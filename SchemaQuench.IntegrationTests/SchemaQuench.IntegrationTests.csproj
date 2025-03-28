@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	  <TargetFrameworks>net9.0;net481</TargetFrameworks>
+	  <ImplicitUsings>disable</ImplicitUsings>
+	  <Nullable>disable</Nullable>
+	  <LangVersion>default</LangVersion>
+	  <IsPackable>false</IsPackable>
+	  <IsTestProject>true</IsTestProject>
+	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+	  <UserSecretsId>547cf94c-f93a-4d2b-983c-4b7545a7b3ec</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
+    <PackageReference Include="NUnit" Version="4.2.2" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.3.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SchemaQuench\SchemaQuench.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="CleanLogFolders" BeforeTargets="Clean;PrepareForBuild;Build">
+    <ItemGroup>
+	  <_LogFolders Include="$(OutDir)\SchemaQuench.0*\*"/>
+	</ItemGroup>
+	<RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
+  </Target>
+</Project>

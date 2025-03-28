@@ -1,0 +1,7 @@
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# These owners will be the default owners for everything in the repo.
+# Protections will be placed so an owner must approve any PRs to the main branch.
+#
+# 
+*       @drzacharysmith68 @AgentSmith71

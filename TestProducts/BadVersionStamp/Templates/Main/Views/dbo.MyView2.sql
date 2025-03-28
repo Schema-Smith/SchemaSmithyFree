@@ -1,0 +1,1 @@
+PRINT 'Applying dbo.MyView2'

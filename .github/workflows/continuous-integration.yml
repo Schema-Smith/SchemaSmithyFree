@@ -1,0 +1,53 @@
+name: continuous-integration
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2019-CU27-ubuntu-20.04
+        env:
+          SA_PASSWORD: aCa2d805-41E5@40c4!98e7#92F93zzxo176
+          ACCEPT_EULA: 'Y'
+        ports:
+          - 1440:1433
+        options: --name mssql
+    steps:
+      - name: Update1 on mssql
+        run: docker exec -u 0 mssql apt-get update
+      - name: Install Curl on mssql
+        run: docker exec -u 0 mssql apt-get install -yq curl systemctl
+      - name: Configure sql server packages on mssql
+        run: docker exec -u 0 mssql curl https://packages.microsoft.com/config/ubuntu/20.04/mssql-server-2019.list -o /etc/apt/sources.list.d/mssql-server-2019.list
+      - name: Update2 on mssql
+        run: docker exec -u 0 mssql apt-get update
+      - name: Install Full Text on mssql
+        run: docker exec -u 0 mssql apt-get install -y mssql-server-fts
+      - name: Restart mssql
+        run: docker container restart mssql
+      - name: Checkout files
+        uses: actions/checkout@v4
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Install dependencies
+        run: dotnet restore
+      - name: Test with dotnet
+        run: dotnet test --framework net9.0 --logger trx --results-directory "TestResults"
+      - name: Upload dotnet test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-results
+          path: TestResults
+        # Use always() to always run this step to publish test results when there are test failures
+        if: ${{ always() }}

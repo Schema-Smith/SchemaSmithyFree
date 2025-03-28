@@ -1,0 +1,8 @@
+{
+    "Name": "InvalidServer",
+    "ValidationScript": "SELECT CAST(0 AS BIT)",
+    "ScriptTokens": {
+        "MainDB": "",
+        "ReleaseVersion": ""
+    }
+}

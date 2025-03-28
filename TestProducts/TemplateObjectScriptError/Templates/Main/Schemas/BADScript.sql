@@ -1,0 +1,1 @@
+RAISERROR('KABOOM!', 16, 1)

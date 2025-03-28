@@ -1,0 +1,87 @@
+{
+	"Schema": "[dbo]",
+	"Name": "[TestTable]",
+	"CompressionType": "NONE",
+	"Columns": [
+		{
+			"Name": "[TestID]",
+			"DataType": "UNIQUEIDENTIFIER"
+		},
+		{
+			"Name": "[ParentID]",
+			"DataType": "UNIQUEIDENTIFIER",
+			"Nullable": true
+		},
+		{
+			"Name": "[DateCreated]",
+			"DataType": "DATETIME",
+			"Nullable": true
+		},
+		{
+			"Name": "[Status]",
+			"DataType": "TINYINT",
+			"Default": "0",
+			"CheckExpression": "",
+			"ComputedExpression": "",
+			"Persisted": false
+		},
+		{
+			"Name": "[SomeText]",
+			"DataType": "VARCHAR(2000)",
+			"Nullable": true
+		}
+	],
+	"Indexes": [
+		{
+			"Name": "[CIX_TestTable_DateCreated]",
+			"Clustered": true,
+			"IndexColumns": "[DateCreated]",
+			"CompressionType": "NONE",
+			"UniqueConstraint": false,
+			"ColumnStore": false,
+			"FillFactor": 100,
+			"IncludeColumns": "",
+			"FilterExpression": ""
+		},
+		{
+			"Name": "[PK_TestTable]",
+			"PrimaryKey": true,
+			"Unique": true,
+			"IndexColumns": "[TestID]"
+		}
+	],
+	"ForeignKeys": [
+		{
+			"Name": "[FK_SelfReference]",
+			"Columns": "[ParentID]",
+			"RelatedTableSchema": "[dbo]",
+			"RelatedTable": "[TestTable]",
+			"RelatedColumns": "[TestID]",
+			"CascadeOnDelete": false,
+			"CascadeOnUpdate": false
+		}
+	],
+	"CheckConstraints": [
+		{
+			"Name": "[CK_Test]",
+			"Expression": "[Status]<(20)"
+		}
+	],
+	"Statistics": [
+		{
+			"Name": "[ST_Test]",
+			"Columns": "[Status]",
+			"SampleSize": 100,
+			"FilterExpression": ""
+		}
+	],
+	"FullTextIndexes": [
+		{
+			"FullTextCatalog": "MyCatalog",
+			"KeyIndex": "PK_TestTable",
+			"ChangeTracking": "OFF",
+			"StopList": "MyStopList",
+			"Columns": "[SomeText]"
+		}
+	]
+}

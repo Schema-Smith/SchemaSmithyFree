@@ -1,0 +1,14 @@
+.DS_Store
+
+.idea
+*.DotSettings.user
+
+**/bin
+**/obj
+*.orig
+
+packages
+.vs
+**/TestResults
+
+

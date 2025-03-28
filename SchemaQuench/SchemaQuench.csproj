@@ -1,0 +1,50 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net9.0;net481</TargetFrameworks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>default</LangVersion>
+    <Nullable>enable</Nullable>
+	<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <UserSecretsId>ff52744b-86a4-4305-ad34-14b848e467f4</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
+    <None Remove="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />
+    <None Remove="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Scripts\Kindling_CompletedMigrations_Table.sql">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Scripts\Kindling_SchemaSmith_Schema.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.TableQuench.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Schema\Schema.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Log4Net.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="CleanLogFolders" BeforeTargets="Clean;PrepareForBuild;Build">
+	<ItemGroup>
+	  <_LogFolders Include="$(OutDir)\SchemaQuench.0*\*" />
+	</ItemGroup>
+	<RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
+  </Target>
+</Project>

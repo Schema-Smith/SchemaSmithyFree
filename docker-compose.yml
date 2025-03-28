@@ -1,0 +1,46 @@
+services:
+  update-testproduct:
+    build:
+      context: .
+      dockerfile: SchemaQuench/Dockerfile
+    environment:
+      - Target__Server=db
+      - Target__User=${MSSQL_SA_USERNAME}
+      - Target__Password=${MSSQL_SA_PASSWORD}
+      - SchemaPackagePath=/metadata
+      - ScriptTokens__MainDB=TestMain
+      - ScriptTokens__SecondaryDB=TestSecondary
+      - ScriptTokens__ReleaseVersion=1.0.0
+    volumes:
+      - ./TestProducts/ValidProduct:/metadata
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    build:
+      context: ./db
+      dockerfile: db.Dockerfile
+    restart: always
+    ports:
+      - "${MSSQL_PORT:-1440}:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_USERNAME=${MSSQL_SA_USERNAME}    
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}    
+    healthcheck:
+      test: /tmp/devdatabase/is-ready.sh
+      interval: 60s
+      timeout: 3s
+      retries: 10
+      start_period: 60s
+
+  completed:
+    image: alpine
+    entrypoint: ["echo"]
+    command: ["completed"]
+    depends_on:
+      db:
+        condition: service_healthy
+      update-testproduct:
+        condition: service_completed_successfully
