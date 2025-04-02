@@ -4,13 +4,13 @@ services:
       context: .
       dockerfile: SchemaQuench/Dockerfile
     environment:
-      - Target__Server=db
-      - Target__User=${MSSQL_SA_USERNAME}
-      - Target__Password=${MSSQL_SA_PASSWORD}
-      - SchemaPackagePath=/metadata
-      - ScriptTokens__MainDB=TestMain
-      - ScriptTokens__SecondaryDB=TestSecondary
-      - ScriptTokens__ReleaseVersion=1.0.0
+      - QuenchSettings_Target__Server=db
+      - QuenchSettings_Target__User=${MSSQL_SA_USERNAME}
+      - QuenchSettings_Target__Password=${MSSQL_SA_PASSWORD}
+      - QuenchSettings_SchemaPackagePath=/metadata
+      - QuenchSettings_ScriptTokens__MainDB=TestMain
+      - QuenchSettings_ScriptTokens__SecondaryDB=TestSecondary
+      - QuenchSettings_ScriptTokens__ReleaseVersion=1.0.0
     volumes:
       - ./TestProducts/ValidProduct:/metadata
     depends_on:

@@ -14,6 +14,7 @@ public class Template
     public Product Product { get; set; }
     public string DatabaseIdentificationScript { get; set; }
     public string VersionStampScript { get; set; }
+    public bool UpdateFillFactor { get; set; } = true;
 
     [JsonIgnore]
     public List<ScriptFolder> ScriptFolders { get; } = GetTemplateFolders();
