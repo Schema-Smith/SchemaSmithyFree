@@ -399,7 +399,16 @@ BEGIN TRY
                                     WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) + ')'
                             ELSE '' END +
                        CASE WHEN si.has_filter = 1 THEN ' WHERE ' + SchemaSmith.fn_StripParenWrapping(si.filter_definition) ELSE '' END +
-                       CASE WHEN COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + p.[data_compression_desc] COLLATE DATABASE_DEFAULT + ')' ELSE '' END
+                       CASE WHEN COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE')
+                         OR ISNULL(si.[fill_factor], 100) NOT IN (0, 100)
+                            THEN ' WITH (' +
+                                 CASE WHEN COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE') THEN 'DATA_COMPRESSION=' + COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT ELSE '' END +
+                                 CASE WHEN ISNULL(si.[fill_factor], 100) NOT IN (0, 100) 
+                                      THEN CASE WHEN COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE') THEN ', ' ELSE '' END +
+                                           'FILLFACTOR = ' + CAST(si.[fill_factor] AS VARCHAR(20)) 
+                                      ELSE '' END +
+	                             ')'
+                            ELSE '' END
     INTO #ExistingIndexes
     FROM #Tables t WITH (NOLOCK)
     JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
@@ -428,7 +437,16 @@ BEGIN TRY
                             'INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[IndexColumns] + ')' +
                             CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END +
                             CASE WHEN RTRIM(ISNULL(i.[FilterExpression], '')) <> '' THEN ' WHERE ' + i.[FilterExpression] ELSE '' END +
-                            CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + i.[CompressionType] + ')' ELSE '' END
+                            CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE')
+                              OR ISNULL(i.[FillFactor], 100) NOT IN (0, 100)
+                                 THEN ' WITH (' +
+                                      CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN 'DATA_COMPRESSION=' + RTRIM(ISNULL(i.[CompressionType], '')) ELSE '' END +
+                                      CASE WHEN ISNULL(i.[FillFactor], 100) NOT IN (0, 100) 
+                                           THEN CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN ', ' ELSE '' END +
+                                                'FILLFACTOR = ' + CAST(i.[FillFactor] AS VARCHAR(20)) 
+                                           ELSE '' END +
+	                                  ')'
+                                 ELSE '' END
 
   RAISERROR('Detect Index Renames', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexRenames
@@ -448,7 +466,16 @@ BEGIN TRY
 	                                                              'INDEX [IndexName] ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[IndexColumns] + ')' +
 						                                          CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END +
                                                                   CASE WHEN RTRIM(ISNULL(i.[FilterExpression], '')) <> '' THEN ' WHERE ' + i.[FilterExpression] ELSE '' END +
-                                                                  CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + i.[CompressionType] + ')' ELSE '' END
+                                                                  CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE')
+                                                                    OR ISNULL(i.[FillFactor], 100) NOT IN (0, 100)
+                                                                       THEN ' WITH (' +
+                                                                            CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN 'DATA_COMPRESSION=' + RTRIM(ISNULL(i.[CompressionType], '')) ELSE '' END +
+                                                                            CASE WHEN ISNULL(i.[FillFactor], 100) NOT IN (0, 100) 
+                                                                                 THEN CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN ', ' ELSE '' END +
+                                                                                      'FILLFACTOR = ' + CAST(i.[FillFactor] AS VARCHAR(20)) 
+                                                                                 ELSE '' END +
+	                                                                        ')'
+                                                                       ELSE '' END
   
   RAISERROR('Handle Renamed Indexes And Unique Constraints', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
