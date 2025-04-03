@@ -26,7 +26,7 @@ public static class ConfigHelper
             var builder = new ConfigurationBuilder();
             builder.AddJsonFile("appsettings.json")
                 .AddUserSecrets(Assembly.GetCallingAssembly())
-                .AddEnvironmentVariables();
+                .AddEnvironmentVariables("QuenchSettings_");
 
             config = builder.Build();
             FactoryContainer.Register(config);

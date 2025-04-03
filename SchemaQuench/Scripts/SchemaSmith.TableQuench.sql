@@ -3,7 +3,8 @@ CREATE OR ALTER PROCEDURE [SchemaSmith].[TableQuench]
   @TableDefinitions VARCHAR(MAX),
   @WhatIf BIT = 0,
   @DropUnknownIndexes BIT = 0,
-  @DropTablesRemovedFromProduct BIT = 1
+  @DropTablesRemovedFromProduct BIT = 1,
+  @UpdateFillFactor BIT = 1
 AS
 BEGIN TRY
   DECLARE @v_SQL VARCHAR(MAX) = ''
@@ -36,7 +37,7 @@ BEGIN TRY
   DROP TABLE IF EXISTS #Indexes
   SELECT t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(i.[CompressionType], 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0), 
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
-         [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(i.[FillFactor], 0),
+         [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
          i.[FilterExpression], 
          [IndexColumns] = (SELECT STRING_AGG(CASE WHEN RTRIM([value]) LIKE '% DESC' 
                                                   THEN SchemaSmith.fn_SafeBracketWrap(SUBSTRING(RTRIM([value]), 1, LEN(RTRIM([value])) - 5)) + ' DESC'
@@ -130,7 +131,7 @@ BEGIN TRY
   RAISERROR('Parse Full Text Indexes from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #FullTextIndexes
   SELECT t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]), 
-         f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(f.[StopList]),
+         f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
          [Columns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '')
     INTO #FullTextIndexes
     FROM #TableDefinitions t WITH (NOLOCK)
@@ -337,7 +338,7 @@ BEGIN TRY
          FullTextCatalog = '[' + (SELECT c.[name] COLLATE DATABASE_DEFAULT FROM sys.fulltext_catalogs c WITH (NOLOCK) WHERE c.fulltext_catalog_id = fi.fulltext_catalog_id) + ']',
          KeyIndex = '[' + (SELECT i.[Name] COLLATE DATABASE_DEFAULT FROM sys.indexes i WITH (NOLOCK) WHERE i.[object_id] = fi.[object_id] AND i.[index_id] = fi.[unique_index_id]) + ']',
          ChangeTracking = change_tracking_state_desc COLLATE DATABASE_DEFAULT,
-         [StopList] = '[' + (SELECT fs.[name] COLLATE DATABASE_DEFAULT FROM sys.fulltext_stoplists fs WITH (NOLOCK) WHERE fs.stoplist_id = fi.stoplist_id) + ']'
+         [StopList] = '[' + COALESCE((SELECT fs.[name] COLLATE DATABASE_DEFAULT FROM sys.fulltext_stoplists fs WITH (NOLOCK) WHERE fs.stoplist_id = fi.stoplist_id), 'SYSTEM') + ']'
     INTO #ExistingFullTextIndexes
     FROM #Tables t WITH (NOLOCK)
     JOIN sys.fulltext_indexes fi WITH (NOLOCK) ON fi.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
@@ -384,7 +385,7 @@ BEGIN TRY
   DROP TABLE IF EXISTS #ExistingIndexes
   SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(si.[Name] AS VARCHAR(500)),
          IsConstraint = CAST(CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 1 ELSE 0 END AS BIT),
-         IsUnique = si.is_unique,
+         IsUnique = si.is_unique, [FillFactor] = ISNULL(NULLIF(si.fill_factor, 0), 100),
          IndexScript = 'CREATE ' + 
                        CASE WHEN si.is_unique = 1 THEN 'UNIQUE ' ELSE '' END + 
                        CASE WHEN si.[type] IN (1, 5) THEN '' ELSE 'NON' END + 'CLUSTERED ' +
@@ -394,12 +395,14 @@ BEGIN TRY
                           WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0) + ')' +
                        CASE WHEN EXISTS (SELECT * FROM sys.index_columns  ic WITH (NOLOCK) WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1)
                             THEN ' INCLUDE (' +
-                                 (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
+                                 (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY key_ordinal)
                                     FROM sys.index_columns  ic WITH (NOLOCK)
                                     WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) + ')'
                             ELSE '' END +
                        CASE WHEN si.has_filter = 1 THEN ' WHERE ' + SchemaSmith.fn_StripParenWrapping(si.filter_definition) ELSE '' END +
-                       CASE WHEN COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + p.[data_compression_desc] COLLATE DATABASE_DEFAULT + ')' ELSE '' END
+                       CASE WHEN COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE')
+                            THEN ' WITH (DATA_COMPRESSION=' + COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT + ')'
+                            ELSE '' END
     INTO #ExistingIndexes
     FROM #Tables t WITH (NOLOCK)
     JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
@@ -428,7 +431,9 @@ BEGIN TRY
                             'INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[IndexColumns] + ')' +
                             CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END +
                             CASE WHEN RTRIM(ISNULL(i.[FilterExpression], '')) <> '' THEN ' WHERE ' + i.[FilterExpression] ELSE '' END +
-                            CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + i.[CompressionType] + ')' ELSE '' END
+                            CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE')
+                                 THEN ' WITH (DATA_COMPRESSION=' + RTRIM(ISNULL(i.[CompressionType], '')) + ')'
+                                 ELSE '' END
 
   RAISERROR('Detect Index Renames', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexRenames
@@ -448,7 +453,9 @@ BEGIN TRY
 	                                                              'INDEX [IndexName] ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[IndexColumns] + ')' +
 						                                          CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END +
                                                                   CASE WHEN RTRIM(ISNULL(i.[FilterExpression], '')) <> '' THEN ' WHERE ' + i.[FilterExpression] ELSE '' END +
-                                                                  CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + i.[CompressionType] + ')' ELSE '' END
+                                                                  CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE')
+                                                                       THEN ' WITH (DATA_COMPRESSION=' + RTRIM(ISNULL(i.[CompressionType], '')) + ')'
+                                                                       ELSE '' END
   
   RAISERROR('Handle Renamed Indexes And Unique Constraints', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
@@ -510,6 +517,20 @@ BEGIN TRY
                                   END, CHAR(13) + CHAR(10))
     FROM #IndexesToDrop di WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
+
+  IF @UpdateFillFactor = 1
+  BEGIN
+    RAISERROR('Fixup Modified Fillfactors', 10, 1) WITH NOWAIT
+    SELECT @v_SQL = STRING_AGG('RAISERROR(''  Fixup ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' fillfactor in ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT; ' + 
+                               'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD WITH (FILLFACTOR = ' + CONVERT(VARCHAR(5), i.[FillFactor]) + ', SORT_IN_TEMPDB = ON);', CHAR(13) + CHAR(10))
+      FROM #ExistingIndexes ei WITH (NOLOCK)
+      JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                   AND ei.[xTableName] = i.[TableName]
+                                   AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+      WHERE ei.[FillFactor] <> i.[FillFactor]
+        AND INDEXPROPERTY(OBJECT_ID(i.[Schema] + '.' + i.[TableName]), ei.[xIndexName], 'IndexID') IS NOT NULL
+    IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
+  END
   
   RAISERROR('Identify Statistics To Drop Based On Column Changes', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #StatisticsToDropForChanges
