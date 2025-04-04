@@ -57,7 +57,7 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                 }
 
                 ProgressLog("  Quenching tables");
-                command.CommandText = $"EXEC [{dbName}].SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = '{template.TableSchema.Replace("'", "''")}', @DropUnknownIndexes = {dropUnknownIndexes}, @WhatIf = {whatIfOnly}";
+                command.CommandText = $"EXEC [{dbName}].SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = '{template.TableSchema.Replace("'", "''")}', @DropUnknownIndexes = {dropUnknownIndexes}, @UpdateFillFactor = {(template.UpdateFillFactor ? "1" : "0" )}, @WhatIf = {whatIfOnly}";
                 _debugFileLocation = $"SchemaQuench - Quench Tables {dbName}.sql";
                 LogSqlScript(_debugFileLocation, command.CommandText);
                 ExecuteNonQueryAndRethrowInfoMessageError(command);
