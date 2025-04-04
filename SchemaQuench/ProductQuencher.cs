@@ -19,13 +19,11 @@ public class ProductQuencher
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly Product _product = Product.Load();
 
-    private readonly string _dropUnknownIndexes;
     private readonly string _whatIfOnly;
     private readonly string _primaryServer;
 
     public ProductQuencher()
     {
-        _dropUnknownIndexes = _config["DropUnknownIndexes"]?.ToLower() == "true" ? "1" : "0";
         _whatIfOnly = _config["WhatIfONLY"]?.ToLower() == "true" ? "1" : "0";
         _primaryServer = _config["Target:Server"] ?? "localhost";
     }
@@ -128,7 +126,7 @@ public class ProductQuencher
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            var quencher = new DatabaseQuencher(_product.Name, template, $"{reader["name"]}", suppressKindligForgeForTesting, _dropUnknownIndexes, _whatIfOnly);
+            var quencher = new DatabaseQuencher(_product.Name, template, $"{reader["name"]}", suppressKindligForgeForTesting, product.DropUnknownIndexes ? "1" : "0", _whatIfOnly);
             dbList.Add(quencher);
         }
 

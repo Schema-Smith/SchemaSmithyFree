@@ -14,6 +14,7 @@ public class Product
 {
     public string Name { get; set; }
     public string ValidationScript { get; set; }
+    public bool DropUnknownIndexes { get; set; } = false;
     public List<string> TemplateOrder { get; set; } = [];
     public Dictionary<string, string> ScriptTokens { get; set; } = [];
 
@@ -23,7 +24,7 @@ public class Product
     private string _branchNameFile;
     public string BranchNameFile
     {
-        get => _branchNameFile ??= Path.Combine(Path.GetDirectoryName(FilePath), ".git", "HEAD"); // default to git
+        get => _branchNameFile ??= Path.Combine(Path.GetDirectoryName(FilePath)!, ".git", "HEAD"); // default to git
         set => _branchNameFile = value;
     }
     public string BeforeBranchNameMask { get; set; } = "ref: refs/heads/"; // default to git
