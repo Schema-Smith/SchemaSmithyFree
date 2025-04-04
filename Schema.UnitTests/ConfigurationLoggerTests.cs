@@ -17,7 +17,6 @@ public class ConfigurationLoggerTests
         {
             $"Version: {FileVersionInfo.GetVersionInfo(assembly.Location).FileVersion}",
             "Configuration:",
-            "  DropUnknownIndexes: false",
             "  SchemaPackagePath: packagePath",
             "  Target: ",
             "    Password: testpassword",
@@ -38,7 +37,6 @@ public class ConfigurationLoggerTests
             ["Target:Server"] = "localhost",
             ["Target:User"] = "testuser",
             ["Target:Password"] = "testpassword",
-            ["DropUnknownIndexes"] = "false",
             ["SchemaPackagePath"] = "packagePath"
         };
         configBuilder.AddInMemoryCollection(configValues);
