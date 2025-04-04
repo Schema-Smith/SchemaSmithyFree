@@ -1,5 +1,5 @@
 # SchemaQuench
-![.Build validate](https://github.com/Schema-Smith/SchemaQuench/actions/workflows/continuous-integration.yml/badge.svg)
+![.Build validate](https://github.com/Schema-Smith/SchemaSmithyFree/actions/workflows/continuous-integration.yml/badge.svg)
 
 SchemaQuench is an opinionated, state based, database migration tool.  Similar in concept to HashiCorp's Terraform, SchemaQuench takes the desired end state for a set of databases in the form of metadata and transforms whatever server it is applied to making it match that state.   
 
