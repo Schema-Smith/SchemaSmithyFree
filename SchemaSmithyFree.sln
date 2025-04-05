@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaQuench.UnitTests", "S
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaQuench.IntegrationTests", "SchemaQuench.IntegrationTests\SchemaQuench.IntegrationTests.csproj", "{9CC9218C-3AD2-4729-913F-F0FF02DF6F19}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaTongs", "SchemaTongs\SchemaTongs.csproj", "{20699A84-CE83-46B1-991F-44C19F57A854}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +41,10 @@ Global
 		{9CC9218C-3AD2-4729-913F-F0FF02DF6F19}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9CC9218C-3AD2-4729-913F-F0FF02DF6F19}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9CC9218C-3AD2-4729-913F-F0FF02DF6F19}.Release|Any CPU.Build.0 = Release|Any CPU
+		{20699A84-CE83-46B1-991F-44C19F57A854}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{20699A84-CE83-46B1-991F-44C19F57A854}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{20699A84-CE83-46B1-991F-44C19F57A854}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{20699A84-CE83-46B1-991F-44C19F57A854}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

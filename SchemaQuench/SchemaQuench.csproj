@@ -12,15 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
-    <None Remove="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />
-    <None Remove="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Scripts\Kindling_CompletedMigrations_Table.sql">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </EmbeddedResource>
+    <EmbeddedResource Include="Scripts\Kindling_CompletedMigrations_Table.sql" />
     <EmbeddedResource Include="Scripts\Kindling_SchemaSmith_Schema.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />

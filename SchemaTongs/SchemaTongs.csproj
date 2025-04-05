@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	  <OutputType>Exe</OutputType>
+	  <TargetFrameworks>net9.0;net481</TargetFrameworks>
+	  <ImplicitUsings>disable</ImplicitUsings>
+	  <Nullable>disable</Nullable>
+	  <LangVersion>default</LangVersion>
+	  <Nullable>enable</Nullable>
+	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+	  <UserSecretsId>e821fe99-a762-4ea4-a7ea-5e64817550da</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SqlServer.SqlManagementObjects" Version="172.64.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Schema\Schema.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Log4Net.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\SchemaQuench\Scripts\Kindling_SchemaSmith_Schema.sql" Link="Scripts\Kindling_SchemaSmith_Schema.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.fn_FormatJson.sql" />
+    <EmbeddedResource Include="..\SchemaQuench\Scripts\SchemaSmith.fn_StripParenWrapping.sql" Link="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.GenerateTableJson.sql" />
+  </ItemGroup>
+
+  <Target Name="CleanLogFolders" BeforeTargets="Clean;PrepareForBuild;Build">
+	<ItemGroup>
+	  <_LogFolders Include="$(OutDir)\SchemaTongs.0*\*" />
+	</ItemGroup>
+	<RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
+  </Target>
+</Project>
