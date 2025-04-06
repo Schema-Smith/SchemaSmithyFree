@@ -58,7 +58,8 @@ public class SchemaTongs
         using var connection = GetConnection(targetDb);
         using var command = connection.CreateCommand();
 
-        KindleTheForge(command);
+        _progressLog.Info("  Kindling The Forge");
+        ForgeKindler.KindleTheForge(command);
 
         ExtractTableDefinitions(command, targetDb);
 
@@ -66,7 +67,7 @@ public class SchemaTongs
         var server = new Server(serverConnection);
         var sourceDb = server.Databases[targetDb];
         ScriptSchemas(sourceDb);
-        ScriptUDTs(sourceDb);
+        ScriptUserDefinedTypes(sourceDb);
         ScriptUserDefinedFunctions(sourceDb);
         ScriptViews(sourceDb);
         ScriptStoredProcedures(sourceDb);
@@ -90,7 +91,7 @@ public class SchemaTongs
         }
     }
 
-    private void ScriptUDTs(Database sourceDb)
+    private void ScriptUserDefinedTypes(Database sourceDb)
     {
         _progressLog.Info("Extracting User Defined Types");
         sourceDb.PrefetchObjects(typeof(UserDefinedDataType), _options);
@@ -260,23 +261,5 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", list.Script(_options)));
         }
-    }
-
-
-    private void KindleTheForge(IDbCommand command)
-    {
-        _progressLog.Info("  Kindling The Forge");
-
-        command.CommandText = ResourceLoader.Load("Kindling_SchemaSmith_Schema.sql");
-        command.ExecuteNonQuery();
-
-        command.CommandText = ResourceLoader.Load("SchemaSmith.fn_StripParenWrapping.sql");
-        command.ExecuteNonQuery();
-
-        command.CommandText = ResourceLoader.Load("SchemaSmith.fn_FormatJson.sql");
-        command.ExecuteNonQuery();
-
-        command.CommandText = ResourceLoader.Load("SchemaSmith.GenerateTableJson.sql");
-        command.ExecuteNonQuery();
     }
 }

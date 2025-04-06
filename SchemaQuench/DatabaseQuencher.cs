@@ -44,7 +44,7 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                     using var kindlingCommand = kindlingConnection.CreateCommand();
                     kindlingCommand.CommandTimeout = 0;
                     ProgressLog("  Kindling Forge");
-                    KindlingForge(kindlingCommand);
+                    ForgeKindler.KindleTheForge(kindlingCommand);
                 }
 
                 if (whatIfOnly != "1")
@@ -130,27 +130,6 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
         FileWrapper.GetFromFactory().WriteAllText(Path.Combine(cwd, name), sql);
     }
 
-    public static void KindlingForge(IDbCommand command)
-    {
-        command.CommandText = ResourceLoader.Load("Kindling_SchemaSmith_Schema.sql");
-        command.ExecuteNonQuery();
-
-        command.CommandText = ResourceLoader.Load("SchemaSmith.fn_StripParenWrapping.sql");
-        command.ExecuteNonQuery();
-
-        command.CommandText = ResourceLoader.Load("SchemaSmith.fn_StripBracketWrapping.sql");
-        command.ExecuteNonQuery();
-
-        command.CommandText = ResourceLoader.Load("SchemaSmith.fn_SafeBracketWrap.sql");
-        command.ExecuteNonQuery();        
-
-        command.CommandText = ResourceLoader.Load("SchemaSmith.TableQuench.sql");
-        command.ExecuteNonQuery();
-
-        command.CommandText = ResourceLoader.Load("Kindling_CompletedMigrations_Table.sql");
-        command.ExecuteNonQuery();
-    }
-
     private Exception? _infoMessageException;
     private void QuenchDatabaseObjects(IDbCommand destCmd, List<SqlScript> templateObjects, bool showErrors = true)
     {
@@ -216,14 +195,14 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
 
     private void RemoveObsoleteCompletedScriptEntries(IDbCommand destCmd, string slot, List<SqlScript> scripts, List<string> alreadyRan)
     {
-        foreach (var obsoleteScript in alreadyRan.Where(a => !scripts.Any(s => GetRelativeScriptPath(s.LogPath) == a)))
+        foreach (var obsoleteScript in alreadyRan.Where(a => scripts.All(s => GetRelativeScriptPath(s.LogPath) != a)))
         {
             destCmd.CommandText = $"DELETE SchemaSmith.CompletedMigrationScripts WHERE [ProductName] = '{productName}' AND [QuenchSlot] = '{slot}' AND [ScriptPath] = '{obsoleteScript}'";
             destCmd.ExecuteNonQuery();
         }
     }
 
-    private bool ShouldAlwaysRun(string scriptName) => Path.GetFileNameWithoutExtension(scriptName)?.EndsWith("[ALWAYS]") ?? false;
+    private bool ShouldAlwaysRun(string scriptName) => Path.GetFileNameWithoutExtension(scriptName).EndsWith("[ALWAYS]");
 
     private List<string> GetCompletedEntriesBySlot(IDbCommand destCmd, string slot)
     {
@@ -256,7 +235,7 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
         foreach (var sqlScript in scripts.Where(s => !s.HasBeenQuenched))
             ProgressLogError($"Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}");
 
-        throw new Exception($"Unable to quench all scripts");
+        throw new Exception("Unable to quench all scripts");
     }
 
     private void ProgressLog(string msg)

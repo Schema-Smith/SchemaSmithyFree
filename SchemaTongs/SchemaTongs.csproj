@@ -28,13 +28,6 @@
     </None>
   </ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="..\SchemaQuench\Scripts\Kindling_SchemaSmith_Schema.sql" Link="Scripts\Kindling_SchemaSmith_Schema.sql" />
-    <EmbeddedResource Include="Scripts\SchemaSmith.fn_FormatJson.sql" />
-    <EmbeddedResource Include="..\SchemaQuench\Scripts\SchemaSmith.fn_StripParenWrapping.sql" Link="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
-    <EmbeddedResource Include="Scripts\SchemaSmith.GenerateTableJson.sql" />
-  </ItemGroup>
-
   <Target Name="CleanLogFolders" BeforeTargets="Clean;PrepareForBuild;Build">
 	<ItemGroup>
 	  <_LogFolders Include="$(OutDir)\SchemaTongs.0*\*" />
