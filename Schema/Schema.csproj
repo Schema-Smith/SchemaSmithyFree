@@ -9,6 +9,28 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Scripts\Kindling_CompletedMigrations_Table.sql" />
+    <None Remove="Scripts\Kindling_SchemaSmith_Schema.sql" />
+    <None Remove="Scripts\SchemaSmith.fn_FormatJson.sql" />
+    <None Remove="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
+    <None Remove="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />
+    <None Remove="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
+    <None Remove="Scripts\SchemaSmith.GenerateTableJson.sql" />
+    <None Remove="Scripts\SchemaSmith.TableQuench.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Scripts\Kindling_CompletedMigrations_Table.sql" />
+    <EmbeddedResource Include="Scripts\Kindling_SchemaSmith_Schema.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.fn_FormatJson.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.GenerateTableJson.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.TableQuench.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="log4net" Version="3.0.3" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />

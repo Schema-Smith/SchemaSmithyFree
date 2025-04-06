@@ -44,7 +44,7 @@ CREATE DATABASE [{_integrationMainDb}];
         cmd.ExecuteNonQuery();
 
         conn.ChangeDatabase(_integrationMainDb);
-        DatabaseQuencher.KindlingForge(cmd);
+        ForgeKindler.KindleTheForge(cmd);
 
         cmd.CommandText = @"
 CREATE TABLE SchemaSmith.TestLog (Id INT IDENTITY(1,1) NOT NULL, Msg VARCHAR(2000) NOT NULL)
@@ -60,7 +60,7 @@ ALTER FULLTEXT STOPLIST [SL_Test2] ADD '$' LANGUAGE 'Neutral';
         cmd.ExecuteNonQuery();
 
         conn.ChangeDatabase(_integrationSecondaryDb);
-        DatabaseQuencher.KindlingForge(cmd);
+        ForgeKindler.KindleTheForge(cmd);
 
         cmd.CommandText = @"
 CREATE TABLE SchemaSmith.TestLog (Id INT IDENTITY(1,1) NOT NULL, Msg VARCHAR(2000) NOT NULL)

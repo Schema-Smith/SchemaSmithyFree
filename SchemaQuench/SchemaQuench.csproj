@@ -12,15 +12,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Scripts\Kindling_CompletedMigrations_Table.sql" />
-    <EmbeddedResource Include="Scripts\Kindling_SchemaSmith_Schema.sql" />
-    <EmbeddedResource Include="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
-    <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />
-    <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
-    <EmbeddedResource Include="Scripts\SchemaSmith.TableQuench.sql" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\Schema\Schema.csproj" />
   </ItemGroup>
 
