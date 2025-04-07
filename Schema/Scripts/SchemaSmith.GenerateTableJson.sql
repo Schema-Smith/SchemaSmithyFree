@@ -116,5 +116,5 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
   WHERE TABLE_NAME = @p_Table
     AND TABLE_SCHEMA = @p_Schema
   FOR JSON AUTO, WITHOUT_ARRAY_WRAPPER
-), '"<Full_Text>"', @FullText), 1)
+), '"<Full_Text>"', COALESCE(@FullText, '{}')), 1)
 ORDER BY [LineNo]
