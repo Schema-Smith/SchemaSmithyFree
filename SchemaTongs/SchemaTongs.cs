@@ -83,7 +83,7 @@ public class SchemaTongs
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Schemas"));
         foreach (Microsoft.SqlServer.Management.Smo.Schema schema in sourceDb.Schemas)
         {
-            if (schema.IsSystemObject || schema.Name.Contains("\\")) continue;
+            if (schema.IsSystemObject || schema.Name.Contains("\\") || schema.Name.EqualsIgnoringCase("SchemaSmith")) continue;
 
             var fileName = Path.Combine(_targetDir, "Schemas", $"{schema.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
@@ -118,7 +118,7 @@ public class SchemaTongs
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Functions"));
         foreach (UserDefinedFunction function in sourceDb.UserDefinedFunctions)
         {
-            if (function.IsSystemObject || function.IsEncrypted) continue;
+            if (function.IsSystemObject || function.IsEncrypted || function.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
 
             var fileName = Path.Combine(_targetDir, "Functions", $"{function.Schema}.{function.Name}.sql");
             var sql = @$"SET ANSI_NULLS {(function.AnsiNullsStatus ? "ON" : "OFF")}
@@ -139,7 +139,8 @@ GO
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Views"));
         foreach (View view in sourceDb.Views)
         {
-            if (view.IsSystemObject || view.IsEncrypted) continue;
+            if (view.IsSystemObject || view.IsEncrypted || view.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
+
             var fileName = Path.Combine(_targetDir, "Views", $"{view.Schema}.{view.Name}.sql");
             var sql = @$"SET ANSI_NULLS {(view.AnsiNullsStatus ? "ON" : "OFF")}
 SET QUOTED_IDENTIFIER {(view.QuotedIdentifierStatus ? "ON" : "OFF")}
@@ -157,15 +158,16 @@ GO
         _progressLog.Info("Extracting Stored Procedure Scripts");
         sourceDb.PrefetchObjects(typeof(StoredProcedure), _options);
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Procedures"));
-        foreach (StoredProcedure proc in sourceDb.StoredProcedures)
+        foreach (StoredProcedure procedure in sourceDb.StoredProcedures)
         {
-            if (proc.IsSystemObject || proc.IsEncrypted) continue;
-            var fileName = Path.Combine(_targetDir, "Procedures", $"{proc.Schema}.{proc.Name}.sql");
-            var sql = @$"SET ANSI_NULLS {(proc.AnsiNullsStatus ? "ON" : "OFF")}
-SET QUOTED_IDENTIFIER {(proc.QuotedIdentifierStatus ? "ON" : "OFF")}
+            if (procedure.IsSystemObject || procedure.IsEncrypted || procedure.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
+
+            var fileName = Path.Combine(_targetDir, "Procedures", $"{procedure.Schema}.{procedure.Name}.sql");
+            var sql = @$"SET ANSI_NULLS {(procedure.AnsiNullsStatus ? "ON" : "OFF")}
+SET QUOTED_IDENTIFIER {(procedure.QuotedIdentifierStatus ? "ON" : "OFF")}
 GO
-{proc.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
-{proc.TextBody}
+{procedure.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
+{procedure.TextBody}
 ";
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
@@ -179,7 +181,7 @@ GO
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Triggers"));
         foreach (Table table in sourceDb.Tables)
         {
-            if (table.IsSystemObject) continue;
+            if (table.IsSystemObject || table.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
 
             foreach (Trigger trigger in table.Triggers)
             {
@@ -211,6 +213,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
     AND TABLE_NAME NOT LIKE 'MSPeer[_]%'
     AND TABLE_NAME NOT LIKE 'MSPub[_]%'
     AND TABLE_NAME NOT LIKE 'sys%'
+    AND TABLE_SCHEMA <> 'SchemaSmith'
   ORDER BY 1, 2
 ";
 
