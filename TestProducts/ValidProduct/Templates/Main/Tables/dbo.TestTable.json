@@ -75,7 +75,7 @@
 			"FilterExpression": ""
 		}
 	],
-	"FullTextIndexes": [
+	"FullTextIndex":
 		{
 			"FullTextCatalog": "MyCatalog",
 			"KeyIndex": "PK_TestTable",
@@ -83,5 +83,4 @@
 			"StopList": "MyStopList",
 			"Columns": "[SomeText]"
 		}
-	]
 }

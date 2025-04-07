@@ -65,7 +65,7 @@ public class Template
         LoadTables();
         TableSchema = JsonConvert.SerializeObject(Tables, Formatting.Indented);
 
-        var tokens = scriptTokens.Union([new("TemplateName", Name ?? "UNSPECIFIED")]).ToList();
+        var tokens = scriptTokens.Concat([new("TemplateName", Name ?? "UNSPECIFIED")]).ToList();
         foreach (var folder in ScriptFolders)
             folder.LoadSqlFiles(Path.GetDirectoryName(FilePath));
 
