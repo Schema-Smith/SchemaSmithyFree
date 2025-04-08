@@ -229,7 +229,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             var json = "";
             while (jsonReader.Read())
                 json += jsonReader[0].ToString();
-            if (string.IsNullOrWhiteSpace(json))
+            if (string.IsNullOrWhiteSpace(json) || json.Trim().Equals("{}"))
             {
                 _progressLog.Error($"No json returned for {reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}");
                 continue;
