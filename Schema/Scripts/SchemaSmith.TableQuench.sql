@@ -42,8 +42,12 @@ BEGIN TRY
          [IndexColumns] = (SELECT STRING_AGG(CASE WHEN RTRIM([value]) LIKE '% DESC' 
                                                   THEN SchemaSmith.fn_SafeBracketWrap(SUBSTRING(RTRIM([value]), 1, LEN(RTRIM([value])) - 5)) + ' DESC'
                                                   ELSE SchemaSmith.fn_SafeBracketWrap([value])
-                                                  END, ',') FROM STRING_SPLIT(i.[IndexColumns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
-         [IncludeColumns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') FROM STRING_SPLIT(i.[IncludeColumns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '')
+                                                  END, ',') 
+                             FROM STRING_SPLIT(i.[IndexColumns], ',') 
+                             WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
+         [IncludeColumns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') WITHIN GROUP (ORDER BY SchemaSmith.fn_SafeBracketWrap([value]))
+                               FROM STRING_SPLIT(i.[IncludeColumns], ',') 
+                               WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '')
     INTO #Indexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(Indexes) WITH (
@@ -395,7 +399,7 @@ BEGIN TRY
                           WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0) + ')' +
                        CASE WHEN EXISTS (SELECT * FROM sys.index_columns  ic WITH (NOLOCK) WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1)
                             THEN ' INCLUDE (' +
-                                 (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY index_column_id)
+                                 (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
                                     FROM sys.index_columns  ic WITH (NOLOCK)
                                     WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) + ')'
                             ELSE '' END +
