@@ -10,6 +10,7 @@ using Schema.Utility;
 using System;
 using System.Data;
 using System.IO;
+using System.Linq;
 
 namespace SchemaTongs;
 
@@ -87,7 +88,7 @@ public class SchemaTongs
 
             var fileName = Path.Combine(_targetDir, "Schemas", $"{schema.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", schema.Script(_options)));
+            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", schema.Script(_options).Cast<string>()));
         }
     }
 
@@ -99,15 +100,15 @@ public class SchemaTongs
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "DataTypes"));
         foreach (UserDefinedDataType type in sourceDb.UserDefinedDataTypes)
         {
-            var fileName = Path.Combine(_targetDir, "DataTypes", $"{type.Name}.sql");
+            var fileName = Path.Combine(_targetDir, "DataTypes", $"{type.Schema}.{type.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", type.Script(_options)));
+            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", type.Script(_options).Cast<string>()));
         }
         foreach (UserDefinedTableType type in sourceDb.UserDefinedTableTypes)
         {
-            var fileName = Path.Combine(_targetDir, "DataTypes", $"{type.Name}.sql");
+            var fileName = Path.Combine(_targetDir, "DataTypes", $"{type.Schema}.{type.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", type.Script(_options)));
+            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", type.Script(_options).Cast<string>()));
         }
     }
 
@@ -228,7 +229,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             using var jsonReader = commandJson.ExecuteReader();
             var json = "";
             while (jsonReader.Read())
-                json += jsonReader[0].ToString();
+                json += $"{jsonReader[0].ToString()}\r\n";
             if (string.IsNullOrWhiteSpace(json) || json.Trim().Equals("{}"))
             {
                 _progressLog.Error($"No json returned for {reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}");
@@ -250,7 +251,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         {
             var fileName = Path.Combine(_targetDir, "FullTextCatalogs", $"{catalog.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", catalog.Script(_options)));
+            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", catalog.Script(_options).Cast<string>()));
         }
     }
 
@@ -262,7 +263,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         {
             var fileName = Path.Combine(_targetDir, "FullTextStopLists", $"{list.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", list.Script(_options)));
+            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", list.Script(_options).Cast<string>()));
         }
     }
 }

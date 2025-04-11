@@ -201,7 +201,7 @@ BEGIN TRY
     DROP TABLE IF EXISTS #TablesRemovedFromProduct
     SELECT tp.[Schema], tp.TableName
       INTO #TablesRemovedFromProduct
-      FROM #TableProperties tp
+      FROM #TableProperties tp WITH (NOLOCK)
       WHERE tp.[value] = @ProductName
         AND NOT EXISTS (SELECT * 
                           FROM #Tables t WITH (NOLOCK) 
@@ -230,7 +230,7 @@ BEGIN TRY
   DROP TABLE IF EXISTS #IndexesRemovedFromProduct
   SELECT xp.[Schema], xp.TableName, xp.IndexName, IsConstraint = CAST(CASE WHEN OBJECT_ID(xp.[Schema] + '.' + xp.IndexName) IS NOT NULL THEN 1 ELSE 0 END AS BIT)
     INTO #IndexesRemovedFromProduct
-    FROM #IndexProperties xp
+    FROM #IndexProperties xp WITH (NOLOCK)
     WHERE xp.[value] = @ProductName
       AND NOT EXISTS (SELECT * 
                         FROM #Indexes i WITH (NOLOCK) 
@@ -256,19 +256,23 @@ BEGIN TRY
     JOIN #Columns c WITH (NOLOCK) ON C.[Schema] = T.[Schema] 
                                  AND C.[TableName] = T.[Name]
                                  AND C.[NewColumn] = 0
-    JOIN INFORMATION_SCHEMA.COLUMNS ic ON ic.TABLE_SCHEMA = SchemaSmith.fn_StripBracketWrapping(C.[Schema])
-                                      AND ic.TABLE_NAME = SchemaSmith.fn_StripBracketWrapping(C.[TableName])
-                                      AND ic.COLUMN_NAME = SchemaSmith.fn_StripBracketWrapping(C.[ColumnName])
+    JOIN INFORMATION_SCHEMA.COLUMNS ic WITH (NOLOCK) ON ic.TABLE_SCHEMA = SchemaSmith.fn_StripBracketWrapping(C.[Schema])
+                                                    AND ic.TABLE_NAME = SchemaSmith.fn_StripBracketWrapping(C.[TableName])
+                                                    AND ic.COLUMN_NAME = SchemaSmith.fn_StripBracketWrapping(C.[ColumnName])
+    JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(ic.TABLE_SCHEMA + '.' + ic.TABLE_NAME) AND sc.[name] = ic.COLUMN_NAME
+    JOIN (SELECT CASE WHEN SCHEMA_NAME(st.[schema_id]) IN ('sys', 'dbo')
+                      THEN '' ELSE SCHEMA_NAME(st.[schema_id]) + '.' END + st.[name] AS USER_TYPE, st.user_type_id
+            FROM sys.types st WITH (NOLOCK)) st ON st.user_type_id = sc.user_type_id
     LEFT JOIN sys.identity_columns ident WITH (NOLOCK) ON ident.[Name] = COLUMN_NAME
                                                       AND ident.[object_id] = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
     LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = SchemaSmith.fn_StripBracketWrapping(c.ColumnName)
                                                    AND cc.[object_id] = OBJECT_ID(C.[Schema] + '.' + C.[TableName])
     WHERE t.NewTable = 0
-      AND (UPPER(DATA_TYPE) + CASE WHEN DATA_TYPE LIKE '%CHAR' OR DATA_TYPE LIKE '%BINARY'
+      AND (UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
                                    THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(VARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
-                                   WHEN DATA_TYPE IN ('NUMERIC', 'DECIMAL')
+                                   WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
                                    THEN  '(' + CONVERT(VARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(VARCHAR(20), NUMERIC_SCALE) + ')'
-                                   WHEN DATA_TYPE = 'DATETIME2'
+                                   WHEN USER_TYPE = 'DATETIME2'
                                    THEN  '(' + CONVERT(VARCHAR(20), DATETIME_PRECISION) + ')'
                                    ELSE '' END +
                               CASE WHEN ident.column_id IS NOT NULL
@@ -295,8 +299,8 @@ BEGIN TRY
   INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], MustDropAndRecreate, [DropOnly])
     SELECT t.[Schema], [TableName] = t.[Name], [ColumnName] = '[' + COLUMN_NAME + ']', '', 0, 1
       FROM #Tables t WITH (NOLOCK)
-      JOIN INFORMATION_SCHEMA.COLUMNS ON TABLE_SCHEMA = SchemaSmith.fn_StripBracketWrapping(t.[Schema])
-                                     AND TABLE_NAME = SchemaSmith.fn_StripBracketWrapping(t.[Name]) 
+      JOIN INFORMATION_SCHEMA.COLUMNS WITH (NOLOCK) ON TABLE_SCHEMA = SchemaSmith.fn_StripBracketWrapping(t.[Schema])
+                                                   AND TABLE_NAME = SchemaSmith.fn_StripBracketWrapping(t.[Name]) 
       WHERE NOT EXISTS (SELECT * 
                           FROM #Columns c WITH (NOLOCK)
                           WHERE c.[Schema] = t.[Schema]
@@ -315,7 +319,7 @@ BEGIN TRY
   RAISERROR('Drop Foreign Keys No Longer Defined In The Product', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + df.[FKName] + ';', CHAR(13) + CHAR(10))
-        FROM #FKsToDrop df WITH (NOLOCK)
+    FROM #FKsToDrop df WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Identify Fulltext Indexes To Drop Based On Column Changes', 10, 1) WITH NOWAIT
@@ -367,8 +371,8 @@ BEGIN TRY
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Altering table compression for ' + t.[Schema] + '.' + t.[Name] + ' TO ' + t.[CompressionType] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              'ALTER TABLE ' + t.[Schema] + '.' + t.[Name] + ' REBUILD PARTITION=ALL WITH (DATA_COMPRESSION=' + t.[CompressionType] + ');', CHAR(13) + CHAR(10))
     FROM #Tables t WITH (NOLOCK)
-    LEFT JOIN sys.partitions AS p WITH (NOLOCK) ON p.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
-                                               AND p.index_id < 2
+    LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+                                            AND p.index_id < 2
     WHERE t.NewTable = 0
       AND COALESCE(p.data_compression_desc COLLATE DATABASE_DEFAULT, 'NONE') <> t.[CompressionType]
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
@@ -380,8 +384,8 @@ BEGIN TRY
     FROM #Indexes i WITH (NOLOCK) 
     JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName])
                                      AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
-    LEFT JOIN sys.partitions AS p WITH (NOLOCK) ON p.[object_id] = si.[object_id]
-                                               AND p.index_id = si.index_id
+    LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = si.[object_id]
+                                            AND p.index_id = si.index_id
     WHERE COALESCE(p.data_compression_desc COLLATE DATABASE_DEFAULT, 'NONE') <> i.[CompressionType]
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
@@ -395,12 +399,12 @@ BEGIN TRY
                        CASE WHEN si.[type] IN (1, 5) THEN '' ELSE 'NON' END + 'CLUSTERED ' +
                        'INDEX [' + si.[Name] + '] ON ' + t.[Schema] + '.' + t.[Name] + ' (' +
                        (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END, ',') WITHIN GROUP (ORDER BY key_ordinal)
-                          FROM sys.index_columns  ic WITH (NOLOCK)
+                          FROM sys.index_columns ic WITH (NOLOCK)
                           WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0) + ')' +
-                       CASE WHEN EXISTS (SELECT * FROM sys.index_columns  ic WITH (NOLOCK) WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1)
+                       CASE WHEN EXISTS (SELECT * FROM sys.index_columns ic WITH (NOLOCK) WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1)
                             THEN ' INCLUDE (' +
                                  (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
-                                    FROM sys.index_columns  ic WITH (NOLOCK)
+                                    FROM sys.index_columns ic WITH (NOLOCK)
                                     WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) + ')'
                             ELSE '' END +
                        CASE WHEN si.has_filter = 1 THEN ' WHERE ' + SchemaSmith.fn_StripParenWrapping(si.filter_definition) ELSE '' END +
@@ -413,8 +417,8 @@ BEGIN TRY
                                      AND si.index_id > 0
                                      AND is_hypothetical = 0
                                      AND is_disabled = 0
-    LEFT JOIN sys.partitions AS p WITH (NOLOCK)  ON p.[object_id] = si.[object_id]
-                                                AND p.index_id = si.index_id
+    LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = si.[object_id]
+                                            AND p.index_id = si.index_id
     WHERE t.NewTable = 0
     
   RAISERROR('Detect Index Changes', 10, 1) WITH NOWAIT
@@ -661,7 +665,7 @@ BEGIN TRY
   DROP TABLE IF EXISTS #DefaultChanges
   SELECT C.[Schema], C.[TableName], C.[ColumnName],
          [DefaultName] = (SELECT [Name] 
-                            FROM sys.default_constraints dc 
+                            FROM sys.default_constraints dc WITH (NOLOCK)
                             WHERE dc.parent_object_id = OBJECT_ID(c.[Schema] + '.' + c.[TableName]) 
                               AND COL_NAME(dc.parent_object_id, dc.parent_column_id) = SchemaSmith.fn_StripBracketWrapping(C.[ColumnName]))
     INTO #DefaultChanges
@@ -782,9 +786,9 @@ BEGIN TRY
   INSERT #CheckChanges ([Schema], [TableName], [CheckName])
     SELECT ec.[Schema], ec.[TableName], ec.[CheckName]
       FROM #ExistingCheckConstraints ec WITH (NOLOCK)
-      JOIN #CheckConstraints cc ON ec.[Schema] = cc.[Schema]
-                               AND ec.[TableName] = cc.[TableName]
-                               AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName])
+      JOIN #CheckConstraints cc WITH (NOLOCK) ON ec.[Schema] = cc.[Schema]
+                                             AND ec.[TableName] = cc.[TableName]
+                                             AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName])
       WHERE ec.[CheckDefinition] <> cc.[Expression]
   
   RAISERROR('Drop Modified Check Constraints', 10, 1) WITH NOWAIT
@@ -819,7 +823,7 @@ BEGIN TRY
     FROM #Indexes i WITH (NOLOCK)
     WHERE i.[Clustered] = 1
       AND NOT EXISTS (SELECT * 
-                        FROM sys.indexes si  WITH (NOLOCK)
+                        FROM sys.indexes si WITH (NOLOCK)
                         WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) 
                           AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
   
@@ -863,7 +867,7 @@ BEGIN TRY
                                   END + ';', CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.[Clustered] =  1 THEN 0 ELSE 1 END, i.[IndexName])
     FROM #Indexes i WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
-                        FROM sys.indexes si  WITH (NOLOCK)
+                        FROM sys.indexes si WITH (NOLOCK)
                         WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) 
                           AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))    
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
@@ -897,7 +901,7 @@ BEGIN TRY
                              ' WITH SAMPLE ' + CAST(ISNULL(s.[SampleSize], 100) AS VARCHAR(20)) + ' PERCENT;', CHAR(13) + CHAR(10))
     FROM #Statistics s WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
-                        FROM sys.stats ss  WITH (NOLOCK)
+                        FROM sys.stats ss WITH (NOLOCK)
                         WHERE ss.[object_id] = OBJECT_ID(s.[Schema] + '.' + s.[TableName]) 
                           AND ss.[name] = SchemaSmith.fn_StripBracketWrapping(s.[StatisticName]))
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
