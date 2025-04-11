@@ -23,11 +23,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
 	   (SELECT * 
           FROM (SELECT '[' + COLUMN_NAME + ']' AS [Name],
-                       UPPER(DATA_TYPE) + CASE WHEN DATA_TYPE LIKE '%CHAR' OR DATA_TYPE LIKE '%BINARY'
+                       UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
                                                THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(VARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
-                                               WHEN DATA_TYPE IN ('NUMERIC', 'DECIMAL')
+                                               WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
                                                THEN  '(' + CONVERT(VARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(VARCHAR(20), NUMERIC_SCALE) + ')'
-                                               WHEN DATA_TYPE = 'DATETIME2'
+                                               WHEN USER_TYPE = 'DATETIME2'
                                                THEN  '(' + CONVERT(VARCHAR(20), DATETIME_PRECISION) + ')'
                                                ELSE '' END +
                                           CASE WHEN ic.column_id IS NOT NULL
@@ -42,6 +42,10 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        SchemaSmith.fn_StripParenWrapping(cc.[definition]) AS ComputedExpression,
                        ISNULL(cc.is_persisted, CAST(0 AS BIT)) AS [Persisted]
                   FROM INFORMATION_SCHEMA.COLUMNS c WITH (NOLOCK)
+                  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME) AND sc.[name] = c.COLUMN_NAME
+                  JOIN (SELECT CASE WHEN SCHEMA_NAME(st.[schema_id]) IN ('sys', 'dbo')
+                                    THEN '' ELSE SCHEMA_NAME(st.[schema_id]) + '.' END + st.[name] AS USER_TYPE, st.user_type_id
+                          FROM sys.types st WITH (NOLOCK)) st ON st.user_type_id = sc.user_type_id
                   LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
                                                                  AND cc.[object_id] = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
                   LEFT JOIN sys.identity_columns ic WITH (NOLOCK) ON ic.[Name] = c.COLUMN_NAME
