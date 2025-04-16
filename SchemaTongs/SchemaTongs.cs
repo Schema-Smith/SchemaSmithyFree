@@ -59,7 +59,7 @@ public class SchemaTongs
         using var connection = GetConnection(targetDb);
         using var command = connection.CreateCommand();
 
-        _progressLog.Info("  Kindling The Forge");
+        _progressLog.Info("Kindling The Forge");
         ForgeKindler.KindleTheForge(command);
 
         ExtractTableDefinitions(command, targetDb);
@@ -75,11 +75,12 @@ public class SchemaTongs
         ScriptTriggers(sourceDb);
         ScriptFullTextCatalogs(sourceDb);
         ScriptFullTextStopLists(sourceDb);
+        ScriptDDLTriggers(sourceDb);
     }
 
     private void ScriptSchemas(Database sourceDb)
     {
-        _progressLog.Info("Extracting Schema Scripts");
+        _progressLog.Info("Casting Schema Scripts");
         sourceDb.PrefetchObjects(typeof(Microsoft.SqlServer.Management.Smo.Schema), _options);
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Schemas"));
         foreach (Microsoft.SqlServer.Management.Smo.Schema schema in sourceDb.Schemas)
@@ -94,7 +95,7 @@ public class SchemaTongs
 
     private void ScriptUserDefinedTypes(Database sourceDb)
     {
-        _progressLog.Info("Extracting User Defined Types");
+        _progressLog.Info("Casting User Defined Types");
         sourceDb.PrefetchObjects(typeof(UserDefinedDataType), _options);
         sourceDb.PrefetchObjects(typeof(UserDefinedTableType), _options);
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "DataTypes"));
@@ -114,7 +115,7 @@ public class SchemaTongs
 
     private void ScriptUserDefinedFunctions(Database sourceDb)
     {
-        _progressLog.Info("Extracting Function Scripts");
+        _progressLog.Info("Casting Function Scripts");
         sourceDb.PrefetchObjects(typeof(UserDefinedFunction), _options);
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Functions"));
         foreach (UserDefinedFunction function in sourceDb.UserDefinedFunctions)
@@ -135,7 +136,7 @@ GO
 
     private void ScriptViews(Database sourceDb)
     {
-        _progressLog.Info("Extracting View Scripts");
+        _progressLog.Info("Casting View Scripts");
         sourceDb.PrefetchObjects(typeof(View), _options);
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Views"));
         foreach (View view in sourceDb.Views)
@@ -156,7 +157,7 @@ GO
 
     private void ScriptStoredProcedures(Database sourceDb)
     {
-        _progressLog.Info("Extracting Stored Procedure Scripts");
+        _progressLog.Info("Casting Stored Procedure Scripts");
         sourceDb.PrefetchObjects(typeof(StoredProcedure), _options);
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Procedures"));
         foreach (StoredProcedure procedure in sourceDb.StoredProcedures)
@@ -177,7 +178,7 @@ GO
 
     private void ScriptTriggers(Database sourceDb)
     {
-        _progressLog.Info("Extracting Trigger Scripts");
+        _progressLog.Info("Casting Trigger Scripts");
         sourceDb.PrefetchObjects(typeof(Table), _options);
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Triggers"));
         foreach (Table table in sourceDb.Tables)
@@ -218,12 +219,13 @@ SELECT TABLE_SCHEMA, TABLE_NAME
   ORDER BY 1, 2
 ";
 
+        _progressLog.Info("Casting Table Structures");
         var tableDir = Path.Combine(_targetDir, "Tables");
         DirectoryWrapper.GetFromFactory().CreateDirectory(tableDir);
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            _progressLog.Info($"Generate Json for {reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}");
+            _progressLog.Info($"  Cast Json for {reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}");
             commandJson.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{reader["TABLE_SCHEMA"]}', @p_Table = '{reader["TABLE_NAME"]}'";
 
             using var jsonReader = commandJson.ExecuteReader();
@@ -232,12 +234,12 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 json += $"{jsonReader[0].ToString()}\r\n";
             if (string.IsNullOrWhiteSpace(json) || json.Trim().Equals("{}"))
             {
-                _progressLog.Error($"No json returned for {reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}");
+                _progressLog.Error($"    No json returned for {reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}");
                 continue;
             }
 
             var filename = Path.Combine(tableDir, $"{reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}.json");
-            _progressLog.Info($"  Casting {filename}");
+            _progressLog.Info($"    Casting {filename}");
             _ = JsonConvert.DeserializeObject<Schema.Domain.Table>(json); // make sure the json is valid
             FileWrapper.GetFromFactory().WriteAllText(filename, json);
         }
@@ -245,25 +247,37 @@ SELECT TABLE_SCHEMA, TABLE_NAME
 
     private void ScriptFullTextCatalogs(Database sourceDb)
     {
-        _progressLog.Info("Extracting FullText Catalogs");
+        _progressLog.Info("Casting FullText Catalog Scripts");
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "FullTextCatalogs"));
         foreach (FullTextCatalog catalog in sourceDb.FullTextCatalogs)
         {
             var fileName = Path.Combine(_targetDir, "FullTextCatalogs", $"{catalog.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", catalog.Script(_options).Cast<string>()));
+            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", catalog.Script(_options).Cast<string>()));
         }
     }
 
     private void ScriptFullTextStopLists(Database sourceDb)
     {
-        _progressLog.Info("Extracting FullText Stop Lists");
+        _progressLog.Info("Casting FullText Stop List Scripts");
         DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "FullTextStopLists"));
         foreach (FullTextStopList list in sourceDb.FullTextStopLists)
         {
             var fileName = Path.Combine(_targetDir, "FullTextStopLists", $"{list.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", list.Script(_options).Cast<string>()));
+            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", list.Script(_options).Cast<string>()));
+        }
+    }
+
+    private void ScriptDDLTriggers(Database sourceDb)
+    {
+        _progressLog.Info("Casting DDL Trigger Scripts");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "DDLTriggers"));
+        foreach (DatabaseDdlTrigger trigger in sourceDb.Triggers)
+        {
+            var fileName = Path.Combine(_targetDir, "DDLTriggers", $"{trigger.Name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", trigger.Script(_options).Cast<string>()));
         }
     }
 }
