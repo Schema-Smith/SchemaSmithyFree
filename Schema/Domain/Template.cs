@@ -96,6 +96,7 @@ public class Template
                 new ScriptFolder { FolderPath = "Views", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "Procedures", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "Triggers", QuenchSlot = QuenchSlot.Objects },
+                new ScriptFolder { FolderPath = "DDLTriggers", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "MigrationScripts/After", QuenchSlot = QuenchSlot.After },
             ];
     }
