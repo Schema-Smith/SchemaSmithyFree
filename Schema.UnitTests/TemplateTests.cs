@@ -33,7 +33,7 @@ public class TemplateTests
             Assert.Multiple(() =>
             {
                 Assert.That(template.FilePath, Is.EqualTo(templateJsonFile));
-                Assert.That(template.ScriptFolders, Has.Count.EqualTo(10));
+                Assert.That(template.ScriptFolders, Has.Count.EqualTo(11));
                 Assert.That(template.DatabaseIdentificationScript, Contains.Substring("Database Identification Script"));
                 Assert.That(template.VersionStampScript, Contains.Substring("Version Stamp Script"));
             });
