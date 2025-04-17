@@ -1,8 +1,12 @@
 services:
-  update-testproduct:
+  schemaquench:
     build:
       context: .
       dockerfile: SchemaQuench/Dockerfile
+    image: schemasmithyfree/schemaquench:${QUENCH_VERSION}
+    
+  update-testproduct:
+    image: schemasmithyfree/schemaquench:latest
     environment:
       - QuenchSettings_Target__Server=db
       - QuenchSettings_Target__User=${MSSQL_SA_USERNAME}
