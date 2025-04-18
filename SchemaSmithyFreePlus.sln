@@ -1,0 +1,63 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35527.113
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaQuench", "SchemaQuench\SchemaQuench.csproj", "{B53484E7-9400-4066-9AC8-1BFA5DE934B9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Schema", "Schema\Schema.csproj", "{29F9A1B8-7B3F-41E9-B2A4-73BE5904C42E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Schema.UnitTests", "Schema.UnitTests\Schema.UnitTests.csproj", "{A1FCB497-123C-4FD1-9BF5-45E76A4AB50D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaQuench.UnitTests", "SchemaQuench.UnitTests\SchemaQuench.UnitTests.csproj", "{CF88946B-613D-4BD5-95CC-06C8AB6B2BB2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaQuench.IntegrationTests", "SchemaQuench.IntegrationTests\SchemaQuench.IntegrationTests.csproj", "{9CC9218C-3AD2-4729-913F-F0FF02DF6F19}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaTongs", "SchemaTongs\SchemaTongs.csproj", "{20699A84-CE83-46B1-991F-44C19F57A854}"
+EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "SetupSchemaQuench", "SetupSchemaQuench\SetupSchemaQuench.vdproj", "{F2D4B1BF-43FA-D784-B92A-BEBBFE2EFF1A}"
+EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "SetupSchemaTongs", "SetupSchemaTongs\SetupSchemaTongs.vdproj", "{B45441A1-950D-3FEF-083F-BF067EBD1D95}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B53484E7-9400-4066-9AC8-1BFA5DE934B9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B53484E7-9400-4066-9AC8-1BFA5DE934B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B53484E7-9400-4066-9AC8-1BFA5DE934B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B53484E7-9400-4066-9AC8-1BFA5DE934B9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{29F9A1B8-7B3F-41E9-B2A4-73BE5904C42E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{29F9A1B8-7B3F-41E9-B2A4-73BE5904C42E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{29F9A1B8-7B3F-41E9-B2A4-73BE5904C42E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{29F9A1B8-7B3F-41E9-B2A4-73BE5904C42E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1FCB497-123C-4FD1-9BF5-45E76A4AB50D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1FCB497-123C-4FD1-9BF5-45E76A4AB50D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1FCB497-123C-4FD1-9BF5-45E76A4AB50D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1FCB497-123C-4FD1-9BF5-45E76A4AB50D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CF88946B-613D-4BD5-95CC-06C8AB6B2BB2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CF88946B-613D-4BD5-95CC-06C8AB6B2BB2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF88946B-613D-4BD5-95CC-06C8AB6B2BB2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CF88946B-613D-4BD5-95CC-06C8AB6B2BB2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9CC9218C-3AD2-4729-913F-F0FF02DF6F19}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9CC9218C-3AD2-4729-913F-F0FF02DF6F19}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9CC9218C-3AD2-4729-913F-F0FF02DF6F19}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9CC9218C-3AD2-4729-913F-F0FF02DF6F19}.Release|Any CPU.Build.0 = Release|Any CPU
+		{20699A84-CE83-46B1-991F-44C19F57A854}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{20699A84-CE83-46B1-991F-44C19F57A854}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{20699A84-CE83-46B1-991F-44C19F57A854}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{20699A84-CE83-46B1-991F-44C19F57A854}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F2D4B1BF-43FA-D784-B92A-BEBBFE2EFF1A}.Debug|Any CPU.ActiveCfg = Debug
+		{F2D4B1BF-43FA-D784-B92A-BEBBFE2EFF1A}.Release|Any CPU.ActiveCfg = Release
+		{B45441A1-950D-3FEF-083F-BF067EBD1D95}.Debug|Any CPU.ActiveCfg = Debug
+		{B45441A1-950D-3FEF-083F-BF067EBD1D95}.Release|Any CPU.ActiveCfg = Release
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {31264ABB-173F-4351-BAC0-3892920B1E60}
+	EndGlobalSection
+EndGlobal

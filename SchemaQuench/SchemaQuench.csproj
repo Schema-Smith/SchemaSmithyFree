@@ -14,7 +14,12 @@
     <Company>SchemaSmith, LLC</Company>
     <Product>SchemaQuench</Product>
     <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
+    <ApplicationIcon>images\SchemaQuench.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="images\SchemaQuench.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Schema\Schema.csproj" />
