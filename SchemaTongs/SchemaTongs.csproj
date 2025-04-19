@@ -15,7 +15,12 @@
 	  <Company>SchemaSmith, LLC</Company>
 	  <Product>SchemaTongs</Product>
 	  <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
+	  <ApplicationIcon>images\SchemaTongs.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="images\SchemaTongs.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.SqlServer.SqlManagementObjects" Version="172.64.0" />

@@ -41,9 +41,9 @@ jobs:
           cache: true
           cache-dependency-path: '**/packages.lock.json'
       - name: Install dependencies
-        run: dotnet restore
+        run: dotnet restore SchemaSmithyFree.sln
       - name: Test with dotnet
-        run: dotnet test --framework net9.0 --logger trx --results-directory "TestResults"
+        run: dotnet test SchemaSmithyFree.sln --framework net9.0 --logger trx --results-directory "TestResults"
       - name: Upload dotnet test results
         uses: actions/upload-artifact@v4
         with:
