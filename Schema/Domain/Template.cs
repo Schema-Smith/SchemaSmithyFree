@@ -11,7 +11,6 @@ namespace Schema.Domain;
 public class Template
 {
     public string Name { get; set; }
-    public Product Product { get; set; }
     public string DatabaseIdentificationScript { get; set; }
     public string VersionStampScript { get; set; }
     public bool UpdateFillFactor { get; set; } = true;
@@ -45,7 +44,6 @@ public class Template
         var template = JsonHelper.Load<Template>(templateFilePath);
         template.FilePath = templateFilePath;
 
-        template.Product = product;
         template.Load(product.ScriptTokens);
 
         return template;

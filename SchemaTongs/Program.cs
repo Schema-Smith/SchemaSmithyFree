@@ -10,7 +10,7 @@ public static class Program
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         ConfigHelper.GetAppSettingsAndUserSecrets(LogFactory.GetLogger("ProgressLog").Info);
 
-        new SchemaTongs().ExctractTemplate();
+        new SchemaTongs().CastTemplate();
         LogBackup.BackupLogsAndExit("SchemaTongs");
     }
 

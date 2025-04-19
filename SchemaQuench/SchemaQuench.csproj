@@ -18,7 +18,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Log4Net.config" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="images\SchemaQuench.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Log4Net.config">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
@@ -27,9 +37,6 @@
 
   <ItemGroup>
     <None Update="appsettings.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Log4Net.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

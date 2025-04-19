@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using System.Reflection;
 using Schema.Isolators;
 using log4net;
@@ -13,7 +12,15 @@ public static class ConfigHelper
     public static void ConfigureLog4Net()
     {
         var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly() ?? Assembly.GetCallingAssembly());
-        XmlConfigurator.Configure(logRepository, new FileInfo("Log4Net.config"));
+        try
+        {
+            using var configStream = ResourceLoader.Load("Log4Net.config").ToStream();
+            XmlConfigurator.Configure(logRepository, configStream);
+        }
+        catch
+        {
+            XmlConfigurator.Configure(logRepository); // use default config if not embedded
+        }
     }
 
     public static IConfigurationRoot GetAppSettingsAndUserSecrets(Action<string> logLine)
