@@ -15,6 +15,7 @@
     <Product>SchemaQuench</Product>
     <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
     <ApplicationIcon>images\SchemaQuench.ico</ApplicationIcon>
+    <RunPostBuildEvent>OnOutputUpdated</RunPostBuildEvent>
   </PropertyGroup>
 
   <ItemGroup>
@@ -46,5 +47,9 @@
 	  <_LogFolders Include="$(OutDir)\SchemaQuench.0*\*" />
 	</ItemGroup>
 	<RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
+  </Target>
+
+  <Target Name="ZipOutputPath" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG'">
+	  <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(OutputPath)\..\..\SchemaQuench-$(TargetFramework).zip" Overwrite="true" />
   </Target>
 </Project>
