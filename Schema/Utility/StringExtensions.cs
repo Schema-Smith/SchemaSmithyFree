@@ -1,5 +1,6 @@
 ﻿using System.Text.RegularExpressions;
 using System;
+using System.IO;
 
 namespace Schema.Utility;
 
@@ -18,4 +19,14 @@ public static class StringExtensions
     public static bool StartsWithIgnoringCase(this string source, string s) => source.StartsWith(s, StringComparison.InvariantCultureIgnoreCase);
 
     public static string ReplaceIgnoringCase(this string source, string find, string replace) => Regex.Replace(source, Regex.Escape(find), replace, RegexOptions.IgnoreCase);
+
+    public static Stream ToStream(this string str)
+    {
+        MemoryStream stream = new MemoryStream();
+        StreamWriter writer = new StreamWriter(stream);
+        writer.Write(str);
+        writer.Flush();
+        stream.Position = 0;
+        return stream;
+    }
 }

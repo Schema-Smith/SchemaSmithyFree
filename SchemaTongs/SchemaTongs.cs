@@ -17,7 +17,8 @@ namespace SchemaTongs;
 public class SchemaTongs
 {
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
-    private string _targetDir = "";
+    private string _productPath = "";
+    private string _templatePath = "";
     private readonly ScriptingOptions _options = new()
     {
         SchemaQualify = true,
@@ -30,12 +31,22 @@ public class SchemaTongs
         ScriptForCreateDrop = false,
         IncludeIfNotExists = true
     };
+    private bool _includeTables;
+    private bool _includeSchemas;
+    private bool _includeUserDefinedTypes;
+    private bool _includeUserDefinedFunction;
+    private bool _includeViews;
+    private bool _includeStoredProcedures;
+    private bool _includeTableTriggers;
+    private bool _includeFullTextCatalogs;
+    private bool _includeFullTextStopLists;
+    private bool _includeDDLTriggers;
 
     private IDbConnection GetConnection(string targetDb)
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
 
-        var connectionString = ConnectionString.Build(config["Target:Server"], targetDb, config["Target:User"], config["Target:Password"]);
+        var connectionString = ConnectionString.Build(config["Source:Server"], targetDb, config["Source:User"], config["Source:Password"]);
 
         var connection = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connectionString);
 
@@ -43,18 +54,30 @@ public class SchemaTongs
         return connection;
     }
 
-    public void ExctractTemplate()
+    public void CastTemplate()
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-        var targetDb = config["Target:Database"]!;
-        if (string.IsNullOrEmpty(targetDb)) throw new Exception("Target database is required");
-        _targetDir = Path.Combine(config["Target:Directory"] ?? ".", targetDb);
+        var targetDb = config["Source:Database"]!;
+        if (string.IsNullOrEmpty(targetDb)) throw new Exception("Source database is required");
+        _productPath = Path.Combine(config["Product:Path"] ?? ".");
 
-        DirectoryWrapper.GetFromFactory().CreateDirectory(_targetDir);
-        ExportDatabase(targetDb);
+        _includeTables = config["ShouldCast:Tables"]?.ToLower() != "false";
+        _includeSchemas = config["ShouldCast:Schemas"]?.ToLower() != "false";
+        _includeUserDefinedTypes = config["ShouldCast:UserDefinedTypes"]?.ToLower() != "false";
+        _includeUserDefinedFunction = config["ShouldCast:UserDefinedFunction"]?.ToLower() != "false";
+        _includeViews = config["ShouldCast:Views"]?.ToLower() != "false";
+        _includeStoredProcedures = config["ShouldCast:StoredProcedures"]?.ToLower() != "false";
+        _includeTableTriggers = config["ShouldCast:TableTriggers"]?.ToLower() != "false";
+        _includeFullTextCatalogs = config["ShouldCast:FullTextCatalogs"]?.ToLower() != "false";
+        _includeFullTextStopLists = config["ShouldCast:FullTextStopLists"]?.ToLower() != "false";
+        _includeDDLTriggers = config["ShouldCast:DatabaseDDLTriggers"]?.ToLower() != "false";
+
+        RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb);
+        _templatePath = RepositoryHelper.UpdateOrInitTemplate(_productPath, config["Template:Name"], targetDb);
+        CastDatabaseObjects(targetDb);
     }
 
-    private void ExportDatabase(string targetDb)
+    private void CastDatabaseObjects(string targetDb)
     {
         using var connection = GetConnection(targetDb);
         using var command = connection.CreateCommand();
@@ -62,32 +85,33 @@ public class SchemaTongs
         _progressLog.Info("Kindling The Forge");
         ForgeKindler.KindleTheForge(command);
 
-        ExtractTableDefinitions(command, targetDb);
+        if (_includeTables) ExtractTableDefinitions(command, targetDb);
 
         var serverConnection = new ServerConnection((SqlConnection)connection);
         var server = new Server(serverConnection);
         var sourceDb = server.Databases[targetDb];
-        ScriptSchemas(sourceDb);
-        ScriptUserDefinedTypes(sourceDb);
-        ScriptUserDefinedFunctions(sourceDb);
-        ScriptViews(sourceDb);
-        ScriptStoredProcedures(sourceDb);
-        ScriptTriggers(sourceDb);
-        ScriptFullTextCatalogs(sourceDb);
-        ScriptFullTextStopLists(sourceDb);
-        ScriptDDLTriggers(sourceDb);
+        if (_includeSchemas) ScriptSchemas(sourceDb);
+        if (_includeUserDefinedTypes) ScriptUserDefinedTypes(sourceDb);
+        if (_includeUserDefinedFunction) ScriptUserDefinedFunctions(sourceDb);
+        if (_includeViews) ScriptViews(sourceDb);
+        if (_includeStoredProcedures) ScriptStoredProcedures(sourceDb);
+        if (_includeTableTriggers) ScriptTriggers(sourceDb);
+        if (_includeFullTextCatalogs) ScriptFullTextCatalogs(sourceDb);
+        if (_includeFullTextStopLists) ScriptFullTextStopLists(sourceDb);
+        if (_includeDDLTriggers) ScriptDDLTriggers(sourceDb);
     }
 
     private void ScriptSchemas(Database sourceDb)
     {
         _progressLog.Info("Casting Schema Scripts");
         sourceDb.PrefetchObjects(typeof(Microsoft.SqlServer.Management.Smo.Schema), _options);
-        DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Schemas"));
+        var castPath = Path.Combine(_templatePath, "Schemas");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (Microsoft.SqlServer.Management.Smo.Schema schema in sourceDb.Schemas)
         {
-            if (schema.IsSystemObject || schema.Name.Contains("\\") || schema.Name.EqualsIgnoringCase("SchemaSmith")) continue;
+            if (schema.IsSystemObject || schema.Name.Contains(@"\") || schema.Name.EqualsIgnoringCase("SchemaSmith")) continue;
 
-            var fileName = Path.Combine(_targetDir, "Schemas", $"{schema.Name}.sql");
+            var fileName = Path.Combine(castPath, $"{schema.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", schema.Script(_options).Cast<string>()));
         }
@@ -98,16 +122,17 @@ public class SchemaTongs
         _progressLog.Info("Casting User Defined Types");
         sourceDb.PrefetchObjects(typeof(UserDefinedDataType), _options);
         sourceDb.PrefetchObjects(typeof(UserDefinedTableType), _options);
-        DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "DataTypes"));
+        var castPath = Path.Combine(_templatePath, "DataTypes");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (UserDefinedDataType type in sourceDb.UserDefinedDataTypes)
         {
-            var fileName = Path.Combine(_targetDir, "DataTypes", $"{type.Schema}.{type.Name}.sql");
+            var fileName = Path.Combine(castPath, $"{type.Schema}.{type.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", type.Script(_options).Cast<string>()));
         }
         foreach (UserDefinedTableType type in sourceDb.UserDefinedTableTypes)
         {
-            var fileName = Path.Combine(_targetDir, "DataTypes", $"{type.Schema}.{type.Name}.sql");
+            var fileName = Path.Combine(castPath, $"{type.Schema}.{type.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", type.Script(_options).Cast<string>()));
         }
@@ -117,12 +142,13 @@ public class SchemaTongs
     {
         _progressLog.Info("Casting Function Scripts");
         sourceDb.PrefetchObjects(typeof(UserDefinedFunction), _options);
-        DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Functions"));
+        var castPath = Path.Combine(_templatePath, "Functions");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (UserDefinedFunction function in sourceDb.UserDefinedFunctions)
         {
             if (function.IsSystemObject || function.IsEncrypted || function.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
 
-            var fileName = Path.Combine(_targetDir, "Functions", $"{function.Schema}.{function.Name}.sql");
+            var fileName = Path.Combine(castPath, $"{function.Schema}.{function.Name}.sql");
             var sql = @$"SET ANSI_NULLS {(function.AnsiNullsStatus ? "ON" : "OFF")}
 SET QUOTED_IDENTIFIER {(function.QuotedIdentifierStatus ? "ON" : "OFF")}
 GO
@@ -138,12 +164,13 @@ GO
     {
         _progressLog.Info("Casting View Scripts");
         sourceDb.PrefetchObjects(typeof(View), _options);
-        DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Views"));
+        var castPath = Path.Combine(_templatePath, "Views");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (View view in sourceDb.Views)
         {
             if (view.IsSystemObject || view.IsEncrypted || view.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
 
-            var fileName = Path.Combine(_targetDir, "Views", $"{view.Schema}.{view.Name}.sql");
+            var fileName = Path.Combine(castPath, $"{view.Schema}.{view.Name}.sql");
             var sql = @$"SET ANSI_NULLS {(view.AnsiNullsStatus ? "ON" : "OFF")}
 SET QUOTED_IDENTIFIER {(view.QuotedIdentifierStatus ? "ON" : "OFF")}
 GO
@@ -159,12 +186,13 @@ GO
     {
         _progressLog.Info("Casting Stored Procedure Scripts");
         sourceDb.PrefetchObjects(typeof(StoredProcedure), _options);
-        DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Procedures"));
+        var castPath = Path.Combine(_templatePath, "Procedures");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (StoredProcedure procedure in sourceDb.StoredProcedures)
         {
             if (procedure.IsSystemObject || procedure.IsEncrypted || procedure.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
 
-            var fileName = Path.Combine(_targetDir, "Procedures", $"{procedure.Schema}.{procedure.Name}.sql");
+            var fileName = Path.Combine(castPath, $"{procedure.Schema}.{procedure.Name}.sql");
             var sql = @$"SET ANSI_NULLS {(procedure.AnsiNullsStatus ? "ON" : "OFF")}
 SET QUOTED_IDENTIFIER {(procedure.QuotedIdentifierStatus ? "ON" : "OFF")}
 GO
@@ -178,9 +206,10 @@ GO
 
     private void ScriptTriggers(Database sourceDb)
     {
-        _progressLog.Info("Casting Trigger Scripts");
+        _progressLog.Info("Casting Table Trigger Scripts");
         sourceDb.PrefetchObjects(typeof(Table), _options);
-        DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "Triggers"));
+        var castPath = Path.Combine(_templatePath, "Triggers");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (Table table in sourceDb.Tables)
         {
             if (table.IsSystemObject || table.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
@@ -188,7 +217,7 @@ GO
             foreach (Trigger trigger in table.Triggers)
             {
                 if (trigger.IsSystemObject || trigger.IsEncrypted) continue;
-                var fileName = Path.Combine(_targetDir, "Triggers", $"{table.Schema}.{table.Name}.{trigger.Name}.sql");
+                var fileName = Path.Combine(castPath, $"{table.Schema}.{table.Name}.{trigger.Name}.sql");
                 var sql = @$"SET ANSI_NULLS {(trigger.AnsiNullsStatus ? "ON" : "OFF")}
 SET QUOTED_IDENTIFIER {(trigger.QuotedIdentifierStatus ? "ON" : "OFF")}
 GO
@@ -220,7 +249,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
 ";
 
         _progressLog.Info("Casting Table Structures");
-        var tableDir = Path.Combine(_targetDir, "Tables");
+        var tableDir = Path.Combine(_templatePath, "Tables");
         DirectoryWrapper.GetFromFactory().CreateDirectory(tableDir);
         using var reader = command.ExecuteReader();
         while (reader.Read())
@@ -231,7 +260,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             using var jsonReader = commandJson.ExecuteReader();
             var json = "";
             while (jsonReader.Read())
-                json += $"{jsonReader[0].ToString()}\r\n";
+                json += $"{jsonReader[0]}\r\n";
             if (string.IsNullOrWhiteSpace(json) || json.Trim().Equals("{}"))
             {
                 _progressLog.Error($"    No json returned for {reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}");
@@ -248,10 +277,11 @@ SELECT TABLE_SCHEMA, TABLE_NAME
     private void ScriptFullTextCatalogs(Database sourceDb)
     {
         _progressLog.Info("Casting FullText Catalog Scripts");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "FullTextCatalogs"));
+        var castPath = Path.Combine(_templatePath, "FullTextCatalogs");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (FullTextCatalog catalog in sourceDb.FullTextCatalogs)
         {
-            var fileName = Path.Combine(_targetDir, "FullTextCatalogs", $"{catalog.Name}.sql");
+            var fileName = Path.Combine(castPath, $"{catalog.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", catalog.Script(_options).Cast<string>()));
         }
@@ -260,10 +290,11 @@ SELECT TABLE_SCHEMA, TABLE_NAME
     private void ScriptFullTextStopLists(Database sourceDb)
     {
         _progressLog.Info("Casting FullText Stop List Scripts");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "FullTextStopLists"));
+        var castPath = Path.Combine(_templatePath, "FullTextStopLists");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (FullTextStopList list in sourceDb.FullTextStopLists)
         {
-            var fileName = Path.Combine(_targetDir, "FullTextStopLists", $"{list.Name}.sql");
+            var fileName = Path.Combine(castPath, $"{list.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", list.Script(_options).Cast<string>()));
         }
@@ -271,11 +302,12 @@ SELECT TABLE_SCHEMA, TABLE_NAME
 
     private void ScriptDDLTriggers(Database sourceDb)
     {
-        _progressLog.Info("Casting DDL Trigger Scripts");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(Path.Combine(_targetDir, "DDLTriggers"));
+        _progressLog.Info("Casting Database DDL Trigger Scripts");
+        var castPath = Path.Combine(_templatePath, "DDLTriggers");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (DatabaseDdlTrigger trigger in sourceDb.Triggers)
         {
-            var fileName = Path.Combine(_targetDir, "DDLTriggers", $"{trigger.Name}.sql");
+            var fileName = Path.Combine(castPath, $"{trigger.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", trigger.Script(_options).Cast<string>()));
         }
