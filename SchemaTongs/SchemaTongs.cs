@@ -11,6 +11,7 @@ using System;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Xml.Linq;
 
 namespace SchemaTongs;
 
@@ -24,7 +25,7 @@ public class SchemaTongs
         SchemaQualify = true,
         NoCollation = true,
         WithDependencies = false,
-        ExtendedProperties = false,
+        ExtendedProperties = true,
         AllowSystemObjects = false,
         Permissions = false,
         ScriptForCreateOrAlter = true,
@@ -157,10 +158,18 @@ SET QUOTED_IDENTIFIER {(function.QuotedIdentifierStatus ? "ON" : "OFF")}
 GO
 {function.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
 {function.TextBody}
-";
+GO
+{AddExtendedProperiesScript(function.ExtendedProperties)}";
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
         }
+    }
+
+    private string AddExtendedProperiesScript(ExtendedPropertyCollection properties)
+    {
+        if (properties.Count == 0) return "";
+
+        return properties.Count == 0 ? "" : $"{string.Join("\r\n", properties.Cast<ExtendedProperty>().SelectMany(p => p.Script(_options).Cast<string>()))}\r\nGO";
     }
 
     private void ScriptViews(Database sourceDb)
@@ -179,7 +188,8 @@ SET QUOTED_IDENTIFIER {(view.QuotedIdentifierStatus ? "ON" : "OFF")}
 GO
 {view.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
 {view.TextBody}
-";
+GO
+{AddExtendedProperiesScript(view.ExtendedProperties)}";
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
         }
@@ -201,7 +211,9 @@ SET QUOTED_IDENTIFIER {(procedure.QuotedIdentifierStatus ? "ON" : "OFF")}
 GO
 {procedure.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
 {procedure.TextBody}
-";
+GO
+{AddExtendedProperiesScript(procedure.ExtendedProperties)}";
+
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
         }
@@ -226,7 +238,8 @@ SET QUOTED_IDENTIFIER {(trigger.QuotedIdentifierStatus ? "ON" : "OFF")}
 GO
 {trigger.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
 {trigger.TextBody}
-";
+GO
+{AddExtendedProperiesScript(trigger.ExtendedProperties)}";
                 _progressLog.Info($"  Casting {fileName}");
                 FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
             }
@@ -311,8 +324,15 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         foreach (DatabaseDdlTrigger trigger in sourceDb.Triggers)
         {
             var fileName = Path.Combine(castPath, $"{trigger.Name}.sql");
+            var sql = @$"SET ANSI_NULLS {(trigger.AnsiNullsStatus ? "ON" : "OFF")}
+SET QUOTED_IDENTIFIER {(trigger.QuotedIdentifierStatus ? "ON" : "OFF")}
+GO
+{trigger.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
+{trigger.TextBody}
+GO
+{AddExtendedProperiesScript(trigger.ExtendedProperties)}";
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", trigger.Script(_options).Cast<string>()));
+            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
         }
     }
 
@@ -325,7 +345,29 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         {
             var fileName = Path.Combine(castPath, $"{collection.Schema}.{collection.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", collection.Script(_options).Cast<string>()));
+            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", collection.Script(_options).Cast<string>().Select(FormatXmlInScript)));
+        }
+    }
+
+    private static string FormatXmlInScript(string script)
+    {
+        if (!script.Contains(" AS N'")) return script;
+        
+        var xmlStart = script.IndexOfIgnoringCase(" AS N'") + 6;
+        var xml = script.Substring(xmlStart, script.Length - (xmlStart + 1));
+        var formattedXml = "\r\n" + string.Join("\r\n", xml.Replace("</xsd:schema>", "</xsd:schema>\r").Split('\r').Select(FormatXml));
+        return script.Replace(xml, formattedXml);
+    }
+
+    private static string FormatXml(string xml)
+    {
+        try
+        {
+            return string.IsNullOrWhiteSpace(xml) ? xml : XDocument.Parse(xml).ToString();
+        }
+        catch
+        {
+            return xml; // if parsing fails then send it back unformatted
         }
     }
 }
