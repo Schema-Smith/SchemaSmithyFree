@@ -90,6 +90,7 @@ public class Template
                 new ScriptFolder { FolderPath = "DataTypes", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "FullTextCatalogs", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "FullTextStopLists", QuenchSlot = QuenchSlot.Objects },
+                new ScriptFolder { FolderPath = "XMLSchemaCollections", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "Functions", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "Views", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "Procedures", QuenchSlot = QuenchSlot.Objects },

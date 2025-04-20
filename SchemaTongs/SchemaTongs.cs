@@ -41,6 +41,7 @@ public class SchemaTongs
     private bool _includeFullTextCatalogs;
     private bool _includeFullTextStopLists;
     private bool _includeDDLTriggers;
+    private bool _includeXmlSchemaCollections;
 
     private IDbConnection GetConnection(string targetDb)
     {
@@ -71,6 +72,7 @@ public class SchemaTongs
         _includeFullTextCatalogs = config["ShouldCast:FullTextCatalogs"]?.ToLower() != "false";
         _includeFullTextStopLists = config["ShouldCast:FullTextStopLists"]?.ToLower() != "false";
         _includeDDLTriggers = config["ShouldCast:DatabaseDDLTriggers"]?.ToLower() != "false";
+        _includeXmlSchemaCollections = config["ShouldCast:XMLSchemaCollections"]?.ToLower() != "false";
 
         RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb);
         _templatePath = RepositoryHelper.UpdateOrInitTemplate(_productPath, config["Template:Name"], targetDb);
@@ -99,6 +101,7 @@ public class SchemaTongs
         if (_includeFullTextCatalogs) ScriptFullTextCatalogs(sourceDb);
         if (_includeFullTextStopLists) ScriptFullTextStopLists(sourceDb);
         if (_includeDDLTriggers) ScriptDDLTriggers(sourceDb);
+        if (_includeXmlSchemaCollections) ScriptXmlSchemaCollections(sourceDb);
     }
 
     private void ScriptSchemas(Database sourceDb)
@@ -310,6 +313,19 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             var fileName = Path.Combine(castPath, $"{trigger.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", trigger.Script(_options).Cast<string>()));
+        }
+    }
+
+    private void ScriptXmlSchemaCollections(Database sourceDb)
+    {
+        _progressLog.Info("Casting XML Schema Collection Scripts");
+        var castPath = Path.Combine(_templatePath, "XMLSchemaCollections");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+        foreach (XmlSchemaCollection collection in sourceDb.XmlSchemaCollections)
+        {
+            var fileName = Path.Combine(castPath, $"{collection.Schema}.{collection.Name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", collection.Script(_options).Cast<string>()));
         }
     }
 }
