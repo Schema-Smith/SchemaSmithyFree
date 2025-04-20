@@ -12,7 +12,7 @@ BEGIN TRY
   RAISERROR('Parse Tables from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #TableDefinitions
   SELECT [Schema] = SchemaSmith.fn_SafeBracketWrap(ISNULL([Schema], 'dbo')), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL([CompressionType], 'NONE'), [IsTemporal] = ISNULL([IsTemporal], 0),
-         [Indexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints]
+         [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints]
     INTO #TableDefinitions
     FROM OPENJSON(@TableDefinitions) WITH (
       [Schema] VARCHAR(500) '$.Schema',
@@ -20,6 +20,7 @@ BEGIN TRY
       [CompressionType] VARCHAR(100) '$.CompressionType',
       [IsTemporal] BIT '$.IsTemporal',
 	  [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON,
+	  [XmlIndexes] NVARCHAR(MAX) '$.XmlIndexes' AS JSON,
       [Columns] NVARCHAR(MAX) '$.Columns' AS JSON,
 	  [Statistics] NVARCHAR(MAX) '$.Statistics' AS JSON,
 	  [FullTextIndex] NVARCHAR(MAX) '$.FullTextIndex' AS JSON,
@@ -62,6 +63,21 @@ BEGIN TRY
       [FilterExpression] VARCHAR(MAX) '$.FilterExpression',
       [IndexColumns] VARCHAR(MAX) '$.IndexColumns',
       [IncludeColumns] VARCHAR(MAX) '$.IncludeColumns'
+      ) i;
+  
+  RAISERROR('Parse XML Indexes from Json', 10, 1) WITH NOWAIT
+  DROP TABLE IF EXISTS #XmlIndexes
+  SELECT t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), i.[IsPrimary],
+         [Column] = SchemaSmith.fn_SafeBracketWrap(i.[Column]), [PrimaryIndex] = SchemaSmith.fn_SafeBracketWrap(i.[PrimaryIndex]),
+         i.[SecondaryIndexType]
+    INTO #XmlIndexes
+    FROM #TableDefinitions t WITH (NOLOCK)
+    CROSS APPLY OPENJSON(XmlIndexes) WITH (
+      [IndexName] VARCHAR(500) '$.Name',
+      [IsPrimary] BIT '$.IsPrimary',
+      [Column] VARCHAR(500) '$.Column',
+      [PrimaryIndex] VARCHAR(500) '$.PrimaryIndex',
+	  [SecondaryIndexType] VARCHAR(500) '$.SecondaryIndexType'
       ) i;
   
   RAISERROR('Parse Columns from Json', 10, 1) WITH NOWAIT
@@ -234,6 +250,11 @@ BEGIN TRY
     WHERE xp.[value] = @ProductName
       AND NOT EXISTS (SELECT * 
                         FROM #Indexes i WITH (NOLOCK) 
+                        WHERE i.[Schema] = xp.[Schema] 
+                          AND i.TableName = xp.TableName
+                          AND SchemaSmith.fn_StripBracketWrapping(i.IndexName) = xp.IndexName)
+      AND NOT EXISTS (SELECT * 
+                        FROM #XmlIndexes i WITH (NOLOCK) 
                         WHERE i.[Schema] = xp.[Schema] 
                           AND i.TableName = xp.TableName
                           AND SchemaSmith.fn_StripBracketWrapping(i.IndexName) = xp.IndexName)
@@ -420,6 +441,7 @@ BEGIN TRY
     LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = si.[object_id]
                                             AND p.index_id = si.index_id
     WHERE t.NewTable = 0
+      AND NOT EXISTS (SELECT * FROM sys.xml_indexes xi WHERE xi.[object_id] = si.[object_id] AND xi.index_id = si.index_id)
     
   RAISERROR('Detect Index Changes', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexChanges
@@ -480,6 +502,67 @@ BEGIN TRY
     FROM #IndexRenames ir WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
+  RAISERROR('Collect Existing XML Index Definitions', 10, 1) WITH NOWAIT
+  DROP TABLE IF EXISTS #ExistingXmlIndexes
+  SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(i.[Name] COLLATE DATABASE_DEFAULT AS VARCHAR(500)),
+         IndexScript = 'CREATE ' + CASE WHEN i.xml_index_type = 0 THEN 'PRIMARY ' ELSE '' END + 
+                       'XML INDEX [' + i.[name] COLLATE DATABASE_DEFAULT + '] ON [' + OBJECT_SCHEMA_NAME(i.[object_id]) + '].[' + OBJECT_NAME(i.[object_id]) + '] ' + 
+                       '([' + COL_NAME(i.[Object_id], ic.column_id) + '])' + 
+                       CASE WHEN i.xml_index_type = 1 
+                            THEN ' USING XML INDEX [' + (SELECT [Name] FROM sys.xml_indexes i2 WHERE i2.[object_id] = i.[object_id] AND i2.index_id = i.using_xml_index_id) COLLATE DATABASE_DEFAULT + '] ' + 
+                                 'FOR ' + i.secondary_type_desc COLLATE DATABASE_DEFAULT 
+                            ELSE '' END
+    INTO #ExistingXmlIndexes
+    FROM #Tables t WITH (NOLOCK)
+    JOIN sys.xml_indexes i ON i.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+    JOIN sys.index_columns ic ON i.[object_id] = ic.[object_id] AND i.index_id = ic.index_id
+    WHERE t.NewTable = 0
+
+  RAISERROR('Detect Xml Index Changes', 10, 1) WITH NOWAIT
+  DROP TABLE IF EXISTS #XmlIndexChanges
+  SELECT i.[Schema], i.[TableName], i.[IndexName]
+    INTO #XmlIndexChanges
+    FROM #ExistingXmlIndexes ei WITH (NOLOCK)
+    JOIN #XmlIndexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                    AND ei.[xTableName] = i.[TableName]
+                                    AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+    WHERE EXISTS (SELECT * 
+                    FROM sys.xml_indexes si WITH (NOLOCK)
+                    WHERE si.[object_id] = OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]) 
+                      AND si.[name] = ei.[xIndexName])
+      AND ei.IndexScript <> 'CREATE ' + CASE WHEN i.IsPrimary = 1 THEN 'PRIMARY ' ELSE '' END + 
+                            'XML INDEX [' + i.[IndexName] COLLATE DATABASE_DEFAULT + '] ON [' + i.[Schema] + '].[' + i.[TableName] + '] ([' + i.[Column] + '])' + 
+                            CASE WHEN i.IsPrimary = 0
+                                 THEN ' USING XML INDEX [' + i.PrimaryIndex + '] FOR ' + i.SecondaryIndexType
+                                 ELSE '' END
+  
+  RAISERROR('Detect Xml Index Renames', 10, 1) WITH NOWAIT
+  DROP TABLE IF EXISTS #XmlIndexRenames
+  SELECT i.[Schema], i.[TableName], [NewName] = i.[IndexName], [OldName] = ei.[xIndexName]
+    INTO #XmlIndexRenames
+    FROM #ExistingXmlIndexes ei WITH (NOLOCK)
+    JOIN #XmlIndexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                    AND ei.[xTableName] = i.[TableName]
+                                    AND ei.[xIndexName] <> SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+    WHERE EXISTS (SELECT * 
+                    FROM sys.xml_indexes si WITH (NOLOCK)
+                    WHERE si.[object_id] = OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]) 
+                      AND si.[name] = ei.[xIndexName])
+      AND REPLACE(ei.IndexScript, ei.[xIndexName], 'IndexName') = 'CREATE ' + CASE WHEN i.IsPrimary = 1 THEN 'PRIMARY ' ELSE '' END + 
+                                                                  'XML INDEX [IndexName] ON [' + i.[Schema] + '].[' + i.[TableName] + '] ([' + i.[Column] + '])' + 
+                                                                  CASE WHEN i.IsPrimary = 0
+                                                                       THEN ' USING XML INDEX [' + i.PrimaryIndex + '] FOR ' + i.SecondaryIndexType
+                                                                       ELSE '' END
+
+  RAISERROR('Handle Renamed Xml Indexes', 10, 1) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                             CASE WHEN INDEXPROPERTY(OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]), SchemaSmith.fn_StripBracketWrapping(ir.[NewName]), 'IndexID') IS NULL
+                                  THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
+                                  ELSE 'DROP INDEX IF EXISTS ' + ir.[Schema] + '.' + ir.[TableName] + '.[' + ir.[OldName] + '];'
+                                  END, CHAR(13) + CHAR(10))
+    FROM #XmlIndexRenames ir WITH (NOLOCK)
+  IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
+
   RAISERROR('Identify unknown and modified indexes to drop', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexesToDrop
   SELECT [Schema] = CAST([Schema] AS VARCHAR(500)), [TableName] = CAST([TableName] AS VARCHAR(500)), 
@@ -498,6 +581,14 @@ BEGIN TRY
   UNION
   SELECT [Schema], [TableName], SchemaSmith.fn_StripBracketWrapping([IndexName]), [IsConstraint], [IsUnique]
     FROM #IndexChanges WITH (NOLOCK)
+  UNION
+  SELECT [xSchema], [xTableName], [xIndexName], [IsConstraint] = 0, [IsUnique] = 0
+    FROM #ExistingXmlIndexes ei WITH (NOLOCK)
+    WHERE @DropUnknownIndexes = 1
+      AND NOT EXISTS (SELECT * FROM #XmlIndexes i WITH (NOLOCK) WHERE i.[Schema] = ei.[xSchema] AND i.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i.[IndexName]) = ei.[xIndexName])
+  UNION
+  SELECT [Schema], [TableName], SchemaSmith.fn_StripBracketWrapping([IndexName]), [IsConstraint] = 0, [IsUnique] = 0
+    FROM #XmlIndexChanges WITH (NOLOCK)
   
   RAISERROR('Drop Referencing Foreign Keys When Dropping Unique Indexes', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
@@ -872,6 +963,21 @@ BEGIN TRY
                           AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))    
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
+
+  RAISERROR('Add Missing Xml Indexes', 10, 1) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Creating index ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                             'CREATE ' + CASE WHEN i.IsPrimary = 1 THEN 'PRIMARY ' ELSE '' END + 
+                             'XML INDEX [' + i.[IndexName] COLLATE DATABASE_DEFAULT + '] ON [' + i.[Schema] + '].[' + i.[TableName] + '] ([' + i.[Column] + '])' + 
+                             CASE WHEN i.IsPrimary = 0
+                                  THEN ' USING XML INDEX [' + i.PrimaryIndex + '] FOR ' + i.SecondaryIndexType
+                                  ELSE '' END + ';', CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.[PrimaryIndex] =  1 THEN 0 ELSE 1 END, i.[IndexName])
+    FROM #XmlIndexes i WITH (NOLOCK)
+    WHERE NOT EXISTS (SELECT * 
+                        FROM sys.xml_indexes si WITH (NOLOCK)
+                        WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) 
+                          AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))    
+  IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
+
   RAISERROR('Turn on Temporal Tracking for tables defined as temporal', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Turn ON Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD [ValidFrom] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL DEFAULT ''0001-01-01 00:00:00.0000000'', ' +
@@ -889,6 +995,17 @@ BEGIN TRY
                                                          '@level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', ' +
                                                          '@level2type = N''Index'', @level2name = ''' + SchemaSmith.fn_StripBracketWrapping(i.IndexName) + ''';', CHAR(13) + CHAR(10))
     FROM #Indexes i WITH (NOLOCK)
+    JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = i.[Schema] AND t.[Name] = i.[TableName]
+    WHERE INDEXPROPERTY(OBJECT_ID(t.[Schema] + '.' + t.[Name]), SchemaSmith.fn_StripBracketWrapping(i.IndexName), 'IndexID') IS NOT NULL
+      AND NOT EXISTS (SELECT * FROM #IndexProperties ip WITH (NOLOCK) WHERE i.[Schema] = ip.[Schema] AND i.TableName = ip.TableName AND SchemaSmith.fn_StripBracketWrapping(i.IndexName) = ip.IndexName AND ip.PropertyName = 'ProductName')
+  IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
+  
+  RAISERROR('Add missing ProductName extended property to xml indexes', 10, 1) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +
+                                                         '@level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ' +
+                                                         '@level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', ' +
+                                                         '@level2type = N''Index'', @level2name = ''' + SchemaSmith.fn_StripBracketWrapping(i.IndexName) + ''';', CHAR(13) + CHAR(10))
+    FROM #XmlIndexes i WITH (NOLOCK)
     JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = i.[Schema] AND t.[Name] = i.[TableName]
     WHERE INDEXPROPERTY(OBJECT_ID(t.[Schema] + '.' + t.[Name]), SchemaSmith.fn_StripBracketWrapping(i.IndexName), 'IndexID') IS NOT NULL
       AND NOT EXISTS (SELECT * FROM #IndexProperties ip WITH (NOLOCK) WHERE i.[Schema] = ip.[Schema] AND i.TableName = ip.TableName AND SchemaSmith.fn_StripBracketWrapping(i.IndexName) = ip.IndexName AND ip.PropertyName = 'ProductName')
