@@ -35,7 +35,7 @@ public class SchemaTongs
     private bool _includeTables;
     private bool _includeSchemas;
     private bool _includeUserDefinedTypes;
-    private bool _includeUserDefinedFunction;
+    private bool _includeUserDefinedFunctions;
     private bool _includeViews;
     private bool _includeStoredProcedures;
     private bool _includeTableTriggers;
@@ -66,13 +66,13 @@ public class SchemaTongs
         _includeTables = config["ShouldCast:Tables"]?.ToLower() != "false";
         _includeSchemas = config["ShouldCast:Schemas"]?.ToLower() != "false";
         _includeUserDefinedTypes = config["ShouldCast:UserDefinedTypes"]?.ToLower() != "false";
-        _includeUserDefinedFunction = config["ShouldCast:UserDefinedFunction"]?.ToLower() != "false";
+        _includeUserDefinedFunctions = config["ShouldCast:UserDefinedFunctions"]?.ToLower() != "false";
         _includeViews = config["ShouldCast:Views"]?.ToLower() != "false";
         _includeStoredProcedures = config["ShouldCast:StoredProcedures"]?.ToLower() != "false";
         _includeTableTriggers = config["ShouldCast:TableTriggers"]?.ToLower() != "false";
-        _includeFullTextCatalogs = config["ShouldCast:FullTextCatalogs"]?.ToLower() != "false";
-        _includeFullTextStopLists = config["ShouldCast:FullTextStopLists"]?.ToLower() != "false";
-        _includeDDLTriggers = config["ShouldCast:DatabaseDDLTriggers"]?.ToLower() != "false";
+        _includeFullTextCatalogs = config["ShouldCast:Catalogs"]?.ToLower() != "false";
+        _includeFullTextStopLists = config["ShouldCast:StopLists"]?.ToLower() != "false";
+        _includeDDLTriggers = config["ShouldCast:DDLTriggers"]?.ToLower() != "false";
         _includeXmlSchemaCollections = config["ShouldCast:XMLSchemaCollections"]?.ToLower() != "false";
 
         RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb);
@@ -95,10 +95,10 @@ public class SchemaTongs
         var sourceDb = server.Databases[targetDb];
         if (_includeSchemas) ScriptSchemas(sourceDb);
         if (_includeUserDefinedTypes) ScriptUserDefinedTypes(sourceDb);
-        if (_includeUserDefinedFunction) ScriptUserDefinedFunctions(sourceDb);
+        if (_includeUserDefinedFunctions) ScriptUserDefinedFunctions(sourceDb);
         if (_includeViews) ScriptViews(sourceDb);
         if (_includeStoredProcedures) ScriptStoredProcedures(sourceDb);
-        if (_includeTableTriggers) ScriptTriggers(sourceDb);
+        if (_includeTableTriggers) ScriptTableTriggers(sourceDb);
         if (_includeFullTextCatalogs) ScriptFullTextCatalogs(sourceDb);
         if (_includeFullTextStopLists) ScriptFullTextStopLists(sourceDb);
         if (_includeDDLTriggers) ScriptDDLTriggers(sourceDb);
@@ -219,7 +219,7 @@ GO
         }
     }
 
-    private void ScriptTriggers(Database sourceDb)
+    private void ScriptTableTriggers(Database sourceDb)
     {
         _progressLog.Info("Casting Table Trigger Scripts");
         sourceDb.PrefetchObjects(typeof(Table), _options);
