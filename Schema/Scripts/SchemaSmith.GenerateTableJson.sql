@@ -3,18 +3,7 @@
   @p_Table SYSNAME
 AS
 SET NOCOUNT ON
-DECLARE @FullText VARCHAR(MAX) = (SELECT FullTextCatalog = '[' + (SELECT c.[name] FROM sys.fulltext_catalogs c WITH (NOLOCK) WHERE c.fulltext_catalog_id = fi.fulltext_catalog_id) + ']',
-                                         KeyIndex = '[' + (SELECT i.[Name] FROM sys.indexes i WITH (NOLOCK) WHERE i.[object_id] = fi.[object_id] AND i.[index_id] = fi.[unique_index_id]) + ']',
-                                         ChangeTracking = change_tracking_state_desc,
-                                         [StopList] = '[' + (SELECT fs.[name] FROM sys.fulltext_stoplists fs WITH (NOLOCK) WHERE fs.stoplist_id = fi.stoplist_id) + ']',
-                                         (SELECT STRING_AGG('[' + COL_NAME(fc.[object_id], fc.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
-                                            FROM sys.fulltext_index_columns fc WITH (NOLOCK)
-                                            WHERE fi.[object_id] = fc.[object_id]) AS [Columns]
-                                    FROM sys.fulltext_indexes fi WITH (NOLOCK)
-                                    WHERE [object_id] = OBJECT_ID('dbo.TestTable')
-                                    FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
-
-SELECT [Line] FROM SchemaSmith.fn_FormatJson(REPLACE((
+SELECT [Line] FROM SchemaSmith.fn_FormatJson(REPLACE(REPLACE(REPLACE((
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
        COALESCE((SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
@@ -40,7 +29,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                           WHERE parent_object_id = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
                             AND parent_column_id = COLUMNPROPERTY(OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME), c.COLUMN_NAME, 'ColumnId')) AS [CheckExpression],
                        SchemaSmith.fn_StripParenWrapping(cc.[definition]) AS ComputedExpression,
-                       ISNULL(cc.is_persisted, CAST(0 AS BIT)) AS [Persisted]
+                       ISNULL(cc.is_persisted, CAST(0 AS BIT)) AS [Persisted],
+	                   '{' + (SELECT STRING_AGG('"' + [Name] + '": "' + CONVERT(VARCHAR(MAX), [Value]) + '"', ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Column', c.COLUMN_NAME) x) + '}' AS [ExtendedProperties]
                   FROM INFORMATION_SCHEMA.COLUMNS c WITH (NOLOCK)
                   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME) AND sc.[name] = c.COLUMN_NAME
                   JOIN (SELECT CASE WHEN SCHEMA_NAME(st.[schema_id]) IN ('sys', 'dbo')
@@ -68,10 +58,15 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END, ',') WITHIN GROUP (ORDER BY key_ordinal)
                   FROM sys.index_columns ic WITH (NOLOCK)
                   WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0) AS [IndexColumns],
-               (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
+               (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY index_column_id)
                   FROM sys.index_columns ic WITH (NOLOCK)
                   WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) AS [IncludeColumns],
-			   CASE WHEN has_filter = 1 THEN SchemaSmith.fn_StripParenWrapping(filter_definition) ELSE NULL END AS [FilterExpression]
+			   CASE WHEN has_filter = 1 THEN SchemaSmith.fn_StripParenWrapping(filter_definition) ELSE NULL END AS [FilterExpression],
+			   '{' + (SELECT STRING_AGG('"' + [Name] + '": "' + [Value] + '"', ',') 
+                        FROM (SELECT COALESCE(i.[Name], c.[Name]) AS [Name], RTRIM(COALESCE(CONVERT(VARCHAR(MAX), c.[Value]) + ' ', '') + COALESCE(CONVERT(VARCHAR(MAX), i.[Value]), '')) AS [Value]
+                                FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Index', si.[Name]) i
+                                FULL OUTER JOIN fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Constraint', si.[Name]) c ON i.[Name] = c.[Name]) x)
+                   + '}' AS [ExtendedProperties]
           FROM sys.indexes si WITH (NOLOCK)
           WHERE si.[object_id] = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
             AND is_hypothetical = 0
@@ -79,17 +74,28 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
             AND index_id > 0
           ORDER BY [Name]
           FOR JSON AUTO) AS [Indexes],
+       (SELECT i.[name] COLLATE DATABASE_DEFAULT AS [Name],
+               COL_NAME(i.[Object_id], ic.column_id) AS [Column],
+               CONVERT(BIT, CASE WHEN i.xml_index_type = 0 THEN 1 ELSE 0 END) AS [IsPrimary],
+               (SELECT [Name] COLLATE DATABASE_DEFAULT FROM sys.xml_indexes i2 WHERE i2.[object_id] = i.[object_id] AND i2.index_id = i.using_xml_index_id AND i.xml_index_type = 1) AS [PrimaryIndex],
+               i.secondary_type_desc COLLATE DATABASE_DEFAULT AS [SecondaryIndexType]
+          FROM sys.xml_indexes i 
+          JOIN sys.index_columns ic ON i.[object_id] = ic.[object_id] AND i.index_id = ic.index_id
+          WHERE i.[object_id] = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
+          ORDER BY i.[Name]
+          FOR JSON AUTO) AS [XmlIndexes],
 	   (SELECT '[' + [Name] + ']' AS [Name],
                (SELECT STRING_AGG('[' + COL_NAME(fc.[parent_object_id], fc.parent_column_id) + ']', ',') WITHIN GROUP (ORDER BY fc.constraint_column_id)
                             FROM sys.foreign_key_columns fc WITH (NOLOCK)
                             WHERE fk.[object_id] = fc.[constraint_object_id]) AS [Columns],
                '[' + OBJECT_SCHEMA_NAME(referenced_object_id) + ']' AS RelatedTableSchema,
                '[' + OBJECT_NAME(referenced_object_id) + ']' AS RelatedTable,
-               (SELECT STRING_AGG('[' + COL_NAME(fc.[referenced_object_id], fc.referenced_column_id) + ']', ',') WITHIN GROUP (ORDER BY fc.constraint_column_id)
+               (SELECT STRING_AGG('[' + COL_NAME(fc.[referenced_object_id], fc.referenced_column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[referenced_object_id], fc.referenced_column_id))
                             FROM sys.foreign_key_columns fc WITH (NOLOCK)
                             WHERE fk.[object_id] = fc.[constraint_object_id]) AS [RelatedColumns],
                CAST(CASE WHEN fk.delete_referential_action = 0 THEN 0 ELSE 1 END AS BIT) AS CascadeOnDelete,
-               CAST(CASE WHEN fk.update_referential_action = 0 THEN 0 ELSE 1 END AS BIT) AS CascadeOnUpdate
+               CAST(CASE WHEN fk.update_referential_action = 0 THEN 0 ELSE 1 END AS BIT) AS CascadeOnUpdate,
+               '{' + (SELECT STRING_AGG('"' + [Name] + '": "' + CONVERT(VARCHAR(MAX), [Value]) + '"', ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Constraint', fk.[Name]) x) + '}' AS [ExtendedProperties]
           FROM sys.foreign_keys fk WITH (NOLOCK)
           WHERE fk.parent_object_id = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
           ORDER BY [Name]
@@ -98,7 +104,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                (SELECT STRING_AGG('[' + COL_NAME(sc.[object_id], sc.column_id) + ']', ',') WITHIN GROUP (ORDER BY sc.stats_column_id)
                   FROM sys.stats_columns sc WITH (NOLOCK)
                   WHERE s.[object_id] = sc.[object_id] AND s.stats_id = sc.stats_id) AS [Columns],
-               SchemaSmith.fn_StripParenWrapping([filter_definition]) AS FilterExpression
+               SchemaSmith.fn_StripParenWrapping([filter_definition]) AS FilterExpression,
+			   '{' + (SELECT STRING_AGG('"' + [Name] + '": "' + CONVERT(VARCHAR(MAX), [Value]) + '"', ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Statistic', s.[Name]) x) + '}' AS [ExtendedProperties]
           FROM sys.stats s WITH (NOLOCK)
           WHERE [object_id] = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
             AND auto_created = 0
@@ -109,16 +116,30 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
           ORDER BY [Name]
           FOR JSON AUTO) AS [Statistics],
        (SELECT '[' + [Name] + ']' AS [Name],
-               SchemaSmith.fn_StripParenWrapping([definition]) AS [Expression]
-          FROM sys.check_constraints WITH (NOLOCK)
+               SchemaSmith.fn_StripParenWrapping([definition]) AS [Expression],
+               '{' + (SELECT STRING_AGG('"' + [Name] + '": "' + CONVERT(VARCHAR(MAX), [Value]) + '"', ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Constraint', cc.[Name]) x) + '}' AS [ExtendedProperties]
+          FROM sys.check_constraints cc WITH (NOLOCK)
           WHERE parent_object_id = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
             AND parent_column_id = 0
           ORDER BY [Name]
           FOR JSON AUTO) AS [CheckConstraints],
-       '<Full_Text>' AS [FullTextIndex]
+       (SELECT FullTextCatalog = '[' + (SELECT c.[name] FROM sys.fulltext_catalogs c WITH (NOLOCK) WHERE c.fulltext_catalog_id = fi.fulltext_catalog_id) + ']',
+               KeyIndex = '[' + (SELECT i.[Name] FROM sys.indexes i WITH (NOLOCK) WHERE i.[object_id] = fi.[object_id] AND i.[index_id] = fi.[unique_index_id]) + ']',
+               ChangeTracking = change_tracking_state_desc,
+               [StopList] = '[' + (SELECT fs.[name] FROM sys.fulltext_stoplists fs WITH (NOLOCK) WHERE fs.stoplist_id = fi.stoplist_id) + ']',
+               (SELECT STRING_AGG('[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
+                                  CASE WHEN fc.type_column_id IS NOT NULL
+                                       THEN ' TYPE COLUMN [' + COL_NAME(fc.[object_id], fc.type_column_id) + ']'
+                                       ELSE '' END, ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
+                  FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+                  WHERE fi.[object_id] = fc.[object_id]) AS [Columns]
+          FROM sys.fulltext_indexes fi WITH (NOLOCK)
+          WHERE [object_id] = OBJECT_ID(@p_Schema + '.' + @p_Table)
+          FOR JSON PATH,WITHOUT_ARRAY_WRAPPER) AS [FullTextIndex],
+	   '{' + (SELECT STRING_AGG('"' + [Name] + '": "' + CONVERT(VARCHAR(MAX), [Value]) + '"', ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, default, default) x) + '}' AS [ExtendedProperties]
   FROM INFORMATION_SCHEMA.TABLES t WITH (NOLOCK)
   WHERE TABLE_NAME = @p_Table
     AND TABLE_SCHEMA = @p_Schema
   FOR JSON AUTO, WITHOUT_ARRAY_WRAPPER
-), '"<Full_Text>"', COALESCE(@FullText, '{}')), 1)
+), '\"', '"'), '"}"', '" }'), '"{"', '{ "'), 1)
 ORDER BY [LineNo]

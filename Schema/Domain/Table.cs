@@ -20,12 +20,14 @@ public class Table
     [JsonProperty(Order = 6)]
     public List<Index> Indexes { get; set; } = [];
     [JsonProperty(Order = 7)]
-    public List<ForeignKey> ForeignKeys { get; set; } = [];
+    public List<XmlIndex> XmlIndexes { get; set; } = [];
     [JsonProperty(Order = 8)]
-    public List<CheckConstraint> CheckConstraints { get; set; } = [];
+    public List<ForeignKey> ForeignKeys { get; set; } = [];
     [JsonProperty(Order = 9)]
-    public List<Statistic> Statistics { get; set; } = [];
+    public List<CheckConstraint> CheckConstraints { get; set; } = [];
     [JsonProperty(Order = 10)]
+    public List<Statistic> Statistics { get; set; } = [];
+    [JsonProperty(Order = 11)]
     public FullTextIndex FullTextIndex { get; set; }
 
     public static Table Load(string filePath)
