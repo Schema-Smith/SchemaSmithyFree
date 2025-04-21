@@ -1,0 +1,264 @@
+{
+  "type": "object",
+    "properties": {
+        "Schema": {
+            "type": "string"
+        },
+        "Name": {
+            "type": "string"
+        },
+        "CompressionType": {
+            "type": "string"
+        },
+        "IsTemporal": {
+            "type": "boolean"
+        },
+        "Columns": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "Name": {
+                        "type": "string"
+                    },
+                    "DataType": {
+                        "type": "string"
+                    },
+                    "Nullable": {
+                        "type": "boolean"
+                    },
+                    "Default": {
+                        "type": "string"
+                    },
+                    "CheckExpression": {
+                        "type": "string"
+                    },
+                    "ComputedExpression": {
+                        "type": "string"
+                    },
+                    "Persisted": {
+                        "type": "boolean"
+                    },
+                    "ExtendedProperties": {
+                        "type": "object"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "Name",
+                    "DataType"
+                ]
+            }
+        },
+        "Indexes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "Name": {
+                        "type": "string"
+                    },
+                    "CompressionType": {
+                        "type": "string"
+                    },
+                    "PrimaryKey": {
+                        "type": "boolean"
+                    },
+                    "Unique": {
+                        "type": "boolean"
+                    },
+                    "UniqueConstraint": {
+                        "type": "boolean"
+                    },
+                    "Clustered": {
+                        "type": "boolean"
+                    },
+                    "ColumnStore": {
+                        "type": "boolean"
+                    },
+                    "FillFactor": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                    },
+                    "IndexColumns": {
+                        "type": "string"
+                    },
+                    "IncludeColumns": {
+                        "type": "string"
+                    },
+                    "FilterExpression": {
+                        "type": "string"
+                    },
+                    "ExtendedProperties": {
+                        "type": "object"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "Name",
+                    "IndexColumns"
+                ]
+            }
+        },
+        "XmlIndexes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "Name": {
+                        "type": "string"
+                    },
+                    "IsPromary": {
+                        "type": "boolean"
+                    },
+                    "Column": {
+                        "type": "string"
+                    },
+                    "PrimaryIndex": {
+                        "type": "string"
+                    },
+                    "SecondaryIndexType": {
+                        "type": "string"
+                    },
+                    "ExtendedProperties": {
+                        "type": "object"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "Name",
+                    "Column"
+                ]
+            }
+        },
+        "ForeignKeys": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "Name": {
+                        "type": "string"
+                    },
+                    "Columns": {
+                        "type": "string"
+                    },
+                    "RelatedTableSchema": {
+                        "type": "string"
+                    },
+                    "RelatedTable": {
+                        "type": "string"
+                    },
+                    "RelatedColumns": {
+                        "type": "string"
+                    },
+                    "CascadeOnDelete": {
+                        "type": "boolean"
+                    },
+                    "CascadeOnUpdate": {
+                        "type": "boolean"
+                    },
+                    "ExtendedProperties": {
+                        "type": "object"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "Name",
+                    "Columns",
+                    "RelatedTable",
+                    "RelatedColumns"
+                ]
+            }
+        },
+        "CheckConstraints": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "Name": {
+                        "type": "string"
+                    },
+                    "Expression": {
+                        "type": "string"
+                    },
+                    "ExtendedProperties": {
+                        "type": "object"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "Name",
+                    "Expression"
+                ]
+            }
+        },
+        "Statistics": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "Name": {
+                        "type": "string"
+                    },
+                    "Columns": {
+                        "type": "string"
+                    },
+                    "SampleSize": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                    },
+                    "FilterExpression": {
+                        "type": "string"
+                    },
+                    "ExtendedProperties": {
+                        "type": "object"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "Name",
+                    "Columns"
+                ]
+            }
+        },
+        "FullTextIndex": {
+            "type": "object",
+            "properties": {
+                "FullTextCatalog": {
+                    "type": "string"
+                },
+                "KeyIndex": {
+                    "type": "string"
+                },
+                "ChangeTracking": {
+                    "type": "string"
+                },
+                "StopList": {
+                    "type": "string"
+                },
+                "Columns": {
+                    "type": "string"
+                },
+                "ExtendedProperties": {
+                    "type": "object"
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "FullTextCatalog",
+                "KeyIndex",
+                "Columns"
+            ]
+        },
+        "ExtendedProperties": {
+            "type": "object"
+        }
+    },
+  "additionalProperties": false,
+  "required": [
+    "Name",
+    "Columns"
+  ]
+}

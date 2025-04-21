@@ -22,6 +22,9 @@
     <None Remove="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
     <None Remove="Scripts\SchemaSmith.GenerateTableJson.sql" />
     <None Remove="Scripts\SchemaSmith.TableQuench.sql" />
+    <None Remove="Utility\products.schema" />
+    <None Remove="Utility\tables.schema" />
+    <None Remove="Utility\templates.schema" />
   </ItemGroup>
 
   <ItemGroup>
@@ -33,6 +36,9 @@
     <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.GenerateTableJson.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.TableQuench.sql" />
+    <EmbeddedResource Include="Utility\products.schema" />
+    <EmbeddedResource Include="Utility\tables.schema" />
+    <EmbeddedResource Include="Utility\templates.schema" />
   </ItemGroup>
 
   <ItemGroup>
