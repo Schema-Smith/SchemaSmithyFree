@@ -23,6 +23,20 @@ public static class RepositoryHelper
         product.FilePath = productFile;
         if (product.TemplateOrder.All(t => !t.EqualsIgnoringCase(templateName))) product.TemplateOrder.Add(templateName);
         JsonHelper.Write(productFile, product);
+
+        var schemaPath = Path.Combine(productPath, ".json-schemas");
+        directory.CreateDirectory(schemaPath);
+        WriteSchemaFile(schemaPath, "products.schema");
+        WriteSchemaFile(schemaPath, "templates.schema");
+        WriteSchemaFile(schemaPath, "tables.schema");
+    }
+
+    private static void WriteSchemaFile(string schemaPath, string fileName)
+    {
+        var file = FileWrapper.GetFromFactory();
+        var schemaFile = Path.Combine(schemaPath, fileName);
+        if (!file.Exists(schemaFile))
+            file.WriteAllText(schemaFile, ResourceLoader.Load(fileName));
     }
 
     public static string UpdateOrInitTemplate(string productPath, string templateName, string dbName)

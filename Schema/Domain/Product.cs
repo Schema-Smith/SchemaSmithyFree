@@ -21,15 +21,6 @@ public class Product
     [JsonIgnore]
     public string FilePath { get; set; }
 
-    private string _branchNameFile;
-    public string BranchNameFile
-    {
-        get => _branchNameFile ??= Path.Combine(Path.GetDirectoryName(FilePath)!, ".git", "HEAD"); // default to git
-        set => _branchNameFile = value;
-    }
-    public string BeforeBranchNameMask { get; set; } = "ref: refs/heads/"; // default to git
-    public string AfterBranchNameMask { get; set; }
-
     public static Product Load()
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
