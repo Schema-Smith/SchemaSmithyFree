@@ -18,9 +18,14 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                                                THEN  '(' + CONVERT(VARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(VARCHAR(20), NUMERIC_SCALE) + ')'
                                                WHEN USER_TYPE = 'DATETIME2'
                                                THEN  '(' + CONVERT(VARCHAR(20), DATETIME_PRECISION) + ')'
+                                               WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
+                                               THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
+                                               WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
+                                               THEN  ' ROWGUIDCOL'
                                                ELSE '' END +
                                           CASE WHEN ic.column_id IS NOT NULL
-                                               THEN ' IDENTITY(' + CONVERT(VARCHAR(20), ic.seed_value) + ', ' + CONVERT(VARCHAR(20), ic.increment_value) + ')'
+                                               THEN ' IDENTITY(' + CONVERT(VARCHAR(20), ic.seed_value) + ', ' + CONVERT(VARCHAR(20), ic.increment_value) + ')' +
+                                                    CASE WHEN ic.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
                                                ELSE '' END AS [DataType],                   
                        CAST(CASE WHEN c.IS_NULLABLE = 'Yes' THEN 1 ELSE 0 END AS BIT) AS [Nullable],
 		               NULLIF(SchemaSmith.fn_StripParenWrapping(COLUMN_DEFAULT), 'NULL') AS [Default],
