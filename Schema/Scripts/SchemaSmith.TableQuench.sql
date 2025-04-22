@@ -295,9 +295,14 @@ BEGIN TRY
                                    THEN  '(' + CONVERT(VARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(VARCHAR(20), NUMERIC_SCALE) + ')'
                                    WHEN USER_TYPE = 'DATETIME2'
                                    THEN  '(' + CONVERT(VARCHAR(20), DATETIME_PRECISION) + ')'
+                                   WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
+                                   THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
+                                   WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
+                                   THEN  ' ROWGUIDCOL'
                                    ELSE '' END +
                               CASE WHEN ident.column_id IS NOT NULL
-                                   THEN ' IDENTITY(' + CONVERT(VARCHAR(20), ident.seed_value) + ', ' + CONVERT(VARCHAR(20), ident.increment_value) + ')'
+                                   THEN ' IDENTITY(' + CONVERT(VARCHAR(20), ident.seed_value) + ', ' + CONVERT(VARCHAR(20), ident.increment_value) + ')' +
+                                        CASE WHEN ident.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
                                    ELSE '' END  <> c.DataType
         OR CASE WHEN c.Nullable = 1 THEN 'YES' ELSE 'NO' END <> ic.IS_NULLABLE
         OR ISNULL(SchemaSmith.fn_StripParenWrapping(cc.[definition]), '') <> ISNULL(c.ComputedExpression, '')
