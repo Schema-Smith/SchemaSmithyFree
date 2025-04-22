@@ -69,6 +69,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                    + '}' AS [ExtendedProperties]
           FROM sys.indexes si WITH (NOLOCK)
           WHERE si.[object_id] = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
+            AND NOT EXISTS (SELECT * FROM sys.xml_indexes xi WITH (NOLOCK) WHERE xi.[object_id] = si.[object_id] AND xi.index_id = si.index_id)
             AND is_hypothetical = 0
             AND is_disabled = 0
             AND index_id > 0
@@ -77,10 +78,10 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        (SELECT i.[name] COLLATE DATABASE_DEFAULT AS [Name],
                COL_NAME(i.[Object_id], ic.column_id) AS [Column],
                CONVERT(BIT, CASE WHEN i.xml_index_type = 0 THEN 1 ELSE 0 END) AS [IsPrimary],
-               (SELECT [Name] COLLATE DATABASE_DEFAULT FROM sys.xml_indexes i2 WHERE i2.[object_id] = i.[object_id] AND i2.index_id = i.using_xml_index_id AND i.xml_index_type = 1) AS [PrimaryIndex],
+               (SELECT [Name] COLLATE DATABASE_DEFAULT FROM sys.xml_indexes i2 WITH (NOLOCK) WHERE i2.[object_id] = i.[object_id] AND i2.index_id = i.using_xml_index_id AND i.xml_index_type = 1) AS [PrimaryIndex],
                i.secondary_type_desc COLLATE DATABASE_DEFAULT AS [SecondaryIndexType]
-          FROM sys.xml_indexes i 
-          JOIN sys.index_columns ic ON i.[object_id] = ic.[object_id] AND i.index_id = ic.index_id
+          FROM sys.xml_indexes i WITH (NOLOCK)
+          JOIN sys.index_columns ic WITH (NOLOCK) ON i.[object_id] = ic.[object_id] AND i.index_id = ic.index_id
           WHERE i.[object_id] = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
           ORDER BY i.[Name]
           FOR JSON AUTO) AS [XmlIndexes],
