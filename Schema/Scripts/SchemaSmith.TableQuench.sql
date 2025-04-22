@@ -473,7 +473,8 @@ BEGIN TRY
     JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
                                  AND ei.[xTableName] = i.[TableName]
                                  AND ei.[xIndexName] <> SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
-    WHERE EXISTS (SELECT * 
+    WHERE INDEXPROPERTY(OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]), SchemaSmith.fn_StripBracketWrapping(i.[IndexName]), 'IndexID') IS NULL
+      AND EXISTS (SELECT * 
                     FROM sys.indexes si WITH (NOLOCK)
                     WHERE si.[object_id] = OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]) 
                       AND si.[name] = ei.[xIndexName])
@@ -486,6 +487,13 @@ BEGIN TRY
                                                                   CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE')
                                                                        THEN ' WITH (DATA_COMPRESSION=' + RTRIM(ISNULL(i.[CompressionType], '')) + ')'
                                                                        ELSE '' END
+
+  -- Remove duplicates from the rename list
+  SELECT MAX([NewName]) AS ValidNewName, [OldName] AS [OriginalName]
+    INTO #IndexRenameDedupe
+    FROM #IndexRenames ir WITH (NOLOCK)
+    GROUP BY [OldName]  
+  DELETE FROM #IndexRenames WHERE EXISTS (SELECT * FROM #IndexRenameDedupe dd WITH (NOLOCK) WHERE [OriginalName] = [OldName] AND [ValidNewName] <> [NewName])
   
   RAISERROR('Handle Renamed Indexes And Unique Constraints', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
@@ -496,7 +504,7 @@ BEGIN TRY
                                             END
                                   ELSE CASE WHEN INDEXPROPERTY(OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]), SchemaSmith.fn_StripBracketWrapping(ir.[NewName]), 'IndexID') IS NULL
                                             THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
-                                            ELSE 'DROP INDEX IF EXISTS ' + ir.[Schema] + '.' + ir.[TableName] + '.[' + ir.[OldName] + '];'
+                                            ELSE 'DROP INDEX IF EXISTS [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
                                             END
                                   END, CHAR(13) + CHAR(10))
     FROM #IndexRenames ir WITH (NOLOCK)
@@ -531,9 +539,9 @@ BEGIN TRY
                     WHERE si.[object_id] = OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]) 
                       AND si.[name] = ei.[xIndexName])
       AND ei.IndexScript <> 'CREATE ' + CASE WHEN i.IsPrimary = 1 THEN 'PRIMARY ' ELSE '' END + 
-                            'XML INDEX [' + i.[IndexName] COLLATE DATABASE_DEFAULT + '] ON [' + i.[Schema] + '].[' + i.[TableName] + '] ([' + i.[Column] + '])' + 
+                            'XML INDEX ' + i.[IndexName] COLLATE DATABASE_DEFAULT + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[Column] + ')' + 
                             CASE WHEN i.IsPrimary = 0
-                                 THEN ' USING XML INDEX [' + i.PrimaryIndex + '] FOR ' + i.SecondaryIndexType
+                                 THEN ' USING XML INDEX ' + i.PrimaryIndex + ' FOR ' + i.SecondaryIndexType
                                  ELSE '' END
   
   RAISERROR('Detect Xml Index Renames', 10, 1) WITH NOWAIT
@@ -549,16 +557,16 @@ BEGIN TRY
                     WHERE si.[object_id] = OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]) 
                       AND si.[name] = ei.[xIndexName])
       AND REPLACE(ei.IndexScript, ei.[xIndexName], 'IndexName') = 'CREATE ' + CASE WHEN i.IsPrimary = 1 THEN 'PRIMARY ' ELSE '' END + 
-                                                                  'XML INDEX [IndexName] ON [' + i.[Schema] + '].[' + i.[TableName] + '] ([' + i.[Column] + '])' + 
+                                                                  'XML INDEX [IndexName] ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[Column] + ')' + 
                                                                   CASE WHEN i.IsPrimary = 0
-                                                                       THEN ' USING XML INDEX [' + i.PrimaryIndex + '] FOR ' + i.SecondaryIndexType
+                                                                       THEN ' USING XML INDEX ' + i.PrimaryIndex + ' FOR ' + i.SecondaryIndexType
                                                                        ELSE '' END
 
   RAISERROR('Handle Renamed Xml Indexes', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              CASE WHEN INDEXPROPERTY(OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]), SchemaSmith.fn_StripBracketWrapping(ir.[NewName]), 'IndexID') IS NULL
                                   THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
-                                  ELSE 'DROP INDEX IF EXISTS ' + ir.[Schema] + '.' + ir.[TableName] + '.[' + ir.[OldName] + '];'
+                                  ELSE 'DROP INDEX IF EXISTS [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
                                   END, CHAR(13) + CHAR(10))
     FROM #XmlIndexRenames ir WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
@@ -612,7 +620,7 @@ BEGIN TRY
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + di.[Schema] + '.' + di.[TableName] + '.' + di.[IndexName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              CASE WHEN IsConstraint = 1
                                   THEN 'ALTER TABLE ' + di.[Schema] + '.' + di.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + di.[IndexName] + '];'
-                                  ELSE 'DROP INDEX IF EXISTS ' + di.[Schema] + '.' + di.[TableName] + '.[' + di.[IndexName] + '];'
+                                  ELSE 'DROP INDEX IF EXISTS [' + di.[IndexName] + '] ON ' + di.[Schema] + '.' + di.[TableName] + ';'
                                   END, CHAR(13) + CHAR(10))
     FROM #IndexesToDrop di WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
@@ -922,7 +930,7 @@ BEGIN TRY
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping ' + CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + mct.[Schema] + '.' + mct.[TableName] + '.' + si.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1
                                   THEN 'ALTER TABLE ' + mct.[Schema] + '.' + mct.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + si.[Name] + '];'
-                                  ELSE 'DROP INDEX IF EXISTS ' + mct.[Schema] + '.' + mct.[TableName] + '.[' + si.[Name] + '];'
+                                  ELSE 'DROP INDEX IF EXISTS [' + si.[Name] + '] ON ' + mct.[Schema] + '.' + mct.[TableName] + ';'
                                   END, CHAR(13) + CHAR(10))
     FROM #MissingClusteredIndexTables mct WITH (NOLOCK)
     JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(mct.[Schema] + '.' + mct.[TableName])
@@ -967,10 +975,10 @@ BEGIN TRY
   RAISERROR('Add Missing Xml Indexes', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Creating index ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              'CREATE ' + CASE WHEN i.IsPrimary = 1 THEN 'PRIMARY ' ELSE '' END + 
-                             'XML INDEX [' + i.[IndexName] COLLATE DATABASE_DEFAULT + '] ON [' + i.[Schema] + '].[' + i.[TableName] + '] ([' + i.[Column] + '])' + 
+                             'XML INDEX ' + i.[IndexName] COLLATE DATABASE_DEFAULT + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[Column] + ')' + 
                              CASE WHEN i.IsPrimary = 0
-                                  THEN ' USING XML INDEX [' + i.PrimaryIndex + '] FOR ' + i.SecondaryIndexType
-                                  ELSE '' END + ';', CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.[PrimaryIndex] =  1 THEN 0 ELSE 1 END, i.[IndexName])
+                                  THEN ' USING XML INDEX ' + i.PrimaryIndex + ' FOR ' + i.SecondaryIndexType
+                                  ELSE '' END + ';', CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.IsPrimary =  1 THEN 0 ELSE 1 END, i.[IndexName])
     FROM #XmlIndexes i WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.xml_indexes si WITH (NOLOCK)
