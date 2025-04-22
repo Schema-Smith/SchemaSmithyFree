@@ -91,7 +91,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                             WHERE fk.[object_id] = fc.[constraint_object_id]) AS [Columns],
                '[' + OBJECT_SCHEMA_NAME(referenced_object_id) + ']' AS RelatedTableSchema,
                '[' + OBJECT_NAME(referenced_object_id) + ']' AS RelatedTable,
-               (SELECT STRING_AGG('[' + COL_NAME(fc.[referenced_object_id], fc.referenced_column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[referenced_object_id], fc.referenced_column_id))
+               (SELECT STRING_AGG('[' + COL_NAME(fc.[referenced_object_id], fc.referenced_column_id) + ']', ',') WITHIN GROUP (ORDER BY fc.constraint_column_id)
                             FROM sys.foreign_key_columns fc WITH (NOLOCK)
                             WHERE fk.[object_id] = fc.[constraint_object_id]) AS [RelatedColumns],
                CAST(CASE WHEN fk.delete_referential_action = 0 THEN 0 ELSE 1 END AS BIT) AS CascadeOnDelete,
