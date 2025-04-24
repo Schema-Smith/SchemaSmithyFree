@@ -21,6 +21,7 @@ The state of your metadata repository at the time of your last release is an exa
 
 If you have docker, you can run 
 
+> docker compose build
 > docker compose up
 
 from the root of the project and the [Test Product](TestProducts/ValidProduct/Product.json) will be applied to a linux sql 2019 docker container.  You can connect to the server at localhost with the user, password and port defined in [.env](.env).
