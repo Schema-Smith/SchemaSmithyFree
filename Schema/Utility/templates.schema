@@ -17,7 +17,6 @@
   "additionalProperties": false,
   "required": [
     "Name",
-    "DatabaseIdentificationScript",
-    "ServerToQuench"
+    "DatabaseIdentificationScript"
   ]
 }
