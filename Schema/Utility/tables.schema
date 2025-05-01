@@ -109,7 +109,7 @@
                     "Name": {
                         "type": "string"
                     },
-                    "IsPromary": {
+                    "IsPrimary": {
                         "type": "boolean"
                     },
                     "Column": {
