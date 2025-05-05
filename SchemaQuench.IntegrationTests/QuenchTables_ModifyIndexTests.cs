@@ -236,6 +236,51 @@ SELECT (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',
         conn.Close();
     }
 
+    [Test]
+    public void ShouldHandleModiyingPrimaryKeyWhenXMLIndexesExist()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT [Name] FROM sys.xml_indexes WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('dbo.ModifyPKWithXMLIndexes') AND xml_index_type = 0";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("XI_Primary"));
+
+        cmd.CommandText = "SELECT [Name] FROM sys.xml_indexes WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('dbo.ModifyPKWithXMLIndexes') AND xml_index_type > 0";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("XI_Secondary_Path"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldModifySecondaryXmlIndex()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT [secondary_type_desc] FROM sys.xml_indexes WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('dbo.ModifySecondaryXmlIndex') AND xml_index_type > 0";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("VALUE"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldModifyPrimaryXmlIndex()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT (SELECT COL_NAME(ic.[Object_id], ic.column_id) FROM sys.index_columns ic WHERE ic.index_id = xi.index_id AND ic.[object_id] = xi.[object_id]) FROM sys.xml_indexes xi WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('dbo.ModifyPrimaryXmlIndex')  AND xml_index_type = 0";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("Column4"));
+
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -303,6 +348,17 @@ CREATE FULLTEXT INDEX ON dbo.ModifyFullTextIndexStopListRemove (Column2) KEY IND
 CREATE TABLE dbo.ModifyFullTextIndexStopListChange (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL)
 CREATE UNIQUE INDEX IDX_KeyIndex ON dbo.ModifyFullTextIndexStopListChange ([Column1])
 CREATE FULLTEXT INDEX ON dbo.ModifyFullTextIndexStopListChange (Column2) KEY INDEX IDX_KeyIndex ON FT_Catalog WITH CHANGE_TRACKING = OFF, STOPLIST = [SL_Test]
+--ShouldHandleModiyingClusteredIndexWhenXMLIndexesExist
+CREATE TABLE dbo.ModifyPKWithXMLIndexes (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 XML NULL, CONSTRAINT PK_ModifyPKWithXMLIndexes PRIMARY KEY CLUSTERED (Column1))
+CREATE PRIMARY XML INDEX [XI_Primary] ON dbo.ModifyPKWithXMLIndexes (Column3)
+CREATE XML INDEX [XI_Secondary_Path] ON dbo.ModifyPKWithXMLIndexes (Column3) USING XML INDEX [XI_Primary] FOR PATH 
+--ShouldModifySecondaryXmlIndex
+CREATE TABLE dbo.ModifySecondaryXmlIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 XML NULL, CONSTRAINT PK_ModifySecondaryXmlIndex PRIMARY KEY CLUSTERED (Column1))
+CREATE PRIMARY XML INDEX [XI_Primary] ON dbo.ModifySecondaryXmlIndex (Column3)
+CREATE XML INDEX [XI_Secondary_Path] ON dbo.ModifySecondaryXmlIndex (Column3) USING XML INDEX [XI_Primary] FOR PATH 
+--ShouldModifyPrimaryXmlIndex
+CREATE TABLE dbo.ModifyPrimaryXmlIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 XML NULL, Column4 XML NULL, CONSTRAINT PK_ModifyPrimaryXmlIndex PRIMARY KEY CLUSTERED (Column1))
+CREATE PRIMARY XML INDEX [XI_Primary] ON dbo.ModifyPrimaryXmlIndex (Column3)
 ";
         cmd.CommandTimeout = 300;
         cmd.ExecuteNonQuery();
@@ -674,6 +730,136 @@ CREATE FULLTEXT INDEX ON dbo.ModifyFullTextIndexStopListChange (Column2) KEY IND
                     "Columns": "[Column2]",
                     "StopList": "SL_Test2"
                 }
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[ModifyPKWithXMLIndexes]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "BIGINT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(200)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column3]",
+                      "DataType": "XML",
+                      "Nullable": true
+                    }
+                ],
+                "Indexes": [
+                    {
+                      "Name": "[PK_ModifyPKWithXMLIndexes]",
+                      "IndexColumns": "[Column1]",
+                      "Clustered": true,
+                      "PrimaryKey": true,
+                      "Unique": true
+                    }
+                ],
+                "XmlIndexes": [
+                    {
+                      "Name": "[XI_Primary]",
+                      "Column": "[Column3]",
+                      "IsPrimary": true
+                    },
+                    {
+                      "Name": "[XI_Secondary_Path]",
+                      "Column": "[Column3]",
+                      "IsPrimary": false,
+                      "PrimaryIndex": "[XI_Primary]",
+                      "SecondaryIndexType": "PATH"
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[ModifySecondaryXmlIndex]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "BIGINT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(200)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column3]",
+                      "DataType": "XML",
+                      "Nullable": true
+                    }
+                ],
+                "Indexes": [
+                    {
+                      "Name": "[PK_ModifySecondaryXmlIndex]",
+                      "IndexColumns": "[Column1]",
+                      "Clustered": true,
+                      "PrimaryKey": true,
+                      "Unique": true
+                    }
+                ],
+                "XmlIndexes": [
+                    {
+                      "Name": "[XI_Primary]",
+                      "Column": "[Column3]",
+                      "IsPrimary": true
+                    },
+                    {
+                      "Name": "[XI_Secondary_Path]",
+                      "Column": "[Column3]",
+                      "IsPrimary": false,
+                      "PrimaryIndex": "[XI_Primary]",
+                      "SecondaryIndexType": "VALUE"
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[ModifyPrimaryXmlIndex]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "BIGINT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(200)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column3]",
+                      "DataType": "XML",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column4]",
+                      "DataType": "XML",
+                      "Nullable": true
+                    }
+                ],
+                "Indexes": [
+                    {
+                      "Name": "[PK_ModifyPrimaryXmlIndex]",
+                      "IndexColumns": "[Column1]",
+                      "Clustered": true,
+                      "PrimaryKey": true,
+                      "Unique": true
+                    }
+                ],
+                "XmlIndexes": [
+                    {
+                      "Name": "[XI_Primary]",
+                      "Column": "[Column4]",
+                      "IsPrimary": true
+                    }
+                ]
             }
         ]
         """;

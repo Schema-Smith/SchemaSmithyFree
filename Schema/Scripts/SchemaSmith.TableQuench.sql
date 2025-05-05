@@ -382,7 +382,8 @@ BEGIN TRY
   DROP TABLE IF EXISTS #IndexesToDropForColumnChanges
   SELECT DISTINCT cc.[Schema], cc.[TableName], IndexName = i.[name],
          IsConstraint = CAST(CASE WHEN i.is_primary_key = 1 OR i.is_unique_constraint = 1 THEN 1 ELSE 0 END AS BIT),
-         IsUnique = i.is_unique
+         IsUnique = i.is_unique,
+         IsClustered = CAST(CASE WHEN i.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT)
     INTO #IndexesToDropForColumnChanges
     FROM sys.indexes i WITH (NOLOCK)
     JOIN #ColumnChanges cc WITH (NOLOCK) ON i.[object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName]) 
@@ -419,7 +420,7 @@ BEGIN TRY
   DROP TABLE IF EXISTS #ExistingIndexes
   SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(si.[Name] AS VARCHAR(500)),
          IsConstraint = CAST(CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 1 ELSE 0 END AS BIT),
-         IsUnique = si.is_unique, [FillFactor] = ISNULL(NULLIF(si.fill_factor, 0), 100),
+         IsUnique = si.is_unique, IsClustered = CAST(CASE WHEN si.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT), [FillFactor] = ISNULL(NULLIF(si.fill_factor, 0), 100),
          IndexScript = 'CREATE ' + 
                        CASE WHEN si.is_unique = 1 THEN 'UNIQUE ' ELSE '' END + 
                        CASE WHEN si.[type] IN (1, 5) THEN '' ELSE 'NON' END + 'CLUSTERED ' +
@@ -450,7 +451,7 @@ BEGIN TRY
     
   RAISERROR('Detect Index Changes', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexChanges
-  SELECT i.[Schema], i.[TableName], i.[IndexName], ei.[IsConstraint], IsUnique = i.[Unique]
+  SELECT i.[Schema], i.[TableName], i.[IndexName], ei.[IsConstraint], IsUnique = i.[Unique], IsClustered = i.[Clustered]
     INTO #IndexChanges
     FROM #ExistingIndexes ei WITH (NOLOCK)
     JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
@@ -582,30 +583,38 @@ BEGIN TRY
   RAISERROR('Identify unknown and modified indexes to drop', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexesToDrop
   SELECT [Schema] = CAST([Schema] AS VARCHAR(500)), [TableName] = CAST([TableName] AS VARCHAR(500)), 
-         [IndexName] = CAST(SchemaSmith.fn_StripBracketWrapping([IndexName]) AS VARCHAR(500)), [IsConstraint], [IsUnique] = i.[is_unique]
+         [IndexName] = CAST(SchemaSmith.fn_StripBracketWrapping([IndexName]) AS VARCHAR(500)), [IsConstraint], [IsUnique] = i.[is_unique], 
+         [IsClustered] = CAST(CASE WHEN i.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT)
     INTO #IndexesToDrop
     FROM #IndexesRemovedFromProduct ir WITH (NOLOCK)
     JOIN sys.indexes i WITH (NOLOCK) ON i.[object_id] = OBJECT_ID([Schema] + '.' + [TableName]) AND i.[Name] = SchemaSmith.fn_StripBracketWrapping([IndexName])
   UNION
-  SELECT [Schema], [TableName], SchemaSmith.fn_StripBracketWrapping([IndexName]), [IsConstraint], [IsUnique]
+  SELECT [Schema], [TableName], SchemaSmith.fn_StripBracketWrapping([IndexName]), [IsConstraint], [IsUnique], [IsClustered]
     FROM #IndexesToDropForColumnChanges WITH (NOLOCK)
   UNION
-  SELECT [xSchema], [xTableName], [xIndexName], [IsConstraint], [IsUnique]
+  SELECT [xSchema], [xTableName], [xIndexName], [IsConstraint], [IsUnique], [IsClustered]
     FROM #ExistingIndexes ei WITH (NOLOCK)
     WHERE @DropUnknownIndexes = 1
       AND NOT EXISTS (SELECT * FROM #Indexes i WITH (NOLOCK) WHERE i.[Schema] = ei.[xSchema] AND i.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i.[IndexName]) = ei.[xIndexName])
   UNION
-  SELECT [Schema], [TableName], SchemaSmith.fn_StripBracketWrapping([IndexName]), [IsConstraint], [IsUnique]
+  SELECT [Schema], [TableName], SchemaSmith.fn_StripBracketWrapping([IndexName]), [IsConstraint], [IsUnique], [IsClustered]
     FROM #IndexChanges WITH (NOLOCK)
   UNION
-  SELECT [xSchema], [xTableName], [xIndexName], [IsConstraint] = 0, [IsUnique] = 0
+  SELECT [xSchema], [xTableName], [xIndexName], [IsConstraint] = 0, [IsUnique] = 0, [IsClustered] = 0
     FROM #ExistingXmlIndexes ei WITH (NOLOCK)
     WHERE @DropUnknownIndexes = 1
       AND NOT EXISTS (SELECT * FROM #XmlIndexes i WITH (NOLOCK) WHERE i.[Schema] = ei.[xSchema] AND i.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i.[IndexName]) = ei.[xIndexName])
   UNION
-  SELECT [Schema], [TableName], SchemaSmith.fn_StripBracketWrapping([IndexName]), [IsConstraint] = 0, [IsUnique] = 0
+  SELECT [Schema], [TableName], SchemaSmith.fn_StripBracketWrapping([IndexName]), [IsConstraint] = 0, [IsUnique] = 0, [IsClustered] = 0
     FROM #XmlIndexChanges WITH (NOLOCK)
   
+  -- Need to drop all the XML indexes if we're removing the clustered PK
+  INSERT #IndexesToDrop ([Schema], [TableName], [IndexName], [IsConstraint], [IsUnique], [IsClustered])
+    SELECT [xSchema], [xTableName], [xIndexName], [IsConstraint] = 0, [IsUnique] = 0, [IsClustered] = 0
+      FROM #ExistingXmlIndexes ei WITH (NOLOCK)
+      WHERE EXISTS (SELECT * FROM #IndexesToDrop id WITH (NOLOCK) WHERE [xSchema] = [Schema] AND [xTableName] = [TableName] AND id.[IsClustered] = 1)
+        AND NOT EXISTS (SELECT * FROM #IndexesToDrop id WITH (NOLOCK) WHERE [xSchema] = [Schema] AND [xTableName] = [TableName] AND [xIndexName] = [IndexName])
+
   RAISERROR('Drop Referencing Foreign Keys When Dropping Unique Indexes', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];', CHAR(13) + CHAR(10))
@@ -629,7 +638,7 @@ BEGIN TRY
                              CASE WHEN IsConstraint = 1
                                   THEN 'ALTER TABLE ' + di.[Schema] + '.' + di.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + di.[IndexName] + '];'
                                   ELSE 'DROP INDEX IF EXISTS [' + di.[IndexName] + '] ON ' + di.[Schema] + '.' + di.[TableName] + ';'
-                                  END, CHAR(13) + CHAR(10))
+                                  END, CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY CASE WHEN [IsClustered] = 0 THEN 0 ELSE 1 END)
     FROM #IndexesToDrop di WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 

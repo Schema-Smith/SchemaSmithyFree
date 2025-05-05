@@ -125,6 +125,23 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
         conn.Close();
     }
 
+    [Test]
+    public void ShouldAddMissingXmlIndex()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT [Name] FROM sys.xml_indexes WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('dbo.AddXmlIndex') AND xml_index_type = 0";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("XI_Primary"));
+
+        cmd.CommandText = "SELECT [Name] FROM sys.xml_indexes WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('dbo.AddXmlIndex') AND xml_index_type > 0";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("XI_Secondary_Path"));
+
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -150,6 +167,8 @@ CREATE TABLE dbo.AddMyStatistics (Id INT NOT NULL)
 --QuenchTables_ShouldAddMissingFullTextIndex
 CREATE TABLE dbo.AddMyFullTextIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL)
 CREATE UNIQUE INDEX UDX_Key ON dbo.AddMyFullTextIndex ([Column1])
+--ShouldAddMissingXmlIndex
+CREATE TABLE dbo.AddXmlIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 XML NULL, CONSTRAINT PK_AddXmlIndex PRIMARY KEY CLUSTERED (Column1))
 ";
         cmd.CommandTimeout = 300;
         cmd.ExecuteNonQuery();
@@ -298,6 +317,50 @@ CREATE UNIQUE INDEX UDX_Key ON dbo.AddMyFullTextIndex ([Column1])
                     "ChangeTracking": "OFF",
                     "Columns": "[Column2]"
                 }
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddXmlIndex]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "BIGINT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(200)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column3]",
+                      "DataType": "XML",
+                      "Nullable": true
+                    }
+                ],
+                "Indexes": [
+                    {
+                      "Name": "[PK_AddXmlIndex]",
+                      "IndexColumns": "[Column1]",
+                      "Clustered": true,
+                      "PrimaryKey": true,
+                      "Unique": true
+                    }
+                ],
+                "XmlIndexes": [
+                    {
+                      "Name": "[XI_Primary]",
+                      "Column": "[Column3]",
+                      "IsPrimary": true
+                    },
+                    {
+                      "Name": "[XI_Secondary_Path]",
+                      "Column": "[Column3]",
+                      "IsPrimary": false,
+                      "PrimaryIndex": "[XI_Primary]",
+                      "SecondaryIndexType": "PATH"
+                    }
+                ]
             }
             ]
             """;

@@ -148,7 +148,24 @@ public class QuenchTables_Miscellaneous : BaseQuenchTablesTests
             }
             """;
         var ex = Assert.Throws<SqlException>(() => RunTableQuenchProc(cmd, json));
-        Assert.That(ex.Message, Contains.Substring("One or more tables in this quench are already owned by another product"));
+        Assert.That(ex!.Message, Contains.Substring("One or more tables in this quench are already owned by another product"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldDropXmlIndexNoLongerPartOfProduct()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN INDEXPROPERTY(OBJECT_ID('dbo.XmlIndexNoLongerInProduct'), 'XI_DropMe', 'IndexId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.False);
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN INDEXPROPERTY(OBJECT_ID('dbo.XmlIndexNoLongerInProduct'), 'XI_KeepMe', 'IndexId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
 
         conn.Close();
     }
@@ -246,6 +263,13 @@ CREATE INDEX IDX_DropMe ON IndexNoLongerInProduct (Column1)
 CREATE INDEX IDX_Custom ON IndexNoLongerInProduct (Column1)
 EXEC sp_addextendedproperty @name = N'ProductName', @value = '{_productName}', @level0type = N'Schema', @level0name = 'dbo', @level1type = N'Table', @level1name = 'IndexNoLongerInProduct'
 EXEC sp_addextendedproperty @name = N'ProductName', @value = '{_productName}', @level0type = N'Schema', @level0name = 'dbo', @level1type = N'Table', @level1name = 'IndexNoLongerInProduct', @level2type = N'Index', @level2name = 'IDX_DropMe'
+--XmlIndexNoLongerInProduct
+CREATE TABLE dbo.XmlIndexNoLongerInProduct (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 XML NULL, CONSTRAINT PK_XmlIndexNoLongerInProduct PRIMARY KEY CLUSTERED (Column1))
+CREATE PRIMARY XML INDEX [XI_KeepMe] ON dbo.XmlIndexNoLongerInProduct (Column3)
+CREATE XML INDEX [XI_DropMe] ON dbo.XmlIndexNoLongerInProduct (Column3) USING XML INDEX [XI_KeepMe] FOR PATH 
+EXEC sp_addextendedproperty @name = N'ProductName', @value = '{_productName}', @level0type = N'Schema', @level0name = 'dbo', @level1type = N'Table', @level1name = 'XmlIndexNoLongerInProduct'
+EXEC sp_addextendedproperty @name = N'ProductName', @value = '{_productName}', @level0type = N'Schema', @level0name = 'dbo', @level1type = N'Table', @level1name = 'XmlIndexNoLongerInProduct', @level2type = N'Index', @level2name = 'XI_KeepMe'
+EXEC sp_addextendedproperty @name = N'ProductName', @value = '{_productName}', @level0type = N'Schema', @level0name = 'dbo', @level1type = N'Table', @level1name = 'XmlIndexNoLongerInProduct', @level2type = N'Index', @level2name = 'XI_DropMe'
 
 -- Exception Cases
 CREATE TABLE dbo.TableOwnedByOtherProduct (Column1 INT NOT NULL)
@@ -414,6 +438,43 @@ EXEC sp_addextendedproperty @name = N'ProductName', @value = 'OtherProduct', @le
                       "Name": "[Column1]",
                       "DataType": "INT",
                       "Nullable": false
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[XmlIndexNoLongerInProduct]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "BIGINT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(200)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column3]",
+                      "DataType": "XML",
+                      "Nullable": true
+                    }
+                ],
+                "Indexes": [
+                    {
+                      "Name": "[PK_XmlIndexNoLongerInProduct]",
+                      "IndexColumns": "[Column1]",
+                      "Clustered": true,
+                      "PrimaryKey": true,
+                      "Unique": true
+                    }
+                ],
+                "XmlIndexes": [
+                    {
+                      "Name": "[XI_KeepMe]",
+                      "Column": "[Column3]",
+                      "IsPrimary": true
                     }
                 ]
             }
