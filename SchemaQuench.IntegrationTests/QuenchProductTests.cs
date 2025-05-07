@@ -148,7 +148,7 @@ INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [Quen
             FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = "../../../../TestProducts/InvalidServer";
 
             var ex = Assert.Throws<Exception>(Quench);
-            Assert.That(ex.Message, Contains.Substring("Invalid server for this product"));
+            Assert.That(ex!.Message, Contains.Substring("Invalid server for this product"));
 
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();
@@ -189,8 +189,8 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
         conn.Close();
     }
 
-    private static readonly List<string> ExpectedScriptLog = new()
-    {
+    private static readonly List<string> ExpectedScriptLog =
+    [
         @"Before\MigrationScript1.sql",
         "MySchema.sql",
         "Type1.sql",
@@ -203,7 +203,7 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
         "dbo.MyTrigger.sql",
         "dbo.FunctionThatNeedsView.sql", // this one will error on the first attempt and gets run again (only in Main)
         @"After\MigrationScript1.sql"
-    };
+    ];
 
     private void AssertScriptsQuenched(string dbName)
     {

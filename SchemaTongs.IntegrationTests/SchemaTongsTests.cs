@@ -433,7 +433,7 @@ CREATE FULLTEXT STOPLIST [SL_Test];
 ALTER FULLTEXT STOPLIST [SL_Test] ADD '$' LANGUAGE 'Neutral';
 
 EXEC('CREATE SCHEMA [Test]')
-CREATE TYPE [Test].[Flag] FROM [bit] NOT NULL
+CREATE TYPE [Test].[Flag] FROM BIT NOT NULL
 ";
         cmd.ExecuteNonQuery();
 

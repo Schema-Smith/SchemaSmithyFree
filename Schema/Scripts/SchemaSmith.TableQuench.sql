@@ -266,8 +266,16 @@ BEGIN TRY
          CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) <> '' 
               THEN 'AS (' + ComputedExpression + ')' + CASE WHEN c.[Persisted] = 1 THEN ' PERSISTED' ELSE '' END
               -- Otherwise we need to build the column definition
-              ELSE UPPER(LEFT([DataType], COALESCE(NULLIF(CHARINDEX('IDENTITY', [DataType]), 0), LEN([DataType]) + 1) - 1)) + CASE WHEN Nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END
+              ELSE REPLACE(REPLACE(UPPER(LEFT([DataType], COALESCE(NULLIF(CHARINDEX('IDENTITY', [DataType]), 0), LEN([DataType]) + 1) - 1)), 'ROWGUIDCOL', ''), 'NOT FOR REPLICATION', '') + 
+                   CASE WHEN Nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END
               END AS [ColumnScript],
+         CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) = '' 
+              THEN CASE WHEN [DataType] LIKE '%ROWGUIDCOL%' AND sc.is_rowguidcol = 0 THEN ' ADD ROWGUIDCOL' ELSE '' END +
+                   CASE WHEN [DataType] NOT LIKE '%ROWGUIDCOL%' AND sc.is_rowguidcol = 1 THEN ' DROP ROWGUIDCOL' ELSE '' END +
+                   CASE WHEN [DataType] LIKE '%NOT FOR REPLICATION%' AND ident.is_not_for_replication = 0 THEN ' ADD NOT FOR REPLICATION' ELSE '' END +
+                   CASE WHEN [DataType] NOT LIKE '%NOT FOR REPLICATION%' AND ident.is_not_for_replication = 1 THEN ' DROP NOT FOR REPLICATION' ELSE '' END                        
+              ELSE ''
+              END AS [SpecialColumnScript],
          CAST(CASE WHEN cc.[definition] IS NOT NULL OR RTRIM(ISNULL([ComputedExpression], '')) <> ''
                      OR (ident.column_id IS NULL AND [DataType] LIKE '%IDENTITY%') -- switching to identity... requires drop and recreate column
                    THEN 1 ELSE 0 END AS BIT) AS MustDropAndRecreate,
@@ -309,9 +317,10 @@ BEGIN TRY
         OR ISNULL(cc.is_persisted, 0) <> ISNULL(c.[Persisted], 0))
   
   RAISERROR('Detect Computed Columns Impacted by Other Column Changes', 10, 1) WITH NOWAIT
-  INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], MustDropAndRecreate, [DropOnly])
+  INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, [DropOnly])
     SELECT C.[Schema], C.[TableName], c.[ColumnName], 
            [ColumnScript] = 'AS (' + ComputedExpression + ')' + CASE WHEN c.[Persisted] = 1 THEN ' PERSISTED' ELSE '' END, 
+           [SpecialColumnScript] = '',
            MustDropAndRecreate = CAST(1 AS BIT), [DropOnly] = CAST(0 AS BIT)
       FROM #ColumnChanges cc WITH (NOLOCK)
       JOIN sys.computed_columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
@@ -322,8 +331,8 @@ BEGIN TRY
       WHERE NOT EXISTS (SELECT * FROM #ColumnChanges cc2 WITH (NOLOCK) WHERE cc2.[Schema] = cc.[Schema] AND cc2.[TableName] = cc.[TableName] AND cc2.[ColumnName] = cc.[ColumnName])
   
   RAISERROR('Detect Column Drops', 10, 1) WITH NOWAIT
-  INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], MustDropAndRecreate, [DropOnly])
-    SELECT t.[Schema], [TableName] = t.[Name], [ColumnName] = '[' + COLUMN_NAME + ']', '', 0, 1
+  INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, [DropOnly])
+    SELECT t.[Schema], [TableName] = t.[Name], [ColumnName] = '[' + COLUMN_NAME + ']', '', '', 0, 1
       FROM #Tables t WITH (NOLOCK)
       JOIN INFORMATION_SCHEMA.COLUMNS WITH (NOLOCK) ON TABLE_SCHEMA = SchemaSmith.fn_StripBracketWrapping(t.[Schema])
                                                    AND TABLE_NAME = SchemaSmith.fn_StripBracketWrapping(t.[Name]) 
@@ -915,7 +924,8 @@ BEGIN TRY
   
   RAISERROR('Alter Modified Columns', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Altering Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ALTER COLUMN ' + cc.[ColumnName] + ' ' + [ColumnScript] + ';', CHAR(13) + CHAR(10))
+                             'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ALTER COLUMN ' + cc.[ColumnName] + ' ' + 
+                             CASE WHEN RTRIM([SpecialColumnScript]) <> '' THEN [SpecialColumnScript] ELSE [ColumnScript] END + ';', CHAR(13) + CHAR(10))
         FROM #ColumnChanges cc WITH (NOLOCK)
         WHERE [MustDropAndRecreate] = 0
           AND [DropOnly] = 0

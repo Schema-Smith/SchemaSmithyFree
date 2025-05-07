@@ -20,6 +20,10 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     [TestCase("Col12", "DECIMAL(10, 2)")]
     [TestCase("Col13", "NUMERIC(12, 3)")]
     [TestCase("Col14", "NUMERIC(10, 2)")]
+    [TestCase("Col15", "SYSNAME")]
+    [TestCase("Col16", "NVARCHAR(128)")]
+    [TestCase("Col17", "FLAG")]
+    [TestCase("Col18", "BIT")]
     public void QuenchTables_ShouldModifyColumnForChangeDataType(string colName, string expectedType)
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
@@ -28,6 +32,22 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
         using var cmd = conn.CreateCommand();
 
         Assert.That(GetColumnDataType(cmd, "ChangeType", colName), Is.EqualTo(expectedType));
+        conn.Close();
+    }
+
+    [Test]
+    public void QuenchTables_ShouldNotAlterColumnWithSYSNAMEorUserDefinedType()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        Assert.That(GetColumnDataType(cmd, "DontChangeType", "Col1"), Is.EqualTo("SYSNAME"));
+        Assert.That(GetColumnDataType(cmd, "DontChangeType", "Col2"), Is.EqualTo("FLAG"));
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN INDEXPROPERTY(OBJECT_ID('dbo.DontChangeType'), 'IDX_Dependency', 'IndexId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
         conn.Close();
     }
 
@@ -382,6 +402,71 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
         conn.Close();
     }
 
+    [Test]
+    public void QuenchTables_ShouldAlterXmlColumnWithXmlIndex()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        Assert.That(GetColumnDataType(cmd, "AlterXmlColumnWithXmlIndex", "Column3"), Is.EqualTo("XML([DBO].[MANUINSTRUCTIONSSCHEMACOLLECTION])"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void QuenchTables_ShouldAddRowGuidColToExistingColumn()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        Assert.That(GetColumnDataType(cmd, "AddRowGuidColToExistingColumn", "Column2"), Is.EqualTo("UNIQUEIDENTIFIER ROWGUIDCOL"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void QuenchTables_ShouldRemoveRowGuidColFromExistingColumn()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        Assert.That(GetColumnDataType(cmd, "RemoveRowGuidColFromExistingColumn", "Column2"), Is.EqualTo("UNIQUEIDENTIFIER"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void QuenchTables_ShouldAddNotForReplicationToExistingColumn()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        Assert.That(GetColumnDataType(cmd, "AddNotForReplicationToExistingColumn", "Column1"), Is.EqualTo("INT IDENTITY(1, 1) NOT FOR REPLICATION"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void QuenchTables_ShouldRemoveNotForReplicationFromExistingColumn()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        Assert.That(GetColumnDataType(cmd, "RemoveNotForReplicationFromExistingColumn", "Column1"), Is.EqualTo("INT IDENTITY(1, 1)"));
+
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -391,7 +476,14 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
 --QuenchTables_ShouldModifyColumnForChangeDataType
-CREATE TABLE dbo.ChangeType (Col1 INT NOT NULL, Col2 CHAR(10) NOT NULL, Col3 BINARY(20) NOT NULL, Col4 VARCHAR(10) NOT NULL, Col5 VARBINARY(20) NOT NULL, Col6 VARCHAR(10) NOT NULL, Col7 VARBINARY(10) NOT NULL, Col8 VARBINARY(10) NOT NULL, Col9 VARBINARY(MAX) NOT NULL, Col10 DATETIME2(3) NOT NULL, Col11 DECIMAL(12, 2) NOT NULL, Col12 DECIMAL(12, 2) NOT NULL, Col13 NUMERIC(12, 2) NOT NULL, Col14 NUMERIC(12, 2) NOT NULL)
+CREATE TABLE dbo.ChangeType 
+  (Col1 INT NOT NULL, Col2 CHAR(10) NOT NULL, Col3 BINARY(20) NOT NULL, Col4 VARCHAR(10) NOT NULL, Col5 VARBINARY(20) NOT NULL, Col6 VARCHAR(10) NOT NULL, 
+   Col7 VARBINARY(10) NOT NULL, Col8 VARBINARY(10) NOT NULL, Col9 VARBINARY(MAX) NOT NULL, Col10 DATETIME2(3) NOT NULL, Col11 DECIMAL(12, 2) NOT NULL, 
+   Col12 DECIMAL(12, 2) NOT NULL, Col13 NUMERIC(12, 2) NOT NULL, Col14 NUMERIC(12, 2) NOT NULL, Col15 NVARCHAR(128) NULL, Col16 SYSNAME NULL,
+   Col17 BIT NOT NULL, Col18 Flag NOT NULL)
+--QuenchTables_ShouldNotAlterColumnWithSYSNAMEorUserDefinedType
+CREATE TABLE dbo.DontChangeType (Col1 SYSNAME NOT NULL, Col2 Flag NOT NULL)
+CREATE INDEX IDX_Dependency ON dbo.DontChangeType (Col1) INCLUDE (Col2)
 --QuenchTables_ShouldModifyColumnNullability
 CREATE TABLE dbo.ChangeNullability (Column1 INT NULL)
 --QuenchTables_ShouldHandleGoingToComputedColumn
@@ -445,6 +537,18 @@ CREATE TABLE dbo.AlterColumnWithComputed (Column1 INT NOT NULL, Column2 INT, Col
 --QuenchTables_ShouldAlterColumnWithFullTextIndex
 CREATE TABLE dbo.AlterColumnWithFTIndex (Column1 INT NOT NULL, Column2 VARCHAR(1000) NULL, CONSTRAINT PK_AlterColumnWithFTIndex PRIMARY KEY (Column1))
 CREATE FULLTEXT INDEX ON dbo.AlterColumnWithFTIndex (Column2) KEY INDEX PK_AlterColumnWithFTIndex ON FT_Catalog WITH CHANGE_TRACKING = OFF
+--QuenchTables_ShouldAlterXmlColumnWithXmlIndex
+CREATE TABLE dbo.AlterXmlColumnWithXmlIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 XML NULL, CONSTRAINT PK_AlterXmlColumnWithXmlIndex PRIMARY KEY CLUSTERED (Column1))
+CREATE PRIMARY XML INDEX [XI_Primary] ON dbo.AlterXmlColumnWithXmlIndex (Column3)
+CREATE XML INDEX [XI_Secondary_Path] ON dbo.AlterXmlColumnWithXmlIndex (Column3) USING XML INDEX [XI_Primary] FOR PATH 
+--QuenchTables_ShouldAddRowGuidColToExistingColumn
+CREATE TABLE dbo.AddRowGuidColToExistingColumn (Column1 INT NOT NULL, Column2 UNIQUEIDENTIFIER NOT NULL)
+--QuenchTables_ShouldRemoveRowGuidColFromExistingColumn
+CREATE TABLE dbo.RemoveRowGuidColFromExistingColumn (Column1 INT NOT NULL, Column2 UNIQUEIDENTIFIER ROWGUIDCOL NOT NULL)
+--QuenchTables_ShouldAddNotForReplicationToExistingColumn
+CREATE TABLE dbo.AddNotForReplicationToExistingColumn (Column1 INT IDENTITY(1,1) NOT NULL, Column2 UNIQUEIDENTIFIER NOT NULL)
+--QuenchTables_ShouldRemoveNotForReplicationFromExistingColumn
+CREATE TABLE dbo.RemoveNotForReplicationFromExistingColumn (Column1 INT IDENTITY(1,1) NOT FOR REPLICATION NOT NULL, Column2 UNIQUEIDENTIFIER NOT NULL)
 ";
         cmd.CommandTimeout = 300;
         cmd.ExecuteNonQuery();
@@ -523,6 +627,26 @@ CREATE FULLTEXT INDEX ON dbo.AlterColumnWithFTIndex (Column2) KEY INDEX PK_Alter
                     {
                       "Name": "[Col14]",
                       "DataType": "NUMERIC(10, 2)",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Col15]",
+                      "DataType": "SYSNAME",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Col16]",
+                      "DataType": "NVARCHAR(128)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Col17]",
+                      "DataType": "Flag",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Col18]",
+                      "DataType": "BIT",
                       "Nullable": false
                     }
                 ]
@@ -878,6 +1002,114 @@ CREATE FULLTEXT INDEX ON dbo.AlterColumnWithFTIndex (Column2) KEY INDEX PK_Alter
                     "ChangeTracking": "OFF",
                     "Columns": "[Column2]"
                 }
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AlterXmlColumnWithXmlIndex]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "BIGINT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(200)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column3]",
+                      "DataType": "XML([MANUINSTRUCTIONSSCHEMACOLLECTION])",
+                      "Nullable": true
+                    }
+                ],
+                "Indexes": [
+                    {
+                      "Name": "[PK_AlterXmlColumnWithXmlIndex]",
+                      "IndexColumns": "[Column1]",
+                      "Clustered": true,
+                      "PrimaryKey": true,
+                      "Unique": true
+                    }
+                ],
+                "XmlIndexes": [
+                    {
+                      "Name": "[XI_Primary]",
+                      "Column": "[Column3]",
+                      "IsPrimary": true
+                    },
+                    {
+                      "Name": "[XI_Secondary_Path]",
+                      "Column": "[Column3]",
+                      "IsPrimary": false,
+                      "PrimaryIndex": "[XI_Primary]",
+                      "SecondaryIndexType": "PATH"
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddRowGuidColToExistingColumn]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "INT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+                      "Nullable": false
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[RemoveRowGuidColFromExistingColumn]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "INT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "UNIQUEIDENTIFIER",
+                      "Nullable": false
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddNotForReplicationToExistingColumn]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "INT IDENTITY(1,1) NOT FOR REPLICATION",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "UNIQUEIDENTIFIER",
+                      "Nullable": false
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[RemoveNotForReplicationFromExistingColumn]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "INT IDENTITY(1,1)",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "UNIQUEIDENTIFIER",
+                      "Nullable": false
+                    }
+                ]
             }
         ]
         """;
