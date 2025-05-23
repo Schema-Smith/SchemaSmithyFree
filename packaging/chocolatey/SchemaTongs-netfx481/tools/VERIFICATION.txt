@@ -1,0 +1,19 @@
+﻿
+
+VERIFICATION
+Verification is intended to assist the Chocolatey moderators and community
+in verifying that this package's contents are trustworthy.
+
+This package is publically available at our github repo at:
+ 
+https://github.com/Schema-Smith/SchemaSmithyFree/releases/download/v1.0.4/SchemaTongs-net481.zip
+
+You can verify the integrity of the installer by downloading it from the above URL and calculating its SHA256 checksum using the following command:
+
+checksum -t sha256 -f './SchemaTongs-net481.zip'
+
+The checksum should be: AEEC93ACB6D4C9C02EAFA81822B932128F83BFEAE4A94693E55C5B9F48D0D998
+
+The LICENSE.txt file is available at:
+
+https://github.com/Schema-Smith/SchemaSmithyFree/tree/main?tab=License-1-ov-file#readme
