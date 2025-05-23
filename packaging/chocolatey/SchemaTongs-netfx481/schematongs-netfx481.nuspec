@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Do not remove this test for UTF-8: if “Ω” doesn’t appear as greek uppercase omega letter enclosed in quotation marks, you should use an editor that supports UTF-8, not this one. -->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>schematongs-netfx481</id>
+    <version>1.0.4</version>
+    <packageSourceUrl>https://github.com/Schema-Smith/SchemaSmithyFree/blob/main/packaging/chocolatey/SchemaTongs-netfx481/schematongs-netfx481.nuspec</packageSourceUrl>
+    <docsUrl>https://github.com/Schema-Smith/SchemaSmithyFree/wiki</docsUrl>
+	<mailingListUrl>https://github.com/Schema-Smith/SchemaSmithyFree/discussions</mailingListUrl>
+	<bugTrackerUrl>https://github.com/Schema-Smith/SchemaSmithyFree/issues</bugTrackerUrl>
+    <owners>SchemaSmith, LLC</owners>
+
+    <title>SchemaTongs netfx-4.8.1</title>
+    <authors>SchemaSmith, LLC</authors>
+    <projectUrl>https://SchemaSmith.com</projectUrl>
+    <copyright>2025 SchemaSmith, LLC</copyright> 
+    <licenseUrl>https://github.com/Schema-Smith/SchemaSmithyFree?tab=License-1-ov-file#readme</licenseUrl>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/Schema-Smith/SchemaSmithyFree</projectSourceUrl>
+    <tags>schematongs netfx-4.8.1 .net deployment mssql developer tools</tags>
+    <summary>Extracts schema metadata from SQL Server.</summary>
+    <description>## Shape. Strengthen. Succeed.
+
+SchemaSmithy is a suite of opinionated, metadata-driven tools that treat **SQL Server schema** like source code—so your database can be versioned, automated, and deployed just like the rest of your tech stack.
+
+## Why SchemaSmithy?
+
+Instead of fragile migration scripts and guesswork, SchemaSmithy gives you:
+
+- Schema-as-code clarity with editable metadata.
+- Git-friendly workflows and full version control.
+- DevOps-ready deployments for CI/CD.
+- Domain modeling that maps cleanly to product ownership.
+
+---
+
+## Core Components
+
+| Tool                           | Role                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------- |
+| [SchemaTongs](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/SchemaTongs)   | Extracts schema metadata from SQL Server.                                                |
+| [SchemaHammer](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/SchemaHammer) | Edit and refactor metadata in a structured UI (available in the [[Enterprise Edition]]). |
+| [SchemaQuench](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/SchemaQuench) | Applies metadata to target servers with precision.                                       |
+
+---
+
+## Why Not Migrations?
+
+Migration scripts tell the story of how your schema evolved, but they don’t tell you what it looks like *right now*. SchemaSmithy is **state-based**—your metadata repository defines the exact end state of your server at each release.
+
+This means your SQL Server schema is always in sync with your source control. You gain full traceability, the ability to diff per-object changes between builds, and a clear history of *what changed*, *when*, and *why*.
+
+Contrast that with traditional migrations, which require manually piecing together changes across multiple files to understand the final structure. With SchemaSmithy, the current state is always explicit.
+
+---
+
+## Define Product Boundaries
+
+Use SchemaSmithy to:
+
+- Easily model multiple applications or teams in a single server.
+- Keep each domain isolated in its own metadata repository.
+- Deploy different products at their own cadence depending on their rate of change.
+
+---
+
+## Additional Resources
+
+- [Defining Tables](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/Defining-Tables)
+- [Metadata](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/Metadata)
+- [Product Structure](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/Examining-The-Product-Repository-Structure)
+- [Templates](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/Template)
+- [Script Tokens](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/Script-Tokens)
+- [Migration Scripts](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/Migration-Scripts)
+- [Enterprise Features](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/Enterprise-edition)
+- [Product Demos](https://github.com/Schema-Smith/SchemaSmithDemos)
+
+---
+
+## Build Smarter with SchemaSmith
+
+Whether you’re modernizing a legacy application or building a greenfield platform, SchemaSmithy brings **discipline and agility** to your SQL Server schema lifecycle.
+
+Visit [SchemaSmith.com](http://SchemaSmith.com) for enterprise licensing, feature comparisons, and more.</description>
+
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
