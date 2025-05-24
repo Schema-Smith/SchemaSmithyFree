@@ -1,0 +1,36 @@
+﻿From: https://github.com/Schema-Smith/SchemaSmithyFree/tree/main?tab=License-1-ov-file#readme
+
+LICENSE
+
+SchemaSmith Community License (SSCL)
+Version 1.0
+1. License Grant
+SchemaSmith ("Licensor") grants you ("Licensee") a non-exclusive, non-transferable, royalty-free license to use, modify, and distribute the SchemaSmith software ("Software") under the terms of this agreement.
+2. Free Use Cases
+This license allows free use of the Software under the following conditions:
+* Open Source & Academic Use: If you are an individual, open-source project (licensed under an OSI-approved license), or academic institution, you may use the Software freely.
+
+* Non-Production Environments: Any organization may use the Software freely for development, testing or demonstration purposes.  
+
+A production environment is defined as an environment that is accessed by end-users of an application, such as an Internet website.
+
+* Individual or Small Company Use: Any company that is not an Enterprise may use the Software freely in production environments.
+3. Enterprise Licensing Requirement
+A paid enterprise license is required if your organization meets either of the following conditions:
+   * Your company has more than 50 employees.
+
+   * Your company generates more than $5 million USD in annual gross revenue.
+4. SaaS & Resale Restriction
+If you incorporate the Software into a commercial SaaS product, hosted service, or resale offering, you must obtain a paid enterprise license regardless of company size or revenue.
+5. Restrictions
+Except as expressly permitted, you may not:
+      * Remove or modify copyright notices.
+
+      * Use the Software for illegal activities.
+
+      * Misrepresent the Software as your own proprietary product.
+6. Disclaimer of Warranty & Liability
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. LICENSOR SHALL NOT BE LIABLE FOR ANY DAMAGES ARISING FROM THE USE OF THIS SOFTWARE.
+7. Governing Law
+This license shall be governed by the laws of the state of Florida.
+For enterprise licensing inquiries, please contact Sales@SchemaSmith.com.
