@@ -7,7 +7,8 @@ CREATE OR ALTER PROCEDURE [SchemaSmith].[TableQuench]
   @UpdateFillFactor BIT = 1
 AS
 BEGIN TRY
-  DECLARE @v_SQL VARCHAR(MAX) = ''
+  DECLARE @v_SQL VARCHAR(MAX) = '',
+          @v_DatabaseCollation VARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'COLLATION') AS VARCHAR(200))
   SET NOCOUNT ON
   RAISERROR('Parse Tables from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #TableDefinitions
@@ -84,6 +85,7 @@ BEGIN TRY
   DROP TABLE IF EXISTS #Columns
   SELECT t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]), c.[DataType], [Nullable] = ISNULL(c.[Nullable], 0), 
          c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
+         [Sparse] = ISNULL(c.[Sparse], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')), 
          CONVERT(BIT, CASE WHEN NOT EXISTS (SELECT * FROM #Tables x WHERE x.[Name] = t.[Name] AND x.[Schema] = t.[Schema] AND x.NewTable = 1)
                             AND COLUMNPROPERTY(OBJECT_ID(t.[Schema] + '.' + t.[Name], 'U'), SchemaSmith.fn_StripBracketWrapping([ColumnName]), 'ColumnId') IS NULL
                            THEN 1 ELSE 0 END) AS NewColumn,
@@ -103,7 +105,10 @@ BEGIN TRY
       [Default] VARCHAR(MAX) '$.Default',
       [CheckExpression] VARCHAR(MAX) '$.CheckExpression',
       [ComputedExpression] VARCHAR(MAX) '$.ComputedExpression',
-      [Persisted] BIT '$.Persisted'
+      [Persisted] BIT '$.Persisted',
+      [Sparse] BIT '$.Sparse',
+      [Collation] VARCHAR(500) '$.Collation',
+      [DataMaskFunction] VARCHAR(500) '$.DataMaskFunction'
       ) c;
   
   RAISERROR('Parse Foreign Keys from Json', 10, 1) WITH NOWAIT
@@ -112,7 +117,8 @@ BEGIN TRY
          [RelatedTableSchema] = SchemaSmith.fn_SafeBracketWrap(ISNULL(f.[RelatedTableSchema], 'dbo')), [RelatedTable] = SchemaSmith.fn_SafeBracketWrap(f.[RelatedTable]), 
          [Columns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
          [RelatedColumns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') FROM STRING_SPLIT(f.[RelatedColumns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
-         [CascadeOnDelete] = ISNULL(f.[CascadeOnDelete], 0), [CascadeOnUpdate] = ISNULL(f.[CascadeOnUpdate], 0)
+         [DeleteAction] = ISNULL(NULLIF(RTRIM([DeleteAction]), ''), 'NO ACTION'),
+         [UpdateAction] = ISNULL(NULLIF(RTRIM([UpdateAction]), ''), 'NO ACTION')
     INTO #ForeignKeys
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(ForeignKeys) WITH (
@@ -121,8 +127,8 @@ BEGIN TRY
       [RelatedTableSchema] VARCHAR(500) '$.RelatedTableSchema',
       [RelatedTable] VARCHAR(500) '$.RelatedTable',
       [RelatedColumns] VARCHAR(MAX) '$.RelatedColumns',
-      [CascadeOnDelete] BIT '$.CascadeOnDelete',
-      [CascadeOnUpdate] BIT '$.CascadeOnUpdate'
+      [DeleteAction] VARCHAR(20) '$.DeleteAction',
+      [UpdateAction] VARCHAR(20) '$.UpdateAction'
       ) f;
   
   RAISERROR('Parse Table Level Check Constraints from Json', 10, 1) WITH NOWAIT
@@ -166,7 +172,7 @@ BEGIN TRY
   -- Clustered index compression overrides the table compression
   RAISERROR('Override table compression to match clustered index', 10, 1) WITH NOWAIT
   UPDATE t
-    SET [CompressionType] = i.[CompressionType]
+    SET [CompressionType] = CASE WHEN [ColumnStore] = 1 THEN 'COLUMNSTORE' ELSE i.[CompressionType] END
     FROM #Tables t
     JOIN #Indexes i WITH (NOLOCK) ON i.[Schema] = t.[Schema]
                                  AND i.[TableName] = t.[Name]
@@ -267,13 +273,20 @@ BEGIN TRY
               THEN 'AS (' + ComputedExpression + ')' + CASE WHEN c.[Persisted] = 1 THEN ' PERSISTED' ELSE '' END
               -- Otherwise we need to build the column definition
               ELSE REPLACE(REPLACE(UPPER(LEFT([DataType], COALESCE(NULLIF(CHARINDEX('IDENTITY', [DataType]), 0), LEN([DataType]) + 1) - 1)), 'ROWGUIDCOL', ''), 'NOT FOR REPLICATION', '') + 
+                   CASE WHEN [Collation] <> 'IGNORE' AND ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') <> [Collation] THEN ' COLLATE ' + ISNULL(NULLIF(RTRIM([Collation]), ''), @v_DatabaseCollation) ELSE '' END +
+                   CASE WHEN [Sparse] = 1 THEN ' SPARSE' ELSE '' END +
                    CASE WHEN Nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END
               END AS [ColumnScript],
          CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) = '' 
               THEN CASE WHEN [DataType] LIKE '%ROWGUIDCOL%' AND sc.is_rowguidcol = 0 THEN ' ADD ROWGUIDCOL' ELSE '' END +
                    CASE WHEN [DataType] NOT LIKE '%ROWGUIDCOL%' AND sc.is_rowguidcol = 1 THEN ' DROP ROWGUIDCOL' ELSE '' END +
                    CASE WHEN [DataType] LIKE '%NOT FOR REPLICATION%' AND ident.is_not_for_replication = 0 THEN ' ADD NOT FOR REPLICATION' ELSE '' END +
-                   CASE WHEN [DataType] NOT LIKE '%NOT FOR REPLICATION%' AND ident.is_not_for_replication = 1 THEN ' DROP NOT FOR REPLICATION' ELSE '' END                        
+                   CASE WHEN [DataType] NOT LIKE '%NOT FOR REPLICATION%' AND ident.is_not_for_replication = 1 THEN ' DROP NOT FOR REPLICATION' ELSE '' END +
+                   CASE WHEN mc.masking_function IS NOT NULL AND ([DataMaskFunction] = '' OR mc.masking_function COLLATE DATABASE_DEFAULT <> [DataMaskFunction]) THEN ' DROP MASKED' ELSE '' END +
+                   CASE WHEN [DataMaskFunction] <> '' AND mc.masking_function IS NULL THEN ' ADD MASKED WITH (FUNCTION = ''' + [DataMaskFunction] + ''')' ELSE '' END +
+                   CASE WHEN [DataMaskFunction] <> '' AND mc.masking_function COLLATE DATABASE_DEFAULT <> [DataMaskFunction]
+                        THEN '; ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ALTER COLUMN ' + c.[ColumnName] + ' ADD MASKED WITH (FUNCTION = ''' + [DataMaskFunction] + ''')'
+                        ELSE '' END
               ELSE ''
               END AS [SpecialColumnScript],
          CAST(CASE WHEN cc.[definition] IS NOT NULL OR RTRIM(ISNULL([ComputedExpression], '')) <> ''
@@ -296,6 +309,8 @@ BEGIN TRY
                                                       AND ident.[object_id] = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
     LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = SchemaSmith.fn_StripBracketWrapping(c.ColumnName)
                                                    AND cc.[object_id] = OBJECT_ID(C.[Schema] + '.' + C.[TableName])
+    LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[name] = SchemaSmith.fn_StripBracketWrapping(c.ColumnName)
+                                                 AND mc.[object_id] = OBJECT_ID(C.[Schema] + '.' + C.[TableName])
     WHERE t.NewTable = 0
       AND (UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
                                    THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(VARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
@@ -315,6 +330,9 @@ BEGIN TRY
         OR CASE WHEN c.Nullable = 1 THEN 'YES' ELSE 'NO' END <> ic.IS_NULLABLE
         OR ISNULL(SchemaSmith.fn_StripParenWrapping(cc.[definition]), '') <> ISNULL(c.ComputedExpression, '')
         OR ISNULL(cc.is_persisted, 0) <> ISNULL(c.[Persisted], 0))
+        OR sc.is_sparse <> [Sparse]
+        OR ISNULL(mc.masking_function, '') COLLATE DATABASE_DEFAULT <> [DataMaskFunction]
+        OR ([Collation] <> 'IGNORE' AND ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') <> [Collation])
   
   RAISERROR('Detect Computed Columns Impacted by Other Column Changes', 10, 1) WITH NOWAIT
   INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, [DropOnly])
@@ -410,6 +428,7 @@ BEGIN TRY
     LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
                                             AND p.index_id < 2
     WHERE t.NewTable = 0
+      AND t.[CompressionType] IN ('NONE', 'ROW', 'PAGE')
       AND COALESCE(p.data_compression_desc COLLATE DATABASE_DEFAULT, 'NONE') <> t.[CompressionType]
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
@@ -433,18 +452,26 @@ BEGIN TRY
          IndexScript = 'CREATE ' + 
                        CASE WHEN si.is_unique = 1 THEN 'UNIQUE ' ELSE '' END + 
                        CASE WHEN si.[type] IN (1, 5) THEN '' ELSE 'NON' END + 'CLUSTERED ' +
-                       'INDEX [' + si.[Name] + '] ON ' + t.[Schema] + '.' + t.[Name] + ' (' +
-                       (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END, ',') WITHIN GROUP (ORDER BY key_ordinal)
-                          FROM sys.index_columns ic WITH (NOLOCK)
-                          WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0) + ')' +
-                       CASE WHEN EXISTS (SELECT * FROM sys.index_columns ic WITH (NOLOCK) WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1)
-                            THEN ' INCLUDE (' +
-                                 (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
-                                    FROM sys.index_columns ic WITH (NOLOCK)
-                                    WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) + ')'
+                       CASE WHEN si.[type] IN (5, 6) THEN 'COLUMNSTORE ' ELSE '' END +
+                       'INDEX [' + si.[Name] + '] ON ' + t.[Schema] + '.' + t.[Name] + 
+                       CASE WHEN si.[type] NOT IN (5, 6) 
+                            THEN ' (' + (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END, ',') WITHIN GROUP (ORDER BY key_ordinal)
+                                           FROM sys.index_columns ic WITH (NOLOCK)
+                                           WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0) + ')' +
+                                 CASE WHEN EXISTS (SELECT * FROM sys.index_columns ic WITH (NOLOCK) WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1)
+                                      THEN ' INCLUDE (' +
+                                           (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
+                                              FROM sys.index_columns ic WITH (NOLOCK)
+                                              WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) + ')'
+                                      ELSE '' END
+                            WHEN si.[type] IN (6) 
+                            THEN ' (' + (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
+                                           FROM sys.index_columns ic WITH (NOLOCK)
+                                           WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) + ')'
                             ELSE '' END +
                        CASE WHEN si.has_filter = 1 THEN ' WHERE ' + SchemaSmith.fn_StripParenWrapping(si.filter_definition) ELSE '' END +
-                       CASE WHEN COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE')
+                       CASE WHEN (si.[type] NOT IN (5, 6) AND COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE'))
+                              OR (si.[type] IN (5, 6) AND COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
                             THEN ' WITH (DATA_COMPRESSION=' + COALESCE(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT + ')'
                             ELSE '' END
     INTO #ExistingIndexes
@@ -473,10 +500,14 @@ BEGIN TRY
       AND ei.IndexScript <> 'CREATE ' + 
                             CASE WHEN i.[Unique] = 1 THEN 'UNIQUE ' ELSE '' END + 
                             CASE WHEN i.[Clustered] = 1 THEN '' ELSE 'NON' END + 'CLUSTERED ' +
-                            'INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[IndexColumns] + ')' +
-                            CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END +
+                            CASE WHEN i.[ColumnStore] = 1 THEN 'COLUMNSTORE ' ELSE '' END + 
+	                        'INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + 
+                            CASE WHEN i.[ColumnStore] = 0 THEN ' (' + i.[IndexColumns] + ')' + CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END
+                                 WHEN i.[ColumnStore] = 1 AND i.[Clustered] = 0 THEN ' (' + i.[IncludeColumns] + ')'
+                                 ELSE '' END +
                             CASE WHEN RTRIM(ISNULL(i.[FilterExpression], '')) <> '' THEN ' WHERE ' + i.[FilterExpression] ELSE '' END +
-                            CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE')
+                            CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
+                                   OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
                                  THEN ' WITH (DATA_COMPRESSION=' + RTRIM(ISNULL(i.[CompressionType], '')) + ')'
                                  ELSE '' END
 
@@ -497,10 +528,14 @@ BEGIN TRY
       AND REPLACE(ei.IndexScript, ei.[xIndexName], 'IndexName') = 'CREATE ' + 
                                                                   CASE WHEN i.[Unique] = 1 OR i.[PrimaryKey] = 1 THEN 'UNIQUE ' ELSE '' END + 
                                                                   CASE WHEN i.[Clustered] = 1 THEN '' ELSE 'NON' END + 'CLUSTERED ' +
-	                                                              'INDEX [IndexName] ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[IndexColumns] + ')' +
-						                                          CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END +
+                                                                  CASE WHEN i.[ColumnStore] = 1 THEN 'COLUMNSTORE ' ELSE '' END + 
+	                                                              'INDEX [IndexName] ON ' + i.[Schema] + '.' + i.[TableName] + 
+                                                                  CASE WHEN i.[ColumnStore] = 0 THEN ' (' + i.[IndexColumns] + ')' + CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END
+                                                                       WHEN i.[ColumnStore] = 1 AND i.[Clustered] = 0 THEN ' (' + i.[IncludeColumns] + ')'
+                                                                       ELSE '' END +
                                                                   CASE WHEN RTRIM(ISNULL(i.[FilterExpression], '')) <> '' THEN ' WHERE ' + i.[FilterExpression] ELSE '' END +
-                                                                  CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE')
+                                                                  CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
+                                                                         OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
                                                                        THEN ' WITH (DATA_COMPRESSION=' + RTRIM(ISNULL(i.[CompressionType], '')) + ')'
                                                                        ELSE '' END
 
@@ -759,7 +794,7 @@ BEGIN TRY
   RAISERROR('Add New Tables', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Adding new table ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              'CREATE TABLE ' + T.[Schema] + '.' + T.[Name] + ' (' + ScriptColumns + ')' + 
-                             CASE WHEN t.[CompressionType] IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + t.[CompressionType] + ')' ELSE '' END + ';', CHAR(13) + CHAR(10))
+                             CASE WHEN ISNULL(t.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + ISNULL(t.[CompressionType], 'NONE') + ')' ELSE '' END + ';', CHAR(13) + CHAR(10))
     FROM (SELECT T.[Schema], T.[Name], t.[CompressionType],
                  ScriptColumns = (SELECT STRING_AGG([ColumnScript], ', ') WITHIN GROUP (ORDER BY c.[ColumnName]) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name])
             FROM #Tables T WITH (NOLOCK)
@@ -821,8 +856,8 @@ BEGIN TRY
                     '(' + (SELECT STRING_AGG('[' + COL_NAME(fc.[referenced_object_id], fc.referenced_column_id) + ']', ',') WITHIN GROUP (ORDER BY fc.constraint_column_id)
                              FROM sys.foreign_key_columns fc WITH (NOLOCK)
                              WHERE fk.[object_id] = fc.[constraint_object_id]) + ')' +
-                    CASE WHEN fk.update_referential_action = 1 THEN ' ON UPDATE CASCADE' ELSE '' END +
-                    CASE WHEN fk.delete_referential_action = 1 THEN ' ON DELETE CASCADE' ELSE '' END
+                    ' ON DELETE ' + REPLACE(fk.update_referential_action_desc, '_', ' ') COLLATE DATABASE_DEFAULT +
+                    ' ON UPDATE ' + REPLACE(fk.delete_referential_action_desc, '_', ' ') COLLATE DATABASE_DEFAULT
     INTO #ExistingFKs
     FROM #Tables t WITH (NOLOCK)
     JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.parent_object_id = OBJECT_ID(t.[Schema] + '.' + t.[Name]) 
@@ -837,8 +872,8 @@ BEGIN TRY
                                       AND ek.[Schema] = fk.[Schema]
                                       AND ek.[FKName] = SchemaSmith.fn_StripBracketWrapping(fk.[KeyName])
     WHERE ek.FKScript <> '(' + [Columns] + ') REFERENCES ' + [RelatedTableSchema] + '.' + [RelatedTable] + ' (' + [RelatedColumns] + ')' +
-                         CASE WHEN fk.[CascadeOnUpdate] = 1 THEN ' ON UPDATE CASCADE' ELSE '' END +
-                         CASE WHEN fk.[CascadeOnDelete] = 1 THEN ' ON DELETE CASCADE' ELSE '' END
+                         ' ON DELETE ' + [DeleteAction] +
+                         ' ON UPDATE ' + [UpdateAction]
   
   RAISERROR('Drop Modified Foreign Keys', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping Foreign Key ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.[FKName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
@@ -976,16 +1011,24 @@ BEGIN TRY
                                   ELSE 'CREATE ' + 
                                        CASE WHEN i.[Unique] = 1 THEN 'UNIQUE ' ELSE '' END +
                                        CASE WHEN i.[Clustered] =  1 THEN '' ELSE 'NON' END + 'CLUSTERED ' +
+                                       CASE WHEN i.[ColumnStore] = 1 THEN 'COLUMNSTORE ' ELSE '' END +
                                        'INDEX ' + i.[IndexName] +
-                                       ' ON ' + i.[Schema] + '.' + i.[TableName] + '(' + i.IndexColumns + ')' +
-                                       CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END +
+                                       ' ON ' + i.[Schema] + '.' + i.[TableName] +
+                                       CASE WHEN i.[ColumnStore] = 0 THEN ' (' + i.[IndexColumns] + ')' + CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END
+                                            WHEN i.[ColumnStore] = 1 AND i.[Clustered] = 0 THEN ' (' + i.[IncludeColumns] + ')'
+                                            ELSE '' END +
                                        CASE WHEN RTRIM(ISNULL(i.[FilterExpression], '')) <> '' THEN ' WHERE ' + i.[FilterExpression] ELSE '' END +
-					                   CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE')
+					                   CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
+                                              OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
                                               OR ISNULL(i.[FillFactor], 100) NOT IN (0, 100)
                                             THEN ' WITH (' +
-                                                 CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN 'DATA_COMPRESSION=' + i.[CompressionType] ELSE '' END +
+                                                 CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
+                                                        OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
+                                                      THEN 'DATA_COMPRESSION=' + i.[CompressionType] ELSE '' END +
                                                  CASE WHEN ISNULL(i.[FillFactor], 100) NOT IN (0, 100) 
-                                                      THEN CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN ', ' ELSE '' END +
+                                                      THEN CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
+                                                                  OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
+                                                                THEN ', ' ELSE '' END +
                                                            'FILLFACTOR = ' + CAST(i.[FillFactor] AS VARCHAR(20)) 
                                                       ELSE '' END +
 							                     ')'
@@ -1003,9 +1046,8 @@ BEGIN TRY
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Creating index ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              'CREATE ' + CASE WHEN i.IsPrimary = 1 THEN 'PRIMARY ' ELSE '' END + 
                              'XML INDEX ' + i.[IndexName] COLLATE DATABASE_DEFAULT + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[Column] + ')' + 
-                             CASE WHEN i.IsPrimary = 0
-                                  THEN ' USING XML INDEX ' + i.PrimaryIndex + ' FOR ' + i.SecondaryIndexType
-                                  ELSE '' END + ';', CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.IsPrimary =  1 THEN 0 ELSE 1 END, i.[IndexName])
+                             CASE WHEN i.IsPrimary = 0 THEN ' USING XML INDEX ' + i.PrimaryIndex + ' FOR ' + i.SecondaryIndexType ELSE '' END +
+                             ';', CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.IsPrimary =  1 THEN 0 ELSE 1 END, i.[IndexName])
     FROM #XmlIndexes i WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.xml_indexes si WITH (NOLOCK)
@@ -1093,8 +1135,8 @@ BEGIN TRY
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Adding foreign key ' + f.[Schema] + '.' + f.[TableName] + '.' + f.[KeyName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              'ALTER TABLE ' + f.[Schema] + '.' + f.[TableName] + ' ADD CONSTRAINT ' + f.[KeyName] + ' FOREIGN KEY ' + 
                              '(' + f.[Columns] + ') REFERENCES ' + [RelatedTableSchema] + '.' + f.[RelatedTable] + ' (' + [RelatedColumns] + ')' +
-                             CASE WHEN f.[CascadeOnUpdate] = 1 THEN ' ON UPDATE CASCADE' ELSE '' END +
-                             CASE WHEN f.[CascadeOnDelete] = 1 THEN ' ON DELETE CASCADE' ELSE '' END + ';', CHAR(13) + CHAR(10))
+                             ' ON DELETE ' + [DeleteAction] +
+                             ' ON UPDATE ' + [UpdateAction] + ';', CHAR(13) + CHAR(10))
     FROM #ForeignKeys f WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT *
                         FROM sys.foreign_keys sf WITH (NOLOCK)

@@ -4,10 +4,10 @@ using Schema.DataAccess;
 namespace SchemaQuench.IntegrationTests;
 
 [Parallelizable(scope: ParallelScope.All)]
-public class QuenchTables_TemporalTables : BaseQuenchTablesTests
+public class TableQuench_TemporalTables : BaseTableQuenchTests
 {
     [Test]
-    public void QuenchTables_ShouldCreateNewTemporalTable()
+    public void TableQuench_ShouldCreateNewTemporalTable()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -30,7 +30,7 @@ public class QuenchTables_TemporalTables : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldRemoveTemporalTracking()
+    public void TableQuench_ShouldRemoveTemporalTracking()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -53,7 +53,7 @@ public class QuenchTables_TemporalTables : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldMakeExistingTableTemporal()
+    public void TableQuench_ShouldMakeExistingTableTemporal()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -100,7 +100,7 @@ public class QuenchTables_TemporalTables : BaseQuenchTablesTests
         conn.ChangeDatabase(_mainDb);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
---QuenchTables_ShouldRemoveTemporalTracking
+--TableQuench_ShouldRemoveTemporalTracking
 CREATE TABLE [dbo].[MyOldTeporalTable] 
   ([Id] INT NOT NULL, 
    [Somedata] VARCHAR(500) NOT NULL, 
@@ -109,7 +109,7 @@ CREATE TABLE [dbo].[MyOldTeporalTable]
    CONSTRAINT [PK_MyOldTeporalTable] PRIMARY KEY NONCLUSTERED  ([Id]),
    PERIOD FOR SYSTEM_TIME ([ValidFrom], [ValidTo])
   ) WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[MyOldTeporalTable_Hist]))
---QuenchTables_ShouldMakeExistingTableTemporal
+--TableQuench_ShouldMakeExistingTableTemporal
 CREATE TABLE [dbo].[MyUpdatedTeporalTable] 
   ([Id] INT NOT NULL, 
    [Somedata] VARCHAR(500) NOT NULL, 

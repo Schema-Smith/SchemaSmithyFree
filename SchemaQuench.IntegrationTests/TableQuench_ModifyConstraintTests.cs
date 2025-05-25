@@ -3,10 +3,10 @@
 namespace SchemaQuench.IntegrationTests;
 
 [Parallelizable(scope: ParallelScope.All)]
-internal class QuenchTables_ModifyConstraintTests : BaseQuenchTablesTests
+internal class TableQuench_ModifyConstraintTests : BaseTableQuenchTests
 {
     [Test]
-    public void QuenchTables_ShouldModifyDefault()
+    public void TableQuench_ShouldModifyDefault()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -19,7 +19,7 @@ internal class QuenchTables_ModifyConstraintTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldModifyColumnLevelCheckConstraint()
+    public void TableQuench_ShouldModifyColumnLevelCheckConstraint()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -32,7 +32,7 @@ internal class QuenchTables_ModifyConstraintTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldModifyTableLevelCheckConstraint()
+    public void TableQuench_ShouldModifyTableLevelCheckConstraint()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -45,7 +45,7 @@ internal class QuenchTables_ModifyConstraintTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldModifyForeignKeyForColumnChange()
+    public void TableQuench_ShouldModifyForeignKeyForColumnChange()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -58,7 +58,7 @@ internal class QuenchTables_ModifyConstraintTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldModifyForeignKeyForReferenceColumnChange()
+    public void TableQuench_ShouldModifyForeignKeyForReferenceColumnChange()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -71,7 +71,7 @@ internal class QuenchTables_ModifyConstraintTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldModifyForeignKeyForReferenceTableChange()
+    public void TableQuench_ShouldModifyForeignKeyForReferenceTableChange()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -84,7 +84,7 @@ internal class QuenchTables_ModifyConstraintTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldModifyForeignKeyForCascadeDeleteChange()
+    public void TableQuench_ShouldModifyForeignKeyForCascadeDeleteChange()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -97,7 +97,7 @@ internal class QuenchTables_ModifyConstraintTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldModifyForeignKeyForCascadeUpdateChange()
+    public void TableQuench_ShouldModifyForeignKeyForCascadeUpdateChange()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -117,32 +117,32 @@ internal class QuenchTables_ModifyConstraintTests : BaseQuenchTablesTests
         conn.ChangeDatabase(_mainDb);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
---QuenchTables_ShouldModifyDefault
+--TableQuench_ShouldModifyDefault
 CREATE TABLE dbo.ModifyMyDefault (Id INT NOT NULL DEFAULT 10)
---QuenchTables_ShouldModifyColumnLevelCheckConstraint
+--TableQuench_ShouldModifyColumnLevelCheckConstraint
 CREATE TABLE dbo.ModifyMyColumnCheck (Id INT NOT NULL CHECK ([Id]<(20)))
---QuenchTables_ShouldModifyTableLevelCheckConstraint
+--TableQuench_ShouldModifyTableLevelCheckConstraint
 CREATE TABLE dbo.ModifyMyTableCheck (Id INT NOT NULL, Col2 INT)
 ALTER TABLE dbo.ModifyMyTableCheck ADD CONSTRAINT CHK_ModifyMyTableCheck_MyCheck CHECK ([Col2]>[Id])
---QuenchTables_ShouldModifyForeignKeyForColumnChange
+--TableQuench_ShouldModifyForeignKeyForColumnChange
 CREATE TABLE dbo.ModifyFKColumn (Id INT NOT NULL PRIMARY KEY, Col2 INT, Col3 INT)
 CREATE TABLE dbo.ModifyFKColumnRef (Id INT NOT NULL PRIMARY KEY)
 ALTER TABLE dbo.ModifyFKColumn ADD CONSTRAINT FK_ModifyFKColumn_ModifyFKColumnRef FOREIGN KEY (Col3) REFERENCES dbo.ModifyFKColumnRef (Id)
---QuenchTables_ShouldModifyForeignKeyForReferenceColumnChange
+--TableQuench_ShouldModifyForeignKeyForReferenceColumnChange
 CREATE TABLE dbo.ModifyFKReferenceColumn (Id INT NOT NULL PRIMARY KEY, Col2 INT, Col3 INT)
 CREATE TABLE dbo.ModifyFKReferenceColumnRef (Id INT NOT NULL PRIMARY KEY, RefCol INT NOT NULL)
 CREATE UNIQUE INDEX IDX_RefKey ON dbo.ModifyFKReferenceColumnRef (RefCol)
 ALTER TABLE dbo.ModifyFKReferenceColumn ADD CONSTRAINT FK_ModifyFKReferenceColumn_ModifyFKReferenceColumnRef FOREIGN KEY (Col3) REFERENCES dbo.ModifyFKReferenceColumnRef (Id)
 CREATE TABLE dbo.ModifyFKReferenceTable (Id INT NOT NULL PRIMARY KEY, Col2 INT, Col3 INT)
---QuenchTables_ShouldModifyForeignKeyForReferenceTableChange
+--TableQuench_ShouldModifyForeignKeyForReferenceTableChange
 CREATE TABLE dbo.ModifyFKReferenceTableRef (Id INT NOT NULL PRIMARY KEY)
 CREATE TABLE dbo.ModifyFKReferenceTableRefNew (Id INT NOT NULL PRIMARY KEY)
 ALTER TABLE dbo.ModifyFKReferenceTable ADD CONSTRAINT FK_ModifyFKReferenceTable_ModifyFKReferenceTableRef FOREIGN KEY (Col3) REFERENCES dbo.ModifyFKReferenceTableRef (Id)
---QuenchTables_ShouldModifyForeignKeyForCascadeDeleteChange
+--TableQuench_ShouldModifyForeignKeyForCascadeDeleteChange
 CREATE TABLE dbo.ModifyFKCascadeDelete (Id INT NOT NULL PRIMARY KEY, Col2 INT, Col3 INT)
 CREATE TABLE dbo.ModifyFKCascadeDeleteRef (Id INT NOT NULL PRIMARY KEY)
 ALTER TABLE dbo.ModifyFKCascadeDelete ADD CONSTRAINT FK_ModifyFKCascadeDelete_ModifyFKCascadeDeleteRef FOREIGN KEY (Col3) REFERENCES dbo.ModifyFKCascadeDeleteRef (Id) ON DELETE CASCADE
---QuenchTables_ShouldModifyForeignKeyForCascadeUpdateChange
+--TableQuench_ShouldModifyForeignKeyForCascadeUpdateChange
 CREATE TABLE dbo.ModifyFKCascadeUpdate (Id INT NOT NULL PRIMARY KEY, Col2 INT, Col3 INT)
 CREATE TABLE dbo.ModifyFKCascadeUpdateRef (Id INT NOT NULL PRIMARY KEY)
 ALTER TABLE dbo.ModifyFKCascadeUpdate ADD CONSTRAINT FK_ModifyFKCascadeUpdate_ModifyFKCascadeUpdateRef FOREIGN KEY (Col3) REFERENCES dbo.ModifyFKCascadeUpdateRef (Id) ON UPDATE CASCADE

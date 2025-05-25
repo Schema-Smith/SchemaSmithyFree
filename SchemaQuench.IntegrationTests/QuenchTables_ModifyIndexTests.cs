@@ -3,7 +3,7 @@
 namespace SchemaQuench.IntegrationTests;
 
 [Parallelizable(scope: ParallelScope.All)]
-public class QuenchTables_ModifyIndexTests : BaseQuenchTablesTests
+public class TableQuenchModifyIndexTests : BaseTableQuenchTests
 {
     [Test]
     public void ShouldModifyIndexWhenFilterExpressionChanges()

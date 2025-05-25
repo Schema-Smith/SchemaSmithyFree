@@ -4,7 +4,6 @@ using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Utility;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Index = Schema.Domain.Index;
 
 namespace SchemaTongs.IntegrationTests;
@@ -105,15 +104,15 @@ ALTER TABLE dbo.MyFKTable ADD CONSTRAINT FK_MyFKTable_Col2_MyFKReferencedTable_R
         Assert.That(result.ForeignKeys[0].RelatedTableSchema, Is.EqualTo("[dbo]"));
         Assert.That(result.ForeignKeys[0].RelatedTable, Is.EqualTo("[MyFKReferencedTable]"));
         Assert.That(result.ForeignKeys[0].RelatedColumns, Is.EqualTo("[RefCol]"));
-        Assert.That(result.ForeignKeys[0].CascadeOnDelete, Is.False);
-        Assert.That(result.ForeignKeys[0].CascadeOnUpdate, Is.True);
+        Assert.That(result.ForeignKeys[0].DeleteAction, Is.EqualTo("NO ACTION"));
+        Assert.That(result.ForeignKeys[0].UpdateAction, Is.EqualTo("CASCADE"));
         Assert.That(result.ForeignKeys[1].Name, Is.EqualTo("[FK_MyFKTable_Col3_MyFKReferencedTable_Id]"));
         Assert.That(result.ForeignKeys[1].Columns, Is.EqualTo("[Col3]"));
         Assert.That(result.ForeignKeys[1].RelatedTableSchema, Is.EqualTo("[dbo]"));
         Assert.That(result.ForeignKeys[1].RelatedTable, Is.EqualTo("[MyFKReferencedTable]"));
         Assert.That(result.ForeignKeys[1].RelatedColumns, Is.EqualTo("[Id]"));
-        Assert.That(result.ForeignKeys[1].CascadeOnDelete, Is.True);
-        Assert.That(result.ForeignKeys[1].CascadeOnUpdate, Is.False);
+        Assert.That(result.ForeignKeys[1].DeleteAction, Is.EqualTo("CASCADE"));
+        Assert.That(result.ForeignKeys[1].UpdateAction, Is.EqualTo("NO ACTION"));
 
         conn.Close();
     }
