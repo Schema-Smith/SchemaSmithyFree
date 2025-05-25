@@ -3,7 +3,7 @@
 namespace SchemaQuench.IntegrationTests;
 
 [Parallelizable(scope: ParallelScope.All)]
-public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
+public class TableQuench_AlterColumnTests : BaseTableQuenchTests
 {
     [Test]
     [TestCase("Col1", "BIGINT")]
@@ -24,7 +24,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     [TestCase("Col16", "NVARCHAR(128)")]
     [TestCase("Col17", "FLAG")]
     [TestCase("Col18", "BIT")]
-    public void QuenchTables_ShouldModifyColumnForChangeDataType(string colName, string expectedType)
+    public void TableQuench_ShouldModifyColumnForChangeDataType(string colName, string expectedType)
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -36,7 +36,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldNotAlterColumnWithSYSNAMEorUserDefinedType()
+    public void TableQuench_ShouldNotAlterColumnWithSYSNAMEorUserDefinedType()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -52,7 +52,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldModifyColumnNullability()
+    public void TableQuench_ShouldModifyColumnNullability()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -65,7 +65,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleGoingToComputedColumn()
+    public void TableQuench_ShouldHandleGoingToComputedColumn()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -78,7 +78,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleGoingFromComputedColumn()
+    public void TableQuench_ShouldHandleGoingFromComputedColumn()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -91,7 +91,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleChangeComputedExpression()
+    public void TableQuench_ShouldHandleChangeComputedExpression()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -107,7 +107,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleChangingComputedColumnPersistence()
+    public void TableQuench_ShouldHandleChangingComputedColumnPersistence()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -123,7 +123,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnUsedInIndex()
+    public void TableQuench_ShouldAlterColumnUsedInIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -148,7 +148,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnUsedInIndexInclude()
+    public void TableQuench_ShouldAlterColumnUsedInIndexInclude()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -173,7 +173,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnUsedInUniqueIndexReferencedByFullTextIndex()
+    public void TableQuench_ShouldAlterColumnUsedInUniqueIndexReferencedByFullTextIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -199,7 +199,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnUsedInUniqueIndexReferencedByForeignKey()
+    public void TableQuench_ShouldAlterColumnUsedInUniqueIndexReferencedByForeignKey()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -222,7 +222,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnWithDefault()
+    public void TableQuench_ShouldAlterColumnWithDefault()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -244,7 +244,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnWithColumnLevelCheckConstraint()
+    public void TableQuench_ShouldAlterColumnWithColumnLevelCheckConstraint()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -265,7 +265,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnWithTableLevelCheckConstraint()
+    public void TableQuench_ShouldAlterColumnWithTableLevelCheckConstraint()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -287,7 +287,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_AlterColumnWithStatistics()
+    public void TableQuench_AlterColumnWithStatistics()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -308,7 +308,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnWithStatisticsFilterExpression()
+    public void TableQuench_ShouldAlterColumnWithStatisticsFilterExpression()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -327,7 +327,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnWithIndexFilterExpression()
+    public void TableQuench_ShouldAlterColumnWithIndexFilterExpression()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -346,7 +346,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnWithForeignKey()
+    public void TableQuench_ShouldAlterColumnWithForeignKey()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -365,7 +365,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_AlterColumnWithComputedExpression()
+    public void TableQuench_AlterColumnWithComputedExpression()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -384,7 +384,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnWithFullTextIndex()
+    public void TableQuench_ShouldAlterColumnWithFullTextIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -403,7 +403,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterXmlColumnWithXmlIndex()
+    public void TableQuench_ShouldAlterXmlColumnWithXmlIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -416,7 +416,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAddRowGuidColToExistingColumn()
+    public void TableQuench_ShouldAddRowGuidColToExistingColumn()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -429,7 +429,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldRemoveRowGuidColFromExistingColumn()
+    public void TableQuench_ShouldRemoveRowGuidColFromExistingColumn()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -442,7 +442,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAddNotForReplicationToExistingColumn()
+    public void TableQuench_ShouldAddNotForReplicationToExistingColumn()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -455,7 +455,7 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldRemoveNotForReplicationFromExistingColumn()
+    public void TableQuench_ShouldRemoveNotForReplicationFromExistingColumn()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -463,6 +463,68 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
         using var cmd = conn.CreateCommand();
 
         Assert.That(GetColumnDataType(cmd, "RemoveNotForReplicationFromExistingColumn", "Column1"), Is.EqualTo("INT IDENTITY(1, 1)"));
+
+        conn.Close();
+    }
+
+
+    [Test]
+    public void TableQuench_ShouldModifyColumnCollation()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT CAST(DATABASEPROPERTYEX(DB_NAME(), 'COLLATION') AS VARCHAR(200))";
+        var dbCollation = cmd.ExecuteScalar() as string;
+        Assert.That(dbCollation, Is.Not.EqualTo("Latin1_General_CS_AS"));
+
+        cmd.CommandText = "SELECT COLLATION_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'ModifyColumnCollation' AND COLUMN_NAME = 'Column1'";
+        Assert.That(cmd.ExecuteScalar() as string, Is.EqualTo(dbCollation));
+
+        cmd.CommandText = "SELECT COLLATION_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'ModifyColumnCollation' AND COLUMN_NAME = 'Column2'";
+        Assert.That(cmd.ExecuteScalar() as string, Is.EqualTo("Latin1_General_CS_AS"));
+
+        cmd.CommandText = "SELECT COLLATION_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'ModifyColumnCollation' AND COLUMN_NAME = 'Column3'";
+        Assert.That(cmd.ExecuteScalar() as string, Is.EqualTo("Latin1_General_CS_AS"));
+        conn.Close();
+    }
+
+
+    [Test]
+    public void TableQuench_ShouldAlterColmnSparseness()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN COLUMNPROPERTY(OBJECT_ID('dbo.ModifyColmnSparseness'), 'Column1', 'IsSparse') = 0 THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN COLUMNPROPERTY(OBJECT_ID('dbo.ModifyColmnSparseness'), 'Column2', 'IsSparse') = 1 THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        conn.Close();
+    }
+
+    [Test]
+    public void TableQuench_ShouldAlterColmnMasking()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT mc.masking_function FROM sys.masked_columns mc WITH (NOLOCK) WHERE mc.[object_id] = OBJECT_ID('dbo.ModifyColmnDataMasking') AND mc.[name] = 'Column1'";
+        Assert.That(cmd.ExecuteScalar() as string, Is.Null);
+
+        cmd.CommandText = "SELECT mc.masking_function FROM sys.masked_columns mc WITH (NOLOCK) WHERE mc.[object_id] = OBJECT_ID('dbo.ModifyColmnDataMasking') AND mc.[name] = 'Column2'";
+        Assert.That(cmd.ExecuteScalar() as string, Is.EqualTo("default()"));
+
+        cmd.CommandText = "SELECT mc.masking_function FROM sys.masked_columns mc WITH (NOLOCK) WHERE mc.[object_id] = OBJECT_ID('dbo.ModifyColmnDataMasking') AND mc.[name] = 'Column3'";
+        Assert.That(cmd.ExecuteScalar() as string, Is.EqualTo("default()"));
 
         conn.Close();
     }
@@ -475,80 +537,86 @@ public class QuenchTables_AlterColumnTests : BaseQuenchTablesTests
         conn.ChangeDatabase(_mainDb);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
---QuenchTables_ShouldModifyColumnForChangeDataType
+--TableQuench_ShouldModifyColumnForChangeDataType
 CREATE TABLE dbo.ChangeType 
   (Col1 INT NOT NULL, Col2 CHAR(10) NOT NULL, Col3 BINARY(20) NOT NULL, Col4 VARCHAR(10) NOT NULL, Col5 VARBINARY(20) NOT NULL, Col6 VARCHAR(10) NOT NULL, 
    Col7 VARBINARY(10) NOT NULL, Col8 VARBINARY(10) NOT NULL, Col9 VARBINARY(MAX) NOT NULL, Col10 DATETIME2(3) NOT NULL, Col11 DECIMAL(12, 2) NOT NULL, 
    Col12 DECIMAL(12, 2) NOT NULL, Col13 NUMERIC(12, 2) NOT NULL, Col14 NUMERIC(12, 2) NOT NULL, Col15 NVARCHAR(128) NULL, Col16 SYSNAME NULL,
    Col17 BIT NOT NULL, Col18 Flag NOT NULL)
---QuenchTables_ShouldNotAlterColumnWithSYSNAMEorUserDefinedType
+--TableQuench_ShouldNotAlterColumnWithSYSNAMEorUserDefinedType
 CREATE TABLE dbo.DontChangeType (Col1 SYSNAME NOT NULL, Col2 Flag NOT NULL)
 CREATE INDEX IDX_Dependency ON dbo.DontChangeType (Col1) INCLUDE (Col2)
---QuenchTables_ShouldModifyColumnNullability
+--TableQuench_ShouldModifyColumnNullability
 CREATE TABLE dbo.ChangeNullability (Column1 INT NULL)
---QuenchTables_ShouldHandleGoingToComputedColumn
+--TableQuench_ShouldHandleGoingToComputedColumn
 CREATE TABLE dbo.ColumnToComputed (Column1 INT NOT NULL, Column2 INT NULL)
---QuenchTables_ShouldHandleGoingFromComputedColumn
+--TableQuench_ShouldHandleGoingFromComputedColumn
 CREATE TABLE dbo.ColumnFromComputed (Column1 INT NOT NULL, Column2 AS ([Column1] * 2))
---QuenchTables_ShouldHandleChangeComputedExpression
+--TableQuench_ShouldHandleChangeComputedExpression
 CREATE TABLE dbo.ChangeComputedExpression (Column1 INT NOT NULL, Column2 AS ('OldResult'))
---QuenchTables_ShouldHandleChangingComputedColumnPersistence
+--TableQuench_ShouldHandleChangingComputedColumnPersistence
 CREATE TABLE dbo.MakePersisted (Column1 INT NOT NULL, Column2 AS ([Column1] * 2))
---QuenchTables_ShouldAlterColumnUsedInIndex
+--TableQuench_ShouldAlterColumnUsedInIndex
 CREATE TABLE dbo.AlterColumnInIndex (Column1 INT NOT NULL, Column2 INT NULL)
 CREATE INDEX IDX_NoDependency ON dbo.AlterColumnInIndex ([Column1])
 CREATE INDEX IDX_Dependency ON dbo.AlterColumnInIndex ([Column2])
---QuenchTables_ShouldAlterColumnUsedInIndexInclude
+--TableQuench_ShouldAlterColumnUsedInIndexInclude
 CREATE TABLE dbo.AlterColumnInIndexInclude (Column1 INT NOT NULL, Column2 INT)
 CREATE INDEX IDX_NoDependency ON dbo.AlterColumnInIndexInclude ([Column1])
 CREATE INDEX IDX_Dependency ON dbo.AlterColumnInIndexInclude ([Column1]) INCLUDE ([Column2])
---QuenchTables_ShouldAlterColumnUsedInUniqueIndexReferencedByFullTextIndex
+--TableQuench_ShouldAlterColumnUsedInUniqueIndexReferencedByFullTextIndex
 CREATE TABLE dbo.AlterColumnInUniqueIndexInFTIndex (Column1 INT NOT NULL, Column2 INT NOT NULL, Column3 VARCHAR(200) NULL)
 CREATE UNIQUE INDEX IDX_Dependency ON dbo.AlterColumnInUniqueIndexInFTIndex ([Column2])
 CREATE FULLTEXT INDEX ON dbo.AlterColumnInUniqueIndexInFTIndex (Column3) KEY INDEX IDX_Dependency ON FT_Catalog WITH CHANGE_TRACKING = OFF
---QuenchTables_ShouldAlterColumnUsedInUniqueIndexReferencedByForeignKey
+--TableQuench_ShouldAlterColumnUsedInUniqueIndexReferencedByForeignKey
 CREATE TABLE dbo.AlterColumnInUniqueIndexInFK (Column1 INT NOT NULL, Column2 INT NOT NULL)
 CREATE UNIQUE INDEX IDX_Dependency ON dbo.AlterColumnInUniqueIndexInFK ([Column2])
 ALTER TABLE dbo.AlterColumnInUniqueIndexInFK ADD CONSTRAINT FK_AlterColumnInUniqueIndexInFK_SelfRef FOREIGN KEY (Column1) REFERENCES dbo.AlterColumnInUniqueIndexInFK (Column2)
---QuenchTables_ShouldAlterColumnWithDefault
+--TableQuench_ShouldAlterColumnWithDefault
 CREATE TABLE dbo.AlterColumnWithDefault (Column1 INT NOT NULL, Column2 INT NOT NULL DEFAULT 0)
---QuenchTables_ShouldAlterColumnWithColumnLevelCheckConstraint
+--TableQuench_ShouldAlterColumnWithColumnLevelCheckConstraint
 CREATE TABLE dbo.AlterColumnWithCheckConstraint (Column1 INT NOT NULL, Column2 INT CHECK ([Column2] < 50))
---QuenchTables_ShouldAlterColumnWithTableLevelCheckConstraint
+--TableQuench_ShouldAlterColumnWithTableLevelCheckConstraint
 CREATE TABLE dbo.AlterColumnWithTableCheckConstraint (Column1 INT NOT NULL, Column2 INT, CONSTRAINT CK_AlterColumnWithTableCheckConstraint_Dependency CHECK (Column2 < Column1))
---QuenchTables_AlterColumnWithStatistics
+--TableQuench_AlterColumnWithStatistics
 CREATE TABLE dbo.AlterColumnWithStatistics (Column1 INT NOT NULL, Column2 INT)
 CREATE STATISTICS ST_Dependency ON dbo.AlterColumnWithStatistics (Column2)
---QuenchTables_ShouldAlterColumnWithStatisticsFilterExpression
+--TableQuench_ShouldAlterColumnWithStatisticsFilterExpression
 CREATE TABLE dbo.AlterColumnWithStatisticsFilter (Column1 INT NOT NULL, Column2 INT)
 CREATE STATISTICS ST_Dependency ON dbo.AlterColumnWithStatisticsFilter (Column1) WHERE Column2 < 100
---QuenchTables_ShouldAlterColumnWithIndexFilterExpression
+--TableQuench_ShouldAlterColumnWithIndexFilterExpression
 CREATE TABLE dbo.AlterColumnWithIndexFilter (Column1 INT NOT NULL, Column2 INT)
 CREATE INDEX IDX_Dependency ON dbo.AlterColumnWithIndexFilter (Column1) WHERE Column2 < 100
---QuenchTables_ShouldAlterColumnWithForeignKey
+--TableQuench_ShouldAlterColumnWithForeignKey
 CREATE TABLE dbo.AlterColumnWithFK (Column1 INT NOT NULL, Column2 INT, CONSTRAINT PK_AlterColumnWithFK PRIMARY KEY (Column1))
 CREATE UNIQUE INDEX UQ_Colum2 ON dbo.AlterColumnWithFK (Column2)
 CREATE TABLE dbo.AlterColumnWithFKRef (Column1 INT NOT NULL, Column2 INT, CONSTRAINT PK_AlterColumnWithFKRef PRIMARY KEY (Column1))
 ALTER TABLE dbo.AlterColumnWithFK ADD CONSTRAINT FK_AlterColumnWithFK_SelfRef FOREIGN KEY (Column2) REFERENCES dbo.AlterColumnWithFK (Column1)
 ALTER TABLE dbo.AlterColumnWithFKRef ADD CONSTRAINT FK_AlterColumnWithFK_Referenced FOREIGN KEY (Column2) REFERENCES dbo.AlterColumnWithFK (Column2)
 ALTER TABLE dbo.AlterColumnWithFK ADD CONSTRAINT FK_AlterColumnWithFK_Referencing FOREIGN KEY (Column2) REFERENCES dbo.AlterColumnWithFKRef (Column1)
---QuenchTables_AlterColumnWithComputedExpression
+--TableQuench_AlterColumnWithComputedExpression
 CREATE TABLE dbo.AlterColumnWithComputed (Column1 INT NOT NULL, Column2 INT, Column3 AS (Column2*3))
---QuenchTables_ShouldAlterColumnWithFullTextIndex
+--TableQuench_ShouldAlterColumnWithFullTextIndex
 CREATE TABLE dbo.AlterColumnWithFTIndex (Column1 INT NOT NULL, Column2 VARCHAR(1000) NULL, CONSTRAINT PK_AlterColumnWithFTIndex PRIMARY KEY (Column1))
 CREATE FULLTEXT INDEX ON dbo.AlterColumnWithFTIndex (Column2) KEY INDEX PK_AlterColumnWithFTIndex ON FT_Catalog WITH CHANGE_TRACKING = OFF
---QuenchTables_ShouldAlterXmlColumnWithXmlIndex
+--TableQuench_ShouldAlterXmlColumnWithXmlIndex
 CREATE TABLE dbo.AlterXmlColumnWithXmlIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 XML NULL, CONSTRAINT PK_AlterXmlColumnWithXmlIndex PRIMARY KEY CLUSTERED (Column1))
 CREATE PRIMARY XML INDEX [XI_Primary] ON dbo.AlterXmlColumnWithXmlIndex (Column3)
 CREATE XML INDEX [XI_Secondary_Path] ON dbo.AlterXmlColumnWithXmlIndex (Column3) USING XML INDEX [XI_Primary] FOR PATH 
---QuenchTables_ShouldAddRowGuidColToExistingColumn
+--TableQuench_ShouldAddRowGuidColToExistingColumn
 CREATE TABLE dbo.AddRowGuidColToExistingColumn (Column1 INT NOT NULL, Column2 UNIQUEIDENTIFIER NOT NULL)
---QuenchTables_ShouldRemoveRowGuidColFromExistingColumn
+--TableQuench_ShouldRemoveRowGuidColFromExistingColumn
 CREATE TABLE dbo.RemoveRowGuidColFromExistingColumn (Column1 INT NOT NULL, Column2 UNIQUEIDENTIFIER ROWGUIDCOL NOT NULL)
---QuenchTables_ShouldAddNotForReplicationToExistingColumn
+--TableQuench_ShouldAddNotForReplicationToExistingColumn
 CREATE TABLE dbo.AddNotForReplicationToExistingColumn (Column1 INT IDENTITY(1,1) NOT NULL, Column2 UNIQUEIDENTIFIER NOT NULL)
---QuenchTables_ShouldRemoveNotForReplicationFromExistingColumn
+--TableQuench_ShouldRemoveNotForReplicationFromExistingColumn
 CREATE TABLE dbo.RemoveNotForReplicationFromExistingColumn (Column1 INT IDENTITY(1,1) NOT FOR REPLICATION NOT NULL, Column2 UNIQUEIDENTIFIER NOT NULL)
+--TableQuench_ShouldModifyColumnCollation
+CREATE TABLE dbo.ModifyColumnCollation (Column1 VARCHAR(10) COLLATE Latin1_General_CS_AS NULL, Column2 VARCHAR(10) NULL, Column3 VARCHAR(10) COLLATE Latin1_General_CS_AS NULL)
+--TableQuench_ShouldAlterColmnSparseness
+CREATE TABLE dbo.ModifyColmnSparseness (Column1 INT SPARSE NULL, Column2 INT NULL)
+--TableQuench_ShouldAlterColmnDataMasking
+CREATE TABLE dbo.ModifyColmnDataMasking (Column1 VARCHAR(100) MASKED WITH (FUNCTION='default()') NULL, Column2 VARCHAR(100) NULL, Column3 VARCHAR(100) MASKED WITH (FUNCTION='email()') NULL)
 ";
         cmd.CommandTimeout = 300;
         cmd.ExecuteNonQuery();
@@ -1108,6 +1176,72 @@ CREATE TABLE dbo.RemoveNotForReplicationFromExistingColumn (Column1 INT IDENTITY
                       "Name": "[Column2]",
                       "DataType": "UNIQUEIDENTIFIER",
                       "Nullable": false
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[ModifyColumnCollation]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "VARCHAR(10)",
+                      "Nullable": true,
+                      "Collation": ""
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(10)",
+                      "Nullable": true,
+                      "Collation": "Latin1_General_CS_AS"
+                    },
+                    {
+                      "Name": "[Column3]",
+                      "DataType": "VARCHAR(10)",
+                      "Nullable": true,
+                      "Collation": "IGNORE"
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[ModifyColmnSparseness]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "VARCHAR(10)",
+                      "Nullable": true,
+                      "Sparse": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(10)",
+                      "Nullable": true,
+                      "Sparse": true
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[ModifyColmnDataMasking]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "VARCHAR(100)",
+                      "Nullable": true,
+                      "DataMaskFunction": ""
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(100)",
+                      "Nullable": true,
+                      "DataMaskFunction": "default()"
+                    },
+                    {
+                      "Name": "[Column3]",
+                      "DataType": "VARCHAR(100)",
+                      "Nullable": true,
+                      "DataMaskFunction": "default()"
                     }
                 ]
             }

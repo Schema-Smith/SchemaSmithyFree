@@ -18,4 +18,10 @@ public class Column
     public string ComputedExpression { get; set; }
     [JsonProperty(Order = 7)]
     public bool Persisted { get; set; }
+    [JsonProperty(Order = 8)]
+    public bool Sparse { get; set; }
+    [JsonProperty(Order = 9)]
+    public string Collation { get; set; }
+    [JsonProperty(Order = 10)]
+    public string DataMaskFunction { get; set; }
 }

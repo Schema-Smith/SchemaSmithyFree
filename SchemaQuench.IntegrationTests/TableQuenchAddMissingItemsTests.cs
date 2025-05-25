@@ -3,10 +3,10 @@
 namespace SchemaQuench.IntegrationTests;
 
 [Parallelizable(scope: ParallelScope.All)]
-public class QuenchTables_AddMissingItemsTests : BaseQuenchTablesTests
+public class TableQuenchAddMissingItemsTests : BaseTableQuenchTests
 {
     [Test]
-    public void QuenchTables_ShouldAddMissingIndex()
+    public void TableQuench_ShouldAddMissingIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -28,7 +28,7 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
     }
 
     [Test]
-    public void QuenchTables_ShouldAddMissingColumn()
+    public void TableQuench_ShouldAddMissingColumns()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -37,11 +37,14 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
 
         cmd.CommandText = "SELECT CAST(CASE WHEN COLUMNPROPERTY(OBJECT_ID('dbo.AddMyColumn'), 'NewColumn', 'ColumnId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
         Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN COLUMNPROPERTY(OBJECT_ID('dbo.AddMyColumn'), 'CollatedColumn', 'ColumnId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
         conn.Close();
     }
 
     [Test]
-    public void QuenchTables_ShouldAddMissingDefault()
+    public void TableQuench_ShouldAddMissingDefault()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -54,7 +57,7 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
     }
 
     [Test]
-    public void QuenchTables_ShouldAddMissingColumnLevelCheckConstraint()
+    public void TableQuench_ShouldAddMissingColumnLevelCheckConstraint()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -67,7 +70,7 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
     }
 
     [Test]
-    public void QuenchTables_ShouldAddMissingTableLevelCheckConstraint()
+    public void TableQuench_ShouldAddMissingTableLevelCheckConstraint()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -80,7 +83,7 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
     }
 
     [Test]
-    public void QuenchTables_ShouldAddMissingForeignKey()
+    public void TableQuench_ShouldAddMissingForeignKey()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -93,7 +96,7 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
     }
 
     [Test]
-    public void QuenchTables_ShouldAddMissingStatistics()
+    public void TableQuench_ShouldAddMissingStatistics()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -106,7 +109,7 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
     }
 
     [Test]
-    public void QuenchTables_ShouldAddMissingFullTextIndex()
+    public void TableQuench_ShouldAddMissingFullTextIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -142,6 +145,35 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
         conn.Close();
     }
 
+    [Test]
+    public void ShouldAddMissingClusteredColumnStoreIndex()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT [Name] FROM sys.indexes WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('dbo.AddClusteredlColumnStoreIndex') AND [type] = 5";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("cci_ColumnStore"));
+
+        conn.Close();
+    }
+
+
+    [Test]
+    public void ShouldAddMissingNonClusteredColumnStoreIndex()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT [Name] FROM sys.indexes WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('dbo.AddNonClusteredlColumnStoreIndex') AND [type] = 6";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("nci_ColumnStore"));
+
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -150,25 +182,29 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
         conn.ChangeDatabase(_mainDb);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
---QuenchTables_ShouldAddMissingIndex
+--TableQuench_ShouldAddMissingIndex
 CREATE TABLE dbo.AddMyIndex (Id INT NOT NULL)
---QuenchTables_ShouldAddMissingColumn
+--TableQuench_ShouldAddMissingColumn
 CREATE TABLE dbo.AddMyColumn (Id INT NOT NULL)
---QuenchTables_ShouldAddMissingDefault
+--TableQuench_ShouldAddMissingDefault
 CREATE TABLE dbo.AddMyDefault (Id INT NOT NULL)
---QuenchTables_ShouldAddMissingColumnLevelCheckConstraint
+--TableQuench_ShouldAddMissingColumnLevelCheckConstraint
 CREATE TABLE dbo.AddMyColumnCheck (Id INT NOT NULL)
---QuenchTables_ShouldAddMissingTableLevelCheckConstraint
+--TableQuench_ShouldAddMissingTableLevelCheckConstraint
 CREATE TABLE dbo.AddMyTableCheck (Id INT NOT NULL, Col2 INT)
---QuenchTables_ShouldAddMissingForeignKey
+--TableQuench_ShouldAddMissingForeignKey
 CREATE TABLE dbo.AddMyFK (Id INT NOT NULL PRIMARY KEY, Col2 INT)
---QuenchTables_ShouldAddMissingStatistics
+--TableQuench_ShouldAddMissingStatistics
 CREATE TABLE dbo.AddMyStatistics (Id INT NOT NULL)
---QuenchTables_ShouldAddMissingFullTextIndex
+--TableQuench_ShouldAddMissingFullTextIndex
 CREATE TABLE dbo.AddMyFullTextIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL)
 CREATE UNIQUE INDEX UDX_Key ON dbo.AddMyFullTextIndex ([Column1])
 --ShouldAddMissingXmlIndex
 CREATE TABLE dbo.AddXmlIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 XML NULL, CONSTRAINT PK_AddXmlIndex PRIMARY KEY CLUSTERED (Column1))
+--ShouldAddMissingClusteredColumnStoreIndex
+CREATE TABLE dbo.AddClusteredlColumnStoreIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 INT NULL, Column4 VARCHAR(100) NULL, Column5 INT NOT NULL)
+--ShouldAddMissingNonClusteredColumnStoreIndex
+CREATE TABLE dbo.AddNonClusteredlColumnStoreIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 INT NULL, Column4 VARCHAR(100) NULL, Column5 INT NOT NULL)
 ";
         cmd.CommandTimeout = 300;
         cmd.ExecuteNonQuery();
@@ -204,7 +240,15 @@ CREATE TABLE dbo.AddXmlIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, C
                     {
                       "Name": "[NewColumn]",
                       "DataType": "VARCHAR(10)",
-                      "Nullable": true
+                      "Nullable": true,
+                      "Sparse": true
+                    },
+                    {
+                      "Name": "[CollatedColumn]",
+                      "DataType": "VARCHAR(10)",
+                      "Nullable": true,
+                      "Collation": "Latin1_General_CS_AS",
+                      "DataMaskFunction": "default()"
                     }
                 ]
             },
@@ -359,6 +403,87 @@ CREATE TABLE dbo.AddXmlIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, C
                       "IsPrimary": false,
                       "PrimaryIndex": "[XI_Primary]",
                       "SecondaryIndexType": "PATH"
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddClusteredlColumnStoreIndex]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "INT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(200)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column3]",
+                      "DataType": "INT",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column4]",
+                      "DataType": "VARCHAR(100)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column5]",
+                      "DataType": "INT",
+                      "Nullable": false
+                    }
+                ],
+                "Indexes": [
+                    {
+                      "Name": "[cci_ColumnStore]",
+                      "Clustered": true,
+                      "ColumnStore": true,
+                      "PrimaryKey": false,
+                      "Unique": false
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddNonClusteredlColumnStoreIndex]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "INT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(200)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column3]",
+                      "DataType": "INT",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column4]",
+                      "DataType": "VARCHAR(100)",
+                      "Nullable": true
+                    },
+                    {
+                      "Name": "[Column5]",
+                      "DataType": "INT",
+                      "Nullable": false
+                    }
+                ],
+                "Indexes": [
+                    {
+                      "Name": "[nci_ColumnStore]",
+                      "Clustered": false,
+                      "ColumnStore": true,
+                      "PrimaryKey": false,
+                      "Unique": false,
+                      "IncludeColumns": "[Column2],[Column3],[Column4]"
                     }
                 ]
             }

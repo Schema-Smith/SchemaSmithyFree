@@ -43,7 +43,7 @@ public class ProductQuencher
 
         TestServerConnections();
 
-        RemoveOldQuenchTablesScripts();
+        RemoveOldTableQuenchScripts();
 
         using var connection = GetConnection("master");
         using var command = connection.CreateCommand();
@@ -107,7 +107,7 @@ public class ProductQuencher
         _progressLog.Info("");
     }
 
-    private static void RemoveOldQuenchTablesScripts()
+    private static void RemoveOldTableQuenchScripts()
     {
         var dir = DirectoryInfoFactory.GetFromFactory().GetDirectoryInfoWrapper(".");
         foreach (var file in dir.GetFiles("SchemaQuench - Quench Tables*.sql", SearchOption.TopDirectoryOnly))

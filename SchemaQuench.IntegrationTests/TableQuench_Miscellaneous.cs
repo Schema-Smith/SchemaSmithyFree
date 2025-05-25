@@ -5,10 +5,10 @@ using System;
 namespace SchemaQuench.IntegrationTests;
 
 [Parallelizable(scope: ParallelScope.All)]
-public class QuenchTables_Miscellaneous : BaseQuenchTablesTests
+public class TableQuench_Miscellaneous : BaseTableQuenchTests
 {
     [Test]
-    public void QuenchTables_ShouldRenameIndex()
+    public void TableQuench_ShouldRenameIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -24,7 +24,7 @@ public class QuenchTables_Miscellaneous : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldRenameUniqueConstraint()
+    public void TableQuench_ShouldRenameUniqueConstraint()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -40,7 +40,7 @@ public class QuenchTables_Miscellaneous : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingForeignKey()
+    public void TableQuench_ShouldHandleRemovingForeignKey()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -232,13 +232,13 @@ EXEC sp_addextendedproperty @name = N'ProductName', @value = '{productName}', @l
         conn.ChangeDatabase(_mainDb);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @$"
---QuenchTables_ShouldRenameIndex
+--TableQuench_ShouldRenameIndex
 CREATE TABLE dbo.RenameMyIndex (Id INT NOT NULL)
 CREATE NONCLUSTERED INDEX IDX_WrongName ON dbo.RenameMyIndex (Id)
---QuenchTables_ShouldRenameUniqueConstraint
+--TableQuench_ShouldRenameUniqueConstraint
 CREATE TABLE dbo.RenameMyUniqueConstraint (Id INT NOT NULL)
 ALTER TABLE dbo.RenameMyUniqueConstraint ADD CONSTRAINT UQ_OldName UNIQUE (Id)
---QuenchTables_ShouldHandleRemovingForeignKey
+--TableQuench_ShouldHandleRemovingForeignKey
 CREATE TABLE dbo.DropFK (Column1 INT NOT NULL, Column2 INT NOT NULL, CONSTRAINT PK_DropFK PRIMARY KEY (Column1))
 CREATE UNIQUE INDEX UQ_Colum2 ON dbo.DropFK (Column2)
 ALTER TABLE dbo.DropFK ADD CONSTRAINT FK_DropFK_SelfRef FOREIGN KEY (Column2) REFERENCES dbo.DropFK (Column1)

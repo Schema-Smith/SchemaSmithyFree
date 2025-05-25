@@ -12,7 +12,7 @@ using System.Linq;
 
 namespace SchemaQuench.IntegrationTests;
 
-public class QuenchProductTests 
+public class ProductQuencherTests 
 {
     private readonly ILog _errorLog = Substitute.For<ILog>();
     private readonly ILog _progressLog = Substitute.For<ILog>();
@@ -21,7 +21,7 @@ public class QuenchProductTests
     private readonly string _secondaryDb;
     private readonly string _mainDb;
 
-    public QuenchProductTests()
+    public ProductQuencherTests()
     {
         var config = FactoryContainer.Resolve<IConfigurationRoot>();
         _connectionString = ConnectionString.Build(config["Target:Server"], "master", config["Target:User"], config["Target:Password"]);

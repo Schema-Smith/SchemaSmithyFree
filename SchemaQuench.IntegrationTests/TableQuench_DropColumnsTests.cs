@@ -3,10 +3,10 @@
 namespace SchemaQuench.IntegrationTests;
 
 [Parallelizable(scope: ParallelScope.All)]
-public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
+public class TableQuench_DropColumnsTests : BaseTableQuenchTests
 {
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnUsedInIndex()
+    public void TableQuench_ShouldHandleRemovingColumnUsedInIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -29,7 +29,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnUsedInUniqueIndexReferencedByFullTextIndex()
+    public void TableQuench_ShouldHandleRemovingColumnUsedInUniqueIndexReferencedByFullTextIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -55,7 +55,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnUsedInUniqueIndexReferencedByForeignKey()
+    public void TableQuench_ShouldHandleRemovingColumnUsedInUniqueIndexReferencedByForeignKey()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -78,7 +78,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnWithDefault()
+    public void TableQuench_ShouldHandleRemovingColumnWithDefault()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -95,7 +95,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnWithColumnLevelCheckConstraint()
+    public void TableQuench_ShouldHandleRemovingColumnWithColumnLevelCheckConstraint()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -112,7 +112,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnWithTableLevelCheckConstraint()
+    public void TableQuench_ShouldHandleRemovingColumnWithTableLevelCheckConstraint()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -129,7 +129,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnWithStatistics()
+    public void TableQuench_ShouldHandleRemovingColumnWithStatistics()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -146,7 +146,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnWithStatisticsFilterExpression()
+    public void TableQuench_ShouldHandleRemovingColumnWithStatisticsFilterExpression()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -163,7 +163,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnWithIndexFilterExpression()
+    public void TableQuench_ShouldHandleRemovingColumnWithIndexFilterExpression()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -180,7 +180,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnWithFullTextIndex()
+    public void TableQuench_ShouldHandleRemovingColumnWithFullTextIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -197,7 +197,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnWithForeignKey()
+    public void TableQuench_ShouldHandleRemovingColumnWithForeignKey()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -214,7 +214,7 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnWithComputedExpression()
+    public void TableQuench_ShouldHandleRemovingColumnWithComputedExpression()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -238,44 +238,44 @@ public class QuenchTables_DropColumnsTests : BaseQuenchTablesTests
         conn.ChangeDatabase(_mainDb);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
---QuenchTables_ShouldHandleRemovingColumnUsedInIndex
+--TableQuench_ShouldHandleRemovingColumnUsedInIndex
 CREATE TABLE dbo.DropColumnInIndex (Column1 INT NOT NULL, Column2 INT)
 CREATE INDEX IDX_NoDependency ON dbo.DropColumnInIndex ([Column1])
 CREATE INDEX IDX_Dependency ON dbo.DropColumnInIndex ([Column2])
---QuenchTables_ShouldHandleRemovingColumnUsedInUniqueIndexReferencedByFullTextIndex
+--TableQuench_ShouldHandleRemovingColumnUsedInUniqueIndexReferencedByFullTextIndex
 CREATE TABLE dbo.DropColumnInUniqueIndexInFTIndex (Column1 INT NOT NULL, Column2 INT NOT NULL, Column3 VARCHAR(200) NULL)
 CREATE UNIQUE INDEX IDX_Dependency ON dbo.DropColumnInUniqueIndexInFTIndex ([Column2])
 CREATE FULLTEXT INDEX ON dbo.DropColumnInUniqueIndexInFTIndex (Column3) KEY INDEX IDX_Dependency ON FT_Catalog WITH CHANGE_TRACKING = OFF
---QuenchTables_ShouldHandleRemovingColumnUsedInUniqueIndexReferencedByForeignKey
+--TableQuench_ShouldHandleRemovingColumnUsedInUniqueIndexReferencedByForeignKey
 CREATE TABLE dbo.DropColumnInUniqueIndexInFK (Column1 INT NOT NULL, Column2 INT NOT NULL)
 CREATE UNIQUE INDEX IDX_Dependency ON dbo.DropColumnInUniqueIndexInFK ([Column2])
 ALTER TABLE dbo.DropColumnInUniqueIndexInFK ADD CONSTRAINT FK_DropColumnInUniqueIndexInFK_SelfRef FOREIGN KEY (Column1) REFERENCES dbo.DropColumnInUniqueIndexInFK (Column2)
---QuenchTables_ShouldHandleRemovingColumnWithDefault
+--TableQuench_ShouldHandleRemovingColumnWithDefault
 CREATE TABLE dbo.DropColumnWithDefault (Column1 INT NOT NULL, Column2 INT DEFAULT 0)
---QuenchTables_ShouldHandleRemovingColumnWithColumnLevelCheckConstraint
+--TableQuench_ShouldHandleRemovingColumnWithColumnLevelCheckConstraint
 CREATE TABLE dbo.DropColumnWithCheckConstraint (Column1 INT NOT NULL, Column2 INT CHECK ([Column2] < 50))
---QuenchTables_ShouldHandleRemovingColumnWithTableLevelCheckConstraint
+--TableQuench_ShouldHandleRemovingColumnWithTableLevelCheckConstraint
 CREATE TABLE dbo.DropColumnWithTableCheckConstraint (Column1 INT NOT NULL, Column2 INT, CONSTRAINT CK_DropColumnWithTableCheckConstraint_Dependency CHECK (Column2 < Column1))
---QuenchTables_ShouldHandleRemovingColumnWithStatistics
+--TableQuench_ShouldHandleRemovingColumnWithStatistics
 CREATE TABLE dbo.DropColumnWithStatistics (Column1 INT NOT NULL, Column2 INT)
 CREATE STATISTICS ST_Dependency ON dbo.DropColumnWithStatistics (Column2)
---QuenchTables_ShouldHandleRemovingColumnWithStatisticsFilterExpression
+--TableQuench_ShouldHandleRemovingColumnWithStatisticsFilterExpression
 CREATE TABLE dbo.DropColumnWithStatisticsFilter (Column1 INT NOT NULL, Column2 INT)
 CREATE STATISTICS ST_Dependency ON dbo.DropColumnWithStatisticsFilter (Column1) WHERE Column2 < 100
---QuenchTables_ShouldHandleRemovingColumnWithIndexFilterExpression
+--TableQuench_ShouldHandleRemovingColumnWithIndexFilterExpression
 CREATE TABLE dbo.DropColumnWithIndexFilter (Column1 INT NOT NULL, Column2 INT)
 CREATE INDEX IDX_Dependency ON dbo.DropColumnWithIndexFilter (Column1) WHERE Column2 < 100
---QuenchTables_ShouldHandleRemovingColumnWithFullTextIndex
+--TableQuench_ShouldHandleRemovingColumnWithFullTextIndex
 CREATE TABLE dbo.DropColumnWithFTIndex (Column1 INT NOT NULL, Column2 VARCHAR(2000), CONSTRAINT PK_DropColumnWithFTIndex PRIMARY KEY (Column1))
 CREATE FULLTEXT INDEX ON dbo.DropColumnWithFTIndex (Column2) KEY INDEX PK_DropColumnWithFTIndex ON FT_Catalog WITH CHANGE_TRACKING = OFF
---QuenchTables_ShouldHandleRemovingColumnWithForeignKey
+--TableQuench_ShouldHandleRemovingColumnWithForeignKey
 CREATE TABLE dbo.DropColumnWithFK (Column1 INT NOT NULL, Column2 INT, CONSTRAINT PK_DropColumnWithFK PRIMARY KEY (Column1))
 CREATE UNIQUE INDEX UQ_Colum2 ON dbo.DropColumnWithFK (Column2)
 CREATE TABLE dbo.DropColumnWithFKRef (Column1 INT NOT NULL, Column2 INT, CONSTRAINT PK_DropColumnWithFKRef PRIMARY KEY (Column1))
 ALTER TABLE dbo.DropColumnWithFK ADD CONSTRAINT FK_DropColumnWithFK_SelfRef FOREIGN KEY (Column2) REFERENCES dbo.DropColumnWithFK (Column1)
 ALTER TABLE dbo.DropColumnWithFKRef ADD CONSTRAINT FK_DropColumnWithFK_Referenced FOREIGN KEY (Column2) REFERENCES dbo.DropColumnWithFK (Column2)
 ALTER TABLE dbo.DropColumnWithFK ADD CONSTRAINT FK_DropColumnWithFK_Referencing FOREIGN KEY (Column2) REFERENCES dbo.DropColumnWithFKRef (Column1)
---QuenchTables_ShouldHandleRemovingColumnWithComputedExpression
+--TableQuench_ShouldHandleRemovingColumnWithComputedExpression
 CREATE TABLE dbo.DropColumnWithComputed (Column1 INT NOT NULL, Column2 INT, Column3 AS (Column2 * 3))
 ";
         cmd.CommandTimeout = 300;

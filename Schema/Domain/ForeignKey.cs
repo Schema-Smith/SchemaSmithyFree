@@ -15,7 +15,7 @@ public class ForeignKey
     [JsonProperty(Order = 5)]
     public string RelatedColumns { get; set; }
     [JsonProperty(Order = 6)]
-    public bool CascadeOnDelete { get; set; }
+    public string DeleteAction { get; set; }
     [JsonProperty(Order = 7)]
-    public bool CascadeOnUpdate { get; set; }
+    public string UpdateAction { get; set; }
 }

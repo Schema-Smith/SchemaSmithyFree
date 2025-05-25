@@ -3,10 +3,10 @@
 namespace SchemaQuench.IntegrationTests;
 
 [Parallelizable(scope: ParallelScope.All)]
-public class QuenchTables_CustomIndexTests : BaseQuenchTablesTests
+public class TableQuench_CustomIndexTests : BaseTableQuenchTests
 {
     [Test]
-    public void QuenchTables_ShouldAlterColumnUsedInCustomIndex()
+    public void TableQuench_ShouldAlterColumnUsedInCustomIndex()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -31,7 +31,7 @@ public class QuenchTables_CustomIndexTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldHandleRemovingColumnUsedInIndexInclude()
+    public void TableQuench_ShouldHandleRemovingColumnUsedInIndexInclude()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -54,7 +54,7 @@ public class QuenchTables_CustomIndexTests : BaseQuenchTablesTests
     }
 
     [Test]
-    public void QuenchTables_ShouldAlterColumnUsedInCustomIndexInclude()
+    public void TableQuench_ShouldAlterColumnUsedInCustomIndexInclude()
     {
         using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
         conn.Open();
@@ -94,15 +94,15 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
         conn.ChangeDatabase(_mainDb);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
---QuenchTables_ShouldAlterColumnUsedInCustomIndex
+--TableQuench_ShouldAlterColumnUsedInCustomIndex
 CREATE TABLE dbo.AlterColumnInCustomIndex (Column1 INT NOT NULL, Column2 INT NULL)
 CREATE INDEX IDX_NoDependency ON dbo.AlterColumnInCustomIndex ([Column1])
 CREATE INDEX IDX_Dependency ON dbo.AlterColumnInCustomIndex ([Column2])
---QuenchTables_ShouldHandleRemovingColumnUsedInIndexInclude
+--TableQuench_ShouldHandleRemovingColumnUsedInIndexInclude
 CREATE TABLE dbo.DropColumnInIndexInclude (Column1 INT NOT NULL, Column2 INT)
 CREATE INDEX IDX_NoDependency ON dbo.DropColumnInIndexInclude ([Column1])
 CREATE INDEX IDX_Dependency ON dbo.DropColumnInIndexInclude ([Column1]) INCLUDE ([Column2])
---QuenchTables_ShouldAlterColumnUsedInCustomIndexInclude
+--TableQuench_ShouldAlterColumnUsedInCustomIndexInclude
 CREATE TABLE dbo.AlterColumnInCustomIndexInclude (Column1 INT NOT NULL, Column2 INT)
 CREATE INDEX IDX_NoDependency ON dbo.AlterColumnInCustomIndexInclude ([Column1])
 CREATE INDEX IDX_Dependency ON dbo.AlterColumnInCustomIndexInclude ([Column1]) INCLUDE ([Column2])

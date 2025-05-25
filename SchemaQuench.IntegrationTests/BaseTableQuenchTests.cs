@@ -5,13 +5,13 @@ using Microsoft.Extensions.Configuration;
 
 namespace SchemaQuench.IntegrationTests;
 
-public class BaseQuenchTablesTests
+public class BaseTableQuenchTests
 {
     protected readonly string _connectionString;
     protected readonly string _mainDb;
     protected readonly string _productName = "Quench Table Tests";
 
-    public BaseQuenchTablesTests()
+    public BaseTableQuenchTests()
     {
         var config = FactoryContainer.Resolve<IConfigurationRoot>();
         _connectionString = ConnectionString.Build(config["Target:Server"], "master", config["Target:User"], config["Target:Password"]);
