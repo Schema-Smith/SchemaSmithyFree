@@ -25,9 +25,11 @@ public class Product
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
         var SchemaPackagePath = config["SchemaPackagePath"] ?? "";
+        if (string.IsNullOrWhiteSpace(SchemaPackagePath))
+            throw new Exception("SchemaPackagePath is not configured in appsettings.json or environment variables.");
 
         if (!DirectoryWrapper.GetFromFactory().Exists(SchemaPackagePath))
-            throw new Exception($"Path not found {SchemaPackagePath}");
+            throw new Exception($"SchemaPackagePath not found {SchemaPackagePath}");
 
         var productFilePath = Path.Combine(SchemaPackagePath, "Product.json");
         var product = JsonHelper.Load<Product>(productFilePath);
