@@ -30,10 +30,17 @@ public class ProductQuencher
 
     private IDbConnection GetConnection(string dbName)
     {
-        var connectionString = ConnectionString.Build(_config["Target:Server"], dbName, _config["Target:User"], _config["Target:Password"]);
+        var connectionString = ConnectionString.Build(_primaryServer, dbName, _config["Target:User"], _config["Target:Password"]);
         var connection = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connectionString);
 
-        connection.Open();
+        try
+        {
+            connection.Open();
+        }
+        catch (Exception e)
+        {
+            throw new Exception($"Unable to connect to {_primaryServer}{(!string.IsNullOrWhiteSpace(_config["Target:User"]) ? $" with user {_config["Target:User"]}" : "")}", e);
+        }
         return connection;
     }
 
