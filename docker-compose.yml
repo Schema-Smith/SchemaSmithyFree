@@ -4,7 +4,9 @@ services:
       context: .
       dockerfile: SchemaQuench/Dockerfile
     image: schemasmithyfree/schemaquench:${QUENCH_VERSION}
-    
+    profiles:
+      - build-only
+  
   update-testproduct:
     image: schemasmithyfree/schemaquench:${QUENCH_VERSION}
     environment:
