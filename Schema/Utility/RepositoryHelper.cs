@@ -15,7 +15,7 @@ public static class RepositoryHelper
         var productFile = Path.Combine(productPath, "Product.json");
         if (string.IsNullOrEmpty(productName)) productName = Path.GetFileName(productPath.TrimEnd(' ', '/', '\\'));
         if (string.IsNullOrEmpty(templateName)) templateName = dbName;
-        var product = new Product { Name = productName, ValidationScript = "SELECT CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] = '{{" + templateName + "Db}}' THEN 1 ELSE 0 END"};
+        var product = new Product { Name = productName, ValidationScript = "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] = '{{" + templateName + "Db}}') THEN 1 ELSE 0 END AS BIT)"};
         if (file.Exists(productFile))
             product = JsonHelper.Load<Product>(productFile) ?? product;
         else
