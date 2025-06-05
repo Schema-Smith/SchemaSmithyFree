@@ -25,9 +25,12 @@ public static class ConfigurationLogger
             while (key.Contains(':'))
             {
                 indents++;
-                key = key.Substring(key.IndexOf(":") + 1);
+                key = key.Substring(key.IndexOf(":", StringComparison.Ordinal) + 1);
             }
-            logLine?.Invoke($"{new string(' ', indents * 2)}{key}: {entry.Value}");
+            var value = key.ContainsIgnoringCase("Password") || key.ContainsIgnoringCase("Pwd") 
+                ? "**********" // Mask sensitive information
+                : entry.Value ?? "";
+            logLine?.Invoke($"{new string(' ', indents * 2)}{key}: {value}");
         }
 
         logLine?.Invoke("");

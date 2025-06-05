@@ -103,6 +103,8 @@ public class SchemaTongs
         if (_includeFullTextStopLists) ScriptFullTextStopLists(sourceDb);
         if (_includeDDLTriggers) ScriptDDLTriggers(sourceDb);
         if (_includeXmlSchemaCollections) ScriptXmlSchemaCollections(sourceDb);
+        _progressLog.Info("");
+        _progressLog.Info("Casting Completed Successfully");
     }
 
     private void ScriptSchemas(Database sourceDb)
