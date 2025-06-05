@@ -19,7 +19,7 @@ public class ConfigurationLoggerTests
             "Configuration:",
             "  SchemaPackagePath: packagePath",
             "  Target: ",
-            "    Password: testpassword",
+            "    Password: **********",
             "    Server: localhost",
             "    User: testuser",
             "",

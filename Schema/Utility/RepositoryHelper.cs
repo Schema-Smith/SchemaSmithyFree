@@ -16,12 +16,10 @@ public static class RepositoryHelper
         if (string.IsNullOrEmpty(productName)) productName = Path.GetFileName(productPath.TrimEnd(' ', '/', '\\'));
         if (string.IsNullOrEmpty(templateName)) templateName = dbName;
         var product = new Product { Name = productName, ValidationScript = "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] = '{{" + templateName + "Db}}') THEN 1 ELSE 0 END AS BIT)"};
-        if (file.Exists(productFile))
-            product = JsonHelper.Load<Product>(productFile) ?? product;
-        else
-            product.ScriptTokens.Add($"{templateName}Db", dbName);
+        if (file.Exists(productFile)) product = JsonHelper.Load<Product>(productFile) ?? product;
         product.FilePath = productFile;
-        if (product.TemplateOrder.All(t => !t.EqualsIgnoringCase(templateName))) product.TemplateOrder.Add(templateName);
+        if (!product.ScriptTokens.Any(t => t.Key.EqualsIgnoringCase($"{templateName}Db"))) product.ScriptTokens.Add($"{templateName}Db", dbName);
+        if (!product.TemplateOrder.Any(t => t.EqualsIgnoringCase(templateName))) product.TemplateOrder.Add(templateName);
         JsonHelper.Write(productFile, product);
 
         var schemaPath = Path.Combine(productPath, ".json-schemas");
