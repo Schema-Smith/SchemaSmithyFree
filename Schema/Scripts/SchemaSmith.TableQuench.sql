@@ -12,8 +12,8 @@ BEGIN TRY
   SET NOCOUNT ON
   RAISERROR('Parse Tables from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #TableDefinitions
-  SELECT [Schema] = SchemaSmith.fn_SafeBracketWrap(ISNULL([Schema], 'dbo')), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL([CompressionType], 'NONE'), [IsTemporal] = ISNULL([IsTemporal], 0),
-         [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints]
+  SELECT [Schema] = SchemaSmith.fn_SafeBracketWrap(ISNULL([Schema], 'dbo')), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL(NULLIF(RTRIM([CompressionType]), ''), 'NONE'), 
+         [IsTemporal] = ISNULL([IsTemporal], 0), [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints]
     INTO #TableDefinitions
     FROM OPENJSON(@TableDefinitions) WITH (
       [Schema] VARCHAR(500) '$.Schema',
@@ -37,8 +37,8 @@ BEGIN TRY
   
   RAISERROR('Parse Indexes from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #Indexes
-  SELECT t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(i.[CompressionType], 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0), 
-         [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
+  SELECT t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(NULLIF(RTRIM(i.[CompressionType]), ''), 'NONE'), 
+         [PrimaryKey] = ISNULL(i.[PrimaryKey], 0), [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
          i.[FilterExpression], 
          [IndexColumns] = (SELECT STRING_AGG(CASE WHEN RTRIM([value]) LIKE '% DESC' 
@@ -110,6 +110,11 @@ BEGIN TRY
       [Collation] VARCHAR(500) '$.Collation',
       [DataMaskFunction] VARCHAR(500) '$.DataMaskFunction'
       ) c;
+
+  -- Handle the ROWVERSION synonym for TIMESTAMP
+  UPDATE #Columns
+    SET  [ColumnScript] = REPLACE([ColumnScript], 'ROWVERSION', 'TIMESTAMP'),
+         [DataType] = REPLACE([DataType], 'ROWVERSION', 'TIMESTAMP')
   
   RAISERROR('Parse Foreign Keys from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #ForeignKeys
@@ -370,8 +375,8 @@ BEGIN TRY
     WHERE NOT EXISTS (SELECT * FROM #ForeignKeys fk2 WITH (NOLOCK) WHERE t.[Schema] = fk2.[Schema] AND t.[Name] = fk2.[TableName] AND fk.[name] = SchemaSmith.fn_StripBracketWrapping(fk2.[KeyName]))
 
   RAISERROR('Drop Foreign Keys No Longer Defined In The Product', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + df.[FKName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                             'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + df.[FKName] + ';' AS VARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #FKsToDrop df WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
@@ -798,7 +803,8 @@ BEGIN TRY
     FROM (SELECT T.[Schema], T.[Name], t.[CompressionType],
                  ScriptColumns = (SELECT STRING_AGG([ColumnScript], ', ') WITHIN GROUP (ORDER BY c.[ColumnName]) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name])
             FROM #Tables T WITH (NOLOCK)
-            WHERE NewTable = 1) T
+            WHERE NewTable = 1
+              AND EXISTS (SELECT * FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name])) T
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Add missing ProductName extended property to tables', 10, 1) WITH NOWAIT
