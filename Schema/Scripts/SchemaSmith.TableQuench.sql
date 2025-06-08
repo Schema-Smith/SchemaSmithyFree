@@ -83,8 +83,8 @@ BEGIN TRY
   
   RAISERROR('Parse Columns from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #Columns
-  SELECT t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]), c.[DataType], [Nullable] = ISNULL(c.[Nullable], 0), 
-         c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
+  SELECT t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]), [DataType] = REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP'), 
+         [Nullable] = ISNULL(c.[Nullable], 0), c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
          [Sparse] = ISNULL(c.[Sparse], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')), 
          CONVERT(BIT, CASE WHEN NOT EXISTS (SELECT * FROM #Tables x WHERE x.[Name] = t.[Name] AND x.[Schema] = t.[Schema] AND x.NewTable = 1)
                             AND COLUMNPROPERTY(OBJECT_ID(t.[Schema] + '.' + t.[Name], 'U'), SchemaSmith.fn_StripBracketWrapping([ColumnName]), 'ColumnId') IS NULL
@@ -93,7 +93,7 @@ BEGIN TRY
          -- For computed columns only the expression is needed
          CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) <> '' THEN 'AS (' + ComputedExpression + ')' + CASE WHEN ISNULL(c.[Persisted], 0) = 1 THEN ' PERSISTED' ELSE '' END
               -- Otherwise build the column definition
-              ELSE UPPER([DataType]) + CASE WHEN ISNULL(Nullable, 0) = 1 THEN ' NULL' ELSE ' NOT NULL' END +
+              ELSE UPPER(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')) + CASE WHEN ISNULL(Nullable, 0) = 1 THEN ' NULL' ELSE ' NOT NULL' END +
                    CASE WHEN RTRIM(ISNULL([Default], '')) <> '' THEN ' DEFAULT ' + [Default] ELSE '' END
               END AS [ColumnScript]
     INTO #Columns
@@ -111,11 +111,6 @@ BEGIN TRY
       [DataMaskFunction] VARCHAR(500) '$.DataMaskFunction'
       ) c;
 
-  -- Handle the ROWVERSION synonym for TIMESTAMP
-  UPDATE #Columns
-    SET  [ColumnScript] = REPLACE([ColumnScript], 'ROWVERSION', 'TIMESTAMP'),
-         [DataType] = REPLACE([DataType], 'ROWVERSION', 'TIMESTAMP')
-  
   RAISERROR('Parse Foreign Keys from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #ForeignKeys
   SELECT t.[Schema], t.[Name] AS [TableName], [KeyName] = SchemaSmith.fn_SafeBracketWrap(f.[KeyName]), 
@@ -317,21 +312,21 @@ BEGIN TRY
     LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[name] = SchemaSmith.fn_StripBracketWrapping(c.ColumnName)
                                                  AND mc.[object_id] = OBJECT_ID(C.[Schema] + '.' + C.[TableName])
     WHERE t.NewTable = 0
-      AND (UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
-                                   THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(VARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
-                                   WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
-                                   THEN  '(' + CONVERT(VARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(VARCHAR(20), NUMERIC_SCALE) + ')'
-                                   WHEN USER_TYPE = 'DATETIME2'
-                                   THEN  '(' + CONVERT(VARCHAR(20), DATETIME_PRECISION) + ')'
-                                   WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
-                                   THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
-                                   WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
-                                   THEN  ' ROWGUIDCOL'
-                                   ELSE '' END +
-                              CASE WHEN ident.column_id IS NOT NULL
-                                   THEN ' IDENTITY(' + CONVERT(VARCHAR(20), ident.seed_value) + ', ' + CONVERT(VARCHAR(20), ident.increment_value) + ')' +
-                                        CASE WHEN ident.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
-                                   ELSE '' END  <> c.DataType
+      AND (REPLACE(UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
+                                           THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(VARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
+                                           WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
+                                           THEN  '(' + CONVERT(VARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(VARCHAR(20), NUMERIC_SCALE) + ')'
+                                           WHEN USER_TYPE = 'DATETIME2'
+                                           THEN  '(' + CONVERT(VARCHAR(20), DATETIME_PRECISION) + ')'
+                                           WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
+                                           THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
+                                           WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
+                                           THEN  ' ROWGUIDCOL'
+                                           ELSE '' END +
+                                      CASE WHEN ident.column_id IS NOT NULL
+                                           THEN ' IDENTITY(' + CONVERT(VARCHAR(20), ident.seed_value) + ', ' + CONVERT(VARCHAR(20), ident.increment_value) + ')' +
+                                                CASE WHEN ident.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
+                                           ELSE '' END, ', ', ',')  <> REPLACE(c.DataType, ', ', ',')
         OR CASE WHEN c.Nullable = 1 THEN 'YES' ELSE 'NO' END <> ic.IS_NULLABLE
         OR ISNULL(SchemaSmith.fn_StripParenWrapping(cc.[definition]), '') <> ISNULL(c.ComputedExpression, '')
         OR ISNULL(cc.is_persisted, 0) <> ISNULL(c.[Persisted], 0))
