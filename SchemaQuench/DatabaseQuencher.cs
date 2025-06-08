@@ -149,10 +149,12 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
     {
         _debugFileLocation = (destCmd.Connection as SqlConnection)?.FireInfoMessageEventOnUserErrors ?? false ? script.LogPath : "";
         ProgressLog($"    Quenching {script.LogPath}");
+        var needDBReset = false;
         try
         {
             foreach (var batch in script.Batches)
             {
+                needDBReset = needDBReset || batch.ContainsIgnoringCase("USE ");
                 destCmd.CommandText = batch;
                 _infoMessageException = null;
                 destCmd.ExecuteNonQuery();
@@ -165,6 +167,23 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
         catch (Exception ex)
         {
             script.Error = ex;
+        }
+        finally
+        {
+            if (needDBReset) ResetDb(destCmd);
+        }
+    }
+    
+    private void ResetDb(IDbCommand destCmd)
+    {
+        try
+        {
+            destCmd.CommandText = $"USE [{dbName}]";
+            destCmd.ExecuteNonQuery();
+        }
+        catch
+        {
+            // ignore error resetting db
         }
     }
 
