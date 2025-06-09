@@ -10,8 +10,8 @@
 	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 	  <UserSecretsId>e821fe99-a762-4ea4-a7ea-5e64817550da</UserSecretsId>
 
-	  <Version>1.0.5</Version>
-	  <FileVersion>1.0.5</FileVersion>
+	  <Version>1.0.6</Version>
+	  <FileVersion>1.0.6</FileVersion>
 	  <Company>SchemaSmith, LLC</Company>
 	  <Product>SchemaTongs</Product>
 	  <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
