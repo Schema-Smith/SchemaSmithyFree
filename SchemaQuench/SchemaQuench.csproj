@@ -9,8 +9,8 @@
     <Nullable>enable</Nullable>
 	<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <UserSecretsId>ff52744b-86a4-4305-ad34-14b848e467f4</UserSecretsId>
-    <Version>1.0.5</Version>
-    <FileVersion>1.0.5</FileVersion>
+    <Version>1.0.6</Version>
+    <FileVersion>1.0.6</FileVersion>
     <Company>SchemaSmith, LLC</Company>
     <Product>SchemaQuench</Product>
     <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
