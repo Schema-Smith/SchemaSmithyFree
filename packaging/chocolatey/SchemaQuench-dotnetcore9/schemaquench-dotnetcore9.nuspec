@@ -2,23 +2,23 @@
 <!-- Do not remove this test for UTF-8: if “Ω” doesn’t appear as greek uppercase omega letter enclosed in quotation marks, you should use an editor that supports UTF-8, not this one. -->
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
-    <id>schematongs-net9.0</id>
+    <id>schemaquench-dotnetcore9</id>
     <version>1.0.4</version>
-    <packageSourceUrl>https://github.com/Schema-Smith/SchemaSmithyFree/blob/main/packaging/chocolatey/SchemaTongs-net9.0/schematongs-net9.0.nuspec</packageSourceUrl>
+    <packageSourceUrl>https://github.com/Schema-Smith/SchemaSmithyFree/blob/main/packaging/chocolatey/SchemaQuench-dotnetcore9/schemaquench-dotnetcore9.nuspec</packageSourceUrl>
     <docsUrl>https://github.com/Schema-Smith/SchemaSmithyFree/wiki</docsUrl>
 	<mailingListUrl>https://github.com/Schema-Smith/SchemaSmithyFree/discussions</mailingListUrl>
 	<bugTrackerUrl>https://github.com/Schema-Smith/SchemaSmithyFree/issues</bugTrackerUrl>
     <owners>SchemaSmith, LLC</owners>
 
-    <title>SchemaTongs net9.0</title>
+    <title>SchemaQuench dotnetcore 9.0</title>
     <authors>SchemaSmith, LLC</authors>
     <projectUrl>https://SchemaSmith.com</projectUrl>
     <copyright>2025 SchemaSmith, LLC</copyright> 
     <licenseUrl>https://github.com/Schema-Smith/SchemaSmithyFree?tab=License-1-ov-file#readme</licenseUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <projectSourceUrl>https://github.com/Schema-Smith/SchemaSmithyFree</projectSourceUrl>
-    <tags>schematongs net9.0 .net deployment mssql developer tools</tags>
-    <summary>Extracts schema metadata from SQL Server.</summary>
+    <tags>schemaquench dotnetcore .net deployment mssql developer tools</tags>
+    <summary>Automates and simplifies the application of schema metadata to SQL Server.</summary>
     <description>## Shape. Strengthen. Succeed.
 
 SchemaSmithy is a suite of opinionated, metadata-driven tools that treat **SQL Server schema** like source code—so your database can be versioned, automated, and deployed just like the rest of your tech stack.
