@@ -29,18 +29,18 @@ public class BaseTableQuenchTests
     {
         cmd.CommandText = @$"
 SELECT UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
-                               THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(VARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
+                               THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
                                WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
-                               THEN  '(' + CONVERT(VARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(VARCHAR(20), NUMERIC_SCALE) + ')'
+                               THEN  '(' + CONVERT(NVARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(NVARCHAR(20), NUMERIC_SCALE) + ')'
                                WHEN USER_TYPE = 'DATETIME2'
-                               THEN  '(' + CONVERT(VARCHAR(20), DATETIME_PRECISION) + ')'
+                               THEN  '(' + CONVERT(NVARCHAR(20), DATETIME_PRECISION) + ')'
                                WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
                                THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
                                WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
                                THEN  ' ROWGUIDCOL'
                                ELSE '' END +
                           CASE WHEN ident.column_id IS NOT NULL
-                               THEN ' IDENTITY(' + CONVERT(VARCHAR(20), ident.seed_value) + ', ' + CONVERT(VARCHAR(20), ident.increment_value) + ')' +
+                               THEN ' IDENTITY(' + CONVERT(NVARCHAR(20), ident.seed_value) + ', ' + CONVERT(NVARCHAR(20), ident.increment_value) + ')' +
                                     CASE WHEN ident.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
                                ELSE '' END
   FROM INFORMATION_SCHEMA.COLUMNS c WITH (NOLOCK)

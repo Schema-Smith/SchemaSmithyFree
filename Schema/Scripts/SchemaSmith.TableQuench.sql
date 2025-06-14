@@ -1,14 +1,14 @@
 CREATE OR ALTER PROCEDURE [SchemaSmith].[TableQuench] 
-  @ProductName VARCHAR(50),
-  @TableDefinitions VARCHAR(MAX),
+  @ProductName NVARCHAR(50),
+  @TableDefinitions NVARCHAR(MAX),
   @WhatIf BIT = 0,
   @DropUnknownIndexes BIT = 0,
   @DropTablesRemovedFromProduct BIT = 1,
   @UpdateFillFactor BIT = 1
 AS
 BEGIN TRY
-  DECLARE @v_SQL VARCHAR(MAX) = '',
-          @v_DatabaseCollation VARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'COLLATION') AS VARCHAR(200))
+  DECLARE @v_SQL NVARCHAR(MAX) = '',
+          @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'COLLATION') AS NVARCHAR(200))
   SET NOCOUNT ON
   RAISERROR('Parse Tables from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #TableDefinitions
@@ -16,9 +16,9 @@ BEGIN TRY
          [IsTemporal] = ISNULL([IsTemporal], 0), [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints]
     INTO #TableDefinitions
     FROM OPENJSON(@TableDefinitions) WITH (
-      [Schema] VARCHAR(500) '$.Schema',
-      [Name] VARCHAR(500) '$.Name',
-      [CompressionType] VARCHAR(100) '$.CompressionType',
+      [Schema] NVARCHAR(500) '$.Schema',
+      [Name] NVARCHAR(500) '$.Name',
+      [CompressionType] NVARCHAR(100) '$.CompressionType',
       [IsTemporal] BIT '$.IsTemporal',
 	  [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON,
 	  [XmlIndexes] NVARCHAR(MAX) '$.XmlIndexes' AS JSON,
@@ -53,17 +53,17 @@ BEGIN TRY
     INTO #Indexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(Indexes) WITH (
-      [IndexName] VARCHAR(500) '$.Name',
-      [CompressionType] VARCHAR(100) '$.CompressionType',
+      [IndexName] NVARCHAR(500) '$.Name',
+      [CompressionType] NVARCHAR(100) '$.CompressionType',
       [PrimaryKey] BIT '$.PrimaryKey',
       [Unique] BIT '$.Unique',
 	  [UniqueConstraint] BIT '$.UniqueConstraint',
       [Clustered] BIT '$.Clustered',
       [ColumnStore] BIT '$.ColumnStore',
       [FillFactor] TINYINT '$.FillFactor',
-      [FilterExpression] VARCHAR(MAX) '$.FilterExpression',
-      [IndexColumns] VARCHAR(MAX) '$.IndexColumns',
-      [IncludeColumns] VARCHAR(MAX) '$.IncludeColumns'
+      [FilterExpression] NVARCHAR(MAX) '$.FilterExpression',
+      [IndexColumns] NVARCHAR(MAX) '$.IndexColumns',
+      [IncludeColumns] NVARCHAR(MAX) '$.IncludeColumns'
       ) i;
   
   RAISERROR('Parse XML Indexes from Json', 10, 1) WITH NOWAIT
@@ -74,11 +74,11 @@ BEGIN TRY
     INTO #XmlIndexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(XmlIndexes) WITH (
-      [IndexName] VARCHAR(500) '$.Name',
+      [IndexName] NVARCHAR(500) '$.Name',
       [IsPrimary] BIT '$.IsPrimary',
-      [Column] VARCHAR(500) '$.Column',
-      [PrimaryIndex] VARCHAR(500) '$.PrimaryIndex',
-	  [SecondaryIndexType] VARCHAR(500) '$.SecondaryIndexType'
+      [Column] NVARCHAR(500) '$.Column',
+      [PrimaryIndex] NVARCHAR(500) '$.PrimaryIndex',
+	  [SecondaryIndexType] NVARCHAR(500) '$.SecondaryIndexType'
       ) i;
   
   RAISERROR('Parse Columns from Json', 10, 1) WITH NOWAIT
@@ -99,16 +99,16 @@ BEGIN TRY
     INTO #Columns
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(Columns) WITH (
-      [ColumnName] VARCHAR(500) '$.Name',
-      [DataType] VARCHAR(100) '$.DataType',
+      [ColumnName] NVARCHAR(500) '$.Name',
+      [DataType] NVARCHAR(100) '$.DataType',
       [Nullable] BIT '$.Nullable',
-      [Default] VARCHAR(MAX) '$.Default',
-      [CheckExpression] VARCHAR(MAX) '$.CheckExpression',
-      [ComputedExpression] VARCHAR(MAX) '$.ComputedExpression',
+      [Default] NVARCHAR(MAX) '$.Default',
+      [CheckExpression] NVARCHAR(MAX) '$.CheckExpression',
+      [ComputedExpression] NVARCHAR(MAX) '$.ComputedExpression',
       [Persisted] BIT '$.Persisted',
       [Sparse] BIT '$.Sparse',
-      [Collation] VARCHAR(500) '$.Collation',
-      [DataMaskFunction] VARCHAR(500) '$.DataMaskFunction'
+      [Collation] NVARCHAR(500) '$.Collation',
+      [DataMaskFunction] NVARCHAR(500) '$.DataMaskFunction'
       ) c;
 
   RAISERROR('Parse Foreign Keys from Json', 10, 1) WITH NOWAIT
@@ -122,13 +122,13 @@ BEGIN TRY
     INTO #ForeignKeys
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(ForeignKeys) WITH (
-      [KeyName] VARCHAR(500) '$.Name',
-      [Columns] VARCHAR(MAX) '$.Columns',
-      [RelatedTableSchema] VARCHAR(500) '$.RelatedTableSchema',
-      [RelatedTable] VARCHAR(500) '$.RelatedTable',
-      [RelatedColumns] VARCHAR(MAX) '$.RelatedColumns',
-      [DeleteAction] VARCHAR(20) '$.DeleteAction',
-      [UpdateAction] VARCHAR(20) '$.UpdateAction'
+      [KeyName] NVARCHAR(500) '$.Name',
+      [Columns] NVARCHAR(MAX) '$.Columns',
+      [RelatedTableSchema] NVARCHAR(500) '$.RelatedTableSchema',
+      [RelatedTable] NVARCHAR(500) '$.RelatedTable',
+      [RelatedColumns] NVARCHAR(MAX) '$.RelatedColumns',
+      [DeleteAction] NVARCHAR(20) '$.DeleteAction',
+      [UpdateAction] NVARCHAR(20) '$.UpdateAction'
       ) f;
   
   RAISERROR('Parse Table Level Check Constraints from Json', 10, 1) WITH NOWAIT
@@ -137,8 +137,8 @@ BEGIN TRY
     INTO #CheckConstraints
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(CheckConstraints) WITH (
-      [ConstraintName] VARCHAR(500) '$.Name',
-      [Expression] VARCHAR(MAX) '$.Expression'
+      [ConstraintName] NVARCHAR(500) '$.Name',
+      [Expression] NVARCHAR(MAX) '$.Expression'
       ) c;
   
   RAISERROR('Parse Statistics from Json', 10, 1) WITH NOWAIT
@@ -148,10 +148,10 @@ BEGIN TRY
     INTO #Statistics
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON([Statistics]) WITH (
-      [StatisticName] VARCHAR(500) '$.Name',
+      [StatisticName] NVARCHAR(500) '$.Name',
       [SampleSize] TINYINT '$.SampleSize',
-      [FilterExpression] VARCHAR(MAX) '$.FilterExpression',
-      [Columns] VARCHAR(MAX) '$.Columns'
+      [FilterExpression] NVARCHAR(MAX) '$.FilterExpression',
+      [Columns] NVARCHAR(MAX) '$.Columns'
       ) s;
   
   RAISERROR('Parse Full Text Indexes from Json', 10, 1) WITH NOWAIT
@@ -162,11 +162,11 @@ BEGIN TRY
     INTO #FullTextIndexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON([FullTextIndex]) WITH (
-      [Columns] VARCHAR(MAX) '$.Columns',
-      [FullTextCatalog] VARCHAR(500) '$.FullTextCatalog',
-      [KeyIndex] VARCHAR(500) '$.KeyIndex',
-      [ChangeTracking] VARCHAR(500) '$.ChangeTracking',
-      [StopList] VARCHAR(500) '$.StopList'
+      [Columns] NVARCHAR(MAX) '$.Columns',
+      [FullTextCatalog] NVARCHAR(500) '$.FullTextCatalog',
+      [KeyIndex] NVARCHAR(500) '$.KeyIndex',
+      [ChangeTracking] NVARCHAR(500) '$.ChangeTracking',
+      [StopList] NVARCHAR(500) '$.StopList'
       ) f;
   
   -- Clustered index compression overrides the table compression
@@ -194,7 +194,7 @@ BEGIN TRY
   
   RAISERROR('Collect table level extended properties', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #TableProperties
-  SELECT [Schema], objname COLLATE DATABASE_DEFAULT AS TableName, x.[Name] COLLATE DATABASE_DEFAULT AS PropertyName, CONVERT(VARCHAR(50), x.[value]) COLLATE DATABASE_DEFAULT AS [value]
+  SELECT [Schema], objname COLLATE DATABASE_DEFAULT AS TableName, x.[Name] COLLATE DATABASE_DEFAULT AS PropertyName, CONVERT(NVARCHAR(50), x.[value]) COLLATE DATABASE_DEFAULT AS [value]
     INTO #TableProperties
     FROM #SchemaList WITH (NOLOCK)
     CROSS APPLY fn_listextendedproperty(default, 'Schema', SchemaSmith.fn_StripBracketWrapping([Schema]), 'Table', default, default, default) x
@@ -242,7 +242,7 @@ BEGIN TRY
   
   RAISERROR('Collect index level extended properties', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexProperties
-  SELECT t.[Schema], t.[Name] AS TableName, objname COLLATE DATABASE_DEFAULT AS IndexName, x.[Name] COLLATE DATABASE_DEFAULT AS PropertyName, CONVERT(VARCHAR(50), x.[value]) COLLATE DATABASE_DEFAULT AS [value]
+  SELECT t.[Schema], t.[Name] AS TableName, objname COLLATE DATABASE_DEFAULT AS IndexName, x.[Name] COLLATE DATABASE_DEFAULT AS PropertyName, CONVERT(NVARCHAR(50), x.[value]) COLLATE DATABASE_DEFAULT AS [value]
     INTO #IndexProperties
     FROM #Tables t WITH (NOLOCK)
     CROSS APPLY fn_listextendedproperty(default, 'Schema', SchemaSmith.fn_StripBracketWrapping(t.[Schema]), 'Table', SchemaSmith.fn_StripBracketWrapping(t.[Name]), 'Index', default) x
@@ -313,18 +313,18 @@ BEGIN TRY
                                                  AND mc.[object_id] = OBJECT_ID(C.[Schema] + '.' + C.[TableName])
     WHERE t.NewTable = 0
       AND (REPLACE(UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
-                                           THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(VARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
+                                           THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
                                            WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
-                                           THEN  '(' + CONVERT(VARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(VARCHAR(20), NUMERIC_SCALE) + ')'
+                                           THEN  '(' + CONVERT(NVARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(NVARCHAR(20), NUMERIC_SCALE) + ')'
                                            WHEN USER_TYPE = 'DATETIME2'
-                                           THEN  '(' + CONVERT(VARCHAR(20), DATETIME_PRECISION) + ')'
+                                           THEN  '(' + CONVERT(NVARCHAR(20), DATETIME_PRECISION) + ')'
                                            WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
                                            THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
                                            WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
                                            THEN  ' ROWGUIDCOL'
                                            ELSE '' END +
                                       CASE WHEN ident.column_id IS NOT NULL
-                                           THEN ' IDENTITY(' + CONVERT(VARCHAR(20), ident.seed_value) + ', ' + CONVERT(VARCHAR(20), ident.increment_value) + ')' +
+                                           THEN ' IDENTITY(' + CONVERT(NVARCHAR(20), ident.seed_value) + ', ' + CONVERT(NVARCHAR(20), ident.increment_value) + ')' +
                                                 CASE WHEN ident.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
                                            ELSE '' END, ', ', ',')  <> REPLACE(c.DataType, ', ', ',')
         OR CASE WHEN c.Nullable = 1 THEN 'YES' ELSE 'NO' END <> ic.IS_NULLABLE
@@ -371,7 +371,7 @@ BEGIN TRY
 
   RAISERROR('Drop Foreign Keys No Longer Defined In The Product', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + df.[FKName] + ';' AS VARCHAR(MAX)), CHAR(13) + CHAR(10))
+                             'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + df.[FKName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #FKsToDrop df WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
@@ -446,7 +446,7 @@ BEGIN TRY
 
   RAISERROR('Collect Existing Index Definitions', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #ExistingIndexes
-  SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(si.[Name] AS VARCHAR(500)),
+  SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(si.[Name] AS NVARCHAR(500)),
          IsConstraint = CAST(CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 1 ELSE 0 END AS BIT),
          IsUnique = si.is_unique, IsClustered = CAST(CASE WHEN si.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT), [FillFactor] = ISNULL(NULLIF(si.fill_factor, 0), 100),
          IndexScript = 'CREATE ' + 
@@ -563,7 +563,7 @@ BEGIN TRY
 
   RAISERROR('Collect Existing XML Index Definitions', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #ExistingXmlIndexes
-  SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(i.[Name] COLLATE DATABASE_DEFAULT AS VARCHAR(500)),
+  SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(i.[Name] COLLATE DATABASE_DEFAULT AS NVARCHAR(500)),
          IndexScript = 'CREATE ' + CASE WHEN i.xml_index_type = 0 THEN 'PRIMARY ' ELSE '' END + 
                        'XML INDEX [' + i.[name] COLLATE DATABASE_DEFAULT + '] ON [' + OBJECT_SCHEMA_NAME(i.[object_id]) + '].[' + OBJECT_NAME(i.[object_id]) + '] ' + 
                        '([' + COL_NAME(i.[Object_id], ic.column_id) + '])' + 
@@ -626,8 +626,8 @@ BEGIN TRY
 
   RAISERROR('Identify unknown and modified indexes to drop', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexesToDrop
-  SELECT [Schema] = CAST([Schema] AS VARCHAR(500)), [TableName] = CAST([TableName] AS VARCHAR(500)), 
-         [IndexName] = CAST(SchemaSmith.fn_StripBracketWrapping([IndexName]) AS VARCHAR(500)), [IsConstraint], [IsUnique] = i.[is_unique], 
+  SELECT [Schema] = CAST([Schema] AS NVARCHAR(500)), [TableName] = CAST([TableName] AS NVARCHAR(500)), 
+         [IndexName] = CAST(SchemaSmith.fn_StripBracketWrapping([IndexName]) AS NVARCHAR(500)), [IsConstraint], [IsUnique] = i.[is_unique], 
          [IsClustered] = CAST(CASE WHEN i.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT)
     INTO #IndexesToDrop
     FROM #IndexesRemovedFromProduct ir WITH (NOLOCK)
@@ -690,7 +690,7 @@ BEGIN TRY
   BEGIN
     RAISERROR('Fixup Modified Fillfactors', 10, 1) WITH NOWAIT
     SELECT @v_SQL = STRING_AGG('RAISERROR(''  Fixup ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' fillfactor in ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT; ' + 
-                               'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD WITH (FILLFACTOR = ' + CONVERT(VARCHAR(5), i.[FillFactor]) + ', SORT_IN_TEMPDB = ON);', CHAR(13) + CHAR(10))
+                               'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD WITH (FILLFACTOR = ' + CONVERT(NVARCHAR(5), i.[FillFactor]) + ', SORT_IN_TEMPDB = ON);', CHAR(13) + CHAR(10))
       FROM #ExistingIndexes ei WITH (NOLOCK)
       JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
                                    AND ei.[xTableName] = i.[TableName]
@@ -1030,7 +1030,7 @@ BEGIN TRY
                                                       THEN CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
                                                                   OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
                                                                 THEN ', ' ELSE '' END +
-                                                           'FILLFACTOR = ' + CAST(i.[FillFactor] AS VARCHAR(20)) 
+                                                           'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                       ELSE '' END +
 							                     ')'
                                             ELSE '' END
@@ -1093,7 +1093,7 @@ BEGIN TRY
   SELECT @v_SQL = STRING_AGG('RAISERROR(''  Creating statistics ' + s.[Schema] + '.' + s.[TableName] + '.' + s.[StatisticName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                              'CREATE STATISTICS ' + s.[StatisticName] + ' ON ' + s.[Schema] + '.' + s.[TableName] + ' (' + s.[Columns] + ')' +
                              CASE WHEN RTRIM(ISNULL(s.[FilterExpression], '')) <> '' THEN ' WHERE ' + s.[FilterExpression] ELSE '' END +
-                             ' WITH SAMPLE ' + CAST(ISNULL(s.[SampleSize], 100) AS VARCHAR(20)) + ' PERCENT;', CHAR(13) + CHAR(10))
+                             ' WITH SAMPLE ' + CAST(ISNULL(s.[SampleSize], 100) AS NVARCHAR(20)) + ' PERCENT;', CHAR(13) + CHAR(10))
     FROM #Statistics s WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.stats ss WITH (NOLOCK)

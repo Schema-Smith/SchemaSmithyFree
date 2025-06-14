@@ -1,5 +1,5 @@
-CREATE OR ALTER FUNCTION SchemaSmith.fn_StripBracketWrapping(@p_Input VARCHAR(MAX))
-  RETURNS VARCHAR(MAX)
+CREATE OR ALTER FUNCTION SchemaSmith.fn_StripBracketWrapping(@p_Input NVARCHAR(MAX))
+  RETURNS NVARCHAR(MAX)
 AS
 BEGIN
   WHILE LEFT(RTRIM(@p_Input), 1) = '[' AND RIGHT(RTRIM(@p_Input), 1) = ']'

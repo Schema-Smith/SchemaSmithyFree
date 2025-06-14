@@ -1,5 +1,5 @@
-CREATE OR ALTER FUNCTION SchemaSmith.fn_StripParenWrapping(@p_Input VARCHAR(MAX))
-  RETURNS VARCHAR(MAX)
+CREATE OR ALTER FUNCTION SchemaSmith.fn_StripParenWrapping(@p_Input NVARCHAR(MAX))
+  RETURNS NVARCHAR(MAX)
 AS
 BEGIN
   DECLARE @Done BIT = 0
