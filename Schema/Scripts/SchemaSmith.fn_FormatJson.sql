@@ -1,15 +1,15 @@
-﻿CREATE OR ALTER FUNCTION SchemaSmith.fn_FormatJson(@Json VARCHAR(MAX), @Level INT) 
-  RETURNS @r_Result TABLE ([LineNo] INT IDENTITY(1,1), [Line] VARCHAR(MAX))
+﻿CREATE OR ALTER FUNCTION SchemaSmith.fn_FormatJson(@Json NVARCHAR(MAX), @Level INT) 
+  RETURNS @r_Result TABLE ([LineNo] INT IDENTITY(1,1), [Line] NVARCHAR(MAX))
 AS 
 BEGIN
   DECLARE @RowCount AS INT, 
           @CurrentRow AS INT = 1,
-          @Indent VARCHAR(200) = SPACE(@Level * 2),
-          @key AS VARCHAR(MAX), 
-          @value AS VARCHAR(MAX),
+          @Indent NVARCHAR(200) = SPACE(@Level * 2),
+          @key AS NVARCHAR(MAX), 
+          @value AS NVARCHAR(MAX),
           @type AS INT
 
-  DECLARE @JsonTbl AS TABLE (Id INT IDENTITY(1,1), [key] VARCHAR(MAX), [value] VARCHAR(MAX), [type] INT)
+  DECLARE @JsonTbl AS TABLE (Id INT IDENTITY(1,1), [key] NVARCHAR(MAX), [value] NVARCHAR(MAX), [type] INT)
   INSERT INTO @JsonTbl ([key], [value], [type])
     SELECT [key], [value], [type]
       FROM OPENJSON(@Json)

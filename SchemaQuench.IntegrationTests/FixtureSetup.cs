@@ -49,7 +49,7 @@ CREATE DATABASE [{_integrationMainDb}];
         cmd.CommandText = @"
 CREATE TYPE [Flag] FROM BIT NOT NULL
 
-CREATE TABLE SchemaSmith.TestLog (Id INT IDENTITY(1,1) NOT NULL, Msg VARCHAR(2000) NOT NULL)
+CREATE TABLE SchemaSmith.TestLog (Id INT IDENTITY(1,1) NOT NULL, Msg NVARCHAR(2000) NOT NULL)
 
 CREATE FULLTEXT CATALOG [FT_Catalog] 
 CREATE FULLTEXT STOPLIST [SL_Test];
@@ -106,7 +106,7 @@ N'<?xml version=""1.0"" encoding=""UTF-16""?>
         ForgeKindler.KindleTheForge(cmd);
 
         cmd.CommandText = @"
-CREATE TABLE SchemaSmith.TestLog (Id INT IDENTITY(1,1) NOT NULL, Msg VARCHAR(2000) NOT NULL)
+CREATE TABLE SchemaSmith.TestLog (Id INT IDENTITY(1,1) NOT NULL, Msg NVARCHAR(2000) NOT NULL)
 ";
         cmd.ExecuteNonQuery();
 
