@@ -41,13 +41,13 @@ BEGIN TRY
          [PrimaryKey] = ISNULL(i.[PrimaryKey], 0), [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
          i.[FilterExpression], 
-         [IndexColumns] = (SELECT STRING_AGG(CASE WHEN RTRIM([value]) LIKE '% DESC' 
-                                                  THEN SchemaSmith.fn_SafeBracketWrap(SUBSTRING(RTRIM([value]), 1, LEN(RTRIM([value])) - 5)) + ' DESC'
-                                                  ELSE SchemaSmith.fn_SafeBracketWrap([value])
-                                                  END, ',') 
+         [IndexColumns] = (SELECT STRING_AGG(CAST(CASE WHEN RTRIM([value]) LIKE '% DESC' 
+                                                       THEN SchemaSmith.fn_SafeBracketWrap(SUBSTRING(RTRIM([value]), 1, LEN(RTRIM([value])) - 5)) + ' DESC'
+                                                       ELSE SchemaSmith.fn_SafeBracketWrap([value])
+                                                       END AS NVARCHAR(MAX)), ',') 
                              FROM STRING_SPLIT(i.[IndexColumns], ',') 
                              WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
-         [IncludeColumns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') WITHIN GROUP (ORDER BY SchemaSmith.fn_SafeBracketWrap([value]))
+         [IncludeColumns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY SchemaSmith.fn_SafeBracketWrap([value]))
                                FROM STRING_SPLIT(i.[IncludeColumns], ',') 
                                WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '')
     INTO #Indexes
@@ -115,8 +115,8 @@ BEGIN TRY
   DROP TABLE IF EXISTS #ForeignKeys
   SELECT t.[Schema], t.[Name] AS [TableName], [KeyName] = SchemaSmith.fn_SafeBracketWrap(f.[KeyName]), 
          [RelatedTableSchema] = SchemaSmith.fn_SafeBracketWrap(ISNULL(f.[RelatedTableSchema], 'dbo')), [RelatedTable] = SchemaSmith.fn_SafeBracketWrap(f.[RelatedTable]), 
-         [Columns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
-         [RelatedColumns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') FROM STRING_SPLIT(f.[RelatedColumns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
+         [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
+         [RelatedColumns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[RelatedColumns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
          [DeleteAction] = ISNULL(NULLIF(RTRIM([DeleteAction]), ''), 'NO ACTION'),
          [UpdateAction] = ISNULL(NULLIF(RTRIM([UpdateAction]), ''), 'NO ACTION')
     INTO #ForeignKeys
@@ -144,7 +144,7 @@ BEGIN TRY
   RAISERROR('Parse Statistics from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #Statistics
   SELECT t.[Schema], t.[Name] AS [TableName], [StatisticName] = SchemaSmith.fn_SafeBracketWrap(s.[StatisticName]), [SampleSize] = ISNULL(s.[SampleSize], 0), s.[FilterExpression],
-         [Columns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') FROM STRING_SPLIT(s.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '')
+         [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(s.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '')
     INTO #Statistics
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON([Statistics]) WITH (
@@ -158,7 +158,7 @@ BEGIN TRY
   DROP TABLE IF EXISTS #FullTextIndexes
   SELECT t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]), 
          f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
-         [Columns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '')
+         [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '')
     INTO #FullTextIndexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON([FullTextIndex]) WITH (
@@ -184,9 +184,9 @@ BEGIN TRY
     FROM #Tables t WITH (NOLOCK)
 
   RAISERROR('Turn off Temporal Tracking for tables no longer defined temporal', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Turn OFF Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' SET (SYSTEM_VERSIONING = OFF);' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP PERIOD FOR SYSTEM_TIME;', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Turn OFF Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' SET (SYSTEM_VERSIONING = OFF);' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP PERIOD FOR SYSTEM_TIME;' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Tables T WITH (NOLOCK)
     WHERE t.IsTemporal = 0
       AND OBJECTPROPERTY(OBJECT_ID([Schema] + '.' + [Name]), 'TableTemporalType') = 2
@@ -201,7 +201,7 @@ BEGIN TRY
     WHERE x.[Name] COLLATE DATABASE_DEFAULT = 'ProductName'
   
   RAISERROR('Validate Table Ownership', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.[TableName] + ' owned by different product. [' + tp.[Value] + ']'', 10, 1) WITH NOWAIT;', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.[TableName] + ' owned by different product. [' + tp.[Value] + ']'', 10, 1) WITH NOWAIT;' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Tables t WITH (NOLOCK)
     JOIN #TableProperties tp WITH (NOLOCK) ON t.[Schema] = tp.[Schema]
                                           AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName
@@ -233,8 +233,8 @@ BEGIN TRY
     IF EXISTS (SELECT * FROM #TablesRemovedFromProduct WITH (NOLOCK))
     BEGIN
       RAISERROR('Drop tables removed from the product', 10, 1) WITH NOWAIT
-      SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping table ' + t.[Schema] + '.' + t.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                 'DROP TABLE IF EXISTS ' + t.[Schema] + '.[' + t.[TableName] + '];', CHAR(13) + CHAR(10))
+      SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping table ' + t.[Schema] + '.' + t.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                      'DROP TABLE IF EXISTS ' + t.[Schema] + '.[' + t.[TableName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #TablesRemovedFromProduct t WITH (NOLOCK)
       IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
     END
@@ -371,7 +371,7 @@ BEGIN TRY
 
   RAISERROR('Drop Foreign Keys No Longer Defined In The Product', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + df.[FKName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                  'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + df.[FKName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #FKsToDrop df WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
@@ -384,8 +384,8 @@ BEGIN TRY
                                         AND COL_NAME(ic.[object_id], ic.column_id) = SchemaSmith.fn_StripBracketWrapping(cc.ColumnName)
   
   RAISERROR('Drop FullText Indexes Referencing Modified Columns', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping fulltext index on ' + di.[Schema] + '.' + di.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'DROP FULLTEXT INDEX ON ' + di.[Schema] + '.' + di.[TableName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping fulltext index on ' + di.[Schema] + '.' + di.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP FULLTEXT INDEX ON ' + di.[Schema] + '.' + di.[TableName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #FTIndexesToDropForChanges di WITH (NOLOCK)
     JOIN sys.fulltext_indexes fi WITH (NOLOCK) ON fi.[object_id] = OBJECT_ID(di.[Schema] + '.' + di.[TableName])
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
@@ -393,7 +393,7 @@ BEGIN TRY
   RAISERROR('Collect Existing FullText Indexes', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #ExistingFullTextIndexes
   SELECT t.[Schema], [TableName] = t.[Name],
-         (SELECT STRING_AGG('[' + COL_NAME(fc.[object_id], fc.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
+         (SELECT STRING_AGG(CAST('[' + COL_NAME(fc.[object_id], fc.column_id) + ']' AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
             FROM sys.fulltext_index_columns fc WITH (NOLOCK)
             WHERE fi.[object_id] = fc.[object_id]) AS [Columns],
          FullTextCatalog = '[' + (SELECT c.[name] COLLATE DATABASE_DEFAULT FROM sys.fulltext_catalogs c WITH (NOLOCK) WHERE c.fulltext_catalog_id = fi.fulltext_catalog_id) + ']',
@@ -422,8 +422,8 @@ BEGIN TRY
   
   -- Handle table compression changes
   RAISERROR('Fixup Table Compression', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Altering table compression for ' + t.[Schema] + '.' + t.[Name] + ' TO ' + t.[CompressionType] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + t.[Schema] + '.' + t.[Name] + ' REBUILD PARTITION=ALL WITH (DATA_COMPRESSION=' + t.[CompressionType] + ');', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering table compression for ' + t.[Schema] + '.' + t.[Name] + ' TO ' + t.[CompressionType] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + t.[Schema] + '.' + t.[Name] + ' REBUILD PARTITION=ALL WITH (DATA_COMPRESSION=' + t.[CompressionType] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Tables t WITH (NOLOCK)
     LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
                                             AND p.index_id < 2
@@ -434,8 +434,8 @@ BEGIN TRY
 
   -- Handle index compression changes
   RAISERROR('Fixup Index Compression', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Altering index compression for ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ' TO ' + i.[CompressionType] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD PARTITION=ALL WITH (DATA_COMPRESSION=' + i.[CompressionType] + ');', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering index compression for ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ' TO ' + i.[CompressionType] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD PARTITION=ALL WITH (DATA_COMPRESSION=' + i.[CompressionType] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Indexes i WITH (NOLOCK) 
     JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName])
                                      AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
@@ -455,17 +455,17 @@ BEGIN TRY
                        CASE WHEN si.[type] IN (5, 6) THEN 'COLUMNSTORE ' ELSE '' END +
                        'INDEX [' + si.[Name] + '] ON ' + t.[Schema] + '.' + t.[Name] + 
                        CASE WHEN si.[type] NOT IN (5, 6) 
-                            THEN ' (' + (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END, ',') WITHIN GROUP (ORDER BY key_ordinal)
+                            THEN ' (' + (SELECT STRING_AGG(CAST('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY key_ordinal)
                                            FROM sys.index_columns ic WITH (NOLOCK)
                                            WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0) + ')' +
                                  CASE WHEN EXISTS (SELECT * FROM sys.index_columns ic WITH (NOLOCK) WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1)
                                       THEN ' INCLUDE (' +
-                                           (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
+                                           (SELECT STRING_AGG(CAST('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
                                               FROM sys.index_columns ic WITH (NOLOCK)
                                               WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) + ')'
                                       ELSE '' END
                             WHEN si.[type] IN (6) 
-                            THEN ' (' + (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
+                            THEN ' (' + (SELECT STRING_AGG(CAST('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY COL_NAME(ic.[object_id], ic.column_id))
                                            FROM sys.index_columns ic WITH (NOLOCK)
                                            WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) + ')'
                             ELSE '' END +
@@ -547,17 +547,17 @@ BEGIN TRY
   DELETE FROM #IndexRenames WHERE EXISTS (SELECT * FROM #IndexRenameDedupe dd WITH (NOLOCK) WHERE [OriginalName] = [OldName] AND [ValidNewName] <> [NewName])
   
   RAISERROR('Handle Renamed Indexes And Unique Constraints', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             CASE WHEN IsConstraint = 1
-                                  THEN CASE WHEN OBJECT_ID(ir.[Schema] + '.' + ir.[NewName]) IS NULL
-                                            THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''OBJECT'';'
-                                            ELSE 'ALTER TABLE ' + ir.[Schema] + '.' + ir.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + ir.[OldName] + '];'
-                                            END
-                                  ELSE CASE WHEN INDEXPROPERTY(OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]), SchemaSmith.fn_StripBracketWrapping(ir.[NewName]), 'IndexID') IS NULL
-                                            THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
-                                            ELSE 'DROP INDEX IF EXISTS [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
-                                            END
-                                  END, CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  CASE WHEN IsConstraint = 1
+                                       THEN CASE WHEN OBJECT_ID(ir.[Schema] + '.' + ir.[NewName]) IS NULL
+                                                 THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''OBJECT'';'
+                                                 ELSE 'ALTER TABLE ' + ir.[Schema] + '.' + ir.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + ir.[OldName] + '];'
+                                                 END
+                                       ELSE CASE WHEN INDEXPROPERTY(OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]), SchemaSmith.fn_StripBracketWrapping(ir.[NewName]), 'IndexID') IS NULL
+                                                 THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
+                                                 ELSE 'DROP INDEX IF EXISTS [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
+                                                 END
+                                       END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #IndexRenames ir WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
@@ -616,11 +616,11 @@ BEGIN TRY
                                                                        ELSE '' END
 
   RAISERROR('Handle Renamed Xml Indexes', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             CASE WHEN INDEXPROPERTY(OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]), SchemaSmith.fn_StripBracketWrapping(ir.[NewName]), 'IndexID') IS NULL
-                                  THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
-                                  ELSE 'DROP INDEX IF EXISTS [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
-                                  END, CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  CASE WHEN INDEXPROPERTY(OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]), SchemaSmith.fn_StripBracketWrapping(ir.[NewName]), 'IndexID') IS NULL
+                                       THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
+                                       ELSE 'DROP INDEX IF EXISTS [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
+                                       END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #XmlIndexRenames ir WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
@@ -660,16 +660,16 @@ BEGIN TRY
         AND NOT EXISTS (SELECT * FROM #IndexesToDrop id WITH (NOLOCK) WHERE [xSchema] = [Schema] AND [xTableName] = [TableName] AND [xIndexName] = [IndexName])
 
   RAISERROR('Drop Referencing Foreign Keys When Dropping Unique Indexes', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #IndexesToDrop di WITH (NOLOCK)
     JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(di.[Schema] + '.' + di.[TableName])
     WHERE IsConstraint = 1 OR IsUnique = 1
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Drop FullText Indexes Referencing Unique Indexes That Will Be Dropped', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping fulltext index on ' + ef.[Schema] + '.' + ef.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'DROP FULLTEXT INDEX ON ' + ef.[Schema] + '.' + ef.[TableName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping fulltext index on ' + ef.[Schema] + '.' + ef.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP FULLTEXT INDEX ON ' + ef.[Schema] + '.' + ef.[TableName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #IndexesToDrop id WITH (NOLOCK)
     JOIN #ExistingFullTextIndexes ef WITH (NOLOCK) ON id.[Schema] = ef.[Schema]
                                                   AND id.[TableName] = ef.[TableName]
@@ -678,19 +678,19 @@ BEGIN TRY
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Drop Unknown and Modified Indexes', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + di.[Schema] + '.' + di.[TableName] + '.' + di.[IndexName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             CASE WHEN IsConstraint = 1
-                                  THEN 'ALTER TABLE ' + di.[Schema] + '.' + di.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + di.[IndexName] + '];'
-                                  ELSE 'DROP INDEX IF EXISTS [' + di.[IndexName] + '] ON ' + di.[Schema] + '.' + di.[TableName] + ';'
-                                  END, CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY CASE WHEN [IsClustered] = 0 THEN 0 ELSE 1 END)
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + di.[Schema] + '.' + di.[TableName] + '.' + di.[IndexName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  CASE WHEN IsConstraint = 1
+                                       THEN 'ALTER TABLE ' + di.[Schema] + '.' + di.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + di.[IndexName] + '];'
+                                       ELSE 'DROP INDEX IF EXISTS [' + di.[IndexName] + '] ON ' + di.[Schema] + '.' + di.[TableName] + ';'
+                                       END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY CASE WHEN [IsClustered] = 0 THEN 0 ELSE 1 END)
     FROM #IndexesToDrop di WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
   IF @UpdateFillFactor = 1
   BEGIN
     RAISERROR('Fixup Modified Fillfactors', 10, 1) WITH NOWAIT
-    SELECT @v_SQL = STRING_AGG('RAISERROR(''  Fixup ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' fillfactor in ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT; ' + 
-                               'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD WITH (FILLFACTOR = ' + CONVERT(NVARCHAR(5), i.[FillFactor]) + ', SORT_IN_TEMPDB = ON);', CHAR(13) + CHAR(10))
+    SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Fixup ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' fillfactor in ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT; ' + 
+                                    'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD WITH (FILLFACTOR = ' + CONVERT(NVARCHAR(5), i.[FillFactor]) + ', SORT_IN_TEMPDB = ON);' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
       FROM #ExistingIndexes ei WITH (NOLOCK)
       JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
                                    AND ei.[xTableName] = i.[TableName]
@@ -713,8 +713,8 @@ BEGIN TRY
        OR i.filter_definition LIKE '%' + SchemaSmith.fn_StripBracketWrapping(cc.ColumnName) + '%'
   
   RAISERROR('Drop Statistics Referencing Modified Columns', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping statistic ' + id.[Schema] + '.' + id.[TableName] + '.[' + [StatName] + ']'', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'DROP STATISTICS ' + id.[Schema] + '.' + id.[TableName] + '.[' + [StatName] + '];', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping statistic ' + id.[Schema] + '.' + id.[TableName] + '.[' + [StatName] + ']'', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP STATISTICS ' + id.[Schema] + '.' + id.[TableName] + '.[' + [StatName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #StatisticsToDropForChanges id WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
@@ -730,8 +730,8 @@ BEGIN TRY
                                          AND SchemaSmith.fn_StripBracketWrapping(cc.ColumnName) = COL_NAME(fc.[referenced_object_id], fc.referenced_column_id))
   
   RAISERROR('Drop Foreign Keys Referencing Modified Columns', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + df.[FKName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + df.[FKName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #FKsToDropForChanges df WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
@@ -744,8 +744,8 @@ BEGIN TRY
                                         AND COL_NAME(dc.parent_object_id, dc.parent_column_id) = SchemaSmith.fn_StripBracketWrapping(cc.ColumnName)
   
   RAISERROR('Drop Defaults Referencing Modified Columns', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping default ' + dd.[Schema] + '.' + dd.[TableName] + '.' + dd.[DefaultName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + dd.[Schema] + '.' + dd.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + dd.[DefaultName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping default ' + dd.[Schema] + '.' + dd.[TableName] + '.' + dd.[DefaultName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + dd.[Schema] + '.' + dd.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + dd.[DefaultName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #DefaultsToDropForChanges dd WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
@@ -759,28 +759,28 @@ BEGIN TRY
                                           OR (ck.parent_column_id = 0 AND ck.[definition] LIKE '%' + SchemaSmith.fn_StripBracketWrapping(cc.ColumnName) + '%'))
   
   RAISERROR('Drop Check Constraints Referencing Modified Columns', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping check constraint ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.CheckName + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + fc.CheckName + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping check constraint ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.CheckName + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + fc.CheckName + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #ChecksToDropForChanges fc WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Drop Modified Computed Columns', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM (SELECT T.[Schema], T.[Name], 
-                 ScriptColumns = (SELECT STRING_AGG('COLUMN ' + [ColumnName], ', ') WITHIN GROUP (ORDER BY cc.[ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1),
-                 MessageColumns = (SELECT STRING_AGG([ColumnName], ', ') WITHIN GROUP (ORDER BY cc.[ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1)
+                 ScriptColumns = (SELECT STRING_AGG(CAST('COLUMN ' + [ColumnName] AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY cc.[ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1),
+                 MessageColumns = (SELECT STRING_AGG(CAST([ColumnName] AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY cc.[ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1)
             FROM #Tables T WITH (NOLOCK)
             WHERE NewTable = 0
               AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1)) T
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Drop Columns No Longer Part of The Product Definition', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM (SELECT T.[Schema], T.[Name],
-                 ScriptColumns = (SELECT STRING_AGG('COLUMN ' + [ColumnName], ', ') WITHIN GROUP (ORDER BY [ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1),
-                 MessageColumns = (SELECT STRING_AGG([ColumnName], ', ') WITHIN GROUP (ORDER BY [ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1)
+                 ScriptColumns = (SELECT STRING_AGG(CAST('COLUMN ' + [ColumnName] AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY [ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1),
+                 MessageColumns = (SELECT STRING_AGG(CAST([ColumnName] AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY [ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1)
             FROM #Tables T WITH (NOLOCK)
             WHERE NewTable = 0
               AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1)) T
@@ -792,31 +792,31 @@ BEGIN TRY
     WHERE EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = c.[Schema] AND cc.[TableName] = c.[TableName] and cc.ColumnName = c.ColumnName AND cc.MustDropAndRecreate = 1)
   
   RAISERROR('Add New Tables', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Adding new table ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'CREATE TABLE ' + T.[Schema] + '.' + T.[Name] + ' (' + ScriptColumns + ')' + 
-                             CASE WHEN ISNULL(t.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + ISNULL(t.[CompressionType], 'NONE') + ')' ELSE '' END + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding new table ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'CREATE TABLE ' + T.[Schema] + '.' + T.[Name] + ' (' + ScriptColumns + ')' + 
+                                  CASE WHEN ISNULL(t.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + ISNULL(t.[CompressionType], 'NONE') + ')' ELSE '' END + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM (SELECT T.[Schema], T.[Name], t.[CompressionType],
-                 ScriptColumns = (SELECT STRING_AGG([ColumnScript], ', ') WITHIN GROUP (ORDER BY c.[ColumnName]) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name])
+                 ScriptColumns = (SELECT STRING_AGG(CAST([ColumnScript] AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY c.[ColumnName]) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name])
             FROM #Tables T WITH (NOLOCK)
             WHERE NewTable = 1
               AND EXISTS (SELECT * FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name])) T
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Add missing ProductName extended property to tables', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +
-                                                         '@level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ' +
-                                                         '@level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +
+                                                              '@level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ' +
+                                                              '@level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Tables t WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * FROM #TableProperties tp WITH (NOLOCK) WHERE t.[Schema] = tp.[Schema] AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName AND tp.PropertyName = 'ProductName')
       AND OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL  -- and the table physically exists
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Add New Physical Columns', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Adding new columns to ' + T.[Schema] + '.' + T.[Name] + ' (' + ColumnMessage + ')'', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD ' + ColumnScripts + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding ' + CAST(ColumnCount AS VARCHAR(20)) + ' new columns to ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD ' + ColumnScripts + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM (SELECT T.[Schema], T.[Name],
-                 ColumnScripts = (SELECT STRING_AGG([ColumnScript], ', ') WITHIN GROUP (ORDER BY c.[ColumnName]) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = ''),
-                 ColumnMessage = (SELECT STRING_AGG([ColumnName], ', ') WITHIN GROUP (ORDER BY c.[ColumnName]) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = '')
+                 ColumnScripts = (SELECT STRING_AGG(CAST([ColumnScript] AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY c.[ColumnName]) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = ''),
+                 ColumnCount = (SELECT COUNT(*) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = '')
             FROM #Tables T WITH (NOLOCK)
             WHERE NewTable = 0
               AND EXISTS (SELECT * FROM #Columns c WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = '')) T
@@ -841,8 +841,8 @@ BEGIN TRY
       AND SchemaSmith.fn_StripParenWrapping(ic.COLUMN_DEFAULT) <> ISNULL(c.[Default], 'NULL')
   
   RAISERROR('Drop Modified Defaults', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping default ' + dc.[Schema] + '.' + dc.[TableName] + '.' + dc.[DefaultName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + dc.[Schema] + '.' + dc.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + dc.[DefaultName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping default ' + dc.[Schema] + '.' + dc.[TableName] + '.' + dc.[DefaultName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + dc.[Schema] + '.' + dc.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + dc.[DefaultName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #DefaultChanges dc WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
@@ -850,11 +850,11 @@ BEGIN TRY
   DROP TABLE IF EXISTS #ExistingFKs
   SELECT t.[Schema], [TableName] = t.[Name],
          FKName = fk.[Name],
-         FKScript = '(' + (SELECT STRING_AGG('[' + COL_NAME(fc.[parent_object_id], fc.parent_column_id) + ']', ',') WITHIN GROUP (ORDER BY fc.constraint_column_id)
+         FKScript = '(' + (SELECT STRING_AGG(CAST('[' + COL_NAME(fc.[parent_object_id], fc.parent_column_id) + ']' AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY fc.constraint_column_id)
                              FROM sys.foreign_key_columns fc WITH (NOLOCK)
                              WHERE fk.[object_id] = fc.[constraint_object_id]) + ')' +
                     ' REFERENCES [' + OBJECT_SCHEMA_NAME(referenced_object_id) + '].[' + OBJECT_NAME(referenced_object_id) + '] ' +
-                    '(' + (SELECT STRING_AGG('[' + COL_NAME(fc.[referenced_object_id], fc.referenced_column_id) + ']', ',') WITHIN GROUP (ORDER BY fc.constraint_column_id)
+                    '(' + (SELECT STRING_AGG(CAST('[' + COL_NAME(fc.[referenced_object_id], fc.referenced_column_id) + ']' AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY fc.constraint_column_id)
                              FROM sys.foreign_key_columns fc WITH (NOLOCK)
                              WHERE fk.[object_id] = fc.[constraint_object_id]) + ')' +
                     ' ON DELETE ' + REPLACE(fk.update_referential_action_desc, '_', ' ') COLLATE DATABASE_DEFAULT +
@@ -877,8 +877,8 @@ BEGIN TRY
                          ' ON UPDATE ' + [UpdateAction]
   
   RAISERROR('Drop Modified Foreign Keys', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping Foreign Key ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.[FKName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + fc.[FKName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping Foreign Key ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.[FKName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + fc.[FKName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #FKChanges fc WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
@@ -887,7 +887,7 @@ BEGIN TRY
   SELECT t.[Schema], [TableName] = t.[Name], [StatsName] = si.[Name],
          StatisticScript = 'CREATE STATISTICS ' +
                            '[' + si.[Name] + '] ON ' + t.[Schema] + '.' + t.[Name] + ' (' +
-                           (SELECT STRING_AGG('[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',') WITHIN GROUP (ORDER BY ic.stats_column_id)
+                           (SELECT STRING_AGG(CAST('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY ic.stats_column_id)
                               FROM sys.stats_columns ic WITH (NOLOCK)
                               WHERE si.[object_id] = ic.[object_id] AND si.stats_id = ic.stats_id) + ')' +
                            CASE WHEN si.has_filter = 1 THEN ' WHERE ' + SchemaSmith.fn_StripParenWrapping(si.filter_definition) ELSE '' END 
@@ -913,8 +913,8 @@ BEGIN TRY
                                 CASE WHEN RTRIM(ISNULL(s.[FilterExpression], '')) <> '' THEN ' WHERE ' + s.[FilterExpression] ELSE '' END
 
   RAISERROR('Drop Modified Statistics', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping statistics ' + sc.[Schema] + '.' + sc.[TableName] + '.' + sc.[StatisticName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'DROP STATISTICS ' + sc.[Schema] + '.' + sc.[TableName] + '.' + sc.[StatisticName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping statistics ' + sc.[Schema] + '.' + sc.[TableName] + '.' + sc.[StatisticName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP STATISTICS ' + sc.[Schema] + '.' + sc.[TableName] + '.' + sc.[StatisticName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #StatsChanges sc WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
@@ -953,26 +953,26 @@ BEGIN TRY
       WHERE ec.[CheckDefinition] <> cc.[Expression]
   
   RAISERROR('Drop Modified Check Constraints', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[CheckName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + cc.[CheckName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[CheckName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + cc.[CheckName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #CheckChanges cc WITH (NOLOCK)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Alter Modified Columns', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Altering Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ALTER COLUMN ' + cc.[ColumnName] + ' ' + 
-                             CASE WHEN RTRIM([SpecialColumnScript]) <> '' THEN [SpecialColumnScript] ELSE [ColumnScript] END + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ALTER COLUMN ' + cc.[ColumnName] + ' ' + 
+                                  CASE WHEN RTRIM([SpecialColumnScript]) <> '' THEN [SpecialColumnScript] ELSE [ColumnScript] END + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #ColumnChanges cc WITH (NOLOCK)
         WHERE [MustDropAndRecreate] = 0
           AND [DropOnly] = 0
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Add New Computed Columns', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Adding new columns to ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD ' + ScriptColumns + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding ' + CAST(ColumnCount AS VARCHAR(20)) + ' new columns to ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD ' + ScriptColumns + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM (SELECT T.[Schema], T.[Name],
-                 ScriptColumns = (SELECT STRING_AGG(c.[ColumnScript], ', ') WITHIN GROUP (ORDER BY c.[ColumnName]) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) <> ''),
-                 MessageColumns = (SELECT STRING_AGG(c.[ColumnName], ', ') WITHIN GROUP (ORDER BY c.[ColumnName]) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) <> '')
+                 ScriptColumns = (SELECT STRING_AGG(CAST(c.[ColumnScript] AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY c.[ColumnName]) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) <> ''),
+                 ColumnCount = (SELECT COUNT(*) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) <> '')
             FROM #Tables T WITH (NOLOCK)
             WHERE NewTable = 0
               AND EXISTS (SELECT * FROM #Columns c WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) <> '')) T
@@ -990,51 +990,51 @@ BEGIN TRY
                           AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
   
   RAISERROR('Drop Conflicting Clustered Index', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping ' + CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + mct.[Schema] + '.' + mct.[TableName] + '.' + si.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1
-                                  THEN 'ALTER TABLE ' + mct.[Schema] + '.' + mct.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + si.[Name] + '];'
-                                  ELSE 'DROP INDEX IF EXISTS [' + si.[Name] + '] ON ' + mct.[Schema] + '.' + mct.[TableName] + ';'
-                                  END, CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping ' + CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + mct.[Schema] + '.' + mct.[TableName] + '.' + si.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1
+                                       THEN 'ALTER TABLE ' + mct.[Schema] + '.' + mct.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + si.[Name] + '];'
+                                       ELSE 'DROP INDEX IF EXISTS [' + si.[Name] + '] ON ' + mct.[Schema] + '.' + mct.[TableName] + ';'
+                                       END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #MissingClusteredIndexTables mct WITH (NOLOCK)
     JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(mct.[Schema] + '.' + mct.[TableName])
                                      AND si.[type] IN (1, 5)
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Add Missing Indexes', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Creating ' + CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1
-                                  THEN 'ALTER TABLE ' + i.[Schema] + '.' + i.[TableName] + ' ADD CONSTRAINT ' + i.[IndexName] +
-                                       CASE WHEN i.PrimaryKey = 1 THEN ' PRIMARY KEY ' WHEN i.UniqueConstraint = 1 THEN ' UNIQUE ' END +
-                                       CASE WHEN i.[Clustered] =  1 THEN '' ELSE 'NON' END + 'CLUSTERED (' + i.IndexColumns + ')' +
-                                       CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE')
-                                            THEN ' WITH (DATA_COMPRESSION=' + i.[CompressionType] + ')'
-                                            ELSE '' END
-                                  ELSE 'CREATE ' + 
-                                       CASE WHEN i.[Unique] = 1 THEN 'UNIQUE ' ELSE '' END +
-                                       CASE WHEN i.[Clustered] =  1 THEN '' ELSE 'NON' END + 'CLUSTERED ' +
-                                       CASE WHEN i.[ColumnStore] = 1 THEN 'COLUMNSTORE ' ELSE '' END +
-                                       'INDEX ' + i.[IndexName] +
-                                       ' ON ' + i.[Schema] + '.' + i.[TableName] +
-                                       CASE WHEN i.[ColumnStore] = 0 THEN ' (' + i.[IndexColumns] + ')' + CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END
-                                            WHEN i.[ColumnStore] = 1 AND i.[Clustered] = 0 THEN ' (' + i.[IncludeColumns] + ')'
-                                            ELSE '' END +
-                                       CASE WHEN RTRIM(ISNULL(i.[FilterExpression], '')) <> '' THEN ' WHERE ' + i.[FilterExpression] ELSE '' END +
-					                   CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
-                                              OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
-                                              OR ISNULL(i.[FillFactor], 100) NOT IN (0, 100)
-                                            THEN ' WITH (' +
-                                                 CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
-                                                        OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
-                                                      THEN 'DATA_COMPRESSION=' + i.[CompressionType] ELSE '' END +
-                                                 CASE WHEN ISNULL(i.[FillFactor], 100) NOT IN (0, 100) 
-                                                      THEN CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
-                                                                  OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
-                                                                THEN ', ' ELSE '' END +
-                                                           'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
-                                                      ELSE '' END +
-							                     ')'
-                                            ELSE '' END
-                                  END + ';', CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.[Clustered] =  1 THEN 0 ELSE 1 END, i.[IndexName])
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Creating ' + CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1
+                                       THEN 'ALTER TABLE ' + i.[Schema] + '.' + i.[TableName] + ' ADD CONSTRAINT ' + i.[IndexName] +
+                                            CASE WHEN i.PrimaryKey = 1 THEN ' PRIMARY KEY ' WHEN i.UniqueConstraint = 1 THEN ' UNIQUE ' END +
+                                            CASE WHEN i.[Clustered] =  1 THEN '' ELSE 'NON' END + 'CLUSTERED (' + i.IndexColumns + ')' +
+                                            CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE')
+                                                 THEN ' WITH (DATA_COMPRESSION=' + i.[CompressionType] + ')'
+                                                 ELSE '' END
+                                       ELSE 'CREATE ' + 
+                                            CASE WHEN i.[Unique] = 1 THEN 'UNIQUE ' ELSE '' END +
+                                            CASE WHEN i.[Clustered] =  1 THEN '' ELSE 'NON' END + 'CLUSTERED ' +
+                                            CASE WHEN i.[ColumnStore] = 1 THEN 'COLUMNSTORE ' ELSE '' END +
+                                            'INDEX ' + i.[IndexName] +
+                                            ' ON ' + i.[Schema] + '.' + i.[TableName] +
+                                            CASE WHEN i.[ColumnStore] = 0 THEN ' (' + i.[IndexColumns] + ')' + CASE WHEN RTRIM(ISNULL(i.[IncludeColumns], '')) <> '' THEN ' INCLUDE (' + i.[IncludeColumns] + ')' ELSE '' END
+                                                 WHEN i.[ColumnStore] = 1 AND i.[Clustered] = 0 THEN ' (' + i.[IncludeColumns] + ')'
+                                                 ELSE '' END +
+                                            CASE WHEN RTRIM(ISNULL(i.[FilterExpression], '')) <> '' THEN ' WHERE ' + i.[FilterExpression] ELSE '' END +
+					                        CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
+                                                   OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
+                                                   OR ISNULL(i.[FillFactor], 100) NOT IN (0, 100)
+                                                 THEN ' WITH (' +
+                                                      CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
+                                                             OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
+                                                           THEN 'DATA_COMPRESSION=' + i.[CompressionType] ELSE '' END +
+                                                      CASE WHEN ISNULL(i.[FillFactor], 100) NOT IN (0, 100) 
+                                                           THEN CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
+                                                                       OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
+                                                                     THEN ', ' ELSE '' END +
+                                                                'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
+                                                           ELSE '' END +
+							                          ')'
+                                                 ELSE '' END
+                                       END + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.[Clustered] =  1 THEN 0 ELSE 1 END, i.[IndexName])
     FROM #Indexes i WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.indexes si WITH (NOLOCK)
@@ -1044,11 +1044,11 @@ BEGIN TRY
   
 
   RAISERROR('Add Missing Xml Indexes', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Creating index ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'CREATE ' + CASE WHEN i.IsPrimary = 1 THEN 'PRIMARY ' ELSE '' END + 
-                             'XML INDEX ' + i.[IndexName] COLLATE DATABASE_DEFAULT + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[Column] + ')' + 
-                             CASE WHEN i.IsPrimary = 0 THEN ' USING XML INDEX ' + i.PrimaryIndex + ' FOR ' + i.SecondaryIndexType ELSE '' END +
-                             ';', CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.IsPrimary =  1 THEN 0 ELSE 1 END, i.[IndexName])
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Creating index ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'CREATE ' + CASE WHEN i.IsPrimary = 1 THEN 'PRIMARY ' ELSE '' END + 
+                                  'XML INDEX ' + i.[IndexName] COLLATE DATABASE_DEFAULT + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' (' + i.[Column] + ')' + 
+                                  CASE WHEN i.IsPrimary = 0 THEN ' USING XML INDEX ' + i.PrimaryIndex + ' FOR ' + i.SecondaryIndexType ELSE '' END +
+                                  ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.IsPrimary =  1 THEN 0 ELSE 1 END, i.[IndexName])
     FROM #XmlIndexes i WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.xml_indexes si WITH (NOLOCK)
@@ -1057,21 +1057,21 @@ BEGIN TRY
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Turn on Temporal Tracking for tables defined as temporal', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Turn ON Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD [ValidFrom] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL DEFAULT ''0001-01-01 00:00:00.0000000'', ' +
-                                                                                 '[ValidTo] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL DEFAULT ''9999-12-31 23:59:59.9999999'', ' +
-                                                                                 'PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo);' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = ' + T.[Schema] + '.[' + SchemaSmith.fn_StripBracketWrapping(T.[Name]) + '_Hist]));', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Turn ON Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD [ValidFrom] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL DEFAULT ''0001-01-01 00:00:00.0000000'', ' +
+                                                                                      '[ValidTo] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL DEFAULT ''9999-12-31 23:59:59.9999999'', ' +
+                                                                                      'PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo);' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = ' + T.[Schema] + '.[' + SchemaSmith.fn_StripBracketWrapping(T.[Name]) + '_Hist]));' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Tables T WITH (NOLOCK)
     WHERE t.IsTemporal = 1
       AND OBJECTPROPERTY(OBJECT_ID([Schema] + '.' + [Name]), 'TableTemporalType') = 0
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Add missing ProductName extended property to indexes', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +
-                                                         '@level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ' +
-                                                         '@level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', ' +
-                                                         '@level2type = N''Index'', @level2name = ''' + SchemaSmith.fn_StripBracketWrapping(i.IndexName) + ''';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +
+                                                              '@level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ' +
+                                                              '@level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', ' +
+                                                              '@level2type = N''Index'', @level2name = ''' + SchemaSmith.fn_StripBracketWrapping(i.IndexName) + ''';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Indexes i WITH (NOLOCK)
     JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = i.[Schema] AND t.[Name] = i.[TableName]
     WHERE INDEXPROPERTY(OBJECT_ID(t.[Schema] + '.' + t.[Name]), SchemaSmith.fn_StripBracketWrapping(i.IndexName), 'IndexID') IS NOT NULL
@@ -1079,10 +1079,10 @@ BEGIN TRY
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Add missing ProductName extended property to xml indexes', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +
-                                                         '@level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ' +
-                                                         '@level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', ' +
-                                                         '@level2type = N''Index'', @level2name = ''' + SchemaSmith.fn_StripBracketWrapping(i.IndexName) + ''';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +
+                                                              '@level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ' +
+                                                              '@level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', ' +
+                                                              '@level2type = N''Index'', @level2name = ''' + SchemaSmith.fn_StripBracketWrapping(i.IndexName) + ''';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #XmlIndexes i WITH (NOLOCK)
     JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = i.[Schema] AND t.[Name] = i.[TableName]
     WHERE INDEXPROPERTY(OBJECT_ID(t.[Schema] + '.' + t.[Name]), SchemaSmith.fn_StripBracketWrapping(i.IndexName), 'IndexID') IS NOT NULL
@@ -1090,10 +1090,10 @@ BEGIN TRY
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Add Missing Statistics', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Creating statistics ' + s.[Schema] + '.' + s.[TableName] + '.' + s.[StatisticName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'CREATE STATISTICS ' + s.[StatisticName] + ' ON ' + s.[Schema] + '.' + s.[TableName] + ' (' + s.[Columns] + ')' +
-                             CASE WHEN RTRIM(ISNULL(s.[FilterExpression], '')) <> '' THEN ' WHERE ' + s.[FilterExpression] ELSE '' END +
-                             ' WITH SAMPLE ' + CAST(ISNULL(s.[SampleSize], 100) AS NVARCHAR(20)) + ' PERCENT;', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Creating statistics ' + s.[Schema] + '.' + s.[TableName] + '.' + s.[StatisticName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'CREATE STATISTICS ' + s.[StatisticName] + ' ON ' + s.[Schema] + '.' + s.[TableName] + ' (' + s.[Columns] + ')' +
+                                  CASE WHEN RTRIM(ISNULL(s.[FilterExpression], '')) <> '' THEN ' WHERE ' + s.[FilterExpression] ELSE '' END +
+                                  ' WITH SAMPLE ' + CAST(ISNULL(s.[SampleSize], 100) AS NVARCHAR(20)) + ' PERCENT;' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Statistics s WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.stats ss WITH (NOLOCK)
@@ -1102,8 +1102,8 @@ BEGIN TRY
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Add Missing Defaults', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Altering Column ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ADD DEFAULT ' + c.[Default] + ' FOR ' + c.[ColumnName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering Column ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ADD DEFAULT ' + c.[Default] + ' FOR ' + c.[ColumnName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Columns c WITH (NOLOCK)
     WHERE RTRIM(ISNULL(c.[Default], '')) <> ''
       AND NOT EXISTS (SELECT * 
@@ -1113,8 +1113,8 @@ BEGIN TRY
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Add Missing Check Constraints', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Adding check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ConstraintName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ADD CONSTRAINT ' + cc.[ConstraintName] + ' CHECK (' + cc.[Expression] + ');', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ConstraintName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ADD CONSTRAINT ' + cc.[ConstraintName] + ' CHECK (' + cc.[Expression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #CheckConstraints cc WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.check_constraints sc WITH (NOLOCK)
@@ -1122,8 +1122,8 @@ BEGIN TRY
                           AND sc.[name] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Adding check constrain to column ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ADD CHECK (' + c.[CheckExpression] + ');', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding check constrain to column ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ADD CHECK (' + c.[CheckExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Columns c WITH (NOLOCK)
     WHERE RTRIM(ISNULL(c.[CheckExpression], '')) <> ''
       AND NOT EXISTS (SELECT * 
@@ -1133,11 +1133,11 @@ BEGIN TRY
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Add Missing Foreign Keys', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Adding foreign key ' + f.[Schema] + '.' + f.[TableName] + '.' + f.[KeyName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'ALTER TABLE ' + f.[Schema] + '.' + f.[TableName] + ' ADD CONSTRAINT ' + f.[KeyName] + ' FOREIGN KEY ' + 
-                             '(' + f.[Columns] + ') REFERENCES ' + [RelatedTableSchema] + '.' + f.[RelatedTable] + ' (' + [RelatedColumns] + ')' +
-                             ' ON DELETE ' + [DeleteAction] +
-                             ' ON UPDATE ' + [UpdateAction] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding foreign key ' + f.[Schema] + '.' + f.[TableName] + '.' + f.[KeyName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + f.[Schema] + '.' + f.[TableName] + ' ADD CONSTRAINT ' + f.[KeyName] + ' FOREIGN KEY ' + 
+                                  '(' + f.[Columns] + ') REFERENCES ' + [RelatedTableSchema] + '.' + f.[RelatedTable] + ' (' + [RelatedColumns] + ')' +
+                                  ' ON DELETE ' + [DeleteAction] +
+                                  ' ON UPDATE ' + [UpdateAction] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #ForeignKeys f WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT *
                         FROM sys.foreign_keys sf WITH (NOLOCK)
@@ -1146,8 +1146,8 @@ BEGIN TRY
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Drop Modified or Removed FullText Indexes', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Dropping fulltext index on ' + ei.[Schema] + '.' + ei.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'DROP FULLTEXT INDEX ON ' + ei.[Schema] + '.' + ei.[TableName] + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping fulltext index on ' + ei.[Schema] + '.' + ei.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP FULLTEXT INDEX ON ' + ei.[Schema] + '.' + ei.[TableName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #ExistingFullTextIndexes ei WITH (NOLOCK)
     LEFT JOIN #FullTextIndexes fi WITH (NOLOCK) ON fi.[Schema] = ei.[Schema]
                                                AND fi.[TableName] = ei.[TableName]
@@ -1161,10 +1161,10 @@ BEGIN TRY
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Add Missing FullText Indexes', 10, 1) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG('RAISERROR(''  Adding fulltext index on ' + fi.[Schema] + '.' + fi.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                             'CREATE FULLTEXT INDEX ON ' + fi.[Schema] + '.' + fi.[TableName] + ' (' + [Columns] + ') KEY INDEX ' + [KeyIndex] + ' ON ' + [FullTextCatalog] + 
-                             ' WITH CHANGE_TRACKING = ' + [ChangeTracking] +
-                             CASE WHEN RTRIM(ISNULL(fi.[StopList], '')) <> '' THEN ', STOPLIST = ' + [StopList] ELSE '' END + ';', CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding fulltext index on ' + fi.[Schema] + '.' + fi.[TableName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'CREATE FULLTEXT INDEX ON ' + fi.[Schema] + '.' + fi.[TableName] + ' (' + [Columns] + ') KEY INDEX ' + [KeyIndex] + ' ON ' + [FullTextCatalog] + 
+                                  ' WITH CHANGE_TRACKING = ' + [ChangeTracking] +
+                                  CASE WHEN RTRIM(ISNULL(fi.[StopList], '')) <> '' THEN ', STOPLIST = ' + [StopList] ELSE '' END + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #FullTextIndexes fi WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * FROM sys.fulltext_indexes ft WITH (NOLOCK) WHERE ft.[object_id] = OBJECT_ID(fi.[Schema] + '.' + fi.[TableName]))
   IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
