@@ -6,13 +6,13 @@ in verifying that this package's contents are trustworthy.
 
 This package is publically available at our github repo at:
  
-https://github.com/Schema-Smith/SchemaSmithyFree/releases/download/v1.0.4/SchemaQuench-net9.0.zip
+https://github.com/Schema-Smith/SchemaSmithyFree/releases/download/v1.0.6/SchemaQuench-net9.0.zip
 
 You can verify the integrity of the installer by downloading it from the above URL and calculating its SHA256 checksum using the following command:
 
 checksum -t sha256 -f './SchemaQuench-net9.0.zip'
 
-The checksum should be: CEDD593E8ED68EB0AEF51308036D3DED2D7DED09333598D24D3B7233A0126D4A
+The checksum should be: 115000F65F0C0311095F1325448F07DD736F67C32D0CC7C0A894146DE1C26A42
 
 The LICENSE.txt file is available at:
 
