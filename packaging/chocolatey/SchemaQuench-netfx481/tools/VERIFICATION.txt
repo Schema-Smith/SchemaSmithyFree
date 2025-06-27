@@ -12,7 +12,7 @@ You can verify the integrity of the installer by downloading it from the above U
 
 checksum -t sha256 -f './SchemaQuench-net481.zip'
 
-The checksum should be: 696724149DF5B10222CF05906E91FA9B2D57B5237B0B9BECA3E9F647D0329368
+The checksum should be: 1C4885975EAE7A3ABA0A14EC9B3ACE8D78144399ED8693E35DB83278831ACFDD
 
 The LICENSE.txt file is available at:
 

@@ -12,7 +12,7 @@ You can verify the integrity of the installer by downloading it from the above U
 
 checksum -t sha256 -f './SchemaTongs-net9.0.zip'
 
-The checksum should be: BF9513C27CC768ACD0A4058EBC2FE7054DB65FBA1D1BB5B4B8A264EE0A018E8E
+The checksum should be: 82E1A9E845C8DACC5495FEDCC1DFAC54E0E7FD347F93495EA950D8D84365AF53
 
 The LICENSE.txt file is available at:
 
