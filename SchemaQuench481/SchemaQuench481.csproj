@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFrameworks>net9.0;net481</TargetFrameworks>
+    <TargetFrameworks>net481</TargetFrameworks>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <LangVersion>default</LangVersion>
@@ -14,7 +14,7 @@
     <Company>SchemaSmith, LLC</Company>
     <Product>SchemaQuench</Product>
     <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
-    <ApplicationIcon>images\SchemaQuench.ico</ApplicationIcon>
+    <ApplicationIcon>..\SchemaQuench\images\SchemaQuench.ico</ApplicationIcon>
     <RunPostBuildEvent>OnOutputUpdated</RunPostBuildEvent>
     <AssemblyName>SchemaQuench</AssemblyName>
   </PropertyGroup>
@@ -24,7 +24,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="images\SchemaQuench.ico" />
+    <Compile Include="..\SchemaQuench\DatabaseQuencher.cs" Link="DatabaseQuencher.cs" />
+    <Compile Include="..\SchemaQuench\ProductQuencher.cs" Link="ProductQuencher.cs" />
+    <Compile Include="..\SchemaQuench\Program.cs" Link="Program.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\SchemaQuench\images\SchemaQuench.ico" />
   </ItemGroup>
 
   <ItemGroup>
