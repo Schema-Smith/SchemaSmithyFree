@@ -1,7 +1,10 @@
-﻿using System.Data;
+﻿using System;
+using System.Data;
+using System.Threading;
+using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
 using Schema.Isolators;
-using Microsoft.Extensions.Configuration;
+using Schema.Utility;
 
 namespace SchemaQuench.IntegrationTests;
 
@@ -22,7 +25,21 @@ public class BaseTableQuenchTests
     {
         cmd.CommandTimeout = 300;
         cmd.CommandText = $"EXEC SchemaSmith.TableQuench @ProductName = '{_productName}', @TableDefinitions = '{json.Replace("'", "''")}', @DropTablesRemovedFromProduct = 0, @DropUnknownIndexes = 0";
-        cmd.ExecuteNonQuery();
+        var retry = true;
+        var tries = 0;
+        while (retry && tries++ < 10)
+        {
+            try
+            {
+                cmd.ExecuteNonQuery();
+                retry = false;
+            }
+            catch (Exception e)
+            {
+                if (!e.Message.ContainsIgnoringCase("has been chosen as the deadlock victim")) throw;
+                Thread.Sleep(1000);
+            }
+        }
     }
 
     protected static string GetColumnDataType(IDbCommand cmd, string tableName, string columnName)
