@@ -3,7 +3,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
     <id>schematongs-netfx481</id>
-    <version>1.0.6</version>
+    <version>1.0.7</version>
     <packageSourceUrl>https://github.com/Schema-Smith/SchemaSmithyFree/blob/main/packaging/chocolatey/SchemaTongs-netfx481/schematongs-netfx481.nuspec</packageSourceUrl>
     <docsUrl>https://github.com/Schema-Smith/SchemaSmithyFree/wiki</docsUrl>
 	<mailingListUrl>https://github.com/Schema-Smith/SchemaSmithyFree/discussions</mailingListUrl>
@@ -81,7 +81,7 @@ Use SchemaSmithy to:
 
 Whether you’re modernizing a legacy application or building a greenfield platform, SchemaSmithy brings **discipline and agility** to your SQL Server schema lifecycle.
 
-Visit [SchemaSmith.com](https://SchemaSmith.com) for enterprise licensing, feature comparisons, and more.</description>
+Visit [SchemaSmith.com](https://SchemaSmith.com?utm_source=chocolatey&utm_content=wiki&utm_campaign=schematongs-netfx481) for enterprise licensing, feature comparisons, and more.</description>
 
   </metadata>
   <files>
