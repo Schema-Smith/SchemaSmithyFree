@@ -35,6 +35,42 @@ BEGIN TRY
     INTO #Tables
     FROM #TableDefinitions WITH (NOLOCK)
   
+  RAISERROR('Parse Columns from Json', 10, 1) WITH NOWAIT
+  DROP TABLE IF EXISTS #Columns
+  SELECT t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]), [DataType] = REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP'), 
+         [Nullable] = ISNULL(c.[Nullable], 0), c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
+         [Sparse] = ISNULL(c.[Sparse], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')), 
+         CONVERT(BIT, CASE WHEN NOT EXISTS (SELECT * FROM #Tables x WHERE x.[Name] = t.[Name] AND x.[Schema] = t.[Schema] AND x.NewTable = 1)
+                            AND COLUMNPROPERTY(OBJECT_ID(t.[Schema] + '.' + t.[Name], 'U'), SchemaSmith.fn_StripBracketWrapping([ColumnName]), 'ColumnId') IS NULL
+                           THEN 1 ELSE 0 END) AS NewColumn,
+         SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]) + ' ' +
+         -- For computed columns only the expression is needed
+         CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) <> '' THEN 'AS (' + ComputedExpression + ')' + CASE WHEN ISNULL(c.[Persisted], 0) = 1 THEN ' PERSISTED' ELSE '' END
+              -- Otherwise build the column definition
+              ELSE UPPER(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')) + CASE WHEN ISNULL(Nullable, 0) = 1 THEN ' NULL' ELSE ' NOT NULL' END +
+                   CASE WHEN RTRIM(ISNULL([Default], '')) <> '' THEN ' DEFAULT ' + [Default] ELSE '' END
+              END AS [ColumnScript]
+    INTO #Columns
+    FROM #TableDefinitions t WITH (NOLOCK)
+    CROSS APPLY OPENJSON(Columns) WITH (
+      [ColumnName] NVARCHAR(500) '$.Name',
+      [DataType] NVARCHAR(100) '$.DataType',
+      [Nullable] BIT '$.Nullable',
+      [Default] NVARCHAR(MAX) '$.Default',
+      [CheckExpression] NVARCHAR(MAX) '$.CheckExpression',
+      [ComputedExpression] NVARCHAR(MAX) '$.ComputedExpression',
+      [Persisted] BIT '$.Persisted',
+      [Sparse] BIT '$.Sparse',
+      [Collation] NVARCHAR(500) '$.Collation',
+      [DataMaskFunction] NVARCHAR(500) '$.DataMaskFunction'
+      ) c;
+
+  -- Don't try to apply tables without columns
+  DELETE FROM #Tables
+    WHERE NOT EXISTS (SELECT * FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = #Tables.[Schema] AND C.[TableName] = #Tables.[Name])
+  DELETE FROM #TableDefinitions
+    WHERE NOT EXISTS (SELECT * FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = #TableDefinitions.[Schema] AND C.[TableName] = #TableDefinitions.[Name])
+  
   RAISERROR('Parse Indexes from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #Indexes
   SELECT t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(NULLIF(RTRIM(i.[CompressionType]), ''), 'NONE'), 
@@ -80,36 +116,6 @@ BEGIN TRY
       [PrimaryIndex] NVARCHAR(500) '$.PrimaryIndex',
 	  [SecondaryIndexType] NVARCHAR(500) '$.SecondaryIndexType'
       ) i;
-  
-  RAISERROR('Parse Columns from Json', 10, 1) WITH NOWAIT
-  DROP TABLE IF EXISTS #Columns
-  SELECT t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]), [DataType] = REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP'), 
-         [Nullable] = ISNULL(c.[Nullable], 0), c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
-         [Sparse] = ISNULL(c.[Sparse], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')), 
-         CONVERT(BIT, CASE WHEN NOT EXISTS (SELECT * FROM #Tables x WHERE x.[Name] = t.[Name] AND x.[Schema] = t.[Schema] AND x.NewTable = 1)
-                            AND COLUMNPROPERTY(OBJECT_ID(t.[Schema] + '.' + t.[Name], 'U'), SchemaSmith.fn_StripBracketWrapping([ColumnName]), 'ColumnId') IS NULL
-                           THEN 1 ELSE 0 END) AS NewColumn,
-         SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]) + ' ' +
-         -- For computed columns only the expression is needed
-         CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) <> '' THEN 'AS (' + ComputedExpression + ')' + CASE WHEN ISNULL(c.[Persisted], 0) = 1 THEN ' PERSISTED' ELSE '' END
-              -- Otherwise build the column definition
-              ELSE UPPER(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')) + CASE WHEN ISNULL(Nullable, 0) = 1 THEN ' NULL' ELSE ' NOT NULL' END +
-                   CASE WHEN RTRIM(ISNULL([Default], '')) <> '' THEN ' DEFAULT ' + [Default] ELSE '' END
-              END AS [ColumnScript]
-    INTO #Columns
-    FROM #TableDefinitions t WITH (NOLOCK)
-    CROSS APPLY OPENJSON(Columns) WITH (
-      [ColumnName] NVARCHAR(500) '$.Name',
-      [DataType] NVARCHAR(100) '$.DataType',
-      [Nullable] BIT '$.Nullable',
-      [Default] NVARCHAR(MAX) '$.Default',
-      [CheckExpression] NVARCHAR(MAX) '$.CheckExpression',
-      [ComputedExpression] NVARCHAR(MAX) '$.ComputedExpression',
-      [Persisted] BIT '$.Persisted',
-      [Sparse] BIT '$.Sparse',
-      [Collation] NVARCHAR(500) '$.Collation',
-      [DataMaskFunction] NVARCHAR(500) '$.DataMaskFunction'
-      ) c;
 
   RAISERROR('Parse Foreign Keys from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #ForeignKeys
