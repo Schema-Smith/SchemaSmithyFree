@@ -133,7 +133,7 @@ public class ProductQuencher
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            var quencher = new DatabaseQuencher(_product.Name, template, $"{reader["name"]}", suppressKindligForgeForTesting, product.DropUnknownIndexes ? "1" : "0", _whatIfOnly);
+            var quencher = new DatabaseQuencher(_product.Name, template, $"{reader[0]}", suppressKindligForgeForTesting, product.DropUnknownIndexes ? "1" : "0", _whatIfOnly);
             dbList.Add(quencher);
         }
 
