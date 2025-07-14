@@ -6,8 +6,8 @@
 	  <Nullable>disable</Nullable>
 	  <LangVersion>default</LangVersion>
 	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-	  <Version>1.0.7</Version>
-	  <FileVersion>1.0.7</FileVersion>
+	  <Version>1.0.8</Version>
+	  <FileVersion>1.0.8</FileVersion>
 	  <Company>SchemaSmith, LLC</Company>
 	  <Product>Schema</Product>
 	  <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
