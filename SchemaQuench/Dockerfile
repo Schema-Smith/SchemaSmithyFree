@@ -17,4 +17,10 @@ RUN dotnet publish "SchemaQuench.csproj"  --framework net9.0 -c Release -o /app/
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+
+RUN useradd -u 1000 -r -s /bin/false appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
 ENTRYPOINT ["dotnet", "SchemaQuench.dll"]
