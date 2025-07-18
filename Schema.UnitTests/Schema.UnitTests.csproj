@@ -8,8 +8,8 @@
 	  <IsPackable>false</IsPackable>
 	  <IsTestProject>true</IsTestProject>
 	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-	  <Version>1.0.8</Version>
-	  <FileVersion>1.0.8</FileVersion>
+	  <Version>$(Version)</Version>
+	  <FileVersion>$(Version)</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
