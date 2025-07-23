@@ -17,6 +17,8 @@ public class Product
     public bool DropUnknownIndexes { get; set; } = false;
     public List<string> TemplateOrder { get; set; } = [];
     public Dictionary<string, string> ScriptTokens { get; set; } = [];
+    public string BaselineValidationScriopt { get; set; }
+    public string VersionStampScript { get; set; }
 
     [JsonIgnore]
     public string FilePath { get; set; }
@@ -60,6 +62,8 @@ public class Product
     {
         var scriptTokens = ScriptTokens.ToList();
         ValidationScript = TokenReplace(ValidationScript, scriptTokens);
+        BaselineValidationScriopt = TokenReplace(BaselineValidationScriopt, scriptTokens);
+        VersionStampScript = TokenReplace(VersionStampScript, scriptTokens);
     }
 
     public static string TokenReplace(string script, List<KeyValuePair<string, string>> scriptTokens)

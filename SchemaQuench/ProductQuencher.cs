@@ -66,7 +66,22 @@ public class ProductQuencher
                     throw new Exception("Invalid server for this product");
             }
 
+            if (!string.IsNullOrWhiteSpace(_product.BaselineValidationScriopt))
+            {
+                _progressLog.Info("Validate Baseline");
+                command.CommandText = _product.BaselineValidationScriopt;
+                if (!((bool?)command.ExecuteScalar() ?? false))
+                    throw new Exception("Invalid baseline for this release");
+            }
+
             _product.TemplateOrder.ForEach(templateName => QuenchTemplate(command, templateName, _product, suppressKindlingForgeForTesting));
+
+            if (!string.IsNullOrWhiteSpace(_product.VersionStampScript))
+            {
+                _progressLog.Info("Stamp product version");
+                command.CommandText = _product.VersionStampScript;
+                command.ExecuteNonQuery();
+            }
         }
         finally
         {
