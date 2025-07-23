@@ -14,6 +14,7 @@ public class Template
     public string DatabaseIdentificationScript { get; set; }
     public string VersionStampScript { get; set; }
     public bool UpdateFillFactor { get; set; } = true;
+    public string BaselineValidationScriopt { get; set; }
 
     [JsonIgnore]
     public List<ScriptFolder> ScriptFolders { get; } = GetTemplateFolders();
@@ -69,6 +70,7 @@ public class Template
 
         DatabaseIdentificationScript = Product.TokenReplace(DatabaseIdentificationScript, tokens);
         VersionStampScript = Product.TokenReplace(VersionStampScript, tokens);
+        BaselineValidationScriopt = Product.TokenReplace(BaselineValidationScriopt, tokens);
     }
 
     private void LoadTables()

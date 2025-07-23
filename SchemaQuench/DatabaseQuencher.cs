@@ -47,6 +47,15 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                     ForgeKindler.KindleTheForge(kindlingCommand);
                 }
 
+
+                if (!string.IsNullOrWhiteSpace(template.BaselineValidationScriopt))
+                {
+                    _progressLog.Info("  Validate Baseline");
+                    command.CommandText = template.BaselineValidationScriopt;
+                    if (!((bool?)command.ExecuteScalar() ?? false))
+                        throw new Exception("Invalid baseline for this release");
+                }
+
                 if (whatIfOnly != "1")
                 {
                     ProgressLog("  Quenching before database scripts");
