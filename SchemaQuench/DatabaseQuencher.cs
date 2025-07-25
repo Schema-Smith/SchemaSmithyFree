@@ -48,10 +48,10 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                 }
 
 
-                if (!string.IsNullOrWhiteSpace(template.BaselineValidationScriopt))
+                if (!string.IsNullOrWhiteSpace(template.BaselineValidationScript))
                 {
                     _progressLog.Info("  Validate Baseline");
-                    command.CommandText = template.BaselineValidationScriopt;
+                    command.CommandText = template.BaselineValidationScript;
                     if (!((bool?)command.ExecuteScalar() ?? false))
                         throw new Exception("Invalid baseline for this release");
                 }
