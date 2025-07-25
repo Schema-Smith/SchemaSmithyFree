@@ -66,10 +66,10 @@ public class ProductQuencher
                     throw new Exception("Invalid server for this product");
             }
 
-            if (!string.IsNullOrWhiteSpace(_product.BaselineValidationScriopt))
+            if (!string.IsNullOrWhiteSpace(_product.BaselineValidationScript))
             {
                 _progressLog.Info("Validate Baseline");
-                command.CommandText = _product.BaselineValidationScriopt;
+                command.CommandText = _product.BaselineValidationScript;
                 if (!((bool?)command.ExecuteScalar() ?? false))
                     throw new Exception("Invalid baseline for this release");
             }
