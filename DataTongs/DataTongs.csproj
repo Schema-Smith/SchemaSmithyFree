@@ -8,15 +8,17 @@
 	  <LangVersion>default</LangVersion>
 	  <Nullable>enable</Nullable>
 	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-	  <UserSecretsId>e821fe99-a762-4ea4-a7ea-5e64817550da</UserSecretsId>
 
-	  <Version>$(Version)</Version>
+  	  <Version>$(Version)</Version>
 	  <FileVersion>$(Version)</FileVersion>
 	  <Company>SchemaSmith, LLC</Company>
-	  <Product>SchemaTongs</Product>
+	  <Product>DataTongs</Product>
+	  <Description />
 	  <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
 	  <ApplicationIcon>images\SchemaTongs.ico</ApplicationIcon>
-      <AssemblyName>SchemaTongs</AssemblyName>
+	  <Configurations>Debug;Release;Demo</Configurations>
+      <AssemblyName>DataTongs</AssemblyName>
+      <UserSecretsId>93f7445c-f67f-4f9a-b918-05bb807ab545</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="images\SchemaTongs.ico" />
+    <ProjectReference Include="..\Schema\Schema.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,27 +36,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SqlServer.SqlManagementObjects" Version="172.64.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Schema\Schema.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 
   <Target Name="CleanLogFolders" BeforeTargets="Clean;PrepareForBuild;Build">
-	<ItemGroup>
-	  <_LogFolders Include="$(OutDir)\SchemaTongs.0*\*" />
-	</ItemGroup>
-	<RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
+    <ItemGroup>
+      <_LogFolders Include="$(OutDir)\DataTongs.0*\*" />
+    </ItemGroup>
+    <RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
   </Target>
 
   <Target Name="ZipOutputPath" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG'">
-    <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(OutputPath)\..\..\..\..\Release\SchemaTongs-$(TargetFramework).zip" Overwrite="true" />
+    <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(OutputPath)\..\..\..\..\Release\DataTongs-$(TargetFramework).zip" Overwrite="true" />
   </Target>
 </Project>
