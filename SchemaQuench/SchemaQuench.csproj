@@ -51,6 +51,6 @@
   </Target>
 
   <Target Name="ZipOutputPath" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG'">
-	  <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(OutputPath)\..\..\SchemaQuench-$(TargetFramework).zip" Overwrite="true" />
+	  <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(OutputPath)\..\..\..\..\Release\SchemaQuench-$(TargetFramework).zip" Overwrite="true" />
   </Target>
 </Project>
