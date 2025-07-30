@@ -23,6 +23,8 @@ public class Template
     [JsonIgnore]
     public List<SqlScript> ObjectScripts => ScriptFolders.Where(f => f.QuenchSlot == QuenchSlot.Objects).SelectMany(f => f.Scripts).ToList();
     [JsonIgnore]
+    public List<SqlScript> TableDataScripts => ScriptFolders.Where(f => f.QuenchSlot == QuenchSlot.TableData).SelectMany(f => f.Scripts).ToList();
+    [JsonIgnore]
     public List<SqlScript> AfterScripts => ScriptFolders.Where(f => f.QuenchSlot == QuenchSlot.After).SelectMany(f => f.Scripts).ToList();
 
     [JsonIgnore]
@@ -98,6 +100,7 @@ public class Template
                 new ScriptFolder { FolderPath = "Procedures", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "Triggers", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "DDLTriggers", QuenchSlot = QuenchSlot.Objects },
+                new ScriptFolder { FolderPath = "TableData", QuenchSlot = QuenchSlot.TableData },
                 new ScriptFolder { FolderPath = "MigrationScripts/After", QuenchSlot = QuenchSlot.After },
             ];
     }

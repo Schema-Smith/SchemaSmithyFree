@@ -80,6 +80,12 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                         QuenchDatabaseObjects(objectsCommand, template.ObjectScripts);
                     }
 
+                    if (template.TableDataScripts.Any(s => !s.HasBeenQuenched))
+                    {
+                        ProgressLog("  Quenching table data scripts");
+                        QuenchDatabaseObjects(command, template.TableDataScripts); // These loop and apply always like object scripts
+                    }
+
                     ProgressLog("  Quenching after database scripts");
                     QuenchTemplateScripts(command, "After", template.AfterScripts);
 
