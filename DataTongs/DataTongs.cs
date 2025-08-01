@@ -31,8 +31,8 @@ public class DataTongs
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
 
-        var mergeInsert = config["ShouldCast:MergeInsert"]?.ToLower() != "false";
-        var mergeUpdate = config["ShouldCast:MergeUpdata"]?.ToLower() != "false";
+        var mergeUpdate = config["ShouldCast:MergeUpdate"]?.ToLower() != "false";
+        var mergeDelete = config["ShouldCast:MergeDelete"]?.ToLower() != "false";
         var outputPath = Path.Combine(config["OutputPath"] ?? ".");
         DirectoryWrapper.GetFromFactory().CreateDirectory(outputPath);
 
@@ -43,6 +43,10 @@ public class DataTongs
             .AsEnumerable()
             .Where(x => x.Value != null)
             .Select(x => new KeyValuePair<string, string>(x.Key.Replace("Tables:", ""), x.Value!));
+        var tableFilters = config.GetSection("TableFilters")
+            .AsEnumerable()
+            .Where(x => !x.Key.Equals("TableFilters"))
+            .ToDictionary(t => t.Key.Replace("TableFilters:", ""), t => t.Value);
 
         _progressLog.Info("Starting DataTongs...");
         using var sourceConnection = GetConnection(sourceDb);
@@ -56,73 +60,96 @@ public class DataTongs
             var matchColumns = string.Join(" AND ", table.Value.Split(',').Select(c => $"Source.[{c.Trim().Trim(']', '[')}] = Target.[{c.Trim().Trim(']', '[')}]"));
             var orderColumns = string.Join(",", table.Value.Split(',').Select(c => $"[{c.Trim().Trim(']', '[')}]"));
 
-            cmd.CommandText = $"""
-SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' 
-                       THEN '[' + c.COLUMN_NAME + '].ToString() AS [' + c.COLUMN_NAME + '], [' + c.COLUMN_NAME + '].STSrid AS [' + c.COLUMN_NAME + '.STSrid]'
-                       ELSE '[' + c.COLUMN_NAME + ']' END, ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
-  FROM INFORMATION_SCHEMA.COLUMNS c
-  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
-  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
-                                                 AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
-    AND cc.[name] IS NULL
-	AND sc.is_rowguidcol = 0
-""";
-            var selectColumns = cmd.ExecuteScalar()?.ToString();
+            var selectColumns = GetSelectColumns(cmd, tableSchema, tableName);
+            tableFilters.TryGetValue(table.Key, out var filter);
+            var tableData = GetTableData(cmd, selectColumns, tableSchema, tableName, orderColumns, filter);
 
-            cmd.CommandText = $"""
-SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' 
-                      THEN 'geography::STGeomFromText([' + c.COLUMN_NAME + '], [' + c.COLUMN_NAME + '.STSrid]) AS [' + c.COLUMN_NAME + ']'
-                      ELSE '[' + c.COLUMN_NAME + ']' END, ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
-  FROM INFORMATION_SCHEMA.COLUMNS c
-  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
-  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
-                                                 AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
-    AND cc.[name] IS NULL
-    AND sc.is_rowguidcol = 0
-""";
-            var fromJsonSelectColumns = cmd.ExecuteScalar()?.ToString();
+            var mergeSQL = BuildMergeSql(cmd, tableSchema, tableName, tableData, matchColumns, mergeUpdate, mergeDelete, filter);
 
-            cmd.CommandText = $"""
-SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' THEN 'G' 
-                       WHEN c.DATA_TYPE = 'XML' THEN 'X' 
-                       ELSE '' END + 
-                  '[' + c.COLUMN_NAME + ']', ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
-  FROM INFORMATION_SCHEMA.COLUMNS c
-  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
-  LEFT JOIN sys.identity_columns ident WITH (NOLOCK) ON ident.[Name] = COLUMN_NAME
-                                                    AND ident.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
-                                                 AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
-    AND ident.[Name] IS NULL
-    AND cc.[name] IS NULL
-    AND sc.is_rowguidcol = 0
-""";
-            var updateColumns = cmd.ExecuteScalar()?.ToString();
+            FileWrapper.GetFromFactory().WriteAllText(Path.Combine(outputPath, $"Populate {tableSchema}.{tableName}.sql"), mergeSQL);
+        }
+        sourceConnection.Close();
+        _progressLog.Info("DataTongs completed successfully.");
+    }
 
-            cmd.CommandText = $"""
-SELECT STRING_AGG('        [' + c.COLUMN_NAME + ']', ',' + CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY c.COLUMN_NAME)
-  FROM INFORMATION_SCHEMA.COLUMNS c
-  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
-  LEFT JOIN sys.identity_columns ident WITH (NOLOCK) ON ident.[Name] = COLUMN_NAME
-                                                    AND ident.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
-                                                 AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
-    AND cc.[name] IS NULL
-    AND sc.is_rowguidcol = 0
-""";
-            var insertColumns = cmd.ExecuteScalar()?.ToString();
+    private static string BuildMergeSql(IDbCommand cmd, string tableSchema, string tableName, string? tableData, string matchColumns, bool mergeUpdate, bool mergeDelete, string? filter)
+    {
+        var fromJsonSelectColumns = GetFromJsonSelectColumns(cmd, tableSchema, tableName);
+        var insertColumns = GetInsertColumns(cmd, tableSchema, tableName);
+        var identityInsert = CheckIdentityInsertRequired(cmd, tableSchema, tableName);
+        var jsonColumns = GetJsonColumns(cmd, tableSchema, tableName);
 
-            cmd.CommandText = $"""
-SELECT CAST(CASE WHEN EXISTS (SELECT * FROM sys.identity_columns WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('{tableSchema}.{tableName}'))
-                 THEN 1 ELSE 0 END AS BIT)
-""";
-            var identityInsert = cmd.ExecuteScalar() as bool? ?? false;
+        var mergeSQL = $@"
+DECLARE @v_json NVARCHAR(MAX) = '{tableData?.Replace("'", "''")}';
 
-            cmd.CommandText = $"""
+{(identityInsert ? $"SET IDENTITY_INSERT [{tableSchema}].[{tableName}] ON;" : "")} 
+MERGE INTO [{tableSchema}].[{tableName}] AS Target
+USING (
+  SELECT {fromJsonSelectColumns}
+    FROM OPENJSON(@v_json)
+    WITH (
+{jsonColumns}
+    )
+) AS Source
+ON {matchColumns}
+";
+        if (mergeUpdate)
+        {
+            var updateColumns = GetUpdateColumns(cmd, tableSchema, tableName);
+            var updateCompare = string.Join(" AND ",
+                updateColumns!.Split(',').Select(c => c.StartsWith("G[")
+                    ? $"NOT (Target.{c.Substring(1)}.ToString() = Source.{c.Substring(1)}.ToString() OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
+                    : c.StartsWith("X[")
+                        ? $"NOT (CAST(Target.{c.Substring(1)} AS NVARCHAR(MAX)) = CAST(Source.{c.Substring(1)} AS NVARCHAR(MAX)) OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
+                        : $"NOT (Target.{c} = Source.{c} OR (Target.{c} IS NULL AND Source.{c} IS NULL))"));
+
+            mergeSQL += $@"
+
+WHEN MATCHED AND ({updateCompare}) THEN
+  UPDATE SET
+{string.Join(",\r\n", updateColumns!.Split(',').Select(c => $"        {c.Replace("G[", "[").Replace("X[", "[")} = Source.{c.Replace("G[", "[").Replace("X[", "[")}"))}
+";
+        }
+
+        mergeSQL += $@"
+
+WHEN NOT MATCHED THEN
+  INSERT (
+{insertColumns}
+  ) VALUES (
+{insertColumns!.Replace("[", "Source.[")}  
+  )
+";
+
+        if (mergeDelete)
+        {
+            mergeSQL += $@"
+ 
+ WHEN NOT MATCHED BY SOURCE{(string.IsNullOrWhiteSpace(filter) ? "" : $" AND ({filter})")} THEN
+   DELETE 
+ ";
+        }
+
+        mergeSQL += $";\r\n{(identityInsert ? $"SET IDENTITY_INSERT [{tableSchema}].[{tableName}] OFF;" : "")} \r\n";
+        return mergeSQL;
+    }
+
+    private static string? GetTableData(IDbCommand cmd, string? selectColumns, string tableSchema, string tableName, string orderColumns, string? filter)
+    {
+        cmd.CommandText = $@"
+SELECT CAST((
+SELECT {selectColumns} 
+  FROM [{tableSchema}].[{tableName}] WITH (NOLOCK) 
+  {(string.IsNullOrWhiteSpace(filter) ? "" : $"WHERE {filter}")}
+  ORDER BY {orderColumns}
+  FOR JSON AUTO) AS NVARCHAR(MAX))
+";
+        return cmd.ExecuteScalar()?.ToString()!.Replace("},{", "},\r\n{").Replace("[{", "[\r\n{").Replace("}]", "}\r\n]");
+    }
+
+    private static string? GetJsonColumns(IDbCommand cmd, string tableSchema, string tableName)
+    {
+        cmd.CommandText = $@"
 SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' + 
        REPLACE(REPLACE(UPPER(USER_TYPE), 'HIERARCHYID', 'NVARCHAR(4000)'), 'GEOGRAPHY', 'NVARCHAR(4000)') + 
            CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
@@ -147,61 +174,88 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
                                                  AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
   WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
     AND cc.[name] IS NULL
-""";
-            var jsonColumns = cmd.ExecuteScalar()?.ToString();
+@";
+        return cmd.ExecuteScalar()?.ToString();
+    }
 
-            cmd.CommandText = $"""
-SELECT CAST((
-SELECT {selectColumns} 
-  FROM [{tableSchema}].[{tableName}] WITH (NOLOCK) 
-  ORDER BY {orderColumns}
-  FOR JSON AUTO) AS NVARCHAR(MAX))
-""";
-            var tableData = cmd.ExecuteScalar()?.ToString()!.Replace("},{", "},\r\n{").Replace("[{", "[\r\n{").Replace("}]", "}\r\n]");
+    private static bool CheckIdentityInsertRequired(IDbCommand cmd, string tableSchema, string tableName)
+    {
+        cmd.CommandText = $@"
+SELECT CAST(CASE WHEN EXISTS (SELECT * FROM sys.identity_columns WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('{tableSchema}.{tableName}'))
+                 THEN 1 ELSE 0 END AS BIT)
+";
+        return cmd.ExecuteScalar() as bool? ?? false;
+    }
 
-            var mergeSQL = $"""
-DECLARE @v_json NVARCHAR(MAX) = '{tableData?.Replace("'", "''")}';
+    private static string? GetInsertColumns(IDbCommand cmd, string tableSchema, string tableName)
+    {
+        cmd.CommandText = $@"
+SELECT STRING_AGG('        [' + c.COLUMN_NAME + ']', ',' + CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY c.COLUMN_NAME)
+  FROM INFORMATION_SCHEMA.COLUMNS c
+  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
+  LEFT JOIN sys.identity_columns ident WITH (NOLOCK) ON ident.[Name] = COLUMN_NAME
+                                                    AND ident.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
+  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
+                                                 AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
+  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+    AND cc.[name] IS NULL
+    AND sc.is_rowguidcol = 0
+";
+        return cmd.ExecuteScalar()?.ToString();
+    }
 
-{(identityInsert ? $"SET IDENTITY_INSERT [{tableSchema}].[{tableName}] ON;" : "")} 
-MERGE INTO [{tableSchema}].[{tableName}] AS Target
-USING (
-  SELECT {fromJsonSelectColumns}
-    FROM OPENJSON(@v_json)
-    WITH (
-{jsonColumns}
-    )
-) AS Source
-ON {matchColumns}
-""";
-            var updateCompare = string.Join(" AND ",
-                updateColumns!.Split(',').Select(c => c.StartsWith("G[")
-                    ? $"NOT (Target.{c.Substring(1)}.ToString() = Source.{c.Substring(1)}.ToString() OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
-                    : c.StartsWith("X[") 
-                        ? $"NOT (CAST(Target.{c.Substring(1)} AS NVARCHAR(MAX)) = CAST(Source.{c.Substring(1)} AS NVARCHAR(MAX)) OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
-                        : $"NOT (Target.{c} = Source.{c} OR (Target.{c} IS NULL AND Source.{c} IS NULL))"));
-            if (mergeUpdate)
-                mergeSQL += $"""
+    private static string? GetUpdateColumns(IDbCommand cmd, string tableSchema, string tableName)
+    {
+        cmd.CommandText = $@"
+SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' THEN 'G' 
+                       WHEN c.DATA_TYPE = 'XML' THEN 'X' 
+                       ELSE '' END + 
+                  '[' + c.COLUMN_NAME + ']', ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
+  FROM INFORMATION_SCHEMA.COLUMNS c
+  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
+  LEFT JOIN sys.identity_columns ident WITH (NOLOCK) ON ident.[Name] = COLUMN_NAME
+                                                    AND ident.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
+  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
+                                                 AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
+  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+    AND ident.[Name] IS NULL
+    AND cc.[name] IS NULL
+    AND sc.is_rowguidcol = 0
+";
+        return cmd.ExecuteScalar()?.ToString();
+    }
 
-WHEN MATCHED AND ({updateCompare}) THEN
-  UPDATE SET
-{string.Join(",\r\n", updateColumns!.Split(',').Select(c => $"        {c.Replace("G[", "[").Replace("X[", "[")} = Source.{c.Replace("G[", "[").Replace("X[", "[")}"))}
-""";
+    private static string? GetFromJsonSelectColumns(IDbCommand cmd, string tableSchema, string tableName)
+    {
+        cmd.CommandText = $@"
+SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' 
+                      THEN 'geography::STGeomFromText([' + c.COLUMN_NAME + '], [' + c.COLUMN_NAME + '.STSrid]) AS [' + c.COLUMN_NAME + ']'
+                      ELSE '[' + c.COLUMN_NAME + ']' END, ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
+  FROM INFORMATION_SCHEMA.COLUMNS c
+  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
+  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
+                                                 AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
+  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+    AND cc.[name] IS NULL
+    AND sc.is_rowguidcol = 0
+";
+        return cmd.ExecuteScalar()?.ToString();
+    }
 
-            if (mergeInsert)
-                mergeSQL += $"""
-
-WHEN NOT MATCHED THEN
-  INSERT (
-{insertColumns}
-  ) VALUES (
-{insertColumns!.Replace("[", "Source.[")}  
-  )
-""";
-            mergeSQL += $";\r\n{(identityInsert ? $"SET IDENTITY_INSERT [{tableSchema}].[{tableName}] OFF;" : "")} \r\n";
-
-            FileWrapper.GetFromFactory().WriteAllText(Path.Combine(outputPath, $"Populate {tableSchema}.{tableName}.sql"), mergeSQL);
-        }
-        sourceConnection.Close();
-        _progressLog.Info("DataTongs completed successfully.");
+    private static string? GetSelectColumns(IDbCommand cmd, string tableSchema, string tableName)
+    {
+        cmd.CommandText = $@"
+SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' 
+                       THEN '[' + c.COLUMN_NAME + '].ToString() AS [' + c.COLUMN_NAME + '], [' + c.COLUMN_NAME + '].STSrid AS [' + c.COLUMN_NAME + '.STSrid]'
+                       ELSE '[' + c.COLUMN_NAME + ']' END, ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
+  FROM INFORMATION_SCHEMA.COLUMNS c
+  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
+  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
+                                                 AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
+  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+    AND cc.[name] IS NULL
+	AND sc.is_rowguidcol = 0
+";
+        return cmd.ExecuteScalar()?.ToString();
     }
 }
