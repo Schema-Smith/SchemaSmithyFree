@@ -10,6 +10,12 @@
         "DropUnknownIndexes": {
             "type": "boolean"
         },
+        "VersionStampScript": {
+            "type": "string"
+        },
+        "BaselineValidationScript": {
+            "type": "string"
+        },
         "TemplateOrder": {
             "type": "array",
             "items": {

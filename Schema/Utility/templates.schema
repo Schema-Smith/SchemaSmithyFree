@@ -12,6 +12,9 @@
         },
         "UpdateFillFactor": {
             "type": "boolean"
+        },
+        "BaselineValidationScript": {
+            "type": "string"
         }
     },
   "additionalProperties": false,
