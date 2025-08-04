@@ -174,7 +174,7 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
                                                  AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
   WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
     AND cc.[name] IS NULL
-@";
+";
         return cmd.ExecuteScalar()?.ToString();
     }
 
