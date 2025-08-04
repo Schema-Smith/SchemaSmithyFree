@@ -54,7 +54,7 @@
 	<RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
   </Target>
 
-  <Target Name="ZipOutputPath" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG'">
+  <Target Name="ZipOutputPath" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG' And Exists('$(OutputPath)\..\..\..\..\Release')">
     <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(OutputPath)\..\..\..\..\Release\SchemaTongs-$(TargetFramework).zip" Overwrite="true" />
   </Target>
 </Project>
