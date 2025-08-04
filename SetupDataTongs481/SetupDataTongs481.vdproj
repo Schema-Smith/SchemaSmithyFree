@@ -37,13 +37,21 @@
         "PrivateKeyFile" = "8:"
         "TimeStampServer" = "8:"
         "InstallerBootstrapper" = "3:2"
+            "BootstrapperCfg:{63ACBE69-63AA-4F98-B2B6-99F9E24495F2}"
+            {
+            "Enabled" = "11:TRUE"
+            "PromptEnabled" = "11:TRUE"
+            "PrerequisitesLocation" = "2:1"
+            "Url" = "8:"
+            "ComponentsUrl" = "8:"
+            }
         }
         "Release"
         {
         "DisplayName" = "8:Release"
         "IsDebugOnly" = "11:FALSE"
         "IsReleaseOnly" = "11:TRUE"
-        "OutputFilename" = "8:..\\Release\\SetupDataTongs481-net481.msi"
+        "OutputFilename" = "8:..\\Release\\SetupDataTongs-net481.msi"
         "PackageFilesAs" = "3:2"
         "PackageFileSize" = "3:-2147483648"
         "CabType" = "3:1"
@@ -167,7 +175,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:DataTongs"
         "ProductCode" = "8:{B0DFE489-D4C1-4BB3-9C31-A27BD325DA4C}"
-        "PackageCode" = "8:{631A421F-FAD2-4325-A60B-050C8516D5B5}"
+        "PackageCode" = "8:{F920227B-085E-4314-AB06-5BCA3645C407}"
         "UpgradeCode" = "8:{F282AD00-417E-47ED-AC90-AA34CDC77041}"
         "AspNetVersion" = "8:"
         "RestartWWWService" = "11:FALSE"
