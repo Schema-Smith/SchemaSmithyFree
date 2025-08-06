@@ -31,6 +31,7 @@ public class DataTongs
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
 
+        var disableTriggers = config["ShouldCast:DisableTriggers"]?.ToLower() == "true";
         var mergeUpdate = config["ShouldCast:MergeUpdate"]?.ToLower() != "false";
         var mergeDelete = config["ShouldCast:MergeDelete"]?.ToLower() != "false";
         var outputPath = Path.Combine(config["OutputPath"] ?? ".");
@@ -64,7 +65,7 @@ public class DataTongs
             tableFilters.TryGetValue(table.Key, out var filter);
             var tableData = GetTableData(cmd, selectColumns, tableSchema, tableName, orderColumns, filter);
 
-            var mergeSQL = BuildMergeSql(cmd, tableSchema, tableName, tableData, matchColumns, mergeUpdate, mergeDelete, filter);
+            var mergeSQL = BuildMergeSql(cmd, tableSchema, tableName, tableData, matchColumns, disableTriggers, mergeUpdate, mergeDelete, filter);
 
             FileWrapper.GetFromFactory().WriteAllText(Path.Combine(outputPath, $"Populate {tableSchema}.{tableName}.sql"), mergeSQL);
         }
@@ -72,7 +73,7 @@ public class DataTongs
         _progressLog.Info("DataTongs completed successfully.");
     }
 
-    private static string BuildMergeSql(IDbCommand cmd, string tableSchema, string tableName, string? tableData, string matchColumns, bool mergeUpdate, bool mergeDelete, string? filter)
+    private static string BuildMergeSql(IDbCommand cmd, string tableSchema, string tableName, string? tableData, string matchColumns, bool disableTriggers, bool mergeUpdate, bool mergeDelete, string? filter)
     {
         var fromJsonSelectColumns = GetFromJsonSelectColumns(cmd, tableSchema, tableName);
         var insertColumns = GetInsertColumns(cmd, tableSchema, tableName);
@@ -82,6 +83,7 @@ public class DataTongs
         var mergeSQL = $@"
 DECLARE @v_json NVARCHAR(MAX) = '{tableData?.Replace("'", "''")}';
 
+{(disableTriggers ? $"ALTER TABLE [{tableSchema}].[{tableName}] DISABLE TRIGGER ALL;" : "")}
 {(identityInsert ? $"SET IDENTITY_INSERT [{tableSchema}].[{tableName}] ON;" : "")} 
 MERGE INTO [{tableSchema}].[{tableName}] AS Target
 USING (
@@ -130,7 +132,7 @@ WHEN NOT MATCHED THEN
  ";
         }
 
-        mergeSQL += $";\r\n{(identityInsert ? $"SET IDENTITY_INSERT [{tableSchema}].[{tableName}] OFF;" : "")} \r\n";
+        mergeSQL += $";\r\n{(identityInsert ? $"SET IDENTITY_INSERT [{tableSchema}].[{tableName}] OFF;\r\n" : "")}{(disableTriggers ? $"ALTER TABLE [{tableSchema}].[{tableName}] ENABLE TRIGGER ALL;\r\n" : "")}";
         return mergeSQL;
     }
 
