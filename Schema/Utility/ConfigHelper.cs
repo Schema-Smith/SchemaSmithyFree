@@ -32,7 +32,9 @@ public static class ConfigHelper
 
             var builder = new ConfigurationBuilder();
             builder.AddJsonFile("appsettings.json")
+#if DEBUG
                 .AddUserSecrets(Assembly.GetCallingAssembly())
+#endif
                 .AddEnvironmentVariables("QuenchSettings_");
 
             config = builder.Build();
