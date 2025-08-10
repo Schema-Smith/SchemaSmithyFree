@@ -51,3 +51,12 @@ jobs:
           path: TestResults
         # Use always() to always run this step to publish test results when there are test failures
         if: ${{ always() }}
+      - name: Test Summary
+        uses: dorny/test-reporter@v2
+        if: ${{ !cancelled() }}       # run this step even if previous step failed
+        with:
+          name: Test with dotnet      # Name of the check run which will be created
+          path: TestResults/*.trx     # Path to test results
+          reporter: dotnet-trx        # Format of test results
+          only-summary: 'true'
+          use-actions-summary: 'true'    
