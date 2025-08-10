@@ -109,7 +109,7 @@ ON {matchColumns}
 
 WHEN MATCHED AND ({updateCompare}) THEN
   UPDATE SET
-{string.Join(",\r\n", updateColumns!.Split(',').Select(c => $"        {c.Replace("G[", "[").Replace("X[", "[")} = Source.{c.Replace("G[", "[").Replace("X[", "[")}"))}
+{string.Join(",\r\n", updateColumns.Split(',').Select(c => $"        {c.Replace("G[", "[").Replace("X[", "[")} = Source.{c.Replace("G[", "[").Replace("X[", "[")}"))}
 ";
         }
 
