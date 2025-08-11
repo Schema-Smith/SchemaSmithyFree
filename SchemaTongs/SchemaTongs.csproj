@@ -34,7 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SqlServer.SqlManagementObjects" Version="172.64.0" />
+    <PackageReference Include="Microsoft.SqlServer.SqlManagementObjects" Version="172.76.0" />
   </ItemGroup>
 
   <ItemGroup>
