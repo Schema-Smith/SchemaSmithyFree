@@ -9,6 +9,7 @@
 	  <Nullable>enable</Nullable>
 	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 	  <UserSecretsId>e821fe99-a762-4ea4-a7ea-5e64817550da</UserSecretsId>
+	  <PublishAot>false</PublishAot>
 
 	  <Version>$(Version)</Version>
 	  <FileVersion>$(Version)</FileVersion>

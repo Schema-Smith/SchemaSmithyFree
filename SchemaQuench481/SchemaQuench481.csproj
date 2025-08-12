@@ -9,6 +9,8 @@
     <Nullable>enable</Nullable>
 	<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <UserSecretsId>ff52744b-86a4-4305-ad34-14b848e467f4</UserSecretsId>
+    <PublishAot>false</PublishAot>
+
     <Version>$(Version)</Version>
     <FileVersion>$(Version)</FileVersion>
     <Company>SchemaSmith, LLC</Company>
