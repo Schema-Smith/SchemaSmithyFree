@@ -6,13 +6,13 @@ in verifying that this package's contents are trustworthy.
 
 This package is publically available at our github repo at:
  
-https://github.com/Schema-Smith/SchemaSmithyFree/releases/download/v1.1.2/SchemaQuench-net9.0.zip
+https://github.com/Schema-Smith/SchemaSmithyFree/releases/download/v1.1.2/DataTongs-net9.0.zip
 
 You can verify the integrity of the installer by downloading it from the above URL and calculating its SHA256 checksum using the following command:
 
-checksum -t sha256 -f './SchemaQuench-net9.0.zip'
+checksum -t sha256 -f './DataTongs-net9.0.zip'
 
-The checksum should be: BDAB09798F1C8B8CDE5DB77556E78668C6B03013338847059D9239029879E15C
+The checksum should be: 1E194B70668258FD3AEC4325329DD0B78C8677E23FBE6F5C6609DDBB3965382F
 
 The LICENSE.txt file is available at:
 
