@@ -6,6 +6,8 @@
 	  <Nullable>disable</Nullable>
 	  <LangVersion>default</LangVersion>
 	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+	  <PublishAot>false</PublishAot>
+
 	  <Version>$(Version)</Version>
 	  <FileVersion>$(Version)</FileVersion>
 	  <Company>SchemaSmith, LLC</Company>
