@@ -3,7 +3,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
     <id>schemaquench-netfx481</id>
-    <version>1.0.7</version>
+    <version>1.1.2</version>
     <packageSourceUrl>https://github.com/Schema-Smith/SchemaSmithyFree/blob/main/packaging/chocolatey/SchemaQuench-netfx481/schemaquench-netfx481.nuspec</packageSourceUrl>
     <docsUrl>https://github.com/Schema-Smith/SchemaSmithyFree/wiki</docsUrl>
 	<mailingListUrl>https://github.com/Schema-Smith/SchemaSmithyFree/discussions</mailingListUrl>
@@ -41,6 +41,7 @@ Instead of fragile migration scripts and guesswork, SchemaSmithy gives you:
 | [SchemaTongs](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/SchemaTongs)   | Extracts schema metadata from SQL Server.                                                |
 | [SchemaHammer](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/SchemaHammer) | Edit and refactor metadata in a structured UI (available in the [[Enterprise Edition]]). |
 | [SchemaQuench](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/SchemaQuench) | Applies metadata to target servers with precision.                                       |
+| [DataTongs](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/DataTongs)       | Extracts data from SQL Server.                                                           |
 
 ---
 

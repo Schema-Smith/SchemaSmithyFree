@@ -2,23 +2,23 @@
 <!-- Do not remove this test for UTF-8: if “Ω” doesn’t appear as greek uppercase omega letter enclosed in quotation marks, you should use an editor that supports UTF-8, not this one. -->
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
-    <id>schematongs-dotnetcore9</id>
+    <id>datatongs-dotnetcore9</id>
     <version>1.1.2</version>
-    <packageSourceUrl>https://github.com/Schema-Smith/SchemaSmithyFree/blob/main/packaging/chocolatey/SchemaTongs-dotnetcore9/schematongs-dotnetcore9.nuspec</packageSourceUrl>
+    <packageSourceUrl>https://github.com/Schema-Smith/SchemaSmithyFree/blob/main/packaging/chocolatey/DataTongs-dotnetcore9/datatongs-dotnetcore9.nuspec</packageSourceUrl>
     <docsUrl>https://github.com/Schema-Smith/SchemaSmithyFree/wiki</docsUrl>
 	<mailingListUrl>https://github.com/Schema-Smith/SchemaSmithyFree/discussions</mailingListUrl>
 	<bugTrackerUrl>https://github.com/Schema-Smith/SchemaSmithyFree/issues</bugTrackerUrl>
     <owners>SchemaSmith, LLC</owners>
 
-    <title>SchemaTongs dotnetcore 9.0</title>
+    <title>DataTongs dotnetcore 9.0</title>
     <authors>SchemaSmith, LLC</authors>
     <projectUrl>https://SchemaSmith.com</projectUrl>
     <copyright>2025 SchemaSmith, LLC</copyright> 
     <licenseUrl>https://github.com/Schema-Smith/SchemaSmithyFree?tab=License-1-ov-file#readme</licenseUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <projectSourceUrl>https://github.com/Schema-Smith/SchemaSmithyFree</projectSourceUrl>
-    <tags>schematongs dotnetcore .net deployment mssql developer tools</tags>
-    <summary>Extracts schema metadata from SQL Server.</summary>
+    <tags>datatongs dotnetcore .net deployment mssql developer tools</tags>
+    <summary>Extracts data from SQL Server.</summary>
     <description>## Shape. Strengthen. Succeed.
 
 SchemaSmithy is a suite of opinionated, metadata-driven tools that treat **SQL Server schema** like source code—so your database can be versioned, automated, and deployed just like the rest of your tech stack.
@@ -40,8 +40,9 @@ Instead of fragile migration scripts and guesswork, SchemaSmithy gives you:
 | ------------------------------ | ---------------------------------------------------------------------------------------- |
 | [SchemaTongs](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/SchemaTongs)   | Extracts schema metadata from SQL Server.                                                |
 | [SchemaHammer](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/SchemaHammer) | Edit and refactor metadata in a structured UI (available in the [[Enterprise Edition]]). |
-| [SchemaQuench](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/SchemaQuench) | Applies metadata to target servers with precision.                                       |
+| [SchemaQuench](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/SchemaQuench) | Applies metadata to target servers with precision.                                       | 
 | [DataTongs](https://github.com/Schema-Smith/SchemaSmithyFree/wiki/DataTongs)       | Extracts data from SQL Server.                                                           |
+
 
 ---
 
