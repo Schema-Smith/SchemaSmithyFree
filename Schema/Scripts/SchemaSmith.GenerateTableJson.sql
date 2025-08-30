@@ -11,6 +11,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                    FROM sys.partitions AS p WITH (NOLOCK) 
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
+       '' AS [OldName],
 	   (SELECT * 
           FROM (SELECT '[' + c.COLUMN_NAME + ']' AS [Name],
                        UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
@@ -39,6 +40,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        sc.is_sparse AS [Sparse],
                        ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') AS [Collation],
                        ISNULL(mc.masking_function, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,
+                       '' AS [OldName],
 	                   '{' + (SELECT STRING_AGG(CAST('"' + [Name] + '": "' + CONVERT(NVARCHAR(MAX), [Value]) + '"' AS NVARCHAR(MAX)), ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Column', c.COLUMN_NAME) x) + '}' AS [ExtendedProperties]
                   FROM INFORMATION_SCHEMA.COLUMNS c WITH (NOLOCK)
                   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = st.[object_id] AND sc.[name] = c.COLUMN_NAME

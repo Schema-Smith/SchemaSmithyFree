@@ -24,4 +24,6 @@ public class Column
     public string Collation { get; set; }
     [JsonProperty(Order = 10)]
     public string DataMaskFunction { get; set; }
+    [JsonProperty(Order = 11)]
+    public string OldName { get; set; } = "";
 }

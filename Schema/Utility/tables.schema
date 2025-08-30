@@ -13,6 +13,9 @@
         "IsTemporal": {
             "type": "boolean"
         },
+        "OldName": {
+            "type": "string"
+        },
         "Columns": {
             "type": "array",
             "items": {
@@ -46,6 +49,9 @@
                         "type": "string"
                     },
                     "DataMaskFunction": {
+                        "type": "string"
+                    },
+                    "OldName": {
                         "type": "string"
                     },
                     "ExtendedProperties": {

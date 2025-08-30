@@ -13,13 +13,15 @@ BEGIN TRY
   RAISERROR('Parse Tables from Json', 10, 1) WITH NOWAIT
   DROP TABLE IF EXISTS #TableDefinitions
   SELECT [Schema] = SchemaSmith.fn_SafeBracketWrap(ISNULL([Schema], 'dbo')), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL(NULLIF(RTRIM([CompressionType]), ''), 'NONE'), 
-         [IsTemporal] = ISNULL([IsTemporal], 0), [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints]
+         [IsTemporal] = ISNULL([IsTemporal], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName]),
+         [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints]
     INTO #TableDefinitions
     FROM OPENJSON(@TableDefinitions) WITH (
       [Schema] NVARCHAR(500) '$.Schema',
       [Name] NVARCHAR(500) '$.Name',
       [CompressionType] NVARCHAR(100) '$.CompressionType',
       [IsTemporal] BIT '$.IsTemporal',
+      [OldName] NVARCHAR(500) '$.OldName',
 	  [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON,
 	  [XmlIndexes] NVARCHAR(MAX) '$.XmlIndexes' AS JSON,
       [Columns] NVARCHAR(MAX) '$.Columns' AS JSON,
@@ -30,8 +32,8 @@ BEGIN TRY
       ) t;
 
   DROP TABLE IF EXISTS #Tables
-  SELECT [Schema], [Name], [CompressionType], [IsTemporal],
-         CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable
+  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [OldName],
+         CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable
     INTO #Tables
     FROM #TableDefinitions WITH (NOLOCK)
   
@@ -39,7 +41,8 @@ BEGIN TRY
   DROP TABLE IF EXISTS #Columns
   SELECT t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]), [DataType] = REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP'), 
          [Nullable] = ISNULL(c.[Nullable], 0), c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
-         [Sparse] = ISNULL(c.[Sparse], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')), 
+         [Sparse] = ISNULL(c.[Sparse], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')),
+         [OldName] = SchemaSmith.fn_SafeBracketWrap(c.[OldName]),
          CONVERT(BIT, CASE WHEN NOT EXISTS (SELECT * FROM #Tables x WHERE x.[Name] = t.[Name] AND x.[Schema] = t.[Schema] AND x.NewTable = 1)
                             AND COLUMNPROPERTY(OBJECT_ID(t.[Schema] + '.' + t.[Name], 'U'), SchemaSmith.fn_StripBracketWrapping([ColumnName]), 'ColumnId') IS NULL
                            THEN 1 ELSE 0 END) AS NewColumn,
@@ -62,7 +65,8 @@ BEGIN TRY
       [Persisted] BIT '$.Persisted',
       [Sparse] BIT '$.Sparse',
       [Collation] NVARCHAR(500) '$.Collation',
-      [DataMaskFunction] NVARCHAR(500) '$.DataMaskFunction'
+      [DataMaskFunction] NVARCHAR(500) '$.DataMaskFunction',
+      [OldName] NVARCHAR(500) '$.OldName'
       ) c;
 
   -- Don't try to apply tables without columns
@@ -188,6 +192,22 @@ BEGIN TRY
   SELECT DISTINCT t.[Schema]
     INTO #SchemaList
     FROM #Tables t WITH (NOLOCK)
+
+  RAISERROR('Handle Table Renames', 10, 1) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Rename ' + T.[Schema] + '.' + T.[OldName] + ' to ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'EXEC sp_rename ''' + SchemaSmith.fn_StripBracketWrapping(T.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(T.[OldName]) + ''', ''' + SchemaSmith.fn_StripBracketWrapping(T.[Name]) + ''';' + CHAR(13) + CHAR(10) AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #Tables T WITH (NOLOCK)
+    WHERE OBJECT_ID(T.[Schema] + '.' + T.[OldName]) IS NOT NULL
+      AND OBJECT_ID(T.[Schema] + '.' + T.[Name]) IS NULL
+  IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
+
+  RAISERROR('Handle Column Renames', 10, 1) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Rename ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[OldName] + ' to ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'EXEC sp_rename ''' + SchemaSmith.fn_StripBracketWrapping(c.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(c.[TableName]) + '.' + SchemaSmith.fn_StripBracketWrapping(c.[OldName]) + ''', ''' + SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) + ''', ''COLUMN'';' + CHAR(13) + CHAR(10) AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #Columns c WITH (NOLOCK)
+    WHERE COLUMNPROPERTY(OBJECT_ID(c.[Schema] + '.' + c.[TableName]), c.[OldName], 'AllowsNull') IS NOT NULL
+      AND COLUMNPROPERTY(OBJECT_ID(c.[Schema] + '.' + c.[TableName]), c.[ColumnName], 'AllowsNull') IS NULL
+  IF @WhatIf = 1 PRINT @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Turn off Temporal Tracking for tables no longer defined temporal', 10, 1) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Turn OFF Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 1) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
