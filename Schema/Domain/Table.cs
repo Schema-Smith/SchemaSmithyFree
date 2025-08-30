@@ -29,6 +29,8 @@ public class Table
     public List<Statistic> Statistics { get; set; } = [];
     [JsonProperty(Order = 11)]
     public FullTextIndex FullTextIndex { get; set; }
+    [JsonProperty(Order = 12)]
+    public string OldName { get; set; } = "";
 
     public static Table Load(string filePath)
     {
