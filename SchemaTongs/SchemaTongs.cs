@@ -43,6 +43,7 @@ public class SchemaTongs
     private bool _includeFullTextStopLists;
     private bool _includeDDLTriggers;
     private bool _includeXmlSchemaCollections;
+    private string[] _objectsToCast = [];
 
     private IDbConnection GetConnection(string targetDb)
     {
@@ -74,6 +75,7 @@ public class SchemaTongs
         _includeFullTextStopLists = config["ShouldCast:StopLists"]?.ToLower() != "false";
         _includeDDLTriggers = config["ShouldCast:DDLTriggers"]?.ToLower() != "false";
         _includeXmlSchemaCollections = config["ShouldCast:XMLSchemaCollections"]?.ToLower() != "false";
+        _objectsToCast = (config["ObjectList"]?.ToLower() ?? "").Split(new []{ ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
 
         RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb);
         _templatePath = RepositoryHelper.UpdateOrInitTemplate(_productPath, config["Template:Name"], targetDb);
@@ -115,6 +117,7 @@ public class SchemaTongs
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (Microsoft.SqlServer.Management.Smo.Schema schema in sourceDb.Schemas)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(schema.Name.ToLower())) continue;
             if (schema.IsSystemObject || schema.Name.Contains(@"\") || schema.Name.EqualsIgnoringCase("SchemaSmith")) continue;
 
             var fileName = Path.Combine(castPath, $"{schema.Name}.sql");
@@ -132,12 +135,16 @@ public class SchemaTongs
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (UserDefinedDataType type in sourceDb.UserDefinedDataTypes)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(type.Name.ToLower()) && !_objectsToCast.Contains($"{type.Schema}.{type.Name}".ToLower())) continue;
+            
             var fileName = Path.Combine(castPath, $"{type.Schema}.{type.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", type.Script(_options).Cast<string>()));
         }
         foreach (UserDefinedTableType type in sourceDb.UserDefinedTableTypes)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(type.Name.ToLower()) && !_objectsToCast.Contains($"{type.Schema}.{type.Name}".ToLower())) continue;
+            
             var fileName = Path.Combine(castPath, $"{type.Schema}.{type.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", type.Script(_options).Cast<string>()));
@@ -152,6 +159,7 @@ public class SchemaTongs
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (UserDefinedFunction function in sourceDb.UserDefinedFunctions)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(function.Name.ToLower()) && !_objectsToCast.Contains($"{function.Schema}.{function.Name}".ToLower())) continue;
             if (function.IsSystemObject || function.IsEncrypted || function.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
 
             var fileName = Path.Combine(castPath, $"{function.Schema}.{function.Name}.sql");
@@ -182,6 +190,7 @@ GO
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (View view in sourceDb.Views)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(view.Name.ToLower()) && !_objectsToCast.Contains($"{view.Schema}.{view.Name}".ToLower())) continue;
             if (view.IsSystemObject || view.IsEncrypted || view.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
 
             var fileName = Path.Combine(castPath, $"{view.Schema}.{view.Name}.sql");
@@ -205,6 +214,7 @@ GO
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (StoredProcedure procedure in sourceDb.StoredProcedures)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(procedure.Name.ToLower()) && !_objectsToCast.Contains($"{procedure.Schema}.{procedure.Name}".ToLower())) continue;
             if (procedure.IsSystemObject || procedure.IsEncrypted || procedure.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
 
             var fileName = Path.Combine(castPath, $"{procedure.Schema}.{procedure.Name}.sql");
@@ -229,6 +239,7 @@ GO
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (Table table in sourceDb.Tables)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(table.Name.ToLower()) && !_objectsToCast.Contains($"{table.Schema}.{table.Name}".ToLower())) continue;
             if (table.IsSystemObject || table.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
 
             foreach (Trigger trigger in table.Triggers)
@@ -272,6 +283,8 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{reader["TABLE_NAME"]}".ToLower()) && !_objectsToCast.Contains($"{reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}".ToLower())) continue;
+
             _progressLog.Info($"  Cast Json for {reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}");
             commandJson.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{reader["TABLE_SCHEMA"]}', @p_Table = '{reader["TABLE_NAME"]}'";
 
@@ -299,6 +312,8 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (FullTextCatalog catalog in sourceDb.FullTextCatalogs)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(catalog.Name.ToLower())) continue;
+            
             var fileName = Path.Combine(castPath, $"{catalog.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", catalog.Script(_options).Cast<string>()));
@@ -312,6 +327,8 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (FullTextStopList list in sourceDb.FullTextStopLists)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(list.Name.ToLower())) continue;
+
             var fileName = Path.Combine(castPath, $"{list.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", list.Script(_options).Cast<string>()));
@@ -325,6 +342,8 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (DatabaseDdlTrigger trigger in sourceDb.Triggers)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(trigger.Name.ToLower())) continue;
+
             var fileName = Path.Combine(castPath, $"{trigger.Name}.sql");
             var sql = @$"SET ANSI_NULLS {(trigger.AnsiNullsStatus ? "ON" : "OFF")}
 SET QUOTED_IDENTIFIER {(trigger.QuotedIdentifierStatus ? "ON" : "OFF")}
@@ -345,6 +364,8 @@ GO
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (XmlSchemaCollection collection in sourceDb.XmlSchemaCollections)
         {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(collection.Name.ToLower()) && !_objectsToCast.Contains($"{collection.Schema}.{collection.Name}".ToLower())) continue;
+
             var fileName = Path.Combine(castPath, $"{collection.Schema}.{collection.Name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", collection.Script(_options).Cast<string>().Select(FormatXmlInScript)));

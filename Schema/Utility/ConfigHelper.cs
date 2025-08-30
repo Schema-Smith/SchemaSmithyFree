@@ -31,7 +31,8 @@ public static class ConfigHelper
             if (config != null) return config;
 
             var builder = new ConfigurationBuilder();
-            builder.AddJsonFile("appsettings.json")
+            var settingsFile = CommandLineParser.ValueOfSwitch("ConfigFile", null) ?? "appsettings.json";
+            builder.AddJsonFile(settingsFile)
 #if DEBUG
                 .AddUserSecrets(Assembly.GetCallingAssembly())
 #endif
