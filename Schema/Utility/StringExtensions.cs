@@ -20,6 +20,14 @@ public static class StringExtensions
 
     public static string ReplaceIgnoringCase(this string source, string find, string replace) => Regex.Replace(source, Regex.Escape(find), replace, RegexOptions.IgnoreCase);
 
+    public static string Unquote(this string value)
+    {
+        var result = value.Trim();
+        if (result.StartsWith("\"") && result.EndsWith("\""))
+            return result.Trim('"');
+        return value;
+    }
+
     public static Stream ToStream(this string str)
     {
         MemoryStream stream = new MemoryStream();
