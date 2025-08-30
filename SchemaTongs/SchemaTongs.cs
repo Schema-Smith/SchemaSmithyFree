@@ -239,12 +239,13 @@ GO
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         foreach (Table table in sourceDb.Tables)
         {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(table.Name.ToLower()) && !_objectsToCast.Contains($"{table.Schema}.{table.Name}".ToLower())) continue;
             if (table.IsSystemObject || table.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
 
             foreach (Trigger trigger in table.Triggers)
             {
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(trigger.Name.ToLower())) continue;
                 if (trigger.IsSystemObject || trigger.IsEncrypted) continue;
+
                 var fileName = Path.Combine(castPath, $"{table.Schema}.{table.Name}.{trigger.Name}.sql");
                 var sql = @$"SET ANSI_NULLS {(trigger.AnsiNullsStatus ? "ON" : "OFF")}
 SET QUOTED_IDENTIFIER {(trigger.QuotedIdentifierStatus ? "ON" : "OFF")}
