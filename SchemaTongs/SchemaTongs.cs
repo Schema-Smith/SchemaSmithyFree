@@ -75,7 +75,7 @@ public class SchemaTongs
         _includeFullTextStopLists = config["ShouldCast:StopLists"]?.ToLower() != "false";
         _includeDDLTriggers = config["ShouldCast:DDLTriggers"]?.ToLower() != "false";
         _includeXmlSchemaCollections = config["ShouldCast:XMLSchemaCollections"]?.ToLower() != "false";
-        _objectsToCast = (config["ObjectList"]?.ToLower() ?? "").Split(new []{ ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+        _objectsToCast = (config["ShouldCast:ObjectList"]?.ToLower() ?? "").Split(new []{ ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
 
         RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb);
         _templatePath = RepositoryHelper.UpdateOrInitTemplate(_productPath, config["Template:Name"], targetDb);

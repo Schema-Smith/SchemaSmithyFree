@@ -17,7 +17,7 @@ public static class LogBackup
             var ext = 0;
             var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
 
-            var cwd = Path.GetDirectoryName(assembly.Location) ?? @".\";
+            var cwd = CommandLineParser.ValueOfSwitch("LogPath", null) ?? Path.GetDirectoryName(assembly.Location) ?? @".\";
             backupDir = Path.Combine(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");
             while (directory.Exists(backupDir))
                 backupDir = Path.Combine(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");
