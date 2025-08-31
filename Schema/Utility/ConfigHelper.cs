@@ -1,9 +1,10 @@
 ﻿using System;
+using System.IO;
 using System.Reflection;
-using Schema.Isolators;
 using log4net;
 using log4net.Config;
 using Microsoft.Extensions.Configuration;
+using Schema.Isolators;
 
 namespace Schema.Utility;
 
@@ -12,6 +13,9 @@ public static class ConfigHelper
     public static void ConfigureLog4Net()
     {
         var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly() ?? Assembly.GetCallingAssembly());
+        var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+        var logDir = Path.GetDirectoryName(assembly.Location) ?? @".\";
+        GlobalContext.Properties["LogPath"] = (CommandLineParser.ValueOfSwitch("LogPath", null) ?? logDir).TrimEnd('\\', '/');
         try
         {
             using var configStream = ResourceLoader.Load("Log4Net.config").ToStream();

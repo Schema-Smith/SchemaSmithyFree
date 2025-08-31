@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
+using Schema.Isolators;
 
 namespace Schema.Utility;
 
@@ -69,6 +72,12 @@ public static class CommandLineParser
         return result;
     }
 
+    public static void HandleCommonSwitches(string app)
+    {
+        if (ContainsSwitch("v") || ContainsSwitch("ver") || ContainsSwitch("version")) ShowVersionAndExit(app);
+        if (ContainsSwitch("?") || ContainsSwitch("h") || ContainsSwitch("help")) ShowHelpAndExit(app);
+    }
+
     private static string ForceLeadingSpace(string commandLine)
     {
         if (!commandLine.StartsWith(" "))
@@ -99,5 +108,22 @@ public static class CommandLineParser
     private static string TrimKeyName(string s)
     {
         return s.TrimStart('/').TrimStart('-');
+    }
+
+    private static void ShowVersionAndExit(string app)
+    {
+        var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+        Console.WriteLine($"{app} - Version: {FileVersionInfo.GetVersionInfo(assembly.Location).FileVersion}");
+        EnvironmentWrapper.GetFromFactory().Exit(0);
+    }
+
+    private static void ShowHelpAndExit(string app)
+    {
+        Console.WriteLine($"{app}.exe [<command>]");
+        Console.WriteLine("  --version                Show the program version");
+        Console.WriteLine("  --LogPath:<logpath>      Path to write logs and create backup directories. The default is current path.");
+        Console.WriteLine("  --ConfigFile:<filepath>  Path and file name of the config file. The default is appsettings.json in the current path.");
+        Console.WriteLine("  --help                   Show the command line options");
+        EnvironmentWrapper.GetFromFactory().Exit(0);
     }
 }
