@@ -35,7 +35,7 @@ public class DatabaseQuencherTests
         connectionFactory.GetSqlConnection(Arg.Any<string>()).Returns(connection);
         connection.CreateCommand().Returns(command);
         var commands = new List<string>();
-        command.When(c => c.ExecuteNonQuery()).Do(c => commands.Add(command.CommandText));
+        command.When(c => c.ExecuteNonQuery()).Do(_ => commands.Add(command.CommandText));
 
         lock (FactoryContainer.SharedLockObject)
         {

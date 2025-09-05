@@ -58,7 +58,7 @@ public class TemplateTests
             FactoryContainer.Register(mockFileWrapper);
 
             var ex = Assert.Throws<Exception>(() => Template.Load("Test", TemplateTests.GetTestProduct()));
-            Assert.That(ex.Message, Is.EqualTo($"File {templateJsonFile} does not exist"));
+            Assert.That(ex!.Message, Is.EqualTo($"File {templateJsonFile} does not exist"));
 
             FactoryContainer.Clear();
         }
@@ -268,10 +268,10 @@ public class TemplateTests
             {
                 Assert.That(sqlFiles, Is.Not.Null);
                 Assert.That(sqlFiles, Has.Count.EqualTo(1));
-                Assert.That(sqlFiles?.First().Name, Is.EqualTo("AFile.sql"));
-                Assert.That(sqlFiles?.First().Batches, Has.Count.EqualTo(2));
-                Assert.That(sqlFiles?.First().Batches.First(), Is.EqualTo($"Batch One{Environment.NewLine}"));
-                Assert.That(sqlFiles?.First().Batches.Last(), Is.EqualTo($"Batch Two{Environment.NewLine}"));
+                Assert.That(sqlFiles.First().Name, Is.EqualTo("AFile.sql"));
+                Assert.That(sqlFiles.First().Batches, Has.Count.EqualTo(2));
+                Assert.That(sqlFiles.First().Batches.First(), Is.EqualTo($"Batch One{Environment.NewLine}"));
+                Assert.That(sqlFiles.First().Batches.Last(), Is.EqualTo($"Batch Two{Environment.NewLine}"));
             });
 
             FactoryContainer.Clear();

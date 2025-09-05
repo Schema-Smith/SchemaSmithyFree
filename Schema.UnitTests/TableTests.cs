@@ -17,7 +17,7 @@ public class TableTests
             FactoryContainer.Register(mockFileWrapper);
 
             var ex = Assert.Throws<Exception>(() => Table.Load("badPath"));
-            Assert.That(ex.Message, Contains.Substring("Error loading table from badPath"));
+            Assert.That(ex!.Message, Contains.Substring("Error loading table from badPath"));
 
             FactoryContainer.Clear();
         }

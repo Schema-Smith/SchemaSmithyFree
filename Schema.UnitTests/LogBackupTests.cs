@@ -71,7 +71,7 @@ public class LogBackupTests
         mockDirectoryWrapper.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>()).Returns(new[] { "TestApp - Progress.log" });
         var mockFileWrapper = Substitute.For<IFile>();
         mockFileWrapper.Exists(Arg.Any<string>()).Returns(false);
-        mockFileWrapper.When(f => f.Copy(Arg.Any<string>(), Arg.Any<string>())).Do(x => throw new Exception("Test Exception"));
+        mockFileWrapper.When(f => f.Copy(Arg.Any<string>(), Arg.Any<string>())).Do(_ => throw new Exception("Test Exception"));
 
         lock (FactoryContainer.SharedLockObject)
         {

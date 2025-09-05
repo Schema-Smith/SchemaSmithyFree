@@ -17,7 +17,7 @@ public class SqlScriptTests
             FactoryContainer.Register(mockFileWrapper);
 
             var ex = Assert.Throws<Exception>(() => SqlScript.Load("badPath"));
-            Assert.That(ex.Message, Is.EqualTo("File badPath does not exist"));
+            Assert.That(ex!.Message, Is.EqualTo("File badPath does not exist"));
 
             FactoryContainer.Clear();
         }
