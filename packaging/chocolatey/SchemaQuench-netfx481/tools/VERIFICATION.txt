@@ -6,13 +6,13 @@ in verifying that this package's contents are trustworthy.
 
 This package is publically available at our github repo at:
  
-https://github.com/Schema-Smith/SchemaSmithyFree/releases/download/v1.1.2/SchemaQuench-net481.zip
+https://github.com/Schema-Smith/SchemaSmithyFree/releases/download/v1.1.3/SchemaQuench-net481.zip
 
 You can verify the integrity of the installer by downloading it from the above URL and calculating its SHA256 checksum using the following command:
 
 checksum -t sha256 -f './SchemaQuench-net481.zip'
 
-The checksum should be: CD606B8DEE28F0037307005852FF3C877B4B30B1977C8449801630BDFF5488EB
+The checksum should be: 540985cca660652eb3c23453e428b5b70b8266937cf7be3cd752b4cdc7ec9a1e
 
 The LICENSE.txt file is available at:
 

@@ -6,13 +6,13 @@ in verifying that this package's contents are trustworthy.
 
 This package is publically available at our github repo at:
  
-https://github.com/Schema-Smith/SchemaSmithyFree/releases/download/v1.1.2/DataTongs-net9.0.zip
+https://github.com/Schema-Smith/SchemaSmithyFree/releases/download/v1.1.3/DataTongs-net9.0.zip
 
 You can verify the integrity of the installer by downloading it from the above URL and calculating its SHA256 checksum using the following command:
 
 checksum -t sha256 -f './DataTongs-net9.0.zip'
 
-The checksum should be: 1E194B70668258FD3AEC4325329DD0B78C8677E23FBE6F5C6609DDBB3965382F
+The checksum should be: b6c09479a66f6ac1eb1f17e86dc0cb20ae96224c4a21f2fe0e229f61b1712993
 
 The LICENSE.txt file is available at:
 
