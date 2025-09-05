@@ -30,7 +30,7 @@ public class ProductTests
             FactoryContainer.Register(mockDirectoryWrapper);
 
             var ex = Assert.Throws<Exception>(() => Product.Load());
-            Assert.That(ex.Message, Contains.Substring("Path not found badPath"));
+            Assert.That(ex!.Message, Contains.Substring("Path not found badPath"));
 
             FactoryContainer.Clear();
         }

@@ -1,6 +1,5 @@
 ﻿using Schema.Isolators;
 using Schema.DataAccess;
-using NUnit.Framework.Internal;
 using System.Collections.Generic;
 
 namespace Schema.UnitTests;
@@ -137,7 +136,7 @@ public class FactoryContainerTests
             IEnumerable<string> test = new string[10];
             FactoryContainer.Register(test);
 
-            var getTest = FactoryContainer.Resolve<IEnumerable<string>, string[]>();
+            var getTest = FactoryContainer.Resolve<IEnumerable<string>, string[]>() as string[];
             Assert.Multiple(() =>
             {
                 Assert.That(getTest, Is.Not.Null);
@@ -159,7 +158,7 @@ public class FactoryContainerTests
             FactoryContainer.Register(test); // registering by interface
             FactoryContainer.Register(test2); // registering by type
 
-            var getTest = FactoryContainer.Resolve<IEnumerable<string>, string[]>();
+            var getTest = FactoryContainer.Resolve<IEnumerable<string>, string[]>() as string[];
             Assert.Multiple(() =>
             {
                 Assert.That(getTest, Is.Not.Null);
@@ -222,7 +221,7 @@ public class FactoryContainerTests
             IEnumerable<string> test = new string[10];
             FactoryContainer.Register(test);
 
-            var getTest = FactoryContainer.ResolveOrCreate<IEnumerable<string>, string[]>();
+            var getTest = FactoryContainer.ResolveOrCreate<IEnumerable<string>, string[]>() as string[];
             Assert.Multiple(() =>
             {
                 Assert.That(getTest, Is.Not.Null);
@@ -244,7 +243,7 @@ public class FactoryContainerTests
             FactoryContainer.Register(test); // registering by interface
             FactoryContainer.Register(test2); // registering by type
 
-            var getTest = FactoryContainer.ResolveOrCreate<IEnumerable<string>, string[]>();
+            var getTest = FactoryContainer.ResolveOrCreate<IEnumerable<string>, string[]>() as string[];
             Assert.Multiple(() =>
             {
                 Assert.That(getTest, Is.Not.Null);
@@ -265,7 +264,7 @@ public class FactoryContainerTests
             var test2 = new string[10];
             FactoryContainer.Register(test2); // registering by type
 
-            var getTest = FactoryContainer.ResolveOrCreate<IEnumerable<string>, string[]>();
+            var getTest = FactoryContainer.ResolveOrCreate<IEnumerable<string>, string[]>() as string[];
             Assert.Multiple(() =>
             {
                 Assert.That(getTest, Is.Not.Null);

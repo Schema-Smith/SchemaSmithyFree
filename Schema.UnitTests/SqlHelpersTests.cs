@@ -84,7 +84,7 @@ GO
 DECLARE @x VARCHAR(100) = '
 GO";
         var ex = Assert.Throws<Exception>(() => SqlHelpers.SplitIntoBatches(sql));
-        Assert.That(ex.Message, Contains.Substring("Batch Parsing Failed"));
+        Assert.That(ex!.Message, Contains.Substring("Batch Parsing Failed"));
     }
 
     [Test]
@@ -95,7 +95,7 @@ GO
 /* Unterminated comment
 GO";
         var ex = Assert.Throws<Exception>(() => SqlHelpers.SplitIntoBatches(sql));
-        Assert.That(ex.Message, Contains.Substring("Batch Parsing Failed"));
+        Assert.That(ex!.Message, Contains.Substring("Batch Parsing Failed"));
     }
 
     [Test]

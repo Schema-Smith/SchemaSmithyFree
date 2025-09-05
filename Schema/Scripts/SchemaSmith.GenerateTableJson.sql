@@ -76,7 +76,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) AS [IncludeColumns],
 			   CASE WHEN has_filter = 1 THEN SchemaSmith.fn_StripParenWrapping(filter_definition) ELSE NULL END AS [FilterExpression],
 			   '{' + (SELECT STRING_AGG(CAST('"' + [Name] + '": "' + [Value] + '"' AS NVARCHAR(MAX)), ',') 
-                        FROM (SELECT COALESCE(i.[Name], c.[Name]) AS [Name], RTRIM(COALESCE(CONVERT(NVARCHAR(MAX), c.[Value]) + ' ', '') + COALESCE(CONVERT(NVARCHAR(MAX), i.[Value]), '')) AS [Value]
+                        FROM (SELECT ISNULL(i.[Name], c.[Name]) AS [Name], RTRIM(COALESCE(CONVERT(NVARCHAR(MAX), c.[Value]) + ' ', '') + COALESCE(CONVERT(NVARCHAR(MAX), i.[Value]), '')) AS [Value]
                                 FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Index', si.[Name]) i
                                 FULL OUTER JOIN fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Constraint', si.[Name]) c ON i.[Name] = c.[Name]) x)
                    + '}' AS [ExtendedProperties]

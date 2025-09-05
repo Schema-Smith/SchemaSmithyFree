@@ -16,7 +16,7 @@ public static class LongPathSupport
         // Windows supports both the windows and unix style path separators... normalize to windows style for simplicity
         path = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
 
-        // Sadly this is still not the default behavior for .NET in VS 2022, but this is how to make File.Copy handle long path names and it
+        // Sadly this is still not the default behavior for .NET in VS 2022, but this is how to make File.Copy handle long path names, and it
         // seems to be safe for short paths as well so we can force the long file path handling behavior for all file access
         //     https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation?tabs=registry
         return path.StartsWith(@"\\") ? $@"\\?\UNC\{path.Substring(2)}" : $@"\\?\{path}";
