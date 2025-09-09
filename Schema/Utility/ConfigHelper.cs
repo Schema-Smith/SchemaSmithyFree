@@ -40,7 +40,8 @@ public static class ConfigHelper
 #if DEBUG
                 .AddUserSecrets(Assembly.GetCallingAssembly())
 #endif
-                .AddEnvironmentVariables("QuenchSettings_");
+                .AddEnvironmentVariables("QuenchSettings_")
+                .AddEnvironmentVariables("SmithySettings_");
 
             config = builder.Build();
             FactoryContainer.Register(config);
