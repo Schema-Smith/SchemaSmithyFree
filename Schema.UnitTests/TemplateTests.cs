@@ -295,6 +295,6 @@ public class TemplateTests
 
     private static Product GetTestProduct()
     {
-        return new Product();
+        return new Product { FilePath = "SchemaPackagePath/product.json" };
     }
 }

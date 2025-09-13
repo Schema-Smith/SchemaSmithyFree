@@ -18,13 +18,13 @@ public class SqlScript
 
     public static SqlScript Load(string filePath)
     {
-        if (!FileWrapper.GetFromFactory().Exists(filePath))
+        if (!ProductFileWrapper.GetFromFactory().Exists(filePath))
             throw new Exception($"File {LongPathSupport.StripLongPathPrefix(filePath)} does not exist");
 
         try
         {
             var script = new SqlScript { Name = Path.GetFileName(filePath), FilePath = filePath };
-            script.Batches.AddRange(SqlHelpers.SplitIntoBatches(FileWrapper.GetFromFactory().ReadAllText(filePath)));
+            script.Batches.AddRange(SqlHelpers.SplitIntoBatches(ProductFileWrapper.GetFromFactory().ReadAllText(filePath)));
             return script;
         }
         catch (Exception e)
