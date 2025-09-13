@@ -10,13 +10,13 @@ services:
   update-testproduct:
     image: schemasmithyfree/schemaquench:${QUENCH_VERSION}
     environment:
-      - QuenchSettings_Target__Server=db
-      - QuenchSettings_Target__User=${MSSQL_SA_USERNAME}
-      - QuenchSettings_Target__Password=${MSSQL_SA_PASSWORD}
-      - QuenchSettings_SchemaPackagePath=/metadata
-      - QuenchSettings_ScriptTokens__MainDB=TestMain
-      - QuenchSettings_ScriptTokens__SecondaryDB=TestSecondary
-      - QuenchSettings_ScriptTokens__ReleaseVersion=1.0.0
+      - SmithySettings_Target__Server=db
+      - SmithySettings_Target__User=${MSSQL_SA_USERNAME}
+      - SmithySettings_Target__Password=${MSSQL_SA_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+      - SmithySettings_ScriptTokens__MainDB=TestMain
+      - SmithySettings_ScriptTokens__SecondaryDB=TestSecondary
+      - SmithySettings_ScriptTokens__ReleaseVersion=1.0.0
     volumes:
       - ./TestProducts/ValidProduct:/metadata
     depends_on:

@@ -14,9 +14,9 @@ namespace Schema.Domain
         public void LoadSqlFiles(string basePath)
         {
             var sqlFilePath = Path.Combine(basePath, FolderPath);
-            if (!DirectoryWrapper.GetFromFactory().Exists(sqlFilePath)) return;
+            if (!ProductDirectoryWrapper.GetFromFactory().Exists(sqlFilePath)) return;
 
-            var files = DirectoryWrapper.GetFromFactory().GetFiles(sqlFilePath, "*.sql", SearchOption.AllDirectories).OrderBy(x => x);
+            var files = ProductDirectoryWrapper.GetFromFactory().GetFiles(sqlFilePath, "*.sql", SearchOption.AllDirectories).OrderBy(x => x);
             Scripts.AddRange(files.Select(SqlScript.Load));
         }
     }

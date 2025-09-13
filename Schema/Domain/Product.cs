@@ -26,15 +26,21 @@ public class Product
     public static Product Load()
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-        var SchemaPackagePath = config["SchemaPackagePath"] ?? "";
-        if (string.IsNullOrWhiteSpace(SchemaPackagePath))
+        var schemaPackagePath = config["SchemaPackagePath"] ?? "";
+        if (string.IsNullOrWhiteSpace(schemaPackagePath))
             throw new Exception("SchemaPackagePath is not configured in appsettings.json or environment variables.");
 
-        if (!DirectoryWrapper.GetFromFactory().Exists(SchemaPackagePath))
-            throw new Exception($"SchemaPackagePath not found {SchemaPackagePath}");
+        if (ZipFileWrapper.IsValidZipFile(schemaPackagePath))
+        {
+            var zipFileWrapper = ZipFileWrapper.GetFromFactory(schemaPackagePath) as ZipFileWrapper;
+            _ = ZipDirectoryWrapper.GetFromFactory(zipFileWrapper?.ZipEntries);
+            schemaPackagePath = ""; // use root of zip
+        }
+        else if (!DirectoryWrapper.GetFromFactory().Exists(schemaPackagePath))
+            throw new Exception($"SchemaPackagePath not found {schemaPackagePath}");
 
-        var productFilePath = Path.Combine(SchemaPackagePath, "Product.json");
-        var product = JsonHelper.Load<Product>(productFilePath);
+        var productFilePath = Path.Combine(schemaPackagePath, "Product.json");
+        var product = JsonHelper.ProductLoad<Product>(productFilePath);
         product.FilePath = productFilePath;
         OverrideProductScriptTokens(config, product);
         product.ScriptTokens.Add("ProductName", product.Name);

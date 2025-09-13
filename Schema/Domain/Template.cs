@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using Schema.Isolators;
 using Schema.Utility;
-using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 
 namespace Schema.Domain;
@@ -39,12 +38,11 @@ public class Template
 
     public static Template Load(string templateName, Product product)
     {
-        var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-        var SchemaPackagePath = config["SchemaPackagePath"] ?? "";
+        var SchemaPackagePath = Path.GetDirectoryName(product.FilePath) ?? "";
 
         var templatePath = Path.Combine(SchemaPackagePath, "Templates", templateName);
         var templateFilePath = Path.Combine(templatePath, "Template.json");
-        var template = JsonHelper.Load<Template>(templateFilePath);
+        var template = JsonHelper.ProductLoad<Template>(templateFilePath);
         template.FilePath = templateFilePath;
 
         template.Load(product.ScriptTokens);
@@ -78,9 +76,9 @@ public class Template
     private void LoadTables()
     {
         var filePath = Path.Combine(Path.GetDirectoryName(FilePath) ?? "", "Tables");
-        if (!DirectoryWrapper.GetFromFactory().Exists(filePath)) return;
+        if (!ProductDirectoryWrapper.GetFromFactory().Exists(filePath)) return;
 
-        var files = DirectoryWrapper.GetFromFactory().GetFiles(filePath, "*.json", SearchOption.AllDirectories)
+        var files = ProductDirectoryWrapper.GetFromFactory().GetFiles(filePath, "*.json", SearchOption.AllDirectories)
             .OrderBy(x => x);
         Tables.AddRange(files.Select(Table.Load));
     }

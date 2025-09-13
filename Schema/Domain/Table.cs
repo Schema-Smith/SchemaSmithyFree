@@ -36,7 +36,7 @@ public class Table
     {
         try
         {
-            return JsonHelper.Load<Table>(filePath);
+            return JsonHelper.ProductLoad<Table>(filePath);
         }
         catch (Exception e)
         {
