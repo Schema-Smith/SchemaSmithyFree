@@ -16,6 +16,16 @@ namespace Schema.Utility
             return schema;
         }
 
+        public static T ProductLoad<T>(string filePath)
+        {
+            if (!ProductFileWrapper.GetFromFactory().Exists(filePath))
+                throw new Exception($"File {filePath} does not exist");
+
+            var text = ProductFileWrapper.GetFromFactory().ReadAllText(filePath);
+            var schema = JsonConvert.DeserializeObject<T>(text);
+            return schema;
+        }
+
         public static void Write<T>(string filePath, T obj)
         {
             var settings = new JsonSerializerSettings { DefaultValueHandling = DefaultValueHandling.Ignore, NullValueHandling = NullValueHandling.Ignore, Formatting = Formatting.Indented };
