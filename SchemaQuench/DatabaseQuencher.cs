@@ -74,10 +74,10 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
 
                 if (whatIfOnly != "1")
                 {
-                    if (template.ObjectScripts.Any(s => !s.HasBeenQuenched))
+                    if (template.AfterTablesObjectScripts.Any(s => !s.HasBeenQuenched))
                     {
-                        ProgressLog("  Quenching object scripts");
-                        QuenchDatabaseObjects(objectsCommand, template.ObjectScripts);
+                        ProgressLog("  Quenching remaining Objects and AfterTableObjects scripts");
+                        QuenchDatabaseObjects(objectsCommand, template.AfterTablesObjectScripts);
                     }
 
                     if (template.TableDataScripts.Any(s => !s.HasBeenQuenched))

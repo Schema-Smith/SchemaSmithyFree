@@ -224,7 +224,7 @@ public class TemplateTests
     [Test]
     public void ShouldLoadTriggers()
     {
-        ObjectLoadTest("Triggers");
+        AfterTablesObjectLoadTest("Triggers");
     }
 
     private const string templateJson = """
@@ -237,6 +237,11 @@ public class TemplateTests
     private static void ObjectLoadTest(string routinePath)
     {
         SqlFileLoadTest(QuenchSlot.Objects, routinePath);
+    }
+
+    private static void AfterTablesObjectLoadTest(string routinePath)
+    {
+        SqlFileLoadTest(QuenchSlot.AfterTablesObjects, routinePath);
     }
 
     private static void SqlFileLoadTest(QuenchSlot slot, string filePath)
