@@ -22,6 +22,9 @@ public class Template
     [JsonIgnore]
     public List<SqlScript> ObjectScripts => ScriptFolders.Where(f => f.QuenchSlot == QuenchSlot.Objects).SelectMany(f => f.Scripts).ToList();
     [JsonIgnore]
+    // Includes the objects scripts so that we can retry ALL remaining unapplied objects scripts
+    public List<SqlScript> AfterTablesObjectScripts => ScriptFolders.Where(f => f.QuenchSlot is QuenchSlot.Objects or QuenchSlot.AfterTablesObjects).SelectMany(f => f.Scripts).ToList();
+    [JsonIgnore]
     public List<SqlScript> TableDataScripts => ScriptFolders.Where(f => f.QuenchSlot == QuenchSlot.TableData).SelectMany(f => f.Scripts).ToList();
     [JsonIgnore]
     public List<SqlScript> AfterScripts => ScriptFolders.Where(f => f.QuenchSlot == QuenchSlot.After).SelectMany(f => f.Scripts).ToList();
@@ -96,8 +99,8 @@ public class Template
                 new ScriptFolder { FolderPath = "Functions", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "Views", QuenchSlot = QuenchSlot.Objects },
                 new ScriptFolder { FolderPath = "Procedures", QuenchSlot = QuenchSlot.Objects },
-                new ScriptFolder { FolderPath = "Triggers", QuenchSlot = QuenchSlot.Objects },
-                new ScriptFolder { FolderPath = "DDLTriggers", QuenchSlot = QuenchSlot.Objects },
+                new ScriptFolder { FolderPath = "Triggers", QuenchSlot = QuenchSlot.AfterTablesObjects },
+                new ScriptFolder { FolderPath = "DDLTriggers", QuenchSlot = QuenchSlot.AfterTablesObjects },
                 new ScriptFolder { FolderPath = "TableData", QuenchSlot = QuenchSlot.TableData },
                 new ScriptFolder { FolderPath = "MigrationScripts/After", QuenchSlot = QuenchSlot.After },
             ];
