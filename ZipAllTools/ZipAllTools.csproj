@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	  <OutputType>Exe</OutputType>
+	  <TargetFrameworks>net9.0;net481</TargetFrameworks>
+	  <ImplicitUsings>disable</ImplicitUsings>
+	  <Nullable>disable</Nullable>
+	  <LangVersion>default</LangVersion>
+	  <Nullable>enable</Nullable>
+	  <PublishAot>false</PublishAot>
+  </PropertyGroup>
+
+  <Target Name="ZipOutputPath" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG' And Exists('$(OutputPath)\..\..\..\..\Release')">
+    <ZipDirectory SourceDirectory="$(OutputPath)\..\..\..\..\Release\Zips\$(TargetFramework)" DestinationFile="$(OutputPath)\..\..\..\..\Release\AllTools-$(TargetFramework).zip" Overwrite="true" />
+  </Target>
+
+</Project>
