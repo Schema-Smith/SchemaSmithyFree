@@ -58,4 +58,11 @@
   <Target Name="ZipOutputPath" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG' And Exists('$(OutputPath)\..\..\..\..\Release')">
     <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(OutputPath)\..\..\..\..\Release\SchemaTongs-$(TargetFramework).zip" Overwrite="true" />
   </Target>
+
+  <Target Name="CopyOutputFiles" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG' And Exists('$(OutputPath)\..\..\..\..\Release')">
+    <ItemGroup>
+	    <MySourceFiles Include="$(OutputPath)\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(MySourceFiles)" DestinationFiles="@(MySourceFiles->'$(OutputPath)\..\..\..\..\Release\Zips\$(TargetFramework)\SchemaTongs\%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 </Project>

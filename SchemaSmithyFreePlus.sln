@@ -43,6 +43,14 @@ Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "SetupAll", "SetupAll\SetupA
 EndProject
 Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "SetupAll481", "SetupAll481\SetupAll481.vdproj", "{A4153208-F609-0053-6CEE-19E35930F54C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZipAllTools", "ZipAllTools\ZipAllTools.csproj", "{DDBBC25F-4780-4170-8B92-F66F851E6C4E}"
+	ProjectSection(ProjectDependencies) = postProject
+		{20699A84-CE83-46B1-991F-44C19F57A854} = {20699A84-CE83-46B1-991F-44C19F57A854}
+		{29F9A1B8-7B3F-41E9-B2A4-73BE5904C42E} = {29F9A1B8-7B3F-41E9-B2A4-73BE5904C42E}
+		{2AAFB2D1-B83D-CD20-8C64-FA7DC452288E} = {2AAFB2D1-B83D-CD20-8C64-FA7DC452288E}
+		{B53484E7-9400-4066-9AC8-1BFA5DE934B9} = {B53484E7-9400-4066-9AC8-1BFA5DE934B9}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -137,6 +145,10 @@ Global
 		{A4153208-F609-0053-6CEE-19E35930F54C}.Demo|Any CPU.ActiveCfg = Release
 		{A4153208-F609-0053-6CEE-19E35930F54C}.Release|Any CPU.ActiveCfg = Release
 		{A4153208-F609-0053-6CEE-19E35930F54C}.Release|Any CPU.Build.0 = Release
+		{DDBBC25F-4780-4170-8B92-F66F851E6C4E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DDBBC25F-4780-4170-8B92-F66F851E6C4E}.Demo|Any CPU.ActiveCfg = Release|Any CPU
+		{DDBBC25F-4780-4170-8B92-F66F851E6C4E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DDBBC25F-4780-4170-8B92-F66F851E6C4E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -54,4 +54,8 @@
     <PackageReference Include="System.IO.Compression" Version="4.3.0" />
   </ItemGroup>
 
+  <Target Name="CleanZips" BeforeTargets="Clean;PrepareForBuild;Build">
+    <RemoveDir Directories="$(OutputPath)\..\..\..\..\Release\Zips" Condition="Exists('$(OutputPath)\..\..\..\..\Release\Zips')" />
+  </Target>
+
 </Project>
