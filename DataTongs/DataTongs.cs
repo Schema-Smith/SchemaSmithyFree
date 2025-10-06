@@ -101,15 +101,19 @@ ON {matchColumns}
             var updateCompare = string.Join(" AND ",
                 updateColumns!.Split(',').Select(c => c.StartsWith("G[")
                     ? $"NOT (Target.{c.Substring(1)}.ToString() = Source.{c.Substring(1)}.ToString() OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
-                    : c.StartsWith("X[")
+                    : c.StartsWith("X[") || c.StartsWith("N[")
                         ? $"NOT (CAST(Target.{c.Substring(1)} AS NVARCHAR(MAX)) = CAST(Source.{c.Substring(1)} AS NVARCHAR(MAX)) OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
-                        : $"NOT (Target.{c} = Source.{c} OR (Target.{c} IS NULL AND Source.{c} IS NULL))"));
+                        : c.StartsWith("T[")
+                            ? $"NOT (CAST(Target.{c.Substring(1)} AS VARCHAR(MAX)) = CAST(Source.{c.Substring(1)} AS VARCHAR(MAX)) OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
+                            : c.StartsWith("I[")
+                                ? $"NOT (CAST(Target.{c.Substring(1)} AS VARBINARY(MAX)) = CAST(Source.{c.Substring(1)} AS VARBINARY(MAX)) OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
+                                : $"NOT (Target.{c} = Source.{c} OR (Target.{c} IS NULL AND Source.{c} IS NULL))"));
 
             mergeSQL += $@"
 
 WHEN MATCHED AND ({updateCompare}) THEN
   UPDATE SET
-{string.Join(",\r\n", updateColumns.Split(',').Select(c => $"        {c.Replace("G[", "[").Replace("X[", "[")} = Source.{c.Replace("G[", "[").Replace("X[", "[")}"))}
+{string.Join(",\r\n", updateColumns.Split(',').Select(c => $"        {c.Replace("G[", "[").Replace("X[", "[").Replace("N[", "[").Replace("T[", "[").Replace("I[", "[")} = Source.{c.Replace("G[", "[").Replace("X[", "[").Replace("N[", "[").Replace("T[", "[").Replace("I[", "[")}"))}
 ";
         }
 
@@ -153,7 +157,7 @@ SELECT {selectColumns}
     {
         cmd.CommandText = $@"
 SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' + 
-       REPLACE(REPLACE(UPPER(USER_TYPE), 'HIERARCHYID', 'NVARCHAR(4000)'), 'GEOGRAPHY', 'NVARCHAR(4000)') + 
+       REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(USER_TYPE), 'HIERARCHYID', 'NVARCHAR(4000)'), 'GEOGRAPHY', 'NVARCHAR(4000)'), 'NTEXT', 'NVARCHAR(MAX)'), 'TEXT', 'VARCHAR(MAX)'), 'IMAGE', 'VARBINARY(MAX)') + 
            CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
                 THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
                                 WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
@@ -211,6 +215,9 @@ SELECT STRING_AGG('        [' + c.COLUMN_NAME + ']', ',' + CHAR(13) + CHAR(10)) 
         cmd.CommandText = $@"
 SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' THEN 'G' 
                        WHEN c.DATA_TYPE = 'XML' THEN 'X' 
+                       WHEN c.DATA_TYPE = 'NTEXT' THEN 'N' 
+                       WHEN c.DATA_TYPE = 'TEXT' THEN 'T' 
+                       WHEN c.DATA_TYPE = 'IMAGE' THEN 'I' 
                        ELSE '' END + 
                   '[' + c.COLUMN_NAME + ']', ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
   FROM INFORMATION_SCHEMA.COLUMNS c
