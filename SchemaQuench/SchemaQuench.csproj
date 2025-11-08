@@ -14,7 +14,7 @@
     <Version>$(Version)</Version>
     <FileVersion>$(Version)</FileVersion>
     <Company>SchemaSmith, LLC</Company>
-    <Product>SchemaQuench</Product>
+    <Product>SchemaQuench MSSQL Community</Product>
     <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
     <ApplicationIcon>images\SchemaQuench.ico</ApplicationIcon>
     <RunPostBuildEvent>OnOutputUpdated</RunPostBuildEvent>

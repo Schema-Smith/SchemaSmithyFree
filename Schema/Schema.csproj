@@ -11,7 +11,7 @@
 	  <Version>$(Version)</Version>
 	  <FileVersion>$(Version)</FileVersion>
 	  <Company>SchemaSmith, LLC</Company>
-	  <Product>Schema</Product>
+	  <Product>Schema MSSQL Community</Product>
 	  <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
   </PropertyGroup>
 
