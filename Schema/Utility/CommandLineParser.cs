@@ -113,7 +113,7 @@ public static class CommandLineParser
     private static void ShowVersionAndExit(string app)
     {
         var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
-        Console.WriteLine($"{app} - Version: {FileVersionInfo.GetVersionInfo(assembly.Location).FileVersion}");
+        Console.WriteLine($"{app} MSSQL Community - Version: {FileVersionInfo.GetVersionInfo(assembly.Location).FileVersion}");
         EnvironmentWrapper.GetFromFactory().Exit(0);
     }
 

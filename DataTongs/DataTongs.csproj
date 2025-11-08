@@ -13,7 +13,7 @@
 	  <Version>$(Version)</Version>
 	  <FileVersion>$(Version)</FileVersion>
 	  <Company>SchemaSmith, LLC</Company>
-	  <Product>DataTongs</Product>
+	  <Product>DataTongs MSSQL Community</Product>
 	  <Description />
 	  <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
 	  <ApplicationIcon>images\SchemaTongs.ico</ApplicationIcon>
