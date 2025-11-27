@@ -10,5 +10,6 @@
         "SecondaryDB": "TestSecondary",
         "MainDB": "TestMain",
         "ReleaseVersion": "1.0.0"
-    }
+    },
+    "Platform": "MSSQL"
 }
