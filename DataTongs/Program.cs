@@ -10,7 +10,7 @@ public static class Program
         CommandLineParser.HandleCommonSwitches("DataTongs");
 
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
-        ConfigHelper.GetAppSettingsAndUserSecrets(LogFactory.GetLogger("ProgressLog").Info);
+        ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", LogFactory.GetLogger("ProgressLog").Info);
 
         new DataTongs().CastData();
         LogBackup.BackupLogsAndExit("DataTongs");

@@ -11,7 +11,7 @@ public static class Program
 
         var skipKindlingForge = args.Length > 0 && args[0] == "SkipKindlingForge";
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
-        ConfigHelper.GetAppSettingsAndUserSecrets(LogFactory.GetLogger("ProgressLog").Info);
+        ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench",LogFactory.GetLogger("ProgressLog").Info);
         new ProductQuencher().Quench(skipKindlingForge);
         LogBackup.BackupLogsAndExit("SchemaQuench");
     }

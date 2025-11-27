@@ -16,7 +16,7 @@ public class DataTongsTests
     [OneTimeSetUp]
     public void OneTimeSetup()
     {
-        var config = ConfigHelper.GetAppSettingsAndUserSecrets(null);
+        var config = ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", null);
         _connectionString = ConnectionString.Build(config["Source:Server"], "master", config["Source:User"], config["Source:Password"]);
         _integrationDb = GenerateUniqueDBName("DataTongs");
 
@@ -59,7 +59,7 @@ INSERT INTO [dbo].[TestTable] ([Id], [Name], Description)
             FactoryContainer.Register(file);
             FactoryContainer.Register(directory);
 
-            var config = ConfigHelper.GetAppSettingsAndUserSecrets(null);
+            var config = ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", null);
             config["Source:database"] = _integrationDb;
             config["Tables:dbo.TestTable"] = "Id";
 
