@@ -10,7 +10,7 @@ public static class Program
         CommandLineParser.HandleCommonSwitches("SchemaTongs");
 
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
-        ConfigHelper.GetAppSettingsAndUserSecrets(LogFactory.GetLogger("ProgressLog").Info);
+        ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", LogFactory.GetLogger("ProgressLog").Info);
 
         new SchemaTongs().CastTemplate();
         LogBackup.BackupLogsAndExit("SchemaTongs");

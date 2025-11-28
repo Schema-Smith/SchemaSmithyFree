@@ -18,7 +18,7 @@ public class SchemaTongsTests
     [OneTimeSetUp]
     public void OneTimeSetup()
     {
-        var config = ConfigHelper.GetAppSettingsAndUserSecrets(null);
+        var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", null);
         _connectionString = ConnectionString.Build(config["Source:Server"], "master", config["Source:User"], config["Source:Password"]);
         _integrationDb = GenerateUniqueDBName(config["Source:database"] ?? "TongsTest");
 
@@ -397,7 +397,7 @@ public class SchemaTongsTests
 
     private IConfigurationRoot SetupConfig()
     {
-        var config = ConfigHelper.GetAppSettingsAndUserSecrets(null);
+        var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", null);
         config["Source:database"] = _integrationDb;
 
         config["ShouldCast:Tables"] = "false";

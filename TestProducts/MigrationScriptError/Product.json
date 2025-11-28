@@ -7,5 +7,6 @@
     "ScriptTokens": {
         "MainDB": "TestMain",
         "ReleaseVersion": ""
-    }
+    },
+    "Platform": "MSSQL"
 }

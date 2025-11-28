@@ -27,7 +27,9 @@ public static class ConfigHelper
         }
     }
 
-    public static IConfigurationRoot GetAppSettingsAndUserSecrets(Action<string> logLine)
+    public const string Platform = "MSSQL";
+
+    public static IConfigurationRoot GetAppSettingsAndUserSecrets(string app, Action<string> logLine)
     {
         lock (FactoryContainer.SharedLockObject)
         {
@@ -45,6 +47,7 @@ public static class ConfigHelper
 
             config = builder.Build();
             FactoryContainer.Register(config);
+            logLine?.Invoke($"{app} {Platform} Community");
             ConfigurationLogger.LogConfiguration(config, logLine);
 
             return config;

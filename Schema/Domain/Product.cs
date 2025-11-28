@@ -19,6 +19,7 @@ public class Product
     public Dictionary<string, string> ScriptTokens { get; set; } = [];
     public string BaselineValidationScript { get; set; }
     public string VersionStampScript { get; set; }
+    public string Platform { get; set; } = ConfigHelper.Platform;
 
     [JsonIgnore]
     public string FilePath { get; set; }
@@ -41,6 +42,8 @@ public class Product
 
         var productFilePath = Path.Combine(schemaPackagePath, "Product.json");
         var product = JsonHelper.ProductLoad<Product>(productFilePath);
+        if (!product.Platform.EqualsIgnoringCase(ConfigHelper.Platform))
+            throw new Exception($"Product platform '{product.Platform}' does not match application platform '{ConfigHelper.Platform}'");
         product.FilePath = productFilePath;
         OverrideProductScriptTokens(config, product);
         product.ScriptTokens.Add("ProductName", product.Name);

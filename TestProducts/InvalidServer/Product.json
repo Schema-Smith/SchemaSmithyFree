@@ -4,5 +4,6 @@
     "ScriptTokens": {
         "MainDB": "",
         "ReleaseVersion": ""
-    }
+    },
+    "Platform": "MSSQL"
 }

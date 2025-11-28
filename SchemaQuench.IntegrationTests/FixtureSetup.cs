@@ -15,7 +15,7 @@ public class FixtureSetup
     [OneTimeSetUp]
     public void RunBeforeAnyTests()
     {
-        var config = ConfigHelper.GetAppSettingsAndUserSecrets(null);
+        var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", null);
         _connectionString = ConnectionString.Build(config["Target:Server"], "master", config["Target:User"], config["Target:Password"]);
 
         _integrationSecondaryDb = GenerateUniqueDBName(config["ScriptTokens:SecondaryDB"] ?? "TestSecondary");
