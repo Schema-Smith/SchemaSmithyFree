@@ -41,31 +41,34 @@ public class DataTongs
         if (string.IsNullOrEmpty(sourceDb)) throw new Exception("Source database is required");
 
         var tables = config.GetSection("Tables")
-            .AsEnumerable()
-            .Where(x => x.Value != null)
-            .Select(x => new KeyValuePair<string, string>(x.Key.Replace("Tables:", ""), x.Value!));
-        var tableFilters = config.GetSection("TableFilters")
-            .AsEnumerable()
-            .Where(x => !x.Key.Equals("TableFilters"))
-            .ToDictionary(t => t.Key.Replace("TableFilters:", ""), t => t.Value);
+            .GetChildren()
+            .Select(t => new TableConfig { TableName = t["Name"] ?? "", KeyColumns = t["KeyColumns"] ?? "", Filter = t["Filter"] ?? "" })
+            .Where(t => !string.IsNullOrWhiteSpace(t.TableName))
+            .ToList();
 
         _progressLog.Info("Starting DataTongs...");
         using var sourceConnection = GetConnection(sourceDb);
         var cmd = sourceConnection.CreateCommand();
         foreach (var table in tables)
         {
-            _progressLog.Info($"  Casting data for: {table.Key}");
-            var parts = table.Key.Split('.').Select(p => p.Trim()).ToArray();
+            _progressLog.Info($"  Casting data for: {table.TableName}");
+            var parts = table.TableName.Split('.').Select(p => p.Trim()).ToArray();
             var tableSchema = parts.Length == 2 ? parts[0] : "dbo";
             var tableName = parts.Length == 2 ? parts[1] : parts[0];
-            var matchColumns = string.Join(" AND ", table.Value.Split(',').Select(c => $"Source.[{c.Trim().Trim(']', '[')}] = Target.[{c.Trim().Trim(']', '[')}]"));
-            var orderColumns = string.Join(",", table.Value.Split(',').Select(c => $"[{c.Trim().Trim(']', '[')}]"));
+            cmd.CommandText = $"SELECT CAST(CASE WHEN OBJECT_ID('{tableSchema}.{tableName}') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+            if (!(cmd.ExecuteScalar() as bool? ?? false))
+            {
+                _progressLog.Error($"  Table {tableSchema}.{tableName} does not exist in source database. Skipping table.");
+                continue;
+            }
+
+            var matchColumns = string.Join(" AND ", table.KeyColumns.Split(',').Select(c => $"Source.[{c.Trim().Trim(']', '[')}] = Target.[{c.Trim().Trim(']', '[')}]"));
+            var orderColumns = string.Join(",", table.KeyColumns.Split(',').Select(c => $"[{c.Trim().Trim(']', '[')}]"));
 
             var selectColumns = GetSelectColumns(cmd, tableSchema, tableName);
-            tableFilters.TryGetValue(table.Key, out var filter);
-            var tableData = GetTableData(cmd, selectColumns, tableSchema, tableName, orderColumns, filter);
+            var tableData = GetTableData(cmd, selectColumns, tableSchema, tableName, orderColumns, table.Filter);
 
-            var mergeSQL = BuildMergeSql(cmd, tableSchema, tableName, tableData, matchColumns, disableTriggers, mergeUpdate, mergeDelete, filter);
+            var mergeSQL = BuildMergeSql(cmd, tableSchema, tableName, tableData, matchColumns, disableTriggers, mergeUpdate, mergeDelete, table.Filter);
 
             FileWrapper.GetFromFactory().WriteAllText(Path.Combine(outputPath, $"Populate {tableSchema}.{tableName}.sql"), mergeSQL);
         }
@@ -266,5 +269,12 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY'
 	AND sc.is_rowguidcol = 0
 ";
         return cmd.ExecuteScalar()?.ToString();
+    }
+
+    private class TableConfig
+    {
+        public string TableName { get; set; } = "";
+        public string KeyColumns { get; set; } = "";
+        public string Filter { get; set; } = "";
     }
 }
