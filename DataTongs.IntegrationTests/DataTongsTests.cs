@@ -61,7 +61,8 @@ INSERT INTO [dbo].[TestTable] ([Id], [Name], Description)
 
             var config = ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", null);
             config["Source:database"] = _integrationDb;
-            config["Tables:dbo.TestTable"] = "Id";
+            config["Tables:0:Name"] = "dbo.TestTable";
+            config["Tables:0:KeyColumns"] = "Id";
 
             var tongs = new DataTongs();
             tongs.CastData();
