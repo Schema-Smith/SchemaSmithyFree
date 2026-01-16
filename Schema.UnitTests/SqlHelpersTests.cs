@@ -162,17 +162,27 @@ GO";
     }
 
     [Test]
+    public void ShouldHandleBracketedIdentifiers()
+    {
+        const string sql = @"-- This is the first batch
+GO--Ignore Me
+SELECT '/* Junk
+
+' AS [Embedded ' "" --]
+GO";
+        var batches = SqlHelpers.SplitIntoBatches(sql);
+        Assert.That(batches, Has.Count.EqualTo(2));
+    }
+
+    [Test]
     public void FigureOutBatchParseIssue()
     {
         const string sql = @"
-create procedure dbo.TestProc (
-        @P_Year      int,                       /* year     - e.g. 2010 or 2011, etc. */
-        @P_Quarter   int,                       /* Quarter  - 1,2,3,4 */
-        @P_FilePath  varchar(500)  = 'D:\Temp\',/* path on the SQL Server machine -- MUST exist - e.g. 'C:\Temp\' */
-        @P_Clients   varchar(MAX)  = NULL,
-        @P_Transfer  bit = 1
-) as
-SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+CREATE PROCEDURE dbo.MyProcedure (
+        @P_FilePath  NVARCHAR(500)  = 'D:\Temp\',/* path on the SQL Server machine -- MUST exist - e.g. 'C:\Temp\' */
+        @P_Transfer  BIT = 1
+) AS
+DECLARE @Junk INT;
 GO
 ";
         var batches = SqlHelpers.SplitIntoBatches(sql);
