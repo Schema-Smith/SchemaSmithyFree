@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-US" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="DowngradeError" Value="A newer version is already installed." />
+  <String Id="x64Required" Value="This application requires 64-bit Windows." />
+  <String Id="FeatureNet9Title" Value=".NET 9.0 CLI Tools" />
+  <String Id="FeatureNet9Desc" Value="SchemaTongs, SchemaQuench, and DataTongs targeting .NET 9.0 (recommended)" />
+  <String Id="FeatureNet481Title" Value=".NET Framework 4.8.1 CLI Tools" />
+  <String Id="FeatureNet481Desc" Value="SchemaTongs, SchemaQuench, and DataTongs targeting .NET Framework 4.8.1 (select instead of .NET 9.0 if needed)" />
+</WixLocalization>

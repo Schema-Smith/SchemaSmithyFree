@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <?define ProductName = "SchemaSmithy MSSQL Tools" ?>
+  <?define Manufacturer = "SchemaSmith, LLC" ?>
+  <?define UpgradeCode = "BA0B29E4-A6CD-4EB1-8C4B-6EB17BEE48C6" ?>
+
+  <Package Name="$(ProductName)"
+           Manufacturer="$(Manufacturer)"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="$(UpgradeCode)"
+           Scope="perMachine"
+           Language="1033"
+           Compressed="yes"
+           InstallerVersion="500">
+
+    <MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)"
+                  AllowSameVersionUpgrades="yes"
+                  Schedule="afterInstallInitialize" />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Launch Condition="Installed OR VersionNT64" Message="!(loc.x64Required)" />
+
+    <!-- .NET 9.0 CLI Tools (selected by default) -->
+    <Feature Id="FeatureNet9" Title="!(loc.FeatureNet9Title)" Description="!(loc.FeatureNet9Desc)" Level="1" Display="expand">
+      <ComponentGroupRef Id="SchemaTongsNet9Components" />
+      <ComponentGroupRef Id="SchemaQuenchNet9Components" />
+      <ComponentGroupRef Id="DataTongsNet9Components" />
+      <ComponentRef Id="PathEnvironmentNet9" />
+    </Feature>
+
+    <!-- .NET Framework 4.8.1 CLI Tools (not selected by default) -->
+    <Feature Id="FeatureNet481" Title="!(loc.FeatureNet481Title)" Description="!(loc.FeatureNet481Desc)" Level="1000" Display="expand">
+      <ComponentGroupRef Id="SchemaTongsNet481Components" />
+      <ComponentGroupRef Id="SchemaQuenchNet481Components" />
+      <ComponentGroupRef Id="DataTongsNet481Components" />
+      <ComponentRef Id="PathEnvironmentNet481" />
+    </Feature>
+
+    <!-- Standard WiX UI with feature selection -->
+    <ui:WixUI Id="WixUI_FeatureTree" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+    <WixVariable Id="WixUIBannerBmp" Value="Images\banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="Images\dialog.bmp" />
+
+    <Icon Id="ProductIcon" SourceFile="..\SchemaQuench\Images\SchemaQuench.ico" />
+    <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://schemasmith.com" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+  </Package>
+</Wix>
