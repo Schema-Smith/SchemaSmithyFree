@@ -1,0 +1,43 @@
+﻿<Project Sdk="WixToolset.Sdk/6.0.2">
+  <PropertyGroup>
+    <OutputName Condition="'$(Configuration)' == 'Release'">SetupSchemaSmithyMSSQL-Community</OutputName>
+    <OutputName Condition="'$(Configuration)' == 'Demo'">SetupSchemaSmithyMSSQL-Demo</OutputName>
+    <OutputName Condition="'$(Configuration)' == 'Debug'">SetupSchemaSmithyMSSQL-Debug</OutputName>
+    <ProductVersion>$(Version)</ProductVersion>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
+    <Configurations>Debug;Release;Demo</Configurations>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <!-- Define paths for published tool binaries - net9.0 -->
+    <SchemaTongsNet9Publish>$(MSBuildProjectDirectory)\..\SchemaTongs\bin\$(Configuration)\net9.0\publish</SchemaTongsNet9Publish>
+    <SchemaQuenchNet9Publish>$(MSBuildProjectDirectory)\..\SchemaQuench\bin\$(Configuration)\net9.0\publish</SchemaQuenchNet9Publish>
+    <DataTongsNet9Publish>$(MSBuildProjectDirectory)\..\DataTongs\bin\$(Configuration)\net9.0\publish</DataTongsNet9Publish>
+    <!-- Define paths for published tool binaries - net481 -->
+    <SchemaTongsNet481Publish>$(MSBuildProjectDirectory)\..\SchemaTongs\bin\$(Configuration)\net481\publish</SchemaTongsNet481Publish>
+    <SchemaQuenchNet481Publish>$(MSBuildProjectDirectory)\..\SchemaQuench\bin\$(Configuration)\net481\publish</SchemaQuenchNet481Publish>
+    <DataTongsNet481Publish>$(MSBuildProjectDirectory)\..\DataTongs\bin\$(Configuration)\net481\publish</DataTongsNet481Publish>
+    <DefineConstants>ProductVersion=$(ProductVersion);SchemaTongsNet9=$(SchemaTongsNet9Publish);SchemaQuenchNet9=$(SchemaQuenchNet9Publish);DataTongsNet9=$(DataTongsNet9Publish);SchemaTongsNet481=$(SchemaTongsNet481Publish);SchemaQuenchNet481=$(SchemaQuenchNet481Publish);DataTongsNet481=$(DataTongsNet481Publish)</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="License.rtf" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="6.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="6.0.2" />
+  </ItemGroup>
+  <!-- Auto-publish before WiX compilation so <Files> globs find published output -->
+  <Target Name="PublishDependencies" BeforeTargets="CoreCompile">
+    <!-- net9.0 CLI tools -->
+    <Exec Command="dotnet publish &quot;$(ProjectDir)..\SchemaTongs\SchemaTongs.csproj&quot; -c $(Configuration) --framework net9.0 --no-build --self-contained false -o &quot;$(SchemaTongsNet9Publish)&quot;" />
+    <Exec Command="dotnet publish &quot;$(ProjectDir)..\SchemaQuench\SchemaQuench.csproj&quot; -c $(Configuration) --framework net9.0 --no-build --self-contained false -o &quot;$(SchemaQuenchNet9Publish)&quot;" />
+    <Exec Command="dotnet publish &quot;$(ProjectDir)..\DataTongs\DataTongs.csproj&quot; -c $(Configuration) --framework net9.0 --no-build --self-contained false -o &quot;$(DataTongsNet9Publish)&quot;" />
+    <!-- net481 CLI tools -->
+    <Exec Command="dotnet publish &quot;$(ProjectDir)..\SchemaTongs\SchemaTongs.csproj&quot; -c $(Configuration) --framework net481 --no-build --self-contained false -o &quot;$(SchemaTongsNet481Publish)&quot;" />
+    <Exec Command="dotnet publish &quot;$(ProjectDir)..\SchemaQuench\SchemaQuench.csproj&quot; -c $(Configuration) --framework net481 --no-build --self-contained false -o &quot;$(SchemaQuenchNet481Publish)&quot;" />
+    <Exec Command="dotnet publish &quot;$(ProjectDir)..\DataTongs\DataTongs.csproj&quot; -c $(Configuration) --framework net481 --no-build --self-contained false -o &quot;$(DataTongsNet481Publish)&quot;" />
+  </Target>
+  <!-- Copy MSI to Release folder after build -->
+  <Target Name="CopyMsiToRelease" AfterTargets="Build">
+    <MakeDir Directories="$(MSBuildProjectDirectory)\..\Release" />
+    <Copy SourceFiles="$(OutputPath)en-US\$(OutputName).msi" DestinationFiles="$(MSBuildProjectDirectory)\..\Release\$(OutputName).msi" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

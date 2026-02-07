@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="ManufacturerFolder" Name="SchemaSmith">
+        <Directory Id="INSTALLFOLDER" Name="SchemaSmithy MSSQL Tools" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="SchemaSmithy MSSQL Tools" />
+    </StandardDirectory>
+  </Fragment>
+</Wix>
