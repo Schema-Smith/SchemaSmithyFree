@@ -54,11 +54,9 @@
   <Target Name="CleanLogFolders" BeforeTargets="Clean;PrepareForBuild;Build">
 	<ItemGroup>
 	  <_LogFolders Include="$(OutDir)\SchemaQuench.0*\*" />
+	  <_FilesToClean Include="$(OutDir)\*.log;$(OutDir)\*.sql" />
 	</ItemGroup>
 	<RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
-  </Target>
-
-  <Target Name="ZipOutputPath" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG'">
-	  <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(OutputPath)\..\..\SchemaQuench-$(TargetFramework).zip" Overwrite="true" />
+	<Delete Files="@(_FilesToClean)" />
   </Target>
 </Project>

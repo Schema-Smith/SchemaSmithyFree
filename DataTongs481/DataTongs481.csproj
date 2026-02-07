@@ -47,4 +47,13 @@
     </None>
   </ItemGroup>
 
+	<Target Name="CleanLogFolders" BeforeTargets="Clean;PrepareForBuild;Build">
+		<ItemGroup>
+			<_LogFolders Include="$(OutDir)\DataTongs.0*\*" />
+			<_FilesToClean Include="$(OutDir)\*.log;$(OutDir)\*.sql" />
+		</ItemGroup>
+		<RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
+		<Delete Files="@(_FilesToClean)" />
+	</Target>
+
 </Project>
