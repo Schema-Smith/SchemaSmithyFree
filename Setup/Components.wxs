@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <!-- .NET 9.0 CLI Tools -->
+
+  <Fragment>
+    <ComponentGroup Id="SchemaTongsNet9Components" Directory="INSTALLFOLDER" Subdirectory="net9.0\SchemaTongs">
+      <Files Include="$(var.SchemaTongsNet9)\**" />
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="SchemaQuenchNet9Components" Directory="INSTALLFOLDER" Subdirectory="net9.0\SchemaQuench">
+      <Files Include="$(var.SchemaQuenchNet9)\**" />
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="DataTongsNet9Components" Directory="INSTALLFOLDER" Subdirectory="net9.0\DataTongs">
+      <Files Include="$(var.DataTongsNet9)\**" />
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- .NET Framework 4.8.1 CLI Tools -->
+
+  <Fragment>
+    <ComponentGroup Id="SchemaTongsNet481Components" Directory="INSTALLFOLDER" Subdirectory="net481\SchemaTongs">
+      <Files Include="$(var.SchemaTongsNet481)\**" />
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="SchemaQuenchNet481Components" Directory="INSTALLFOLDER" Subdirectory="net481\SchemaQuench">
+      <Files Include="$(var.SchemaQuenchNet481)\**" />
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="DataTongsNet481Components" Directory="INSTALLFOLDER" Subdirectory="net481\DataTongs">
+      <Files Include="$(var.DataTongsNet481)\**" />
+    </ComponentGroup>
+  </Fragment>
+
+</Wix>

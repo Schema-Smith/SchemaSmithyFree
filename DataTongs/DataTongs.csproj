@@ -49,13 +49,15 @@
   <Target Name="CleanLogFolders" BeforeTargets="Clean;PrepareForBuild;Build">
     <ItemGroup>
       <_LogFolders Include="$(OutDir)\DataTongs.0*\*" />
+	  <_FilesToClean Include="$(OutDir)\*.log;$(OutDir)\*.sql" />
     </ItemGroup>
     <RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
+	<Delete Files="@(_FilesToClean)" />
   </Target>
 
   <Target Name="CopyOutputFiles" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG' And Exists('$(OutputPath)\..\..\..\..\Release')">
     <ItemGroup>
-      <MySourceFiles Include="$(OutputPath)\**\*.*" />
+      <MySourceFiles Include="$(OutputPath)\**\*.*" Exclude="$(OutputPath)\publish\**;$(OutputPath)\win-x64\**;$(OutputPath)\**\*.pdb" />
     </ItemGroup>
     <Copy SourceFiles="@(MySourceFiles)" DestinationFiles="@(MySourceFiles->'$(OutputPath)\..\..\..\..\Release\Zips\$(TargetFramework)\DataTongs\%(RecursiveDir)%(Filename)%(Extension)')" />
   </Target>

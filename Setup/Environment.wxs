@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+
+      <!-- .NET 9.0: Set base path variable and add tools to PATH -->
+      <Component Id="PathEnvironmentNet9" Guid="F1A2B3C4-D5E6-7890-ABCD-EF1234567890" Bitness="always64">
+        <Environment Id="BasePathNet9" Name="SchemaSmithMSSQLPath"
+                     Value="[INSTALLFOLDER]net9.0"
+                     Permanent="no" Part="all" Action="set" System="yes" />
+        <Environment Id="PATHNet9" Name="PATH"
+                     Value="%SchemaSmithMSSQLPath%\SchemaTongs;%SchemaSmithMSSQLPath%\SchemaQuench;%SchemaSmithMSSQLPath%\DataTongs"
+                     Permanent="no" Part="last" Action="set" System="yes" />
+        <RegistryValue Root="HKLM" Key="Software\SchemaSmith\SchemaSmithyMSSQL"
+                       Name="PathNet9Added" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <!-- .NET Framework 4.8.1: Set base path variable and add tools to PATH -->
+      <Component Id="PathEnvironmentNet481" Guid="A1B2C3D4-E5F6-7890-1234-567890ABCDEF" Bitness="always64">
+        <Environment Id="BasePathNet481" Name="SchemaSmithMSSQLPath"
+                     Value="[INSTALLFOLDER]net481"
+                     Permanent="no" Part="all" Action="set" System="yes" />
+        <Environment Id="PATHNet481" Name="PATH"
+                     Value="%SchemaSmithMSSQLPath%\SchemaTongs;%SchemaSmithMSSQLPath%\SchemaQuench;%SchemaSmithMSSQLPath%\DataTongs"
+                     Permanent="no" Part="last" Action="set" System="yes" />
+        <RegistryValue Root="HKLM" Key="Software\SchemaSmith\SchemaSmithyMSSQL"
+                       Name="PathNet481Added" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+    </DirectoryRef>
+  </Fragment>
+</Wix>

@@ -321,7 +321,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
   WHERE TABLE_TYPE = 'BASE TABLE'
     AND TABLE_NAME NOT LIKE 'MSPeer[_]%'
     AND TABLE_NAME NOT LIKE 'MSPub[_]%'
-    AND TABLE_NAME NOT LIKE 'sys%'
+    AND TABLE_NAME NOT IN ('dtproperties', 'sysdiagrams')
     AND TABLE_SCHEMA <> 'SchemaSmith'
   ORDER BY 1, 2
 ";
