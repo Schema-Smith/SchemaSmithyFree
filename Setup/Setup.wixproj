@@ -7,10 +7,13 @@
     <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
     <Configurations>Debug;Release;Demo</Configurations>
     <InstallerPlatform>x64</InstallerPlatform>
+    <SuppressValidation>true</SuppressValidation>
+	  
     <!-- Define paths for published tool binaries - net9.0 -->
     <SchemaTongsNet9Publish>$(MSBuildProjectDirectory)\..\SchemaTongs\bin\$(Configuration)\net9.0\publish</SchemaTongsNet9Publish>
     <SchemaQuenchNet9Publish>$(MSBuildProjectDirectory)\..\SchemaQuench\bin\$(Configuration)\net9.0\publish</SchemaQuenchNet9Publish>
     <DataTongsNet9Publish>$(MSBuildProjectDirectory)\..\DataTongs\bin\$(Configuration)\net9.0\publish</DataTongsNet9Publish>
+	  
     <!-- Define paths for published tool binaries - net481 -->
     <SchemaTongsNet481Publish>$(MSBuildProjectDirectory)\..\SchemaTongs\bin\$(Configuration)\net481\publish</SchemaTongsNet481Publish>
     <SchemaQuenchNet481Publish>$(MSBuildProjectDirectory)\..\SchemaQuench\bin\$(Configuration)\net481\publish</SchemaQuenchNet481Publish>
