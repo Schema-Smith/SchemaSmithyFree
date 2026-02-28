@@ -31,4 +31,4 @@ from the root of the project and the [Test Product](TestProducts/ValidProduct/Pr
 ## Additional Resources 
 
 - For more samples, see our [demo repository](https://github.com/Schema-Smith/SchemaSmithDemos).
-- Checkout our [wiki](https://github.com/Schema-Smith/SchemaSmithyFree/wiki) for documentation about how these tools work to make deploying sql server schema effortless.
+- Checkout our [website](https://schemasmith.com/documentation/mssql/community/getting-started.html) for documentation about how these tools work to make deploying sql server schema effortless.
