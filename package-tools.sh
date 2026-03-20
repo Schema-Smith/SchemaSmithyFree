@@ -19,7 +19,7 @@ for rid in "${RIDS[@]}"; do
 
   for tool in "${TOOLS[@]}"; do
     echo "  Publishing $tool..."
-    dotnet publish "$SCRIPT_DIR/$tool/$tool.csproj" -c Release -r "$rid" -o "$RID_DIR"
+    dotnet publish "$SCRIPT_DIR/$tool/$tool.csproj" -c Release -r "$rid" --self-contained -o "$RID_DIR"
   done
 
   ZIP_NAME="SchemaSmithyMSSQL-Community-$rid.zip"

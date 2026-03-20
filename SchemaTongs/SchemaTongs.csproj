@@ -8,7 +8,7 @@
 	  <LangVersion>default</LangVersion>
 	  <UserSecretsId>e821fe99-a762-4ea4-a7ea-5e64817550da</UserSecretsId>
 	  <PublishSingleFile>true</PublishSingleFile>
-	  <SelfContained>true</SelfContained>
+
 	  <PublishTrimmed>false</PublishTrimmed>
 	  <PublishAot>false</PublishAot>
 

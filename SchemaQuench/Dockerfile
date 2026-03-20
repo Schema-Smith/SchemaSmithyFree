@@ -12,7 +12,7 @@ WORKDIR "/src/SchemaQuench"
 RUN dotnet build "SchemaQuench.csproj" -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "SchemaQuench.csproj" -c Release -r linux-x64 -o /app/publish
+RUN dotnet publish "SchemaQuench.csproj" -c Release -r linux-x64 --self-contained -o /app/publish
 
 FROM base AS final
 WORKDIR /app

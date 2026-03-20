@@ -7,7 +7,7 @@
 	  <Nullable>enable</Nullable>
 	  <LangVersion>default</LangVersion>
 	  <PublishSingleFile>true</PublishSingleFile>
-	  <SelfContained>true</SelfContained>
+
 	  <PublishTrimmed>false</PublishTrimmed>
 	  <PublishAot>false</PublishAot>
 

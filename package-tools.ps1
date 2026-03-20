@@ -17,7 +17,7 @@ foreach ($rid in $Rids) {
 
     foreach ($tool in $Tools) {
         Write-Host "  Publishing $tool..."
-        dotnet publish "$ScriptDir/$tool/$tool.csproj" -c Release -r $rid -o $RidDir
+        dotnet publish "$ScriptDir/$tool/$tool.csproj" -c Release -r $rid --self-contained -o $RidDir
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
 

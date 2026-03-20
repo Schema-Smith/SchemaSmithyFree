@@ -24,7 +24,7 @@ New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
 foreach ($tool in @("SchemaQuench", "SchemaTongs", "DataTongs")) {
     Write-Host "  Publishing $tool..."
-    dotnet publish "$ScriptDir/$tool/$tool.csproj" -c Release -r $Rid -o $OutputDir
+    dotnet publish "$ScriptDir/$tool/$tool.csproj" -c Release -r $Rid --self-contained -o $OutputDir
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 

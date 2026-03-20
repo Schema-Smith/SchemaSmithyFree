@@ -23,7 +23,7 @@ mkdir -p "$OUTPUT_DIR"
 
 for tool in SchemaQuench SchemaTongs DataTongs; do
   echo "  Publishing $tool..."
-  dotnet publish "$SCRIPT_DIR/$tool/$tool.csproj" -c Release -r "$RID" -o "$OUTPUT_DIR"
+  dotnet publish "$SCRIPT_DIR/$tool/$tool.csproj" -c Release -r "$RID" --self-contained -o "$OUTPUT_DIR"
 done
 
 echo "Done. Tools published to $OUTPUT_DIR"
