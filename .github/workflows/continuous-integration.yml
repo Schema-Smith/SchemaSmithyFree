@@ -4,9 +4,11 @@ on:
   pull_request:
     branches:
       - main
+      - dev/v2
   push:
     branches:
       - main
+      - dev/v2
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,11 +41,11 @@ jobs:
         with:
           dotnet-version: '9.0.x'
           cache: true
-          cache-dependency-path: '**/packages.lock.json'
+          cache-dependency-path: '**/*.csproj'
       - name: Install dependencies
         run: dotnet restore SchemaSmithyFree.sln
       - name: Test with dotnet
-        run: dotnet test SchemaSmithyFree.sln --framework net9.0 --logger trx --results-directory "TestResults"
+        run: dotnet test SchemaSmithyFree.sln --logger trx --results-directory "TestResults"
       - name: Upload dotnet test results
         uses: actions/upload-artifact@v4
         with:
