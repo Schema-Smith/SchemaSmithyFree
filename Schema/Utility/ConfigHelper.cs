@@ -14,9 +14,8 @@ public static class ConfigHelper
     public static void ConfigureLog4Net()
     {
         var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly() ?? Assembly.GetCallingAssembly());
-        var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
-        var logDir = Path.GetDirectoryName(assembly.Location) ?? @".\";
-        GlobalContext.Properties["LogPath"] = (CommandLineParser.ValueOfSwitch("LogPath", null) ?? logDir).TrimEnd('\\', '/');
+        var toolDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        GlobalContext.Properties["LogPath"] = (CommandLineParser.ValueOfSwitch("LogPath", null) ?? toolDir).TrimEnd('\\', '/');
         try
         {
             using var configStream = ResourceLoader.Load("Log4Net.config").ToStream();

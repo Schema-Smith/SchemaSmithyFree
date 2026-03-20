@@ -1,7 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using Schema.Isolators;
@@ -114,7 +113,10 @@ public static class CommandLineParser
     private static void ShowVersionAndExit(string app)
     {
         var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
-        Console.WriteLine($"{app} MSSQL Community - Version: {FileVersionInfo.GetVersionInfo(assembly.Location).FileVersion}");
+        var version = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version
+                      ?? assembly.GetName().Version?.ToString()
+                      ?? "unknown";
+        Console.WriteLine($"{app} MSSQL Community - Version: {version}");
         EnvironmentWrapper.GetFromFactory().Exit(0);
     }
 

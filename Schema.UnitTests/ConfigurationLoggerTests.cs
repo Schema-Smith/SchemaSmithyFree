@@ -1,6 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Schema.Utility;
@@ -14,9 +13,12 @@ public class ConfigurationLoggerTests
     {
         ConfigurationLogger.LogConfiguration(GenerateConfiguration(), GetLogLine);
         var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+        var version = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version
+                      ?? assembly.GetName().Version?.ToString()
+                      ?? "unknown";
         var expectedOutput = new List<string>
         {
-            $"Version: {FileVersionInfo.GetVersionInfo(assembly.Location).FileVersion}",
+            $"Version: {version}",
             "Configuration:",
             "  SchemaPackagePath: packagePath",
             "  Target: ",
