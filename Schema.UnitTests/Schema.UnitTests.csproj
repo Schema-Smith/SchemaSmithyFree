@@ -1,13 +1,12 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>net9.0;net481</TargetFrameworks>
+	  <TargetFramework>net9.0</TargetFramework>
 	  <ImplicitUsings>disable</ImplicitUsings>
 	  <Nullable>disable</Nullable>
 	  <LangVersion>default</LangVersion>
 	  <IsPackable>false</IsPackable>
 	  <IsTestProject>true</IsTestProject>
-	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 	  <Version>$(Version)</Version>
 	  <FileVersion>$(Version)</FileVersion>
   </PropertyGroup>
