@@ -1,1 +1,30 @@
-*.sh    eol=lf
+# Auto-detect text files and normalize line endings
+* text=auto
+
+# Source code
+*.cs text diff=csharp
+*.csproj text
+*.sln text eol=crlf
+*.props text
+*.targets text
+
+# Scripts - shell scripts must use LF line endings (required for Unix/macOS/Docker)
+*.sql text
+*.sh text eol=lf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Dockerfiles must use LF
+Dockerfile* text eol=lf
+
+# Config/Data
+*.json text
+*.xml text
+*.yml text
+*.yaml text
+*.md text
+
+# Binary
+*.png binary
+*.ico binary
+*.zip binary
