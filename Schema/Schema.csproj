@@ -1,12 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>net9.0;net481</TargetFrameworks>
+	  <TargetFramework>net9.0</TargetFramework>
 	  <ImplicitUsings>disable</ImplicitUsings>
 	  <Nullable>disable</Nullable>
 	  <LangVersion>default</LangVersion>
-	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-	  <PublishAot>false</PublishAot>
 
 	  <Version>$(Version)</Version>
 	  <FileVersion>$(Version)</FileVersion>
@@ -51,14 +49,6 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="System.IO.Compression" Version="4.3.0" />
   </ItemGroup>
-
-	<Target Name="CleanZips" BeforeTargets="DispatchToInnerBuilds" Condition="'$(TargetFramework)' == '' And '$(Configuration)' != 'DEBUG'">
-		<RemoveDir Directories="$(MSBuildProjectDirectory)\..\Release\Zips\$(Configuration)" Condition="Exists('$(MSBuildProjectDirectory)\..\Release\Zips\$(Configuration)')" />
-	</Target>
-  <Target Name="CleanZips" BeforeTargets="Clean;PrepareForBuild;Build">
-    <RemoveDir Directories="$(OutputPath)\..\..\..\..\Release\Zips" Condition="Exists('$(OutputPath)\..\..\..\..\Release\Zips')" />
-  </Target>
 
 </Project>
