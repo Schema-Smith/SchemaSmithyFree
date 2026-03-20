@@ -1,6 +1,6 @@
 #See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
-FROM mcr.microsoft.com/dotnet/runtime:9.0 AS base
+FROM mcr.microsoft.com/dotnet/runtime-deps:9.0 AS base
 WORKDIR /app
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
@@ -12,7 +12,7 @@ WORKDIR "/src/SchemaQuench"
 RUN dotnet build "SchemaQuench.csproj" -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "SchemaQuench.csproj"  --framework net9.0 -c Release -o /app/publish
+RUN dotnet publish "SchemaQuench.csproj" -c Release -r linux-x64 -o /app/publish
 
 FROM base AS final
 WORKDIR /app
@@ -23,4 +23,4 @@ RUN useradd -u 1000 -r -s /bin/false appuser && \
 
 USER appuser
 
-ENTRYPOINT ["dotnet", "SchemaQuench.dll"]
+ENTRYPOINT ["./SchemaQuench"]
