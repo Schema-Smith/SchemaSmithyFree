@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Isolators;
@@ -140,9 +139,7 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
 
     private static void LogSqlScript(string name, string sql)
     {
-        var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
-        var cwd = Path.GetDirectoryName(assembly.Location) ?? @".\";
-
+        var cwd = AppContext.BaseDirectory;
         FileWrapper.GetFromFactory().WriteAllText(Path.Combine(cwd, name), sql);
     }
 
