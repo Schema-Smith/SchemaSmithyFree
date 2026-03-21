@@ -18,6 +18,12 @@
 - **Config file is now optional:** Tools can run with environment variables alone (no config file required)
 - **AppContext.BaseDirectory fallback:** Config file is found even when current directory differs from tool directory
 
+### MinimumVersion
+
+- **SqlServerVersion enum:** New `SqlServerVersion` enum (Sql2016-Sql2025) with year-based names for human readability. Serializes as strings in Product.json via `StringEnumConverter`.
+- **Product.MinimumVersion:** Optional property declaring minimum SQL Server version for a schema package. Null means no version ceiling. Infrastructure for future SchemaHammer and SchemaQuench feature gating.
+- **VersionHelper:** Utility for version threshold comparison.
+
 ### Schema Validation
 
 - **Runtime-generated JSON Schema files:** `.json-schemas/` files are now generated from the domain model at runtime instead of static embedded files. SchemaTongs always overwrites with the latest schema on each extraction.
