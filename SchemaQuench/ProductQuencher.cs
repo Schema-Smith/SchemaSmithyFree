@@ -22,11 +22,19 @@ public class ProductQuencher
 
     private readonly string _whatIfOnly;
     private readonly string _primaryServer;
+    private readonly bool _kindleTheForge;
+    private readonly bool _updateTables;
+    private readonly bool _dropTablesRemovedFromProduct;
+    private readonly bool _runScriptsTwice;
 
     public ProductQuencher()
     {
         _whatIfOnly = _config["WhatIfONLY"]?.ToLower() == "true" ? "1" : "0";
         _primaryServer = _config["Target:Server"] ?? "localhost";
+        _kindleTheForge = _config["KindleTheForge"]?.ToLower() != "false";
+        _updateTables = _config["UpdateTables"]?.ToLower() != "false";
+        _dropTablesRemovedFromProduct = _config["DropTablesRemovedFromProduct"]?.ToLower() != "false";
+        _runScriptsTwice = _config["RunScriptsTwice"]?.ToLower() == "true";
     }
 
     private IDbConnection GetConnection(string dbName)
@@ -149,7 +157,11 @@ public class ProductQuencher
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            var quencher = new DatabaseQuencher(_product.Name, template, $"{reader[0]}", suppressKindligForgeForTesting, product.DropUnknownIndexes ? "1" : "0", _whatIfOnly);
+            var quencher = new DatabaseQuencher(
+                _product.Name, template, $"{reader[0]}",
+                suppressKindligForgeForTesting || !_kindleTheForge,
+                product.DropUnknownIndexes ? "1" : "0",
+                _whatIfOnly, _updateTables, _dropTablesRemovedFromProduct, _runScriptsTwice);
             dbList.Add(quencher);
         }
 

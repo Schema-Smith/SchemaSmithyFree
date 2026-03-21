@@ -14,7 +14,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace SchemaQuench;
 
-public class DatabaseQuencher(string productName, Template template, string dbName, bool suppressKindlingForgeForTesting, string dropUnknownIndexes, string whatIfOnly)
+public class DatabaseQuencher(string productName, Template template, string dbName, bool suppressKindlingForgeForTesting, string dropUnknownIndexes, string whatIfOnly, bool updateTables = true, bool dropTablesRemovedFromProduct = true, bool runScriptsTwice = false)
 {
     public bool QuenchSuccessful { get; private set; }
 
@@ -63,14 +63,28 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
 
                     ProgressLog("  Quenching object scripts");
                     QuenchDatabaseObjects(objectsCommand, template.ObjectScripts, false);
+
+                    if (runScriptsTwice)
+                    {
+                        ProgressLog("  Quenching object scripts (second pass)");
+                        template.ObjectScripts.ForEach(s => s.HasBeenQuenched = false);
+                        QuenchDatabaseObjects(objectsCommand, template.ObjectScripts, false);
+                    }
                 }
 
-                ProgressLog("  Quenching tables");
-                command.CommandText = $"EXEC [{dbName}].SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = '{template.TableSchema.Replace("'", "''")}', @DropUnknownIndexes = {dropUnknownIndexes}, @UpdateFillFactor = {(template.UpdateFillFactor ? "1" : "0")}, @WhatIf = {whatIfOnly}";
-                _debugFileLocation = $"SchemaQuench - Quench Tables {dbName}.sql";
-                LogSqlScript(_debugFileLocation, command.CommandText);
-                ExecuteNonQueryAndRethrowInfoMessageError(command);
-                _debugFileLocation = "";
+                if (updateTables)
+                {
+                    ProgressLog("  Quenching tables");
+                    command.CommandText = $"EXEC [{dbName}].SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = '{template.TableSchema.Replace("'", "''")}', @DropUnknownIndexes = {dropUnknownIndexes}, @DropTablesRemovedFromProduct = {(dropTablesRemovedFromProduct ? "1" : "0")}, @UpdateFillFactor = {(template.UpdateFillFactor ? "1" : "0")}, @WhatIf = {whatIfOnly}";
+                    _debugFileLocation = $"SchemaQuench - Quench Tables {dbName}.sql";
+                    LogSqlScript(_debugFileLocation, command.CommandText);
+                    ExecuteNonQueryAndRethrowInfoMessageError(command);
+                    _debugFileLocation = "";
+                }
+                else
+                {
+                    ProgressLog("  Skipping table updates (UpdateTables=false)");
+                }
 
                 if (whatIfOnly != "1")
                 {
