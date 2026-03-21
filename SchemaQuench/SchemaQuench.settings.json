@@ -1,0 +1,14 @@
+{
+    "Target": {
+        "Server": "",
+        "User": "", // Leave User and Password blank for Windows authentication
+        "Password": ""
+    },
+    "WhatIfONLY": false, // Log all changes without executing them
+    "SchemaPackagePath": "",
+    "RunScriptsTwice": false, // Run object scripts twice to resolve cross-dependencies
+    "DropTablesRemovedFromProduct": true, // Drop tables not defined in the product
+    "UpdateTables": true, // Apply table structure changes (columns, indexes, constraints)
+    "KindleTheForge": true, // Install SchemaSmith helper functions/procedures in target database
+    "ScriptTokens": {}
+}

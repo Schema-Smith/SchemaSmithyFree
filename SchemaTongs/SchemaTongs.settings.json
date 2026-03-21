@@ -1,0 +1,34 @@
+{
+    "Source": {
+        "Server": "",
+        "User": "", // Leave User and Password blank for Windows authentication
+        "Password": "",
+        "Database": ""
+    },
+    // Name will default to the last folder in the product path if not provided.
+    // Name is used for the new product if one is created and will not rename an existing one.
+    "Product": {
+        "Path": "",
+        "Name": ""
+    },
+    // Name will default to Database if not provided.
+    // This becomes the folder name for the template that is exported as well as the template name.
+    "Template": {
+        "Name": ""
+    },
+    "ShouldCast": {
+        "Tables": true,
+        "Schemas": true,
+        "UserDefinedTypes": true,
+        "UserDefinedFunctions": true,
+        "Views": true,
+        "StoredProcedures": true,
+        "TableTriggers": true,
+        "Catalogs": true, // Full-Text Catalogs
+        "StopLists": true, // Full-Text Stop Lists
+        "DDLTriggers": true,
+        "XMLSchemaCollections": true,
+        "ScriptDynamicDependencyRemovalForFunctions": false,
+        "ObjectList": "" // Comma-separated list of specific objects to extract (blank = all)
+    }
+}

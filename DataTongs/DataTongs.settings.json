@@ -1,0 +1,17 @@
+{
+    "Source": {
+        "Server": "",
+        "User": "", // Leave User and Password blank for Windows authentication
+        "Password": "",
+        "Database": ""
+    },
+    "OutputPath": "",
+    "Tables": [
+        // { "Name": "", "KeyColumns": "", "Filter": "" }
+    ],
+    "ShouldCast": {
+        "DisableTriggers": true, // Wrap data delivery in trigger disable/enable
+        "MergeUpdate": true, // Include UPDATE clause in merge scripts
+        "MergeDelete": false // Include DELETE clause in merge scripts
+    }
+}
