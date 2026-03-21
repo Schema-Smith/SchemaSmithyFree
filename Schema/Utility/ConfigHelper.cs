@@ -36,13 +36,22 @@ public static class ConfigHelper
             var config = FactoryContainer.Resolve<IConfigurationRoot>();
             if (config != null) return config;
 
-            var builder = new ConfigurationBuilder();
-            var settingsFile = CommandLineParser.ValueOfSwitch("ConfigFile", null) ?? "appsettings.json";
-            builder.AddJsonFile(settingsFile)
+            var settingsFile = CommandLineParser.ValueOfSwitch("ConfigFile", null) ?? $"{app}.settings.json";
+            var basePath = Directory.GetCurrentDirectory();
+
+            if (!File.Exists(Path.Combine(basePath, settingsFile)))
+            {
+                var appBasePath = AppContext.BaseDirectory;
+                if (File.Exists(Path.Combine(appBasePath, settingsFile)))
+                    basePath = appBasePath;
+            }
+
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(basePath)
+                .AddJsonFile(settingsFile, optional: true)
 #if DEBUG
-                .AddUserSecrets(Assembly.GetCallingAssembly())
+                .AddUserSecrets(Assembly.GetCallingAssembly(), optional: true)
 #endif
-                .AddEnvironmentVariables("QuenchSettings_")
                 .AddEnvironmentVariables("SmithySettings_");
 
             config = builder.Build();
