@@ -3,6 +3,7 @@ using Schema.Domain;
 using Schema.Isolators;
 using NSubstitute;
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace Schema.UnitTests;
@@ -127,6 +128,51 @@ public class SqlScriptTests
             var ex = Assert.Throws<Exception>(() => SqlScript.Load(filePath));
             Assert.That(ex!.Message, Does.Contain("Unreadable.sql"));
             Assert.That(ex.Message, Does.Contain("disk error"));
+
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldApplyTokenReplacementWhenTokensProvided()
+    {
+        var sqlFile = "test_token.sql";
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(sqlFile).Returns(true);
+        mockFileWrapper.ReadAllText(sqlFile).Returns("USE [{{MainDB}}]\nGO\nSELECT '{{TemplateName}}'");
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFileWrapper);
+
+            var tokens = new List<KeyValuePair<string, string>>
+            {
+                new("MainDB", "Production"),
+                new("TemplateName", "MyTemplate")
+            };
+            var script = SqlScript.Load(sqlFile, tokens);
+            Assert.Multiple(() =>
+            {
+                Assert.That(script.Batches[0], Does.Contain("USE [Production]"));
+                Assert.That(script.Batches[1], Does.Contain("SELECT 'MyTemplate'"));
+            });
+
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldNotApplyTokensWhenNullProvided()
+    {
+        var sqlFile = "test_no_token.sql";
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(sqlFile).Returns(true);
+        mockFileWrapper.ReadAllText(sqlFile).Returns("USE [{{MainDB}}]");
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFileWrapper);
+
+            var script = SqlScript.Load(sqlFile);
+            Assert.That(script.Batches[0], Does.Contain("{{MainDB}}"));
 
             FactoryContainer.Clear();
         }

@@ -53,4 +53,15 @@ public class ForgeKindlerTests
         Assert.That(tableQuenchIndex, Is.GreaterThan(-1), "TableQuench wrapper should be deployed");
         Assert.That(foreignKeyIndex, Is.LessThan(tableQuenchIndex), "Modular procs must be deployed before wrapper");
     }
+
+    [Test]
+    public void ShouldReturnParseTableJsonScript()
+    {
+        var script = ForgeKindler.GetParseTableJsonScript();
+        Assert.That(script, Is.Not.Null.And.Not.Empty);
+        Assert.That(script, Does.Contain("Parse Tables from Json"));
+        Assert.That(script, Does.Contain("#Tables"));
+        Assert.That(script, Does.Contain("#Columns"));
+        Assert.That(script, Does.Contain("#Indexes"));
+    }
 }

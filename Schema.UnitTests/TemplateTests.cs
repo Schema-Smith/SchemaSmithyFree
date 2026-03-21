@@ -34,7 +34,7 @@ public class TemplateTests
             Assert.Multiple(() =>
             {
                 Assert.That(template.FilePath, Is.EqualTo(templateJsonFile));
-                Assert.That(template.ScriptFolders, Has.Count.EqualTo(13));
+                Assert.That(template.ObjectScripts, Is.Not.Null);
                 Assert.That(template.DatabaseIdentificationScript, Contains.Substring("Database Identification Script"));
                 Assert.That(template.VersionStampScript, Contains.Substring("Version Stamp Script"));
             });
@@ -171,13 +171,25 @@ public class TemplateTests
     [Test]
     public void ShouldLoadBeforeMigrationScripts()
     {
-        SqlFileLoadTest(QuenchSlot.Before, "MigrationScripts/Before");
+        SqlFileLoadTest(TemplateQuenchSlot.Before, "MigrationScripts/Before");
     }
 
     [Test]
     public void ShouldLoadAfterMigrationScripts()
     {
-        SqlFileLoadTest(QuenchSlot.After, "MigrationScripts/After");
+        SqlFileLoadTest(TemplateQuenchSlot.After, "MigrationScripts/After");
+    }
+
+    [Test]
+    public void ShouldLoadBetweenTablesAndKeysScripts()
+    {
+        SqlFileLoadTest(TemplateQuenchSlot.BetweenTablesAndKeys, "MigrationScripts/BetweenTablesAndKeys");
+    }
+
+    [Test]
+    public void ShouldLoadAfterTablesScripts()
+    {
+        SqlFileLoadTest(TemplateQuenchSlot.AfterTablesScripts, "MigrationScripts/AfterTablesScripts");
     }
 
     [Test]
@@ -228,24 +240,55 @@ public class TemplateTests
         AfterTablesObjectLoadTest("Triggers");
     }
 
+    [Test]
+    public void ShouldMergeTemplateTokensOverProductTokens()
+    {
+        var templateJsonWithTokens = """
+        {
+          "DatabaseIdentificationScript": "SELECT '{{MainDB}}'",
+          "ScriptTokens": { "MainDB": "TemplateDB" }
+        }
+        """;
+
+        var templateJsonFile = Path.Combine("SchemaPackagePath", "Templates", "Test", "Template.json");
+        var config = SetupConfig();
+        var mockDirectoryWrapper = Substitute.For<IDirectory>();
+        mockDirectoryWrapper.Exists(Arg.Any<string>()).Returns(true);
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockFileWrapper.ReadAllText(templateJsonFile).Returns(templateJsonWithTokens);
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(config);
+            FactoryContainer.Register(mockDirectoryWrapper);
+            FactoryContainer.Register(mockFileWrapper);
+            var product = GetTestProduct();
+            product.ScriptTokens.Add("MainDB", "ProductDB");
+            var template = Template.Load("Test", product);
+            Assert.That(template.DatabaseIdentificationScript, Is.EqualTo("SELECT 'TemplateDB'"));
+
+            FactoryContainer.Clear();
+        }
+    }
+
     private const string templateJson = """
-{ 
-  "DatabaseIdentificationScript": "Database Identification Script {{TestDB}}", 
+{
+  "DatabaseIdentificationScript": "Database Identification Script {{TestDB}}",
   "VersionStampScript": "Version Stamp Script {{MyVersion}}"
 }
 """;
 
     private static void ObjectLoadTest(string routinePath)
     {
-        SqlFileLoadTest(QuenchSlot.Objects, routinePath);
+        SqlFileLoadTest(TemplateQuenchSlot.Objects, routinePath);
     }
 
     private static void AfterTablesObjectLoadTest(string routinePath)
     {
-        SqlFileLoadTest(QuenchSlot.AfterTablesObjects, routinePath);
+        SqlFileLoadTest(TemplateQuenchSlot.AfterTablesObjects, routinePath);
     }
 
-    private static void SqlFileLoadTest(QuenchSlot slot, string filePath)
+    private static void SqlFileLoadTest(TemplateQuenchSlot slot, string filePath)
     {
         var templateJsonFile = Path.Combine("SchemaPackagePath", "Templates", "Test", "Template.json");
         var sqlFilePath = Path.Combine("SchemaPackagePath", "Templates", "Test", filePath);
@@ -269,7 +312,17 @@ public class TemplateTests
             var template = Template.Load("Test", TemplateTests.GetTestProduct());
             mockDirectoryWrapper.Received(1).Exists(sqlFilePath);
             mockFileWrapper.Received(1).ReadAllText(sqlFile);
-            var sqlFiles = template.ScriptFolders?.Where(s => s.QuenchSlot == slot).SelectMany(f => f.Scripts).ToList();
+            var sqlFiles = slot switch
+            {
+                TemplateQuenchSlot.Before => template.BeforeScripts,
+                TemplateQuenchSlot.Objects => template.ObjectScripts,
+                TemplateQuenchSlot.BetweenTablesAndKeys => template.BetweenTablesAndKeysScripts,
+                TemplateQuenchSlot.AfterTablesScripts => template.AfterTablesScripts,
+                TemplateQuenchSlot.AfterTablesObjects => template.AfterTablesObjectScripts,
+                TemplateQuenchSlot.TableData => template.TableDataScripts,
+                TemplateQuenchSlot.After => template.AfterScripts,
+                _ => throw new ArgumentException($"Unexpected slot: {slot}")
+            };
             Assert.Multiple(() =>
             {
                 Assert.That(sqlFiles, Is.Not.Null);
