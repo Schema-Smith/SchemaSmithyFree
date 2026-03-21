@@ -9,7 +9,6 @@ namespace Schema.Domain
     public class ScriptFolder
     {
         public string FolderPath { get; set; }
-        public QuenchSlot QuenchSlot { get; set; }
         public List<SqlScript> Scripts { get; set; } = [];
 
         public void LoadSqlFiles(string basePath)
