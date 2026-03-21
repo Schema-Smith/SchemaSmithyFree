@@ -23,6 +23,7 @@
     <None Remove="Scripts\SchemaSmith.PrintWithNoWait.sql" />
     <None Remove="Scripts\SchemaSmith.GenerateTableJson.sql" />
     <None Remove="Scripts\SchemaSmith.TableQuench.sql" />
+    <None Remove="Scripts\ParseTableJsonIntoTempTables.sql" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,6 +36,7 @@
     <EmbeddedResource Include="Scripts\SchemaSmith.PrintWithNoWait.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.GenerateTableJson.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.TableQuench.sql" />
+    <EmbeddedResource Include="Scripts\ParseTableJsonIntoTempTables.sql" />
   </ItemGroup>
 
   <ItemGroup>
