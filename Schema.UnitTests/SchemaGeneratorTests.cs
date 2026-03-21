@@ -218,6 +218,20 @@ public class SchemaGeneratorTests
         Assert.That(prop?["pattern"]?.ToString(), Does.Contain("Sql2022"));
     }
 
+    [Test]
+    public void ShouldIncludeUpdateFillFactorInTableSchema()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Table));
+        Assert.That(schema["properties"]?["UpdateFillFactor"]?["type"]?.ToString(), Is.EqualTo("boolean"));
+    }
+
+    [Test]
+    public void ShouldIncludeUpdateFillFactorInIndexSchema()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Index));
+        Assert.That(schema["properties"]?["UpdateFillFactor"]?["type"]?.ToString(), Is.EqualTo("boolean"));
+    }
+
     // --- Test helper classes ---
     private class SimpleStringClass { public string Name { get; set; } }
     private class BoolClass { public bool IsActive { get; set; } }

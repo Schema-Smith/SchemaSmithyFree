@@ -30,4 +30,6 @@ public class Index
     public string IncludeColumns { get; set; }
     [JsonProperty(Order = 11)]
     public string FilterExpression { get; set; }
+    [JsonProperty(Order = 12)]
+    public bool UpdateFillFactor { get; set; }
 }

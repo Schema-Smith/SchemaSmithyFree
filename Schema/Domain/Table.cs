@@ -34,6 +34,8 @@ public class Table
     public FullTextIndex FullTextIndex { get; set; }
     [JsonProperty(Order = 12)]
     public string OldName { get; set; } = "";
+    [JsonProperty(Order = 13)]
+    public bool UpdateFillFactor { get; set; }
 
     public static Table Load(string filePath)
     {
