@@ -35,7 +35,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        (SELECT SchemaSmith.fn_StripParenWrapping([definition])
                           FROM sys.check_constraints WITH (NOLOCK)
                           WHERE parent_object_id = st.[object_id]
-                            AND parent_column_id = COLUMNPROPERTY(st.[object_id], c.COLUMN_NAME, 'ColumnId')) AS [CheckExpression],
+                            AND parent_column_id = sc.column_id) AS [CheckExpression],
                        SchemaSmith.fn_StripParenWrapping(cc.[definition]) AS ComputedExpression,
                        ISNULL(cc.is_persisted, CAST(0 AS BIT)) AS [Persisted],
                        sc.is_sparse AS [Sparse],
@@ -60,7 +60,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        (SELECT '[' + [Name] + ']' AS [Name], 
                (SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
                   FROM sys.partitions AS p WITH (NOLOCK) 
-                  WHERE p.[object_id] = st.[object_id]
+                  WHERE p.[object_id] = si.[object_id]
                     AND p.index_id = si.index_id) AS [CompressionType],
                is_primary_key AS [PrimaryKey], 
                is_unique AS [Unique],
