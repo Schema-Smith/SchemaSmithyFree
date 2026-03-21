@@ -48,7 +48,15 @@ public static class SchemaGenerator
         if (type == typeof(bool)) return new JObject { ["type"] = "boolean" };
         if (IsIntegerType(type)) return new JObject { ["type"] = "integer" };
         if (IsNumberType(type)) return new JObject { ["type"] = "number" };
-        if (type.IsEnum) return new JObject { ["type"] = "integer" };
+        if (type.IsEnum)
+        {
+            if (type.GetCustomAttribute<JsonConverterAttribute>()?.ConverterType == typeof(Newtonsoft.Json.Converters.StringEnumConverter))
+            {
+                var values = string.Join("|", Enum.GetNames(type));
+                return new JObject { ["type"] = "string", ["pattern"] = values };
+            }
+            return new JObject { ["type"] = "integer" };
+        }
         if (IsListType(type))
         {
             var elementType = type.GetGenericArguments()[0];
@@ -83,10 +91,6 @@ public static class SchemaGenerator
     {
         return prop.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName ?? prop.Name;
     }
-
-    // Note: Enum with [JsonConverter(typeof(StringEnumConverter))] -> string+pattern is in the design
-    // but deferred from this implementation — no Community domain types currently use StringEnumConverter.
-    // Add when needed (e.g., if a future domain property uses a string-serialized enum).
 
     private static bool IsIntegerType(Type t) => t == typeof(byte) || t == typeof(short) || t == typeof(ushort) || t == typeof(int) || t == typeof(long);
     private static bool IsNumberType(Type t) => t == typeof(float) || t == typeof(double) || t == typeof(decimal);

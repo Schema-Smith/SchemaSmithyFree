@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Schema.Domain;
 using Schema.Utility;
@@ -187,6 +188,36 @@ public class SchemaGeneratorTests
         Assert.That(fkItems?["properties"]?["DeleteAction"]?["pattern"]?.ToString(), Is.EqualTo("NO ACTION|CASCADE|SET NULL|SET DEFAULT"));
     }
 
+    [Test]
+    public void ShouldMapStringEnumConverterToStringWithPattern()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(StringEnumClass));
+        var prop = schema["properties"]?["Version"];
+        Assert.That(prop?["type"]?.ToString(), Is.EqualTo("string"));
+        Assert.That(prop?["pattern"]?.ToString(), Does.Contain("ValueA"));
+        Assert.That(prop?["pattern"]?.ToString(), Does.Contain("ValueB"));
+    }
+
+    [Test]
+    public void ShouldMapNullableEnumProperty()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(NullableEnumClass));
+        var prop = schema["properties"]?["Version"];
+        Assert.That(prop?["type"]?.ToString(), Is.EqualTo("string"));
+        Assert.That(prop?["pattern"]?.ToString(), Does.Contain("ValueA"));
+    }
+
+    [Test]
+    public void ShouldGenerateProductSchemaWithMinimumVersion()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Product));
+        var prop = schema["properties"]?["MinimumVersion"];
+        Assert.That(prop, Is.Not.Null, "MinimumVersion should appear in schema");
+        Assert.That(prop?["type"]?.ToString(), Is.EqualTo("string"));
+        Assert.That(prop?["pattern"]?.ToString(), Does.Contain("Sql2019"));
+        Assert.That(prop?["pattern"]?.ToString(), Does.Contain("Sql2022"));
+    }
+
     // --- Test helper classes ---
     private class SimpleStringClass { public string Name { get; set; } }
     private class BoolClass { public bool IsActive { get; set; } }
@@ -220,4 +251,10 @@ public class SchemaGeneratorTests
     {
         [SchemaProperty(Minimum = 0, Maximum = 100)] public byte FillFactor { get; set; }
     }
+
+    [JsonConverter(typeof(StringEnumConverter))]
+    private enum TestStringEnum { ValueA, ValueB, ValueC }
+
+    private class StringEnumClass { public TestStringEnum Version { get; set; } }
+    private class NullableEnumClass { public TestStringEnum? Version { get; set; } }
 }
