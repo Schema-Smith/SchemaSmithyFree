@@ -1,0 +1,63 @@
+{
+  "Schema": "[Production]",
+  "Name": "[Illustration]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[Diagram]",
+      "DataType": "XML",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Illustrations used in manufacturing instructions. Stored as XML."
+      }
+    },
+    {
+      "Name": "[IllustrationID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for Illustration records."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Illustration_IllustrationID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[IllustrationID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Bicycle assembly diagrams."
+  }
+}

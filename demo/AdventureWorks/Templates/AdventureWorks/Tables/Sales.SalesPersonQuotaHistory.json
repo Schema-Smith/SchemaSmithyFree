@@ -1,0 +1,117 @@
+{
+  "Schema": "[Sales]",
+  "Name": "[SalesPersonQuotaHistory]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Sales person identification number. Foreign key to SalesPerson.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[QuotaDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Sales quota date."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[SalesQuota]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "CheckExpression": "[SalesQuota]>(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Sales quota amount."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_SalesPersonQuotaHistory_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[PK_SalesPersonQuotaHistory_BusinessEntityID_QuotaDate]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[BusinessEntityID],[QuotaDate]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_SalesPersonQuotaHistory_SalesPerson_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SalesPerson]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SalesPerson.SalesPersonID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Sales performance tracking."
+  }
+}

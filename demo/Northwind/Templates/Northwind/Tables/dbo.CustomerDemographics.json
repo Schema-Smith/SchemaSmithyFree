@@ -1,0 +1,38 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[CustomerDemographics]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[CustomerDesc]",
+      "DataType": "NTEXT",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[CustomerTypeID]",
+      "DataType": "NCHAR(10)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_CustomerDemographics]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[CustomerTypeID]"
+    }
+  ]
+}

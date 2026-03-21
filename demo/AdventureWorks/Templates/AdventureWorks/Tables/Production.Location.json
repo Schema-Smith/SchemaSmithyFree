@@ -1,0 +1,105 @@
+{
+  "Schema": "[Production]",
+  "Name": "[Location]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[Availability]",
+      "DataType": "DECIMAL(8, 2)",
+      "Nullable": false,
+      "Default": "0.00",
+      "CheckExpression": "[Availability]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Work capacity (in hours) of the manufacturing location."
+      }
+    },
+    {
+      "Name": "[CostRate]",
+      "DataType": "SMALLMONEY",
+      "Nullable": false,
+      "Default": "0.00",
+      "CheckExpression": "[CostRate]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Standard hourly cost of the manufacturing location."
+      }
+    },
+    {
+      "Name": "[LocationID]",
+      "DataType": "SMALLINT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for Location records."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Name]",
+      "DataType": "NAME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Location description."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_Location_Name]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[Name]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_Location_LocationID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[LocationID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Product inventory and manufacturing locations."
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "Name": "AdventureWorks",
+  "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] = '{{AdventureWorksDb}}'",
+  "UpdateFillFactor": true
+}

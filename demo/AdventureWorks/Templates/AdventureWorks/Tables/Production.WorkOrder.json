@@ -1,0 +1,213 @@
+{
+  "Schema": "[Production]",
+  "Name": "[WorkOrder]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[DueDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Work order due date."
+      }
+    },
+    {
+      "Name": "[EndDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Work order end date."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[OrderQty]",
+      "DataType": "INT",
+      "Nullable": false,
+      "CheckExpression": "[OrderQty]>(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product quantity to build."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[ScrappedQty]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "CheckExpression": "[ScrappedQty]>=(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity that failed inspection."
+      }
+    },
+    {
+      "Name": "[ScrapReasonID]",
+      "DataType": "SMALLINT",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Reason for inspection failure."
+      }
+    },
+    {
+      "Name": "[StartDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Work order start date."
+      }
+    },
+    {
+      "Name": "[StockedQty]",
+      "DataType": "INT",
+      "Nullable": false,
+      "ComputedExpression": "isnull([OrderQty]-[ScrappedQty],(0))",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity built and put in inventory."
+      }
+    },
+    {
+      "Name": "[WorkOrderID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for WorkOrder records."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_WorkOrder_ProductID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[IX_WorkOrder_ScrapReasonID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ScrapReasonID]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_WorkOrder_WorkOrderID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[WorkOrderID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_WorkOrder_Product_ProductID]",
+      "Columns": "[ProductID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      }
+    },
+    {
+      "Name": "[FK_WorkOrder_ScrapReason_ScrapReasonID]",
+      "Columns": "[ScrapReasonID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[ScrapReason]",
+      "RelatedColumns": "[ScrapReasonID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing ScrapReason.ScrapReasonID."
+      }
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_WorkOrder_EndDate]",
+      "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NULL"
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Manufacturing work orders."
+  }
+}

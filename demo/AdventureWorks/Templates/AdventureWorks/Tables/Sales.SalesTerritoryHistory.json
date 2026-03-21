@@ -1,0 +1,149 @@
+{
+  "Schema": "[Sales]",
+  "Name": "[SalesTerritoryHistory]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. The sales rep.  Foreign key to SalesPerson.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[EndDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the sales representative left work in the territory."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[StartDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Date the sales representive started work in the territory."
+      }
+    },
+    {
+      "Name": "[TerritoryID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Territory identification number. Foreign key to SalesTerritory.SalesTerritoryID."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_SalesTerritoryHistory_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[PK_SalesTerritoryHistory_BusinessEntityID_StartDate_TerritoryID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[BusinessEntityID],[StartDate],[TerritoryID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_SalesTerritoryHistory_SalesPerson_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SalesPerson]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SalesPerson.SalesPersonID."
+      }
+    },
+    {
+      "Name": "[FK_SalesTerritoryHistory_SalesTerritory_TerritoryID]",
+      "Columns": "[TerritoryID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SalesTerritory]",
+      "RelatedColumns": "[TerritoryID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SalesTerritory.TerritoryID."
+      }
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_SalesTerritoryHistory_EndDate]",
+      "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NULL"
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Sales representative transfers to other sales territories."
+  }
+}

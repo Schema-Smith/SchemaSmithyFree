@@ -1,0 +1,231 @@
+{
+  "Schema": "[Purchasing]",
+  "Name": "[ProductVendor]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[AverageLeadTime]",
+      "DataType": "INT",
+      "Nullable": false,
+      "CheckExpression": "[AverageLeadTime]>=(1)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "The average span of time (in days) between placing an order with the vendor and receiving the purchased product."
+      }
+    },
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to Vendor.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[LastReceiptCost]",
+      "DataType": "MONEY",
+      "Nullable": true,
+      "CheckExpression": "[LastReceiptCost]>(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "The selling price when last purchased."
+      }
+    },
+    {
+      "Name": "[LastReceiptDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the product was last received by the vendor."
+      }
+    },
+    {
+      "Name": "[MaxOrderQty]",
+      "DataType": "INT",
+      "Nullable": false,
+      "CheckExpression": "[MaxOrderQty]>=(1)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "The minimum quantity that should be ordered."
+      }
+    },
+    {
+      "Name": "[MinOrderQty]",
+      "DataType": "INT",
+      "Nullable": false,
+      "CheckExpression": "[MinOrderQty]>=(1)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "The maximum quantity that should be ordered."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[OnOrderQty]",
+      "DataType": "INT",
+      "Nullable": true,
+      "CheckExpression": "[OnOrderQty]>=(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "The quantity currently on order."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[StandardPrice]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "CheckExpression": "[StandardPrice]>(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "The vendor's usual selling price."
+      }
+    },
+    {
+      "Name": "[UnitMeasureCode]",
+      "DataType": "NCHAR(3)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "The product's unit of measure."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_ProductVendor_BusinessEntityID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[BusinessEntityID]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[IX_ProductVendor_UnitMeasureCode]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[UnitMeasureCode]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_ProductVendor_ProductID_BusinessEntityID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID],[BusinessEntityID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_ProductVendor_Product_ProductID]",
+      "Columns": "[ProductID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      }
+    },
+    {
+      "Name": "[FK_ProductVendor_UnitMeasure_UnitMeasureCode]",
+      "Columns": "[UnitMeasureCode]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[UnitMeasure]",
+      "RelatedColumns": "[UnitMeasureCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+      }
+    },
+    {
+      "Name": "[FK_ProductVendor_Vendor_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTableSchema": "[Purchasing]",
+      "RelatedTable": "[Vendor]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Vendor.BusinessEntityID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Cross-reference table mapping vendors with the products they supply."
+  }
+}

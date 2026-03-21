@@ -1,0 +1,188 @@
+{
+  "Schema": "[Sales]",
+  "Name": "[SpecialOffer]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[Category]",
+      "DataType": "NVARCHAR(50)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Group the discount applies to such as Reseller or Customer."
+      }
+    },
+    {
+      "Name": "[Description]",
+      "DataType": "NVARCHAR(255)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount description."
+      }
+    },
+    {
+      "Name": "[DiscountPct]",
+      "DataType": "SMALLMONEY",
+      "Nullable": false,
+      "Default": "0.00",
+      "CheckExpression": "[DiscountPct]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount precentage."
+      }
+    },
+    {
+      "Name": "[EndDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount end date."
+      }
+    },
+    {
+      "Name": "[MaxQty]",
+      "DataType": "INT",
+      "Nullable": true,
+      "CheckExpression": "[MaxQty]>=(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Maximum discount percent allowed."
+      }
+    },
+    {
+      "Name": "[MinQty]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Default": "0",
+      "CheckExpression": "[MinQty]>=(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Minimum discount percent allowed."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[SpecialOfferID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for SpecialOffer records."
+      }
+    },
+    {
+      "Name": "[StartDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount start date."
+      }
+    },
+    {
+      "Name": "[Type]",
+      "DataType": "NVARCHAR(50)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount type category."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_SpecialOffer_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[PK_SpecialOffer_SpecialOfferID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[SpecialOfferID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_SpecialOffer_EndDate]",
+      "Expression": "[EndDate]>=[StartDate]",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [EndDate] >= [StartDate]"
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Sale discounts lookup table."
+  }
+}

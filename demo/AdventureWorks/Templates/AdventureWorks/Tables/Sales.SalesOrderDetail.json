@@ -1,0 +1,219 @@
+{
+  "Schema": "[Sales]",
+  "Name": "[SalesOrderDetail]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[CarrierTrackingNumber]",
+      "DataType": "NVARCHAR(25)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Shipment tracking number supplied by the shipper."
+      }
+    },
+    {
+      "Name": "[LineTotal]",
+      "DataType": "NUMERIC(38, 6)",
+      "Nullable": false,
+      "ComputedExpression": "isnull(([UnitPrice]*((1.0)-[UnitPriceDiscount]))*[OrderQty],(0.0))",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Per product subtotal. Computed as UnitPrice * (1 - UnitPriceDiscount) * OrderQty."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[OrderQty]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "CheckExpression": "[OrderQty]>(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity ordered per product."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product sold to customer. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[SalesOrderDetailID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. One incremental unique number per product sold."
+      }
+    },
+    {
+      "Name": "[SalesOrderID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to SalesOrderHeader.SalesOrderID."
+      }
+    },
+    {
+      "Name": "[SpecialOfferID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Promotional code. Foreign key to SpecialOffer.SpecialOfferID."
+      }
+    },
+    {
+      "Name": "[UnitPrice]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "CheckExpression": "[UnitPrice]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Selling price of a single product."
+      }
+    },
+    {
+      "Name": "[UnitPriceDiscount]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "Default": "0.0",
+      "CheckExpression": "[UnitPriceDiscount]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount amount."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_SalesOrderDetail_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[IX_SalesOrderDetail_ProductID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_SalesOrderDetail_SalesOrderID_SalesOrderDetailID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[SalesOrderID],[SalesOrderDetailID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_SalesOrderDetail_SalesOrderHeader_SalesOrderID]",
+      "Columns": "[SalesOrderID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SalesOrderHeader]",
+      "RelatedColumns": "[SalesOrderID]",
+      "DeleteAction": "CASCADE",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SalesOrderHeader.PurchaseOrderID."
+      }
+    },
+    {
+      "Name": "[FK_SalesOrderDetail_SpecialOfferProduct_SpecialOfferIDProductID]",
+      "Columns": "[SpecialOfferID],[ProductID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SpecialOfferProduct]",
+      "RelatedColumns": "[SpecialOfferID],[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SpecialOfferProduct.SpecialOfferIDProductID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Individual products associated with a specific sales order. See SalesOrderHeader."
+  }
+}

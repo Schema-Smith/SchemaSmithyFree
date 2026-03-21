@@ -1,0 +1,28 @@
+{
+  "type": "object",
+    "properties": {
+        "Name": {
+            "type": "string"
+        },
+        "ValidationScript": {
+            "type": "string"
+        },
+        "DropUnknownIndexes": {
+            "type": "boolean"
+        },
+        "TemplateOrder": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "ScriptTokens": {
+            "type": "object"
+        }
+    },
+  "additionalProperties": false,
+  "required": [
+    "Name",
+    "ValidationScript"
+  ]
+}

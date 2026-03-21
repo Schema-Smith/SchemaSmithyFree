@@ -1,0 +1,141 @@
+{
+  "Schema": "[Production]",
+  "Name": "[ProductInventory]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[Bin]",
+      "DataType": "TINYINT",
+      "Nullable": false,
+      "CheckExpression": "[Bin]>=(0) AND [Bin]<=(100)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Storage container on a shelf in an inventory location."
+      }
+    },
+    {
+      "Name": "[LocationID]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Inventory location identification number. Foreign key to Location.LocationID. "
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[Quantity]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "Default": "0",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity of products in the inventory location."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[Shelf]",
+      "DataType": "NVARCHAR(10)",
+      "Nullable": false,
+      "CheckExpression": "[Shelf] like '[A-Za-z]' OR [Shelf]='N/A'",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Storage compartment within an inventory location."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_ProductInventory_ProductID_LocationID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID],[LocationID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_ProductInventory_Location_LocationID]",
+      "Columns": "[LocationID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Location]",
+      "RelatedColumns": "[LocationID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Location.LocationID."
+      }
+    },
+    {
+      "Name": "[FK_ProductInventory_Product_ProductID]",
+      "Columns": "[ProductID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Product inventory information."
+  }
+}

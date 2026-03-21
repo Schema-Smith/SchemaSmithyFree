@@ -1,0 +1,103 @@
+{
+  "Schema": "[Sales]",
+  "Name": "[CountryRegionCurrency]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[CountryRegionCode]",
+      "DataType": "NVARCHAR(3)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ISO code for countries and regions. Foreign key to CountryRegion.CountryRegionCode."
+      }
+    },
+    {
+      "Name": "[CurrencyCode]",
+      "DataType": "NCHAR(3)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ISO standard currency code. Foreign key to Currency.CurrencyCode."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_CountryRegionCurrency_CurrencyCode]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[CurrencyCode]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_CountryRegionCurrency_CountryRegionCode_CurrencyCode]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[CountryRegionCode],[CurrencyCode]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_CountryRegionCurrency_CountryRegion_CountryRegionCode]",
+      "Columns": "[CountryRegionCode]",
+      "RelatedTableSchema": "[Person]",
+      "RelatedTable": "[CountryRegion]",
+      "RelatedColumns": "[CountryRegionCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
+      }
+    },
+    {
+      "Name": "[FK_CountryRegionCurrency_Currency_CurrencyCode]",
+      "Columns": "[CurrencyCode]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[Currency]",
+      "RelatedColumns": "[CurrencyCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Currency.CurrencyCode."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Cross-reference table mapping ISO currency codes to a country or region."
+  }
+}

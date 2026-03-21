@@ -1,0 +1,89 @@
+{
+  "Schema": "[Production]",
+  "Name": "[ProductModelIllustration]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[IllustrationID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to Illustration.IllustrationID."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[ProductModelID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to ProductModel.ProductModelID."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_ProductModelIllustration_ProductModelID_IllustrationID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductModelID],[IllustrationID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_ProductModelIllustration_Illustration_IllustrationID]",
+      "Columns": "[IllustrationID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Illustration]",
+      "RelatedColumns": "[IllustrationID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Illustration.IllustrationID."
+      }
+    },
+    {
+      "Name": "[FK_ProductModelIllustration_ProductModel_ProductModelID]",
+      "Columns": "[ProductModelID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[ProductModel]",
+      "RelatedColumns": "[ProductModelID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing ProductModel.ProductModelID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Cross-reference table mapping product models and illustrations."
+  }
+}

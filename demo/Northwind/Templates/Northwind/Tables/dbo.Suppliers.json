@@ -1,0 +1,150 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[Suppliers]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[Address]",
+      "DataType": "NVARCHAR(60)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[City]",
+      "DataType": "NVARCHAR(15)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[CompanyName]",
+      "DataType": "NVARCHAR(40)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[ContactName]",
+      "DataType": "NVARCHAR(30)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[ContactTitle]",
+      "DataType": "NVARCHAR(30)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[Country]",
+      "DataType": "NVARCHAR(15)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[Fax]",
+      "DataType": "NVARCHAR(24)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[HomePage]",
+      "DataType": "NTEXT",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[Phone]",
+      "DataType": "NVARCHAR(24)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[PostalCode]",
+      "DataType": "NVARCHAR(10)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[Region]",
+      "DataType": "NVARCHAR(15)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[SupplierID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[CompanyName]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[CompanyName]"
+    },
+    {
+      "Name": "[PK_Suppliers]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[SupplierID]"
+    },
+    {
+      "Name": "[PostalCode]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[PostalCode]"
+    }
+  ]
+}

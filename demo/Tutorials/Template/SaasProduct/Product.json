@@ -1,0 +1,13 @@
+ {
+  "Name": "SaasProduct",
+  "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] = '{{RegistryDb}}') THEN 1 ELSE 0 END AS BIT)",
+  "TemplateOrder": [
+    "Registry",
+    "Client"
+  ],
+  "ScriptTokens": {
+    "RegistryDb": "Registry",
+    "MigrationVersion": "1.0.1"
+  },
+  "Platform": "MSSQL"
+}

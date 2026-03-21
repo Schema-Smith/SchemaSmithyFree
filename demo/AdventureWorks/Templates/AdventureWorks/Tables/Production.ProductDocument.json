@@ -1,0 +1,89 @@
+{
+  "Schema": "[Production]",
+  "Name": "[ProductDocument]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[DocumentNode]",
+      "DataType": "HIERARCHYID",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Document identification number. Foreign key to Document.DocumentNode."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_ProductDocument_ProductID_DocumentNode]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID],[DocumentNode]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_ProductDocument_Document_DocumentNode]",
+      "Columns": "[DocumentNode]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Document]",
+      "RelatedColumns": "[DocumentNode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Document.DocumentNode."
+      }
+    },
+    {
+      "Name": "[FK_ProductDocument_Product_ProductID]",
+      "Columns": "[ProductID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Cross-reference table mapping products to related product documents."
+  }
+}

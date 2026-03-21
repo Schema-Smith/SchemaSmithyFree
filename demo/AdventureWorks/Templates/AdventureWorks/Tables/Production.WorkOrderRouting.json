@@ -1,0 +1,230 @@
+{
+  "Schema": "[Production]",
+  "Name": "[WorkOrderRouting]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[ActualCost]",
+      "DataType": "MONEY",
+      "Nullable": true,
+      "CheckExpression": "[ActualCost]>(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Actual manufacturing cost."
+      }
+    },
+    {
+      "Name": "[ActualEndDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Actual end date."
+      }
+    },
+    {
+      "Name": "[ActualResourceHrs]",
+      "DataType": "DECIMAL(9, 4)",
+      "Nullable": true,
+      "CheckExpression": "[ActualResourceHrs]>=(0.0000)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Number of manufacturing hours used."
+      }
+    },
+    {
+      "Name": "[ActualStartDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Actual start date."
+      }
+    },
+    {
+      "Name": "[LocationID]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Manufacturing location where the part is processed. Foreign key to Location.LocationID."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[OperationSequence]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Indicates the manufacturing process sequence."
+      }
+    },
+    {
+      "Name": "[PlannedCost]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "CheckExpression": "[PlannedCost]>(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Estimated manufacturing cost."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[ScheduledEndDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Planned manufacturing end date."
+      }
+    },
+    {
+      "Name": "[ScheduledStartDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Planned manufacturing start date."
+      }
+    },
+    {
+      "Name": "[WorkOrderID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to WorkOrder.WorkOrderID."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_WorkOrderRouting_ProductID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_WorkOrderRouting_WorkOrderID_ProductID_OperationSequence]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[WorkOrderID],[ProductID],[OperationSequence]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_WorkOrderRouting_Location_LocationID]",
+      "Columns": "[LocationID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Location]",
+      "RelatedColumns": "[LocationID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Location.LocationID."
+      }
+    },
+    {
+      "Name": "[FK_WorkOrderRouting_WorkOrder_WorkOrderID]",
+      "Columns": "[WorkOrderID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[WorkOrder]",
+      "RelatedColumns": "[WorkOrderID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing WorkOrder.WorkOrderID."
+      }
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_WorkOrderRouting_ActualEndDate]",
+      "Expression": "[ActualEndDate]>=[ActualStartDate] OR [ActualEndDate] IS NULL OR [ActualStartDate] IS NULL",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [ActualEndDate] >= [ActualStartDate] OR [ActualEndDate] IS NULL OR [ActualStartDate] IS NULL"
+      }
+    },
+    {
+      "Name": "[CK_WorkOrderRouting_ScheduledEndDate]",
+      "Expression": "[ScheduledEndDate]>=[ScheduledStartDate]",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [ScheduledEndDate] >= [ScheduledStartDate]"
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Work order details."
+  }
+}

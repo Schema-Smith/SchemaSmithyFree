@@ -1,0 +1,103 @@
+{
+  "Schema": "[HumanResources]",
+  "Name": "[EmployeePayHistory]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Employee identification number. Foreign key to Employee.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[PayFrequency]",
+      "DataType": "TINYINT",
+      "Nullable": false,
+      "CheckExpression": "[PayFrequency]=(2) OR [PayFrequency]=(1)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "1 = Salary received monthly, 2 = Salary received biweekly"
+      }
+    },
+    {
+      "Name": "[Rate]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "CheckExpression": "[Rate]>=(6.50) AND [Rate]<=(200.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Salary hourly rate."
+      }
+    },
+    {
+      "Name": "[RateChangeDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the change in pay is effective"
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_EmployeePayHistory_BusinessEntityID_RateChangeDate]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[BusinessEntityID],[RateChangeDate]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_EmployeePayHistory_Employee_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTableSchema": "[HumanResources]",
+      "RelatedTable": "[Employee]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Employee pay history."
+  }
+}

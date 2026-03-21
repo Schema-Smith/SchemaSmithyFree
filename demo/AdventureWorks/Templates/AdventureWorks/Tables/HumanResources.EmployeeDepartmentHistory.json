@@ -1,0 +1,174 @@
+{
+  "Schema": "[HumanResources]",
+  "Name": "[EmployeeDepartmentHistory]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Employee identification number. Foreign key to Employee.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[DepartmentID]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Department in which the employee worked including currently. Foreign key to Department.DepartmentID."
+      }
+    },
+    {
+      "Name": "[EndDate]",
+      "DataType": "DATE",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the employee left the department. NULL = Current department."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[ShiftID]",
+      "DataType": "TINYINT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Identifies which 8-hour shift the employee works. Foreign key to Shift.Shift.ID."
+      }
+    },
+    {
+      "Name": "[StartDate]",
+      "DataType": "DATE",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the employee started work in the department."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_EmployeeDepartmentHistory_DepartmentID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[DepartmentID]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[IX_EmployeeDepartmentHistory_ShiftID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ShiftID]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_EmployeeDepartmentHistory_BusinessEntityID_StartDate_DepartmentID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[BusinessEntityID],[StartDate],[DepartmentID],[ShiftID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_EmployeeDepartmentHistory_Department_DepartmentID]",
+      "Columns": "[DepartmentID]",
+      "RelatedTableSchema": "[HumanResources]",
+      "RelatedTable": "[Department]",
+      "RelatedColumns": "[DepartmentID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Department.DepartmentID."
+      }
+    },
+    {
+      "Name": "[FK_EmployeeDepartmentHistory_Employee_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTableSchema": "[HumanResources]",
+      "RelatedTable": "[Employee]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
+      }
+    },
+    {
+      "Name": "[FK_EmployeeDepartmentHistory_Shift_ShiftID]",
+      "Columns": "[ShiftID]",
+      "RelatedTableSchema": "[HumanResources]",
+      "RelatedTable": "[Shift]",
+      "RelatedColumns": "[ShiftID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Shift.ShiftID"
+      }
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_EmployeeDepartmentHistory_EndDate]",
+      "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NUL"
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Employee department transfers."
+  }
+}

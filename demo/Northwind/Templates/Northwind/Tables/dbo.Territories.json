@@ -1,0 +1,58 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[Territories]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[RegionID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[TerritoryDescription]",
+      "DataType": "NCHAR(50)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[TerritoryID]",
+      "DataType": "NVARCHAR(20)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Territories]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[TerritoryID]"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Territories_Region]",
+      "Columns": "[RegionID]",
+      "RelatedTableSchema": "[dbo]",
+      "RelatedTable": "[Region]",
+      "RelatedColumns": "[RegionID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    }
+  ]
+}

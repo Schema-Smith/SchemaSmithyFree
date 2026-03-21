@@ -1,0 +1,275 @@
+{
+  "Schema": "[Person]",
+  "Name": "[Person]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[AdditionalContactInfo]",
+      "DataType": "XML([Person].[AdditionalContactInfoSchemaCollection])",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Additional contact information about the person stored in xml format. "
+      }
+    },
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for Person records."
+      }
+    },
+    {
+      "Name": "[Demographics]",
+      "DataType": "XML([Person].[IndividualSurveySchemaCollection])",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Personal information such as hobbies, and income collected from online shoppers. Used for sales analysis."
+      }
+    },
+    {
+      "Name": "[EmailPromotion]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Default": "0",
+      "CheckExpression": "[EmailPromotion]>=(0) AND [EmailPromotion]<=(2)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = Contact does not wish to receive e-mail promotions, 1 = Contact does wish to receive e-mail promotions from AdventureWorks, 2 = Contact does wish to receive e-mail promotions from AdventureWorks and selected partners. "
+      }
+    },
+    {
+      "Name": "[FirstName]",
+      "DataType": "NAME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "First name of the person."
+      }
+    },
+    {
+      "Name": "[LastName]",
+      "DataType": "NAME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Last name of the person."
+      }
+    },
+    {
+      "Name": "[MiddleName]",
+      "DataType": "NAME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Middle name or middle initial of the person."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[NameStyle]",
+      "DataType": "NAMESTYLE",
+      "Nullable": false,
+      "Default": "0",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = The data in FirstName and LastName are stored in western style (first name, last name) order.  1 = Eastern style (last name, first name) order."
+      }
+    },
+    {
+      "Name": "[PersonType]",
+      "DataType": "NCHAR(2)",
+      "Nullable": false,
+      "CheckExpression": "[PersonType] IS NULL OR (upper([PersonType])='GC' OR upper([PersonType])='SP' OR upper([PersonType])='EM' OR upper([PersonType])='IN' OR upper([PersonType])='VC' OR upper([PersonType])='SC')",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary type of person: SC = Store Contact, IN = Individual (retail) customer, SP = Sales person, EM = Employee (non-sales), VC = Vendor contact, GC = General contact"
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[Suffix]",
+      "DataType": "NVARCHAR(10)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Surname suffix. For example, Sr. or Jr."
+      }
+    },
+    {
+      "Name": "[Title]",
+      "DataType": "NVARCHAR(8)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "A courtesy title. For example, Mr. or Ms."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_Person_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[IX_Person_LastName_FirstName_MiddleName]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[LastName],[FirstName],[MiddleName]"
+    },
+    {
+      "Name": "[PK_Person_BusinessEntityID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[BusinessEntityID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "XmlIndexes": [
+    {
+      "Name": "[PXML_Person_AddContact]",
+      "Column": "[AdditionalContactInfo]",
+      "IsPrimary": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary XML index."
+      }
+    },
+    {
+      "Name": "[PXML_Person_Demographics]",
+      "Column": "[Demographics]",
+      "IsPrimary": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary XML index."
+      }
+    },
+    {
+      "Name": "[XMLPATH_Person_Demographics]",
+      "Column": "[Demographics]",
+      "IsPrimary": false,
+      "PrimaryIndex": "[PXML_Person_Demographics]",
+      "SecondaryIndexType": "PATH",
+      "ExtendedProperties": {
+        "MS_Description": "Secondary XML index for path."
+      }
+    },
+    {
+      "Name": "[XMLPROPERTY_Person_Demographics]",
+      "Column": "[Demographics]",
+      "IsPrimary": false,
+      "PrimaryIndex": "[PXML_Person_Demographics]",
+      "SecondaryIndexType": "PROPERTY",
+      "ExtendedProperties": {
+        "MS_Description": "Secondary XML index for property."
+      }
+    },
+    {
+      "Name": "[XMLVALUE_Person_Demographics]",
+      "Column": "[Demographics]",
+      "IsPrimary": false,
+      "PrimaryIndex": "[PXML_Person_Demographics]",
+      "SecondaryIndexType": "VALUE",
+      "ExtendedProperties": {
+        "MS_Description": "Secondary XML index for value."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Person_BusinessEntity_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTableSchema": "[Person]",
+      "RelatedTable": "[BusinessEntity]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Human beings involved with AdventureWorks: employees, customer contacts, and vendor contacts."
+  }
+}

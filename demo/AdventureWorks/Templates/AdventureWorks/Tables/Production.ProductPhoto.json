@@ -1,0 +1,99 @@
+{
+  "Schema": "[Production]",
+  "Name": "[ProductPhoto]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[LargePhoto]",
+      "DataType": "VARBINARY(MAX)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Large image of the product."
+      }
+    },
+    {
+      "Name": "[LargePhotoFileName]",
+      "DataType": "NVARCHAR(50)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Large image file name."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[ProductPhotoID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for ProductPhoto records."
+      }
+    },
+    {
+      "Name": "[ThumbNailPhoto]",
+      "DataType": "VARBINARY(MAX)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Small image of the product."
+      }
+    },
+    {
+      "Name": "[ThumbnailPhotoFileName]",
+      "DataType": "NVARCHAR(50)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Small image file name."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_ProductPhoto_ProductPhotoID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductPhotoID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Product images."
+  }
+}

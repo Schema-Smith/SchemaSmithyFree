@@ -1,0 +1,273 @@
+{
+  "Schema": "[Production]",
+  "Name": "[Document]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[ChangeNumber]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Default": "0",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Engineering change approval number."
+      }
+    },
+    {
+      "Name": "[Document]",
+      "DataType": "VARBINARY(MAX)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Complete document."
+      }
+    },
+    {
+      "Name": "[DocumentLevel]",
+      "DataType": "SMALLINT",
+      "Nullable": true,
+      "ComputedExpression": "[DocumentNode].[GetLevel]()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Depth in the document hierarchy."
+      }
+    },
+    {
+      "Name": "[DocumentNode]",
+      "DataType": "HIERARCHYID",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for Document records."
+      }
+    },
+    {
+      "Name": "[DocumentSummary]",
+      "DataType": "NVARCHAR(MAX)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Document abstract."
+      }
+    },
+    {
+      "Name": "[FileExtension]",
+      "DataType": "NVARCHAR(8)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "File extension indicating the document type. For example, .doc or .txt."
+      }
+    },
+    {
+      "Name": "[FileName]",
+      "DataType": "NVARCHAR(400)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "File name of the document"
+      }
+    },
+    {
+      "Name": "[FolderFlag]",
+      "DataType": "BIT",
+      "Nullable": false,
+      "Default": "0",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = This is a folder, 1 = This is a document."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Owner]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Employee who controls the document.  Foreign key to Employee.BusinessEntityID"
+      }
+    },
+    {
+      "Name": "[Revision]",
+      "DataType": "NCHAR(5)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Revision number of the document. "
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Required for FileStream."
+      }
+    },
+    {
+      "Name": "[Status]",
+      "DataType": "TINYINT",
+      "Nullable": false,
+      "CheckExpression": "[Status]>=(1) AND [Status]<=(3)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "1 = Pending approval, 2 = Approved, 3 = Obsolete"
+      }
+    },
+    {
+      "Name": "[Title]",
+      "DataType": "NVARCHAR(50)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Title of the document."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_Document_DocumentLevel_DocumentNode]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[DocumentLevel],[DocumentNode]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[AK_Document_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support FileStream."
+      }
+    },
+    {
+      "Name": "[IX_Document_FileName_Revision]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[FileName],[Revision]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_Document_DocumentNode]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[DocumentNode]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    },
+    {
+      "Name": "[UQ__Document__F73921F79941AC4E]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Document_Employee_Owner]",
+      "Columns": "[Owner]",
+      "RelatedTableSchema": "[HumanResources]",
+      "RelatedTable": "[Employee]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Employee.BusinessEntityID."
+      }
+    }
+  ],
+  "FullTextIndex": {
+    "FullTextCatalog": "[AW2016FullTextCatalog]",
+    "KeyIndex": "[PK_Document_DocumentNode]",
+    "ChangeTracking": "AUTO",
+    "Columns": "[Document] TYPE COLUMN [FileExtension],[DocumentSummary]"
+  },
+  "ExtendedProperties": {
+    "MS_Description": "Product maintenance documents."
+  }
+}

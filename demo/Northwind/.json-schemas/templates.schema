@@ -1,0 +1,22 @@
+{
+  "type": "object",
+    "properties": {
+        "Name": {
+            "type": "string"
+        },
+        "DatabaseIdentificationScript": {
+            "type": "string"
+        },
+        "VersionStampScript": {
+            "type": "string"
+        },
+        "UpdateFillFactor": {
+            "type": "boolean"
+        }
+    },
+  "additionalProperties": false,
+  "required": [
+    "Name",
+    "DatabaseIdentificationScript"
+  ]
+}

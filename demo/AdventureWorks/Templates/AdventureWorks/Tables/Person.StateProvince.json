@@ -1,0 +1,193 @@
+{
+  "Schema": "[Person]",
+  "Name": "[StateProvince]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[CountryRegionCode]",
+      "DataType": "NVARCHAR(3)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ISO standard country or region code. Foreign key to CountryRegion.CountryRegionCode. "
+      }
+    },
+    {
+      "Name": "[IsOnlyStateProvinceFlag]",
+      "DataType": "FLAG",
+      "Nullable": false,
+      "Default": "1",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = StateProvinceCode exists. 1 = StateProvinceCode unavailable, using CountryRegionCode."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Name]",
+      "DataType": "NAME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "State or province description."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[StateProvinceCode]",
+      "DataType": "NCHAR(3)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ISO standard state or province code."
+      }
+    },
+    {
+      "Name": "[StateProvinceID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for StateProvince records."
+      }
+    },
+    {
+      "Name": "[TerritoryID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ID of the territory in which the state or province is located. Foreign key to SalesTerritory.SalesTerritoryID."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_StateProvince_Name]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[Name]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[AK_StateProvince_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[AK_StateProvince_StateProvinceCode_CountryRegionCode]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[StateProvinceCode],[CountryRegionCode]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_StateProvince_StateProvinceID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[StateProvinceID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_StateProvince_CountryRegion_CountryRegionCode]",
+      "Columns": "[CountryRegionCode]",
+      "RelatedTableSchema": "[Person]",
+      "RelatedTable": "[CountryRegion]",
+      "RelatedColumns": "[CountryRegionCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
+      }
+    },
+    {
+      "Name": "[FK_StateProvince_SalesTerritory_TerritoryID]",
+      "Columns": "[TerritoryID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SalesTerritory]",
+      "RelatedColumns": "[TerritoryID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SalesTerritory.TerritoryID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "State and province lookup table."
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[CustomerCustomerDemo]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[CustomerID]",
+      "DataType": "NCHAR(5)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    },
+    {
+      "Name": "[CustomerTypeID]",
+      "DataType": "NCHAR(10)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_CustomerCustomerDemo]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[CustomerID],[CustomerTypeID]"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_CustomerCustomerDemo]",
+      "Columns": "[CustomerTypeID]",
+      "RelatedTableSchema": "[dbo]",
+      "RelatedTable": "[CustomerDemographics]",
+      "RelatedColumns": "[CustomerTypeID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    },
+    {
+      "Name": "[FK_CustomerCustomerDemo_Customers]",
+      "Columns": "[CustomerID]",
+      "RelatedTableSchema": "[dbo]",
+      "RelatedTable": "[Customers]",
+      "RelatedColumns": "[CustomerID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    }
+  ]
+}

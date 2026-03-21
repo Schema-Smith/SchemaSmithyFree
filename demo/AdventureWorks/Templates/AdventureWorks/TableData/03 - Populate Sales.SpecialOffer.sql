@@ -1,0 +1,75 @@
+DECLARE @v_json NVARCHAR(MAX) = '[
+{"Category":"No Discount","Description":"No Discount","DiscountPct":0.0000,"EndDate":"2014-11-30T00:00:00","MinQty":0,"ModifiedDate":"2011-04-01T00:00:00","SpecialOfferID":1,"StartDate":"2011-05-01T00:00:00","Type":"No Discount"},
+{"Category":"Reseller","Description":"Volume Discount 11 to 14","DiscountPct":0.0200,"EndDate":"2014-05-30T00:00:00","MaxQty":14,"MinQty":11,"ModifiedDate":"2011-05-01T00:00:00","SpecialOfferID":2,"StartDate":"2011-05-31T00:00:00","Type":"Volume Discount"},
+{"Category":"Reseller","Description":"Volume Discount 15 to 24","DiscountPct":0.0500,"EndDate":"2014-05-30T00:00:00","MaxQty":24,"MinQty":15,"ModifiedDate":"2011-05-01T00:00:00","SpecialOfferID":3,"StartDate":"2011-05-31T00:00:00","Type":"Volume Discount"},
+{"Category":"Reseller","Description":"Volume Discount 25 to 40","DiscountPct":0.1000,"EndDate":"2014-05-30T00:00:00","MaxQty":40,"MinQty":25,"ModifiedDate":"2011-05-01T00:00:00","SpecialOfferID":4,"StartDate":"2011-05-31T00:00:00","Type":"Volume Discount"},
+{"Category":"Reseller","Description":"Volume Discount 41 to 60","DiscountPct":0.1500,"EndDate":"2014-05-30T00:00:00","MaxQty":60,"MinQty":41,"ModifiedDate":"2011-05-01T00:00:00","SpecialOfferID":5,"StartDate":"2011-05-31T00:00:00","Type":"Volume Discount"},
+{"Category":"Reseller","Description":"Volume Discount over 60","DiscountPct":0.2000,"EndDate":"2014-05-30T00:00:00","MinQty":61,"ModifiedDate":"2011-05-01T00:00:00","SpecialOfferID":6,"StartDate":"2011-05-31T00:00:00","Type":"Volume Discount"},
+{"Category":"Reseller","Description":"Mountain-100 Clearance Sale","DiscountPct":0.3500,"EndDate":"2012-05-29T00:00:00","MinQty":0,"ModifiedDate":"2012-03-14T00:00:00","SpecialOfferID":7,"StartDate":"2012-04-13T00:00:00","Type":"Discontinued Product"},
+{"Category":"Reseller","Description":"Sport Helmet Discount-2002","DiscountPct":0.1000,"EndDate":"2012-06-29T00:00:00","MinQty":0,"ModifiedDate":"2012-04-30T00:00:00","SpecialOfferID":8,"StartDate":"2012-05-30T00:00:00","Type":"Seasonal Discount"},
+{"Category":"Reseller","Description":"Road-650 Overstock","DiscountPct":0.3000,"EndDate":"2012-07-30T00:00:00","MinQty":0,"ModifiedDate":"2012-04-30T00:00:00","SpecialOfferID":9,"StartDate":"2012-05-30T00:00:00","Type":"Excess Inventory"},
+{"Category":"Customer","Description":"Mountain Tire Sale","DiscountPct":0.5000,"EndDate":"2013-07-29T00:00:00","MinQty":0,"ModifiedDate":"2013-04-14T00:00:00","SpecialOfferID":10,"StartDate":"2013-05-14T00:00:00","Type":"Excess Inventory"},
+{"Category":"Reseller","Description":"Sport Helmet Discount-2003","DiscountPct":0.1500,"EndDate":"2013-06-29T00:00:00","MinQty":0,"ModifiedDate":"2013-04-30T00:00:00","SpecialOfferID":11,"StartDate":"2013-05-30T00:00:00","Type":"Seasonal Discount"},
+{"Category":"Reseller","Description":"LL Road Frame Sale","DiscountPct":0.3500,"EndDate":"2013-07-14T00:00:00","MinQty":0,"ModifiedDate":"2013-04-30T00:00:00","SpecialOfferID":12,"StartDate":"2013-05-30T00:00:00","Type":"Excess Inventory"},
+{"Category":"Reseller","Description":"Touring-3000 Promotion","DiscountPct":0.1500,"EndDate":"2013-08-29T00:00:00","MinQty":0,"ModifiedDate":"2013-04-30T00:00:00","SpecialOfferID":13,"StartDate":"2013-05-30T00:00:00","Type":"New Product"},
+{"Category":"Reseller","Description":"Touring-1000 Promotion","DiscountPct":0.2000,"EndDate":"2013-08-29T00:00:00","MinQty":0,"ModifiedDate":"2013-04-30T00:00:00","SpecialOfferID":14,"StartDate":"2013-05-30T00:00:00","Type":"New Product"},
+{"Category":"Customer","Description":"Half-Price Pedal Sale","DiscountPct":0.5000,"EndDate":"2013-08-14T00:00:00","MinQty":0,"ModifiedDate":"2013-06-14T00:00:00","SpecialOfferID":15,"StartDate":"2013-07-14T00:00:00","Type":"Seasonal Discount"},
+{"Category":"Reseller","Description":"Mountain-500 Silver Clearance Sale","DiscountPct":0.4000,"EndDate":"2014-05-30T00:00:00","MinQty":0,"ModifiedDate":"2014-03-01T00:00:00","SpecialOfferID":16,"StartDate":"2014-03-31T00:00:00","Type":"Discontinued Product"}
+]';
+
+SET IDENTITY_INSERT [Sales].[SpecialOffer] ON; 
+MERGE INTO [Sales].[SpecialOffer] AS Target
+USING (
+  SELECT [Category],[Description],[DiscountPct],[EndDate],[MaxQty],[MinQty],[ModifiedDate],[SpecialOfferID],[StartDate],[Type]
+    FROM OPENJSON(@v_json)
+    WITH (
+           [Category] NVARCHAR(50),
+           [Description] NVARCHAR(255),
+           [DiscountPct] SMALLMONEY,
+           [EndDate] DATETIME,
+           [MaxQty] INT,
+           [MinQty] INT,
+           [ModifiedDate] DATETIME,
+           [rowguid] UNIQUEIDENTIFIER,
+           [SpecialOfferID] INT,
+           [StartDate] DATETIME,
+           [Type] NVARCHAR(50)
+    )
+) AS Source
+ON Source.[SpecialOfferID] = Target.[SpecialOfferID]
+WHEN MATCHED AND (NOT (Target.[Category] = Source.[Category] OR (Target.[Category] IS NULL AND Source.[Category] IS NULL)) AND NOT (Target.[Description] = Source.[Description] OR (Target.[Description] IS NULL AND Source.[Description] IS NULL)) AND NOT (Target.[DiscountPct] = Source.[DiscountPct] OR (Target.[DiscountPct] IS NULL AND Source.[DiscountPct] IS NULL)) AND NOT (Target.[EndDate] = Source.[EndDate] OR (Target.[EndDate] IS NULL AND Source.[EndDate] IS NULL)) AND NOT (Target.[MaxQty] = Source.[MaxQty] OR (Target.[MaxQty] IS NULL AND Source.[MaxQty] IS NULL)) AND NOT (Target.[MinQty] = Source.[MinQty] OR (Target.[MinQty] IS NULL AND Source.[MinQty] IS NULL)) AND NOT (Target.[ModifiedDate] = Source.[ModifiedDate] OR (Target.[ModifiedDate] IS NULL AND Source.[ModifiedDate] IS NULL)) AND NOT (Target.[StartDate] = Source.[StartDate] OR (Target.[StartDate] IS NULL AND Source.[StartDate] IS NULL)) AND NOT (Target.[Type] = Source.[Type] OR (Target.[Type] IS NULL AND Source.[Type] IS NULL))) THEN
+  UPDATE SET
+        [Category] = Source.[Category],
+        [Description] = Source.[Description],
+        [DiscountPct] = Source.[DiscountPct],
+        [EndDate] = Source.[EndDate],
+        [MaxQty] = Source.[MaxQty],
+        [MinQty] = Source.[MinQty],
+        [ModifiedDate] = Source.[ModifiedDate],
+        [StartDate] = Source.[StartDate],
+        [Type] = Source.[Type]
+WHEN NOT MATCHED THEN
+  INSERT (
+        [Category],
+        [Description],
+        [DiscountPct],
+        [EndDate],
+        [MaxQty],
+        [MinQty],
+        [ModifiedDate],
+        [SpecialOfferID],
+        [StartDate],
+        [Type]
+  ) VALUES (
+        Source.[Category],
+        Source.[Description],
+        Source.[DiscountPct],
+        Source.[EndDate],
+        Source.[MaxQty],
+        Source.[MinQty],
+        Source.[ModifiedDate],
+        Source.[SpecialOfferID],
+        Source.[StartDate],
+        Source.[Type]  
+  );
+SET IDENTITY_INSERT [Sales].[SpecialOffer] OFF; 

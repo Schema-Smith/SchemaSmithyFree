@@ -1,0 +1,11 @@
+{
+  "Name": "Northwind",
+  "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] = '{{NorthwindDb}}') THEN 1 ELSE 0 END AS BIT)",
+  "TemplateOrder": [
+    "Northwind"
+  ],
+  "ScriptTokens": {
+    "NorthwindDb": "Northwind"
+  },
+  "Platform": "MSSQL"
+}

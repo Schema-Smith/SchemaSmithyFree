@@ -1,0 +1,11 @@
+{
+  "Name": "AdventureWorks",
+  "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] = '{{AdventureWorksDb}}') THEN 1 ELSE 0 END AS BIT)",
+  "TemplateOrder": [
+    "AdventureWorks"
+  ],
+  "ScriptTokens": {
+    "AdventureWorksDb": "AdventureWorks"
+  },
+  "Platform": "MSSQL"
+}

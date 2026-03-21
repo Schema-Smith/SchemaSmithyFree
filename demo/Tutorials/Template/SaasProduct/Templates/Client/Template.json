@@ -1,0 +1,5 @@
+{
+  "Name": "Client",
+  "DatabaseIdentificationScript": "SELECT [DatabaseName] FROM {{RegistryDB}}.dbo.ClientDBs WHERE [IsEnabled] = 1",
+  "VersionStampScript": "IF NOT EXISTS(SELECT * FROM dbo.ProductVersion WHERE Product = '{{ProductName}}' AND Version = '{{MigrationVersion}}') INSERT dbo.ProductVersion(Product, Version) VALUES('{{ProductName}}', '{{MigrationVersion}}')"
+}

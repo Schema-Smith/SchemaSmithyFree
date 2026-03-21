@@ -1,0 +1,89 @@
+{
+  "Schema": "[Sales]",
+  "Name": "[SalesOrderHeaderSalesReason]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[SalesOrderID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to SalesOrderHeader.SalesOrderID."
+      }
+    },
+    {
+      "Name": "[SalesReasonID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to SalesReason.SalesReasonID."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_SalesOrderHeaderSalesReason_SalesOrderID_SalesReasonID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[SalesOrderID],[SalesReasonID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_SalesOrderHeaderSalesReason_SalesOrderHeader_SalesOrderID]",
+      "Columns": "[SalesOrderID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SalesOrderHeader]",
+      "RelatedColumns": "[SalesOrderID]",
+      "DeleteAction": "CASCADE",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SalesOrderHeader.SalesOrderID."
+      }
+    },
+    {
+      "Name": "[FK_SalesOrderHeaderSalesReason_SalesReason_SalesReasonID]",
+      "Columns": "[SalesReasonID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SalesReason]",
+      "RelatedColumns": "[SalesReasonID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SalesReason.SalesReasonID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Cross-reference table mapping sales orders to sales reason codes."
+  }
+}

@@ -1,0 +1,227 @@
+{
+  "Schema": "[Production]",
+  "Name": "[BillOfMaterials]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[BillOfMaterialsID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for BillOfMaterials records."
+      }
+    },
+    {
+      "Name": "[BOMLevel]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Indicates the depth the component is from its parent (AssemblyID)."
+      }
+    },
+    {
+      "Name": "[ComponentID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Component identification number. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[EndDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the component stopped being used in the assembly item."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[PerAssemblyQty]",
+      "DataType": "DECIMAL(8, 2)",
+      "Nullable": false,
+      "Default": "1.00",
+      "CheckExpression": "[PerAssemblyQty]>=(1.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity of the component needed to create the assembly."
+      }
+    },
+    {
+      "Name": "[ProductAssemblyID]",
+      "DataType": "INT",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Parent product identification number. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[StartDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the component started being used in the assembly item."
+      }
+    },
+    {
+      "Name": "[UnitMeasureCode]",
+      "DataType": "NCHAR(3)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Standard code identifying the unit of measure for the quantity."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_BillOfMaterials_ProductAssemblyID_ComponentID_StartDate]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductAssemblyID],[ComponentID],[StartDate]",
+      "ExtendedProperties": {
+        "MS_Description": "Clustered index."
+      }
+    },
+    {
+      "Name": "[IX_BillOfMaterials_UnitMeasureCode]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[UnitMeasureCode]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_BillOfMaterials_BillOfMaterialsID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[BillOfMaterialsID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Nonclustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_BillOfMaterials_Product_ComponentID]",
+      "Columns": "[ComponentID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ComponentID."
+      }
+    },
+    {
+      "Name": "[FK_BillOfMaterials_Product_ProductAssemblyID]",
+      "Columns": "[ProductAssemblyID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ProductAssemblyID."
+      }
+    },
+    {
+      "Name": "[FK_BillOfMaterials_UnitMeasure_UnitMeasureCode]",
+      "Columns": "[UnitMeasureCode]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[UnitMeasure]",
+      "RelatedColumns": "[UnitMeasureCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+      }
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_BillOfMaterials_BOMLevel]",
+      "Expression": "[ProductAssemblyID] IS NULL AND [BOMLevel]=(0) AND [PerAssemblyQty]=(1.00) OR [ProductAssemblyID] IS NOT NULL AND [BOMLevel]>=(1)",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [ProductAssemblyID] IS NULL AND [BOMLevel] = (0) AND [PerAssemblyQty] = (1) OR [ProductAssemblyID] IS NOT NULL AND [BOMLevel] >= (1)"
+      }
+    },
+    {
+      "Name": "[CK_BillOfMaterials_EndDate]",
+      "Expression": "[EndDate]>[StartDate] OR [EndDate] IS NULL",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint EndDate] > [StartDate] OR [EndDate] IS NULL"
+      }
+    },
+    {
+      "Name": "[CK_BillOfMaterials_ProductAssemblyID]",
+      "Expression": "[ProductAssemblyID]<>[ComponentID]",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [ProductAssemblyID] <> [ComponentID]"
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Items required to make bicycles and bicycle subassemblies. It identifies the heirarchical relationship between a parent product and its components."
+  }
+}

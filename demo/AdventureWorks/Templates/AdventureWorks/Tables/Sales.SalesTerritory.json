@@ -1,0 +1,198 @@
+{
+  "Schema": "[Sales]",
+  "Name": "[SalesTerritory]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[CostLastYear]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "Default": "0.00",
+      "CheckExpression": "[CostLastYear]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Business costs in the territory the previous year."
+      }
+    },
+    {
+      "Name": "[CostYTD]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "Default": "0.00",
+      "CheckExpression": "[CostYTD]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Business costs in the territory year to date."
+      }
+    },
+    {
+      "Name": "[CountryRegionCode]",
+      "DataType": "NVARCHAR(3)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ISO standard country or region code. Foreign key to CountryRegion.CountryRegionCode. "
+      }
+    },
+    {
+      "Name": "[Group]",
+      "DataType": "NVARCHAR(50)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Geographic area to which the sales territory belong."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Name]",
+      "DataType": "NAME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Sales territory description"
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[SalesLastYear]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "Default": "0.00",
+      "CheckExpression": "[SalesLastYear]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Sales in the territory the previous year."
+      }
+    },
+    {
+      "Name": "[SalesYTD]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "Default": "0.00",
+      "CheckExpression": "[SalesYTD]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Sales in the territory year to date."
+      }
+    },
+    {
+      "Name": "[TerritoryID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for SalesTerritory records."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_SalesTerritory_Name]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[Name]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[AK_SalesTerritory_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[PK_SalesTerritory_TerritoryID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[TerritoryID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_SalesTerritory_CountryRegion_CountryRegionCode]",
+      "Columns": "[CountryRegionCode]",
+      "RelatedTableSchema": "[Person]",
+      "RelatedTable": "[CountryRegion]",
+      "RelatedColumns": "[CountryRegionCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Sales territory lookup table."
+  }
+}

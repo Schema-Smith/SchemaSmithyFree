@@ -1,0 +1,22 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[ProductVersion]",
+  "Columns": [
+    {
+      "Name": "[Product]",
+      "DataType": "VARCHAR(50)",
+      "Nullable": false
+    },
+    {
+      "Name": "[Version]",
+      "DataType": "VARCHAR(50)",
+      "Nullable": false
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()"
+    }
+  ]
+}

@@ -1,0 +1,151 @@
+{
+  "Schema": "[Sales]",
+  "Name": "[CurrencyRate]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[AverageRate]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Average exchange rate for the day."
+      }
+    },
+    {
+      "Name": "[CurrencyRateDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the exchange rate was obtained."
+      }
+    },
+    {
+      "Name": "[CurrencyRateID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for CurrencyRate records."
+      }
+    },
+    {
+      "Name": "[EndOfDayRate]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Final exchange rate for the day."
+      }
+    },
+    {
+      "Name": "[FromCurrencyCode]",
+      "DataType": "NCHAR(3)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Exchange rate was converted from this currency code."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[ToCurrencyCode]",
+      "DataType": "NCHAR(3)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Exchange rate was converted to this currency code."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_CurrencyRate_CurrencyRateDate_FromCurrencyCode_ToCurrencyCode]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[CurrencyRateDate],[FromCurrencyCode],[ToCurrencyCode]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_CurrencyRate_CurrencyRateID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[CurrencyRateID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_CurrencyRate_Currency_FromCurrencyCode]",
+      "Columns": "[FromCurrencyCode]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[Currency]",
+      "RelatedColumns": "[CurrencyCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Currency.FromCurrencyCode."
+      }
+    },
+    {
+      "Name": "[FK_CurrencyRate_Currency_ToCurrencyCode]",
+      "Columns": "[ToCurrencyCode]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[Currency]",
+      "RelatedColumns": "[CurrencyCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Currency.ToCurrencyCode."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Currency exchange rates."
+  }
+}

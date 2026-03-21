@@ -1,0 +1,440 @@
+{
+  "Schema": "[Production]",
+  "Name": "[Product]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[Class]",
+      "DataType": "NCHAR(2)",
+      "Nullable": true,
+      "CheckExpression": "upper([Class])='H' OR upper([Class])='M' OR upper([Class])='L' OR [Class] IS NULL",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "H = High, M = Medium, L = Low"
+      }
+    },
+    {
+      "Name": "[Color]",
+      "DataType": "NVARCHAR(15)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product color."
+      }
+    },
+    {
+      "Name": "[DaysToManufacture]",
+      "DataType": "INT",
+      "Nullable": false,
+      "CheckExpression": "[DaysToManufacture]>=(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Number of days required to manufacture the product."
+      }
+    },
+    {
+      "Name": "[DiscontinuedDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the product was discontinued."
+      }
+    },
+    {
+      "Name": "[FinishedGoodsFlag]",
+      "DataType": "FLAG",
+      "Nullable": false,
+      "Default": "1",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = Product is not a salable item. 1 = Product is salable."
+      }
+    },
+    {
+      "Name": "[ListPrice]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "CheckExpression": "[ListPrice]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Selling price."
+      }
+    },
+    {
+      "Name": "[MakeFlag]",
+      "DataType": "FLAG",
+      "Nullable": false,
+      "Default": "1",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = Product is purchased, 1 = Product is manufactured in-house."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Name]",
+      "DataType": "NAME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Name of the product."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for Product records."
+      }
+    },
+    {
+      "Name": "[ProductLine]",
+      "DataType": "NCHAR(2)",
+      "Nullable": true,
+      "CheckExpression": "upper([ProductLine])='R' OR upper([ProductLine])='M' OR upper([ProductLine])='T' OR upper([ProductLine])='S' OR [ProductLine] IS NULL",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "R = Road, M = Mountain, T = Touring, S = Standard"
+      }
+    },
+    {
+      "Name": "[ProductModelID]",
+      "DataType": "INT",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product is a member of this product model. Foreign key to ProductModel.ProductModelID."
+      }
+    },
+    {
+      "Name": "[ProductNumber]",
+      "DataType": "NVARCHAR(25)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Unique product identification number."
+      }
+    },
+    {
+      "Name": "[ProductSubcategoryID]",
+      "DataType": "INT",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product is a member of this product subcategory. Foreign key to ProductSubCategory.ProductSubCategoryID. "
+      }
+    },
+    {
+      "Name": "[ReorderPoint]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "CheckExpression": "[ReorderPoint]>(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Inventory level that triggers a purchase order or work order. "
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[SafetyStockLevel]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "CheckExpression": "[SafetyStockLevel]>(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Minimum inventory quantity. "
+      }
+    },
+    {
+      "Name": "[SellEndDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the product was no longer available for sale."
+      }
+    },
+    {
+      "Name": "[SellStartDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the product was available for sale."
+      }
+    },
+    {
+      "Name": "[Size]",
+      "DataType": "NVARCHAR(5)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product size."
+      }
+    },
+    {
+      "Name": "[SizeUnitMeasureCode]",
+      "DataType": "NCHAR(3)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Unit of measure for Size column."
+      }
+    },
+    {
+      "Name": "[StandardCost]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "CheckExpression": "[StandardCost]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Standard cost of the product."
+      }
+    },
+    {
+      "Name": "[Style]",
+      "DataType": "NCHAR(2)",
+      "Nullable": true,
+      "CheckExpression": "upper([Style])='U' OR upper([Style])='M' OR upper([Style])='W' OR [Style] IS NULL",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "W = Womens, M = Mens, U = Universal"
+      }
+    },
+    {
+      "Name": "[Weight]",
+      "DataType": "DECIMAL(8, 2)",
+      "Nullable": true,
+      "CheckExpression": "[Weight]>(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product weight."
+      }
+    },
+    {
+      "Name": "[WeightUnitMeasureCode]",
+      "DataType": "NCHAR(3)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Unit of measure for Weight column."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_Product_Name]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[Name]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[AK_Product_ProductNumber]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductNumber]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[AK_Product_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[PK_Product_ProductID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Product_ProductModel_ProductModelID]",
+      "Columns": "[ProductModelID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[ProductModel]",
+      "RelatedColumns": "[ProductModelID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing ProductModel.ProductModelID."
+      }
+    },
+    {
+      "Name": "[FK_Product_ProductSubcategory_ProductSubcategoryID]",
+      "Columns": "[ProductSubcategoryID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[ProductSubcategory]",
+      "RelatedColumns": "[ProductSubcategoryID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing ProductSubcategory.ProductSubcategoryID."
+      }
+    },
+    {
+      "Name": "[FK_Product_UnitMeasure_SizeUnitMeasureCode]",
+      "Columns": "[SizeUnitMeasureCode]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[UnitMeasure]",
+      "RelatedColumns": "[UnitMeasureCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+      }
+    },
+    {
+      "Name": "[FK_Product_UnitMeasure_WeightUnitMeasureCode]",
+      "Columns": "[WeightUnitMeasureCode]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[UnitMeasure]",
+      "RelatedColumns": "[UnitMeasureCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+      }
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_Product_SellEndDate]",
+      "Expression": "[SellEndDate]>=[SellStartDate] OR [SellEndDate] IS NULL",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [SellEndDate] >= [SellStartDate] OR [SellEndDate] IS NULL"
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Products sold or used in the manfacturing of sold products."
+  }
+}

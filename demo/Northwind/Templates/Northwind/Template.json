@@ -1,0 +1,5 @@
+{
+  "Name": "Northwind",
+  "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] = '{{NorthwindDb}}'",
+  "UpdateFillFactor": true
+}

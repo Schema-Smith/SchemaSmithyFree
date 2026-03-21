@@ -1,0 +1,205 @@
+{
+  "Schema": "[Purchasing]",
+  "Name": "[PurchaseOrderDetail]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[DueDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the product is expected to be received."
+      }
+    },
+    {
+      "Name": "[LineTotal]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "ComputedExpression": "isnull([OrderQty]*[UnitPrice],(0.00))",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Per product subtotal. Computed as OrderQty * UnitPrice."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[OrderQty]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "CheckExpression": "[OrderQty]>(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity ordered."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[PurchaseOrderDetailID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. One line number per purchased product."
+      }
+    },
+    {
+      "Name": "[PurchaseOrderID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to PurchaseOrderHeader.PurchaseOrderID."
+      }
+    },
+    {
+      "Name": "[ReceivedQty]",
+      "DataType": "DECIMAL(8, 2)",
+      "Nullable": false,
+      "CheckExpression": "[ReceivedQty]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity actually received from the vendor."
+      }
+    },
+    {
+      "Name": "[RejectedQty]",
+      "DataType": "DECIMAL(8, 2)",
+      "Nullable": false,
+      "CheckExpression": "[RejectedQty]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity rejected during inspection."
+      }
+    },
+    {
+      "Name": "[StockedQty]",
+      "DataType": "DECIMAL(9, 2)",
+      "Nullable": false,
+      "ComputedExpression": "isnull([ReceivedQty]-[RejectedQty],(0.00))",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity accepted into inventory. Computed as ReceivedQty - RejectedQty."
+      }
+    },
+    {
+      "Name": "[UnitPrice]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "CheckExpression": "[UnitPrice]>=(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "ExtendedProperties": {
+        "MS_Description": "Vendor's selling price of a single product."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_PurchaseOrderDetail_ProductID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID]",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_PurchaseOrderDetail_PurchaseOrderID_PurchaseOrderDetailID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[PurchaseOrderID],[PurchaseOrderDetailID]",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_PurchaseOrderDetail_Product_ProductID]",
+      "Columns": "[ProductID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      }
+    },
+    {
+      "Name": "[FK_PurchaseOrderDetail_PurchaseOrderHeader_PurchaseOrderID]",
+      "Columns": "[PurchaseOrderID]",
+      "RelatedTableSchema": "[Purchasing]",
+      "RelatedTable": "[PurchaseOrderHeader]",
+      "RelatedColumns": "[PurchaseOrderID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing PurchaseOrderHeader.PurchaseOrderID."
+      }
+    }
+  ],
+  "ExtendedProperties": {
+    "MS_Description": "Individual products associated with a specific purchase order. See PurchaseOrderHeader."
+  }
+}
