@@ -192,25 +192,25 @@ Tokens use the `{{TokenName}}` syntax and are replaced at runtime in all SQL fil
 ### Token Scoping and Precedence
 
 - **Product-level tokens** are defined in `Product.json` and available to all templates
-- **Configuration overrides** -- Token values can be overridden in `appsettings.json` and environment variables
+- **Configuration overrides** -- Token values can be overridden in `{ToolName}.settings.json` and environment variables
 - **Built-in tokens** -- `{{ProductName}}` and `{{TemplateName}}` are automatically available
 
 ---
 
 ## Configuration
 
-### appsettings.json
+### Settings Files
 
-Each tool has its own `appsettings.json` with hierarchical settings.
+Each tool has its own `{ToolName}.settings.json` with hierarchical settings (e.g., `SchemaQuench.settings.json`, `SchemaTongs.settings.json`, `DataTongs.settings.json`).
 
 ### Configuration Hierarchy
 
 Settings are loaded from multiple sources with this precedence (highest wins):
 
 1. CLI switches
-2. Environment variables (`SmithySettings_` and `QuenchSettings_` prefixes)
+2. Environment variables (`SmithySettings_` prefix)
 3. User secrets
-4. Configuration file (`appsettings.json`)
+4. Configuration file (`{ToolName}.settings.json`)
 
 ### ZIP Support
 

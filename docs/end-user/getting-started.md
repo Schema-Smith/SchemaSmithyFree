@@ -22,7 +22,7 @@ Download the ZIP package for the target framework (`net9.0` or `net481`). Extrac
 - `SchemaTongs.exe`
 - `DataTongs.exe`
 
-Each tool includes an `appsettings.json` file for configuration.
+Each tool includes a `{ToolName}.settings.json` file for configuration (e.g., `SchemaQuench.settings.json`).
 
 ### From Source
 
@@ -40,9 +40,9 @@ Tools are built to their respective `bin/` directories.
 
 All tools load configuration from multiple sources in this order (later sources override earlier ones):
 
-1. **appsettings.json** — In the tool's directory, or specified via `--ConfigFile`
+1. **`{ToolName}.settings.json`** — In the tool's directory, or specified via `--ConfigFile`
 2. **User secrets** — Available in DEBUG builds only
-3. **Environment variables** — Using `QuenchSettings_` or `SmithySettings_` prefixes with `__` as hierarchy separator. `SmithySettings_` takes precedence over `QuenchSettings_` when both define the same key.
+3. **Environment variables** — Using the `SmithySettings_` prefix with `__` as hierarchy separator
 4. **Command-line switches** — `--ConfigFile`, `--LogPath`
 
 ---
@@ -63,7 +63,7 @@ DataTongs --version
 
 ### 1. Extract a schema with SchemaTongs
 
-Configure `SchemaTongs/appsettings.json` with the source database connection:
+Configure `SchemaTongs/SchemaTongs.settings.json` with the source database connection:
 
 ```json
 {
@@ -91,7 +91,7 @@ This creates a schema package at the specified path with all extractable databas
 
 ### 2. Apply with SchemaQuench
 
-Configure `SchemaQuench/appsettings.json` with the target server and the schema package path:
+Configure `SchemaQuench/SchemaQuench.settings.json` with the target server and the schema package path:
 
 ```json
 {

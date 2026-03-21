@@ -206,16 +206,16 @@ Packages can be deployed from **folders** or **ZIP archives**.
 - Case-insensitive replacement
 - Automatic tokens: `{{ProductName}}`, `{{TemplateName}}`
 - Applied to all SQL scripts and JSON config files
-- Override hierarchy: Product.json → appsettings.json → environment variables → CLI switches
+- Override hierarchy: Product.json → `{ToolName}.settings.json` → environment variables → CLI switches
 
 ---
 
 ## Configuration System
 
 **Loading Hierarchy (lowest to highest priority):**
-1. `appsettings.json` (in tool directory or via `--ConfigFile`)
+1. `{ToolName}.settings.json` (in tool directory or via `--ConfigFile`)
 2. User secrets (debug builds only)
-3. Environment variables (`SmithySettings_` or `QuenchSettings_` prefixes, `__` as hierarchy separator)
+3. Environment variables (`SmithySettings_` prefix, `__` as hierarchy separator)
 4. Command-line switches
 
 **Authentication:**

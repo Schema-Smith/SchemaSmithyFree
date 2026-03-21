@@ -43,7 +43,7 @@ SchemaQuench automatically adds the following tokens:
 
 Token values defined in `Product.json` can be overridden via configuration sources without modifying the package:
 
-### appsettings.json
+### Settings File
 
 ```json
 {
@@ -57,11 +57,9 @@ Token values defined in `Product.json` can be overridden via configuration sourc
 ### Environment Variables
 
 ```bash
-export QuenchSettings_ScriptTokens__MainDB="Staging"
+export SmithySettings_ScriptTokens__MainDB="Staging"
 export SmithySettings_ScriptTokens__ReleaseVersion="2.1.1"
 ```
-
-`SmithySettings_` takes precedence over `QuenchSettings_` when both define the same key.
 
 Overrides only apply to tokens that already exist in `Product.json`. New tokens cannot be introduced via configuration overrides alone.
 
@@ -82,7 +80,7 @@ Tokens are resolved in:
 When `Product.json` defines a token and a configuration override provides a different value, the override wins:
 
 1. `Product.json` `ScriptTokens` — base values
-2. `appsettings.json` `ScriptTokens` section — overrides matching keys
+2. `{ToolName}.settings.json` `ScriptTokens` section — overrides matching keys
 3. Environment variables — overrides matching keys
 
 ---

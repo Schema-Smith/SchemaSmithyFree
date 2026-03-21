@@ -6,14 +6,14 @@ Applies to: DataTongs (SQL Server, Community)
 
 DataTongs reads its configuration from multiple sources, merged in the following precedence order (highest priority last):
 
-1. **Configuration file** -- `appsettings.json` in the current working directory (or the file specified by `--ConfigFile`)
+1. **Configuration file** -- `DataTongs.settings.json` in the current working directory (or the file specified by `--ConfigFile`)
 2. **User secrets** (debug builds only)
-3. **Environment variables** with the `QuenchSettings_` or `SmithySettings_` prefix
+3. **Environment variables** with the `SmithySettings_` prefix
 4. **Command-line switches** (highest precedence)
 
 ---
 
-## appsettings.json
+## DataTongs.settings.json
 
 ```json
 {
@@ -78,16 +78,16 @@ Configuration keys can be overridden using environment variables. For the genera
 
 ### Environment Variable Mapping
 
-| Configuration Key | QuenchSettings_ Variable | SmithySettings_ Variable |
-|---|---|---|
-| `Source:Server` | `QuenchSettings_Source__Server` | `SmithySettings_Source__Server` |
-| `Source:User` | `QuenchSettings_Source__User` | `SmithySettings_Source__User` |
-| `Source:Password` | `QuenchSettings_Source__Password` | `SmithySettings_Source__Password` |
-| `Source:Database` | `QuenchSettings_Source__Database` | `SmithySettings_Source__Database` |
-| `OutputPath` | `QuenchSettings_OutputPath` | `SmithySettings_OutputPath` |
-| `ShouldCast:DisableTriggers` | `QuenchSettings_ShouldCast__DisableTriggers` | `SmithySettings_ShouldCast__DisableTriggers` |
-| `ShouldCast:MergeUpdate` | `QuenchSettings_ShouldCast__MergeUpdate` | `SmithySettings_ShouldCast__MergeUpdate` |
-| `ShouldCast:MergeDelete` | `QuenchSettings_ShouldCast__MergeDelete` | `SmithySettings_ShouldCast__MergeDelete` |
+| Configuration Key | SmithySettings_ Variable |
+|---|---|
+| `Source:Server` | `SmithySettings_Source__Server` |
+| `Source:User` | `SmithySettings_Source__User` |
+| `Source:Password` | `SmithySettings_Source__Password` |
+| `Source:Database` | `SmithySettings_Source__Database` |
+| `OutputPath` | `SmithySettings_OutputPath` |
+| `ShouldCast:DisableTriggers` | `SmithySettings_ShouldCast__DisableTriggers` |
+| `ShouldCast:MergeUpdate` | `SmithySettings_ShouldCast__MergeUpdate` |
+| `ShouldCast:MergeDelete` | `SmithySettings_ShouldCast__MergeDelete` |
 
 ### Example
 

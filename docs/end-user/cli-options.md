@@ -32,7 +32,7 @@ These switches are recognized by all three CLI tools.
 |---|---|---|
 | `--version` | `-v`, `--ver` | Print the tool version, then exit. |
 | `--help` | `-h`, `-?` | Print command-line options, then exit. |
-| `--ConfigFile:<path>` | | Path to the configuration file. Overrides the default `appsettings.json` in the current working directory. |
+| `--ConfigFile:<path>` | | Path to the configuration file. Overrides the default `{ToolName}.settings.json` in the current working directory. |
 | `--LogPath:<path>` | | Directory for log output and backup directories. Defaults to the executable directory. |
 
 ---

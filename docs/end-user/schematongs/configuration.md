@@ -6,14 +6,14 @@ Applies to: SchemaTongs (SQL Server, Community)
 
 SchemaTongs reads its configuration from multiple sources, merged in the following precedence order (highest priority last):
 
-1. **Configuration file** -- `appsettings.json` in the current working directory (or the file specified by `--ConfigFile`)
+1. **Configuration file** -- `SchemaTongs.settings.json` in the current working directory (or the file specified by `--ConfigFile`)
 2. **User secrets** (debug builds only)
-3. **Environment variables** with the `QuenchSettings_` or `SmithySettings_` prefix
+3. **Environment variables** with the `SmithySettings_` prefix
 4. **Command-line switches** (highest precedence)
 
 ---
 
-## appsettings.json
+## SchemaTongs.settings.json
 
 ```json
 {
@@ -95,17 +95,17 @@ Configuration keys can be overridden using environment variables. For the genera
 
 ### Environment Variable Mapping
 
-| Configuration Key | QuenchSettings_ Variable | SmithySettings_ Variable |
-|---|---|---|
-| `Source:Server` | `QuenchSettings_Source__Server` | `SmithySettings_Source__Server` |
-| `Source:User` | `QuenchSettings_Source__User` | `SmithySettings_Source__User` |
-| `Source:Password` | `QuenchSettings_Source__Password` | `SmithySettings_Source__Password` |
-| `Source:Database` | `QuenchSettings_Source__Database` | `SmithySettings_Source__Database` |
-| `Product:Path` | `QuenchSettings_Product__Path` | `SmithySettings_Product__Path` |
-| `Product:Name` | `QuenchSettings_Product__Name` | `SmithySettings_Product__Name` |
-| `Template:Name` | `QuenchSettings_Template__Name` | `SmithySettings_Template__Name` |
-| `ShouldCast:Tables` | `QuenchSettings_ShouldCast__Tables` | `SmithySettings_ShouldCast__Tables` |
-| `ShouldCast:ObjectList` | `QuenchSettings_ShouldCast__ObjectList` | `SmithySettings_ShouldCast__ObjectList` |
+| Configuration Key | SmithySettings_ Variable |
+|---|---|
+| `Source:Server` | `SmithySettings_Source__Server` |
+| `Source:User` | `SmithySettings_Source__User` |
+| `Source:Password` | `SmithySettings_Source__Password` |
+| `Source:Database` | `SmithySettings_Source__Database` |
+| `Product:Path` | `SmithySettings_Product__Path` |
+| `Product:Name` | `SmithySettings_Product__Name` |
+| `Template:Name` | `SmithySettings_Template__Name` |
+| `ShouldCast:Tables` | `SmithySettings_ShouldCast__Tables` |
+| `ShouldCast:ObjectList` | `SmithySettings_ShouldCast__ObjectList` |
 
 ### Example
 

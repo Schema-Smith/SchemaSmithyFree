@@ -60,7 +60,7 @@ ALTER TABLE [schema].[table] ENABLE TRIGGER ALL;          -- if DisableTriggers
 
 ## Table Selection
 
-Tables to extract are configured in the `Tables` array in `appsettings.json`:
+Tables to extract are configured in the `Tables` array in `DataTongs.settings.json`:
 
 ```json
 "Tables": [

@@ -6,14 +6,14 @@ Applies to: SchemaQuench (SQL Server, Community)
 
 SchemaQuench reads its configuration from multiple sources, merged in the following precedence order (highest priority last):
 
-1. **Configuration file** -- `appsettings.json` in the current working directory (or the file specified by `--ConfigFile`)
+1. **Configuration file** -- `SchemaQuench.settings.json` in the current working directory (or the file specified by `--ConfigFile`)
 2. **User secrets** (debug builds only)
-3. **Environment variables** with the `QuenchSettings_` or `SmithySettings_` prefix
+3. **Environment variables** with the `SmithySettings_` prefix
 4. **Command-line switches** (highest precedence)
 
 ---
 
-## appsettings.json
+## SchemaQuench.settings.json
 
 ```json
 {
@@ -23,7 +23,12 @@ SchemaQuench reads its configuration from multiple sources, merged in the follow
         "Password": ""
     },
     "WhatIfONLY": false,
-    "SchemaPackagePath": ""
+    "SchemaPackagePath": "",
+    "KindleTheForge": true,
+    "UpdateTables": true,
+    "DropTablesRemovedFromProduct": true,
+    "RunScriptsTwice": false,
+    "ScriptTokens": {}
 }
 ```
 
@@ -45,10 +50,15 @@ SchemaQuench reads its configuration from multiple sources, merged in the follow
 |-----|------|---------|-------------|
 | `SchemaPackagePath` | string | _(required)_ | Path to the schema package directory or ZIP file. |
 | `WhatIfONLY` | bool | `false` | When `true`, runs in dry-run mode. Table quench generates SQL without executing it. Script slots are skipped. |
+| `KindleTheForge` | bool | `true` | When `true`, installs SchemaSmith helper functions and stored procedures in the target database. |
+| `UpdateTables` | bool | `true` | When `true`, applies table structure changes (columns, indexes, constraints) from the schema package. |
+| `DropTablesRemovedFromProduct` | bool | `true` | When `true`, drops tables that exist in the database but are not defined in the schema package. |
+| `RunScriptsTwice` | bool | `false` | When `true`, runs object scripts twice to resolve cross-dependencies between objects. |
+| `ScriptTokens` | object | `{}` | Config-level override for product script tokens. Keys are token names, values are replacement strings. See [Script Tokens](../script-tokens.md). |
 
 ### Script Token Overrides
 
-Token values from `Product.json` can be overridden via the `ScriptTokens` section in `appsettings.json` or environment variables. See [Script Tokens](../script-tokens.md) for the full reference.
+Token values from `Product.json` can be overridden via the `ScriptTokens` section in `SchemaQuench.settings.json` or environment variables. See [Script Tokens](../script-tokens.md) for the full reference.
 
 ---
 
@@ -58,14 +68,18 @@ Configuration keys can be overridden using environment variables. For the genera
 
 ### Environment Variable Mapping
 
-| Configuration Key | QuenchSettings_ Variable | SmithySettings_ Variable |
-|---|---|---|
-| `Target:Server` | `QuenchSettings_Target__Server` | `SmithySettings_Target__Server` |
-| `Target:User` | `QuenchSettings_Target__User` | `SmithySettings_Target__User` |
-| `Target:Password` | `QuenchSettings_Target__Password` | `SmithySettings_Target__Password` |
-| `WhatIfONLY` | `QuenchSettings_WhatIfONLY` | `SmithySettings_WhatIfONLY` |
-| `SchemaPackagePath` | `QuenchSettings_SchemaPackagePath` | `SmithySettings_SchemaPackagePath` |
-| `ScriptTokens:<name>` | `QuenchSettings_ScriptTokens__<name>` | `SmithySettings_ScriptTokens__<name>` |
+| Configuration Key | SmithySettings_ Variable |
+|---|---|
+| `Target:Server` | `SmithySettings_Target__Server` |
+| `Target:User` | `SmithySettings_Target__User` |
+| `Target:Password` | `SmithySettings_Target__Password` |
+| `WhatIfONLY` | `SmithySettings_WhatIfONLY` |
+| `SchemaPackagePath` | `SmithySettings_SchemaPackagePath` |
+| `KindleTheForge` | `SmithySettings_KindleTheForge` |
+| `UpdateTables` | `SmithySettings_UpdateTables` |
+| `DropTablesRemovedFromProduct` | `SmithySettings_DropTablesRemovedFromProduct` |
+| `RunScriptsTwice` | `SmithySettings_RunScriptsTwice` |
+| `ScriptTokens:<name>` | `SmithySettings_ScriptTokens__<name>` |
 
 ### Example
 
