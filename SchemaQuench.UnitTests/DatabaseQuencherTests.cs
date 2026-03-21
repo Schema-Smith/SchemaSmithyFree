@@ -59,6 +59,7 @@ public class DatabaseQuencherTests
             quencher.Quench();
 
             var expectedBoostrapCommand = commands.FirstOrDefault(c => c.Contains("CREATE OR ALTER PROCEDURE [SchemaSmith].[TableQuench]"));
+            var expectedBoostrapCommand = commands.FirstOrDefault(c => c.StartsWith("CREATE OR ALTER PROCEDURE SchemaSmith.TableQuench"));
             Assert.That(expectedBoostrapCommand, Is.Not.Null);
 
             FactoryContainer.Clear();
