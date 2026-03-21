@@ -2,16 +2,16 @@
 using log4net;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
-using Microsoft.SqlServer.Management.Common;
-using Microsoft.SqlServer.Management.Smo;
 using Newtonsoft.Json;
 using Schema.DataAccess;
 using Schema.Isolators;
 using Schema.Utility;
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace SchemaTongs;
@@ -21,18 +21,6 @@ public class SchemaTongs
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private string _productPath = "";
     private string _templatePath = "";
-    private readonly ScriptingOptions _options = new()
-    {
-        SchemaQualify = true,
-        NoCollation = true,
-        WithDependencies = false,
-        ExtendedProperties = true,
-        AllowSystemObjects = false,
-        Permissions = false,
-        ScriptForCreateOrAlter = true,
-        ScriptForCreateDrop = false,
-        IncludeIfNotExists = true
-    };
     private bool _includeTables;
     private bool _includeSchemas;
     private bool _includeUserDefinedTypes;
@@ -88,225 +76,33 @@ public class SchemaTongs
     private void CastDatabaseObjects(string targetDb)
     {
         using var connection = GetConnection(targetDb);
-        using var command = connection.CreateCommand();
+        try
+        {
+            using var command = connection.CreateCommand();
+            command.CommandTimeout = 0;
 
-        _progressLog.Info("Kindling The Forge");
-        ForgeKindler.KindleTheForge(command);
+            _progressLog.Info("Kindling The Forge");
+            ForgeKindler.KindleTheForge(command);
 
-        if (_includeTables) ExtractTableDefinitions(command, targetDb);
+            if (_includeTables) ExtractTableDefinitions(command, targetDb);
+            if (_includeSchemas) ScriptSqlServerSchemas(command);
+            if (_includeUserDefinedTypes) ScriptSqlServerUserDefinedTypes(command);
+            if (_includeUserDefinedFunctions) ScriptSqlServerFunctions(command);
+            if (_includeViews) ScriptSqlServerViews(command);
+            if (_includeStoredProcedures) ScriptSqlServerProcedures(command);
+            if (_includeTableTriggers) ScriptSqlServerTableTriggers(command);
+            if (_includeFullTextCatalogs) ScriptSqlServerFullTextCatalogs(command);
+            if (_includeFullTextStopLists) ScriptSqlServerFullTextStopLists(command);
+            if (_includeDDLTriggers) ScriptSqlServerDDLTriggers(command);
+            if (_includeXmlSchemaCollections) ScriptSqlServerXmlSchemaCollections(command);
+        }
+        finally
+        {
+            connection.Close();
+        }
 
-        var serverConnection = new ServerConnection((SqlConnection)connection);
-        var server = new Server(serverConnection);
-        var sourceDb = server.Databases[targetDb];
-        if (_includeSchemas) ScriptSchemas(sourceDb);
-        if (_includeUserDefinedTypes) ScriptUserDefinedTypes(sourceDb);
-        if (_includeUserDefinedFunctions) ScriptUserDefinedFunctions(sourceDb);
-        if (_includeViews) ScriptViews(sourceDb);
-        if (_includeStoredProcedures) ScriptStoredProcedures(sourceDb);
-        if (_includeTableTriggers) ScriptTableTriggers(sourceDb);
-        if (_includeFullTextCatalogs) ScriptFullTextCatalogs(sourceDb);
-        if (_includeFullTextStopLists) ScriptFullTextStopLists(sourceDb);
-        if (_includeDDLTriggers) ScriptDDLTriggers(sourceDb);
-        if (_includeXmlSchemaCollections) ScriptXmlSchemaCollections(sourceDb);
         _progressLog.Info("");
         _progressLog.Info("Casting Completed Successfully");
-    }
-
-    private void ScriptSchemas(Database sourceDb)
-    {
-        _progressLog.Info("Casting Schema Scripts");
-        sourceDb.PrefetchObjects(typeof(Microsoft.SqlServer.Management.Smo.Schema), _options);
-        var castPath = Path.Combine(_templatePath, "Schemas");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        foreach (Microsoft.SqlServer.Management.Smo.Schema schema in sourceDb.Schemas)
-        {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(schema.Name.ToLower())) continue;
-            if (schema.IsSystemObject || schema.Name.Contains(@"\") || schema.Name.EqualsIgnoringCase("SchemaSmith")) continue;
-
-            var fileName = Path.Combine(castPath, $"{schema.Name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", schema.Script(_options).Cast<string>()));
-        }
-    }
-
-    private void ScriptUserDefinedTypes(Database sourceDb)
-    {
-        _progressLog.Info("Casting User Defined Types");
-        sourceDb.PrefetchObjects(typeof(UserDefinedDataType), _options);
-        sourceDb.PrefetchObjects(typeof(UserDefinedTableType), _options);
-        var castPath = Path.Combine(_templatePath, "DataTypes");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        foreach (UserDefinedDataType type in sourceDb.UserDefinedDataTypes)
-        {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(type.Name.ToLower()) && !_objectsToCast.Contains($"{type.Schema}.{type.Name}".ToLower())) continue;
-            
-            var fileName = Path.Combine(castPath, $"{type.Schema}.{type.Name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", type.Script(_options).Cast<string>()));
-        }
-        foreach (UserDefinedTableType type in sourceDb.UserDefinedTableTypes)
-        {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(type.Name.ToLower()) && !_objectsToCast.Contains($"{type.Schema}.{type.Name}".ToLower())) continue;
-            
-            var fileName = Path.Combine(castPath, $"{type.Schema}.{type.Name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\n", type.Script(_options).Cast<string>()));
-        }
-    }
-
-    private void ScriptUserDefinedFunctions(Database sourceDb)
-    {
-        _progressLog.Info("Casting Function Scripts");
-        sourceDb.PrefetchObjects(typeof(UserDefinedFunction), _options);
-        var castPath = Path.Combine(_templatePath, "Functions");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        foreach (UserDefinedFunction function in sourceDb.UserDefinedFunctions)
-        {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(function.Name.ToLower()) && !_objectsToCast.Contains($"{function.Schema}.{function.Name}".ToLower())) continue;
-            if (function.IsSystemObject || function.IsEncrypted || function.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
-
-            var fileName = Path.Combine(castPath, $"{function.Schema}.{function.Name}.sql");
-            var sql = @$"SET ANSI_NULLS {(function.AnsiNullsStatus ? "ON" : "OFF")}
-SET QUOTED_IDENTIFIER {(function.QuotedIdentifierStatus ? "ON" : "OFF")}
-GO{(_scriptDynamicDependencyRemovalForFunctions ? @$"
-
-DECLARE @v_SearchTerm VARCHAR(2000) = '%{function.Name}%'
-DECLARE @v_SQL VARCHAR(MAX) = (SELECT STRING_AGG(Task, ';' + CHAR(13) + CHAR(10)) 
-                                 FROM (SELECT 'ALTER TABLE [' + OBJECT_SCHEMA_NAME(cc.parent_object_id) + '].[' + OBJECT_NAME(cc.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + OBJECT_NAME(cc.[name]) + ']' AS Task
-                                         FROM sys.check_constraints cc
-                                         WHERE cc.[definition] LIKE @v_SearchTerm
-                                            OR EXISTS (SELECT *
-                                                         FROM sys.computed_columns cc2
-                                                         WHERE cc2.[definition] LIKE @v_SearchTerm
-                                                           AND cc2.[object_id] = cc.parent_object_id
-                                                           AND cc2.column_id = cc.parent_column_id)
-                                       UNION ALL
-                                       SELECT 'ALTER TABLE [' + OBJECT_SCHEMA_NAME(dc.parent_object_id) + '].[' + OBJECT_NAME(dc.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + OBJECT_NAME(dc.[name]) + ']'
-                                         FROM sys.default_constraints dc
-                                         WHERE dc.[definition] LIKE @v_SearchTerm
-                                            OR EXISTS (SELECT *
-                                                         FROM sys.computed_columns cc
-                                                         WHERE cc.[definition] LIKE @v_SearchTerm
-                                                           AND cc.[object_id] = dc.parent_object_id
-                                                           AND cc.column_id = dc.parent_column_id)
-                                       UNION ALL
-                                       SELECT 'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + OBJECT_NAME(fk.[name]) + ']'
-                                         FROM sys.foreign_keys fk
-                                         WHERE EXISTS (SELECT *
-                                                         FROM sys.computed_columns cc
-                                                         JOIN sys.foreign_key_columns fc ON fk.[object_id] = fk.[object_id]
-                                                                                        AND ((fc.parent_object_id = cc.[object_id] AND fc.parent_column_id = cc.column_id)
-                                                                                          OR (fc.referenced_object_id = cc.[object_id] AND fc.referenced_column_id = cc.column_id))
-                                                         WHERE cc.[definition] LIKE @v_SearchTerm)
-                                       UNION ALL
-                                       SELECT 'DROP INDEX IF EXISTS [' + si.[name] + '] ON [' + OBJECT_SCHEMA_NAME(si.[object_id]) + '].[' + OBJECT_NAME(si.[object_id]) + ']'
-                                         FROM sys.indexes si
-                                         WHERE si.filter_definition LIKE @v_SearchTerm
-                                            OR EXISTS (SELECT *
-                                                         FROM sys.computed_columns cc
-                                                         JOIN sys.index_columns ic ON ic.[object_id] = si.[object_id]
-                                                                                  AND ic.index_id = si.index_id
-                                                                                  AND ic.column_id = cc.column_id
-                                                         WHERE cc.[definition] LIKE @v_SearchTerm
-                                                           AND cc.[object_id] = si.[object_id])
-                                       UNION ALL
-                                       SELECT 'ALTER TABLE [' + OBJECT_SCHEMA_NAME(cc.[object_id]) + '].[' + OBJECT_NAME(cc.[object_id]) + '] DROP COLUMN IF EXISTS [' + cc.[name] + ']'
-                                         FROM sys.computed_columns cc
-                                         WHERE cc.[definition] LIKE @v_SearchTerm) x) + ';'
-EXEC(@v_SQL) -- Remove any dependencies before updating the function
-GO" : "")}
-{function.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
-{function.TextBody}
-GO
-{AddExtendedProperiesScript(function.ExtendedProperties)}";
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
-        }
-    }
-
-    private string AddExtendedProperiesScript(ExtendedPropertyCollection properties)
-    {
-        if (properties.Count == 0) return "";
-
-        return properties.Count == 0 ? "" : $"{string.Join("\r\n", properties.Cast<ExtendedProperty>().SelectMany(p => p.Script(_options).Cast<string>()))}\r\nGO";
-    }
-
-    private void ScriptViews(Database sourceDb)
-    {
-        _progressLog.Info("Casting View Scripts");
-        sourceDb.PrefetchObjects(typeof(View), _options);
-        var castPath = Path.Combine(_templatePath, "Views");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        foreach (View view in sourceDb.Views)
-        {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(view.Name.ToLower()) && !_objectsToCast.Contains($"{view.Schema}.{view.Name}".ToLower())) continue;
-            if (view.IsSystemObject || view.IsEncrypted || view.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
-
-            var fileName = Path.Combine(castPath, $"{view.Schema}.{view.Name}.sql");
-            var sql = @$"SET ANSI_NULLS {(view.AnsiNullsStatus ? "ON" : "OFF")}
-SET QUOTED_IDENTIFIER {(view.QuotedIdentifierStatus ? "ON" : "OFF")}
-GO
-{view.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
-{view.TextBody}
-GO
-{AddExtendedProperiesScript(view.ExtendedProperties)}";
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
-        }
-    }
-
-    private void ScriptStoredProcedures(Database sourceDb)
-    {
-        _progressLog.Info("Casting Stored Procedure Scripts");
-        sourceDb.PrefetchObjects(typeof(StoredProcedure), _options);
-        var castPath = Path.Combine(_templatePath, "Procedures");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        foreach (StoredProcedure procedure in sourceDb.StoredProcedures)
-        {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(procedure.Name.ToLower()) && !_objectsToCast.Contains($"{procedure.Schema}.{procedure.Name}".ToLower())) continue;
-            if (procedure.IsSystemObject || procedure.IsEncrypted || procedure.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
-
-            var fileName = Path.Combine(castPath, $"{procedure.Schema}.{procedure.Name}.sql");
-            var sql = @$"SET ANSI_NULLS {(procedure.AnsiNullsStatus ? "ON" : "OFF")}
-SET QUOTED_IDENTIFIER {(procedure.QuotedIdentifierStatus ? "ON" : "OFF")}
-GO
-{procedure.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
-{procedure.TextBody}
-GO
-{AddExtendedProperiesScript(procedure.ExtendedProperties)}";
-
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
-        }
-    }
-
-    private void ScriptTableTriggers(Database sourceDb)
-    {
-        _progressLog.Info("Casting Table Trigger Scripts");
-        sourceDb.PrefetchObjects(typeof(Table), _options);
-        var castPath = Path.Combine(_templatePath, "Triggers");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        foreach (Table table in sourceDb.Tables)
-        {
-            if (table.IsSystemObject || table.Schema.EqualsIgnoringCase("SchemaSmith")) continue;
-
-            foreach (Trigger trigger in table.Triggers)
-            {
-                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(trigger.Name.ToLower())) continue;
-                if (trigger.IsSystemObject || trigger.IsEncrypted) continue;
-
-                var fileName = Path.Combine(castPath, $"{table.Schema}.{table.Name}.{trigger.Name}.sql");
-                var sql = @$"SET ANSI_NULLS {(trigger.AnsiNullsStatus ? "ON" : "OFF")}
-SET QUOTED_IDENTIFIER {(trigger.QuotedIdentifierStatus ? "ON" : "OFF")}
-GO
-{trigger.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
-{trigger.TextBody}
-GO
-{AddExtendedProperiesScript(trigger.ExtendedProperties)}";
-                _progressLog.Info($"  Casting {fileName}");
-                FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
-            }
-        }
     }
 
     private void ExtractTableDefinitions(IDbCommand command, string targetDb)
@@ -355,77 +151,98 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         }
     }
 
-    private void ScriptFullTextCatalogs(Database sourceDb)
+    private void ScriptSqlServerSchemas(IDbCommand command) { }
+    private void ScriptSqlServerUserDefinedTypes(IDbCommand command) { }
+    private void ScriptSqlServerFunctions(IDbCommand command) { }
+    private void ScriptSqlServerViews(IDbCommand command) { }
+    private void ScriptSqlServerProcedures(IDbCommand command) { }
+    private void ScriptSqlServerTableTriggers(IDbCommand command) { }
+    private void ScriptSqlServerFullTextCatalogs(IDbCommand command) { }
+    private void ScriptSqlServerFullTextStopLists(IDbCommand command) { }
+    private void ScriptSqlServerDDLTriggers(IDbCommand command) { }
+    private void ScriptSqlServerXmlSchemaCollections(IDbCommand command) { }
+
+    internal static string EscapeSql(string value) => value.Replace("'", "''");
+
+    internal static string ConvertToCreateOrAlter(string definition, string schemaName, string objectName)
     {
-        _progressLog.Info("Casting FullText Catalog Scripts");
-        var castPath = Path.Combine(_templatePath, "FullTextCatalogs");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        foreach (FullTextCatalog catalog in sourceDb.FullTextCatalogs)
-        {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(catalog.Name.ToLower())) continue;
-            
-            var fileName = Path.Combine(castPath, $"{catalog.Name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", catalog.Script(_options).Cast<string>()));
-        }
+        var createMatch = Regex.Match(definition,
+            @"(?<!\w)CREATE(\s+)(PROCEDURE|FUNCTION|VIEW|TRIGGER)\b",
+            RegexOptions.IgnoreCase);
+        var result = createMatch.Success
+            ? definition.Substring(0, createMatch.Index) + "CREATE OR ALTER" + createMatch.Value.Substring("CREATE".Length) + definition.Substring(createMatch.Index + createMatch.Length)
+            : definition;
+
+        var escapedSchema = Regex.Escape(schemaName);
+        var escapedName = Regex.Escape(objectName);
+        var namePattern = $@"\[?{escapedSchema}\]?\.\[?{escapedName}\]?";
+        var match = Regex.Match(result, namePattern, RegexOptions.IgnoreCase);
+        if (match.Success)
+            result = result.Substring(0, match.Index) + $"[{schemaName}].[{objectName}]" + result.Substring(match.Index + match.Length);
+
+        return result;
     }
 
-    private void ScriptFullTextStopLists(Database sourceDb)
+    internal static string FormatBaseType(string baseType, short maxLength, byte precision, byte scale)
     {
-        _progressLog.Info("Casting FullText Stop List Scripts");
-        var castPath = Path.Combine(_templatePath, "FullTextStopLists");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        foreach (FullTextStopList list in sourceDb.FullTextStopLists)
+        var lower = baseType.ToLower();
+        return lower switch
         {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(list.Name.ToLower())) continue;
-
-            var fileName = Path.Combine(castPath, $"{list.Name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", list.Script(_options).Cast<string>()));
-        }
+            "nvarchar" or "nchar" => maxLength == -1 ? $"[{baseType}](max)" : $"[{baseType}]({maxLength / 2})",
+            "varchar" or "char" or "varbinary" or "binary" => maxLength == -1 ? $"[{baseType}](max)" : $"[{baseType}]({maxLength})",
+            "decimal" or "numeric" => $"[{baseType}]({precision}, {scale})",
+            "datetime2" or "datetimeoffset" or "time" => scale != 7 ? $"[{baseType}]({scale})" : $"[{baseType}]",
+            _ => $"[{baseType}]"
+        };
     }
 
-    private void ScriptDDLTriggers(Database sourceDb)
+    private string ScriptSqlServerProgrammableObject(IDbCommand command, string schemaName, string objectName, string objectType, string level2Type = null, string level2ParentName = null)
     {
-        _progressLog.Info("Casting Database DDL Trigger Scripts");
-        var castPath = Path.Combine(_templatePath, "DDLTriggers");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        foreach (DatabaseDdlTrigger trigger in sourceDb.Triggers)
+        command.CommandText = $@"
+SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
+  FROM sys.sql_modules sm
+  JOIN sys.objects o ON sm.object_id = o.object_id
+  JOIN sys.schemas s ON o.schema_id = s.schema_id
+ WHERE s.name = '{EscapeSql(schemaName)}' AND o.name = '{EscapeSql(objectName)}'";
+
+        string definition = null;
+        bool usesAnsiNulls = true;
+        bool usesQuotedIdentifier = true;
+
+        using (var reader = command.ExecuteReader())
         {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(trigger.Name.ToLower())) continue;
-
-            var fileName = Path.Combine(castPath, $"{trigger.Name}.sql");
-            var sql = @$"SET ANSI_NULLS {(trigger.AnsiNullsStatus ? "ON" : "OFF")}
-SET QUOTED_IDENTIFIER {(trigger.QuotedIdentifierStatus ? "ON" : "OFF")}
-GO
-{trigger.ScriptHeader(ScriptNameObjectBase.ScriptHeaderType.ScriptHeaderForCreateOrAlter)}
-{trigger.TextBody}
-GO
-{AddExtendedProperiesScript(trigger.ExtendedProperties)}";
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+            if (reader.Read())
+            {
+                if (reader.IsDBNull(0))
+                {
+                    _progressLog.Warn($"  WARNING: {schemaName}.{objectName} is encrypted, skipping");
+                    return null;
+                }
+                definition = reader.GetString(0);
+                usesAnsiNulls = reader.GetBoolean(1);
+                usesQuotedIdentifier = reader.GetBoolean(2);
+            }
         }
-    }
 
-    private void ScriptXmlSchemaCollections(Database sourceDb)
-    {
-        _progressLog.Info("Casting XML Schema Collection Scripts");
-        var castPath = Path.Combine(_templatePath, "XMLSchemaCollections");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        foreach (XmlSchemaCollection collection in sourceDb.XmlSchemaCollections)
-        {
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(collection.Name.ToLower()) && !_objectsToCast.Contains($"{collection.Schema}.{collection.Name}".ToLower())) continue;
+        if (definition == null) return null;
 
-            var fileName = Path.Combine(castPath, $"{collection.Schema}.{collection.Name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, string.Join("\r\nGO\r\n", collection.Script(_options).Cast<string>().Select(FormatXmlInScript)));
-        }
+        definition = definition.Trim();
+        if (!definition.Contains("\r\n"))
+            definition = definition.Replace("\n", "\r\n");
+
+        definition = ConvertToCreateOrAlter(definition, schemaName, objectName);
+        definition = Regex.Replace(definition, @"(?<=\bAS[ \t]*\r\n)([ \t]*)(?=\S)", "$1\r\n");
+
+        var ansiNulls = usesAnsiNulls ? "ON" : "OFF";
+        var quotedIdentifier = usesQuotedIdentifier ? "ON" : "OFF";
+
+        return $"SET ANSI_NULLS {ansiNulls}\r\nSET QUOTED_IDENTIFIER {quotedIdentifier}\r\nGO\r\n\r\n{definition}\r\n\r\nGO\r\n";
     }
 
     private static string FormatXmlInScript(string script)
     {
         if (!script.Contains(" AS N'")) return script;
-        
+
         var xmlStart = script.IndexOfIgnoringCase(" AS N'") + 6;
         var xml = script.Substring(xmlStart, script.Length - (xmlStart + 1));
         var formattedXml = "\r\n" + string.Join("\r\n", xml.Replace("</xsd:schema>", "</xsd:schema>\r").Split('\r').Select(FormatXml));
