@@ -24,6 +24,13 @@
 - **Product.MinimumVersion:** Optional property declaring minimum SQL Server version for a schema package. Null means no version ceiling. Infrastructure for future SchemaHammer and SchemaQuench feature gating.
 - **VersionHelper:** Utility for version threshold comparison.
 
+### Demo Products Consolidated
+
+- **Demo products moved into repository:** Northwind, AdventureWorks, and tutorial products now live in `demo/` instead of a separate repository.
+- **Build from source:** `docker compose -f demo/docker-compose.yml up` builds SchemaQuench from source and deploys demo products — no published Docker image dependency.
+- **`.community` sentinel:** SchemaTongs now writes a `.community` file to new product roots, marking them as Community edition packages.
+- **CI validation:** Demo product JSON files are validated against schemas on every PR.
+
 ### Schema Validation
 
 - **Runtime-generated JSON Schema files:** `.json-schemas/` files are now generated from the domain model at runtime instead of static embedded files. SchemaTongs always overwrites with the latest schema on each extraction.
