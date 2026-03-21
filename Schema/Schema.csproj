@@ -20,6 +20,7 @@
     <None Remove="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
     <None Remove="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />
     <None Remove="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
+    <None Remove="Scripts\SchemaSmith.PrintWithNoWait.sql" />
     <None Remove="Scripts\SchemaSmith.GenerateTableJson.sql" />
     <None Remove="Scripts\SchemaSmith.TableQuench.sql" />
   </ItemGroup>
@@ -31,6 +32,7 @@
     <EmbeddedResource Include="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.PrintWithNoWait.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.GenerateTableJson.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.TableQuench.sql" />
   </ItemGroup>
