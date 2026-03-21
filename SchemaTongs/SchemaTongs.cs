@@ -189,7 +189,202 @@ SELECT s.name
         }
     }
 
-    private void ScriptSqlServerUserDefinedTypes(IDbCommand command) { }
+    private void ScriptSqlServerUserDefinedTypes(IDbCommand command)
+    {
+        _progressLog.Info("Casting User Defined Types");
+        var castPath = Path.Combine(_templatePath, "DataTypes");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+        ScriptSqlServerAliasTypes(command, castPath);
+        ScriptSqlServerTableTypes(command, castPath);
+    }
+
+    private void ScriptSqlServerAliasTypes(IDbCommand command, string castPath)
+    {
+        command.CommandText = @"
+SELECT s.name AS SchemaName, t.name AS TypeName,
+       TYPE_NAME(t.system_type_id) AS BaseTypeName,
+       t.max_length, t.precision, t.scale, t.is_nullable
+  FROM sys.types t
+  JOIN sys.schemas s ON t.schema_id = s.schema_id
+ WHERE t.is_user_defined = 1
+   AND t.is_table_type = 0
+   AND t.is_assembly_type = 0
+ ORDER BY s.name, t.name";
+
+        var types = new List<(string Schema, string Name, string BaseType, short MaxLength, byte Precision, byte Scale, bool IsNullable)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var schema = reader.GetString(0);
+                var name = reader.GetString(1);
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
+                types.Add((schema, name, reader.GetString(2), reader.GetInt16(3), reader.GetByte(4), reader.GetByte(5), reader.GetBoolean(6)));
+            }
+        }
+
+        foreach (var (schema, name, baseType, maxLength, precision, scale, isNullable) in types)
+        {
+            var typeSpec = FormatBaseType(baseType, maxLength, precision, scale);
+            var nullSpec = isNullable ? "NULL" : "NOT NULL";
+            var script = $"IF NOT EXISTS (SELECT * FROM sys.types st JOIN sys.schemas ss ON st.schema_id = ss.schema_id WHERE st.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
+                         $"CREATE TYPE [{schema}].[{name}] FROM {typeSpec} {nullSpec}";
+
+            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+        }
+    }
+
+    private void ScriptSqlServerTableTypes(IDbCommand command, string castPath)
+    {
+        command.CommandText = @"
+SELECT s.name AS SchemaName, tt.name AS TypeName, tt.type_table_object_id
+  FROM sys.table_types tt
+  JOIN sys.schemas s ON tt.schema_id = s.schema_id
+ WHERE tt.is_user_defined = 1
+ ORDER BY s.name, tt.name";
+
+        var tableTypes = new List<(string Schema, string Name, int ObjectId)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var schema = reader.GetString(0);
+                var name = reader.GetString(1);
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
+                tableTypes.Add((schema, name, reader.GetInt32(2)));
+            }
+        }
+
+        foreach (var (schema, name, objectId) in tableTypes)
+        {
+            command.CommandText = $@"
+SELECT c.name, TYPE_NAME(c.user_type_id) AS TypeName,
+       c.max_length, c.precision, c.scale, c.is_nullable,
+       c.is_identity, c.is_computed,
+       ts.name AS UserTypeName, tss.name AS UserTypeSchema,
+       c.column_id
+  FROM sys.columns c
+  LEFT JOIN sys.types ts ON c.user_type_id = ts.user_type_id AND ts.is_user_defined = 1
+  LEFT JOIN sys.schemas tss ON ts.schema_id = tss.schema_id
+ WHERE c.object_id = {objectId}
+ ORDER BY c.column_id";
+
+            var columns = new List<(string Name, string TypeName, short MaxLength, byte Precision, byte Scale, bool IsNullable, bool IsIdentity, bool IsComputed, string UserTypeName, string UserTypeSchema)>();
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    columns.Add((
+                        reader.GetString(0),
+                        reader.GetString(1),
+                        reader.GetInt16(2),
+                        reader.GetByte(3),
+                        reader.GetByte(4),
+                        reader.GetBoolean(5),
+                        reader.GetBoolean(6),
+                        reader.GetBoolean(7),
+                        reader.IsDBNull(8) ? null : reader.GetString(8),
+                        reader.IsDBNull(9) ? null : reader.GetString(9)
+                    ));
+                }
+            }
+
+            command.CommandText = $@"
+SELECT i.name, i.type_desc, i.is_unique, i.is_primary_key,
+       ic.column_id, c.name AS ColumnName, ic.is_descending_key
+  FROM sys.indexes i
+  JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+  JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+ WHERE i.object_id = {objectId}
+   AND i.type > 0
+ ORDER BY i.index_id, ic.key_ordinal";
+
+            var indexes = new Dictionary<string, (string TypeDesc, bool IsUnique, bool IsPrimaryKey, List<(string ColumnName, bool IsDescending)> Columns)>();
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    var indexName = reader.IsDBNull(0) ? "" : reader.GetString(0);
+                    var typeDesc = reader.GetString(1);
+                    var isUnique = reader.GetBoolean(2);
+                    var isPrimaryKey = reader.GetBoolean(3);
+                    var columnName = reader.GetString(5);
+                    var isDescending = reader.GetBoolean(6);
+
+                    if (!indexes.ContainsKey(indexName))
+                        indexes[indexName] = (typeDesc, isUnique, isPrimaryKey, new List<(string, bool)>());
+                    indexes[indexName].Columns.Add((columnName, isDescending));
+                }
+            }
+
+            command.CommandText = $@"
+SELECT cc.name, cc.definition
+  FROM sys.check_constraints cc
+ WHERE cc.parent_object_id = {objectId}
+ ORDER BY cc.name";
+
+            var checkConstraints = new List<(string Name, string Definition)>();
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                    checkConstraints.Add((reader.GetString(0), reader.GetString(1)));
+            }
+
+            var lines = new List<string>();
+            lines.Add($"CREATE TYPE [{schema}].[{name}] AS TABLE(");
+
+            for (var i = 0; i < columns.Count; i++)
+            {
+                var col = columns[i];
+                string typeSpec;
+                if (col.UserTypeName != null)
+                    typeSpec = $"[{col.UserTypeSchema}].[{col.UserTypeName}]";
+                else
+                    typeSpec = FormatBaseType(col.TypeName, col.MaxLength, col.Precision, col.Scale);
+
+                var nullSpec = col.IsNullable ? "NULL" : "NOT NULL";
+                var comma = (i < columns.Count - 1 || indexes.Count > 0 || checkConstraints.Count > 0) ? "," : "";
+                lines.Add($"\t[{col.Name}] {typeSpec} {nullSpec}{comma}");
+            }
+
+            var constraintEntries = new List<string>();
+            foreach (var kvp in indexes)
+            {
+                var idx = kvp.Value;
+                var colList = string.Join(",\r\n", idx.Columns.Select(c => $"\t[{c.ColumnName}] " + (c.IsDescending ? "DESC" : "ASC")));
+
+                if (idx.IsPrimaryKey)
+                    constraintEntries.Add($"\tPRIMARY KEY {idx.TypeDesc} \r\n(\r\n{colList}\r\n)");
+                else
+                {
+                    var unique = idx.IsUnique ? "UNIQUE " : "";
+                    constraintEntries.Add($"\t{unique}{idx.TypeDesc} \r\n(\r\n{colList}\r\n)");
+                }
+            }
+
+            foreach (var cc in checkConstraints)
+                constraintEntries.Add($"\tCHECK {cc.Definition}");
+
+            for (var i = 0; i < constraintEntries.Count; i++)
+            {
+                var suffix = i < constraintEntries.Count - 1 ? "," : "";
+                lines.Add(constraintEntries[i] + suffix);
+            }
+
+            lines.Add(")");
+
+            var createScript = string.Join("\r\n", lines);
+
+            var script = $"IF NOT EXISTS (SELECT * FROM sys.types st JOIN sys.schemas ss ON st.schema_id = ss.schema_id WHERE st.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
+                         createScript;
+
+            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+        }
+    }
 
     private void ScriptSqlServerFunctions(IDbCommand command)
     {
@@ -358,10 +553,131 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
         }
     }
-    private void ScriptSqlServerTableTriggers(IDbCommand command) { }
+    private void ScriptSqlServerTableTriggers(IDbCommand command)
+    {
+        _progressLog.Info("Casting Table Trigger Scripts");
+        var castPath = Path.Combine(_templatePath, "Triggers");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"
+SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
+  FROM sys.triggers tr
+  JOIN sys.objects pt ON tr.parent_id = pt.object_id
+  JOIN sys.schemas s ON pt.schema_id = s.schema_id
+ WHERE tr.parent_class = 1
+   AND pt.is_ms_shipped = 0
+   AND s.name <> 'SchemaSmith'
+ ORDER BY s.name, pt.name, tr.name";
+
+        var triggers = new List<(string TableSchema, string TableName, string TriggerName)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var triggerName = reader.GetString(2);
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(triggerName.ToLower())) continue;
+                triggers.Add((reader.GetString(0), reader.GetString(1), triggerName));
+            }
+        }
+
+        foreach (var (tableSchema, tableName, triggerName) in triggers)
+        {
+            var sql = ScriptSqlServerProgrammableObject(command, tableSchema, triggerName, "TRIGGER", "TRIGGER", tableName);
+            if (sql == null) continue;
+
+            var escapedSchema = Regex.Escape(tableSchema);
+            var escapedTable = Regex.Escape(tableName);
+            var tablePattern = $@"(?<=\bON\s+)\[?{escapedSchema}\]?\.\[?{escapedTable}\]?";
+            sql = Regex.Replace(sql, tablePattern, $"[{tableSchema}].[{tableName}]", RegexOptions.IgnoreCase);
+
+            var fileName = Path.Combine(castPath, $"{tableSchema}.{tableName}.{triggerName}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+        }
+    }
     private void ScriptSqlServerFullTextCatalogs(IDbCommand command) { }
     private void ScriptSqlServerFullTextStopLists(IDbCommand command) { }
-    private void ScriptSqlServerDDLTriggers(IDbCommand command) { }
+    private void ScriptSqlServerDDLTriggers(IDbCommand command)
+    {
+        _progressLog.Info("Casting Database DDL Trigger Scripts");
+        var castPath = Path.Combine(_templatePath, "DDLTriggers");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"
+SELECT tr.name AS TriggerName
+  FROM sys.triggers tr
+ WHERE tr.parent_class = 0
+ ORDER BY tr.name";
+
+        var triggers = new List<string>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var name = reader.GetString(0);
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower())) continue;
+                triggers.Add(name);
+            }
+        }
+
+        foreach (var triggerName in triggers)
+        {
+            command.CommandText = $@"
+SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
+  FROM sys.sql_modules sm
+  JOIN sys.triggers tr ON sm.object_id = tr.object_id
+ WHERE tr.parent_class = 0 AND tr.name = '{EscapeSql(triggerName)}'";
+
+            string definition = null;
+            bool usesAnsiNulls = true;
+            bool usesQuotedIdentifier = true;
+
+            using (var reader = command.ExecuteReader())
+            {
+                if (reader.Read())
+                {
+                    if (reader.IsDBNull(0))
+                    {
+                        _progressLog.Warn($"  WARNING: {triggerName} is encrypted, skipping");
+                        continue;
+                    }
+                    definition = reader.GetString(0);
+                    usesAnsiNulls = reader.GetBoolean(1);
+                    usesQuotedIdentifier = reader.GetBoolean(2);
+                }
+            }
+
+            if (definition == null) continue;
+
+            definition = definition.Trim();
+
+            if (!definition.Contains("\r\n"))
+                definition = definition.Replace("\n", "\r\n");
+
+            var createMatch = Regex.Match(definition, @"(?<!\w)CREATE(\s+)TRIGGER\b", RegexOptions.IgnoreCase);
+            if (createMatch.Success)
+                definition = definition.Substring(0, createMatch.Index) + "CREATE OR ALTER" + createMatch.Value.Substring("CREATE".Length) + definition.Substring(createMatch.Index + createMatch.Length);
+
+            var escapedName = Regex.Escape(triggerName);
+            var namePattern = $@"(?<=TRIGGER\s+)\[?{escapedName}\]?";
+            definition = Regex.Replace(definition, namePattern, $"[{triggerName}]", RegexOptions.IgnoreCase);
+
+            definition = Regex.Replace(definition, @"(?<=\bAS[ \t]*\r\n)([ \t]*)(?=\S)", "$1\r\n");
+
+            var ansiNulls = usesAnsiNulls ? "ON" : "OFF";
+            var quotedIdentifier = usesQuotedIdentifier ? "ON" : "OFF";
+
+            var sql = $"SET ANSI_NULLS {ansiNulls}\r\n" +
+                      $"SET QUOTED_IDENTIFIER {quotedIdentifier}\r\n" +
+                      $"GO\r\n\r\n" +
+                      $"{definition}\r\n\r\n" +
+                      $"GO\r\n";
+
+            var fileName = Path.Combine(castPath, $"{triggerName}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+        }
+    }
     private void ScriptSqlServerXmlSchemaCollections(IDbCommand command) { }
 
     internal static string EscapeSql(string value) => value.Replace("'", "''");
