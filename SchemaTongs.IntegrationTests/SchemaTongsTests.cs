@@ -47,7 +47,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -80,7 +80,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -114,7 +114,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -147,7 +147,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -180,7 +180,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -213,7 +213,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -246,7 +246,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -279,7 +279,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -312,7 +312,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -345,7 +345,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -378,7 +378,7 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
