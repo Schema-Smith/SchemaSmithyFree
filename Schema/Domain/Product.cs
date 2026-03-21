@@ -28,6 +28,13 @@ public class Product
     [JsonIgnore]
     public string FilePath { get; set; }
 
+    private readonly List<ProductFolder> _scriptFolders = GetProductFolders();
+
+    [JsonIgnore]
+    public List<ProductFolder> BeforeFolders => _scriptFolders.Where(f => f.QuenchSlot == ProductQuenchSlot.Before).ToList();
+    [JsonIgnore]
+    public List<ProductFolder> AfterFolders => _scriptFolders.Where(f => f.QuenchSlot == ProductQuenchSlot.After).ToList();
+
     public static Product Load()
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
@@ -77,6 +84,10 @@ public class Product
         ValidationScript = TokenReplace(ValidationScript, scriptTokens);
         BaselineValidationScript = TokenReplace(BaselineValidationScript, scriptTokens);
         VersionStampScript = TokenReplace(VersionStampScript, scriptTokens);
+
+        var productDir = Path.GetDirectoryName(FilePath) ?? "";
+        foreach (var folder in _scriptFolders)
+            folder.LoadSqlFiles(productDir, scriptTokens);
     }
 
     public static string TokenReplace(string script, List<KeyValuePair<string, string>> scriptTokens)
@@ -84,5 +95,14 @@ public class Product
         if (!string.IsNullOrEmpty(script))
             scriptTokens.ForEach(token => { script = Regex.Replace(script, $@"\{{\{{{token.Key}\}}\}}", token.Value, RegexOptions.IgnoreCase); });
         return script;
+    }
+
+    private static List<ProductFolder> GetProductFolders()
+    {
+        return
+        [
+            new ProductFolder { FolderPath = "ProductScripts/Before", QuenchSlot = ProductQuenchSlot.Before },
+            new ProductFolder { FolderPath = "ProductScripts/After", QuenchSlot = ProductQuenchSlot.After },
+        ];
     }
 }

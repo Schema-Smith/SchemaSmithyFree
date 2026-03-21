@@ -25,6 +25,11 @@ public static class ForgeKindler
         KindleOneFile(command, "SchemaSmith.GenerateTableJson.sql");
     }
 
+    public static string GetParseTableJsonScript()
+    {
+        return ResourceLoader.Load("ParseTableJsonIntoTempTables.sql");
+    }
+
     private static void KindleOneFile(IDbCommand command, string fileName, bool replaceParseJsonToken = false)
     {
         var script = ResourceLoader.Load(fileName);

@@ -99,7 +99,7 @@ public class Template
         Tables.AddRange(files.Select(Table.Load));
     }
 
-    private static List<TemplateFolder> GetTemplateFolders()
+    internal static List<TemplateFolder> GetTemplateFolders()
     {
         return
         [
