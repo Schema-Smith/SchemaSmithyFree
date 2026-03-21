@@ -294,6 +294,136 @@ public class ProductTests
     }
 
     [Test]
+    public void ShouldErrorWhenProductPlatformDoesNotMatchApplicationPlatform()
+    {
+        var productJson = """
+            {
+                "Name": "WrongPlatformProduct",
+                "Platform": "PostgreSQL"
+            }
+            """;
+
+        var configValues = new Dictionary<string, string>
+        {
+            ["SchemaPackagePath"] = "SchemaPackagePath"
+        };
+        var configBuilder = new ConfigurationBuilder();
+        _ = configBuilder.AddInMemoryCollection(configValues);
+        var config = configBuilder.Build();
+        var productJsonFile = Path.Combine("SchemaPackagePath", "Product.json");
+        var mockDirectoryWrapper = Substitute.For<IDirectory>();
+        mockDirectoryWrapper.Exists(Arg.Any<string>()).Returns(true);
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockFileWrapper.ReadAllText(productJsonFile).Returns(productJson);
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(config);
+            FactoryContainer.Register(mockDirectoryWrapper);
+            FactoryContainer.Register(mockFileWrapper);
+
+            var ex = Assert.Throws<Exception>(() => Product.Load());
+            Assert.That(ex!.Message, Does.Contain("PostgreSQL"));
+            Assert.That(ex.Message, Does.Contain("MSSQL"));
+
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldNotOverrideTokenWhenConfigTokenNotInProductScriptTokens()
+    {
+        // Config has a token that doesn't exist in the product's ScriptTokens —
+        // the override should be silently skipped (ContainsKey is false)
+        var productJson = """
+            {
+                "Name": "SparseTokenProduct",
+                "ScriptTokens": {
+                    "KnownToken": "original"
+                }
+            }
+            """;
+
+        var configValues = new Dictionary<string, string>
+        {
+            ["SchemaPackagePath"] = "SchemaPackagePath",
+            ["ScriptTokens:UnknownToken"] = "ShouldBeIgnored",
+            ["ScriptTokens:KnownToken"] = "overridden"
+        };
+        var configBuilder = new ConfigurationBuilder();
+        _ = configBuilder.AddInMemoryCollection(configValues);
+        var config = configBuilder.Build();
+        var productJsonFile = Path.Combine("SchemaPackagePath", "Product.json");
+        var mockDirectoryWrapper = Substitute.For<IDirectory>();
+        mockDirectoryWrapper.Exists(Arg.Any<string>()).Returns(true);
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockFileWrapper.ReadAllText(productJsonFile).Returns(productJson);
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(config);
+            FactoryContainer.Register(mockDirectoryWrapper);
+            FactoryContainer.Register(mockFileWrapper);
+
+            var product = Product.Load();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(product.ScriptTokens.ContainsKey("UnknownToken"), Is.False);
+                Assert.That(product.ScriptTokens["KnownToken"], Is.EqualTo("overridden"));
+            });
+
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldNotOverrideTokenWhenConfigValueIsEmpty()
+    {
+        // Config has a token that exists in the product but config value is empty —
+        // the override should be skipped (!string.IsNullOrEmpty check)
+        var productJson = """
+            {
+                "Name": "EmptyOverrideProduct",
+                "ScriptTokens": {
+                    "MyToken": "originalValue"
+                }
+            }
+            """;
+
+        var configValues = new Dictionary<string, string>
+        {
+            ["SchemaPackagePath"] = "SchemaPackagePath",
+            ["ScriptTokens:MyToken"] = ""
+        };
+        var configBuilder = new ConfigurationBuilder();
+        _ = configBuilder.AddInMemoryCollection(configValues);
+        var config = configBuilder.Build();
+        var productJsonFile = Path.Combine("SchemaPackagePath", "Product.json");
+        var mockDirectoryWrapper = Substitute.For<IDirectory>();
+        mockDirectoryWrapper.Exists(Arg.Any<string>()).Returns(true);
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockFileWrapper.ReadAllText(productJsonFile).Returns(productJson);
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(config);
+            FactoryContainer.Register(mockDirectoryWrapper);
+            FactoryContainer.Register(mockFileWrapper);
+
+            var product = Product.Load();
+
+            // Value should remain unchanged because config override was empty
+            Assert.That(product.ScriptTokens["MyToken"], Is.EqualTo("originalValue"));
+
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
     public void ShouldApplyScriptTokensFromConfigOverrideOnLoad()
     {
         var productJson = """

@@ -189,4 +189,113 @@ GO
         var batches = SqlHelpers.SplitIntoBatches(sql);
         Assert.That(batches, Has.Count.EqualTo(1));
     }
+
+    // Double-quoted string support (inString2 branch)
+    [Test]
+    public void ShouldHandleDoubleQuoteStringsSpanningLines()
+    {
+        // Double-quoted string that spans two lines — the GO on the second
+        // line is inside the string so should not split
+        const string sql = @"SELECT ""First line
+Second line""
+GO";
+        var batches = SqlHelpers.SplitIntoBatches(sql);
+        Assert.That(batches, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ShouldHandleDoubleQuoteStringContainingGoOnSameLine()
+    {
+        // A double-quoted string with GO inside it — must not split
+        const string sql = @"PRINT ""GO is just text here""
+GO";
+        var batches = SqlHelpers.SplitIntoBatches(sql);
+        Assert.That(batches, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ShouldErrorOnUnterminatedDoubleQuoteString()
+    {
+        const string sql = @"-- first batch
+GO
+DECLARE @x NVARCHAR(100) = ""
+GO";
+        var ex = Assert.Throws<Exception>(() => SqlHelpers.SplitIntoBatches(sql));
+        Assert.That(ex!.Message, Contains.Substring("Batch Parsing Failed"));
+    }
+
+    [Test]
+    public void ShouldHandleDoubleQuoteStringWithEmbeddedSingleLineComment()
+    {
+        // -- inside a double-quoted string should not be treated as a comment
+        const string sql = "PRINT \"-- not a comment\"\nGO";
+        var batches = SqlHelpers.SplitIntoBatches(sql);
+        Assert.That(batches, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ShouldHandleDoubleQuoteStringWithEmbeddedMultiLineComment()
+    {
+        // /* inside a double-quoted string should not be treated as a comment
+        const string sql = "PRINT \"/* not a comment */\"\nGO";
+        var batches = SqlHelpers.SplitIntoBatches(sql);
+        Assert.That(batches, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ShouldHandleBracketedIdentifierSpanningLines()
+    {
+        // A bracketed identifier ([ ]) that spans lines — GO on second line is inside bracket
+        const string sql = "SELECT [column\nname]\nGO";
+        var batches = SqlHelpers.SplitIntoBatches(sql);
+        Assert.That(batches, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ShouldErrorOnUnterminatedBracketedIdentifier()
+    {
+        const string sql = @"-- first batch
+GO
+SELECT [unterminated
+GO";
+        var ex = Assert.Throws<Exception>(() => SqlHelpers.SplitIntoBatches(sql));
+        Assert.That(ex!.Message, Contains.Substring("Batch Parsing Failed"));
+    }
+
+    [Test]
+    public void ShouldHandleEmptyInput()
+    {
+        var batches = SqlHelpers.SplitIntoBatches("");
+        Assert.That(batches, Is.Empty);
+    }
+
+    [Test]
+    public void ShouldHandleWhitespaceOnlyInput()
+    {
+        var batches = SqlHelpers.SplitIntoBatches("   \n   \n   ");
+        Assert.That(batches, Is.Empty);
+    }
+
+    [Test]
+    public void ShouldHandleMultilineCommentSpanningLinesWithoutEndOnSameLine()
+    {
+        // Multi-line comment where the closing */ is on a later line
+        // This ensures the inMultiLine=true && no-*/ branch (cleanLine = "") is hit
+        const string sql = @"SELECT 1
+/* This comment
+   spans three
+   lines */
+GO";
+        var batches = SqlHelpers.SplitIntoBatches(sql);
+        Assert.That(batches, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ShouldHandleSingleQuoteStringSpanningMultipleLinesWithNoQuoteOnMiddleLine()
+    {
+        // inString=true and cleanLine has no ' — exercises the cleanLine="" branch on line 54
+        const string sql = "DECLARE @x VARCHAR(MAX) = 'line one\nno quote here\nend quote'\nGO";
+        var batches = SqlHelpers.SplitIntoBatches(sql);
+        Assert.That(batches, Has.Count.EqualTo(1));
+    }
 }
