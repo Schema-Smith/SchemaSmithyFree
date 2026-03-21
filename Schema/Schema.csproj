@@ -25,6 +25,7 @@
     <None Remove="Scripts\SchemaSmith.TableQuench.sql" />
     <None Remove="Scripts\ParseTableJsonIntoTempTables.sql" />
     <None Remove="Scripts\SchemaSmith.MissingTableAndColumnQuench.sql" />
+    <None Remove="Scripts\SchemaSmith.ModifiedTableQuench.sql" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,6 +40,7 @@
     <EmbeddedResource Include="Scripts\SchemaSmith.TableQuench.sql" />
     <EmbeddedResource Include="Scripts\ParseTableJsonIntoTempTables.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.MissingTableAndColumnQuench.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.ModifiedTableQuench.sql" />
   </ItemGroup>
 
   <ItemGroup>
