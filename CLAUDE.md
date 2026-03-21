@@ -86,7 +86,7 @@ Key types: `Product` (package metadata, script tokens, MinimumVersion), `Templat
 
 - **Framework:** NUnit with NSubstitute for mocking
 - **Pattern:** `FactoryContainer` registers mock implementations; tests use `lock (FactoryContainer.SharedLockObject)` for isolation; `[SetUp]`/`[TearDown]` call `FactoryContainer.Clear()`
-- **Integration tests** require a Docker SQL Server instance on port 1440 (see `docker-compose.yml`)
+- **Integration tests** require a Docker SQL Server instance on port 1440. Start one with: `docker compose -f demo/docker-compose.yml up -d demoserver`
 - **Zero warnings policy** — `TreatWarningsAsErrors` is enabled in `Directory.Build.props`
 
 ## Configuration
