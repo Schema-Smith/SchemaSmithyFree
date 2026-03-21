@@ -7,28 +7,32 @@ public static class ForgeKindler
 {
     public static void KindleTheForge(IDbCommand command)
     {
-        command.CommandText = ResourceLoader.Load("Kindling_SchemaSmith_Schema.sql");
-        command.ExecuteNonQuery();
+        KindleOneFile(command, "Kindling_SchemaSmith_Schema.sql");
 
-        command.CommandText = ResourceLoader.Load("SchemaSmith.fn_StripParenWrapping.sql");
-        command.ExecuteNonQuery();
+        KindleOneFile(command, "SchemaSmith.fn_StripParenWrapping.sql");
+        KindleOneFile(command, "SchemaSmith.fn_StripBracketWrapping.sql");
+        KindleOneFile(command, "SchemaSmith.fn_SafeBracketWrap.sql");
+        KindleOneFile(command, "SchemaSmith.PrintWithNoWait.sql");
 
-        command.CommandText = ResourceLoader.Load("SchemaSmith.fn_StripBracketWrapping.sql");
-        command.ExecuteNonQuery();
+        KindleOneFile(command, "SchemaSmith.MissingTableAndColumnQuench.sql");
+        KindleOneFile(command, "SchemaSmith.ModifiedTableQuench.sql");
+        KindleOneFile(command, "SchemaSmith.MissingIndexesAndConstraintsQuench.sql");
+        KindleOneFile(command, "SchemaSmith.ForeignKeyQuench.sql");
+        KindleOneFile(command, "SchemaSmith.TableQuench.sql", replaceParseJsonToken: true);
 
-        command.CommandText = ResourceLoader.Load("SchemaSmith.fn_SafeBracketWrap.sql");
-        command.ExecuteNonQuery();
+        KindleOneFile(command, "Kindling_CompletedMigrations_Table.sql");
+        KindleOneFile(command, "SchemaSmith.fn_FormatJson.sql");
+        KindleOneFile(command, "SchemaSmith.GenerateTableJson.sql");
+    }
 
-        command.CommandText = ResourceLoader.Load("SchemaSmith.TableQuench.sql");
-        command.ExecuteNonQuery();
+    private static void KindleOneFile(IDbCommand command, string fileName, bool replaceParseJsonToken = false)
+    {
+        var script = ResourceLoader.Load(fileName);
 
-        command.CommandText = ResourceLoader.Load("Kindling_CompletedMigrations_Table.sql");
-        command.ExecuteNonQuery();
+        if (replaceParseJsonToken)
+            script = script.Replace("{{ParseJson}}", ResourceLoader.Load("ParseTableJsonIntoTempTables.sql"));
 
-        command.CommandText = ResourceLoader.Load("SchemaSmith.fn_FormatJson.sql");
-        command.ExecuteNonQuery();
-
-        command.CommandText = ResourceLoader.Load("SchemaSmith.GenerateTableJson.sql");
+        command.CommandText = script;
         command.ExecuteNonQuery();
     }
 }
