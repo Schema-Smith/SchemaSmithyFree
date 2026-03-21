@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System.IO;
 using System.Linq;
+using Newtonsoft.Json;
 using Schema.Domain;
 using Schema.Isolators;
 
@@ -25,17 +26,12 @@ public static class RepositoryHelper
 
         var schemaPath = Path.Combine(productPath, ".json-schemas");
         directory.CreateDirectory(schemaPath);
-        WriteSchemaFile(schemaPath, "products.schema");
-        WriteSchemaFile(schemaPath, "templates.schema");
-        WriteSchemaFile(schemaPath, "tables.schema");
-    }
-
-    private static void WriteSchemaFile(string schemaPath, string fileName)
-    {
-        var file = FileWrapper.GetFromFactory();
-        var schemaFile = Path.Combine(schemaPath, fileName);
-        if (!file.Exists(schemaFile))
-            file.WriteAllText(schemaFile, ResourceLoader.Load(fileName));
+        file.WriteAllText(Path.Combine(schemaPath, "products.schema"),
+            SchemaGenerator.GenerateSchema(typeof(Product)).ToString(Formatting.Indented));
+        file.WriteAllText(Path.Combine(schemaPath, "templates.schema"),
+            SchemaGenerator.GenerateSchema(typeof(Template)).ToString(Formatting.Indented));
+        file.WriteAllText(Path.Combine(schemaPath, "tables.schema"),
+            SchemaGenerator.GenerateSchema(typeof(Table)).ToString(Formatting.Indented));
     }
 
     public static string UpdateOrInitTemplate(string productPath, string templateName, string dbName)
