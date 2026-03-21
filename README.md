@@ -1,44 +1,49 @@
 # SchemaSmith Community Edition
 
-*Terraform for SQL Server databases*
-
 ![Build](https://github.com/Schema-Smith/SchemaSmithyFree/actions/workflows/continuous-integration.yml/badge.svg)
-[![License: SSCL v2.0](https://img.shields.io/badge/license-SSCL%20v2.0-blue)](LICENSE)
 
 SchemaSmith is a state-based database schema management toolset for SQL Server. Define your desired database state as metadata — tables, views, procedures, triggers — and SchemaSmith transforms any target server to match.
 
-## Why State-Based?
-
-Migrations show the evolution of a database over time, but you can't tell what the current state is at a glance. With a state-based approach, your metadata repository is an exact representation of what your server should be — treating SQL Server code like any other production code, guaranteeing they are always in sync.
-
 ## Tools
 
-- **SchemaQuench** — Deploys schema packages to databases
-- **SchemaTongs** — Extracts database schemas into schema packages
+- **SchemaQuench** — Applies schema packages to databases (deploy)
+- **SchemaTongs** — Extracts database schemas into schema packages (extract)
 - **DataTongs** — Extracts table data and generates MERGE scripts
 
 ## Quick Start
 
-If you have Docker, run from the project root:
+Build the tools and run the demo products against a local SQL Server:
 
 ```bash
-docker compose build
-docker compose up
+docker compose -f demo/docker-compose.yml build
+docker compose -f demo/docker-compose.yml up
 ```
 
-This applies the [Test Product](TestProducts/ValidProduct/Product.json) to a SQL Server container. Connect at `localhost` with credentials from [.env](.env).
+This builds SchemaQuench from source, starts a SQL Server instance, and deploys the Northwind and AdventureWorks demo products. Connect to the server at `localhost:1440` with credentials from `demo/.env`.
 
-For more samples, see the [SchemaSmithDemos](https://github.com/Schema-Smith/SchemaSmithDemos) repository.
+## Building
 
-## Technical Notes
+```bash
+dotnet build SchemaSmithyFree.sln
+```
 
-- **Target Frameworks**: net9.0, net481
-- **IDEs**: Visual Studio 2022 or JetBrains Rider
-- **Database**: Tested against SQL Server 2019-CU27. Should work with any version at compatibility level 130 or higher.
+## Running Tests
 
-## License
+Integration tests require a SQL Server instance on `localhost,1440`. Start one via the demo docker-compose:
 
-SchemaSmith Community Edition is licensed under [SSCL v2.0](LICENSE). No organization size or revenue restrictions — use for any purpose, personal or commercial. Tiers are feature-based only: Community is free, Enterprise adds multi-platform support and advanced features.
+```bash
+docker compose -f demo/docker-compose.yml up -d demoserver
+```
+
+Then run tests:
+
+```bash
+dotnet test SchemaSmithyFree.sln
+```
+
+## Demo Products and Tutorials
+
+See [demo/README.md](demo/README.md) for demo products, tutorials, and detailed docker-compose usage.
 
 ## Additional Resources
 
