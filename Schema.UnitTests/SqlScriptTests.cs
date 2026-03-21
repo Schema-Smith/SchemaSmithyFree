@@ -109,4 +109,26 @@ public class SqlScriptTests
             FactoryContainer.Clear();
         }
     }
+
+    [Test]
+    public void ShouldWrapExceptionWithFilePathWhenReadAllTextFails()
+    {
+        // Exercises the catch block when the IO layer throws rather than the SQL parser
+        const string filePath = @"C:\scripts\Unreadable.sql";
+
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(filePath).Returns(true);
+        mockFileWrapper.ReadAllText(filePath).Returns(_ => throw new IOException("disk error"));
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFileWrapper);
+
+            var ex = Assert.Throws<Exception>(() => SqlScript.Load(filePath));
+            Assert.That(ex!.Message, Does.Contain("Unreadable.sql"));
+            Assert.That(ex.Message, Does.Contain("disk error"));
+
+            FactoryContainer.Clear();
+        }
+    }
 }
