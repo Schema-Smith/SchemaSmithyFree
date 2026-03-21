@@ -23,6 +23,7 @@ public class Product
     public string BaselineValidationScript { get; set; }
     public string VersionStampScript { get; set; }
     public string Platform { get; set; } = ConfigHelper.Platform;
+    public SqlServerVersion? MinimumVersion { get; set; }
 
     [JsonIgnore]
     public string FilePath { get; set; }
