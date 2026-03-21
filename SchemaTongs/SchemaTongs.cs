@@ -151,11 +151,213 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         }
     }
 
-    private void ScriptSqlServerSchemas(IDbCommand command) { }
+    private void ScriptSqlServerSchemas(IDbCommand command)
+    {
+        _progressLog.Info("Casting Schema Scripts");
+        var castPath = Path.Combine(_templatePath, "Schemas");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"
+SELECT s.name
+  FROM sys.schemas s
+ WHERE s.schema_id > 4
+   AND s.name NOT LIKE 'db[_]%'
+   AND s.name NOT LIKE '%\%'
+   AND s.name <> 'SchemaSmith'
+   AND s.principal_id IS NOT NULL
+ ORDER BY s.name";
+
+        var schemas = new List<string>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var name = reader.GetString(0);
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower())) continue;
+                schemas.Add(name);
+            }
+        }
+
+        foreach (var name in schemas)
+        {
+            var script = $"IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = N'{EscapeSql(name)}')\r\n" +
+                         $"EXEC sys.sp_executesql N'CREATE SCHEMA [{name}]'\r\n";
+
+            var fileName = Path.Combine(castPath, $"{name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+        }
+    }
+
     private void ScriptSqlServerUserDefinedTypes(IDbCommand command) { }
-    private void ScriptSqlServerFunctions(IDbCommand command) { }
-    private void ScriptSqlServerViews(IDbCommand command) { }
-    private void ScriptSqlServerProcedures(IDbCommand command) { }
+
+    private void ScriptSqlServerFunctions(IDbCommand command)
+    {
+        _progressLog.Info("Casting Function Scripts");
+        var castPath = Path.Combine(_templatePath, "Functions");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"
+SELECT s.name AS SchemaName, o.name AS ObjectName
+  FROM sys.objects o
+  JOIN sys.schemas s ON o.schema_id = s.schema_id
+ WHERE o.type IN ('FN', 'IF', 'TF')
+   AND o.is_ms_shipped = 0
+   AND s.name <> 'SchemaSmith'
+ ORDER BY s.name, o.name";
+
+        var functions = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var schema = reader.GetString(0);
+                var name = reader.GetString(1);
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
+                functions.Add((schema, name));
+            }
+        }
+
+        foreach (var (schema, name) in functions)
+        {
+            var sql = ScriptSqlServerProgrammableObject(command, schema, name, "FUNCTION");
+            if (sql == null) continue;
+
+            if (_scriptDynamicDependencyRemovalForFunctions)
+            {
+                var dependencyBlock =
+                    $"\r\nDECLARE @v_SearchTerm VARCHAR(2000) = '%{name}%'\r\n" +
+                    "DECLARE @v_SQL VARCHAR(MAX) = (SELECT STRING_AGG(Task, ';' + CHAR(13) + CHAR(10)) \r\n" +
+                    "                                 FROM (SELECT 'ALTER TABLE [' + OBJECT_SCHEMA_NAME(cc.parent_object_id) + '].[' + OBJECT_NAME(cc.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + OBJECT_NAME(cc.[name]) + ']' AS Task\r\n" +
+                    "                                         FROM sys.check_constraints cc\r\n" +
+                    "                                         WHERE cc.[definition] LIKE @v_SearchTerm\r\n" +
+                    "                                            OR EXISTS (SELECT *\r\n" +
+                    "                                                         FROM sys.computed_columns cc2\r\n" +
+                    "                                                         WHERE cc2.[definition] LIKE @v_SearchTerm\r\n" +
+                    "                                                           AND cc2.[object_id] = cc.parent_object_id\r\n" +
+                    "                                                           AND cc2.column_id = cc.parent_column_id)\r\n" +
+                    "                                       UNION ALL\r\n" +
+                    "                                       SELECT 'ALTER TABLE [' + OBJECT_SCHEMA_NAME(dc.parent_object_id) + '].[' + OBJECT_NAME(dc.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + OBJECT_NAME(dc.[name]) + ']'\r\n" +
+                    "                                         FROM sys.default_constraints dc\r\n" +
+                    "                                         WHERE dc.[definition] LIKE @v_SearchTerm\r\n" +
+                    "                                            OR EXISTS (SELECT *\r\n" +
+                    "                                                         FROM sys.computed_columns cc\r\n" +
+                    "                                                         WHERE cc.[definition] LIKE @v_SearchTerm\r\n" +
+                    "                                                           AND cc.[object_id] = dc.parent_object_id\r\n" +
+                    "                                                           AND cc.column_id = dc.parent_column_id)\r\n" +
+                    "                                       UNION ALL\r\n" +
+                    "                                       SELECT 'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + OBJECT_NAME(fk.[name]) + ']'\r\n" +
+                    "                                         FROM sys.foreign_keys fk\r\n" +
+                    "                                         WHERE EXISTS (SELECT *\r\n" +
+                    "                                                         FROM sys.computed_columns cc\r\n" +
+                    "                                                         JOIN sys.foreign_key_columns fc ON fk.[object_id] = fk.[object_id]\r\n" +
+                    "                                                                                        AND ((fc.parent_object_id = cc.[object_id] AND fc.parent_column_id = cc.column_id)\r\n" +
+                    "                                                                                          OR (fc.referenced_object_id = cc.[object_id] AND fc.referenced_column_id = cc.column_id))\r\n" +
+                    "                                                         WHERE cc.[definition] LIKE @v_SearchTerm)\r\n" +
+                    "                                       UNION ALL\r\n" +
+                    "                                       SELECT 'DROP INDEX IF EXISTS [' + si.[name] + '] ON [' + OBJECT_SCHEMA_NAME(si.[object_id]) + '].[' + OBJECT_NAME(si.[object_id]) + ']'\r\n" +
+                    "                                         FROM sys.indexes si\r\n" +
+                    "                                         WHERE si.filter_definition LIKE @v_SearchTerm\r\n" +
+                    "                                            OR EXISTS (SELECT *\r\n" +
+                    "                                                         FROM sys.computed_columns cc\r\n" +
+                    "                                                         JOIN sys.index_columns ic ON ic.[object_id] = si.[object_id]\r\n" +
+                    "                                                                                  AND ic.index_id = si.index_id\r\n" +
+                    "                                                                                  AND ic.column_id = cc.column_id\r\n" +
+                    "                                                         WHERE cc.[definition] LIKE @v_SearchTerm\r\n" +
+                    "                                                           AND cc.[object_id] = si.[object_id])\r\n" +
+                    "                                       UNION ALL\r\n" +
+                    "                                       SELECT 'ALTER TABLE [' + OBJECT_SCHEMA_NAME(cc.[object_id]) + '].[' + OBJECT_NAME(cc.[object_id]) + '] DROP COLUMN IF EXISTS [' + cc.[name] + ']'\r\n" +
+                    "                                         FROM sys.computed_columns cc\r\n" +
+                    "                                         WHERE cc.[definition] LIKE @v_SearchTerm) x) + ';'\r\n" +
+                    "EXEC(@v_SQL) -- Remove any dependencies before updating the function\r\n" +
+                    "GO\r\n";
+
+                var firstGoEnd = sql.IndexOf("GO\r\n\r\n") + 4;
+                if (firstGoEnd > 3)
+                    sql = sql.Substring(0, firstGoEnd) + dependencyBlock + sql.Substring(firstGoEnd);
+            }
+
+            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+        }
+    }
+
+    private void ScriptSqlServerViews(IDbCommand command)
+    {
+        _progressLog.Info("Casting View Scripts");
+        var castPath = Path.Combine(_templatePath, "Views");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"
+SELECT s.name AS SchemaName, o.name AS ObjectName
+  FROM sys.objects o
+  JOIN sys.schemas s ON o.schema_id = s.schema_id
+ WHERE o.type = 'V'
+   AND o.is_ms_shipped = 0
+   AND s.name <> 'SchemaSmith'
+ ORDER BY s.name, o.name";
+
+        var views = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var schema = reader.GetString(0);
+                var name = reader.GetString(1);
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
+                views.Add((schema, name));
+            }
+        }
+
+        foreach (var (schema, name) in views)
+        {
+            var sql = ScriptSqlServerProgrammableObject(command, schema, name, "VIEW");
+            if (sql == null) continue;
+
+            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+        }
+    }
+
+    private void ScriptSqlServerProcedures(IDbCommand command)
+    {
+        _progressLog.Info("Casting Stored Procedure Scripts");
+        var castPath = Path.Combine(_templatePath, "Procedures");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"
+SELECT s.name AS SchemaName, o.name AS ObjectName
+  FROM sys.objects o
+  JOIN sys.schemas s ON o.schema_id = s.schema_id
+ WHERE o.type = 'P'
+   AND o.is_ms_shipped = 0
+   AND s.name <> 'SchemaSmith'
+ ORDER BY s.name, o.name";
+
+        var procedures = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var schema = reader.GetString(0);
+                var name = reader.GetString(1);
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
+                procedures.Add((schema, name));
+            }
+        }
+
+        foreach (var (schema, name) in procedures)
+        {
+            var sql = ScriptSqlServerProgrammableObject(command, schema, name, "PROCEDURE");
+            if (sql == null) continue;
+
+            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+        }
+    }
     private void ScriptSqlServerTableTriggers(IDbCommand command) { }
     private void ScriptSqlServerFullTextCatalogs(IDbCommand command) { }
     private void ScriptSqlServerFullTextStopLists(IDbCommand command) { }
