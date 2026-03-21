@@ -595,8 +595,88 @@ SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
         }
     }
-    private void ScriptSqlServerFullTextCatalogs(IDbCommand command) { }
-    private void ScriptSqlServerFullTextStopLists(IDbCommand command) { }
+    private void ScriptSqlServerFullTextCatalogs(IDbCommand command)
+    {
+        _progressLog.Info("Casting FullText Catalog Scripts");
+        var castPath = Path.Combine(_templatePath, "FullTextCatalogs");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"SELECT name FROM sys.fulltext_catalogs ORDER BY name";
+
+        var catalogs = new List<string>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var name = reader.GetString(0);
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower())) continue;
+                catalogs.Add(name);
+            }
+        }
+
+        foreach (var name in catalogs)
+        {
+            var script = $"IF NOT EXISTS (SELECT * FROM sysfulltextcatalogs ftc WHERE ftc.name = N'{EscapeSql(name)}')\r\n" +
+                         $"CREATE FULLTEXT CATALOG [{name}] ";
+
+            var fileName = Path.Combine(castPath, $"{name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+        }
+    }
+
+    private void ScriptSqlServerFullTextStopLists(IDbCommand command)
+    {
+        _progressLog.Info("Casting FullText Stop List Scripts");
+        var castPath = Path.Combine(_templatePath, "FullTextStopLists");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"
+SELECT stoplist_id, name
+  FROM sys.fulltext_stoplists
+ ORDER BY name";
+
+        var stopLists = new List<(int Id, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var name = reader.GetString(1);
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower())) continue;
+                stopLists.Add((reader.GetInt32(0), name));
+            }
+        }
+
+        foreach (var (id, name) in stopLists)
+        {
+            command.CommandText = $@"
+SELECT stopword, language
+  FROM sys.fulltext_stopwords
+ WHERE stoplist_id = {id}
+ ORDER BY stopword, language";
+
+            var stopWords = new List<(string Word, string Language)>();
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                    stopWords.Add((reader.GetString(0), reader.GetString(1)));
+            }
+
+            var script = $"IF NOT EXISTS (SELECT * FROM sys.fulltext_stoplists ftsl WHERE ftsl.name = N'{EscapeSql(name)}')\r\n" +
+                         $"BEGIN\r\n" +
+                         $"CREATE FULLTEXT STOPLIST [{name}]\r\n" +
+                         $";\r\n";
+
+            foreach (var (word, language) in stopWords)
+                script += $"ALTER FULLTEXT STOPLIST [{name}] ADD '{EscapeSql(word)}' LANGUAGE '{EscapeSql(language)}';\r\n";
+
+            script += "END\r\n";
+
+            var fileName = Path.Combine(castPath, $"{name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+        }
+    }
     private void ScriptSqlServerDDLTriggers(IDbCommand command)
     {
         _progressLog.Info("Casting Database DDL Trigger Scripts");
@@ -678,7 +758,43 @@ SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
         }
     }
-    private void ScriptSqlServerXmlSchemaCollections(IDbCommand command) { }
+    private void ScriptSqlServerXmlSchemaCollections(IDbCommand command)
+    {
+        _progressLog.Info("Casting XML Schema Collection Scripts");
+        var castPath = Path.Combine(_templatePath, "XMLSchemaCollections");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"
+SELECT s.name AS SchemaName, xsc.name AS CollectionName
+  FROM sys.xml_schema_collections xsc
+  JOIN sys.schemas s ON xsc.schema_id = s.schema_id
+ WHERE xsc.xml_collection_id > 1
+ ORDER BY s.name, xsc.name";
+
+        var collections = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+                collections.Add((reader.GetString(0), reader.GetString(1)));
+        }
+
+        foreach (var (schema, name) in collections)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
+
+            command.CommandText = $"SELECT CAST(XML_SCHEMA_NAMESPACE(N'{EscapeSql(schema)}', N'{EscapeSql(name)}') AS NVARCHAR(MAX))";
+            var xmlContent = (string)command.ExecuteScalar();
+
+            var script =
+                $"IF NOT EXISTS (SELECT * FROM sys.xml_schema_collections c, sys.schemas s WHERE c.schema_id = s.schema_id AND (quotename(s.name) + '.' + quotename(c.name)) = N'[{schema}].[{name}]')\r\n" +
+                $"CREATE XML SCHEMA COLLECTION [{schema}].[{name}] AS N'{xmlContent}'";
+            script = FormatXmlInScript(script);
+
+            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+        }
+    }
 
     internal static string EscapeSql(string value) => value.Replace("'", "''");
 
