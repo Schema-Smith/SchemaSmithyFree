@@ -6,7 +6,7 @@ Applies to: SchemaTongs (SQL Server, Community)
 
 ## What SchemaTongs Does
 
-SchemaTongs extracts database schema from a live SQL Server and writes it into schema package format. It connects to a source database, reads its objects using SQL Server Management Objects (SMO), and generates the JSON and SQL files that make up a schema package.
+SchemaTongs extracts database schema from a live SQL Server and writes it into schema package format. It connects to a source database, reads its objects using direct SQL queries against system views, and generates the JSON and SQL files that make up a schema package.
 
 SchemaTongs can create a new schema package from scratch or update an existing one. When updating, it overwrites object scripts and table definitions with the current state of the database.
 
@@ -67,7 +67,7 @@ SchemaTongs generates SQL scripts with these conventions:
 - **CREATE OR ALTER** — Used for stored procedures and functions where supported.
 - **SET options** — `SET ANSI_NULLS ON` and `SET QUOTED_IDENTIFIER ON` are included in scripts.
 - **IF NOT EXISTS** — Existence checks are included where appropriate.
-- **Extended properties** — SQL Server extended properties on programmable objects are preserved in extracted scripts.
+- **Schema qualification** — Object names are schema-qualified in generated scripts.
 
 ---
 
