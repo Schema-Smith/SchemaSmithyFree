@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using NSubstitute;
 using Schema.Isolators;
 using Schema.Utility;
@@ -10,6 +12,14 @@ public class CommandLineParserTests
     public void TearDown()
     {
         FactoryContainer.Clear();
+    }
+
+    private static IEnvironment MockCommandLine(string commandLine)
+    {
+        var env = Substitute.For<IEnvironment>();
+        env.CommandLine.Returns(commandLine);
+        FactoryContainer.Register<IEnvironment>(env);
+        return env;
     }
 
     // ContainsSwitch — switch definitely absent from test runner command line
@@ -27,6 +37,27 @@ public class CommandLineParserTests
         Assert.That(CommandLineParser.ContainsSwitch("xyzzy-upper"), Is.False);
     }
 
+    [Test]
+    public void ContainsSwitchReturnsTrueWhenSwitchPresent()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            MockCommandLine("myapp.exe --foo --bar:value");
+            Assert.That(CommandLineParser.ContainsSwitch("foo"), Is.True);
+        }
+    }
+
+    [Test]
+    public void ContainsSwitchIsCaseInsensitiveForPresentSwitch()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            MockCommandLine("myapp.exe --FOO");
+            Assert.That(CommandLineParser.ContainsSwitch("foo"), Is.True);
+            Assert.That(CommandLineParser.ContainsSwitch("FOO"), Is.True);
+        }
+    }
+
     // ValueOfSwitch — returns supplied default when switch is absent
     [Test]
     public void ValueOfSwitchReturnsEmptyStringDefaultWhenSwitchAbsent()
@@ -40,6 +71,37 @@ public class CommandLineParserTests
     {
         var result = CommandLineParser.ValueOfSwitch("xyzzy-missing", "fallback");
         Assert.That(result, Is.EqualTo("fallback"));
+    }
+
+    [Test]
+    public void ValueOfSwitchExtractsColonDelimitedValue()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            MockCommandLine("myapp.exe --LogPath:C:\\logs");
+            Assert.That(CommandLineParser.ValueOfSwitch("LogPath"), Is.EqualTo("C:\\logs"));
+        }
+    }
+
+    [Test]
+    public void ValueOfSwitchExtractsEqualsDelimitedValue()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            MockCommandLine("myapp.exe --ConfigFile=appsettings.json");
+            Assert.That(CommandLineParser.ValueOfSwitch("ConfigFile"), Is.EqualTo("appsettings.json"));
+        }
+    }
+
+    [Test]
+    public void ValueOfSwitchPreservesEmbeddedColonInValue()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            // Only the first colon is the delimiter; the rest belongs to the value
+            MockCommandLine("myapp.exe --LogPath:C:\\some:path");
+            Assert.That(CommandLineParser.ValueOfSwitch("LogPath"), Is.EqualTo("C:\\some:path"));
+        }
     }
 
     // IntValueOfSwitch — returns default when switch absent
@@ -69,36 +131,13 @@ public class CommandLineParserTests
         }
     }
 
-    // CommandLine — always has a leading space (ForceLeadingSpace invariant)
-    [Test]
-    public void CommandLineAlwaysStartsWithSpace()
-    {
-        Assert.That(CommandLineParser.CommandLine, Does.StartWith(" "));
-    }
-
-    // CommandLine and Arguments are consistent
+    // Arguments is a list
     [Test]
     public void ArgumentsIsAList()
     {
         var args = CommandLineParser.Arguments;
         Assert.That(args, Is.Not.Null);
         Assert.That(args, Is.InstanceOf<System.Collections.Generic.List<string>>());
-    }
-
-    // HandleCommonSwitches — does not call Exit when version/help switches are absent
-    [Test]
-    public void HandleCommonSwitchesDoesNotCallExitWhenNoVersionOrHelpSwitch()
-    {
-        var env = Substitute.For<IEnvironment>();
-        lock (FactoryContainer.SharedLockObject)
-        {
-            FactoryContainer.Register<IEnvironment>(env);
-
-            // As long as --version / --v / --ver / --help / --h / --? are absent from
-            // the test runner command line, Exit should never be called.
-            Assert.That(() => CommandLineParser.HandleCommonSwitches("TestApp"), Throws.Nothing);
-            env.DidNotReceive().Exit(Arg.Any<int>());
-        }
     }
 
     // SwitchesAndValues dictionary — independent of argument order checks
@@ -108,5 +147,101 @@ public class CommandLineParserTests
         var switches = CommandLineParser.SwitchesAndValues;
         Assert.That(switches, Is.Not.Null);
         Assert.That(switches, Is.InstanceOf<System.Collections.Generic.Dictionary<string, string>>());
+    }
+
+    // HandleCommonSwitches — does not call Exit when version/help switches are absent
+    [Test]
+    public void HandleCommonSwitchesDoesNotCallExitWhenNoVersionOrHelpSwitch()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var env = MockCommandLine("myapp.exe --unrelated");
+
+            Assert.That(() => CommandLineParser.HandleCommonSwitches("TestApp"), Throws.Nothing);
+            env.DidNotReceive().Exit(Arg.Any<int>());
+        }
+    }
+
+    [Test]
+    public void HandleCommonSwitchesCallsExitForVersionSwitch()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var env = MockCommandLine("myapp.exe --version");
+            CommandLineParser.HandleCommonSwitches("TestApp");
+            env.Received(1).Exit(0);
+        }
+    }
+
+    [Test]
+    public void HandleCommonSwitchesCallsExitForVerSwitch()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var env = MockCommandLine("myapp.exe --ver");
+            CommandLineParser.HandleCommonSwitches("TestApp");
+            env.Received(1).Exit(0);
+        }
+    }
+
+    [Test]
+    public void HandleCommonSwitchesCallsExitForVSwitch()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var env = MockCommandLine("myapp.exe --v");
+            CommandLineParser.HandleCommonSwitches("TestApp");
+            env.Received(1).Exit(0);
+        }
+    }
+
+    [Test]
+    public void HandleCommonSwitchesCallsExitForHelpSwitch()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var env = MockCommandLine("myapp.exe --help");
+            CommandLineParser.HandleCommonSwitches("TestApp");
+            env.Received(1).Exit(0);
+        }
+    }
+
+    [Test]
+    public void HandleCommonSwitchesCallsExitForHSwitch()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var env = MockCommandLine("myapp.exe --h");
+            CommandLineParser.HandleCommonSwitches("TestApp");
+            env.Received(1).Exit(0);
+        }
+    }
+
+    [Test]
+    public void ShowHelpAndExitOutputsExpectedHelpText()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var env = MockCommandLine("myapp.exe --help");
+
+            var originalOut = Console.Out;
+            var output = new StringWriter();
+            Console.SetOut(output);
+            try
+            {
+                CommandLineParser.HandleCommonSwitches("myapp");
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
+
+            var text = output.ToString();
+            Assert.That(text, Does.Contain("myapp.exe"));
+            Assert.That(text, Does.Contain("--version"));
+            Assert.That(text, Does.Contain("--help"));
+            Assert.That(text, Does.Contain("--LogPath"));
+            Assert.That(text, Does.Contain("--ConfigFile"));
+        }
     }
 }

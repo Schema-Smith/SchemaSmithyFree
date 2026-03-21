@@ -9,26 +9,25 @@ namespace Schema.Utility;
 
 public static class CommandLineParser
 {
-    public static string CommandLine { get; } = ForceLeadingSpace(Environment.CommandLine);
-
     public static List<string> Arguments
     {
         get
         {
+            var commandLine = ForceLeadingSpace(EnvironmentWrapper.GetFromFactory().CommandLine);
             var result = new List<string>();
             var pos = 0;
-            while (pos < CommandLine.Length - 1)
+            while (pos < commandLine.Length - 1)
             {
-                var nextPos = FindNextUnquotedSpace(CommandLine, pos);
+                var nextPos = FindNextUnquotedSpace(commandLine, pos);
                 if (nextPos == -1)
                 {
-                    result.Add(CommandLine.Substring(pos).Trim().Unquote());
+                    result.Add(commandLine.Substring(pos).Trim().Unquote());
                     break;
                 }
-                var arg = CommandLine.Substring(pos, nextPos - pos).Trim().Unquote();
+                var arg = commandLine.Substring(pos, nextPos - pos).Trim().Unquote();
                 if (arg != string.Empty)
                     result.Add(arg);
-                pos = FindNextNonSpace(CommandLine, nextPos);
+                pos = FindNextNonSpace(commandLine, nextPos);
             }
 
             return result;
