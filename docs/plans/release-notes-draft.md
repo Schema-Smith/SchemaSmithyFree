@@ -31,6 +31,12 @@
 - **`.community` sentinel:** SchemaTongs now writes a `.community` file to new product roots, marking them as Community edition packages.
 - **CI validation:** Demo product JSON files are validated against schemas on every PR.
 
+### SMO-Free SchemaTongs
+
+- **SMO dependency removed:** SchemaTongs no longer depends on `Microsoft.SqlServer.SqlManagementObjects`. All schema extraction uses direct SQL queries against system views, matching Enterprise's proven approach.
+- **Extended properties stripped:** Extracted scripts and table JSON no longer include extended properties. Custom properties are an Enterprise feature.
+- **Performance improvement:** Direct SQL queries are faster than SMO's reflection-based extraction.
+
 ### Schema Validation
 
 - **Runtime-generated JSON Schema files:** `.json-schemas/` files are now generated from the domain model at runtime instead of static embedded files. SchemaTongs always overwrites with the latest schema on each extraction.
