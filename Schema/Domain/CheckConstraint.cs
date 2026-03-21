@@ -6,7 +6,9 @@ namespace Schema.Domain;
 public class CheckConstraint
 {
     [JsonProperty(Order = 1)]
+    [SchemaProperty(Required = true)]
     public string Name { get; set; }
     [JsonProperty(Order = 2)]
+    [SchemaProperty(Required = true)]
     public string Expression { get; set; }
 }

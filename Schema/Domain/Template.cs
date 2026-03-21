@@ -10,7 +10,9 @@ namespace Schema.Domain;
 
 public class Template
 {
+    [SchemaProperty(Required = true)]
     public string Name { get; set; }
+    [SchemaProperty(Required = true)]
     public string DatabaseIdentificationScript { get; set; }
     public string VersionStampScript { get; set; }
     public bool UpdateFillFactor { get; set; } = true;

@@ -6,6 +6,7 @@ namespace Schema.Domain;
 public class Index
 {
     [JsonProperty(Order = 1)]
+    [SchemaProperty(Required = true)]
     public string Name { get; set; }
     [JsonProperty(Order = 2)]
     public string CompressionType { get; set; } = "NONE";
@@ -20,8 +21,10 @@ public class Index
     [JsonProperty(Order = 7)]
     public bool ColumnStore { get; set; }
     [JsonProperty(Order = 8)]
+    [SchemaProperty(Minimum = 0, Maximum = 100)]
     public byte FillFactor { get; set; }
     [JsonProperty(Order = 9)]
+    [SchemaProperty(Required = true)]
     public string IndexColumns { get; set; }
     [JsonProperty(Order = 10)]
     public string IncludeColumns { get; set; }

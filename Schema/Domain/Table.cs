@@ -11,12 +11,14 @@ public class Table
     [JsonProperty(Order = 1)]
     public string Schema { get; set; } = "dbo";
     [JsonProperty(Order = 2)]
+    [SchemaProperty(Required = true)]
     public string Name { get; set; }
     [JsonProperty(Order = 3)]
     public string CompressionType { get; set; } = "NONE";
     [JsonProperty(Order = 4)]
     public bool IsTemporal { get; set; }
     [JsonProperty(Order = 5)]
+    [SchemaProperty(Required = true)]
     public List<Column> Columns { get; set; } = [];
     [JsonProperty(Order = 6)]
     public List<Index> Indexes { get; set; } = [];

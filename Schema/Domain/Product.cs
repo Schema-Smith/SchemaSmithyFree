@@ -13,7 +13,9 @@ namespace Schema.Domain;
 
 public class Product
 {
+    [SchemaProperty(Required = true)]
     public string Name { get; set; }
+    [SchemaProperty(Required = true)]
     public string ValidationScript { get; set; }
     public bool DropUnknownIndexes { get; set; } = false;
     public List<string> TemplateOrder { get; set; } = [];

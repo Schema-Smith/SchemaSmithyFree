@@ -6,8 +6,10 @@ namespace Schema.Domain;
 public class Column
 {
     [JsonProperty(Order = 1)]
+    [SchemaProperty(Required = true)]
     public string Name { get; set; }
     [JsonProperty(Order = 2)]
+    [SchemaProperty(Required = true)]
     public string DataType { get; set; }
     [JsonProperty(Order = 3)]
     public bool Nullable { get; set; }
