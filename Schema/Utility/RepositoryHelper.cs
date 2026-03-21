@@ -32,6 +32,7 @@ public static class RepositoryHelper
             SchemaGenerator.GenerateSchema(typeof(Template)).ToString(Formatting.Indented));
         file.WriteAllText(Path.Combine(schemaPath, "tables.schema"),
             SchemaGenerator.GenerateSchema(typeof(Table)).ToString(Formatting.Indented));
+        file.WriteAllText(Path.Combine(productPath, ".community"), "");
     }
 
     public static string UpdateOrInitTemplate(string productPath, string templateName, string dbName)

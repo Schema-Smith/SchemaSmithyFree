@@ -33,7 +33,8 @@ public class RepositoryHelperTests
             mockDirectoryWrapper.Received(2).CreateDirectory(Arg.Any<string>());
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, "Templates"));
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, ".json-schemas"));
-            mockFileWrapper.Received(4).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            mockFileWrapper.Received(5).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith(".community")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("products.schema")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("templates.schema")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("tables.schema")), Arg.Any<string>());
@@ -100,7 +101,8 @@ public class RepositoryHelperTests
             mockDirectoryWrapper.Received(2).CreateDirectory(Arg.Any<string>());
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, "Templates"));
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, ".json-schemas"));
-            mockFileWrapper.Received(4).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            mockFileWrapper.Received(5).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith(".community")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("products.schema")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("templates.schema")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("tables.schema")), Arg.Any<string>());
