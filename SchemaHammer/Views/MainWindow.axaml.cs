@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using SchemaHammer.ViewModels;
 
@@ -42,6 +43,9 @@ public partial class MainWindow : Window
             // Don't save minimized state — keep previous normal bounds
             if (WindowState == WindowState.Minimized) return;
 
+            if (vm.TreeViewModel.SelectedNode != null)
+                vm.Settings.LastSelectedNodePath = vm.TreeViewModel.SelectedNode.FullTreePath;
+
             vm.SaveWindowState(
                 WindowState == WindowState.Maximized,
                 Position.X,
@@ -59,6 +63,25 @@ public partial class MainWindow : Window
     public static void SetNormal(Window window)
     {
         window.Cursor = Cursor.Default;
+    }
+
+    private void HistoryListBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ListBox listBox || listBox.SelectedIndex < 0) return;
+        if (DataContext is not MainWindowViewModel vm) return;
+
+        var historyIndex = vm.NavigationHistory.Count - 1 - listBox.SelectedIndex;
+        vm.NavigateToHistoryCommand.Execute(historyIndex);
+
+        listBox.SelectedIndex = -1;
+
+        // Close the flyout
+        if (listBox.Parent is FlyoutPresenter presenter)
+        {
+            var flyout = presenter.Parent;
+            if (flyout is Popup popup)
+                popup.Close();
+        }
     }
 
     private void RestoreWindowState(MainWindowViewModel vm)

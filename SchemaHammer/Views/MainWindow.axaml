@@ -3,6 +3,8 @@
         xmlns:vm="using:SchemaHammer.ViewModels"
         xmlns:vmEditors="using:SchemaHammer.ViewModels.Editors"
         xmlns:editors="using:SchemaHammer.Views.Editors"
+        xmlns:views="using:SchemaHammer.Views"
+        xmlns:models="using:SchemaHammer.Models"
         x:Class="SchemaHammer.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="{Binding Title}"
@@ -17,6 +19,9 @@
     <Window.DataTemplates>
         <DataTemplate DataType="vmEditors:WelcomeViewModel">
             <editors:WelcomeView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:PlaceholderEditorViewModel">
+            <editors:PlaceholderEditorView />
         </DataTemplate>
     </Window.DataTemplates>
 
@@ -35,6 +40,30 @@
             <!-- Menu Bar -->
             <DockPanel DockPanel.Dock="Top"
                        Background="{DynamicResource SH.Toolbar.Background}">
+                <SplitButton DockPanel.Dock="Left"
+                             Command="{Binding NavigateBackCommand}"
+                             IsEnabled="{Binding CanNavigateBack}"
+                             ToolTip.Tip="Navigate Back"
+                             Padding="8,0" VerticalAlignment="Stretch"
+                             BorderThickness="0"
+                             Foreground="{DynamicResource SH.Toolbar.Foreground}"
+                             Background="Transparent">
+                    <TextBlock Text="&#x2190;" FontSize="16" />
+                    <SplitButton.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedLeft">
+                            <ListBox ItemsSource="{Binding NavigationHistory}"
+                                     MaxHeight="300" MinWidth="200"
+                                     Name="HistoryListBox"
+                                     SelectionChanged="HistoryListBox_SelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:TreeNodeModel">
+                                        <TextBlock Text="{Binding Text}" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Flyout>
+                    </SplitButton.Flyout>
+                </SplitButton>
                 <Menu Foreground="{DynamicResource SH.Toolbar.Foreground}">
                     <!-- File Menu -->
                     <MenuItem Header="_File">
@@ -50,6 +79,16 @@
                             <MenuItem.Icon>
                                 <PathIcon Data="{StaticResource RefreshIcon}" Width="14" Height="14" />
                             </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Recent Products"
+                                  ItemsSource="{Binding Settings.RecentProducts}">
+                            <MenuItem.Styles>
+                                <Style Selector="MenuItem">
+                                    <Setter Property="Header" Value="{Binding}" />
+                                    <Setter Property="Command" Value="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LoadRecentProductCommand}" />
+                                    <Setter Property="CommandParameter" Value="{Binding}" />
+                                </Style>
+                            </MenuItem.Styles>
                         </MenuItem>
                         <Separator />
                         <MenuItem Header="E_xit" Command="{Binding ExitCommand}" />
@@ -99,11 +138,9 @@
 
             <!-- Main Content: Tree (left) + Editor (right) with splitter -->
             <Grid ColumnDefinitions="327,Auto,*">
-                <!-- Left Panel: Product Tree Placeholder -->
+                <!-- Left Panel: Product Tree -->
                 <Border Grid.Column="0" Background="{DynamicResource SH.TreePanel.Background}">
-                    <TextBlock Text="Product Tree (Sub-Project 2)" Opacity="0.3"
-                               Foreground="{DynamicResource SH.TreePanel.Foreground}"
-                               VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    <views:ProductTreeView DataContext="{Binding TreeViewModel}" />
                 </Border>
 
                 <!-- Splitter -->

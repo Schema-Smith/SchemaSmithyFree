@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using SchemaHammer.Models;
 using SchemaHammer.Services;
 using SchemaHammer.ViewModels;
 using SchemaHammer.Views;
@@ -27,8 +28,20 @@ public partial class App : Application
             var theme = themeService.LoadTheme(settingsService.Settings.ActiveThemeName);
             themeService.SetActive(theme);
 
+            var productTreeService = new ProductTreeService();
+            var editorService = new EditorService();
+            var navigationService = new NavigationService();
+
             var mainWindow = new MainWindow();
-            mainWindow.DataContext = new MainWindowViewModel(settingsService);
+            mainWindow.DataContext = new MainWindowViewModel(
+                settingsService, navigationService, editorService, productTreeService);
+
+            TreeNodeModel.SetBusyCallback = busy =>
+            {
+                if (busy) MainWindow.SetBusy(mainWindow);
+                else MainWindow.SetNormal(mainWindow);
+            };
+
             desktop.MainWindow = mainWindow;
         }
 
