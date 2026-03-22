@@ -23,6 +23,22 @@
     <!-- Search -->
     <StreamGeometry x:Key="SearchIcon">M6.5,1 C3.46,1 1,3.46 1,6.5 C1,9.54 3.46,12 6.5,12 C7.79,12 8.97,11.56 9.93,10.83 L13.47,14.53 L14.53,13.47 L10.83,9.93 C11.56,8.97 12,7.79 12,6.5 C12,3.46 9.54,1 6.5,1 Z M6.5,3 C8.43,3 10,4.57 10,6.5 C10,8.43 8.43,10 6.5,10 C4.57,10 3,8.43 3,6.5 C3,4.57 4.57,3 6.5,3 Z</StreamGeometry>
 
+    <!-- Tree Node Types -->
+    <StreamGeometry x:Key="ProductIcon">M8,1 L15,5 L15,11 L8,15 L1,11 L1,5 Z M1,5 L8,9 L15,5 M8,9 L8,15</StreamGeometry>
+    <StreamGeometry x:Key="TemplateIcon">M3,4 A5,2 0 1,1 13,4 A5,2 0 1,1 3,4 M3,4 L3,12 A5,2 0 0,0 13,12 L13,4 M3,8 A5,2 0 0,0 13,8</StreamGeometry>
+    <StreamGeometry x:Key="TableIcon">M2,2 L14,2 L14,14 L2,14 Z M2,5 L14,5 M2,8 L14,8 M2,11 L14,11 M6,5 L6,14 M10,5 L10,14 M2,2 L14,2 L14,5 L2,5 Z</StreamGeometry>
+    <StreamGeometry x:Key="ColumnIcon">F0 M5,2 L11,2 L11,14 L5,14 Z M5,2 L11,2 L11,5 L5,5 Z</StreamGeometry>
+    <StreamGeometry x:Key="IndexIcon">M3,3 L10,3 M3,7 L10,7 M3,11 L10,11 M12,2 L12,13 M10,11 L12,13 L14,11</StreamGeometry>
+    <StreamGeometry x:Key="XmlIndexIcon">M2,5 L5,8 L2,11 M14,5 L11,8 L14,11 M12,2 L12,13 M10,11 L12,13 L14,11</StreamGeometry>
+    <StreamGeometry x:Key="ForeignKeyIcon">M2,7 A3,3 0 1,1 8,7 A3,3 0 1,1 2,7 M8,7 L15,7 M11,7 L11,10 M13,7 L13,10</StreamGeometry>
+    <StreamGeometry x:Key="CheckConstraintIcon">F0 M8,1 L14,3 L14,9 L8,15 L2,9 L2,3 Z M4,8.5 L7,12 L13,4.5 L11,4 L7,9.5 L5.5,7.5 Z</StreamGeometry>
+    <StreamGeometry x:Key="StatisticIcon">M3,14 L3,8 L6,8 L6,14 M7,14 L7,5 L10,5 L10,14 M11,14 L11,2 L14,2 L14,14 M2,14 L15,14</StreamGeometry>
+    <StreamGeometry x:Key="FullTextIndexIcon">M10,1 A5,5 0 1,1 9.99,1 M13,9 L15,11 M3,4 L8,4 M3,7 L7,7</StreamGeometry>
+    <StreamGeometry x:Key="IndexedViewIcon">M2,2 L14,2 L14,14 L2,14 Z M2,5 L14,5 M2,8 L14,8 M2,11 L14,11 M6,5 L6,14 M10,5 L10,14 M2,2 L14,2 L14,5 L2,5 Z</StreamGeometry>
+    <StreamGeometry x:Key="ScriptIcon">M4,2 Q1,2 1,5 L1,7 Q1,8 0,8 Q1,8 1,9 L1,11 Q1,14 4,14 M12,2 Q15,2 15,5 L15,7 Q15,8 16,8 Q15,8 15,9 L15,11 Q15,14 12,14</StreamGeometry>
+    <StreamGeometry x:Key="FolderIcon">M1,4 L7,4 L8,2 L14,2 L14,13 L1,13 Z</StreamGeometry>
+    <StreamGeometry x:Key="FileIcon">M3,1 L10,1 L13,4 L13,15 L3,15 Z M10,1 L10,4 L13,4</StreamGeometry>
+
     <!-- Misc -->
     <StreamGeometry x:Key="RefreshIcon">M14,4 C12.5,2.5 10.4,1.5 8,1.5 C4.41,1.5 1.5,4.41 1.5,8 C1.5,11.59 4.41,14.5 8,14.5 C10.9,14.5 13.37,12.62 14.2,10 L12.5,10 C11.75,11.66 10,13 8,13 C5.24,13 3,10.76 3,8 C3,5.24 5.24,3 8,3 C9.4,3 10.7,3.6 11.6,4.5 L9.5,6.5 L14.5,6.5 L14.5,1.5 Z</StreamGeometry>
     <StreamGeometry x:Key="BrowseIcon">M2,4 L6,4 L7,2 L14,2 L14,13 L2,13 Z</StreamGeometry>
