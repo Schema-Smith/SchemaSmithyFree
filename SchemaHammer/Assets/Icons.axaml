@@ -1,0 +1,35 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Navigation -->
+    <StreamGeometry x:Key="BackIcon">M15,8 L5,8 M5,8 L9,4 M5,8 L9,12</StreamGeometry>
+
+    <!-- File Operations -->
+    <StreamGeometry x:Key="SaveIcon">M3,1 L11,1 L13,3 L13,13 L3,13 Z M5,1 L5,5 L10,5 L10,1 M5,8 L11,8 M5,10 L11,10</StreamGeometry>
+    <StreamGeometry x:Key="UndoIcon">M5,4 L2,7 L5,10 M2,7 L10,7 C13,7 13,11 10,11 L8,11</StreamGeometry>
+
+    <!-- Edit Actions -->
+    <StreamGeometry x:Key="DeleteIcon">M5,2 L11,2 M4,4 L12,4 L11,14 L5,14 Z M8,6 L8,12</StreamGeometry>
+    <StreamGeometry x:Key="RenameIcon">M3,13 L3,11 L11,3 L13,5 L5,13 Z</StreamGeometry>
+    <StreamGeometry x:Key="NewItemIcon">M8,3 L8,13 M3,8 L13,8</StreamGeometry>
+    <StreamGeometry x:Key="NewFolderIcon">M1,5 L6,5 L7,3 L14,3 L14,13 L1,13 Z M7,7 L7,11 M5,9 L9,9</StreamGeometry>
+
+    <!-- Import -->
+    <StreamGeometry x:Key="ImportIcon">M8,2 L8,9 M5,6 L8,9 L11,6 M3,11 L3,14 L13,14 L13,11</StreamGeometry>
+
+    <!-- View/Preview -->
+    <StreamGeometry x:Key="PreviewIcon">M8,4 C4,4 1,8 1,8 C1,8 4,12 8,12 C12,12 15,8 15,8 C15,8 12,4 8,4 Z M8,6 A2,2 0 1,1 8,10 A2,2 0 1,1 8,6</StreamGeometry>
+
+    <!-- Search -->
+    <StreamGeometry x:Key="SearchIcon">M6.5,1 C3.46,1 1,3.46 1,6.5 C1,9.54 3.46,12 6.5,12 C7.79,12 8.97,11.56 9.93,10.83 L13.47,14.53 L14.53,13.47 L10.83,9.93 C11.56,8.97 12,7.79 12,6.5 C12,3.46 9.54,1 6.5,1 Z M6.5,3 C8.43,3 10,4.57 10,6.5 C10,8.43 8.43,10 6.5,10 C4.57,10 3,8.43 3,6.5 C3,4.57 4.57,3 6.5,3 Z</StreamGeometry>
+
+    <!-- Misc -->
+    <StreamGeometry x:Key="RefreshIcon">M14,4 C12.5,2.5 10.4,1.5 8,1.5 C4.41,1.5 1.5,4.41 1.5,8 C1.5,11.59 4.41,14.5 8,14.5 C10.9,14.5 13.37,12.62 14.2,10 L12.5,10 C11.75,11.66 10,13 8,13 C5.24,13 3,10.76 3,8 C3,5.24 5.24,3 8,3 C9.4,3 10.7,3.6 11.6,4.5 L9.5,6.5 L14.5,6.5 L14.5,1.5 Z</StreamGeometry>
+    <StreamGeometry x:Key="BrowseIcon">M2,4 L6,4 L7,2 L14,2 L14,13 L2,13 Z</StreamGeometry>
+    <StreamGeometry x:Key="EditIcon">M3,12 L3,10 L10,3 L12,5 L5,12 Z M13,2 L14,3</StreamGeometry>
+    <StreamGeometry x:Key="AddIcon">M8,3 L8,13 M3,8 L13,8</StreamGeometry>
+    <StreamGeometry x:Key="RemoveIcon">M3,8 L13,8</StreamGeometry>
+    <StreamGeometry x:Key="UpIcon">M4,10 L8,5 L12,10</StreamGeometry>
+    <StreamGeometry x:Key="DownIcon">M4,6 L8,11 L12,6</StreamGeometry>
+
+</ResourceDictionary>
