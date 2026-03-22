@@ -62,6 +62,17 @@ public partial class MainWindowViewModel : ObservableObject
         TreeViewModel.NodeSelected += OnNodeSelected;
     }
 
+    public void Initialize()
+    {
+        var lastProduct = Settings.RecentProducts.FirstOrDefault();
+        if (!string.IsNullOrEmpty(lastProduct) && Directory.Exists(lastProduct))
+        {
+            var productJsonPath = Path.Combine(lastProduct, "Product.json");
+            if (File.Exists(productJsonPath))
+                LoadProductFromPath(lastProduct);
+        }
+    }
+
     [RelayCommand]
     private void Exit()
     {
@@ -91,24 +102,49 @@ public partial class MainWindowViewModel : ObservableObject
             (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow);
         if (topLevel == null) return;
 
-        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(
-            new FolderPickerOpenOptions { Title = "Choose Product", AllowMultiple = false });
+        var jsonFilter = new FilePickerFileType("Product File") { Patterns = ["Product.json"] };
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(
+            new FilePickerOpenOptions
+            {
+                Title = "Choose Product",
+                AllowMultiple = false,
+                FileTypeFilter = [jsonFilter]
+            });
 
-        if (folders.Count == 0) return;
-        var path = folders[0].Path.LocalPath;
+        if (files.Count == 0) return;
+        var filePath = files[0].Path.LocalPath;
 
-        var productJsonPath = Path.Combine(path, "Product.json");
-        if (!File.Exists(productJsonPath))
+        if (!Path.GetFileName(filePath).Equals("Product.json", StringComparison.OrdinalIgnoreCase))
             return;
 
-        LoadProductFromPath(path);
+        var productDir = Path.GetDirectoryName(filePath);
+        if (string.IsNullOrEmpty(productDir)) return;
+
+        LoadProductFromPath(productDir);
     }
 
     [RelayCommand]
     private void ReloadTree()
     {
-        var roots = _productTreeService.ReloadProduct();
-        TreeViewModel.SetRootNodes(roots);
+        var childNodes = _productTreeService.ReloadProduct();
+        var product = _productTreeService.Product;
+
+        var productNode = new TreeNodeModel
+        {
+            Text = product?.Name ?? "Product",
+            Tag = "Product",
+            NodePath = Path.GetDirectoryName(product?.FilePath) ?? "",
+            ImageKey = "product",
+            IsExpanded = true
+        };
+
+        foreach (var child in childNodes)
+        {
+            child.Parent = productNode;
+            productNode.Children.Add(child);
+        }
+
+        TreeViewModel.SetRootNodes([productNode]);
 
         _navigationService.Clear();
         SyncNavigationHistory();
@@ -196,13 +232,29 @@ public partial class MainWindowViewModel : ObservableObject
 
     internal void LoadProductFromPath(string path)
     {
-        var roots = _productTreeService.LoadProduct(path);
-        TreeViewModel.SetRootNodes(roots);
+        var childNodes = _productTreeService.LoadProduct(path);
+        var product = _productTreeService.Product;
+
+        var productNode = new TreeNodeModel
+        {
+            Text = product?.Name ?? Path.GetFileName(path),
+            Tag = "Product",
+            NodePath = path,
+            ImageKey = "product",
+            IsExpanded = true
+        };
+
+        foreach (var child in childNodes)
+        {
+            child.Parent = productNode;
+            productNode.Children.Add(child);
+        }
+
+        TreeViewModel.SetRootNodes([productNode]);
 
         _navigationService.Clear();
         SyncNavigationHistory();
 
-        var product = _productTreeService.Product;
         Title = $"SchemaHammer Community — {product?.Name ?? "Unknown"}";
         ProductStatus = product?.Name ?? "NO PRODUCT";
 
@@ -212,9 +264,9 @@ public partial class MainWindowViewModel : ObservableObject
         CurrentEditor = new WelcomeViewModel();
 
         var lastPath = _settingsService.Settings.LastSelectedNodePath;
-        if (!string.IsNullOrEmpty(lastPath) && roots.Count > 0)
+        if (!string.IsNullOrEmpty(lastPath))
         {
-            var node = roots[0].FindByTreePath(lastPath);
+            var node = productNode.FindByTreePath(lastPath);
             if (node != null)
                 TreeViewModel.SelectedNode = node;
         }

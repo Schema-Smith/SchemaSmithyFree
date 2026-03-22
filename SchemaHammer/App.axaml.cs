@@ -33,8 +33,9 @@ public partial class App : Application
             var navigationService = new NavigationService();
 
             var mainWindow = new MainWindow();
-            mainWindow.DataContext = new MainWindowViewModel(
+            var viewModel = new MainWindowViewModel(
                 settingsService, navigationService, editorService, productTreeService);
+            mainWindow.DataContext = viewModel;
 
             TreeNodeModel.SetBusyCallback = busy =>
             {
@@ -43,6 +44,8 @@ public partial class App : Application
             };
 
             desktop.MainWindow = mainWindow;
+
+            viewModel.Initialize();
         }
 
         base.OnFrameworkInitializationCompleted();
