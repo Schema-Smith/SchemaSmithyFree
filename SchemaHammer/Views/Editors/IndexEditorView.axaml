@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             xmlns:controls="using:SchemaHammer.Controls"
+             x:Class="SchemaHammer.Views.Editors.IndexEditorView"
+             x:DataType="vm:IndexEditorViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="8" Margin="8">
+            <TextBlock Text="{Binding EditorLabel}" Classes="editor-title" />
+
+            <StackPanel Margin="4,0,0,0">
+                <TextBlock Text="Compression Type" Margin="0,0,0,2" />
+                <TextBox Text="{Binding CompressionType}" IsReadOnly="True" />
+            </StackPanel>
+
+            <Grid ColumnDefinitions="*,*" Margin="4,0,0,0">
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <CheckBox Content="Primary Key" IsChecked="{Binding PrimaryKey}" IsEnabled="False" />
+                    <CheckBox Content="Unique" IsChecked="{Binding Unique}" IsEnabled="False" />
+                    <CheckBox Content="Unique Constraint" IsChecked="{Binding UniqueConstraint}" IsEnabled="False" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="4">
+                    <CheckBox Content="Clustered" IsChecked="{Binding Clustered}" IsEnabled="False" />
+                    <CheckBox Content="Column Store" IsChecked="{Binding ColumnStore}" IsEnabled="False" />
+                </StackPanel>
+            </Grid>
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Columns" />
+            </Border>
+            <StackPanel Margin="4,0,0,0" Spacing="8">
+                <StackPanel>
+                    <TextBlock Text="Index Columns" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding IndexColumns}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Include Columns" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding IncludeColumns}" IsReadOnly="True" />
+                </StackPanel>
+            </StackPanel>
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Advanced" />
+            </Border>
+            <StackPanel Margin="4,0,0,0" Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="Fill Factor" Margin="0,0,0,2" />
+                        <TextBox Text="{Binding FillFactor}" IsReadOnly="True" />
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" Content="Update Fill Factor" IsChecked="{Binding UpdateFillFactor}" IsEnabled="False" VerticalAlignment="Bottom" />
+                </Grid>
+                <StackPanel>
+                    <TextBlock Text="Filter Expression" Margin="0,0,0,2" />
+                    <controls:SqlEditorControl Text="{Binding FilterExpression}" EditorHeight="100" />
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

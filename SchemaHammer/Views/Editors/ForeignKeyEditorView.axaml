@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             x:Class="SchemaHammer.Views.Editors.ForeignKeyEditorView"
+             x:DataType="vm:ForeignKeyEditorViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="8" Margin="8">
+            <TextBlock Text="{Binding EditorLabel}" Classes="editor-title" />
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Relationship" />
+            </Border>
+            <StackPanel Margin="4,0,0,0" Spacing="8">
+                <StackPanel>
+                    <TextBlock Text="Columns" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding Columns}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Related Table Schema" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding RelatedTableSchema}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Related Table" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding RelatedTable}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Related Columns" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding RelatedColumns}" IsReadOnly="True" />
+                </StackPanel>
+            </StackPanel>
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Actions" />
+            </Border>
+            <Grid ColumnDefinitions="*,*" Margin="4,0,0,0">
+                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                    <TextBlock Text="Delete Action" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding DeleteAction}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="Update Action" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding UpdateAction}" IsReadOnly="True" />
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
