@@ -354,4 +354,46 @@ IF OBJECT_ID('dbo.IVTest_Multi', 'U') IS NULL
 
         conn.Close();
     }
+
+    [Test]
+    public void ShouldErrorWhenQuenchingViewOwnedByDifferentProduct()
+    {
+        const string originalProduct = "IV Ownership Test";
+        const string wrongProduct = "WrongProduct";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+IF OBJECT_ID('dbo.IVTest_Ownership', 'U') IS NULL
+    CREATE TABLE dbo.IVTest_Ownership (Id INT NOT NULL, Val INT)";
+        cmd.ExecuteNonQuery();
+
+        var json = @"[{
+        ""Schema"": ""dbo"",
+        ""Name"": ""vw_OwnershipTest"",
+        ""Definition"": ""SELECT Id, Val FROM dbo.IVTest_Ownership"",
+        ""Indexes"": [{
+            ""Name"": ""CIX_vw_OwnershipTest"",
+            ""Unique"": true,
+            ""Clustered"": true,
+            ""IndexColumns"": ""Id""
+        }]
+    }]";
+
+        // First quench — creates view owned by originalProduct
+        RunIndexedViewQuench(cmd, originalProduct, json);
+
+        // Verify ownership EP exists
+        cmd.CommandText = "SELECT CAST(value AS NVARCHAR(200)) FROM sys.extended_properties WHERE major_id = OBJECT_ID('dbo.vw_OwnershipTest') AND name = 'SchemaSmith_Product'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo(originalProduct));
+
+        // Quench as different product — should fail because view is owned by originalProduct
+        var ex = Assert.Catch<Exception>(() => RunIndexedViewQuench(cmd, wrongProduct, json));
+        Assert.That(ex!.Message, Does.Contain("already"), "Should fail when view is owned by different product");
+
+        conn.Close();
+    }
 }
