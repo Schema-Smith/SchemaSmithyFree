@@ -38,6 +38,7 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
 
             try
             {
+                // Step 1: Kindle Forge
                 if (!suppressKindlingForgeForTesting)
                 {
                     using var kindlingConnection = GetConnection(ignoreInfoMessages: true);
@@ -47,7 +48,7 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                     ForgeKindler.KindleTheForge(kindlingCommand);
                 }
 
-
+                // Step 2: Validate Baseline
                 if (!string.IsNullOrWhiteSpace(template.BaselineValidationScript))
                 {
                     _progressLog.Info("  Validate Baseline");
@@ -56,11 +57,9 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                         throw new Exception("Invalid baseline for this release");
                 }
 
+                // Step 3: Object Quench (first pass — Objects slot only)
                 if (whatIfOnly != "1")
                 {
-                    ProgressLog("  Quenching before database scripts");
-                    QuenchTemplateScripts(command, "Before", template.BeforeScripts);
-
                     ProgressLog("  Quenching object scripts");
                     QuenchDatabaseObjects(objectsCommand, template.ObjectScripts, false);
 
@@ -71,44 +70,177 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                         QuenchDatabaseObjects(objectsCommand, template.ObjectScripts, false);
                     }
                 }
+                else
+                {
+                    WhatIfLogScripts(template.ObjectScripts, "object scripts");
+                }
 
                 if (updateTables)
                 {
-                    ProgressLog("  Quenching tables");
-                    command.CommandText = $"EXEC [{dbName}].SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = '{template.TableSchema.Replace("'", "''")}', @DropUnknownIndexes = {dropUnknownIndexes}, @DropTablesRemovedFromProduct = {(dropTablesRemovedFromProduct ? "1" : "0")}, @UpdateFillFactor = {(template.UpdateFillFactor ? "1" : "0")}, @WhatIf = {whatIfOnly}";
-                    _debugFileLocation = $"SchemaQuench - Quench Tables {dbName}.sql";
+                    var tableJson = template.TableSchema.Replace("'", "''");
+                    var updateFillFactor = template.UpdateFillFactor ? "1" : "0";
+
+                    // Step 4: Parse JSON into temp tables once
+                    ProgressLog("  Parsing table JSON into temp tables");
+                    var parseJsonScript = ForgeKindler.GetParseTableJsonScript();
+                    command.CommandText = $"DECLARE @TableDefinitions NVARCHAR(MAX) = '{tableJson}', @UpdateFillFactor BIT = {updateFillFactor}\r\n{parseJsonScript}";
+                    _debugFileLocation = $"SchemaQuench - ParseJson {dbName}.sql";
                     LogSqlScript(_debugFileLocation, command.CommandText);
                     ExecuteNonQueryAndRethrowInfoMessageError(command);
                     _debugFileLocation = "";
+
+                    // Step 5: MissingTableAndColumnQuench
+                    ProgressLog("  Quenching missing tables and columns");
+                    command.CommandText = $"EXEC [{dbName}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {whatIfOnly}";
+                    _debugFileLocation = $"SchemaQuench - MissingTableAndColumnQuench {dbName}.sql";
+                    LogSqlScript(_debugFileLocation, command.CommandText);
+                    ExecuteNonQueryAndRethrowInfoMessageError(command);
+                    _debugFileLocation = "";
+
+                    // Step 6: Object Quench (second opportunity — Objects slot only)
+                    if (whatIfOnly != "1")
+                    {
+                        if (template.ObjectScripts.Any(s => !s.HasBeenQuenched))
+                        {
+                            ProgressLog("  Quenching object scripts (post missing tables)");
+                            QuenchDatabaseObjects(objectsCommand, template.ObjectScripts, false);
+                        }
+                    }
+
+                    // Step 7: Template Before Scripts (migration scripts)
+                    if (whatIfOnly != "1")
+                    {
+                        ProgressLog("  Quenching before database scripts");
+                        QuenchTemplateScripts(command, "Before", template.BeforeScripts);
+                    }
+                    else
+                    {
+                        WhatIfLogTemplateScripts(command, "Before", template.BeforeScripts);
+                    }
+
+                    // Step 8: ModifiedTableQuench
+                    ProgressLog("  Quenching modified tables");
+                    command.CommandText = $"EXEC [{dbName}].SchemaSmith.ModifiedTableQuench @ProductName = '{productName}', @WhatIf = {whatIfOnly}, @DropUnknownIndexes = {dropUnknownIndexes}, @DropTablesRemovedFromProduct = {(dropTablesRemovedFromProduct ? "1" : "0")}";
+                    _debugFileLocation = $"SchemaQuench - ModifiedTableQuench {dbName}.sql";
+                    LogSqlScript(_debugFileLocation, command.CommandText);
+                    ExecuteNonQueryAndRethrowInfoMessageError(command);
+                    _debugFileLocation = "";
+
+                    // Step 9: Object Quench (third opportunity — Objects slot only)
+                    if (whatIfOnly != "1")
+                    {
+                        if (template.ObjectScripts.Any(s => !s.HasBeenQuenched))
+                        {
+                            ProgressLog("  Quenching object scripts (post modified tables)");
+                            QuenchDatabaseObjects(objectsCommand, template.ObjectScripts, false);
+                        }
+                    }
+
+                    // Step 10: BetweenTablesAndKeys Scripts (migration scripts)
+                    if (whatIfOnly != "1")
+                    {
+                        if (template.BetweenTablesAndKeysScripts.Any())
+                        {
+                            ProgressLog("  Quenching between-tables-and-keys scripts");
+                            QuenchTemplateScripts(command, "BetweenTablesAndKeys", template.BetweenTablesAndKeysScripts);
+                        }
+                    }
+                    else
+                    {
+                        WhatIfLogTemplateScripts(command, "BetweenTablesAndKeys", template.BetweenTablesAndKeysScripts);
+                    }
+
+                    // Step 11: MissingIndexesAndConstraintsQuench
+                    ProgressLog("  Quenching missing indexes and constraints");
+                    command.CommandText = $"EXEC [{dbName}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{productName}', @WhatIf = {whatIfOnly}";
+                    _debugFileLocation = $"SchemaQuench - MissingIndexesAndConstraintsQuench {dbName}.sql";
+                    LogSqlScript(_debugFileLocation, command.CommandText);
+                    ExecuteNonQueryAndRethrowInfoMessageError(command);
+                    _debugFileLocation = "";
+
+                    // Step 12: AfterTablesScripts (migration scripts)
+                    if (whatIfOnly != "1")
+                    {
+                        if (template.AfterTablesScripts.Any())
+                        {
+                            ProgressLog("  Quenching after-tables scripts");
+                            QuenchTemplateScripts(command, "AfterTablesScripts", template.AfterTablesScripts);
+                        }
+                    }
+                    else
+                    {
+                        WhatIfLogTemplateScripts(command, "AfterTablesScripts", template.AfterTablesScripts);
+                    }
+
+                    // Step 13: AfterTablesObjects (Objects + AfterTablesObjects combined — final retry, show errors)
+                    if (whatIfOnly != "1")
+                    {
+                        if (template.AfterTablesObjectScripts.Any(s => !s.HasBeenQuenched))
+                        {
+                            ProgressLog("  Quenching remaining Objects and AfterTableObjects scripts");
+                            QuenchDatabaseObjects(objectsCommand, template.AfterTablesObjectScripts);
+                        }
+                    }
+                    else
+                    {
+                        var unquenched = template.AfterTablesObjectScripts.Where(s => !s.HasBeenQuenched).ToList();
+                        WhatIfLogScripts(unquenched, "remaining Objects and AfterTableObjects scripts");
+                    }
+
+                    // Step 14: TableData Scripts
+                    if (whatIfOnly != "1")
+                    {
+                        if (template.TableDataScripts.Any(s => !s.HasBeenQuenched))
+                        {
+                            ProgressLog("  Quenching table data scripts");
+                            QuenchDatabaseObjects(objectsCommand, template.TableDataScripts);
+                        }
+                    }
+                    else
+                    {
+                        WhatIfLogScripts(template.TableDataScripts, "table data scripts");
+                    }
+
+                    // Step 15: ForeignKeyQuench
+                    ProgressLog("  Quenching foreign keys");
+                    command.CommandText = $"EXEC [{dbName}].SchemaSmith.ForeignKeyQuench @ProductName = '{productName}', @WhatIf = {whatIfOnly}";
+                    _debugFileLocation = $"SchemaQuench - ForeignKeyQuench {dbName}.sql";
+                    LogSqlScript(_debugFileLocation, command.CommandText);
+                    ExecuteNonQueryAndRethrowInfoMessageError(command);
+                    _debugFileLocation = "";
+
+                    // Step 16: Indexed Views — deferred
                 }
                 else
                 {
                     ProgressLog("  Skipping table updates (UpdateTables=false)");
                 }
 
+                // Step 17: Template After Scripts (migration scripts)
                 if (whatIfOnly != "1")
                 {
-                    if (template.AfterTablesObjectScripts.Any(s => !s.HasBeenQuenched))
-                    {
-                        ProgressLog("  Quenching remaining Objects and AfterTableObjects scripts");
-                        QuenchDatabaseObjects(objectsCommand, template.AfterTablesObjectScripts);
-                    }
-
-                    if (template.TableDataScripts.Any(s => !s.HasBeenQuenched))
-                    {
-                        ProgressLog("  Quenching table data scripts");
-                        QuenchDatabaseObjects(objectsCommand, template.TableDataScripts); // These loop and apply always like object scripts
-                    }
-
                     ProgressLog("  Quenching after database scripts");
                     QuenchTemplateScripts(command, "After", template.AfterScripts);
+                }
+                else
+                {
+                    WhatIfLogTemplateScripts(command, "After", template.AfterScripts);
+                }
 
+                // Step 18: Stamp Version
+                if (whatIfOnly != "1")
+                {
                     if (!string.IsNullOrWhiteSpace(template.VersionStampScript))
                     {
                         ProgressLog("  Stamp version");
                         command.CommandText = template.VersionStampScript;
                         ExecuteNonQueryAndRethrowInfoMessageError(command);
                     }
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(template.VersionStampScript))
+                        ProgressLog("  [WhatIf] Would stamp version");
                 }
             }
             finally
@@ -124,6 +256,28 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
         catch (Exception e)
         {
             ProgressLogError($"FAILED to quench:\r\n{e.Message}");
+        }
+    }
+
+    private void WhatIfLogScripts(List<SqlScript> scripts, string description)
+    {
+        if (!scripts.Any()) return;
+        ProgressLog($"  [WhatIf] Would quench {description}:");
+        foreach (var script in scripts)
+            ProgressLog($"    Would APPLY: {script.LogPath}");
+    }
+
+    private void WhatIfLogTemplateScripts(IDbCommand destCmd, string slot, List<SqlScript> scripts)
+    {
+        if (!scripts.Any()) return;
+        ProgressLog($"  [WhatIf] Would quench {slot.ToLower()} scripts:");
+        var alreadyRan = GetCompletedEntriesBySlot(destCmd, slot);
+        foreach (var script in scripts)
+        {
+            if (ShouldAlwaysRun(script.Name) || !alreadyRan.Contains(GetRelativeScriptPath(script.LogPath)))
+                ProgressLog($"    Would APPLY: {script.LogPath}");
+            else
+                ProgressLog($"    Would SKIP (previously quenched): {script.LogPath}");
         }
     }
 
