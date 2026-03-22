@@ -28,6 +28,8 @@
     <None Remove="Scripts\SchemaSmith.ModifiedTableQuench.sql" />
     <None Remove="Scripts\SchemaSmith.MissingIndexesAndConstraintsQuench.sql" />
     <None Remove="Scripts\SchemaSmith.ForeignKeyQuench.sql" />
+    <None Remove="Scripts\SchemaSmith.IndexedViewQuench.sql" />
+    <None Remove="Scripts\SchemaSmith.GenerateIndexedViewJson.sql" />
   </ItemGroup>
 
   <ItemGroup>
@@ -45,6 +47,8 @@
     <EmbeddedResource Include="Scripts\SchemaSmith.ModifiedTableQuench.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.MissingIndexesAndConstraintsQuench.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.ForeignKeyQuench.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.IndexedViewQuench.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.GenerateIndexedViewJson.sql" />
   </ItemGroup>
 
   <ItemGroup>
