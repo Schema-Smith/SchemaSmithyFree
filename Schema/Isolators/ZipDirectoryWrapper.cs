@@ -17,8 +17,7 @@ public class ZipDirectoryWrapper : IDirectory
 
         var normalizedPath = NormalizePath(path);
         return _zipEntries.Any(e =>
-            e.FullName.StartsWith(normalizedPath, StringComparison.OrdinalIgnoreCase) &&
-            (NormalizePath(e.FullName).Length == normalizedPath.Length || e.FullName[normalizedPath.Length] == '/'));
+            e.FullName.Replace('\\', '/').StartsWith(normalizedPath, StringComparison.OrdinalIgnoreCase));
     }
 
     public string[] GetFiles(string path, string searchPattern, SearchOption searchOption)

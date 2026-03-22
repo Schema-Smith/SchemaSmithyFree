@@ -1,0 +1,195 @@
+using System.IO;
+using System.Text;
+using System.IO.Compression;
+using NSubstitute;
+using Schema.Isolators;
+
+namespace Schema.UnitTests;
+
+public class ZipFileWrapperTests
+{
+    private ZipFileWrapper _wrapper;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _wrapper = new ZipFileWrapper();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _wrapper.Dispose();
+        FactoryContainer.Clear();
+    }
+
+    private static IZipEntry MockEntry(string fullName, string content = "")
+    {
+        var entry = Substitute.For<IZipEntry>();
+        entry.FullName.Returns(fullName);
+        entry.Open().Returns(_ => new MemoryStream(Encoding.UTF8.GetBytes(content)));
+        return entry;
+    }
+
+    // --- Exists ---
+
+    [Test]
+    public void Exists_ReturnsTrue_WhenEntryFound()
+    {
+        _wrapper.SetZipEntries([MockEntry("Templates/Main/Template.json")]);
+        Assert.That(_wrapper.Exists("Templates/Main/Template.json"), Is.True);
+    }
+
+    [Test]
+    public void Exists_ReturnsFalse_WhenEntryNotFound()
+    {
+        _wrapper.SetZipEntries([MockEntry("Templates/Main/Template.json")]);
+        Assert.That(_wrapper.Exists("Templates/Other/Missing.json"), Is.False);
+    }
+
+    [Test]
+    public void Exists_IsCaseInsensitive()
+    {
+        _wrapper.SetZipEntries([MockEntry("Templates/Main/Template.json")]);
+        Assert.That(_wrapper.Exists("templates/main/template.json"), Is.True);
+    }
+
+    [Test]
+    public void Exists_NormalizesSlashes()
+    {
+        _wrapper.SetZipEntries([MockEntry("Templates/Main/Template.json")]);
+        Assert.That(_wrapper.Exists(@"Templates\Main\Template.json"), Is.True);
+    }
+
+    [Test]
+    public void Exists_ReturnsFalse_WhenPathIsNullOrEmpty()
+    {
+        _wrapper.SetZipEntries([MockEntry("some/file.txt")]);
+        Assert.Multiple(() =>
+        {
+            Assert.That(_wrapper.Exists(null), Is.False);
+            Assert.That(_wrapper.Exists(""), Is.False);
+        });
+    }
+
+    // --- ReadAllText ---
+
+    [Test]
+    public void ReadAllText_ReturnsContent_WhenEntryFound()
+    {
+        _wrapper.SetZipEntries([MockEntry("Product.json", """{"Name":"Test"}""")]);
+        var content = _wrapper.ReadAllText("Product.json");
+        Assert.That(content, Is.EqualTo("""{"Name":"Test"}"""));
+    }
+
+    [Test]
+    public void ReadAllText_IsCaseInsensitive()
+    {
+        _wrapper.SetZipEntries([MockEntry("Product.json", "content")]);
+        Assert.That(_wrapper.ReadAllText("product.json"), Is.EqualTo("content"));
+    }
+
+    [Test]
+    public void ReadAllText_NormalizesSlashes()
+    {
+        _wrapper.SetZipEntries([MockEntry("Templates/Main/Table.json", "data")]);
+        Assert.That(_wrapper.ReadAllText(@"Templates\Main\Table.json"), Is.EqualTo("data"));
+    }
+
+    [Test]
+    public void ReadAllText_ThrowsFileNotFound_WhenEntryMissing()
+    {
+        _wrapper.SetZipEntries([MockEntry("other.json")]);
+        var ex = Assert.Throws<FileNotFoundException>(() => _wrapper.ReadAllText("missing.json"));
+        Assert.That(ex!.Message, Does.Contain("missing.json"));
+    }
+
+    [Test]
+    public void ReadAllText_ThrowsFileNotFound_WhenPathIsNullOrEmpty()
+    {
+        _wrapper.SetZipEntries([MockEntry("file.txt")]);
+        Assert.Multiple(() =>
+        {
+            Assert.Throws<FileNotFoundException>(() => _wrapper.ReadAllText(null));
+            Assert.Throws<FileNotFoundException>(() => _wrapper.ReadAllText(""));
+        });
+    }
+
+    // --- IsValidZipFile ---
+
+    [Test]
+    public void IsValidZipFile_ReturnsFalse_WhenFilenameIsNull()
+    {
+        Assert.That(ZipFileWrapper.IsValidZipFile(null), Is.False);
+    }
+
+    [Test]
+    public void IsValidZipFile_ReturnsFalse_WhenFilenameIsEmpty()
+    {
+        Assert.That(ZipFileWrapper.IsValidZipFile(""), Is.False);
+    }
+
+    [Test]
+    public void IsValidZipFile_ReturnsFalse_WhenFileDoesNotExist()
+    {
+        var mockFile = Substitute.For<IFile>();
+        mockFile.Exists("missing.zip").Returns(false);
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFile);
+            Assert.That(ZipFileWrapper.IsValidZipFile("missing.zip"), Is.False);
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void IsValidZipFile_ReturnsFalse_WhenFileIsEmpty()
+    {
+        var mockFile = Substitute.For<IFile>();
+        mockFile.Exists("empty.zip").Returns(true);
+        mockFile.OpenRead("empty.zip").Returns(new MemoryStream([]));
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFile);
+            Assert.That(ZipFileWrapper.IsValidZipFile("empty.zip"), Is.False);
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void IsValidZipFile_ReturnsFalse_WhenFileIsNotAZip()
+    {
+        var mockFile = Substitute.For<IFile>();
+        mockFile.Exists("notazip.zip").Returns(true);
+        mockFile.OpenRead("notazip.zip").Returns(new MemoryStream(Encoding.UTF8.GetBytes("this is not a zip file")));
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFile);
+            Assert.That(ZipFileWrapper.IsValidZipFile("notazip.zip"), Is.False);
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void IsValidZipFile_ReturnsTrue_WhenFileIsValidZip()
+    {
+        var zipStream = new MemoryStream();
+        using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("test.txt");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("hello");
+        }
+        zipStream.Position = 0;
+
+        var mockFile = Substitute.For<IFile>();
+        mockFile.Exists("valid.zip").Returns(true);
+        mockFile.OpenRead("valid.zip").Returns(zipStream);
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFile);
+            Assert.That(ZipFileWrapper.IsValidZipFile("valid.zip"), Is.True);
+            FactoryContainer.Clear();
+        }
+    }
+}
