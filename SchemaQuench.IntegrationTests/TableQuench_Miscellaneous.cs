@@ -225,6 +225,162 @@ EXEC sp_addextendedproperty @name = N'ProductName', @value = '{productName}', @l
         conn.Close();
     }
 
+    [Test]
+    public void ShouldRenameTableViaOldName()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var oldTableName = $"OldTableName_{uniqueId}";
+        var newTableName = $"NewTableName_{uniqueId}";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = $@"
+CREATE TABLE dbo.{oldTableName} (Id INT NOT NULL, Val INT NOT NULL)
+INSERT INTO dbo.{oldTableName} (Id, Val) VALUES (1, 42)
+EXEC sp_addextendedproperty @name = N'ProductName', @value = '{productName}', @level0type = N'Schema', @level0name = 'dbo', @level1type = N'Table', @level1name = '{oldTableName}'
+";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        var json = $@"{{
+    ""Schema"": ""[dbo]"",
+    ""Name"": ""[{newTableName}]"",
+    ""OldName"": ""[{oldTableName}]"",
+    ""Columns"": [
+        {{""Name"": ""[Id]"", ""DataType"": ""INT"", ""Nullable"": false}},
+        {{""Name"": ""[Val]"", ""DataType"": ""INT"", ""Nullable"": false}}
+    ]
+}}";
+
+        cmd.CommandText = $"EXEC SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = '{json.Replace("'", "''")}', @DropTablesRemovedFromProduct = 0";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"SELECT CAST(CASE WHEN OBJECT_ID('dbo.{oldTableName}') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.False, "Old table should no longer exist");
+
+        cmd.CommandText = $"SELECT CAST(CASE WHEN OBJECT_ID('dbo.{newTableName}') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True, "New table should exist");
+
+        cmd.CommandText = $"SELECT Val FROM dbo.{newTableName} WHERE Id = 1";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(42), "Data should be preserved after rename");
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldRenameColumnViaOldName()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"ColRenameTable_{uniqueId}";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = $@"
+CREATE TABLE dbo.{tableName} (Id INT NOT NULL, OldColName INT NOT NULL)
+INSERT INTO dbo.{tableName} (Id, OldColName) VALUES (1, 99)
+EXEC sp_addextendedproperty @name = N'ProductName', @value = '{productName}', @level0type = N'Schema', @level0name = 'dbo', @level1type = N'Table', @level1name = '{tableName}'
+";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        var json = $@"{{
+    ""Schema"": ""[dbo]"",
+    ""Name"": ""[{tableName}]"",
+    ""Columns"": [
+        {{""Name"": ""[Id]"", ""DataType"": ""INT"", ""Nullable"": false}},
+        {{""Name"": ""[NewColName]"", ""OldName"": ""[OldColName]"", ""DataType"": ""INT"", ""Nullable"": false}}
+    ]
+}}";
+
+        cmd.CommandText = $"EXEC SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = '{json.Replace("'", "''")}', @DropTablesRemovedFromProduct = 0";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = '{tableName}' AND COLUMN_NAME = 'OldColName'";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(0), "Old column name should no longer exist");
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = '{tableName}' AND COLUMN_NAME = 'NewColName'";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(1), "New column name should exist");
+
+        cmd.CommandText = $"SELECT NewColName FROM dbo.{tableName} WHERE Id = 1";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(99), "Data should be preserved after column rename");
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldDropUnknownIndexWhenFlagEnabled()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"DropUnknownIdx_{uniqueId}";
+        var indexName = $"IDX_NotInJson_{uniqueId}";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = $@"
+CREATE TABLE dbo.{tableName} (Id INT NOT NULL, Col1 INT NOT NULL)
+CREATE INDEX {indexName} ON dbo.{tableName} (Col1)
+EXEC sp_addextendedproperty @name = N'ProductName', @value = '{productName}', @level0type = N'Schema', @level0name = 'dbo', @level1type = N'Table', @level1name = '{tableName}'
+";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        var json = $@"{{
+    ""Schema"": ""[dbo]"",
+    ""Name"": ""[{tableName}]"",
+    ""Columns"": [
+        {{""Name"": ""[Id]"", ""DataType"": ""INT"", ""Nullable"": false}},
+        {{""Name"": ""[Col1]"", ""DataType"": ""INT"", ""Nullable"": false}}
+    ]
+}}";
+
+        cmd.CommandText = $"EXEC SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = '{json.Replace("'", "''")}', @DropTablesRemovedFromProduct = 0, @DropUnknownIndexes = 1";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"SELECT CAST(CASE WHEN INDEXPROPERTY(OBJECT_ID('dbo.{tableName}'), '{indexName}', 'IndexId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.False, "Index not in JSON definition should have been dropped");
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldCreateForeignKeyWithCorrectActions()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+SELECT f.delete_referential_action, f.update_referential_action
+  FROM sys.foreign_keys f
+ WHERE f.name = 'FK_Child_Parent'
+   AND f.parent_object_id = OBJECT_ID('dbo.FKActionChild')";
+
+        using var reader = cmd.ExecuteReader();
+        Assert.That(reader.Read(), Is.True, "FK_Child_Parent should exist");
+        Assert.Multiple(() =>
+        {
+            Assert.That(reader.GetByte(0), Is.EqualTo(1), "delete_referential_action should be 1 (CASCADE)");
+            Assert.That(reader.GetByte(1), Is.EqualTo(2), "update_referential_action should be 2 (SET NULL)");
+        });
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -275,6 +431,9 @@ EXEC sp_addextendedproperty @name = N'ProductName', @value = '{_productName}', @
 -- Exception Cases
 CREATE TABLE dbo.TableOwnedByOtherProduct (Column1 INT NOT NULL)
 EXEC sp_addextendedproperty @name = N'ProductName', @value = 'OtherProduct', @level0type = N'Schema', @level0name = 'dbo', @level1type = N'Table', @level1name = 'TableOwnedByOtherProduct'
+--FK Action Type Tests
+CREATE TABLE dbo.FKActionParent (Id INT NOT NULL, CONSTRAINT PK_FKActionParent PRIMARY KEY (Id))
+CREATE TABLE dbo.FKActionChild (Id INT NOT NULL, ParentId INT NULL)
 ";
         cmd.CommandTimeout = 300;
         cmd.ExecuteNonQuery();
@@ -476,6 +635,34 @@ EXEC sp_addextendedproperty @name = N'ProductName', @value = 'OtherProduct', @le
                       "Name": "[XI_KeepMe]",
                       "Column": "[Column3]",
                       "IsPrimary": true
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[FKActionParent]",
+                "Columns": [
+                    {"Name": "[Id]", "DataType": "INT", "Nullable": false}
+                ],
+                "Indexes": [
+                    {"Name": "[PK_FKActionParent]", "PrimaryKey": true, "IndexColumns": "[Id]"}
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[FKActionChild]",
+                "Columns": [
+                    {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+                    {"Name": "[ParentId]", "DataType": "INT", "Nullable": true}
+                ],
+                "ForeignKeys": [
+                    {
+                        "Name": "[FK_Child_Parent]",
+                        "Columns": "[ParentId]",
+                        "RelatedTable": "[FKActionParent]",
+                        "RelatedColumns": "[Id]",
+                        "DeleteAction": "CASCADE",
+                        "UpdateAction": "SET NULL"
                     }
                 ]
             }
