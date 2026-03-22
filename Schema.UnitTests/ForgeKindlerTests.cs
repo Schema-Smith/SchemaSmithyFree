@@ -55,6 +55,22 @@ public class ForgeKindlerTests
     }
 
     [Test]
+    public void ShouldDeployIndexedViewScripts()
+    {
+        var command = Substitute.For<IDbCommand>();
+        var executedScripts = new System.Collections.Generic.List<string>();
+        command.When(c => c.ExecuteNonQuery()).Do(_ => executedScripts.Add(command.CommandText));
+
+        ForgeKindler.KindleTheForge(command);
+
+        var indexedViewQuench = executedScripts.FindIndex(s => s.Contains("IndexedViewQuench"));
+        var generateIndexedViewJson = executedScripts.FindIndex(s => s.Contains("GenerateIndexedViewJson"));
+        Assert.That(indexedViewQuench, Is.GreaterThan(-1), "IndexedViewQuench should be deployed");
+        Assert.That(generateIndexedViewJson, Is.GreaterThan(-1), "GenerateIndexedViewJson should be deployed");
+        Assert.That(indexedViewQuench, Is.GreaterThan(executedScripts.FindIndex(s => s.Contains("ForeignKeyQuench"))), "IndexedViewQuench should deploy after ForeignKeyQuench");
+    }
+
+    [Test]
     public void ShouldReturnParseTableJsonScript()
     {
         var script = ForgeKindler.GetParseTableJsonScript();

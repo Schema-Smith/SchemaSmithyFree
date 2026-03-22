@@ -23,6 +23,8 @@ public static class ForgeKindler
         KindleOneFile(command, "Kindling_CompletedMigrations_Table.sql");
         KindleOneFile(command, "SchemaSmith.fn_FormatJson.sql");
         KindleOneFile(command, "SchemaSmith.GenerateTableJson.sql");
+        KindleOneFile(command, "SchemaSmith.IndexedViewQuench.sql");
+        KindleOneFile(command, "SchemaSmith.GenerateIndexedViewJson.sql");
     }
 
     public static string GetParseTableJsonScript()
