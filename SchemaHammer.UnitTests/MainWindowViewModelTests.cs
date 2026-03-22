@@ -245,4 +245,118 @@ public class MainWindowViewModelTests
 
         treeService.DidNotReceive().LoadProduct(Arg.Any<string>());
     }
+
+    [Test]
+    public void LoadRecentProduct_WithNullPath_DoesNothing()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        var vm = CreateViewModel(tree: treeService);
+
+        vm.LoadRecentProductCommand.Execute(null);
+
+        treeService.DidNotReceive().LoadProduct(Arg.Any<string>());
+    }
+
+    [Test]
+    public void LoadRecentProduct_WithNonExistentPath_DoesNothing()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        var vm = CreateViewModel(tree: treeService);
+
+        var nonExistent = Path.Combine(Path.GetTempPath(), "nonexistent_product_" + Guid.NewGuid().ToString("N"));
+        vm.LoadRecentProductCommand.Execute(nonExistent);
+
+        treeService.DidNotReceive().LoadProduct(Arg.Any<string>());
+    }
+
+    [Test]
+    public void Initialize_WithNoRecentProducts_DoesNothing()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        var settingsService = Substitute.For<IUserSettingsService>();
+        settingsService.Settings.Returns(new UserSettings { RecentProducts = [] });
+
+        var vm = CreateViewModel(settings: settingsService, tree: treeService);
+        vm.Initialize();
+
+        treeService.DidNotReceive().LoadProduct(Arg.Any<string>());
+        Assert.That(vm.TreeViewModel.RootNodes, Is.Empty);
+    }
+
+    [Test]
+    public void Initialize_WithNonExistentProduct_DoesNothing()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        var settingsService = Substitute.For<IUserSettingsService>();
+        var stalePath = Path.Combine(Path.GetTempPath(), "nonexistent_product_" + Guid.NewGuid().ToString("N"));
+        settingsService.Settings.Returns(new UserSettings { RecentProducts = [stalePath] });
+
+        var vm = CreateViewModel(settings: settingsService, tree: treeService);
+        vm.Initialize();
+
+        treeService.DidNotReceive().LoadProduct(Arg.Any<string>());
+        Assert.That(vm.TreeViewModel.RootNodes, Is.Empty);
+    }
+
+    [Test]
+    public void Initialize_WithRecentProduct_LoadsProduct()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        var settingsService = Substitute.For<IUserSettingsService>();
+
+        // Use a temp directory with a Product.json to simulate a real product
+        var tempProductDir = Path.Combine(
+            Path.GetTempPath(),
+            "TestProduct_" + Guid.NewGuid().ToString("N"));
+        tempProductDir = tempProductDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        Directory.CreateDirectory(tempProductDir);
+        var productJsonPath = Path.Combine(tempProductDir, "Product.json");
+        File.WriteAllText(productJsonPath, "{\"Name\":\"TestProduct\",\"Templates\":[]}");
+
+        try
+        {
+            var settings = new UserSettings();
+            settings.RecentProducts.Add(tempProductDir);
+            // Set up Settings AFTER creating the substitute and construct the VM directly
+            // to avoid CreateViewModel overwriting the settings mock
+            settingsService.Settings.Returns(settings);
+            treeService.LoadProduct(Arg.Any<string>()).Returns([]);
+            treeService.Product.Returns(new Schema.Domain.Product { Name = "TestProduct" });
+
+            var vm = new MainWindowViewModel(settingsService, new NavigationService(), new EditorService(), treeService);
+            vm.Initialize();
+
+            treeService.Received(1).LoadProduct(tempProductDir);
+            Assert.That(vm.TreeViewModel.RootNodes, Has.Count.EqualTo(1));
+        }
+        finally
+        {
+            Directory.Delete(tempProductDir, true);
+        }
+    }
+
+    [Test]
+    public void NavigateBack_WithEmptyHistory_DoesNothing()
+    {
+        var nav = new NavigationService();
+        var vm = CreateViewModel(nav: nav);
+
+        // No nodes pushed, NavigateBack should do nothing
+        vm.NavigateBackCommand.Execute(null);
+
+        Assert.That(vm.TreeViewModel.SelectedNode, Is.Null);
+        Assert.That(vm.CanNavigateBack, Is.False);
+    }
+
+    [Test]
+    public void NavigateToHistory_WithInvalidIndex_DoesNothing()
+    {
+        var nav = new NavigationService();
+        var vm = CreateViewModel(nav: nav);
+
+        // No history, index 5 is out of range
+        vm.NavigateToHistoryCommand.Execute(5);
+
+        Assert.That(vm.TreeViewModel.SelectedNode, Is.Null);
+    }
 }

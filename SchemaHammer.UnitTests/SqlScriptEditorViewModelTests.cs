@@ -192,4 +192,65 @@ public class SqlScriptEditorViewModelTests
         var vm = new SqlScriptEditorViewModel();
         Assert.That(vm.EditorTitle, Is.EqualTo("Script"));
     }
+
+    [Test]
+    public void PreviewButtonText_ReturnsPreviewWhenNotInPreviewMode()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.PreviewButtonText, Is.EqualTo("Preview"));
+    }
+
+    [Test]
+    public void PreviewButtonText_ReturnsRawWhenInPreviewMode()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        vm.TogglePreviewCommand.Execute(null);
+        Assert.That(vm.PreviewButtonText, Is.EqualTo("Raw"));
+    }
+
+    [Test]
+    public void PreviewButtonText_TogglesBackToPreviewAfterSecondToggle()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        vm.TogglePreviewCommand.Execute(null); // now in preview mode
+        vm.TogglePreviewCommand.Execute(null); // back to raw mode
+        Assert.That(vm.PreviewButtonText, Is.EqualTo("Preview"));
+    }
+
+    [Test]
+    public void ChangeNode_WithNonExistentPath_ShowsErrorMessage()
+    {
+        var node = new TreeNodeModel
+        {
+            Text = "missing.sql",
+            Tag = "Sql Script",
+            NodePath = Path.Combine(Path.GetTempPath(), "nonexistent_" + Guid.NewGuid() + ".sql")
+        };
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(node);
+        Assert.That(vm.DisplayContent, Does.StartWith("// Error loading"));
+    }
+
+    [Test]
+    public void ChangeNode_WithEmptyNodePath_DisplayContentIsEmpty()
+    {
+        var node = new TreeNodeModel { Text = "test.sql", Tag = "Sql Script", NodePath = "" };
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(node);
+        Assert.That(vm.DisplayContent, Is.EqualTo(""));
+    }
+
+    [Test]
+    public void DisplayContent_DefaultsToEmpty()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.DisplayContent, Is.EqualTo(""));
+    }
+
+    [Test]
+    public void IsPreviewMode_DefaultsToFalse()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.IsPreviewMode, Is.False);
+    }
 }

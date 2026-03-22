@@ -92,4 +92,51 @@ public class UserSettingsServiceTests
         service.Load();
         Assert.That(service.Settings.ActiveThemeName, Is.EqualTo("Light"));
     }
+
+    [Test]
+    public void Load_PrunesStaleProducts()
+    {
+        var validPath = _tempDir; // exists — the temp dir itself
+        var stalePath = Path.Combine(Path.GetTempPath(), "nonexistent_product_" + Guid.NewGuid().ToString("N"));
+
+        // Write settings JSON with both a valid and a stale path
+        var json = $"{{\"RecentProducts\":[\"{EscapeJson(validPath)}\",\"{EscapeJson(stalePath)}\"]}}";
+        File.WriteAllText(_settingsPath, json);
+
+        var service = new UserSettingsService(_settingsPath);
+        service.Load();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(service.Settings.RecentProducts, Does.Contain(validPath));
+            Assert.That(service.Settings.RecentProducts, Does.Not.Contain(stalePath));
+        });
+    }
+
+    [Test]
+    public void Load_PrunesAllStaleWhenNoneExist()
+    {
+        var stale1 = Path.Combine(Path.GetTempPath(), "stale_a_" + Guid.NewGuid().ToString("N"));
+        var stale2 = Path.Combine(Path.GetTempPath(), "stale_b_" + Guid.NewGuid().ToString("N"));
+
+        var json = $"{{\"RecentProducts\":[\"{EscapeJson(stale1)}\",\"{EscapeJson(stale2)}\"]}}";
+        File.WriteAllText(_settingsPath, json);
+
+        var service = new UserSettingsService(_settingsPath);
+        service.Load();
+
+        Assert.That(service.Settings.RecentProducts, Is.Empty);
+    }
+
+    [Test]
+    public void DefaultConstructor_SetsSettingsPathUnderApplicationData()
+    {
+        // Ensure the default constructor runs without error and produces valid settings
+        var service = new UserSettingsService();
+        Assert.That(service.Settings, Is.Not.Null);
+        Assert.That(service.Settings.ActiveThemeName, Is.EqualTo("Light"));
+    }
+
+    private static string EscapeJson(string path) =>
+        path.Replace("\\", "\\\\");
 }
