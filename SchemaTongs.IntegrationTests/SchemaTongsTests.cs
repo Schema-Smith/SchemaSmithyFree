@@ -80,11 +80,12 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(7).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(8).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Views", "Test.TestView.sql"))), Arg.Any<string>());
+            file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Views", "Test.TestIndexedView.sql"))), Arg.Any<string>());
 
             config["ShouldCast:Views"] = "false";
             FactoryContainer.Clear();
