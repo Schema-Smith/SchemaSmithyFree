@@ -1,0 +1,209 @@
+using System;
+using System.Data;
+using Schema.DataAccess;
+
+namespace SchemaQuench.IntegrationTests;
+
+[Parallelizable(scope: ParallelScope.All)]
+public class IndexedViewQuenchTests : BaseTableQuenchTests
+{
+    private static void RunIndexedViewQuench(IDbCommand cmd, string productName, string json, bool whatIf = false)
+    {
+        cmd.CommandTimeout = 300;
+        cmd.CommandText = $"EXEC SchemaSmith.IndexedViewQuench @ProductName = '{productName}', @IndexedViewSchema = '{json.Replace("'", "''")}', @WhatIf = {(whatIf ? "1" : "0")}, @UpdateFillFactor = 0";
+        cmd.ExecuteNonQuery();
+    }
+
+    [Test]
+    public void ShouldCreateIndexedViewWithClusteredAndNonclusteredIndexes()
+    {
+        const string product = "IV Create Test";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+IF OBJECT_ID('dbo.IVTest_Orders', 'U') IS NULL
+    CREATE TABLE dbo.IVTest_Orders (OrderId INT NOT NULL, Status NVARCHAR(20), Amount DECIMAL(10,2))";
+        cmd.ExecuteNonQuery();
+
+        var json = @"[{
+            ""Schema"": ""dbo"",
+            ""Name"": ""vw_OrderSummary"",
+            ""Definition"": ""SELECT OrderId, Status, Amount FROM dbo.IVTest_Orders"",
+            ""Indexes"": [{
+                ""Name"": ""CIX_vw_OrderSummary"",
+                ""Unique"": true,
+                ""Clustered"": true,
+                ""IndexColumns"": ""OrderId""
+            }, {
+                ""Name"": ""IX_vw_OrderSummary_Status"",
+                ""Unique"": false,
+                ""Clustered"": false,
+                ""IndexColumns"": ""Status""
+            }]
+        }]";
+
+        RunIndexedViewQuench(cmd, product, json);
+
+        // View exists
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_OrderSummary')";
+        Assert.That(cmd.ExecuteScalar(), Is.Not.Null.And.Not.EqualTo(DBNull.Value));
+
+        // View is indexed
+        cmd.CommandText = "SELECT OBJECTPROPERTY(OBJECT_ID('dbo.vw_OrderSummary'), 'IsIndexed')";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(1));
+
+        // Both indexes exist
+        cmd.CommandText = "SELECT name FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.vw_OrderSummary') AND name = 'CIX_vw_OrderSummary'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("CIX_vw_OrderSummary"));
+
+        cmd.CommandText = "SELECT name FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.vw_OrderSummary') AND name = 'IX_vw_OrderSummary_Status'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("IX_vw_OrderSummary_Status"));
+
+        // Ownership extended property
+        cmd.CommandText = "SELECT CAST(value AS NVARCHAR(200)) FROM sys.extended_properties WHERE major_id = OBJECT_ID('dbo.vw_OrderSummary') AND name = 'SchemaSmith_Product'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo(product));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldRecreateViewWhenDefinitionChanges()
+    {
+        const string product = "IV Recreate Test";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+IF OBJECT_ID('dbo.IVTest_Products', 'U') IS NULL
+    CREATE TABLE dbo.IVTest_Products (ProductId INT NOT NULL, Name NVARCHAR(100), Price DECIMAL(10,2))";
+        cmd.ExecuteNonQuery();
+
+        // First quench: view without Price
+        var json1 = @"[{
+            ""Schema"": ""dbo"",
+            ""Name"": ""vw_ProductList"",
+            ""Definition"": ""SELECT ProductId, Name FROM dbo.IVTest_Products"",
+            ""Indexes"": [{
+                ""Name"": ""CIX_vw_ProductList"",
+                ""Unique"": true,
+                ""Clustered"": true,
+                ""IndexColumns"": ""ProductId""
+            }]
+        }]";
+
+        RunIndexedViewQuench(cmd, product, json1);
+
+        // Verify initial view exists
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_ProductList')";
+        Assert.That(cmd.ExecuteScalar(), Is.Not.Null.And.Not.EqualTo(DBNull.Value));
+
+        // Second quench: view with Price added
+        var json2 = @"[{
+            ""Schema"": ""dbo"",
+            ""Name"": ""vw_ProductList"",
+            ""Definition"": ""SELECT ProductId, Name, Price FROM dbo.IVTest_Products"",
+            ""Indexes"": [{
+                ""Name"": ""CIX_vw_ProductList"",
+                ""Unique"": true,
+                ""Clustered"": true,
+                ""IndexColumns"": ""ProductId""
+            }]
+        }]";
+
+        RunIndexedViewQuench(cmd, product, json2);
+
+        // Verify view definition now contains Price
+        cmd.CommandText = "SELECT definition FROM sys.sql_modules WHERE object_id = OBJECT_ID('dbo.vw_ProductList')";
+        var definition = cmd.ExecuteScalar()?.ToString();
+        Assert.That(definition, Does.Contain("Price"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldRemoveIndexedViewNotInSchema()
+    {
+        const string product = "IV Remove Test";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+IF OBJECT_ID('dbo.IVTest_Customers', 'U') IS NULL
+    CREATE TABLE dbo.IVTest_Customers (CustomerId INT NOT NULL, Email NVARCHAR(200))";
+        cmd.ExecuteNonQuery();
+
+        // First quench: create an indexed view
+        var json = @"[{
+            ""Schema"": ""dbo"",
+            ""Name"": ""vw_CustomerEmails"",
+            ""Definition"": ""SELECT CustomerId, Email FROM dbo.IVTest_Customers"",
+            ""Indexes"": [{
+                ""Name"": ""CIX_vw_CustomerEmails"",
+                ""Unique"": true,
+                ""Clustered"": true,
+                ""IndexColumns"": ""CustomerId""
+            }]
+        }]";
+
+        RunIndexedViewQuench(cmd, product, json);
+
+        // Verify view exists
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_CustomerEmails')";
+        Assert.That(cmd.ExecuteScalar(), Is.Not.Null.And.Not.EqualTo(DBNull.Value));
+
+        // Second quench: empty array removes the view
+        RunIndexedViewQuench(cmd, product, "[]");
+
+        // Verify view no longer exists
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_CustomerEmails')";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(DBNull.Value).Or.Null);
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldNotCreateViewInWhatIfMode()
+    {
+        const string product = "IV WhatIf Test";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+IF OBJECT_ID('dbo.IVTest_WhatIf', 'U') IS NULL
+    CREATE TABLE dbo.IVTest_WhatIf (Id INT NOT NULL, Val INT)";
+        cmd.ExecuteNonQuery();
+
+        var json = @"[{
+            ""Schema"": ""dbo"",
+            ""Name"": ""vw_WhatIfTest"",
+            ""Definition"": ""SELECT Id, Val FROM dbo.IVTest_WhatIf"",
+            ""Indexes"": [{
+                ""Name"": ""CIX_vw_WhatIfTest"",
+                ""Unique"": true,
+                ""Clustered"": true,
+                ""IndexColumns"": ""Id""
+            }]
+        }]";
+
+        RunIndexedViewQuench(cmd, product, json, whatIf: true);
+
+        // Verify view does NOT exist
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_WhatIfTest')";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(DBNull.Value).Or.Null);
+
+        conn.Close();
+    }
+}
