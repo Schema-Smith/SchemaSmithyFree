@@ -206,4 +206,152 @@ IF OBJECT_ID('dbo.IVTest_WhatIf', 'U') IS NULL
 
         conn.Close();
     }
+
+    [Test]
+    public void ShouldPreserveViewOnIdempotentReQuench()
+    {
+        const string product = "IV Idempotent Test";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+IF OBJECT_ID('dbo.IVTest_Idempotent', 'U') IS NULL
+    CREATE TABLE dbo.IVTest_Idempotent (Id INT NOT NULL, Name NVARCHAR(100))";
+        cmd.ExecuteNonQuery();
+
+        var json = @"[{
+        ""Schema"": ""dbo"",
+        ""Name"": ""vw_Idempotent"",
+        ""Definition"": ""SELECT Id, Name FROM dbo.IVTest_Idempotent"",
+        ""Indexes"": [{
+            ""Name"": ""CIX_vw_Idempotent"",
+            ""Unique"": true,
+            ""Clustered"": true,
+            ""IndexColumns"": ""Id""
+        }]
+    }]";
+
+        RunIndexedViewQuench(cmd, product, json);
+
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_Idempotent')";
+        var firstObjectId = cmd.ExecuteScalar();
+
+        RunIndexedViewQuench(cmd, product, json);
+
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_Idempotent')";
+        var secondObjectId = cmd.ExecuteScalar();
+        Assert.That(secondObjectId, Is.EqualTo(firstObjectId), "Idempotent re-quench should not recreate the view");
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldAddIndexWithoutRecreatingView()
+    {
+        const string product = "IV IndexOnly Test";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+IF OBJECT_ID('dbo.IVTest_IndexOnly', 'U') IS NULL
+    CREATE TABLE dbo.IVTest_IndexOnly (Id INT NOT NULL, Category NVARCHAR(50))";
+        cmd.ExecuteNonQuery();
+
+        var json1 = @"[{
+        ""Schema"": ""dbo"",
+        ""Name"": ""vw_IndexOnly"",
+        ""Definition"": ""SELECT Id, Category FROM dbo.IVTest_IndexOnly"",
+        ""Indexes"": [{
+            ""Name"": ""CIX_vw_IndexOnly"",
+            ""Unique"": true,
+            ""Clustered"": true,
+            ""IndexColumns"": ""Id""
+        }]
+    }]";
+
+        RunIndexedViewQuench(cmd, product, json1);
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_IndexOnly')";
+        var firstObjectId = cmd.ExecuteScalar();
+
+        var json2 = @"[{
+        ""Schema"": ""dbo"",
+        ""Name"": ""vw_IndexOnly"",
+        ""Definition"": ""SELECT Id, Category FROM dbo.IVTest_IndexOnly"",
+        ""Indexes"": [{
+            ""Name"": ""CIX_vw_IndexOnly"",
+            ""Unique"": true,
+            ""Clustered"": true,
+            ""IndexColumns"": ""Id""
+        }, {
+            ""Name"": ""IX_vw_IndexOnly_Category"",
+            ""Unique"": false,
+            ""Clustered"": false,
+            ""IndexColumns"": ""Category""
+        }]
+    }]";
+
+        RunIndexedViewQuench(cmd, product, json2);
+
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_IndexOnly')";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(firstObjectId), "Adding an index should not recreate the view");
+
+        cmd.CommandText = "SELECT name FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.vw_IndexOnly') AND name = 'IX_vw_IndexOnly_Category'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("IX_vw_IndexOnly_Category"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldQuenchMultipleViewsIndependently()
+    {
+        const string product = "IV Multi Test";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+IF OBJECT_ID('dbo.IVTest_Multi', 'U') IS NULL
+    CREATE TABLE dbo.IVTest_Multi (Id INT NOT NULL, Code NVARCHAR(10), Val INT)";
+        cmd.ExecuteNonQuery();
+
+        var json = @"[{
+        ""Schema"": ""dbo"",
+        ""Name"": ""vw_MultiA"",
+        ""Definition"": ""SELECT Id, Code FROM dbo.IVTest_Multi"",
+        ""Indexes"": [{
+            ""Name"": ""CIX_vw_MultiA"",
+            ""Unique"": true,
+            ""Clustered"": true,
+            ""IndexColumns"": ""Id""
+        }]
+    }, {
+        ""Schema"": ""dbo"",
+        ""Name"": ""vw_MultiB"",
+        ""Definition"": ""SELECT Id, Val FROM dbo.IVTest_Multi"",
+        ""Indexes"": [{
+            ""Name"": ""CIX_vw_MultiB"",
+            ""Unique"": true,
+            ""Clustered"": true,
+            ""IndexColumns"": ""Id""
+        }]
+    }]";
+
+        RunIndexedViewQuench(cmd, product, json);
+
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_MultiA')";
+        Assert.That(cmd.ExecuteScalar(), Is.Not.Null.And.Not.EqualTo(DBNull.Value), "vw_MultiA should exist");
+
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.vw_MultiB')";
+        Assert.That(cmd.ExecuteScalar(), Is.Not.Null.And.Not.EqualTo(DBNull.Value), "vw_MultiB should exist");
+
+        conn.Close();
+    }
 }
