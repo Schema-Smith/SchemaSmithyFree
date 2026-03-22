@@ -91,4 +91,140 @@ public class EditorServiceTests
 
         Assert.That(tableEditor, Is.Not.SameAs(columnEditor));
     }
+
+    [Test]
+    public void GetEditor_ReturnsColumnEditorForColumnNode()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel { Text = "Id", Tag = "Column" };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<ColumnEditorViewModel>());
+    }
+
+    [Test]
+    public void GetEditor_ReturnsIndexEditorForIndexNode()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel { Text = "PK_Test", Tag = "Index" };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<IndexEditorViewModel>());
+    }
+
+    [Test]
+    public void GetEditor_ReturnsForeignKeyEditorForFKNode()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel { Text = "FK_Test", Tag = "Foreign Key" };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<ForeignKeyEditorViewModel>());
+    }
+
+    [Test]
+    public void GetEditor_ReturnsSqlScriptEditorForScriptNode()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel { Text = "deploy.sql", Tag = "Sql Script" };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<SqlScriptEditorViewModel>());
+    }
+
+    [Test]
+    public void GetEditor_ReturnsProductEditorForProductNode()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel { Text = "MyProduct", Tag = "Product" };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<ProductEditorViewModel>());
+    }
+
+    [Test]
+    public void GetEditor_ReturnsTemplateEditorForTemplateNode()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel { Text = "Main", Tag = "Template" };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<TemplateEditorViewModel>());
+    }
+
+    [Test]
+    public void GetEditor_ReturnsContainerEditorForTemplatesTag()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel { Text = "Templates", Tag = "Templates" };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<ContainerEditorViewModel>());
+    }
+
+    [Test]
+    public void GetEditor_ReturnsContainerEditorForTablesTag()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel { Text = "Tables", Tag = "Tables" };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<ContainerEditorViewModel>());
+    }
+
+    [Test]
+    public void GetEditor_ReturnsNullForUnknownTag()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel { Text = "Mystery", Tag = "Unknown" };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.Null);
+    }
+
+    [Test]
+    public void GetEditor_ReturnsIndexedViewEditorForIndexedViewNode()
+    {
+        var service = new EditorService();
+        var node = new IndexedViewNodeModel { Text = "dbo.vwTest", Tag = "Indexed View" };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<IndexedViewEditorViewModel>());
+    }
+
+    [Test]
+    public void GetEditorTag_ReturnsCorrectTagForAllKnownTypes()
+    {
+        var service = new EditorService();
+        Assert.Multiple(() =>
+        {
+            Assert.That(service.GetEditorTag("Product"), Is.EqualTo("Product"));
+            Assert.That(service.GetEditorTag("Template"), Is.EqualTo("Template"));
+            Assert.That(service.GetEditorTag("Index"), Is.EqualTo("Index"));
+            Assert.That(service.GetEditorTag("Xml Index"), Is.EqualTo("Xml Index"));
+            Assert.That(service.GetEditorTag("Foreign Key"), Is.EqualTo("Foreign Key"));
+            Assert.That(service.GetEditorTag("Check Constraint"), Is.EqualTo("Check Constraint"));
+            Assert.That(service.GetEditorTag("Statistic"), Is.EqualTo("Statistic"));
+            Assert.That(service.GetEditorTag("Full Text Index"), Is.EqualTo("Full Text Index"));
+            Assert.That(service.GetEditorTag("Indexed View"), Is.EqualTo("Indexed View"));
+            Assert.That(service.GetEditorTag(null!), Is.Null);
+        });
+    }
+
+    [Test]
+    public void GetEditorTag_ReturnsContainerForFolderContainerSuffix()
+    {
+        var service = new EditorService();
+        Assert.That(service.GetEditorTag("Script FolderContainer"), Is.EqualTo("Container"));
+    }
 }
