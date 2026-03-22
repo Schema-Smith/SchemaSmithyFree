@@ -22,6 +22,7 @@ public class EditorService : IEditorService
         {
             "Product" => "Product",
             "Template" => "Template",
+            "Templates" or "Tables" or "Indexed Views" => "Container",
             "Table" => "Table",
             "Column" => "Column",
             "Index" => "Index",

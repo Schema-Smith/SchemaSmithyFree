@@ -15,10 +15,10 @@ public class XmlIndexEditorViewModel : EditorBaseViewModel
     {
         base.ChangeNode(node);
         var table = ColumnEditorViewModel.FindParentTable(node);
-        var xi = table?.XmlIndexes.FirstOrDefault(x => x.Name == node.Text);
+        var xi = table?.XmlIndexes.FirstOrDefault(x => NameMatchesNodeText(x.Name, node.Text));
         if (xi != null)
         {
-            Name = xi.Name;
+            Name = StripBrackets(xi.Name);
             IsPrimary = xi.IsPrimary;
             Column = xi.Column ?? "";
             PrimaryIndex = xi.PrimaryIndex ?? "";

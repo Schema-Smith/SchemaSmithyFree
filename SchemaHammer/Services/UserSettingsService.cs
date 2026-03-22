@@ -13,7 +13,7 @@ public class UserSettingsService : IUserSettingsService
     {
         var appDataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "SchemaHammer");
+            "SchemaHammer Community");
         Directory.CreateDirectory(appDataDir);
         _settingsPath = Path.Combine(appDataDir, "settings.json");
     }

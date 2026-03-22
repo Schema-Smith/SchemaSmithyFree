@@ -31,10 +31,10 @@ public class ColumnEditorViewModel : EditorBaseViewModel
         var table = FindParentTable(node);
         if (table == null) return;
 
-        var column = table.Columns.FirstOrDefault(c => c.Name == node.Text);
+        var column = table.Columns.FirstOrDefault(c => NameMatchesNodeText(c.Name, node.Text));
         if (column == null) return;
 
-        Name = column.Name;
+        Name = StripBrackets(column.Name);
         DataType = column.DataType;
         Nullable = column.Nullable;
         Default = column.Default ?? "";

@@ -21,9 +21,8 @@ public class TemplateEditorViewModel : EditorBaseViewModel
         base.ChangeNode(node);
         if (string.IsNullOrEmpty(node.NodePath)) return;
 
-        var templateJsonPath = System.IO.Path.Combine(node.NodePath, "Template.json");
         Template template;
-        try { template = JsonHelper.Load<Template>(templateJsonPath); }
+        try { template = JsonHelper.ProductLoad<Template>(node.NodePath); }
         catch { return; }
 
         Name = template.Name ?? "";

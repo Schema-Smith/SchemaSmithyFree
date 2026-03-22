@@ -7,10 +7,10 @@ namespace SchemaHammer.UnitTests;
 public class IndexEditorViewModelTests
 {
     [Test]
-    public void ChangeNode_LoadsIndexFromTable()
+    public void ChangeNode_LoadsIndexFromTable_WithBracketedNames()
     {
         var table = new Table { Name = "Users", Schema = "dbo" };
-        table.Indexes.Add(new Schema.Domain.Index { Name = "PK_Users", PrimaryKey = true, Clustered = true, IndexColumns = "Id" });
+        table.Indexes.Add(new Schema.Domain.Index { Name = "[PK_Users]", PrimaryKey = true, Clustered = true, IndexColumns = "Id" });
 
         var tableNode = new TableNodeModel { Text = "dbo.Users", Tag = "Table", TableData = table };
         var container = new TreeNodeModel { Text = "Indexes", Tag = "Index Container", Parent = tableNode };
@@ -32,7 +32,7 @@ public class IndexEditorViewModelTests
     public void ChangeNode_LoadsIndexFromIndexedView()
     {
         var iv = new IndexedView { Name = "vwUsers", Schema = "dbo", Definition = "SELECT Id FROM dbo.Users" };
-        iv.Indexes.Add(new Schema.Domain.Index { Name = "IX_vwUsers", Unique = true, Clustered = true, IndexColumns = "Id" });
+        iv.Indexes.Add(new Schema.Domain.Index { Name = "[IX_vwUsers]", Unique = true, Clustered = true, IndexColumns = "Id" });
 
         var ivNode = new IndexedViewNodeModel { Text = "dbo.vwUsers", Tag = "Indexed View", IndexedViewData = iv };
         var container = new TreeNodeModel { Text = "Indexes", Tag = "Index Container", Parent = ivNode };
@@ -50,10 +50,10 @@ public class IndexEditorViewModelTests
     }
 
     [Test]
-    public void EditorTitle_ReturnsIndexName()
+    public void EditorTitle_ReturnsStrippedName()
     {
         var table = new Table { Name = "T", Schema = "dbo" };
-        table.Indexes.Add(new Schema.Domain.Index { Name = "IX_T_Col", IndexColumns = "Col" });
+        table.Indexes.Add(new Schema.Domain.Index { Name = "[IX_T_Col]", IndexColumns = "Col" });
 
         var tableNode = new TableNodeModel { Text = "dbo.T", Tag = "Table", TableData = table };
         var container = new TreeNodeModel { Text = "Indexes", Tag = "Index Container", Parent = tableNode };

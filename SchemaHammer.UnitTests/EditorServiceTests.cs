@@ -25,6 +25,15 @@ public class EditorServiceTests
     }
 
     [Test]
+    public void GetEditorTag_ReturnsContainerForGroupTags()
+    {
+        var service = new EditorService();
+        Assert.That(service.GetEditorTag("Templates"), Is.EqualTo("Container"));
+        Assert.That(service.GetEditorTag("Tables"), Is.EqualTo("Container"));
+        Assert.That(service.GetEditorTag("Indexed Views"), Is.EqualTo("Container"));
+    }
+
+    [Test]
     public void GetEditorTag_ReturnsNullForUnknownTags()
     {
         var service = new EditorService();

@@ -7,12 +7,12 @@ namespace SchemaHammer.UnitTests;
 public class ColumnEditorViewModelTests
 {
     [Test]
-    public void ChangeNode_LoadsColumnProperties()
+    public void ChangeNode_LoadsColumnProperties_WithBracketedNames()
     {
         var table = new Table { Name = "Users", Schema = "dbo" };
         table.Columns.Add(new Column
         {
-            Name = "Email",
+            Name = "[Email]",
             DataType = "nvarchar(256)",
             Nullable = true,
             Default = "N''",
@@ -37,6 +37,27 @@ public class ColumnEditorViewModelTests
     }
 
     [Test]
+    public void ChangeNode_LoadsColumnProperties_WithUnbracketedNames()
+    {
+        var table = new Table { Name = "Users", Schema = "dbo" };
+        table.Columns.Add(new Column
+        {
+            Name = "Email",
+            DataType = "nvarchar(256)",
+            Nullable = true
+        });
+
+        var tableNode = new TableNodeModel { Text = "dbo.Users", Tag = "Table", TableData = table };
+        var container = new TreeNodeModel { Text = "Columns", Tag = "Column Container", Parent = tableNode };
+        var columnNode = new TreeNodeModel { Text = "Email", Tag = "Column", Parent = container };
+
+        var vm = new ColumnEditorViewModel();
+        vm.ChangeNode(columnNode);
+
+        Assert.That(vm.Name, Is.EqualTo("Email"));
+    }
+
+    [Test]
     public void FindParentTable_WalksUpTree()
     {
         var table = new Table { Name = "T", Schema = "dbo" };
@@ -51,10 +72,10 @@ public class ColumnEditorViewModelTests
     }
 
     [Test]
-    public void EditorTitle_ReturnsColumnName()
+    public void EditorTitle_ReturnsStrippedColumnName()
     {
         var table = new Table { Name = "T", Schema = "dbo" };
-        table.Columns.Add(new Column { Name = "Id", DataType = "int" });
+        table.Columns.Add(new Column { Name = "[Id]", DataType = "int" });
 
         var tableNode = new TableNodeModel { Text = "dbo.T", TableData = table };
         var container = new TreeNodeModel { Text = "Columns", Parent = tableNode };

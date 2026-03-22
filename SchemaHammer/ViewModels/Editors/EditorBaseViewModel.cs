@@ -17,4 +17,16 @@ public abstract partial class EditorBaseViewModel : ObservableObject
         EditorLabel = node.Text;
         OnPropertyChanged(nameof(EditorTitle));
     }
+
+    /// <summary>Strips SQL Server bracket quoting from an identifier name: [Name] → Name</summary>
+    internal static string StripBrackets(string? name)
+    {
+        return name?.Trim('[', ']') ?? "";
+    }
+
+    /// <summary>Checks whether a domain object name (possibly bracketed) matches tree node text (unbracketed).</summary>
+    internal static bool NameMatchesNodeText(string domainName, string nodeText)
+    {
+        return StripBrackets(domainName).Equals(nodeText, StringComparison.OrdinalIgnoreCase);
+    }
 }

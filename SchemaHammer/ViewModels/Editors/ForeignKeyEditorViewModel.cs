@@ -18,10 +18,10 @@ public class ForeignKeyEditorViewModel : EditorBaseViewModel
     {
         base.ChangeNode(node);
         var table = ColumnEditorViewModel.FindParentTable(node);
-        var fk = table?.ForeignKeys.FirstOrDefault(f => f.Name == node.Text);
+        var fk = table?.ForeignKeys.FirstOrDefault(f => NameMatchesNodeText(f.Name, node.Text));
         if (fk != null)
         {
-            Name = fk.Name;
+            Name = StripBrackets(fk.Name);
             Columns = fk.Columns ?? "";
             RelatedTableSchema = fk.RelatedTableSchema ?? "dbo";
             RelatedTable = fk.RelatedTable ?? "";

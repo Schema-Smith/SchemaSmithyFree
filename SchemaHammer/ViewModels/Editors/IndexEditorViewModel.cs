@@ -32,7 +32,7 @@ public class IndexEditorViewModel : EditorBaseViewModel
         var index = FindIndex(node);
         if (index == null) return;
 
-        Name = index.Name;
+        Name = StripBrackets(index.Name);
         CompressionType = index.CompressionType ?? "NONE";
         PrimaryKey = index.PrimaryKey;
         Unique = index.Unique;
@@ -52,9 +52,9 @@ public class IndexEditorViewModel : EditorBaseViewModel
         while (current != null)
         {
             if (current is TableNodeModel tableNode)
-                return tableNode.TableData?.Indexes.FirstOrDefault(i => i.Name == node.Text);
+                return tableNode.TableData?.Indexes.FirstOrDefault(i => NameMatchesNodeText(i.Name, node.Text));
             if (current is IndexedViewNodeModel ivNode)
-                return ivNode.IndexedViewData?.Indexes.FirstOrDefault(i => i.Name == node.Text);
+                return ivNode.IndexedViewData?.Indexes.FirstOrDefault(i => NameMatchesNodeText(i.Name, node.Text));
             current = current.Parent;
         }
         return null;

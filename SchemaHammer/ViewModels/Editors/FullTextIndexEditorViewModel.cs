@@ -18,11 +18,11 @@ public class FullTextIndexEditorViewModel : EditorBaseViewModel
         var fti = table?.FullTextIndex;
         if (fti != null)
         {
-            FullTextCatalog = fti.FullTextCatalog ?? "";
-            KeyIndex = fti.KeyIndex ?? "";
+            FullTextCatalog = StripBrackets(fti.FullTextCatalog);
+            KeyIndex = StripBrackets(fti.KeyIndex);
             ChangeTracking = fti.ChangeTracking ?? "";
             StopList = fti.StopList ?? "";
-            Columns = fti.Columns ?? "";
+            Columns = StripBrackets(fti.Columns);
         }
         OnPropertyChanged(nameof(FullTextCatalog));
         OnPropertyChanged(nameof(KeyIndex));

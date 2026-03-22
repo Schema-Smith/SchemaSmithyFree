@@ -14,10 +14,10 @@ public class StatisticEditorViewModel : EditorBaseViewModel
     {
         base.ChangeNode(node);
         var table = ColumnEditorViewModel.FindParentTable(node);
-        var stat = table?.Statistics.FirstOrDefault(s => s.Name == node.Text);
+        var stat = table?.Statistics.FirstOrDefault(s => NameMatchesNodeText(s.Name, node.Text));
         if (stat != null)
         {
-            Name = stat.Name;
+            Name = StripBrackets(stat.Name);
             Columns = stat.Columns ?? "";
             SampleSize = stat.SampleSize;
             FilterExpression = stat.FilterExpression ?? "";

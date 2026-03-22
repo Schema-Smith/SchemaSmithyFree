@@ -15,7 +15,10 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
                     <Button Command="{Binding TogglePreviewCommand}"
                             Content="{Binding PreviewButtonText}"
-                            MinWidth="80" />
+                            MinWidth="80"
+                            Foreground="{DynamicResource SH.Toolbar.Foreground}"
+                            Background="{DynamicResource SH.Accent.Ember}"
+                            Padding="8,4" />
                 </StackPanel>
             </DockPanel>
         </Border>

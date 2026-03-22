@@ -12,8 +12,8 @@ public class CheckConstraintEditorViewModel : EditorBaseViewModel
     {
         base.ChangeNode(node);
         var table = ColumnEditorViewModel.FindParentTable(node);
-        var cc = table?.CheckConstraints.FirstOrDefault(c => c.Name == node.Text);
-        if (cc != null) { Name = cc.Name; Expression = cc.Expression ?? ""; }
+        var cc = table?.CheckConstraints.FirstOrDefault(c => NameMatchesNodeText(c.Name, node.Text));
+        if (cc != null) { Name = StripBrackets(cc.Name); Expression = cc.Expression ?? ""; }
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(Expression));
     }
