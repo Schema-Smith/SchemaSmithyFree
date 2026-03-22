@@ -28,6 +28,7 @@
         "StopLists": true, // Full-Text Stop Lists
         "DDLTriggers": true,
         "XMLSchemaCollections": true,
+        "IndexedViews": true,
         "ScriptDynamicDependencyRemovalForFunctions": false,
         "ObjectList": "" // Comma-separated list of specific objects to extract (blank = all)
     }

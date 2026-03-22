@@ -32,6 +32,7 @@ public class SchemaTongs
     private bool _includeFullTextStopLists;
     private bool _includeDDLTriggers;
     private bool _includeXmlSchemaCollections;
+    private bool _includeIndexedViews;
     private bool _scriptDynamicDependencyRemovalForFunctions;
     private string[] _objectsToCast = [];
 
@@ -65,6 +66,7 @@ public class SchemaTongs
         _includeFullTextStopLists = config["ShouldCast:StopLists"]?.ToLower() != "false";
         _includeDDLTriggers = config["ShouldCast:DDLTriggers"]?.ToLower() != "false";
         _includeXmlSchemaCollections = config["ShouldCast:XMLSchemaCollections"]?.ToLower() != "false";
+        _includeIndexedViews = config["ShouldCast:IndexedViews"]?.ToLower() != "false";
         _scriptDynamicDependencyRemovalForFunctions = config["ShouldCast:ScriptDynamicDependencyRemovalForFunctions"]?.ToLower() == "true";
         _objectsToCast = (config["ShouldCast:ObjectList"]?.ToLower() ?? "").Split(new []{ ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
 
@@ -95,6 +97,7 @@ public class SchemaTongs
             if (_includeFullTextStopLists) ScriptSqlServerFullTextStopLists(command);
             if (_includeDDLTriggers) ScriptSqlServerDDLTriggers(command);
             if (_includeXmlSchemaCollections) ScriptSqlServerXmlSchemaCollections(command);
+            if (_includeIndexedViews) CastSqlServerIndexedViews(command);
         }
         finally
         {
@@ -793,6 +796,50 @@ SELECT s.name AS SchemaName, xsc.name AS CollectionName
             var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+        }
+    }
+
+    private void CastSqlServerIndexedViews(IDbCommand command)
+    {
+        _progressLog.Info("Casting Indexed Views");
+
+        command.CommandText = @"
+            SELECT s.name AS SchemaName, v.name AS ViewName
+            FROM sys.views v
+            INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+            WHERE OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1
+            ORDER BY s.name, v.name";
+
+        var views = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+            while (reader.Read())
+                views.Add((reader.GetString(0), reader.GetString(1)));
+
+        if (views.Count == 0)
+        {
+            _progressLog.Info("  No indexed views found");
+            return;
+        }
+
+        var indexedViewsPath = Path.Combine(_templatePath, "Indexed Views");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(indexedViewsPath);
+
+        foreach (var (schema, name) in views)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower()))
+                continue;
+
+            command.CommandText = $"SELECT SchemaSmith.GenerateIndexedViewJson('{schema}', '{name}')";
+            var json = command.ExecuteScalar()?.ToString();
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                _progressLog.Info($"  Skipping {schema}.{name} (no JSON returned)");
+                continue;
+            }
+
+            var fileName = Path.Combine(indexedViewsPath, $"{schema}.{name}.json");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, json);
+            _progressLog.Info($"  {schema}.{name}");
         }
     }
 
