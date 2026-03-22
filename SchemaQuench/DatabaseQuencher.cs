@@ -209,7 +209,11 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                     ExecuteNonQueryAndRethrowInfoMessageError(command);
                     _debugFileLocation = "";
 
-                    // Step 16: Indexed Views — deferred
+                    // Step 16: Indexed Views
+                    if (template.IndexedViews.Count > 0)
+                    {
+                        QuenchIndexedViews(command);
+                    }
                 }
                 else
                 {
@@ -436,6 +440,26 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
             ProgressLogError($"Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}");
 
         throw new Exception("Unable to quench all scripts");
+    }
+
+    private void QuenchIndexedViews(IDbCommand command)
+    {
+        // Validate: every indexed view must have a unique clustered index
+        foreach (var view in template.IndexedViews)
+        {
+            if (!view.Indexes.Any(i => i.Clustered))
+                throw new Exception($"Indexed view {view.Schema}.{view.Name} must have a unique clustered index");
+        }
+
+        var viewJson = template.IndexedViewSchema.Replace("'", "''");
+        var updateFillFactor = template.UpdateFillFactor ? "1" : "0";
+
+        ProgressLog("  Quenching indexed views");
+        command.CommandText = $"EXEC [{dbName}].SchemaSmith.IndexedViewQuench @ProductName = '{productName}', @IndexedViewSchema = '{viewJson}', @WhatIf = {whatIfOnly}, @UpdateFillFactor = {updateFillFactor}";
+        _debugFileLocation = $"SchemaQuench - IndexedViewQuench {dbName}.sql";
+        LogSqlScript(_debugFileLocation, command.CommandText);
+        ExecuteNonQueryAndRethrowInfoMessageError(command);
+        _debugFileLocation = "";
     }
 
     private void ProgressLog(string msg)
