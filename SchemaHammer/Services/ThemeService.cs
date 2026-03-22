@@ -13,9 +13,12 @@ public class ThemeService
     public ThemeDefinition LoadTheme(string name) =>
         name == "Dark" ? BuiltInThemes.Dark : BuiltInThemes.Light;
 
+    public event Action? ThemeChanged;
+
     public void SetActive(ThemeDefinition theme)
     {
         Current = theme;
         ThemeApplier.Apply(theme);
+        ThemeChanged?.Invoke();
     }
 }

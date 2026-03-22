@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Styling;
 
 namespace SchemaHammer.Themes;
 
@@ -10,6 +11,9 @@ public static class ThemeApplier
     {
         var app = Application.Current;
         if (app == null) return;
+
+        var isDark = theme.BasedOn == "Dark";
+        app.RequestedThemeVariant = isDark ? ThemeVariant.Dark : ThemeVariant.Light;
 
         foreach (var (key, hexColor) in theme.Colors)
         {
