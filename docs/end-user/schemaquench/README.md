@@ -20,12 +20,14 @@ When SchemaQuench runs, it executes the following steps:
 2. **Test server connection** — Validates connectivity to the target server.
 3. **Validate server** — Executes `Product.ValidationScript` if configured. Aborts if the result is falsy.
 4. **Validate baseline** — Executes `Product.BaselineValidationScript` if configured.
-5. **Quench each template** — For each template in `TemplateOrder`:
-   1. Load `Template.json` and resolve tokens
+5. **Product Before scripts** — Executes scripts from `ProductScripts/Before`. Each script runs once and is tracked. Scripts with `[ALWAYS]` in the filename run every time.
+6. **Quench each template** — For each template in `TemplateOrder`:
+   1. Load `Template.json`, merge template-level `ScriptTokens` over the product token set
    2. Execute `DatabaseIdentificationScript` to discover target databases
    3. For each database, execute the database quench sequence (see below)
-6. **Stamp product version** — Executes `Product.VersionStampScript` if configured.
-7. **Backup logs and exit**
+7. **Product After scripts** — Executes scripts from `ProductScripts/After` with the same tracking as Product Before scripts.
+8. **Stamp product version** — Executes `Product.VersionStampScript` if configured.
+9. **Backup logs and exit**
 
 ### Database Quench Sequence
 
@@ -35,11 +37,14 @@ For each database identified by a template:
 2. **Validate baseline** — Executes `Template.BaselineValidationScript` if configured.
 3. **Before scripts** — Executes migration scripts from `MigrationScripts/Before`. Each script runs once and is tracked. Scripts with `[ALWAYS]` in the filename run every time.
 4. **Objects scripts** — Executes scripts from all Objects-slot folders (Schemas, DataTypes, FullTextCatalogs, FullTextStopLists, XMLSchemaCollections, Functions, Views, Procedures) in a dependency retry loop.
-5. **Table quench** — Applies table definitions from `Tables/*.json` via the `SchemaSmith.TableQuench` stored procedure. Creates new tables, adds/modifies/drops columns, rebuilds indexes, and manages constraints.
-6. **AfterTablesObjects scripts** — Executes scripts from Triggers and DDLTriggers folders in a dependency retry loop. Includes any unresolved Objects scripts from step 4.
-7. **TableData scripts** — Executes scripts from the TableData folder in a dependency retry loop.
-8. **After scripts** — Executes migration scripts from `MigrationScripts/After` with the same tracking as Before scripts.
-9. **Stamp version** — Executes `Template.VersionStampScript` if configured.
+5. **Table quench (structures)** — Applies table column definitions and indexes from `Tables/*.json`. Creates new tables and modifies existing columns and indexes.
+6. **BetweenTablesAndKeys scripts** — Executes migration scripts from `MigrationScripts/BetweenTablesAndKeys`. Sequential and tracked. Runs after table structures exist but before FK constraints are applied.
+7. **Table quench (keys and constraints)** — Applies foreign key constraints and remaining table constraints from `Tables/*.json`.
+8. **AfterTablesScripts** — Executes migration scripts from `MigrationScripts/AfterTablesScripts`. Sequential and tracked. Runs after the full table quench but before triggers.
+9. **AfterTablesObjects scripts** — Executes scripts from Triggers and DDLTriggers folders in a dependency retry loop. Includes any unresolved Objects scripts from step 4.
+10. **TableData scripts** — Executes scripts from the TableData folder in a dependency retry loop.
+11. **After scripts** — Executes migration scripts from `MigrationScripts/After` with the same tracking as Before scripts.
+12. **Stamp version** — Executes `Template.VersionStampScript` if configured.
 
 ---
 
@@ -76,7 +81,7 @@ When `WhatIfONLY` is set to `true` in configuration, SchemaQuench performs a dry
 
 - Validation scripts execute normally
 - Table quench runs in WhatIf mode, generating the SQL that would be executed without applying it
-- Before, Objects, AfterTablesObjects, TableData, and After scripts are skipped entirely
+- Before, Objects, BetweenTablesAndKeys, AfterTablesScripts, AfterTablesObjects, TableData, After, and product Before/After scripts are skipped entirely
 
 The generated SQL is written to `SchemaQuench - Quench Tables {DatabaseName}.sql` in the log directory.
 
