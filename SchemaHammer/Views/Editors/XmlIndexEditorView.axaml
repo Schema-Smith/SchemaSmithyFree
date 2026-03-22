@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             x:Class="SchemaHammer.Views.Editors.XmlIndexEditorView"
+             x:DataType="vm:XmlIndexEditorViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="8" Margin="8">
+            <TextBlock Text="{Binding EditorLabel}" Classes="editor-title" />
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Configuration" />
+            </Border>
+            <StackPanel Margin="4,0,0,0" Spacing="8">
+                <CheckBox Content="Primary" IsChecked="{Binding IsPrimary}" IsEnabled="False" />
+                <StackPanel>
+                    <TextBlock Text="Column" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding Column}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Primary Index" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding PrimaryIndex}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Secondary Index Type" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding SecondaryIndexType}" IsReadOnly="True" />
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

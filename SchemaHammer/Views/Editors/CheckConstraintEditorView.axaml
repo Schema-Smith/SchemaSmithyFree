@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             xmlns:controls="using:SchemaHammer.Controls"
+             x:Class="SchemaHammer.Views.Editors.CheckConstraintEditorView"
+             x:DataType="vm:CheckConstraintEditorViewModel">
+    <DockPanel Margin="8">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding EditorLabel}" Classes="editor-title" />
+
+        <Border DockPanel.Dock="Top" Classes="section-header-border">
+            <TextBlock Classes="section-header" Text="Expression" />
+        </Border>
+
+        <controls:SqlEditorControl Text="{Binding Expression}" />
+    </DockPanel>
+</UserControl>
