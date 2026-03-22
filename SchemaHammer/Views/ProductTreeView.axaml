@@ -1,0 +1,34 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels"
+             xmlns:models="using:SchemaHammer.Models"
+             xmlns:conv="using:SchemaHammer.Converters"
+             x:Class="SchemaHammer.Views.ProductTreeView"
+             x:DataType="vm:ProductTreeViewModel">
+    <TreeView ItemsSource="{Binding RootNodes}"
+              SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
+              Name="ProductTree"
+              Background="Transparent">
+        <TreeView.Styles>
+            <Style Selector="TreeViewItem">
+                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            </Style>
+        </TreeView.Styles>
+        <TreeView.DataTemplates>
+            <TreeDataTemplate DataType="models:TreeNodeModel" ItemsSource="{Binding Children}">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Image Width="16" Height="16" VerticalAlignment="Center">
+                        <Image.Source>
+                            <MultiBinding Converter="{x:Static conv:TreeIconConverter.Instance}">
+                                <Binding Path="ImageKey" />
+                                <Binding Path="Tag" />
+                            </MultiBinding>
+                        </Image.Source>
+                    </Image>
+                    <TextBlock Text="{Binding Text}" VerticalAlignment="Center"
+                               Foreground="{DynamicResource SH.TreePanel.Foreground}" />
+                </StackPanel>
+            </TreeDataTemplate>
+        </TreeView.DataTemplates>
+    </TreeView>
+</UserControl>
