@@ -1,4 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -41,6 +42,10 @@ public class Template
     public List<Table> Tables { get; } = [];
     [JsonIgnore]
     public string TableSchema { get; set; }
+    [JsonIgnore]
+    public List<IndexedView> IndexedViews { get; } = [];
+    [JsonIgnore]
+    public string IndexedViewSchema { get; set; } = "[]";
 
     [JsonIgnore]
     public string FilePath { get; set; }
@@ -74,6 +79,8 @@ public class Template
     {
         LoadTables();
         TableSchema = JsonConvert.SerializeObject(Tables, Formatting.Indented);
+        LoadIndexedViews();
+        IndexedViewSchema = JsonConvert.SerializeObject(IndexedViews, Formatting.Indented);
 
         // Merge tokens: template overrides product, then add auto-tokens
         var mergedTokens = ScriptTokens
@@ -97,6 +104,26 @@ public class Template
         var files = ProductDirectoryWrapper.GetFromFactory().GetFiles(filePath, "*.json", SearchOption.AllDirectories)
             .OrderBy(x => x);
         Tables.AddRange(files.Select(Table.Load));
+    }
+
+    private void LoadIndexedViews()
+    {
+        var filePath = Path.Combine(Path.GetDirectoryName(FilePath) ?? "", "Indexed Views");
+        if (!ProductDirectoryWrapper.GetFromFactory().Exists(filePath)) return;
+
+        var files = ProductDirectoryWrapper.GetFromFactory().GetFiles(filePath, "*.json", SearchOption.AllDirectories)
+            .OrderBy(x => x);
+        foreach (var file in files)
+        {
+            try
+            {
+                IndexedViews.Add(JsonHelper.ProductLoad<IndexedView>(file));
+            }
+            catch (Exception e)
+            {
+                throw new Exception($"Error loading indexed view from {LongPathSupport.StripLongPathPrefix(file)}\r\n{e.Message}", e);
+            }
+        }
     }
 
     internal static List<TemplateFolder> GetTemplateFolders()

@@ -45,6 +45,7 @@ public static class RepositoryHelper
         var templateFile = Path.Combine(templatePath, "Template.json");
         foreach (var folder in Template.GetTemplateFolders())
             directory.CreateDirectory(Path.Combine(templatePath, folder.FolderPath));
+        directory.CreateDirectory(Path.Combine(templatePath, "Indexed Views"));
         if (!file.Exists(templateFile)) 
         {
             var template = new Template { Name = templateName, DatabaseIdentificationScript = "SELECT [Name] FROM master.sys.databases WHERE [Name] = '{{" + templateName + "Db}}'" };

@@ -131,13 +131,14 @@ public class RepositoryHelperTests
             var result = RepositoryHelper.UpdateOrInitTemplate(productPath, templateName, dbName);
 
             Assert.That(result, Is.EqualTo(Path.Combine(productPath, "Templates", templateName)));
-            mockDirectoryWrapper.Received(16).CreateDirectory(Arg.Any<string>());
+            mockDirectoryWrapper.Received(17).CreateDirectory(Arg.Any<string>());
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, "Templates", templateName));
             mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("Schemas")));
             mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("Functions")));
             mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("DataTypes")));
             mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("BetweenTablesAndKeys")));
             mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("AfterTablesScripts")));
+            mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("Indexed Views")));
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("Template.json")), Arg.Is<string>(s => s.ContainsIgnoringCase("\"Name\": \"MyTemplate\"")));
 
             FactoryContainer.Clear();
@@ -169,7 +170,7 @@ public class RepositoryHelperTests
             var result = RepositoryHelper.UpdateOrInitTemplate(productPath, templateName, dbName);
 
             Assert.That(result, Is.EqualTo(Path.Combine(productPath, "Templates", templateName)));
-            mockDirectoryWrapper.Received(16).CreateDirectory(Arg.Any<string>());
+            mockDirectoryWrapper.Received(17).CreateDirectory(Arg.Any<string>());
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, "Templates", templateName));
             mockFileWrapper.Received(0).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("Template.json")), Arg.Any<string>());
 

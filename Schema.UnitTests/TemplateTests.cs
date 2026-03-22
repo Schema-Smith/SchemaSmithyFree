@@ -271,6 +271,51 @@ public class TemplateTests
         }
     }
 
+    [Test]
+    public void ShouldLoadIndexedViews()
+    {
+        var templateJsonFile = Path.Combine("SchemaPackagePath", "Templates", "Test", "Template.json");
+        var indexedViewsPath = Path.Combine("SchemaPackagePath", "Templates", "Test", "Indexed Views");
+        var viewFile = Path.Combine(indexedViewsPath, "dbo.vw_ActiveOrders.json");
+
+        var config = SetupConfig();
+        var mockDirectoryWrapper = Substitute.For<IDirectory>();
+        mockDirectoryWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockDirectoryWrapper.GetFiles(indexedViewsPath, "*.json", SearchOption.AllDirectories).Returns([viewFile]);
+
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockFileWrapper.ReadAllText(templateJsonFile).Returns(templateJson);
+        mockFileWrapper.ReadAllText(viewFile).Returns("""
+        {
+            "Name": "vw_ActiveOrders",
+            "Schema": "dbo",
+            "Definition": "SELECT OrderId FROM dbo.Orders WHERE Status = 'Active'",
+            "Indexes": [
+                { "Name": "CIX_vw_ActiveOrders", "Clustered": true, "Unique": true, "IndexColumns": "OrderId" }
+            ]
+        }
+        """);
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(config);
+            FactoryContainer.Register(mockDirectoryWrapper);
+            FactoryContainer.Register(mockFileWrapper);
+
+            var template = Template.Load("Test", GetTestProduct());
+            Assert.Multiple(() =>
+            {
+                Assert.That(template.IndexedViews, Has.Count.EqualTo(1));
+                Assert.That(template.IndexedViews[0].Name, Is.EqualTo("vw_ActiveOrders"));
+                Assert.That(template.IndexedViews[0].Indexes, Has.Count.EqualTo(1));
+                Assert.That(template.IndexedViewSchema, Does.Contain("vw_ActiveOrders"));
+            });
+
+            FactoryContainer.Clear();
+        }
+    }
+
     private const string templateJson = """
 {
   "DatabaseIdentificationScript": "Database Identification Script {{TestDB}}",
