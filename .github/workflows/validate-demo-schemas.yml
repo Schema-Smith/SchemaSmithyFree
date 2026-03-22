@@ -1,6 +1,8 @@
 name: validate-demo-schemas
 on:
   pull_request:
+    paths:
+      - 'demo/**'
 
 permissions:
   contents: read

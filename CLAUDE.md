@@ -95,4 +95,4 @@ Each tool uses `{ToolName}.settings.json` (e.g., `SchemaQuench.settings.json`). 
 
 ## Development Rules
 
-All development rules, workflow processes, and Definition of Done are maintained in the Community command center repository. See `C:\src\Community\CLAUDE.md` for the authoritative set. Key rules: TDD, >85% coverage, plan discipline, feature branches on dev/v2, push after commit, zero warnings.
+All development rules, workflow processes, and Definition of Done are maintained in the Community command center repository. See `C:\src\Community\CLAUDE.md` for the authoritative set. Key rules: TDD, >85% coverage, plan discipline, feature branches on dev/v2, batch pushes (not after every commit — CI costs are significant), zero warnings.
