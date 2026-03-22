@@ -55,4 +55,43 @@ public class ConfigHelperTests
             Environment.SetEnvironmentVariable("SmithySettings_TestKey", null);
         }
     }
+
+    [Test]
+    public void ShouldReturnCachedConfig_WhenCalledTwice()
+    {
+        MockCommandLine("test.exe");
+
+        var config1 = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", null);
+        var config2 = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", null);
+
+        Assert.That(config2, Is.SameAs(config1));
+    }
+
+    [Test]
+    public void ShouldUseSmithySettingsPrefix()
+    {
+        Environment.SetEnvironmentVariable("SmithySettings_CustomKey", "custom-value");
+        MockCommandLine("test.exe");
+
+        try
+        {
+            var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", null);
+            Assert.That(config["CustomKey"], Is.EqualTo("custom-value"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SmithySettings_CustomKey", null);
+        }
+    }
+
+    [Test]
+    public void ShouldRegisterConfigInFactoryContainer()
+    {
+        MockCommandLine("test.exe");
+
+        var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", null);
+        var resolved = FactoryContainer.Resolve<IConfigurationRoot>();
+
+        Assert.That(resolved, Is.SameAs(config));
+    }
 }

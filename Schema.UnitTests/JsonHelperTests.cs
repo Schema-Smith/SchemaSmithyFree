@@ -213,6 +213,63 @@ public class JsonHelperTests
         }
     }
 
+    [Test]
+    public void ProductLoadUsesProductFileWrapper()
+    {
+        var json = """{"Name":"Product","Value":10}""";
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(TestFilePath).Returns(true);
+        mockFileWrapper.ReadAllText(TestFilePath).Returns(json);
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFileWrapper);
+
+            _ = JsonHelper.ProductLoad<TestData>(TestFilePath);
+
+            mockFileWrapper.Received(1).Exists(TestFilePath);
+            mockFileWrapper.Received(1).ReadAllText(TestFilePath);
+
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void SerializeOmitsDefaultValues()
+    {
+        var obj = new TestData { Name = "Test", Value = 0 };
+        string writtenContent = null;
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper
+            .When(f => f.WriteAllText(TestFilePath, Arg.Any<string>()))
+            .Do(ci => writtenContent = ci.ArgAt<string>(1));
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFileWrapper);
+
+            JsonHelper.Write(TestFilePath, obj);
+
+            Assert.That(writtenContent, Does.Not.Contain("\"Value\""));
+
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void LoadThrowsDescriptiveErrorOnInvalidJson()
+    {
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(TestFilePath).Returns(true);
+        mockFileWrapper.ReadAllText(TestFilePath).Returns("not json at all");
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFileWrapper);
+
+            Assert.Throws<JsonReaderException>(() => JsonHelper.Load<TestData>(TestFilePath));
+
+            FactoryContainer.Clear();
+        }
+    }
+
     // ------------------------------------------------------------------
     // Helper types
     // ------------------------------------------------------------------

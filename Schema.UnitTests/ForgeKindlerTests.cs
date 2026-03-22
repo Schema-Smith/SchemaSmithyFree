@@ -80,4 +80,39 @@ public class ForgeKindlerTests
         Assert.That(script, Does.Contain("#Columns"));
         Assert.That(script, Does.Contain("#Indexes"));
     }
+
+    [Test]
+    public void ShouldDeployExpectedNumberOfScripts()
+    {
+        var command = Substitute.For<IDbCommand>();
+        var executedScripts = new System.Collections.Generic.List<string>();
+        command.When(c => c.ExecuteNonQuery()).Do(_ => executedScripts.Add(command.CommandText));
+
+        ForgeKindler.KindleTheForge(command);
+
+        Assert.That(executedScripts.Count, Is.GreaterThanOrEqualTo(10), "Expected at least 10 kindling scripts");
+    }
+
+    [Test]
+    public void ShouldDeployAllExpectedProcedures()
+    {
+        var command = Substitute.For<IDbCommand>();
+        var executedScripts = new System.Collections.Generic.List<string>();
+        command.When(c => c.ExecuteNonQuery()).Do(_ => executedScripts.Add(command.CommandText));
+
+        ForgeKindler.KindleTheForge(command);
+
+        var allScriptText = string.Join("\n", executedScripts);
+        Assert.Multiple(() =>
+        {
+            Assert.That(allScriptText, Does.Contain("MissingTableAndColumnQuench"), "MissingTableAndColumnQuench should be deployed");
+            Assert.That(allScriptText, Does.Contain("ModifiedTableQuench"), "ModifiedTableQuench should be deployed");
+            Assert.That(allScriptText, Does.Contain("MissingIndexesAndConstraintsQuench"), "MissingIndexesAndConstraintsQuench should be deployed");
+            Assert.That(allScriptText, Does.Contain("ForeignKeyQuench"), "ForeignKeyQuench should be deployed");
+            Assert.That(allScriptText, Does.Contain("IndexedViewQuench"), "IndexedViewQuench should be deployed");
+            Assert.That(allScriptText, Does.Contain("GenerateIndexedViewJson"), "GenerateIndexedViewJson should be deployed");
+            Assert.That(allScriptText, Does.Contain("PrintWithNoWait"), "PrintWithNoWait should be deployed");
+            Assert.That(allScriptText, Does.Contain("TableQuench"), "TableQuench should be deployed");
+        });
+    }
 }
