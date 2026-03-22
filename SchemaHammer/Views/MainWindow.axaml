@@ -121,7 +121,7 @@
                             <MenuItem.Styles>
                                 <Style Selector="MenuItem">
                                     <Setter Property="Header" Value="{Binding}" />
-                                    <Setter Property="Command" Value="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LoadRecentProductCommand}" />
+                                    <Setter Property="Command" Value="{ReflectionBinding DataContext.LoadRecentProductCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}" />
                                     <Setter Property="CommandParameter" Value="{Binding}" />
                                 </Style>
                             </MenuItem.Styles>
