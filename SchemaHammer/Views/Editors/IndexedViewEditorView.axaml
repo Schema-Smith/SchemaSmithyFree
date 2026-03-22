@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             xmlns:controls="using:SchemaHammer.Controls"
+             x:Class="SchemaHammer.Views.Editors.IndexedViewEditorView"
+             x:DataType="vm:IndexedViewEditorViewModel">
+    <DockPanel Margin="8">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding EditorLabel}" Classes="editor-title" />
+
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="16" Margin="4,4,0,8">
+            <TextBlock Text="Schema:" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Schema}" VerticalAlignment="Center" />
+            <TextBlock Text="Name:" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <Border DockPanel.Dock="Top" Classes="section-header-border">
+            <TextBlock Classes="section-header" Text="Definition" />
+        </Border>
+
+        <TextBlock DockPanel.Dock="Top" Text="The SELECT query. SchemaSmith generates the CREATE VIEW WITH SCHEMABINDING wrapper."
+                   FontStyle="Italic" Opacity="0.7" Margin="4,2,0,4" />
+
+        <Border DockPanel.Dock="Bottom" Classes="section-header-border" Margin="0,8,0,0">
+            <TextBlock Classes="section-header" Text="Indexes" />
+        </Border>
+        <ListBox DockPanel.Dock="Bottom" ItemsSource="{Binding IndexSummary}" MinHeight="80" MaxHeight="150" />
+
+        <controls:SqlEditorControl Text="{Binding Definition}" />
+    </DockPanel>
+</UserControl>

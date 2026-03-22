@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             xmlns:controls="using:SchemaHammer.Controls"
+             x:Class="SchemaHammer.Views.Editors.ProductEditorView"
+             x:DataType="vm:ProductEditorViewModel">
+    <TabControl>
+        <TabItem Header="Main">
+            <ScrollViewer>
+                <StackPanel Spacing="8" Margin="8">
+                    <Border Classes="section-header-border">
+                        <TextBlock Classes="section-header" Text="Product Name" />
+                    </Border>
+                    <TextBox Text="{Binding Name}" IsReadOnly="True" Margin="4,0,0,0" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="4,8,0,0">
+                        <TextBlock Text="Platform:" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Platform}" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="4,0,0,0">
+                        <TextBlock Text="Minimum Version:" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding MinimumVersion}" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <CheckBox Content="Drop Unknown Indexes" IsChecked="{Binding DropUnknownIndexes}" IsEnabled="False" Margin="4,0,0,0" />
+
+                    <StackPanel Margin="4,8,0,0" Spacing="8">
+                        <TextBlock Text="Validation Script" Margin="0,0,0,2" />
+                        <controls:SqlEditorControl Text="{Binding ValidationScript}" EditorHeight="80" />
+                    </StackPanel>
+
+                    <StackPanel Margin="4,0,0,0" Spacing="8">
+                        <TextBlock Text="Baseline Validation Script" Margin="0,0,0,2" />
+                        <controls:SqlEditorControl Text="{Binding BaselineValidationScript}" EditorHeight="80" />
+                    </StackPanel>
+
+                    <StackPanel Margin="4,0,0,0" Spacing="8">
+                        <TextBlock Text="Version Stamp Script" Margin="0,0,0,2" />
+                        <controls:SqlEditorControl Text="{Binding VersionStampScript}" EditorHeight="80" />
+                    </StackPanel>
+
+                    <Border Classes="section-header-border">
+                        <TextBlock Classes="section-header" Text="Template Order" />
+                    </Border>
+                    <ListBox ItemsSource="{Binding TemplateOrder}" MinHeight="120" Margin="4,0,0,0" />
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+        <TabItem Header="Script Tokens">
+            <DataGrid ItemsSource="{Binding ScriptTokens}"
+                      IsReadOnly="True"
+                      AutoGenerateColumns="False"
+                      GridLinesVisibility="All"
+                      Margin="8">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Token" Binding="{Binding Key}" Width="*" />
+                    <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="2*" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </TabItem>
+    </TabControl>
+</UserControl>
