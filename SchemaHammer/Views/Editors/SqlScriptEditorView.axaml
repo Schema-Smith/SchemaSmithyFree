@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             xmlns:controls="using:SchemaHammer.Controls"
+             x:Class="SchemaHammer.Views.Editors.SqlScriptEditorView"
+             x:DataType="vm:SqlScriptEditorViewModel">
+    <DockPanel>
+        <!-- Minimal toolbar: Preview toggle only -->
+        <Border DockPanel.Dock="Top" Padding="8,4"
+                Background="{DynamicResource SH.Toolbar.Background}">
+            <DockPanel>
+                <TextBlock Text="{Binding EditorLabel}"
+                           Foreground="{DynamicResource SH.Toolbar.Foreground}"
+                           VerticalAlignment="Center" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
+                    <Button Command="{Binding TogglePreviewCommand}"
+                            Content="{Binding PreviewButtonText}"
+                            MinWidth="80" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- SQL Editor fills remaining space -->
+        <controls:SqlEditorControl Text="{Binding DisplayContent}" />
+    </DockPanel>
+</UserControl>
