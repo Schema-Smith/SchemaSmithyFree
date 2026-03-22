@@ -20,8 +20,44 @@
         <DataTemplate DataType="vmEditors:WelcomeViewModel">
             <editors:WelcomeView />
         </DataTemplate>
-        <DataTemplate DataType="vmEditors:PlaceholderEditorViewModel">
-            <editors:PlaceholderEditorView />
+        <DataTemplate DataType="vmEditors:ContainerEditorViewModel">
+            <editors:ContainerEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:ProductEditorViewModel">
+            <editors:ProductEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:TemplateEditorViewModel">
+            <editors:TemplateEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:TableEditorViewModel">
+            <editors:TableEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:ColumnEditorViewModel">
+            <editors:ColumnEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:IndexEditorViewModel">
+            <editors:IndexEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:ForeignKeyEditorViewModel">
+            <editors:ForeignKeyEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:CheckConstraintEditorViewModel">
+            <editors:CheckConstraintEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:StatisticEditorViewModel">
+            <editors:StatisticEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:XmlIndexEditorViewModel">
+            <editors:XmlIndexEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:FullTextIndexEditorViewModel">
+            <editors:FullTextIndexEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:IndexedViewEditorViewModel">
+            <editors:IndexedViewEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:SqlScriptEditorViewModel">
+            <editors:SqlScriptEditorView />
         </DataTemplate>
     </Window.DataTemplates>
 

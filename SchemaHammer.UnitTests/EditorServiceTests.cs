@@ -7,12 +7,12 @@ namespace SchemaHammer.UnitTests;
 public class EditorServiceTests
 {
     [Test]
-    public void GetEditorTag_ReturnsNullForContainers()
+    public void GetEditorTag_ReturnsContainerForContainerTags()
     {
         var service = new EditorService();
-        Assert.That(service.GetEditorTag("Column Container"), Is.Null);
-        Assert.That(service.GetEditorTag("Index Container"), Is.Null);
-        Assert.That(service.GetEditorTag("Before Folder"), Is.Null);
+        Assert.That(service.GetEditorTag("Column Container"), Is.EqualTo("Container"));
+        Assert.That(service.GetEditorTag("Index Container"), Is.EqualTo("Container"));
+        Assert.That(service.GetEditorTag("Before Folder"), Is.EqualTo("Container"));
     }
 
     [Test]
@@ -33,24 +33,27 @@ public class EditorServiceTests
     }
 
     [Test]
-    public void GetEditor_ReturnsPlaceholderForKnownNode()
+    public void GetEditor_ReturnsTableEditorForTableNode()
     {
         var service = new EditorService();
         var node = new TreeNodeModel { Text = "dbo.Users", Tag = "Table" };
 
         var editor = service.GetEditor(node);
 
-        Assert.That(editor, Is.TypeOf<PlaceholderEditorViewModel>());
+        Assert.That(editor, Is.TypeOf<TableEditorViewModel>());
         Assert.That(editor!.Node, Is.SameAs(node));
     }
 
     [Test]
-    public void GetEditor_ReturnsNullForContainerNode()
+    public void GetEditor_ReturnsContainerEditorForContainerNode()
     {
         var service = new EditorService();
         var node = new TreeNodeModel { Text = "Columns", Tag = "Column Container" };
 
-        Assert.That(service.GetEditor(node), Is.Null);
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<ContainerEditorViewModel>());
+        Assert.That(editor!.Node, Is.SameAs(node));
     }
 
     [Test]

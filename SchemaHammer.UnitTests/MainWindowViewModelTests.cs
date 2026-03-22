@@ -112,7 +112,7 @@ public class MainWindowViewModelTests
     public void OnNodeSelected_ChangesCurrentEditor()
     {
         var editorService = Substitute.For<IEditorService>();
-        var placeholder = new PlaceholderEditorViewModel();
+        var placeholder = new TableEditorViewModel();
         var node = new TreeNodeModel { Text = "MyTable", Tag = "Table" };
         editorService.GetEditor(node).Returns(placeholder);
 

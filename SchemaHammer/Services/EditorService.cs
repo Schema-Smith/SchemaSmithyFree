@@ -15,7 +15,7 @@ public class EditorService : IEditorService
             nodeTag.EndsWith(" Folder", StringComparison.OrdinalIgnoreCase) ||
             nodeTag.EndsWith(" FolderContainer", StringComparison.OrdinalIgnoreCase))
         {
-            return null;
+            return "Container";
         }
 
         return nodeTag switch
@@ -59,10 +59,19 @@ public class EditorService : IEditorService
     {
         return editorTag switch
         {
-            "Product" or "Template" or "Table" or "Column" or
-            "Index" or "Xml Index" or "Foreign Key" or "Check Constraint" or
-            "Statistic" or "Full Text Index" or "Indexed View" or "Sql Script"
-                => new PlaceholderEditorViewModel(),
+            "Product" => new ProductEditorViewModel(),
+            "Template" => new TemplateEditorViewModel(),
+            "Table" => new TableEditorViewModel(),
+            "Column" => new ColumnEditorViewModel(),
+            "Index" => new IndexEditorViewModel(),
+            "Xml Index" => new XmlIndexEditorViewModel(),
+            "Foreign Key" => new ForeignKeyEditorViewModel(),
+            "Check Constraint" => new CheckConstraintEditorViewModel(),
+            "Statistic" => new StatisticEditorViewModel(),
+            "Full Text Index" => new FullTextIndexEditorViewModel(),
+            "Indexed View" => new IndexedViewEditorViewModel(),
+            "Sql Script" => new SqlScriptEditorViewModel(),
+            "Container" => new ContainerEditorViewModel(),
             _ => null
         };
     }
