@@ -25,6 +25,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{F0E3A1B2
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaHammer", "SchemaHammer\SchemaHammer.csproj", "{0E4DF2A4-31A9-4EDC-8F52-51E485436DF0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaHammer.UnitTests", "SchemaHammer.UnitTests\SchemaHammer.UnitTests.csproj", "{DC61FB15-EC8C-4034-93B8-660952D515F9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -155,6 +157,18 @@ Global
 		{0E4DF2A4-31A9-4EDC-8F52-51E485436DF0}.Release|x64.Build.0 = Release|Any CPU
 		{0E4DF2A4-31A9-4EDC-8F52-51E485436DF0}.Release|x86.ActiveCfg = Release|Any CPU
 		{0E4DF2A4-31A9-4EDC-8F52-51E485436DF0}.Release|x86.Build.0 = Release|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Debug|x64.Build.0 = Debug|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Debug|x86.Build.0 = Debug|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Release|x64.ActiveCfg = Release|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Release|x64.Build.0 = Release|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Release|x86.ActiveCfg = Release|Any CPU
+		{DC61FB15-EC8C-4034-93B8-660952D515F9}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
