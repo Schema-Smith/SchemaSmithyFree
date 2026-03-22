@@ -4,14 +4,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Threading.Tasks;
 using Schema.Utility;
 
 namespace Schema.Isolators;
 
-public class ZipFileWrapper : IFile, IDisposable, IAsyncDisposable
+public class ZipFileWrapper : IFile, IDisposable
 {
-    public List<ZipArchiveEntry> ZipEntries { get; private set; }
+    public List<IZipEntry> ZipEntries { get; private set; }
 
     private string _zipFilePath;
     private ZipArchive _archive;
@@ -21,7 +20,7 @@ public class ZipFileWrapper : IFile, IDisposable, IAsyncDisposable
     {
         if (string.IsNullOrEmpty(NormalizePath(path)))
             return false;
-        
+
         return ZipEntries.Any(e => NormalizePath(e.FullName).EqualsIgnoringCase(NormalizePath(path)));
     }
 
@@ -44,15 +43,16 @@ public class ZipFileWrapper : IFile, IDisposable, IAsyncDisposable
 
     public static bool IsValidZipFile(string filename)
     {
-        if (string.IsNullOrEmpty(filename) || !File.Exists(filename))
+        var file = FileWrapper.GetFromFactory();
+        if (string.IsNullOrEmpty(filename) || !file.Exists(filename))
             return false;
 
         try
         {
-            using var fileStream = File.OpenRead(filename);
+            using var fileStream = file.OpenRead(filename);
             if (fileStream.Length == 0) return false;
             using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read, leaveOpen: false);
-            _ = archive.Entries; // Accessing Entries will throw if not a valid zip
+            _ = archive.Entries;
             return true;
         }
         catch
@@ -67,13 +67,13 @@ public class ZipFileWrapper : IFile, IDisposable, IAsyncDisposable
         lock (_lockObject)
         {
             _archive = ZipFile.OpenRead(zipFileName);
-            ZipEntries = _archive.Entries.ToList();
+            ZipEntries = _archive.Entries.Select(e => (IZipEntry)new ZipEntryWrapper(e)).ToList();
         }
     }
 
     private static string NormalizePath(string path)
     {
-        return path.Replace('\\', '/').Trim('/');
+        return path?.Replace('\\', '/').Trim('/');
     }
 
     public static IFile GetFromFactory(string zipFileName)
@@ -83,6 +83,11 @@ public class ZipFileWrapper : IFile, IDisposable, IAsyncDisposable
         return zipFile;
     }
 
+    internal void SetZipEntries(List<IZipEntry> entries)
+    {
+        ZipEntries = entries;
+    }
+
     public void Dispose()
     {
         ZipEntries = null;
@@ -90,10 +95,8 @@ public class ZipFileWrapper : IFile, IDisposable, IAsyncDisposable
     }
 
     // Other IFile methods not used for zip access
+    public Stream OpenRead(string path) => throw new NotImplementedException();
     public void WriteAllText(string path, string contents) => throw new NotImplementedException();
-    public byte[] ReadAllBytes(string path) => throw new NotImplementedException();
     public void Copy(string source, string destination, bool overwrite = false) => throw new NotImplementedException();
-    public void Move(string sourceFileName, string destFileName) => throw new NotImplementedException();
     public void Delete(string path) => throw new NotImplementedException();
-    public ValueTask DisposeAsync() => throw new NotImplementedException();
 }
