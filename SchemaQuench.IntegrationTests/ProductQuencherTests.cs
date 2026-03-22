@@ -71,6 +71,8 @@ INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [Quen
             AssertTableCreatedWithExtendedProperties(_mainDb, "dbo.TestTable");
             AssertTableCreatedWithExtendedProperties(_secondaryDb, "dbo.TestSecondaryTable");
 
+            AssertIndexedViewCreated(_mainDb, "dbo.vw_TestSummary");
+
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();
         }
@@ -244,5 +246,19 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
         conn.Close();
 
         return scriptLog;
+    }
+
+    private void AssertIndexedViewCreated(string dbName, string viewName)
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(dbName);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT CAST(CASE WHEN OBJECT_ID('{viewName}', 'V') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True, $"Indexed view {viewName} should exist after product quench");
+
+        cmd.CommandText = $"SELECT OBJECTPROPERTY(OBJECT_ID('{viewName}'), 'IsIndexed')";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(1), $"{viewName} should have indexes");
+        conn.Close();
     }
 }

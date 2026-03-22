@@ -1,0 +1,13 @@
+{
+  "Schema": "dbo",
+  "Name": "vw_TestSummary",
+  "Definition": "SELECT TestID, Status, COUNT_BIG(*) AS Cnt FROM dbo.TestTable GROUP BY TestID, Status",
+  "Indexes": [
+    {
+      "Name": "CIX_vw_TestSummary",
+      "Unique": true,
+      "Clustered": true,
+      "IndexColumns": "TestID, Status"
+    }
+  ]
+}
