@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             x:Class="SchemaHammer.Views.Editors.PlaceholderEditorView"
+             x:DataType="vm:PlaceholderEditorViewModel">
+    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
+        <TextBlock Text="{Binding EditorTitle}"
+                   FontSize="20" FontWeight="Bold"
+                   Foreground="{DynamicResource SH.Accent.Ember}"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding NodeTag, StringFormat='Type: {0}'}"
+                   FontSize="14" Opacity="0.6"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding TemplateName, StringFormat='Template: {0}'}"
+                   FontSize="14" Opacity="0.6"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding NodePath}"
+                   FontSize="12" Opacity="0.4"
+                   HorizontalAlignment="Center" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>
