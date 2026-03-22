@@ -14,9 +14,8 @@ public class FullTextIndexEditorViewModel : EditorBaseViewModel
     public override void ChangeNode(TreeNodeModel node)
     {
         base.ChangeNode(node);
-        // FullTextIndex is a direct child of TableNodeModel, not inside a container
-        var tableNode = node.Parent as TableNodeModel;
-        var fti = tableNode?.TableData?.FullTextIndex;
+        var table = ColumnEditorViewModel.FindParentTable(node);
+        var fti = table?.FullTextIndex;
         if (fti != null)
         {
             FullTextCatalog = fti.FullTextCatalog ?? "";
