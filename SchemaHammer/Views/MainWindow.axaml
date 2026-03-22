@@ -1,0 +1,124 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SchemaHammer.ViewModels"
+        xmlns:vmEditors="using:SchemaHammer.ViewModels.Editors"
+        xmlns:editors="using:SchemaHammer.Views.Editors"
+        x:Class="SchemaHammer.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding Title}"
+        Width="984" Height="561"
+        MinWidth="800" MinHeight="550"
+        WindowStartupLocation="CenterScreen">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel />
+    </Design.DataContext>
+
+    <Window.DataTemplates>
+        <DataTemplate DataType="vmEditors:WelcomeViewModel">
+            <editors:WelcomeView />
+        </DataTemplate>
+    </Window.DataTemplates>
+
+    <Panel>
+        <DockPanel IsVisible="{Binding !IsLoading}">
+            <!-- Ember Heat Line -->
+            <Border DockPanel.Dock="Top" Height="3" IsHitTestVisible="False">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                        <GradientStop Color="{DynamicResource SH.Accent.Ember.Color}" Offset="0" />
+                        <GradientStop Color="{DynamicResource SH.Accent.EmberLight.Color}" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <!-- Menu Bar -->
+            <DockPanel DockPanel.Dock="Top"
+                       Background="{DynamicResource SH.Toolbar.Background}">
+                <Menu Foreground="{DynamicResource SH.Toolbar.Foreground}">
+                    <!-- File Menu -->
+                    <MenuItem Header="_File">
+                        <MenuItem Header="Choose Product"
+                                  Command="{Binding ChooseProductCommand}">
+                            <MenuItem.Icon>
+                                <PathIcon Data="{StaticResource BrowseIcon}" Width="14" Height="14" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Reload Tree"
+                                  Command="{Binding ReloadTreeCommand}"
+                                  InputGesture="F5">
+                            <MenuItem.Icon>
+                                <PathIcon Data="{StaticResource RefreshIcon}" Width="14" Height="14" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <Separator />
+                        <MenuItem Header="E_xit" Command="{Binding ExitCommand}" />
+                    </MenuItem>
+
+                    <!-- Search Menu -->
+                    <MenuItem Header="_Search">
+                        <MenuItem Header="Search Tree"
+                                  Command="{Binding SearchTreeCommand}"
+                                  InputGesture="Ctrl+F">
+                            <MenuItem.Icon>
+                                <PathIcon Data="{StaticResource SearchIcon}" Width="14" Height="14" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Search Code"
+                                  Command="{Binding SearchCodeCommand}"
+                                  InputGesture="Ctrl+Shift+F">
+                            <MenuItem.Icon>
+                                <PathIcon Data="{StaticResource SearchIcon}" Width="14" Height="14" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                    </MenuItem>
+
+                    <!-- Tools Menu -->
+                    <MenuItem Header="_Tools">
+                        <MenuItem Header="Update Schema Files"
+                                  Command="{Binding UpdateSchemaFilesCommand}" />
+                        <Separator />
+                        <MenuItem Header="Toggle Theme"
+                                  Command="{Binding OpenThemeSettingsCommand}" />
+                    </MenuItem>
+                </Menu>
+            </DockPanel>
+
+            <!-- Status Bar -->
+            <Border DockPanel.Dock="Bottom" Classes="status-bar"
+                    BorderBrush="{DynamicResource SH.Accent.Ember}" BorderThickness="0,1,0,0"
+                    Background="{DynamicResource SH.General.StatusBarBackground}"
+                    Height="24">
+                <DockPanel LastChildFill="True" Margin="6,0">
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="{Binding ProductStatus}"
+                               Foreground="{DynamicResource SH.General.StatusBarForeground}"
+                               VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+
+            <!-- Main Content: Tree (left) + Editor (right) with splitter -->
+            <Grid ColumnDefinitions="327,Auto,*">
+                <!-- Left Panel: Product Tree Placeholder -->
+                <Border Grid.Column="0" Background="{DynamicResource SH.TreePanel.Background}">
+                    <TextBlock Text="Product Tree (Sub-Project 2)" Opacity="0.3"
+                               Foreground="{DynamicResource SH.TreePanel.Foreground}"
+                               VerticalAlignment="Center" HorizontalAlignment="Center" />
+                </Border>
+
+                <!-- Splitter -->
+                <GridSplitter Grid.Column="1" Width="4"
+                              ResizeDirection="Columns"
+                              Background="{DynamicResource SH.General.GridSplitter}" />
+
+                <!-- Right Panel: Editor Area -->
+                <ContentControl Grid.Column="2"
+                                x:Name="EditorContentControl"
+                                Content="{Binding CurrentEditor}"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                Margin="0" />
+            </Grid>
+        </DockPanel>
+    </Panel>
+</Window>

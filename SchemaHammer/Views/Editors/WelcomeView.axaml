@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             x:Class="SchemaHammer.Views.Editors.WelcomeView"
+             x:DataType="vm:WelcomeViewModel">
+    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12">
+        <TextBlock Text="{Binding WelcomeMessage}"
+                   FontSize="24" FontWeight="Bold"
+                   Foreground="{DynamicResource SH.Accent.Ember}"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding Instructions}"
+                   FontSize="14" Opacity="0.7"
+                   HorizontalAlignment="Center" />
+    </StackPanel>
+</UserControl>
