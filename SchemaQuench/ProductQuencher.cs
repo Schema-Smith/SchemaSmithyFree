@@ -83,7 +83,21 @@ public class ProductQuencher
                     throw new Exception("Invalid baseline for this release");
             }
 
+            // Product Before scripts
+            if (_product.BeforeFolders.SelectMany(f => f.Scripts).Any())
+            {
+                _progressLog.Info("Quenching Product Before scripts");
+                QuenchProductScripts(command, _product.BeforeFolders.SelectMany(f => f.Scripts).ToList());
+            }
+
             _product.TemplateOrder.ForEach(templateName => QuenchTemplate(command, templateName, _product, suppressKindlingForgeForTesting));
+
+            // Product After scripts
+            if (_product.AfterFolders.SelectMany(f => f.Scripts).Any())
+            {
+                _progressLog.Info("Quenching Product After scripts");
+                QuenchProductScripts(command, _product.AfterFolders.SelectMany(f => f.Scripts).ToList());
+            }
 
             if (!string.IsNullOrWhiteSpace(_product.VersionStampScript))
             {
@@ -143,6 +157,25 @@ public class ProductQuencher
         var dir = DirectoryInfoFactory.GetFromFactory().GetDirectoryInfoWrapper(".");
         foreach (var file in dir.GetFiles("SchemaQuench - Quench Tables*.sql", SearchOption.TopDirectoryOnly))
             file.Delete();
+    }
+
+    private void QuenchProductScripts(IDbCommand command, List<SqlScript> scripts)
+    {
+        foreach (var script in scripts)
+        {
+            if (_whatIfOnly == "1")
+            {
+                _progressLog.Info($"  Would APPLY: {script.LogPath}");
+                continue;
+            }
+
+            _progressLog.Info($"  Quenching {script.LogPath}");
+            foreach (var batch in script.Batches)
+            {
+                command.CommandText = batch;
+                command.ExecuteNonQuery();
+            }
+        }
     }
 
     private void QuenchTemplate(IDbCommand command, string templateName, Product product, bool suppressKindligForgeForTesting)
