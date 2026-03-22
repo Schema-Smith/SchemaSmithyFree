@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             x:Class="SchemaHammer.Views.Editors.TableEditorView"
+             x:DataType="vm:TableEditorViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="8" Margin="8">
+            <TextBlock Text="{Binding EditorLabel}" Classes="editor-title" />
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Settings" />
+            </Border>
+            <StackPanel Margin="4,0,0,0" Spacing="8">
+                <StackPanel>
+                    <TextBlock Text="Schema" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding Schema}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Compression Type" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding CompressionType}" IsReadOnly="True" />
+                </StackPanel>
+                <Grid ColumnDefinitions="*,*" Margin="0,0,0,0">
+                    <CheckBox Grid.Column="0" Content="Is Temporal" IsChecked="{Binding IsTemporal}" IsEnabled="False" />
+                    <CheckBox Grid.Column="1" Content="Update Fill Factor" IsChecked="{Binding UpdateFillFactor}" IsEnabled="False" />
+                </Grid>
+                <StackPanel>
+                    <TextBlock Text="Old Name" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding OldName}" IsReadOnly="True" />
+                </StackPanel>
+            </StackPanel>
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Summary" />
+            </Border>
+            <StackPanel Margin="4,0,0,0" Spacing="8">
+                <TextBlock Text="Columns" />
+                <ListBox ItemsSource="{Binding ColumnSummary}" Height="120" />
+
+                <TextBlock Text="Indexes" />
+                <ListBox ItemsSource="{Binding IndexSummary}" Height="100" />
+
+                <TextBlock Text="Foreign Keys" />
+                <ListBox ItemsSource="{Binding ForeignKeySummary}" Height="80" />
+
+                <TextBlock Text="Check Constraints" />
+                <ListBox ItemsSource="{Binding CheckConstraintSummary}" Height="80" />
+
+                <TextBlock Text="Statistics" />
+                <ListBox ItemsSource="{Binding StatisticSummary}" Height="80" />
+
+                <TextBlock Text="XML Indexes" />
+                <ListBox ItemsSource="{Binding XmlIndexSummary}" Height="80" />
+
+                <TextBlock Text="Full Text Index" />
+                <TextBlock Text="{Binding FullTextIndexSummary}" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
