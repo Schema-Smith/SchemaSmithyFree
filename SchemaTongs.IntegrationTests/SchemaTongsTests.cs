@@ -390,6 +390,67 @@ public class SchemaTongsTests
         }
     }
 
+    [Test]
+    public void ShouldCastIndexedViews()
+    {
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+        lock (FactoryContainer.SharedLockObject)
+        {
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+            var config = SetupConfig();
+            config["ShouldCast:IndexedViews"] = "true";
+
+            var tongs = new SchemaTongs();
+            tongs.CastTemplate();
+
+            file.Received(1).WriteAllText(
+                Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Indexed Views", "Test.TestIndexedView.json"))),
+                Arg.Any<string>());
+
+            config["ShouldCast:IndexedViews"] = "false";
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldNotCastIndexedViewsWhenDisabled()
+    {
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+        lock (FactoryContainer.SharedLockObject)
+        {
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+            var config = SetupConfig();
+            config["ShouldCast:IndexedViews"] = "false";
+
+            var tongs = new SchemaTongs();
+            tongs.CastTemplate();
+
+            file.DidNotReceive().WriteAllText(
+                Arg.Is<string>(s => s.Contains("Indexed Views")),
+                Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
     [OneTimeTearDown]
     public void RunAfterAnyTests()
     {
@@ -412,6 +473,7 @@ public class SchemaTongsTests
         config["ShouldCast:StopLists"] = "false";
         config["ShouldCast:DDLTriggers"] = "false";
         config["ShouldCast:XMLSchemaCollections"] = "false";
+        config["ShouldCast:IndexedViews"] = "false";
         return config;
     }
 
@@ -527,6 +589,20 @@ AS
 BEGIN
     SELECT @param;
 END;
+";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = @"
+CREATE VIEW Test.TestIndexedView WITH SCHEMABINDING
+AS
+SELECT Column1, Column2, COUNT_BIG(*) AS Cnt
+FROM Test.TestTable
+GROUP BY Column1, Column2;
+";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = @"
+CREATE UNIQUE CLUSTERED INDEX CIX_TestIndexedView ON Test.TestIndexedView (Column1);
 ";
         cmd.ExecuteNonQuery();
 
