@@ -232,6 +232,19 @@ public class SchemaGeneratorTests
         Assert.That(schema["properties"]?["UpdateFillFactor"]?["type"]?.ToString(), Is.EqualTo("boolean"));
     }
 
+    [Test]
+    public void ShouldIncludeIndexedViewPropertiesInSchema()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(IndexedView));
+        Assert.Multiple(() =>
+        {
+            Assert.That(schema["properties"]?["Name"]?["type"]?.ToString(), Is.EqualTo("string"));
+            Assert.That(schema["properties"]?["Schema"]?["type"]?.ToString(), Is.EqualTo("string"));
+            Assert.That(schema["properties"]?["Definition"]?["type"]?.ToString(), Is.EqualTo("string"));
+            Assert.That(schema["properties"]?["Indexes"]?["type"]?.ToString(), Is.EqualTo("array"));
+        });
+    }
+
     // --- Test helper classes ---
     private class SimpleStringClass { public string Name { get; set; } }
     private class BoolClass { public bool IsActive { get; set; } }
