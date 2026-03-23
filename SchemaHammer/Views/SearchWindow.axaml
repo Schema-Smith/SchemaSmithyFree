@@ -1,0 +1,66 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SchemaHammer.ViewModels"
+        xmlns:models="using:SchemaHammer.Models"
+        x:Class="SchemaHammer.Views.SearchWindow"
+        x:DataType="vm:SearchViewModel"
+        Title="Search"
+        Width="600" Height="450"
+        MinWidth="400" MinHeight="300"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+    <TabControl SelectedIndex="{Binding SelectedTabIndex}">
+        <!-- Tree Search Tab -->
+        <TabItem Header="Tree">
+            <DockPanel Margin="8">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                    <TextBox Text="{Binding TreeSearchTerm}"
+                             Watermark="Search tree..."
+                             Width="300" />
+                    <ComboBox ItemsSource="{Binding SearchTypes}"
+                              SelectedItem="{Binding SelectedSearchType}"
+                              Width="120" />
+                </StackPanel>
+                <DataGrid Name="TreeResultsGrid"
+                          ItemsSource="{Binding TreeSearchResults}"
+                          IsReadOnly="True"
+                          AutoGenerateColumns="False"
+                          GridLinesVisibility="Horizontal"
+                          SelectionMode="Single">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" />
+                        <DataGridTextColumn Header="Template" Binding="{Binding Template}" Width="*" />
+                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </TabItem>
+
+        <!-- Code Search Tab -->
+        <TabItem Header="Sql Code">
+            <DockPanel Margin="8">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                    <TextBox Text="{Binding CodeSearchTerm}"
+                             Watermark="Search code..."
+                             Width="300"
+                             Name="CodeSearchBox" />
+                    <Button Content="Search"
+                            Command="{Binding SearchCodeCommand}"
+                            MinWidth="80" />
+                </StackPanel>
+                <DataGrid Name="CodeResultsGrid"
+                          ItemsSource="{Binding CodeSearchResults}"
+                          IsReadOnly="True"
+                          AutoGenerateColumns="False"
+                          GridLinesVisibility="Horizontal"
+                          SelectionMode="Single">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" />
+                        <DataGridTextColumn Header="Template" Binding="{Binding Template}" Width="*" />
+                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </TabItem>
+    </TabControl>
+</Window>
