@@ -41,7 +41,11 @@ public class ProductQuencher
 
     private IDbConnection GetConnection(string dbName)
     {
-        var connectionString = ConnectionString.Build(_primaryServer, dbName, _config["Target:User"], _config["Target:Password"]);
+        var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
+        var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        var connectionString = string.IsNullOrEmpty(connectionStringOverride)
+            ? ConnectionString.Build(_primaryServer, dbName, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties)
+            : connectionStringOverride;
         var connection = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connectionString);
 
         try
@@ -132,7 +136,8 @@ public class ProductQuencher
         _progressLog.Info("Testing connection to configured server");
         try
         {
-            var connStr = ConnectionString.Build(_primaryServer, "master", _config["Target:User"], _config["Target:Password"]);
+            var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+            var connStr = ConnectionString.Build(_primaryServer, "master", _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
             using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connStr);
             conn.Open();
             using var cmd = conn.CreateCommand();

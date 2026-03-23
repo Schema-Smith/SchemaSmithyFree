@@ -40,11 +40,21 @@ public class SchemaTongs
     private IDbConnection GetConnection(string targetDb)
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
+        var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
+        if (!string.IsNullOrEmpty(connectionStringOverride))
+        {
+            var overrideConnection = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connectionStringOverride);
+            overrideConnection.Open();
+            return overrideConnection;
+        }
 
-        var connectionString = ConnectionString.Build(config["Source:Server"], targetDb, config["Source:User"], config["Source:Password"]);
+        var connectionProperties = ConnectionString.ReadProperties(config, "Source:ConnectionProperties");
+        if (connectionProperties.Count == 0)
+            connectionProperties = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
+
+        var connectionString = ConnectionString.Build(config["Source:Server"], targetDb, config["Source:User"], config["Source:Password"], config["Source:Port"], connectionProperties);
 
         var connection = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connectionString);
-
         connection.Open();
         return connection;
     }

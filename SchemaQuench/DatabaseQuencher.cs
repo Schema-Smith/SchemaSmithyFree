@@ -316,7 +316,11 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
     private IDbConnection GetConnection(bool fireInfoMessageEventOnUserErrors = true, bool ignoreInfoMessages = false)
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-        var connectionString = ConnectionString.Build(config["Target:Server"], dbName, config["Target:User"], config["Target:Password"]);
+        var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
+        var connectionProperties = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
+        var connectionString = string.IsNullOrEmpty(connectionStringOverride)
+            ? ConnectionString.Build(config["Target:Server"], dbName, config["Target:User"], config["Target:Password"], config["Target:Port"], connectionProperties)
+            : connectionStringOverride;
 
         var connection = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connectionString);
 
