@@ -1,9 +1,13 @@
 {
     "Source": {
         "Server": "",
+        "Port": "",
         "User": "", // Leave User and Password blank for Windows authentication
         "Password": "",
-        "Database": ""
+        "Database": "",
+        "ConnectionProperties": {
+            "TrustServerCertificate": "True"
+        }
     },
     "OutputPath": "",
     "Tables": [

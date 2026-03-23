@@ -1,9 +1,13 @@
 {
     "Source": {
         "Server": "",
+        "Port": "",
         "User": "", // Leave User and Password blank for Windows authentication
         "Password": "",
-        "Database": ""
+        "Database": "",
+        "ConnectionProperties": {
+            "TrustServerCertificate": "True"
+        }
     },
     // Name will default to the last folder in the product path if not provided.
     // Name is used for the new product if one is created and will not rename an existing one.

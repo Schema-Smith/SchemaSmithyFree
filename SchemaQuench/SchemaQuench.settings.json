@@ -1,8 +1,12 @@
 {
     "Target": {
         "Server": "",
+        "Port": "",
         "User": "", // Leave User and Password blank for Windows authentication
-        "Password": ""
+        "Password": "",
+        "ConnectionProperties": {
+            "TrustServerCertificate": "True"
+        }
     },
     "WhatIfONLY": false, // Log all changes without executing them
     "SchemaPackagePath": "",
