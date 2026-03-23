@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using SchemaHammer.ViewModels;
 
 namespace SchemaHammer.Views;
@@ -9,6 +10,7 @@ namespace SchemaHammer.Views;
 public partial class MainWindow : Window
 {
     private static readonly Cursor WaitCursor = new(StandardCursorType.Wait);
+    private SearchWindow? _searchWindow;
 
     public MainWindow()
     {
@@ -23,7 +25,66 @@ public partial class MainWindow : Window
         {
             RestoreWindowState(vm);
             vm.PropertyChanged += OnViewModelPropertyChanged;
+            vm.OpenSearchRequested += OnOpenSearchRequested;
         }
+    }
+
+    private void OnOpenSearchRequested(string defaultTab)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+
+        if (_searchWindow != null)
+        {
+            _searchWindow.Activate();
+            if (_searchWindow.DataContext is SearchViewModel searchVm)
+                searchVm.SelectedTabIndex = defaultTab == "Code" ? 1 : 0;
+            return;
+        }
+
+        var searchVm2 = new SearchViewModel(vm.ProductTreeService, defaultTab);
+        searchVm2.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(SearchViewModel.SelectedResultNode) && searchVm2.SelectedResultNode != null)
+            {
+                vm.SelectNodeFromSearch(searchVm2.SelectedResultNode);
+                searchVm2.SelectedResultNode = null;
+            }
+        };
+
+        _searchWindow = new SearchWindow { DataContext = searchVm2 };
+        _searchWindow.Closed += (s, e) => _searchWindow = null;
+        _searchWindow.Show(this);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.F)
+        {
+            if (IsFocusInSqlScriptEditor())
+                return; // SqlScriptEditorView's OnKeyDown will handle it
+
+            OnOpenSearchRequested("Tree");
+            e.Handled = true;
+        }
+        else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F)
+        {
+            OnOpenSearchRequested("Code");
+            e.Handled = true;
+        }
+    }
+
+    private bool IsFocusInSqlScriptEditor()
+    {
+        var focused = FocusManager?.GetFocusedElement() as Avalonia.Visual;
+        while (focused != null)
+        {
+            if (focused is SchemaHammer.Views.Editors.SqlScriptEditorView)
+                return true;
+            focused = focused.GetVisualParent() as Avalonia.Visual;
+        }
+        return false;
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

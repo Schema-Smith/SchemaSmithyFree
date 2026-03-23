@@ -359,4 +359,31 @@ public class MainWindowViewModelTests
 
         Assert.That(vm.TreeViewModel.SelectedNode, Is.Null);
     }
+
+    [Test]
+    public void SelectNodeFromSearch_SetsSelectedNode()
+    {
+        var vm = CreateViewModel();
+        var node = new TreeNodeModel { Text = "Found", Tag = "Table" };
+
+        vm.SelectNodeFromSearch(node);
+
+        Assert.That(vm.TreeViewModel.SelectedNode, Is.EqualTo(node));
+    }
+
+    [Test]
+    public void SelectNodeFromSearch_AddsToHistory()
+    {
+        var nav = new NavigationService();
+        var vm = CreateViewModel(nav: nav);
+
+        var node1 = new TreeNodeModel { Text = "First", Tag = "Table" };
+        var node2 = new TreeNodeModel { Text = "FromSearch", Tag = "Table" };
+
+        vm.TreeViewModel.SelectedNode = node1;
+        vm.SelectNodeFromSearch(node2);
+
+        Assert.That(nav.History, Has.Count.EqualTo(1));
+        Assert.That(nav.History[0], Is.EqualTo(node1));
+    }
 }

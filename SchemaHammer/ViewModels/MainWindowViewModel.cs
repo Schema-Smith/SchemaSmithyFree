@@ -182,6 +182,27 @@ public partial class MainWindowViewModel : ObservableObject
         LoadProductFromPath(path);
     }
 
+    public void SelectNodeFromSearch(TreeNodeModel node)
+    {
+        TreeViewModel.SelectedNode = node;
+    }
+
+    [RelayCommand]
+    private void SearchTree()
+    {
+        OpenSearchRequested?.Invoke("Tree");
+    }
+
+    [RelayCommand]
+    private void SearchCode()
+    {
+        OpenSearchRequested?.Invoke("Code");
+    }
+
+    public event Action<string>? OpenSearchRequested;
+
+    internal IProductTreeService ProductTreeService => _productTreeService;
+
     public void SaveWindowState(bool isMaximized, int x, int y, double width, double height)
     {
         Settings.IsMaximized = isMaximized;
