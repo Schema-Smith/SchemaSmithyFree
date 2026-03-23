@@ -164,4 +164,112 @@ public class SearchViewModelTests
         var vm = new SearchViewModel(CreateTreeService(), "Code");
         Assert.That(vm.SelectedTabIndex, Is.EqualTo(1));
     }
+
+    // --- Code Search Tests (use real ProductTreeService + ValidProduct) ---
+
+    private static readonly string ValidProductPath =
+        Path.GetFullPath(Path.Combine(TestContext.CurrentContext.TestDirectory,
+            "..", "..", "..", "..", "TestProducts", "ValidProduct"));
+
+    private static SearchViewModel CreateRealSearchViewModel()
+    {
+        var treeService = new ProductTreeService();
+        treeService.LoadProduct(ValidProductPath);
+        return new SearchViewModel(treeService);
+    }
+
+    [Test]
+    public void SearchCode_FindsTextInSqlScripts()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "CREATE";
+        vm.SearchCodeCommand.Execute(null);
+
+        var scriptResults = vm.CodeSearchResults.Where(r => r.Type == "Sql Script").ToList();
+        Assert.That(scriptResults, Is.Not.Empty);
+    }
+
+    [Test]
+    public void SearchCode_FindsTableByName()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "TestTable";
+        vm.SearchCodeCommand.Execute(null);
+
+        var tableResults = vm.CodeSearchResults.Where(r => r.Type == "Table").ToList();
+        Assert.That(tableResults, Is.Not.Empty);
+    }
+
+    [Test]
+    public void SearchCode_FindsColumnByName()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "ParentID";
+        vm.SearchCodeCommand.Execute(null);
+
+        var columnResults = vm.CodeSearchResults.Where(r => r.Type == "Column").ToList();
+        Assert.That(columnResults, Is.Not.Empty);
+    }
+
+    [Test]
+    public void SearchCode_FindsScriptTokenByKey()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "MainDB";
+        vm.SearchCodeCommand.Execute(null);
+
+        var tokenResults = vm.CodeSearchResults.Where(r => r.Type == "Script Token").ToList();
+        Assert.That(tokenResults, Is.Not.Empty);
+    }
+
+    [Test]
+    public void SearchCode_FindsScriptTokenByValue()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "TestMain";
+        vm.SearchCodeCommand.Execute(null);
+
+        var tokenResults = vm.CodeSearchResults.Where(r => r.Type == "Script Token").ToList();
+        Assert.That(tokenResults, Is.Not.Empty);
+    }
+
+    [Test]
+    public void SearchCode_EmptyTerm_ClearsResults()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "CREATE";
+        vm.SearchCodeCommand.Execute(null);
+        Assert.That(vm.CodeSearchResults, Is.Not.Empty);
+
+        vm.CodeSearchTerm = "";
+        vm.SearchCodeCommand.Execute(null);
+        Assert.That(vm.CodeSearchResults, Is.Empty);
+    }
+
+    [Test]
+    public void SearchCode_NoMatch_ReturnsEmpty()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "ZZZZNOTFOUND999";
+        vm.SearchCodeCommand.Execute(null);
+        Assert.That(vm.CodeSearchResults, Is.Empty);
+    }
+
+    [Test]
+    public void SearchCode_CaseInsensitive()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "testtable";
+        vm.SearchCodeCommand.Execute(null);
+        Assert.That(vm.CodeSearchResults, Is.Not.Empty);
+    }
+
+    [Test]
+    public void SearchCode_ProductLevelScripts_ShowProductTemplate()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "CREATE";
+        vm.SearchCodeCommand.Execute(null);
+        Assert.That(vm.CodeSearchResults.All(r => r.Template != null), Is.True);
+    }
 }

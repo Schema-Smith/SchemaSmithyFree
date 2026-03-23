@@ -8,6 +8,12 @@ public abstract partial class EditorBaseViewModel : ObservableObject
     public abstract string EditorTitle { get; }
     public TreeNodeModel? Node { get; protected set; }
 
+    /// <summary>
+    /// When set, the editor should switch to the Script Tokens tab and select this token.
+    /// Set by search/token navigation before switching nodes; cleared after use.
+    /// </summary>
+    public static string? PendingTokenName { get; set; }
+
     [ObservableProperty]
     private string _editorLabel = "";
 
