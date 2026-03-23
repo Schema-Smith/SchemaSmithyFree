@@ -132,4 +132,33 @@ public class ProductTreeServiceTests
             Assert.That(ivContainer.Children.All(c => c.Tag == "Indexed View"), Is.True);
         }
     }
+
+    [Test]
+    public void LoadProduct_PopulatesTemplatesDictionary()
+    {
+        var service = new ProductTreeService();
+        service.LoadProduct(ValidProductPath);
+        Assert.That(service.Templates, Is.Not.Empty);
+        Assert.That(service.Templates.ContainsKey("Main"), Is.True);
+        Assert.That(service.Templates["Main"].Name, Is.EqualTo("Main"));
+    }
+
+    [Test]
+    public void LoadProduct_TemplatesDictionary_ContainsAllTemplates()
+    {
+        var service = new ProductTreeService();
+        service.LoadProduct(ValidProductPath);
+        // ValidProduct has Main, Secondary, Bogus templates
+        Assert.That(service.Templates.Keys, Is.SupersetOf(new[] { "Main", "Secondary" }));
+    }
+
+    [Test]
+    public void ReloadProduct_ClearsAndRepopulatesTemplates()
+    {
+        var service = new ProductTreeService();
+        service.LoadProduct(ValidProductPath);
+        var firstCount = service.Templates.Count;
+        service.ReloadProduct();
+        Assert.That(service.Templates.Count, Is.EqualTo(firstCount));
+    }
 }

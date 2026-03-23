@@ -9,6 +9,7 @@ public class ProductTreeService : IProductTreeService
 {
     public Product? Product { get; private set; }
     public List<TreeNodeModel> SearchList { get; } = [];
+    public Dictionary<string, Template> Templates { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     private string _productPath = "";
 
@@ -16,6 +17,7 @@ public class ProductTreeService : IProductTreeService
     {
         _productPath = productPath;
         SearchList.Clear();
+        Templates.Clear();
 
         var productFile = Path.Combine(productPath, "Product.json");
         Product = JsonHelper.ProductLoad<Product>(productFile);
@@ -108,6 +110,7 @@ public class ProductTreeService : IProductTreeService
 
         var template = JsonHelper.ProductLoad<Template>(templateFile);
         var templateName = Path.GetFileName(templateDirPath);
+        Templates[templateName] = template;
 
         var templateNode = MakeNode(templateName, "Template", "template");
         templateNode.NodePath = templateFile;
