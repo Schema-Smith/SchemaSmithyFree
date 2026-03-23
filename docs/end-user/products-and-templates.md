@@ -54,6 +54,7 @@ Each template directory under `Templates/` contains a `Template.json` file that 
 | `BaselineValidationScript` | string | No | T-SQL validation per database before quench begins for that database. |
 | `ScriptTokens` | object | No | Key-value pairs that override matching product-level tokens for this template. See [Script Tokens — Template-Level Tokens](script-tokens.md#template-level-tokens). |
 | `UpdateFillFactor` | bool | No | Default: `true`. When `true`, the table quench process updates index fill factors to match the JSON definition. |
+| `IndexOnlyTableQuenches` | bool | No | Default: `false`. When `true`, the table quench only manages indexes — skips table creation, column changes, and foreign key management. See [Index-Only Templates](#index-only-templates) below. |
 
 ### Example
 
@@ -64,6 +65,16 @@ Each template directory under `Templates/` contains a `Template.json` file that 
     "VersionStampScript": "EXEC sys.sp_updateextendedproperty @name = N'ReleaseVersion', @value = '{{ReleaseVersion}}'"
 }
 ```
+
+### Index-Only Templates
+
+Set `"IndexOnlyTableQuenches": true` in Template.json to create a template that only manages indexes. The quench will skip table creation, column changes, and foreign key management — it only adds, modifies, and drops indexes, statistics, XML indexes, and full-text indexes.
+
+Use cases:
+- Adding indexes to a replicated database where replicating the source indexes doesn't fit the replica's query patterns
+- Managing indexes on a third-party database where you don't own the table schema
+
+Tables that don't exist are silently skipped — IndexOnly mode never creates tables.
 
 ---
 

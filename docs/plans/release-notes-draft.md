@@ -9,6 +9,7 @@
 
 ### New Features
 
+- **IndexOnlyTableQuenches:** New template-level setting that restricts quench to index management only — skips table/column/FK changes. Supports use cases like indexing replicated databases or third-party schemas.
 - **SchemaQuench config toggles:** New settings to control quench behavior without modifying Product.json:
   - `KindleTheForge` (default: true) — skip SchemaSmith helper installation when set to false
   - `UpdateTables` (default: true) — skip table structure changes when set to false

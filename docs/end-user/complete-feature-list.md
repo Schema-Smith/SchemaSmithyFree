@@ -154,6 +154,7 @@ Slots marked with "Retry Loop" use a dependency resolution loop -- scripts that 
 
 - **DropUnknownIndexes** -- When enabled, indexes that exist in the database but not in the package are dropped (drift cleanup)
 - **UpdateFillFactor** -- Control per template
+- **IndexOnlyTableQuenches** -- Template-level setting that restricts quench to index management only; skips table creation, column changes, and FK management. Tables that don't exist are silently skipped.
 - **ZIP package deployment** -- SchemaQuench can load schema packages directly from a `.zip` file
 - **Product and template validation scripts**
 - **Version stamp scripts** at product and template level

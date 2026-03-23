@@ -79,6 +79,12 @@ Applies schema packages to target SQL Server databases using state-based compari
 - `DropUnknownIndexes` removes indexes not defined in the schema package
 - Brings database back into fully managed desired state
 
+**Index-Only Mode:**
+- `IndexOnlyTableQuenches` template setting restricts quench to index management only
+- Skips table creation, column changes, and foreign key management
+- Only adds, modifies, and drops indexes, statistics, XML indexes, and full-text indexes
+- Tables that don't exist are silently skipped
+
 **Validation & Verification:**
 - Product-level validation script (runs once before any template)
 - Template-level baseline validation (per database)
