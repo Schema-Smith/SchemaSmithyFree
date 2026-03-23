@@ -398,4 +398,89 @@ IF OBJECT_ID('dbo.IVTest_Ownership', 'U') IS NULL
 
         conn.Close();
     }
+
+    [Test]
+    public void IndexOnlyChange_DoesNotRebuildView()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var product = $"IV IndexOnlyChange Test {uniqueId}";
+        var sourceTable = $"IVTest_IO_Source_{uniqueId}";
+        var viewName = $"vw_IO_Summary_{uniqueId}";
+        var clusteredIndex = $"UDX_{viewName}";
+        var firstNonClustered = $"IX_{viewName}_A";
+        var secondNonClustered = $"IX_{viewName}_B";
+
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        // Create source table in Test schema
+        cmd.CommandText = $@"
+IF SCHEMA_ID('Test') IS NULL EXEC('CREATE SCHEMA Test')
+IF OBJECT_ID('Test.{sourceTable}', 'U') IS NULL
+    CREATE TABLE Test.{sourceTable} (Id INT NOT NULL, Name VARCHAR(100) NOT NULL, Amount DECIMAL(10,2) NOT NULL,
+        CONSTRAINT PK_{sourceTable} PRIMARY KEY CLUSTERED (Id))";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        // Initial quench: let IndexedViewQuench create the view plus clustered + one nonclustered index
+        var json1 = $@"[{{
+            ""Schema"": ""Test"",
+            ""Name"": ""{viewName}"",
+            ""Definition"": ""SELECT Name, SUM(Amount) AS TotalAmount, COUNT_BIG(*) AS ItemCount FROM Test.{sourceTable} GROUP BY Name"",
+            ""Indexes"": [{{
+                ""Name"": ""{clusteredIndex}"",
+                ""Unique"": true,
+                ""Clustered"": true,
+                ""IndexColumns"": ""Name""
+            }}, {{
+                ""Name"": ""{firstNonClustered}"",
+                ""Unique"": false,
+                ""Clustered"": false,
+                ""IndexColumns"": ""TotalAmount""
+            }}]
+        }}]";
+        RunIndexedViewQuench(cmd, product, json1);
+
+        // Record the view's object_id before adding a third index
+        cmd.CommandText = $"SELECT OBJECT_ID('Test.{viewName}')";
+        var objectIdBefore = cmd.ExecuteScalar();
+        Assert.That(objectIdBefore, Is.Not.Null.And.Not.EqualTo(DBNull.Value), "View should exist after initial quench");
+
+        // Second quench: add a third index without changing the view definition
+        var json2 = $@"[{{
+            ""Schema"": ""Test"",
+            ""Name"": ""{viewName}"",
+            ""Definition"": ""SELECT Name, SUM(Amount) AS TotalAmount, COUNT_BIG(*) AS ItemCount FROM Test.{sourceTable} GROUP BY Name"",
+            ""Indexes"": [{{
+                ""Name"": ""{clusteredIndex}"",
+                ""Unique"": true,
+                ""Clustered"": true,
+                ""IndexColumns"": ""Name""
+            }}, {{
+                ""Name"": ""{firstNonClustered}"",
+                ""Unique"": false,
+                ""Clustered"": false,
+                ""IndexColumns"": ""TotalAmount""
+            }}, {{
+                ""Name"": ""{secondNonClustered}"",
+                ""Unique"": false,
+                ""Clustered"": false,
+                ""IndexColumns"": ""ItemCount""
+            }}]
+        }}]";
+        RunIndexedViewQuench(cmd, product, json2);
+
+        // View object_id must be unchanged — view was NOT rebuilt
+        cmd.CommandText = $"SELECT OBJECT_ID('Test.{viewName}')";
+        var objectIdAfter = cmd.ExecuteScalar();
+        Assert.That(objectIdAfter, Is.EqualTo(objectIdBefore), "View should not be rebuilt when only adding an index");
+
+        // New index must exist
+        cmd.CommandText = $"SELECT name FROM sys.indexes WHERE object_id = OBJECT_ID('Test.{viewName}') AND name = '{secondNonClustered}'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo(secondNonClustered), "New index should be present after quench");
+
+        conn.Close();
+    }
 }
