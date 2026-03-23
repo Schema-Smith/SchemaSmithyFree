@@ -253,4 +253,59 @@ public class SqlScriptEditorViewModelTests
         var vm = new SqlScriptEditorViewModel();
         Assert.That(vm.IsPreviewMode, Is.False);
     }
+
+    [Test]
+    public void ExtractTokenAtPosition_InsideToken_ReturnsTokenName()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        var text = "SELECT {{{MainDB}}}.dbo.Table1";
+        var result = vm.ExtractTokenAtPosition(text, 10); // inside "MainDB"
+
+        Assert.That(result, Is.EqualTo("MainDB"));
+    }
+
+    [Test]
+    public void ExtractTokenAtPosition_OutsideToken_ReturnsNull()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        var text = "SELECT {{{MainDB}}}.dbo.Table1";
+        var result = vm.ExtractTokenAtPosition(text, 2); // inside "SELECT"
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void ExtractTokenAtPosition_OnOpeningBraces_ReturnsTokenName()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        var text = "SELECT {{{MainDB}}}.dbo.Table1";
+        var result = vm.ExtractTokenAtPosition(text, 7); // on first {
+
+        Assert.That(result, Is.EqualTo("MainDB"));
+    }
+
+    [Test]
+    public void ExtractTokenAtPosition_OnClosingBraces_ReturnsTokenName()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        var text = "SELECT {{{MainDB}}}.dbo.Table1";
+        var result = vm.ExtractTokenAtPosition(text, 17); // on last }
+
+        Assert.That(result, Is.EqualTo("MainDB"));
+    }
+
+    [Test]
+    public void ExtractTokenAtPosition_EmptyText_ReturnsNull()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.ExtractTokenAtPosition("", 0), Is.Null);
+    }
+
+    [Test]
+    public void ExtractTokenAtPosition_NoTripleBraces_ReturnsNull()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        var text = "SELECT {{MainDB}}.dbo.Table1"; // double braces, not triple
+        Assert.That(vm.ExtractTokenAtPosition(text, 10), Is.Null);
+    }
 }

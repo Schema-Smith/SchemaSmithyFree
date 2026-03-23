@@ -223,7 +223,10 @@ public partial class MainWindowViewModel : ObservableObject
 
         var editor = _editorService.GetEditor(node);
         if (editor != null)
+        {
+            editor.NavigateToNode = targetNode => SelectNodeFromSearch(targetNode);
             CurrentEditor = editor;
+        }
 
         _settingsService.Settings.LastSelectedNodePath = node.FullTreePath;
     }

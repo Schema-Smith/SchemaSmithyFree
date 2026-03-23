@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using SchemaHammer.Models;
+using System;
 
 namespace SchemaHammer.ViewModels.Editors;
 
@@ -13,6 +14,12 @@ public abstract partial class EditorBaseViewModel : ObservableObject
     /// Set by search/token navigation before switching nodes; cleared after use.
     /// </summary>
     public static string? PendingTokenName { get; set; }
+
+    /// <summary>
+    /// Callback set by MainWindowViewModel to navigate to a specific tree node.
+    /// Used by token double-click navigation to jump to the token's definition.
+    /// </summary>
+    public Action<TreeNodeModel>? NavigateToNode { get; set; }
 
     [ObservableProperty]
     private string _editorLabel = "";

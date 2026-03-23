@@ -67,6 +67,86 @@ public partial class SqlScriptEditorViewModel : EditorBaseViewModel
         return content;
     }
 
+    internal string? ExtractTokenAtPosition(string text, int position)
+    {
+        if (string.IsNullOrEmpty(text) || position < 0 || position >= text.Length)
+            return null;
+
+        // Find the {{{ before or at the position (account for cursor being on braces).
+        // LastIndexOf startIndex is where to begin the backward search, so use position + 2 so
+        // that {{{ starting at exactly `position` (occupying position..position+2) is found.
+        var searchFrom = Math.Min(position + 2, text.Length - 1);
+        var openIdx = text.LastIndexOf("{{{", searchFrom, StringComparison.Ordinal);
+        if (openIdx < 0) return null;
+
+        var closeIdx = text.IndexOf("}}}", openIdx + 3, StringComparison.Ordinal);
+        if (closeIdx < 0) return null;
+
+        // Check position is within {{{ ... }}} range (inclusive of braces)
+        if (position < openIdx || position > closeIdx + 2) return null;
+
+        var tokenName = text.Substring(openIdx + 3, closeIdx - openIdx - 3).Trim();
+        return string.IsNullOrEmpty(tokenName) ? null : tokenName;
+    }
+
+    internal void NavigateToTokenDefinition(string tokenName)
+    {
+        if (NavigateToNode == null) return;
+
+        TreeNodeModel? templateNode = null;
+        TreeNodeModel? productNode = null;
+        var current = Node?.Parent;
+        while (current != null)
+        {
+            if (current.Tag == "Template" && templateNode == null)
+                templateNode = current;
+            if (current.Tag == "Product" || current.Parent == null)
+                productNode = current;
+            current = current.Parent;
+        }
+
+        // Check template tokens first (they override product)
+        if (templateNode != null && !string.IsNullOrEmpty(templateNode.NodePath))
+        {
+            try
+            {
+                var templateJsonPath = System.IO.Path.Combine(templateNode.NodePath, "Template.json");
+                var template = JsonHelper.Load<Schema.Domain.Template>(templateJsonPath);
+                if (template.ScriptTokens.ContainsKey(tokenName))
+                {
+                    EditorBaseViewModel.PendingTokenName = tokenName;
+                    NavigateToNode(templateNode);
+                    return;
+                }
+            }
+            catch { /* ignore */ }
+        }
+
+        // Fall back to product tokens
+        if (productNode != null && !string.IsNullOrEmpty(productNode.NodePath))
+        {
+            try
+            {
+                var product = JsonHelper.ProductLoad<Schema.Domain.Product>(
+                    System.IO.Path.Combine(productNode.NodePath, "Product.json"));
+                if (product.ScriptTokens.ContainsKey(tokenName))
+                {
+                    EditorBaseViewModel.PendingTokenName = tokenName;
+                    NavigateToNode(productNode);
+                    return;
+                }
+            }
+            catch { /* ignore */ }
+        }
+
+        // Token not found — navigate to template if available, else product
+        EditorBaseViewModel.PendingTokenName = tokenName;
+        if (templateNode != null)
+            NavigateToNode(templateNode);
+        else if (productNode != null)
+            NavigateToNode(productNode);
+    }
+
     internal Dictionary<string, string> CollectScriptTokens()
     {
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
