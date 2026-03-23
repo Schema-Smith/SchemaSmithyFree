@@ -26,6 +26,7 @@ public static class ForgeKindler
         KindleOneFile(command, "SchemaSmith.GenerateTableJson.sql");
         KindleOneFile(command, "SchemaSmith.IndexedViewQuench.sql");
         KindleOneFile(command, "SchemaSmith.GenerateIndexedViewJson.sql");
+        KindleOneFile(command, "SchemaSmith.IndexOnlyQuench.sql");
     }
 
     public static string GetParseTableJsonScript()
