@@ -308,4 +308,168 @@ public class SqlScriptEditorViewModelTests
         var text = "SELECT {{MainDB}}.dbo.Table1"; // double braces, not triple
         Assert.That(vm.ExtractTokenAtPosition(text, 10), Is.Null);
     }
+
+    [TearDown]
+    public void Cleanup()
+    {
+        EditorBaseViewModel.PendingTokenName = null;
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_WithTemplateToken_NavigatesToTemplate()
+    {
+        var templateDir = Path.Combine(ValidProductPath, "Templates", "Main");
+
+        var productNode = new TreeNodeModel
+        {
+            Text = "ValidProduct",
+            Tag = "Product",
+            NodePath = ValidProductPath
+        };
+        var templatesContainer = new TreeNodeModel
+        {
+            Text = "Templates",
+            Tag = "Templates",
+            Parent = productNode
+        };
+        var templateNode = new TreeNodeModel
+        {
+            Text = "Main",
+            Tag = "Template",
+            NodePath = Path.Combine(templateDir, "Template.json"),
+            Parent = templatesContainer
+        };
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "test.sql",
+            Tag = "Sql Script",
+            Parent = templateNode
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        TreeNodeModel? navigatedTo = null;
+        vm.NavigateToNode = node => navigatedTo = node;
+
+        // MainDB is a product-level token, should navigate to product
+        vm.NavigateToTokenDefinition("MainDB");
+
+        Assert.That(navigatedTo, Is.EqualTo(productNode));
+        Assert.That(EditorBaseViewModel.PendingTokenName, Is.EqualTo("MainDB"));
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_WithProductToken_NavigatesToProduct()
+    {
+        var productNode = new TreeNodeModel
+        {
+            Text = "ValidProduct",
+            Tag = "Product",
+            NodePath = ValidProductPath
+        };
+        var templatesContainer = new TreeNodeModel
+        {
+            Text = "Templates",
+            Tag = "Templates",
+            Parent = productNode
+        };
+        var templateNode = new TreeNodeModel
+        {
+            Text = "Main",
+            Tag = "Template",
+            NodePath = Path.Combine(ValidProductPath, "Templates", "Main", "Template.json"),
+            Parent = templatesContainer
+        };
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "test.sql",
+            Tag = "Sql Script",
+            Parent = templateNode
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        TreeNodeModel? navigatedTo = null;
+        vm.NavigateToNode = node => navigatedTo = node;
+
+        vm.NavigateToTokenDefinition("SecondaryDB");
+
+        Assert.That(navigatedTo, Is.Not.Null);
+        Assert.That(EditorBaseViewModel.PendingTokenName, Is.EqualTo("SecondaryDB"));
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_UnknownToken_StillNavigates()
+    {
+        var productNode = new TreeNodeModel
+        {
+            Text = "ValidProduct",
+            Tag = "Product",
+            NodePath = ValidProductPath
+        };
+        var templateNode = new TreeNodeModel
+        {
+            Text = "Main",
+            Tag = "Template",
+            NodePath = Path.Combine(ValidProductPath, "Templates", "Main", "Template.json"),
+            Parent = productNode
+        };
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "test.sql",
+            Tag = "Sql Script",
+            Parent = templateNode
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        TreeNodeModel? navigatedTo = null;
+        vm.NavigateToNode = node => navigatedTo = node;
+
+        vm.NavigateToTokenDefinition("NonExistentToken");
+
+        // Should still navigate — falls through to template node
+        Assert.That(navigatedTo, Is.Not.Null);
+        Assert.That(EditorBaseViewModel.PendingTokenName, Is.EqualTo("NonExistentToken"));
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_NoCallback_DoesNotThrow()
+    {
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "test.sql",
+            Tag = "Sql Script"
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+        // NavigateToNode is null — should return immediately
+
+        Assert.DoesNotThrow(() => vm.NavigateToTokenDefinition("MainDB"));
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_NoParentNodes_DoesNotNavigate()
+    {
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "orphan.sql",
+            Tag = "Sql Script"
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        TreeNodeModel? navigatedTo = null;
+        vm.NavigateToNode = node => navigatedTo = node;
+
+        vm.NavigateToTokenDefinition("MainDB");
+
+        // No template or product to navigate to
+        Assert.That(navigatedTo, Is.Null);
+    }
 }
