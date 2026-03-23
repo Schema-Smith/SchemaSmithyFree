@@ -97,4 +97,28 @@ public class TemplateEditorViewModelTests
 
         Assert.That(vm.Node, Is.SameAs(node));
     }
+
+    [Test]
+    public void ChangeNode_WithPendingTokenName_SetsSelectedTabIndex()
+    {
+        EditorBaseViewModel.PendingTokenName = "SomeToken";
+        var node = new TreeNodeModel
+        {
+            Text = "Main",
+            Tag = "Template",
+            NodePath = Path.Combine(ValidProductPath, "Templates", "Main", "Template.json")
+        };
+
+        var vm = new TemplateEditorViewModel();
+        vm.ChangeNode(node);
+
+        Assert.That(vm.SelectedTabIndex, Is.EqualTo(1));
+        Assert.That(EditorBaseViewModel.PendingTokenName, Is.Null);
+    }
+
+    [TearDown]
+    public void Cleanup()
+    {
+        EditorBaseViewModel.PendingTokenName = null;
+    }
 }

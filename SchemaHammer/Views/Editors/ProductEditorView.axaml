@@ -4,7 +4,7 @@
              xmlns:controls="using:SchemaHammer.Controls"
              x:Class="SchemaHammer.Views.Editors.ProductEditorView"
              x:DataType="vm:ProductEditorViewModel">
-    <TabControl>
+    <TabControl SelectedIndex="{Binding SelectedTabIndex}">
         <TabItem Header="Main">
             <ScrollViewer>
                 <StackPanel Spacing="8" Margin="8">
@@ -49,6 +49,7 @@
         </TabItem>
         <TabItem Header="Script Tokens">
             <DataGrid ItemsSource="{Binding ScriptTokens}"
+                      SelectedItem="{Binding SelectedScriptToken}"
                       IsReadOnly="True"
                       AutoGenerateColumns="False"
                       GridLinesVisibility="All"
