@@ -63,7 +63,7 @@ public static class CommandLineParser
 
     public static string ValueOfSwitch(string switchName, string defval = "")
     {
-        return ContainsSwitch(switchName) ? SwitchesAndValues[switchName].Trim('"', ' ') : defval;
+        return ContainsSwitch(switchName) ? SwitchesAndValues[switchName]?.Trim('"', ' ') : defval;
     }
 
     public static int IntValueOfSwitch(string switchName, int defval = -1)
