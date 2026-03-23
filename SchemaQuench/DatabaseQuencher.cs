@@ -82,51 +82,64 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                     var tableJson = template.TableSchema.Replace("'", "''");
                     var updateFillFactor = template.UpdateFillFactor ? "1" : "0";
 
-                    // Step 4: Parse JSON into temp tables once
-                    ProgressLog("  Parsing table JSON into temp tables");
-                    var parseJsonScript = ForgeKindler.GetParseTableJsonScript();
-                    command.CommandText = $"DECLARE @TableDefinitions NVARCHAR(MAX) = '{tableJson}', @UpdateFillFactor BIT = {updateFillFactor}\r\n{parseJsonScript}";
-                    _debugFileLocation = $"SchemaQuench - ParseJson {dbName}.sql";
-                    LogSqlScript(_debugFileLocation, command.CommandText);
-                    ExecuteNonQueryAndRethrowInfoMessageError(command);
-                    _debugFileLocation = "";
-
-                    // Step 5: MissingTableAndColumnQuench
-                    ProgressLog("  Quenching missing tables and columns");
-                    command.CommandText = $"EXEC [{dbName}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {whatIfOnly}";
-                    _debugFileLocation = $"SchemaQuench - MissingTableAndColumnQuench {dbName}.sql";
-                    LogSqlScript(_debugFileLocation, command.CommandText);
-                    ExecuteNonQueryAndRethrowInfoMessageError(command);
-                    _debugFileLocation = "";
-
-                    // Step 6: Object Quench (second opportunity — Objects slot only)
-                    if (whatIfOnly != "1")
+                    if (template.IndexOnlyTableQuenches)
                     {
-                        if (template.ObjectScripts.Any(s => !s.HasBeenQuenched))
-                        {
-                            ProgressLog("  Quenching object scripts (post missing tables)");
-                            QuenchDatabaseObjects(objectsCommand, template.ObjectScripts, false);
-                        }
-                    }
-
-                    // Step 7: Template Before Scripts (migration scripts)
-                    if (whatIfOnly != "1")
-                    {
-                        ProgressLog("  Quenching before database scripts");
-                        QuenchTemplateScripts(command, "Before", template.BeforeScripts);
+                        // Index-only mode: skip table/column/FK changes, only manage indexes
+                        ProgressLog("  Quenching indexes only (IndexOnlyTableQuenches mode)");
+                        command.CommandText = $"EXEC [{dbName}].SchemaSmith.IndexOnlyQuench @ProductName = '{productName}', @TableDefinitions = '{tableJson}', @WhatIf = {whatIfOnly}, @DropUnknownIndexes = {dropUnknownIndexes}, @UpdateFillFactor = {updateFillFactor}";
+                        _debugFileLocation = $"SchemaQuench - IndexOnlyQuench {dbName}.sql";
+                        LogSqlScript(_debugFileLocation, command.CommandText);
+                        ExecuteNonQueryAndRethrowInfoMessageError(command);
+                        _debugFileLocation = "";
                     }
                     else
                     {
-                        WhatIfLogTemplateScripts(command, "Before", template.BeforeScripts);
-                    }
+                        // Step 4: Parse JSON into temp tables once
+                        ProgressLog("  Parsing table JSON into temp tables");
+                        var parseJsonScript = ForgeKindler.GetParseTableJsonScript();
+                        command.CommandText = $"DECLARE @TableDefinitions NVARCHAR(MAX) = '{tableJson}', @UpdateFillFactor BIT = {updateFillFactor}\r\n{parseJsonScript}";
+                        _debugFileLocation = $"SchemaQuench - ParseJson {dbName}.sql";
+                        LogSqlScript(_debugFileLocation, command.CommandText);
+                        ExecuteNonQueryAndRethrowInfoMessageError(command);
+                        _debugFileLocation = "";
 
-                    // Step 8: ModifiedTableQuench
-                    ProgressLog("  Quenching modified tables");
-                    command.CommandText = $"EXEC [{dbName}].SchemaSmith.ModifiedTableQuench @ProductName = '{productName}', @WhatIf = {whatIfOnly}, @DropUnknownIndexes = {dropUnknownIndexes}, @DropTablesRemovedFromProduct = {(dropTablesRemovedFromProduct ? "1" : "0")}";
-                    _debugFileLocation = $"SchemaQuench - ModifiedTableQuench {dbName}.sql";
-                    LogSqlScript(_debugFileLocation, command.CommandText);
-                    ExecuteNonQueryAndRethrowInfoMessageError(command);
-                    _debugFileLocation = "";
+                        // Step 5: MissingTableAndColumnQuench
+                        ProgressLog("  Quenching missing tables and columns");
+                        command.CommandText = $"EXEC [{dbName}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {whatIfOnly}";
+                        _debugFileLocation = $"SchemaQuench - MissingTableAndColumnQuench {dbName}.sql";
+                        LogSqlScript(_debugFileLocation, command.CommandText);
+                        ExecuteNonQueryAndRethrowInfoMessageError(command);
+                        _debugFileLocation = "";
+
+                        // Step 6: Object Quench (second opportunity — Objects slot only)
+                        if (whatIfOnly != "1")
+                        {
+                            if (template.ObjectScripts.Any(s => !s.HasBeenQuenched))
+                            {
+                                ProgressLog("  Quenching object scripts (post missing tables)");
+                                QuenchDatabaseObjects(objectsCommand, template.ObjectScripts, false);
+                            }
+                        }
+
+                        // Step 7: Template Before Scripts (migration scripts)
+                        if (whatIfOnly != "1")
+                        {
+                            ProgressLog("  Quenching before database scripts");
+                            QuenchTemplateScripts(command, "Before", template.BeforeScripts);
+                        }
+                        else
+                        {
+                            WhatIfLogTemplateScripts(command, "Before", template.BeforeScripts);
+                        }
+
+                        // Step 8: ModifiedTableQuench
+                        ProgressLog("  Quenching modified tables");
+                        command.CommandText = $"EXEC [{dbName}].SchemaSmith.ModifiedTableQuench @ProductName = '{productName}', @WhatIf = {whatIfOnly}, @DropUnknownIndexes = {dropUnknownIndexes}, @DropTablesRemovedFromProduct = {(dropTablesRemovedFromProduct ? "1" : "0")}";
+                        _debugFileLocation = $"SchemaQuench - ModifiedTableQuench {dbName}.sql";
+                        LogSqlScript(_debugFileLocation, command.CommandText);
+                        ExecuteNonQueryAndRethrowInfoMessageError(command);
+                        _debugFileLocation = "";
+                    }
 
                     // Step 9: Object Quench (third opportunity — Objects slot only)
                     if (whatIfOnly != "1")
@@ -153,12 +166,15 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                     }
 
                     // Step 11: MissingIndexesAndConstraintsQuench
-                    ProgressLog("  Quenching missing indexes and constraints");
-                    command.CommandText = $"EXEC [{dbName}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{productName}', @WhatIf = {whatIfOnly}";
-                    _debugFileLocation = $"SchemaQuench - MissingIndexesAndConstraintsQuench {dbName}.sql";
-                    LogSqlScript(_debugFileLocation, command.CommandText);
-                    ExecuteNonQueryAndRethrowInfoMessageError(command);
-                    _debugFileLocation = "";
+                    if (!template.IndexOnlyTableQuenches)
+                    {
+                        ProgressLog("  Quenching missing indexes and constraints");
+                        command.CommandText = $"EXEC [{dbName}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{productName}', @WhatIf = {whatIfOnly}";
+                        _debugFileLocation = $"SchemaQuench - MissingIndexesAndConstraintsQuench {dbName}.sql";
+                        LogSqlScript(_debugFileLocation, command.CommandText);
+                        ExecuteNonQueryAndRethrowInfoMessageError(command);
+                        _debugFileLocation = "";
+                    }
 
                     // Step 12: AfterTablesScripts (migration scripts)
                     if (whatIfOnly != "1")
@@ -204,12 +220,15 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                     }
 
                     // Step 15: ForeignKeyQuench
-                    ProgressLog("  Quenching foreign keys");
-                    command.CommandText = $"EXEC [{dbName}].SchemaSmith.ForeignKeyQuench @ProductName = '{productName}', @WhatIf = {whatIfOnly}";
-                    _debugFileLocation = $"SchemaQuench - ForeignKeyQuench {dbName}.sql";
-                    LogSqlScript(_debugFileLocation, command.CommandText);
-                    ExecuteNonQueryAndRethrowInfoMessageError(command);
-                    _debugFileLocation = "";
+                    if (!template.IndexOnlyTableQuenches)
+                    {
+                        ProgressLog("  Quenching foreign keys");
+                        command.CommandText = $"EXEC [{dbName}].SchemaSmith.ForeignKeyQuench @ProductName = '{productName}', @WhatIf = {whatIfOnly}";
+                        _debugFileLocation = $"SchemaQuench - ForeignKeyQuench {dbName}.sql";
+                        LogSqlScript(_debugFileLocation, command.CommandText);
+                        ExecuteNonQueryAndRethrowInfoMessageError(command);
+                        _debugFileLocation = "";
+                    }
 
                     // Step 16: Indexed Views
                     if (template.IndexedViews.Count > 0)
