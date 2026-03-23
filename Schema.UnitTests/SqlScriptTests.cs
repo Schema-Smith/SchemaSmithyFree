@@ -31,7 +31,7 @@ public class SqlScriptTests
     [Test]
     public void ShouldLoadSqlScriptSuccessfully()
     {
-        const string filePath = @"C:\scripts\Setup.sql";
+        var filePath = "scripts/Setup.sql";
         const string sqlContent = "SELECT 1\nGO\nSELECT 2\nGO";
 
         var mockFileWrapper = Substitute.For<IFile>();
@@ -61,7 +61,7 @@ public class SqlScriptTests
     [Test]
     public void ShouldWrapExceptionWithFilePathWhenSqlParsingFails()
     {
-        const string filePath = @"C:\scripts\Broken.sql";
+        var filePath = "scripts/Broken.sql";
         // Unterminated string — will cause SplitIntoBatches to throw
         const string brokenSql = "DECLARE @x VARCHAR(100) = '\nGO";
 
@@ -94,7 +94,7 @@ public class SqlScriptTests
     [Test]
     public void ShouldLoadScriptWithSingleBatch()
     {
-        const string filePath = @"C:\scripts\Single.sql";
+        var filePath = "scripts/Single.sql";
         const string sqlContent = "CREATE TABLE dbo.Test (Id INT)";
 
         var mockFileWrapper = Substitute.For<IFile>();
@@ -117,7 +117,7 @@ public class SqlScriptTests
     public void ShouldWrapExceptionWithFilePathWhenReadAllTextFails()
     {
         // Exercises the catch block when the IO layer throws rather than the SQL parser
-        const string filePath = @"C:\scripts\Unreadable.sql";
+        var filePath = "scripts/Unreadable.sql";
 
         var mockFileWrapper = Substitute.For<IFile>();
         mockFileWrapper.Exists(filePath).Returns(true);
