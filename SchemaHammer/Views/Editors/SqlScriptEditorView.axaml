@@ -23,7 +23,10 @@
             </DockPanel>
         </Border>
 
+        <!-- Find Bar -->
+        <controls:FindBarControl DockPanel.Dock="Top" Name="FindBar" />
+
         <!-- SQL Editor fills remaining space -->
-        <controls:SqlEditorControl Text="{Binding DisplayContent}" />
+        <controls:SqlEditorControl Text="{Binding DisplayContent}" Name="SqlEditor" />
     </DockPanel>
 </UserControl>
