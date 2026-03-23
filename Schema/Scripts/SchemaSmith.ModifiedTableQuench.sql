@@ -130,6 +130,9 @@ BEGIN TRY
          CAST(CASE WHEN cc.[definition] IS NOT NULL OR RTRIM(ISNULL([ComputedExpression], '')) <> ''
                      OR (ident.column_id IS NULL AND [DataType] LIKE '%IDENTITY%') -- switching to identity... requires drop and recreate column
                    THEN 1 ELSE 0 END AS BIT) AS MustDropAndRecreate,
+         CAST(CASE WHEN (ident.column_id IS NOT NULL AND [DataType] NOT LIKE '%IDENTITY%'
+                           AND RTRIM(ISNULL([ComputedExpression], '')) = '') -- identity removal (data-preserving swap)
+                  THEN 1 ELSE 0 END AS BIT) AS MustSwapColumn,
          CAST(0 AS BIT) AS DropOnly
     INTO #ColumnChanges
     FROM #Tables T WITH (NOLOCK)
@@ -174,11 +177,11 @@ BEGIN TRY
 
   
   RAISERROR('Detect Computed Columns Impacted by Other Column Changes', 10, 100) WITH NOWAIT
-  INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, [DropOnly])
-    SELECT C.[Schema], C.[TableName], c.[ColumnName], 
-           [ColumnScript] = 'AS (' + ComputedExpression + ')' + CASE WHEN c.[Persisted] = 1 THEN ' PERSISTED' ELSE '' END, 
+  INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, MustSwapColumn, [DropOnly])
+    SELECT C.[Schema], C.[TableName], c.[ColumnName],
+           [ColumnScript] = 'AS (' + ComputedExpression + ')' + CASE WHEN c.[Persisted] = 1 THEN ' PERSISTED' ELSE '' END,
            [SpecialColumnScript] = '',
-           MustDropAndRecreate = CAST(1 AS BIT), [DropOnly] = CAST(0 AS BIT)
+           MustDropAndRecreate = CAST(1 AS BIT), MustSwapColumn = CAST(0 AS BIT), [DropOnly] = CAST(0 AS BIT)
       FROM #ColumnChanges cc WITH (NOLOCK)
       JOIN sys.computed_columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
                                                 AND sc.[definition] LIKE '%' + SchemaSmith.fn_StripBracketWrapping(cc.ColumnName) + '%'
@@ -188,8 +191,8 @@ BEGIN TRY
       WHERE NOT EXISTS (SELECT * FROM #ColumnChanges cc2 WITH (NOLOCK) WHERE cc2.[Schema] = cc.[Schema] AND cc2.[TableName] = cc.[TableName] AND cc2.[ColumnName] = cc.[ColumnName])
   
   RAISERROR('Detect Column Drops', 10, 100) WITH NOWAIT
-  INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, [DropOnly])
-    SELECT t.[Schema], [TableName] = t.[Name], [ColumnName] = '[' + COLUMN_NAME + ']', '', '', 0, 1
+  INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, MustSwapColumn, [DropOnly])
+    SELECT t.[Schema], [TableName] = t.[Name], [ColumnName] = '[' + COLUMN_NAME + ']', '', '', 0, 0, 1
       FROM #Tables t WITH (NOLOCK)
       JOIN INFORMATION_SCHEMA.COLUMNS WITH (NOLOCK) ON TABLE_SCHEMA = SchemaSmith.fn_StripBracketWrapping(t.[Schema])
                                                    AND TABLE_NAME = SchemaSmith.fn_StripBracketWrapping(t.[Name]) 
@@ -604,7 +607,35 @@ BEGIN TRY
                                   'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS ' + fc.CheckName + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #ChecksToDropForChanges fc WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
+  RAISERROR('Swap Columns Requiring Data-Preserving Replacement', 10, 100) WITH NOWAIT
+  DECLARE @v_SwapSchema NVARCHAR(256), @v_SwapTable NVARCHAR(256), @v_SwapColumn NVARCHAR(256), @v_SwapColumnScript NVARCHAR(MAX)
+  DECLARE swap_cursor CURSOR LOCAL FAST_FORWARD FOR
+    SELECT cc.[Schema], cc.[TableName], SchemaSmith.fn_StripBracketWrapping(cc.ColumnName), cc.ColumnScript
+      FROM #ColumnChanges cc WITH (NOLOCK)
+      WHERE cc.MustSwapColumn = 1
+  OPEN swap_cursor
+  FETCH NEXT FROM swap_cursor INTO @v_SwapSchema, @v_SwapTable, @v_SwapColumn, @v_SwapColumnScript
+  WHILE @@FETCH_STATUS = 0
+  BEGIN
+    DECLARE @v_TempColName NVARCHAR(256) = @v_SwapColumn + '_swap_temp'
+    -- Add temp column as nullable (so it can be added to a table with rows), then copy/drop/rename in separate EXEC to avoid metadata visibility issues
+    DECLARE @v_NullableScript NVARCHAR(MAX) = REPLACE(@v_SwapColumnScript, ' NOT NULL', ' NULL')
+    SET @v_SQL = 'RAISERROR(''  Swapping column ' + @v_SwapSchema + '.' + @v_SwapTable + '.[' + @v_SwapColumn + '] (data-preserving identity removal)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                 'ALTER TABLE ' + @v_SwapSchema + '.' + @v_SwapTable + ' ADD [' + @v_TempColName + '] ' + @v_NullableScript + ';'
+    IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+    SET @v_SQL = 'UPDATE ' + @v_SwapSchema + '.' + @v_SwapTable + ' SET [' + @v_TempColName + '] = [' + @v_SwapColumn + '];' + CHAR(13) + CHAR(10) +
+                 'ALTER TABLE ' + @v_SwapSchema + '.' + @v_SwapTable + ' DROP COLUMN [' + @v_SwapColumn + '];' + CHAR(13) + CHAR(10) +
+                 'EXEC sp_rename ''' + SchemaSmith.fn_StripBracketWrapping(@v_SwapSchema) + '.' + SchemaSmith.fn_StripBracketWrapping(@v_SwapTable) + '.[' + @v_TempColName + ']'', ''' + @v_SwapColumn + ''', ''COLUMN'';' + CHAR(13) + CHAR(10) +
+                 CASE WHEN @v_SwapColumnScript LIKE '%NOT NULL%'
+                      THEN 'ALTER TABLE ' + @v_SwapSchema + '.' + @v_SwapTable + ' ALTER COLUMN [' + @v_SwapColumn + '] ' + @v_SwapColumnScript + ';'
+                      ELSE '' END
+    IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+    FETCH NEXT FROM swap_cursor INTO @v_SwapSchema, @v_SwapTable, @v_SwapColumn, @v_SwapColumnScript
+  END
+  CLOSE swap_cursor
+  DEALLOCATE swap_cursor
+
   RAISERROR('Drop Modified Computed Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
@@ -800,6 +831,7 @@ BEGIN TRY
                                   CASE WHEN RTRIM([SpecialColumnScript]) <> '' THEN [SpecialColumnScript] ELSE [ColumnScript] END + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #ColumnChanges cc WITH (NOLOCK)
         WHERE [MustDropAndRecreate] = 0
+          AND [MustSwapColumn] = 0
           AND [DropOnly] = 0
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   

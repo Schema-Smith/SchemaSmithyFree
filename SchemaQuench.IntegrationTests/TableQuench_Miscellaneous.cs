@@ -381,6 +381,24 @@ SELECT f.delete_referential_action, f.update_referential_action
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldRemoveIdentityFromExistingColumn()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        // Verify identity was removed
+        Assert.That(GetColumnDataType(cmd, "RemoveIdentityFromColumn", "Column1"), Is.EqualTo("INT"));
+
+        // Verify data was preserved
+        cmd.CommandText = "SELECT COUNT(*) FROM dbo.RemoveIdentityFromColumn";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(2));
+
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -434,6 +452,9 @@ EXEC sp_addextendedproperty @name = N'ProductName', @value = 'OtherProduct', @le
 --FK Action Type Tests
 CREATE TABLE dbo.FKActionParent (Id INT NOT NULL, CONSTRAINT PK_FKActionParent PRIMARY KEY (Id))
 CREATE TABLE dbo.FKActionChild (Id INT NOT NULL, ParentId INT NULL)
+--TableQuench_ShouldRemoveIdentityFromExistingColumn
+CREATE TABLE dbo.RemoveIdentityFromColumn (Column1 INT IDENTITY(1,1) NOT NULL, Column2 VARCHAR(50) NOT NULL)
+INSERT dbo.RemoveIdentityFromColumn (Column2) VALUES ('Row1'), ('Row2')
 ";
         cmd.CommandTimeout = 300;
         cmd.ExecuteNonQuery();
@@ -663,6 +684,22 @@ CREATE TABLE dbo.FKActionChild (Id INT NOT NULL, ParentId INT NULL)
                         "RelatedColumns": "[Id]",
                         "DeleteAction": "CASCADE",
                         "UpdateAction": "SET NULL"
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[RemoveIdentityFromColumn]",
+                "Columns": [
+                    {
+                      "Name": "[Column1]",
+                      "DataType": "INT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[Column2]",
+                      "DataType": "VARCHAR(50)",
+                      "Nullable": false
                     }
                 ]
             }
