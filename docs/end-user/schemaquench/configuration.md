@@ -19,8 +19,12 @@ SchemaQuench reads its configuration from multiple sources, merged in the follow
 {
     "Target": {
         "Server": "",
+        "Port": "",
         "User": "",
-        "Password": ""
+        "Password": "",
+        "ConnectionProperties": {
+            "TrustServerCertificate": "True"
+        }
     },
     "WhatIfONLY": false,
     "SchemaPackagePath": "",
@@ -41,8 +45,10 @@ SchemaQuench reads its configuration from multiple sources, merged in the follow
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `Target:Server` | string | _(required)_ | SQL Server instance name (e.g., `"myserver"`, `"myserver\\SQLEXPRESS"`, `"myserver,1433"`) |
+| `Target:Port` | string | _(empty)_ | SQL Server port number. When provided, appended to the server as `server,port`. The `server,port` format in `Server` is also supported. |
 | `Target:User` | string | _(empty)_ | SQL Server login. When blank, Windows authentication is used. |
 | `Target:Password` | string | _(empty)_ | SQL Server password. When blank, Windows authentication is used. |
+| `Target:ConnectionProperties` | object | _(empty)_ | Arbitrary key-value pairs appended to the connection string. See [Connection Properties](#connection-properties) below. |
 
 ### Behavior
 
@@ -71,8 +77,10 @@ Configuration keys can be overridden using environment variables. For the genera
 | Configuration Key | SmithySettings_ Variable |
 |---|---|
 | `Target:Server` | `SmithySettings_Target__Server` |
+| `Target:Port` | `SmithySettings_Target__Port` |
 | `Target:User` | `SmithySettings_Target__User` |
 | `Target:Password` | `SmithySettings_Target__Password` |
+| `Target:ConnectionProperties:<name>` | `SmithySettings_Target__ConnectionProperties__<name>` |
 | `WhatIfONLY` | `SmithySettings_WhatIfONLY` |
 | `SchemaPackagePath` | `SmithySettings_SchemaPackagePath` |
 | `KindleTheForge` | `SmithySettings_KindleTheForge` |
@@ -119,7 +127,47 @@ SchemaQuench connects to SQL Server using the `Target` settings. The authenticat
 - **Windows authentication** (default) — Used when `User` and `Password` are both blank. The connection uses the identity of the account running SchemaQuench.
 - **SQL Server authentication** — Used when both `User` and `Password` are provided.
 
-All connections are established with `TrustServerCertificate` enabled.
+### Connection Properties
+
+`Target:ConnectionProperties` accepts arbitrary key-value pairs that are appended to the connection string. This allows you to configure any ADO.NET SQL Server connection string keyword.
+
+```json
+"Target": {
+    "Server": "myserver",
+    "ConnectionProperties": {
+        "TrustServerCertificate": "True",
+        "Encrypt": "True",
+        "ApplicationIntent": "ReadWrite"
+    }
+}
+```
+
+Common properties:
+
+| Property | Example Value | Description |
+|---|---|---|
+| `TrustServerCertificate` | `"True"` | Trust the server's SSL certificate without validation. Recommended for local and dev environments. |
+| `Encrypt` | `"True"` | Enforce an encrypted connection. |
+| `ApplicationIntent` | `"ReadWrite"` | Direct the connection to a primary replica in an availability group. |
+| `Column Encryption Setting` | `"Enabled"` | Enable Always Encrypted column decryption. |
+
+Individual properties can also be overridden via environment variables:
+
+```bash
+export SmithySettings_Target__ConnectionProperties__TrustServerCertificate="True"
+```
+
+> **Breaking change from previous versions:** Earlier releases hardcoded `TrustServerCertificate=True` and `ApplicationIntent=ReadWrite` on every connection. These values are now configurable. The sample settings file includes `TrustServerCertificate: True` as a recommended default. If you relied on `ApplicationIntent=ReadWrite`, add it explicitly to `ConnectionProperties`.
+
+### --ConnectionString Override
+
+The `--ConnectionString` switch bypasses all `Target` settings and passes the provided value directly to the SQL Server driver. Use this for scenarios where you need full control over the connection string, such as CI pipelines or environments where individual fields are inconvenient.
+
+```
+SchemaQuench --ConnectionString:"data source=myserver;Initial Catalog=mydb;User ID=sa;Password=secret;TrustServerCertificate=True;"
+```
+
+When `--ConnectionString` is provided, `Target:Server`, `Target:User`, `Target:Password`, `Target:Port`, and `Target:ConnectionProperties` are all ignored.
 
 ---
 

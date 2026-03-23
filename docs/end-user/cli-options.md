@@ -34,6 +34,7 @@ These switches are recognized by all three CLI tools.
 | `--help` | `-h`, `-?` | Print command-line options, then exit. |
 | `--ConfigFile:<path>` | | Path to the configuration file. Overrides the default `{ToolName}.settings.json` in the current working directory. |
 | `--LogPath:<path>` | | Directory for log output and backup directories. Defaults to the executable directory. |
+| `--ConnectionString:<value>` | | Full ADO.NET connection string. Overrides all connection settings (`Server`, `Port`, `User`, `Password`, `ConnectionProperties`). |
 
 ---
 
@@ -47,4 +48,6 @@ SchemaTongs --ConfigFile:extract-config.json
 SchemaQuench --version
 
 SchemaTongs --help
+
+SchemaQuench --ConnectionString:"data source=myserver;Initial Catalog=mydb;User ID=sa;Password=secret;TrustServerCertificate=True;"
 ```
