@@ -272,4 +272,81 @@ public class SearchViewModelTests
         vm.SearchCodeCommand.Execute(null);
         Assert.That(vm.CodeSearchResults.All(r => r.Template != null), Is.True);
     }
+
+    [Test]
+    public void SelectCodeResult_TokenResult_SetsPendingTokenName()
+    {
+        var node = new TreeNodeModel { Text = "Main", Tag = "Template" };
+        var result = new SearchResultItem
+        {
+            Name = "{{{MainDB}}}",
+            Type = "Script Token",
+            Node = node
+        };
+
+        var vm = new SearchViewModel(CreateTreeService());
+        vm.SelectCodeResultCommand.Execute(result);
+
+        Assert.That(SchemaHammer.ViewModels.Editors.EditorBaseViewModel.PendingTokenName, Is.EqualTo("MainDB"));
+        Assert.That(vm.SelectedResultNode, Is.SameAs(node));
+        SchemaHammer.ViewModels.Editors.EditorBaseViewModel.PendingTokenName = null;
+    }
+
+    [Test]
+    public void SelectCodeResult_NonTokenResult_DoesNotSetPendingTokenName()
+    {
+        var node = new TreeNodeModel { Text = "TestTable", Tag = "Table" };
+        var result = new SearchResultItem
+        {
+            Name = "TestTable",
+            Type = "Table",
+            Node = node
+        };
+
+        var vm = new SearchViewModel(CreateTreeService());
+        SchemaHammer.ViewModels.Editors.EditorBaseViewModel.PendingTokenName = null;
+        vm.SelectCodeResultCommand.Execute(result);
+
+        Assert.That(SchemaHammer.ViewModels.Editors.EditorBaseViewModel.PendingTokenName, Is.Null);
+        Assert.That(vm.SelectedResultNode, Is.SameAs(node));
+    }
+
+    [Test]
+    public void SelectCodeResult_NullItem_DoesNothing()
+    {
+        var vm = new SearchViewModel(CreateTreeService());
+        vm.SelectCodeResultCommand.Execute(null);
+        Assert.That(vm.SelectedResultNode, Is.Null);
+    }
+
+    [Test]
+    public void SelectCodeResult_NullNode_DoesNothing()
+    {
+        var result = new SearchResultItem { Name = "Test", Type = "Table", Node = null };
+        var vm = new SearchViewModel(CreateTreeService());
+        vm.SelectCodeResultCommand.Execute(result);
+        Assert.That(vm.SelectedResultNode, Is.Null);
+    }
+
+    [Test]
+    public void SearchCode_FindsIndexByName()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "PK_";
+        vm.SearchCodeCommand.Execute(null);
+
+        var indexResults = vm.CodeSearchResults.Where(r => r.Type == "Index").ToList();
+        Assert.That(indexResults, Is.Not.Empty);
+    }
+
+    [Test]
+    public void SearchCode_FindsForeignKeyByName()
+    {
+        var vm = CreateRealSearchViewModel();
+        vm.CodeSearchTerm = "FK_";
+        vm.SearchCodeCommand.Execute(null);
+
+        var fkResults = vm.CodeSearchResults.Where(r => r.Type == "Foreign Key").ToList();
+        Assert.That(fkResults, Is.Not.Empty);
+    }
 }
