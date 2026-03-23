@@ -17,7 +17,8 @@ public class GenerateIndexedViewJsonTests
     public void OneTimeSetUp()
     {
         var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", null);
-        _connectionString = ConnectionString.Build(config["Source:Server"], "master", config["Source:User"], config["Source:Password"]);
+        var connectionProperties = ConnectionString.ReadProperties(config, "Source:ConnectionProperties");
+        _connectionString = ConnectionString.Build(config["Source:Server"], "master", config["Source:User"], config["Source:Password"], config["Source:Port"], connectionProperties);
         _testDb = GenerateUniqueDBName("GenIVJsonTest");
         CreateTestDatabase();
     }

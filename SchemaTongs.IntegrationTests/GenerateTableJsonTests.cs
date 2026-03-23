@@ -21,12 +21,13 @@ public class GenerateTableJsonTests
     public void OneTimeSetup()
     {
         var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", null);
-        _connectionString = ConnectionString.Build(config["Source:Server"], "master", config["Source:User"], config["Source:Password"]);
+        var connectionProperties = ConnectionString.ReadProperties(config, "Source:ConnectionProperties");
+        _connectionString = ConnectionString.Build(config["Source:Server"], "master", config["Source:User"], config["Source:Password"], config["Source:Port"], connectionProperties);
         _integrationDb = GenerateUniqueDBName("GenerateTableJson");
 
         CreateTestDatabases();
 
-        _testConnectionString = ConnectionString.Build(config["Source:Server"], _integrationDb, config["Source:User"], config["Source:Password"]);
+        _testConnectionString = ConnectionString.Build(config["Source:Server"], _integrationDb, config["Source:User"], config["Source:Password"], config["Source:Port"], connectionProperties);
     }
 
     [Test]

@@ -20,7 +20,8 @@ public class DataTongsTests
     public void OneTimeSetup()
     {
         var config = ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", null);
-        _connectionString = ConnectionString.Build(config["Source:Server"], "master", config["Source:User"], config["Source:Password"]);
+        var connectionProperties = ConnectionString.ReadProperties(config, "Source:ConnectionProperties");
+        _connectionString = ConnectionString.Build(config["Source:Server"], "master", config["Source:User"], config["Source:Password"], config["Source:Port"], connectionProperties);
         _integrationDb = GenerateUniqueDBName("DataTongs");
 
         CreateTestDatabases();

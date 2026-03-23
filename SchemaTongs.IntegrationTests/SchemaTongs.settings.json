@@ -1,9 +1,12 @@
-﻿{
+{
     "Source": {
         "Server": ".,1440",
         "User": "sa",
         "Password": "aCa2d805-41E5@40c4!98e7#92F93zzxo176",
-        "Database": "TongsTest"
+        "Database": "TongsTest",
+        "ConnectionProperties": {
+            "TrustServerCertificate": "True"
+        }
     },
     "Product": {
         "Path": "C:/Temp/Tongs/TongsTest",
