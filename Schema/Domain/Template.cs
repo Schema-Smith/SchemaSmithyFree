@@ -18,6 +18,7 @@ public class Template
     public string DatabaseIdentificationScript { get; set; }
     public string VersionStampScript { get; set; }
     public bool UpdateFillFactor { get; set; } = true;
+    public bool IndexOnlyTableQuenches { get; set; }
     public string BaselineValidationScript { get; set; }
     public Dictionary<string, string> ScriptTokens { get; set; } = [];
 

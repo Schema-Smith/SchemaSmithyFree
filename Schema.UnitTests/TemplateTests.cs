@@ -242,6 +242,22 @@ public class TemplateTests
     }
 
     [Test]
+    public void IndexOnlyTableQuenches_DefaultsFalse()
+    {
+        var template = new Template();
+        Assert.That(template.IndexOnlyTableQuenches, Is.False);
+    }
+
+    [Test]
+    public void IndexOnlyTableQuenches_SerializesRoundTrip()
+    {
+        var template = new Template { IndexOnlyTableQuenches = true };
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(template);
+        var deserialized = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(json);
+        Assert.That(deserialized!.IndexOnlyTableQuenches, Is.True);
+    }
+
+    [Test]
     public void ShouldMergeTemplateTokensOverProductTokens()
     {
         var templateJsonWithTokens = """
