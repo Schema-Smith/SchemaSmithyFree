@@ -12,14 +12,16 @@ public class MainWindowViewModelTests
         IUserSettingsService? settings = null,
         INavigationService? nav = null,
         IEditorService? editor = null,
-        IProductTreeService? tree = null)
+        IProductTreeService? tree = null,
+        ISchemaFileService? schemaFile = null)
     {
         settings ??= Substitute.For<IUserSettingsService>();
         settings.Settings.Returns(new UserSettings());
         nav ??= new NavigationService();
         editor ??= new EditorService();
         tree ??= Substitute.For<IProductTreeService>();
-        return new MainWindowViewModel(settings, nav, editor, tree);
+        schemaFile ??= Substitute.For<ISchemaFileService>();
+        return new MainWindowViewModel(settings, nav, editor, tree, schemaFile);
     }
 
     [Test]
@@ -323,7 +325,7 @@ public class MainWindowViewModelTests
             treeService.LoadProduct(Arg.Any<string>()).Returns([]);
             treeService.Product.Returns(new Schema.Domain.Product { Name = "TestProduct" });
 
-            var vm = new MainWindowViewModel(settingsService, new NavigationService(), new EditorService(), treeService);
+            var vm = new MainWindowViewModel(settingsService, new NavigationService(), new EditorService(), treeService, Substitute.For<ISchemaFileService>());
             vm.Initialize();
 
             treeService.Received(1).LoadProduct(tempProductDir);
@@ -385,5 +387,31 @@ public class MainWindowViewModelTests
 
         Assert.That(nav.History, Has.Count.EqualTo(1));
         Assert.That(nav.History[0], Is.EqualTo(node1));
+    }
+
+    [Test]
+    public void ProductStatusTooltip_SetDuringLoadProduct()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        var roots = new List<TreeNodeModel> { new() { Text = "Root", Tag = "Product" } };
+        treeService.LoadProduct(Arg.Any<string>()).Returns(roots);
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "TestProduct" });
+        treeService.SearchList.Returns(new List<TreeNodeModel> { new(), new(), new() });
+
+        var settingsService = Substitute.For<IUserSettingsService>();
+        settingsService.Settings.Returns(new UserSettings());
+
+        var vm = CreateViewModel(settings: settingsService, tree: treeService);
+        vm.LoadProductFromPath("/some/path");
+
+        Assert.That(vm.ProductStatusTooltip, Does.Contain("/some/path"));
+        Assert.That(vm.ProductStatusTooltip, Does.Contain("nodes"));
+    }
+
+    [Test]
+    public void UpdateSchemaFiles_NoProduct_DoesNotThrow()
+    {
+        var vm = CreateViewModel();
+        Assert.DoesNotThrow(() => vm.UpdateSchemaFilesCommand.Execute(null));
     }
 }

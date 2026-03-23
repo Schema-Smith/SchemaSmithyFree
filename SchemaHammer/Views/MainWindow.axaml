@@ -167,6 +167,7 @@
                 <DockPanel LastChildFill="True" Margin="6,0">
                     <TextBlock DockPanel.Dock="Left"
                                Text="{Binding ProductStatus}"
+                               ToolTip.Tip="{Binding ProductStatusTooltip}"
                                Foreground="{DynamicResource SH.General.StatusBarForeground}"
                                VerticalAlignment="Center" />
                 </DockPanel>

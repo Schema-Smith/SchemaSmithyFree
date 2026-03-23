@@ -31,10 +31,11 @@ public partial class App : Application
             var productTreeService = new ProductTreeService();
             var editorService = new EditorService();
             var navigationService = new NavigationService();
+            var schemaFileService = new SchemaFileService();
 
             var mainWindow = new MainWindow();
             var viewModel = new MainWindowViewModel(
-                settingsService, navigationService, editorService, productTreeService);
+                settingsService, navigationService, editorService, productTreeService, schemaFileService);
             mainWindow.DataContext = viewModel;
 
             TreeNodeModel.SetBusyCallback = busy =>

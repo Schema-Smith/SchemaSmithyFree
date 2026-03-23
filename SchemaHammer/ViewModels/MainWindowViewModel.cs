@@ -17,12 +17,16 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly INavigationService _navigationService;
     private readonly IEditorService _editorService;
     private readonly IProductTreeService _productTreeService;
+    private readonly ISchemaFileService _schemaFileService;
 
     [ObservableProperty]
     private string _title = "SchemaHammer Community";
 
     [ObservableProperty]
     private string _productStatus = "NO PRODUCT";
+
+    [ObservableProperty]
+    private string _productStatusTooltip = "";
 
     [ObservableProperty]
     private EditorBaseViewModel _currentEditor = new WelcomeViewModel();
@@ -43,7 +47,7 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _suppressHistory;
 
     public MainWindowViewModel()
-        : this(new UserSettingsService(), new NavigationService(), new EditorService(), new ProductTreeService())
+        : this(new UserSettingsService(), new NavigationService(), new EditorService(), new ProductTreeService(), new SchemaFileService())
     {
     }
 
@@ -51,12 +55,14 @@ public partial class MainWindowViewModel : ObservableObject
         IUserSettingsService settingsService,
         INavigationService navigationService,
         IEditorService editorService,
-        IProductTreeService productTreeService)
+        IProductTreeService productTreeService,
+        ISchemaFileService schemaFileService)
     {
         _settingsService = settingsService;
         _navigationService = navigationService;
         _editorService = editorService;
         _productTreeService = productTreeService;
+        _schemaFileService = schemaFileService;
 
         TreeViewModel = new ProductTreeViewModel();
         TreeViewModel.NodeSelected += OnNodeSelected;
@@ -126,7 +132,9 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ReloadTree()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var childNodes = _productTreeService.ReloadProduct();
+        sw.Stop();
         var product = _productTreeService.Product;
 
         var productNode = new TreeNodeModel
@@ -150,6 +158,38 @@ public partial class MainWindowViewModel : ObservableObject
         SyncNavigationHistory();
 
         CurrentEditor = new WelcomeViewModel();
+
+        var productPath = Path.GetDirectoryName(product?.FilePath) ?? "";
+        ProductStatusTooltip = $"{productPath} [Loaded {(_productTreeService.SearchList?.Count ?? 0):N0} nodes in {sw.ElapsedMilliseconds:N0}ms]";
+    }
+
+    [RelayCommand]
+    private async Task UpdateSchemaFiles()
+    {
+        if (_productTreeService.Product == null) return;
+
+        var productPath = Path.GetDirectoryName(_productTreeService.Product.FilePath);
+        if (string.IsNullOrEmpty(productPath)) return;
+
+        try
+        {
+            var count = _schemaFileService.UpdateSchemaFiles(productPath);
+            var box = MsBox.Avalonia.MessageBoxManager.GetMessageBoxStandard(
+                "Update Schema Files",
+                $"Updated {count} schema files in .json-schemas/",
+                MsBox.Avalonia.Enums.ButtonEnum.Ok,
+                MsBox.Avalonia.Enums.Icon.Info);
+            await box.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            var box = MsBox.Avalonia.MessageBoxManager.GetMessageBoxStandard(
+                "Update Schema Files",
+                $"Error: {ex.Message}",
+                MsBox.Avalonia.Enums.ButtonEnum.Ok,
+                MsBox.Avalonia.Enums.Icon.Error);
+            await box.ShowAsync();
+        }
     }
 
     [RelayCommand]
@@ -256,7 +296,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     internal void LoadProductFromPath(string path)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var childNodes = _productTreeService.LoadProduct(path);
+        sw.Stop();
         var product = _productTreeService.Product;
 
         var productNode = new TreeNodeModel
@@ -281,6 +323,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         Title = $"SchemaHammer Community — {product?.Name ?? "Unknown"}";
         ProductStatus = product?.Name ?? "NO PRODUCT";
+        ProductStatusTooltip = $"{path} [Loaded {(_productTreeService.SearchList?.Count ?? 0):N0} nodes in {sw.ElapsedMilliseconds:N0}ms]";
 
         _settingsService.AddRecentProduct(path);
         _settingsService.Save();
