@@ -619,17 +619,25 @@ BEGIN TRY
   WHILE @@FETCH_STATUS = 0
   BEGIN
     DECLARE @v_TempColName NVARCHAR(256) = @v_SwapColumn + '_swap_temp'
-    -- Add temp column as nullable (so it can be added to a table with rows), then copy/drop/rename in separate EXEC to avoid metadata visibility issues
     DECLARE @v_NullableScript NVARCHAR(MAX) = REPLACE(@v_SwapColumnScript, ' NOT NULL', ' NULL')
+    -- Step 1: Add temp column as nullable (so it can be added to a table with existing rows)
     SET @v_SQL = 'RAISERROR(''  Swapping column ' + @v_SwapSchema + '.' + @v_SwapTable + '.[' + @v_SwapColumn + '] (data-preserving identity removal)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                  'ALTER TABLE ' + @v_SwapSchema + '.' + @v_SwapTable + ' ADD [' + @v_TempColName + '] ' + @v_NullableScript + ';'
     IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-    SET @v_SQL = 'UPDATE ' + @v_SwapSchema + '.' + @v_SwapTable + ' SET [' + @v_TempColName + '] = [' + @v_SwapColumn + '];' + CHAR(13) + CHAR(10) +
-                 'ALTER TABLE ' + @v_SwapSchema + '.' + @v_SwapTable + ' DROP COLUMN [' + @v_SwapColumn + '];' + CHAR(13) + CHAR(10) +
-                 'EXEC sp_rename ''' + SchemaSmith.fn_StripBracketWrapping(@v_SwapSchema) + '.' + SchemaSmith.fn_StripBracketWrapping(@v_SwapTable) + '.[' + @v_TempColName + ']'', ''' + @v_SwapColumn + ''', ''COLUMN'';' + CHAR(13) + CHAR(10) +
-                 CASE WHEN @v_SwapColumnScript LIKE '%NOT NULL%'
-                      THEN 'ALTER TABLE ' + @v_SwapSchema + '.' + @v_SwapTable + ' ALTER COLUMN [' + @v_SwapColumn + '] ' + @v_SwapColumnScript + ';'
-                      ELSE '' END
+    -- Step 2: Copy data from original to temp
+    SET @v_SQL = 'UPDATE ' + @v_SwapSchema + '.' + @v_SwapTable + ' SET [' + @v_TempColName + '] = [' + @v_SwapColumn + '];'
+    IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+    -- Step 3: Enforce NOT NULL on temp column if original was NOT NULL
+    IF @v_SwapColumnScript LIKE '%NOT NULL%'
+    BEGIN
+      SET @v_SQL = 'ALTER TABLE ' + @v_SwapSchema + '.' + @v_SwapTable + ' ALTER COLUMN [' + @v_TempColName + '] ' + @v_SwapColumnScript + ';'
+      IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+    END
+    -- Step 4: Drop original column
+    SET @v_SQL = 'ALTER TABLE ' + @v_SwapSchema + '.' + @v_SwapTable + ' DROP COLUMN [' + @v_SwapColumn + '];'
+    IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+    -- Step 5: Rename temp to original name
+    SET @v_SQL = 'EXEC sp_rename ''' + SchemaSmith.fn_StripBracketWrapping(@v_SwapSchema) + '.' + SchemaSmith.fn_StripBracketWrapping(@v_SwapTable) + '.[' + @v_TempColName + ']'', ''' + @v_SwapColumn + ''', ''COLUMN'';'
     IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
     FETCH NEXT FROM swap_cursor INTO @v_SwapSchema, @v_SwapTable, @v_SwapColumn, @v_SwapColumnScript
   END
@@ -640,11 +648,11 @@ BEGIN TRY
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM (SELECT T.[Schema], T.[Name], 
-                 ScriptColumns = (SELECT STRING_AGG('COLUMN ' + [ColumnName], ', ') WITHIN GROUP (ORDER BY cc.[ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1),
-                 MessageColumns = (SELECT STRING_AGG([ColumnName], ', ') WITHIN GROUP (ORDER BY cc.[ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1)
+                 ScriptColumns = (SELECT STRING_AGG('COLUMN ' + [ColumnName], ', ') WITHIN GROUP (ORDER BY cc.[ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0),
+                 MessageColumns = (SELECT STRING_AGG([ColumnName], ', ') WITHIN GROUP (ORDER BY cc.[ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0)
             FROM #Tables T WITH (NOLOCK)
             WHERE NewTable = 0
-              AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1)) T
+              AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0)) T
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Drop Columns No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
@@ -684,7 +692,7 @@ BEGIN TRY
   UPDATE c
     SET NewColumn = 1
     FROM #Columns c
-    WHERE EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = c.[Schema] AND cc.[TableName] = c.[TableName] and cc.ColumnName = c.ColumnName AND cc.MustDropAndRecreate = 1)
+    WHERE EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = c.[Schema] AND cc.[TableName] = c.[TableName] and cc.ColumnName = c.ColumnName AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0)
   
   RAISERROR('Add missing ProductName extended property to tables', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +
