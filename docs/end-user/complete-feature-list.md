@@ -185,6 +185,55 @@ DataTongs generates standalone MERGE scripts from live table data:
 
 ---
 
+## Schema Viewing (SchemaHammer)
+
+### Desktop Schema Viewer
+
+SchemaHammer is a read-only desktop application for browsing SchemaSmith schema packages.
+
+- Product tree navigation with lazy-loaded table and indexed view nodes
+- Back button with history dropdown for quick navigation
+- Last selection restoration on application reopen
+- Recent products list (up to 10 entries)
+
+### Schema Editors (Read-Only)
+
+Dedicated editors for every node type in the tree:
+
+| Editor | Properties Shown |
+|--------|-----------------|
+| Product | Name, Platform, ValidationScript, TemplateOrder, ScriptTokens, MinimumVersion, DropUnknownIndexes |
+| Template | Name, DatabaseIdentificationScript, VersionStampScript, UpdateFillFactor, ScriptTokens |
+| Table | Schema, Name, CompressionType, IsTemporal, UpdateFillFactor, OldName |
+| Column | Name, DataType, Nullable, Default, CheckExpression, ComputedExpression, Persisted, Sparse, Collation, DataMaskFunction, OldName |
+| Index | Name, PrimaryKey, Unique, Clustered, ColumnStore, FillFactor, IndexColumns, IncludeColumns, FilterExpression, CompressionType |
+| Foreign Key | Name, Columns, RelatedTable, RelatedColumns, DeleteAction, UpdateAction |
+| Check Constraint | Name, Expression |
+| Statistic | Name, Columns, SampleSize, FilterExpression |
+| XML Index | Name, IsPrimary, SecondaryType, ParentIndex |
+| Full-Text Index | CatalogName, KeyIndex, ChangeTracking, Columns |
+| Indexed View | Name, Schema, Indexes |
+
+### SQL Script Viewing
+
+- T-SQL syntax highlighting via AvaloniaEdit
+- Token preview toggle — expand `{{{Token}}}` placeholders to their actual values
+- Product and template tokens merged with template overriding product
+
+### Search
+
+- **Tree search** — Contains, Begins With, Ends With matching with auto-search
+- **Code search** — Searches SQL script files, table metadata (columns, indexes, FKs, constraints, statistics), and script tokens
+- **Find bar** — In-editor text find with next/previous navigation, match count, and case toggle
+- **Token navigation** — Double-click `{{{Token}}}` in SQL to navigate to the token definition
+
+### Tools
+
+- **Update Schema Files** — Regenerates `.json-schemas/` validation files for the current product
+- **Light/Dark themes** — Toggle via Tools menu
+
+---
+
 ## Script Tokens
 
 Tokens use the `{{TokenName}}` syntax and are replaced at runtime in all SQL files and configuration scripts. Token replacement is case-insensitive.

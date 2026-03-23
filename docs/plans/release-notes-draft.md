@@ -18,10 +18,38 @@
 - **Config file is now optional:** Tools can run with environment variables alone (no config file required)
 - **AppContext.BaseDirectory fallback:** Config file is found even when current directory differs from tool directory
 
+### SchemaHammer — New Desktop Schema Viewer
+
+SchemaHammer is a new read-only desktop application for browsing SchemaSmith schema packages visually. It provides a graphical alternative to exploring Product.json, Template.json, table definitions, and SQL scripts.
+
+**Navigation:**
+- Product tree with lazy-loaded nodes — browse products, templates, tables, indexed views, and all child objects
+- Back button with history dropdown
+- Recent products list (up to 10)
+- Last selection restoration on reopen
+- Keyboard shortcuts: F5 (reload), Ctrl+F (search), Ctrl+Shift+F (code search)
+
+**Schema Viewing:**
+- Dedicated read-only editors for every node type: Product, Template, Table, Column, Index, Foreign Key, Check Constraint, Statistic, XML Index, Full-Text Index, Indexed View
+- SQL script viewing with T-SQL syntax highlighting
+- Script token preview — toggle to expand `{{{Token}}}` placeholders to their actual values
+
+**Search:**
+- Tree search with Contains, Begins With, Ends With matching (auto-search as you type)
+- Code search across SQL script files, table metadata, and script tokens
+- In-editor find bar with next/previous, match count, and case toggle
+- Token navigation — double-click `{{{Token}}}` to jump to its definition
+
+**Tools and Polish:**
+- Update Schema Files — regenerates `.json-schemas/` validation files
+- Light and dark themes
+- About dialog with version info and GitHub link
+- Status bar tooltip showing product path, node count, and load time
+
 ### MinimumVersion
 
 - **SqlServerVersion enum:** New `SqlServerVersion` enum (Sql2016-Sql2025) with year-based names for human readability. Serializes as strings in Product.json via `StringEnumConverter`.
-- **Product.MinimumVersion:** Optional property declaring minimum SQL Server version for a schema package. Null means no version ceiling. Infrastructure for future SchemaHammer and SchemaQuench feature gating.
+- **Product.MinimumVersion:** Optional property declaring minimum SQL Server version for a schema package. Null means no version ceiling. Used by SchemaHammer and available for future SchemaQuench feature gating.
 - **VersionHelper:** Utility for version threshold comparison.
 
 ### Demo Products Consolidated

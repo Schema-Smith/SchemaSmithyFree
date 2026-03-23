@@ -123,6 +123,33 @@ Extracts table data and generates self-contained MERGE scripts.
 
 ---
 
+### 4. SchemaHammer — Desktop Schema Viewer
+A read-only desktop application for browsing SchemaSmith schema packages visually.
+
+**Navigation:**
+- Product tree with lazy-loaded nodes (Product → Templates → Tables/Scripts/Indexed Views → child items)
+- Back button with history dropdown
+- Last selection restoration on reopen
+- Recent products list (up to 10)
+
+**Schema Viewing (All Read-Only):**
+- Product, Template, Table, Column, Index, ForeignKey, CheckConstraint, Statistic, XmlIndex, FullTextIndex, and IndexedView property editors
+- SQL script viewing with T-SQL syntax highlighting
+- Script token preview — toggle between raw `{{{Token}}}` placeholders and expanded values
+- Container/folder editors with child summary
+
+**Search:**
+- Tree search with Contains, Begins With, Ends With matching
+- Code search across SQL script files, table metadata, and script tokens
+- In-editor find bar with next/previous, match count, and case toggle
+- Token navigation — double-click `{{{Token}}}` in SQL to navigate to its definition
+
+**Tools:**
+- Update Schema Files — regenerates `.json-schemas/` validation files
+- Light and dark themes
+
+---
+
 ## SQL Server Features Supported
 
 **Table-Level:**

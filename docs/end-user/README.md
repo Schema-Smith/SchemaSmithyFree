@@ -9,6 +9,7 @@ SchemaSmithyFree is a SQL Server database schema management toolset that enables
 - **[SchemaQuench](schemaquench/README.md)** — Applies schema packages to SQL Server databases. Takes the desired end state and transforms the target server to match.
 - **[SchemaTongs](schematongs/README.md)** — Extracts database schema from a live SQL Server into schema package format.
 - **[DataTongs](datatongs/README.md)** — Extracts table data from a live SQL Server and generates MERGE scripts for data synchronization.
+- **[SchemaHammer](schemahammer/README.md)** — Desktop schema viewer for browsing schema packages visually. Read-only viewer with tree navigation, search, and SQL syntax highlighting.
 
 ---
 

@@ -9,6 +9,7 @@ SchemaSmith is a state-based database schema management toolset for SQL Server. 
 - **SchemaQuench** — Applies schema packages to databases (deploy)
 - **SchemaTongs** — Extracts database schemas into schema packages (extract)
 - **DataTongs** — Extracts table data and generates MERGE scripts
+- **SchemaHammer** — Desktop schema viewer for browsing products, templates, tables, and scripts (GUI)
 
 ## Quick Start
 
