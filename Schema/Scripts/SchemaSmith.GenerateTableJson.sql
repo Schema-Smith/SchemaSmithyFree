@@ -1,7 +1,7 @@
 -- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 CREATE OR ALTER PROCEDURE SchemaSmith.GenerateTableJSON 
 
-﻿CREATE OR ALTER PROCEDURE SchemaSmith.GenerateTableJSON 
+CREATE OR ALTER PROCEDURE SchemaSmith.GenerateTableJSON 
   @p_Schema SYSNAME = 'dbo',
   @p_Table SYSNAME
 AS

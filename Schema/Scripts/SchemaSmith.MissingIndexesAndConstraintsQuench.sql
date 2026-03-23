@@ -1,6 +1,6 @@
 -- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
-﻿CREATE OR ALTER PROCEDURE SchemaSmith.MissingIndexesAndConstraintsQuench
+CREATE OR ALTER PROCEDURE SchemaSmith.MissingIndexesAndConstraintsQuench
     @ProductName NVARCHAR(50),
     @WhatIf BIT = 0
 AS
