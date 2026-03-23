@@ -1,3 +1,5 @@
+-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 CREATE OR ALTER PROCEDURE SchemaSmith.MissingTableAndColumnQuench
     @WhatIf BIT = 0
 AS

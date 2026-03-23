@@ -1,3 +1,5 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using System.Globalization;
 using Avalonia;
 using Avalonia.Data.Converters;

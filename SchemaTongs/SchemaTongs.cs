@@ -1,4 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using log4net;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;

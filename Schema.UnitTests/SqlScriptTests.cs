@@ -1,5 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using Schema.Domain;
+
+﻿using Schema.Domain;
 using Schema.Isolators;
 using NSubstitute;
 using System;

@@ -1,5 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using log4net;
+
+﻿using log4net;
 using System;
 using System.Collections.Generic;
 using System.Data;

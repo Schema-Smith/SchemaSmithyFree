@@ -1,4 +1,5 @@
 -- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 CREATE OR ALTER FUNCTION SchemaSmith.fn_StripBracketWrapping(@p_Input NVARCHAR(MAX))
   RETURNS NVARCHAR(MAX)
 AS

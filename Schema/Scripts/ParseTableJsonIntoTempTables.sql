@@ -1,3 +1,5 @@
+-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
   DECLARE @v_SQL NVARCHAR(MAX) = ''
   SET NOCOUNT ON
   RAISERROR('Parse Tables from Json', 10, 100) WITH NOWAIT

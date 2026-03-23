@@ -6,6 +6,7 @@ CREATE OR ALTER PROCEDURE [SchemaSmith].[TableQuench]
   @DropUnknownIndexes BIT = 0,
   @DropTablesRemovedFromProduct BIT = 1,
   @UpdateFillFactor BIT = 1
+
 CREATE OR ALTER PROCEDURE SchemaSmith.TableQuench
     @ProductName NVARCHAR(50),
     @TableDefinitions NVARCHAR(MAX),

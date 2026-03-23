@@ -1,3 +1,5 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using System.Collections.ObjectModel;
 using Avalonia;
 using Avalonia.Controls;

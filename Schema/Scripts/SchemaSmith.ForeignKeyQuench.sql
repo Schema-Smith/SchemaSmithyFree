@@ -1,3 +1,5 @@
+-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 CREATE OR ALTER PROCEDURE SchemaSmith.ForeignKeyQuench
     @ProductName NVARCHAR(50),
     @WhatIf BIT = 0

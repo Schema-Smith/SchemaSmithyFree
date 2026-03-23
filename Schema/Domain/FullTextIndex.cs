@@ -1,6 +1,8 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using Newtonsoft.Json;
 
+﻿using Newtonsoft.Json;
+
 namespace Schema.Domain;
 
 public class FullTextIndex

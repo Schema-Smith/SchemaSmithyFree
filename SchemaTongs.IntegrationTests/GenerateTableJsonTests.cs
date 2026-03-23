@@ -1,5 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System.Data;
+
+﻿using System.Data;
 using System;
 using Schema.DataAccess;
 using Schema.Domain;

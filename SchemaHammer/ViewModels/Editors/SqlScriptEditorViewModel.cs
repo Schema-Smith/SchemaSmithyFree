@@ -1,3 +1,5 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Schema.Domain;

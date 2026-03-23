@@ -101,6 +101,24 @@ Added explicit ownership conflict detection in `IndexedViewQuench.sql`. If a vie
 
 ---
 
+## 7. Identity Removal Not Supported in ModifiedTableQuench — BUG
+
+**Priority:** Medium
+**Discovered by:** Enterprise integration test `ShouldRemoveIdentityFromExistingColumn` in `SchemaQuench.IntegrationTests/SqlServer/TableQuench_Miscellaneous.cs` (marked `[Explicit]` pending fix)
+
+**Bug:** `ModifiedTableQuench.sql` handles adding IDENTITY to an existing column (via drop+recreate, `MustDropAndRecreate` flag) but has no code path for removing IDENTITY. The `MustDropAndRecreate` condition only checks `ident.column_id IS NULL AND DataType LIKE '%IDENTITY%'` (adding identity). The reverse case — `ident.column_id IS NOT NULL AND DataType NOT LIKE '%IDENTITY%'` (removing identity) — is missing.
+
+**Impact:** If a product definition removes IDENTITY from a column, the quench silently leaves the IDENTITY property in place. The column continues auto-incrementing despite the product definition saying otherwise.
+
+**Fix:** Add the reverse condition to `MustDropAndRecreate` in `ModifiedTableQuench.sql`:
+```sql
+OR (ident.column_id IS NOT NULL AND [DataType] NOT LIKE '%IDENTITY%') -- switching from identity... requires drop and recreate column
+```
+
+**Enterprise file:** `Schema/Scripts/SqlServer/SchemaSmith.ModifiedTableQuench.sql` — line 134 (the `MustDropAndRecreate` CASE expression)
+
+---
+
 ## Summary
 
 | # | Item | Type | Priority | Enterprise Source |
@@ -111,3 +129,4 @@ Added explicit ownership conflict detection in `IndexedViewQuench.sql`. If a vie
 | 4 | Indexed view quench test suite | Tests | High | `IndexedViewQuenchTests.cs` (9 tests) |
 | 5 | Indexed view extraction tests | Tests | High | `GenerateIndexedViewJsonTests.cs` (3 tests) |
 | 6 | ValidProduct indexed view test data | Test data | Medium | `Indexed Views/dbo.vTestSummary.json` |
+| 7 | Identity removal not supported | Bug | Medium | `ModifiedTableQuench.sql:134` |
