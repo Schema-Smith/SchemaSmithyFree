@@ -414,4 +414,102 @@ public class MainWindowViewModelTests
         var vm = CreateViewModel();
         Assert.DoesNotThrow(() => vm.UpdateSchemaFilesCommand.Execute(null));
     }
+
+    [Test]
+    public void SearchTreeCommand_FiresOpenSearchRequested()
+    {
+        var vm = CreateViewModel();
+        string? receivedTab = null;
+        vm.OpenSearchRequested += tab => receivedTab = tab;
+
+        vm.SearchTreeCommand.Execute(null);
+
+        Assert.That(receivedTab, Is.EqualTo("Tree"));
+    }
+
+    [Test]
+    public void SearchCodeCommand_FiresOpenSearchRequested()
+    {
+        var vm = CreateViewModel();
+        string? receivedTab = null;
+        vm.OpenSearchRequested += tab => receivedTab = tab;
+
+        vm.SearchCodeCommand.Execute(null);
+
+        Assert.That(receivedTab, Is.EqualTo("Code"));
+    }
+
+    [Test]
+    public void ShowAboutCommand_FiresShowAboutRequested()
+    {
+        var vm = CreateViewModel();
+        var fired = false;
+        vm.ShowAboutRequested += () => fired = true;
+
+        vm.ShowAboutCommand.Execute(null);
+
+        Assert.That(fired, Is.True);
+    }
+
+    [Test]
+    public void SearchTreeCommand_NoSubscriber_DoesNotThrow()
+    {
+        var vm = CreateViewModel();
+        Assert.DoesNotThrow(() => vm.SearchTreeCommand.Execute(null));
+    }
+
+    [Test]
+    public void SearchCodeCommand_NoSubscriber_DoesNotThrow()
+    {
+        var vm = CreateViewModel();
+        Assert.DoesNotThrow(() => vm.SearchCodeCommand.Execute(null));
+    }
+
+    [Test]
+    public void ShowAboutCommand_NoSubscriber_DoesNotThrow()
+    {
+        var vm = CreateViewModel();
+        Assert.DoesNotThrow(() => vm.ShowAboutCommand.Execute(null));
+    }
+
+    [Test]
+    public void ExitCommand_WithNoApplication_DoesNotThrow()
+    {
+        var vm = CreateViewModel();
+        Assert.DoesNotThrow(() => vm.ExitCommand.Execute(null));
+    }
+
+    [Test]
+    public void OpenThemeSettingsCommand_WithNoThemeService_DoesNotThrow()
+    {
+        var vm = CreateViewModel();
+        // ThemeService.Instance is null in test context — should return early
+        Assert.DoesNotThrow(() => vm.OpenThemeSettingsCommand.Execute(null));
+    }
+
+    [Test]
+    public void ProductStatusTooltip_DefaultsToEmpty()
+    {
+        var vm = CreateViewModel();
+        Assert.That(vm.ProductStatusTooltip, Is.EqualTo(""));
+    }
+
+    [Test]
+    public void ProductStatusTooltip_ContainsNodeCount()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        var roots = new List<TreeNodeModel> { new() { Text = "Root", Tag = "Product" } };
+        treeService.LoadProduct(Arg.Any<string>()).Returns(roots);
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "Test" });
+        treeService.SearchList.Returns(new List<TreeNodeModel> { new(), new(), new(), new(), new() });
+
+        var settingsService = Substitute.For<IUserSettingsService>();
+        settingsService.Settings.Returns(new UserSettings());
+
+        var vm = CreateViewModel(settings: settingsService, tree: treeService);
+        vm.LoadProductFromPath("/test/path");
+
+        Assert.That(vm.ProductStatusTooltip, Does.Contain("5"));
+        Assert.That(vm.ProductStatusTooltip, Does.Contain("ms"));
+    }
 }
