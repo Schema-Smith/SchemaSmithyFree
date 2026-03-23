@@ -32,6 +32,8 @@ public static class RepositoryHelper
             SchemaGenerator.GenerateSchema(typeof(Template)).ToString(Formatting.Indented));
         file.WriteAllText(Path.Combine(schemaPath, "tables.schema"),
             SchemaGenerator.GenerateSchema(typeof(Table)).ToString(Formatting.Indented));
+        file.WriteAllText(Path.Combine(schemaPath, "indexedviews.schema"),
+            SchemaGenerator.GenerateSchema(typeof(IndexedView)).ToString(Formatting.Indented));
         file.WriteAllText(Path.Combine(productPath, ".community"), "");
     }
 
