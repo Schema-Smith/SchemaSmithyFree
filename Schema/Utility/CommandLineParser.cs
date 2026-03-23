@@ -127,6 +127,7 @@ public static class CommandLineParser
         Console.WriteLine("  --version                Show the program version");
         Console.WriteLine("  --LogPath:<logpath>      Path to write logs and create backup directories. The default is current path.");
         Console.WriteLine($"  --ConfigFile:<filepath>  Path and file name of the config file. The default is {app}.settings.json in the current path.");
+        Console.WriteLine("  --ConnectionString:<connstr>     Override the connection string. Bypasses all connection settings in the config file.");
         Console.WriteLine("  --help                   Show the command line options");
         EnvironmentWrapper.GetFromFactory().Exit(0);
     }
