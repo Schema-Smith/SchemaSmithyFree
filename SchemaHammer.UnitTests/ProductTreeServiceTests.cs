@@ -161,4 +161,13 @@ public class ProductTreeServiceTests
         service.ReloadProduct();
         Assert.That(service.Templates.Count, Is.EqualTo(firstCount));
     }
+
+    [Test]
+    public void ReloadProduct_WithNoProduct_ReturnsEmpty()
+    {
+        var service = new ProductTreeService();
+        // Never loaded — should return empty
+        var result = service.ReloadProduct();
+        Assert.That(result, Is.Empty);
+    }
 }

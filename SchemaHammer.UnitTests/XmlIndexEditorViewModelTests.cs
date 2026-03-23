@@ -109,4 +109,18 @@ public class XmlIndexEditorViewModelTests
             Assert.That(vm.SecondaryIndexType, Is.EqualTo(""));
         });
     }
+
+    [Test]
+    public void EditorTitle_ReturnsXmlIndexName()
+    {
+        var table = new Table { Name = "T", Schema = "dbo" };
+        table.XmlIndexes.Add(new XmlIndex { Name = "[MyXmlIdx]", IsPrimary = true, Column = "Data" });
+
+        var (_, xiNode) = SetupTableTree(table, "MyXmlIdx");
+        var vm = new XmlIndexEditorViewModel();
+        vm.ChangeNode(xiNode);
+
+        Assert.That(vm.EditorTitle, Is.Not.Empty);
+        Assert.That(vm.EditorTitle, Is.EqualTo("MyXmlIdx"));
+    }
 }

@@ -35,4 +35,14 @@ public class ContainerEditorViewModelTests
         vm.ChangeNode(new TreeNodeModel { Text = "Root" });
         Assert.That(vm.ParentContext, Is.EqualTo(""));
     }
+
+    [Test]
+    public void EditorTitle_ReturnsContainerName()
+    {
+        var node = new TreeNodeModel { Text = "Tables", Tag = "Tables" };
+        var vm = new ContainerEditorViewModel();
+        vm.ChangeNode(node);
+
+        Assert.That(vm.EditorTitle, Is.EqualTo("Tables"));
+    }
 }

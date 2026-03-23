@@ -79,4 +79,18 @@ public class StatisticEditorViewModelTests
             Assert.That(vm.FilterExpression, Is.EqualTo(""));
         });
     }
+
+    [Test]
+    public void EditorTitle_ReturnsStatisticName()
+    {
+        var table = new Table { Name = "T", Schema = "dbo" };
+        table.Statistics.Add(new Statistic { Name = "[MyStat]", Columns = "Col", SampleSize = 10 });
+
+        var (_, statNode) = SetupTableTree(table, "MyStat");
+        var vm = new StatisticEditorViewModel();
+        vm.ChangeNode(statNode);
+
+        Assert.That(vm.EditorTitle, Is.Not.Empty);
+        Assert.That(vm.EditorTitle, Is.EqualTo("MyStat"));
+    }
 }

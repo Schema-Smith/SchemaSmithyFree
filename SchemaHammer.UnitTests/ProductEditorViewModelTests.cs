@@ -117,4 +117,20 @@ public class ProductEditorViewModelTests
 
         Assert.That(vm.SelectedTabIndex, Is.EqualTo(0));
     }
+
+    [Test]
+    public void EditorTitle_ReturnsName()
+    {
+        var node = new TreeNodeModel
+        {
+            Text = "ValidProduct",
+            Tag = "Product",
+            NodePath = ValidProductPath
+        };
+        var vm = new ProductEditorViewModel();
+        vm.ChangeNode(node);
+
+        Assert.That(vm.EditorTitle, Is.Not.Empty);
+        Assert.That(vm.EditorTitle, Is.EqualTo(vm.Name));
+    }
 }

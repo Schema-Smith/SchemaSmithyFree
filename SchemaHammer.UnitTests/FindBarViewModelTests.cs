@@ -112,4 +112,66 @@ public class FindBarViewModelTests
         vm.SearchTerm = "";
         Assert.That(vm.MatchCount, Is.EqualTo(0));
     }
+
+    [Test]
+    public void FindNext_NoMatch_DoesNotChangeSelection()
+    {
+        var vm = new FindBarViewModel(new SearchService());
+        vm.SetEditorText("hello world");
+        vm.SearchTerm = "xyz";
+
+        vm.FindNextCommand.Execute(null);
+
+        Assert.That(vm.SelectionStart, Is.EqualTo(0));
+        Assert.That(vm.SelectionLength, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void FindPrevious_NoMatch_DoesNotChangeSelection()
+    {
+        var vm = new FindBarViewModel(new SearchService());
+        vm.SetEditorText("hello world");
+        vm.SearchTerm = "xyz";
+
+        vm.FindPreviousCommand.Execute(null);
+
+        Assert.That(vm.SelectionStart, Is.EqualTo(0));
+        Assert.That(vm.SelectionLength, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void FindNext_EmptyTerm_DoesNothing()
+    {
+        var vm = new FindBarViewModel(new SearchService());
+        vm.SetEditorText("hello");
+        vm.SearchTerm = "";
+
+        vm.FindNextCommand.Execute(null);
+
+        Assert.That(vm.SelectionStart, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void FindPrevious_EmptyTerm_DoesNothing()
+    {
+        var vm = new FindBarViewModel(new SearchService());
+        vm.SetEditorText("hello");
+        vm.SearchTerm = "";
+
+        vm.FindPreviousCommand.Execute(null);
+
+        Assert.That(vm.SelectionStart, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void CurrentMatchIndex_ZeroWhenNoMatches()
+    {
+        var vm = new FindBarViewModel(new SearchService());
+        vm.SetEditorText("hello");
+        vm.SearchTerm = "xyz";
+
+        vm.FindNextCommand.Execute(null);
+
+        Assert.That(vm.CurrentMatchIndex, Is.EqualTo(0));
+    }
 }
