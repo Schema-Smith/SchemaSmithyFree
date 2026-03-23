@@ -26,6 +26,7 @@ public partial class MainWindow : Window
             RestoreWindowState(vm);
             vm.PropertyChanged += OnViewModelPropertyChanged;
             vm.OpenSearchRequested += OnOpenSearchRequested;
+            vm.ShowAboutRequested += OnShowAboutRequested;
         }
     }
 
@@ -54,6 +55,12 @@ public partial class MainWindow : Window
         _searchWindow = new SearchWindow { DataContext = searchVm2 };
         _searchWindow.Closed += (s, e) => _searchWindow = null;
         _searchWindow.Show(this);
+    }
+
+    private void OnShowAboutRequested()
+    {
+        var about = new AboutWindow { DataContext = new AboutViewModel() };
+        about.ShowDialog(this);
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

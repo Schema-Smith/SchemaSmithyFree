@@ -240,6 +240,13 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     public event Action<string>? OpenSearchRequested;
+    public event Action? ShowAboutRequested;
+
+    [RelayCommand]
+    private void ShowAbout()
+    {
+        ShowAboutRequested?.Invoke();
+    }
 
     internal IProductTreeService ProductTreeService => _productTreeService;
 

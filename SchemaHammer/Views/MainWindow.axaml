@@ -156,6 +156,12 @@
                         <MenuItem Header="Toggle Theme"
                                   Command="{Binding OpenThemeSettingsCommand}" />
                     </MenuItem>
+
+                    <!-- Help Menu -->
+                    <MenuItem Header="_Help">
+                        <MenuItem Header="About SchemaHammer"
+                                  Command="{Binding ShowAboutCommand}" />
+                    </MenuItem>
                 </Menu>
             </DockPanel>
 
