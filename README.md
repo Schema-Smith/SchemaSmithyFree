@@ -1,6 +1,10 @@
 # SchemaSmith Community Edition
 
+*Terraform for SQL Server databases*
+
 ![Build](https://github.com/Schema-Smith/SchemaSmithyFree/actions/workflows/continuous-integration.yml/badge.svg)
+[![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmithyFree)](https://github.com/Schema-Smith/SchemaSmithyFree/releases/latest)
+[![License: SSCL v2.0](https://img.shields.io/badge/license-SSCL%20v2.0-blue)](LICENSE)
 
 SchemaSmith is a state-based database schema management toolset for SQL Server. Define your desired database state as metadata — tables, views, procedures, triggers — and SchemaSmith transforms any target server to match.
 
@@ -49,4 +53,5 @@ See [demo/README.md](demo/README.md) for demo products, tutorials, and detailed 
 ## Additional Resources
 
 - [Documentation](https://schemasmith.com/documentation/mssql/community/getting-started.html)
+- [Changelog](CHANGELOG.md) — version history
 - [Community Command Center](https://github.com/Schema-Smith/Community) — roadmap, plans, feature matrices
