@@ -54,8 +54,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
-          cache: true
-          cache-dependency-path: '**/*.csproj'
       - name: Install dependencies
         run: dotnet restore SchemaSmithyFree.sln
       - name: Test with dotnet
