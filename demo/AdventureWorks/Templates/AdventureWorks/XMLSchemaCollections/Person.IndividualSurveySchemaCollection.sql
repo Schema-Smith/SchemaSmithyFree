@@ -46,10 +46,3 @@ CREATE XML SCHEMA COLLECTION [Person].[IndividualSurveySchemaCollection] AS N'
   </xsd:simpleType>
 </xsd:schema>
 '
-GO
-IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'SCHEMA',N'Person', N'XML SCHEMA COLLECTION',N'IndividualSurveySchemaCollection', NULL,NULL))
-	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Collection of XML schemas for the Demographics column in the Person.Person table.' , @level0type=N'SCHEMA',@level0name=N'Person', @level1type=N'XML SCHEMA COLLECTION',@level1name=N'IndividualSurveySchemaCollection'
-ELSE
-BEGIN
-	EXEC sys.sp_updateextendedproperty @name=N'MS_Description', @value=N'Collection of XML schemas for the Demographics column in the Person.Person table.' , @level0type=N'SCHEMA',@level0name=N'Person', @level1type=N'XML SCHEMA COLLECTION',@level1name=N'IndividualSurveySchemaCollection'
-END

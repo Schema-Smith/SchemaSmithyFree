@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[SalesPersonQuotaHistory]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[BusinessEntityID]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales person identification number. Foreign key to SalesPerson.BusinessEntityID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[QuotaDate]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales quota date."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -49,9 +44,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesQuota]",
@@ -62,9 +55,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales quota amount."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -77,10 +68,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[PK_SalesPersonQuotaHistory_BusinessEntityID_QuotaDate]",
@@ -91,10 +79,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[BusinessEntityID],[QuotaDate]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[BusinessEntityID],[QuotaDate]"
     }
   ],
   "ForeignKeys": [
@@ -105,13 +90,7 @@
       "RelatedTable": "[SalesPerson]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesPerson.SalesPersonID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Sales performance tracking."
-  }
+  ]
 }

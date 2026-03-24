@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[CountryRegionCurrency]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[CountryRegionCode]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ISO code for countries and regions. Foreign key to CountryRegion.CountryRegionCode."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CurrencyCode]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ISO standard currency code. Foreign key to Currency.CurrencyCode."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -51,10 +46,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[CurrencyCode]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[CurrencyCode]"
     },
     {
       "Name": "[PK_CountryRegionCurrency_CountryRegionCode_CurrencyCode]",
@@ -65,10 +57,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[CountryRegionCode],[CurrencyCode]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[CountryRegionCode],[CurrencyCode]"
     }
   ],
   "ForeignKeys": [
@@ -79,10 +68,7 @@
       "RelatedTable": "[CountryRegion]",
       "RelatedColumns": "[CountryRegionCode]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_CountryRegionCurrency_Currency_CurrencyCode]",
@@ -91,13 +77,7 @@
       "RelatedTable": "[Currency]",
       "RelatedColumns": "[CurrencyCode]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Currency.CurrencyCode."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping ISO currency codes to a country or region."
-  }
+  ]
 }

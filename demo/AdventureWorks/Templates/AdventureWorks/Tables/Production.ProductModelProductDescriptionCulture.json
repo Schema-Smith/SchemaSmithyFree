@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[ProductModelProductDescriptionCulture]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[CultureID]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Culture identification number. Foreign key to Culture.CultureID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductDescriptionID]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to ProductDescription.ProductDescriptionID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductModelID]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to ProductModel.ProductModelID."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -63,10 +56,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductModelID],[ProductDescriptionID],[CultureID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ProductModelID],[ProductDescriptionID],[CultureID]"
     }
   ],
   "ForeignKeys": [
@@ -77,10 +67,7 @@
       "RelatedTable": "[Culture]",
       "RelatedColumns": "[CultureID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Culture.CultureID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_ProductModelProductDescriptionCulture_ProductDescription_ProductDescriptionID]",
@@ -89,10 +76,7 @@
       "RelatedTable": "[ProductDescription]",
       "RelatedColumns": "[ProductDescriptionID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ProductDescription.ProductDescriptionID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_ProductModelProductDescriptionCulture_ProductModel_ProductModelID]",
@@ -101,13 +85,7 @@
       "RelatedTable": "[ProductModel]",
       "RelatedColumns": "[ProductModelID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ProductModel.ProductModelID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping product descriptions and the language the description is written in."
-  }
+  ]
 }

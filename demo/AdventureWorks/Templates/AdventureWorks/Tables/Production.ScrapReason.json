@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[ScrapReason]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[ModifiedDate]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Failure description."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ScrapReasonID]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for ScrapReason records."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -51,10 +46,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[Name]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[Name]"
     },
     {
       "Name": "[PK_ScrapReason_ScrapReasonID]",
@@ -65,13 +57,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ScrapReasonID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ScrapReasonID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Manufacturing failure reasons lookup table."
-  }
+  ]
 }

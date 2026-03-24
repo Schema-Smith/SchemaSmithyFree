@@ -2,6 +2,7 @@
   "Schema": "[dbo]",
   "Name": "[AWBuildVersion]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[Database Version]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Version number of the database in 9.yy.mm.dd.00 format."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SystemInformationID]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for AWBuildVersion records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[VersionDate]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -63,13 +56,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SystemInformationID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[SystemInformationID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Current version number of the AdventureWorks 2016 sample database. "
-  }
+  ]
 }

@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[SalesTaxRate]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[ModifiedDate]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Tax rate description."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesTaxRateID]",
@@ -49,9 +44,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for SalesTaxRate records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[StateProvinceID]",
@@ -61,9 +54,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "State, province, or country/region the sales tax applies to."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TaxRate]",
@@ -74,9 +65,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Tax rate amount."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TaxType]",
@@ -87,9 +76,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "1 = Tax applied to retail transactions, 2 = Tax applied to wholesale transactions, 3 = Tax applied to all sales (retail and wholesale) transactions."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -102,10 +89,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[AK_SalesTaxRate_StateProvinceID_TaxType]",
@@ -116,10 +100,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[StateProvinceID],[TaxType]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[StateProvinceID],[TaxType]"
     },
     {
       "Name": "[PK_SalesTaxRate_SalesTaxRateID]",
@@ -130,10 +111,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SalesTaxRateID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[SalesTaxRateID]"
     }
   ],
   "ForeignKeys": [
@@ -144,13 +122,7 @@
       "RelatedTable": "[StateProvince]",
       "RelatedColumns": "[StateProvinceID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing StateProvince.StateProvinceID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Tax rate lookup table."
-  }
+  ]
 }

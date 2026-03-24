@@ -2,6 +2,7 @@
   "Schema": "[Person]",
   "Name": "[Address]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[AddressID]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Address records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[AddressLine1]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "First street address line."
-      }
+      "OldName": ""
     },
     {
       "Name": "[AddressLine2]",
@@ -35,9 +32,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Second street address line."
-      }
+      "OldName": ""
     },
     {
       "Name": "[City]",
@@ -47,9 +42,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Name of the city."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -60,9 +53,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[PostalCode]",
@@ -72,9 +63,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Postal code for the street address."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -85,9 +74,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SpatialLocation]",
@@ -97,9 +84,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Latitude and longitude of this address."
-      }
+      "OldName": ""
     },
     {
       "Name": "[StateProvinceID]",
@@ -109,9 +94,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unique identification number for the state or province. Foreign key to StateProvince table."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -124,10 +107,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[IX_Address_AddressLine1_AddressLine2_City_StateProvinceID_PostalCode]",
@@ -138,10 +118,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[AddressLine1],[AddressLine2],[City],[StateProvinceID],[PostalCode]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[AddressLine1],[AddressLine2],[City],[StateProvinceID],[PostalCode]"
     },
     {
       "Name": "[IX_Address_StateProvinceID]",
@@ -152,10 +129,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[StateProvinceID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[StateProvinceID]"
     },
     {
       "Name": "[PK_Address_AddressID]",
@@ -166,10 +140,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[AddressID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[AddressID]"
     }
   ],
   "ForeignKeys": [
@@ -180,13 +151,7 @@
       "RelatedTable": "[StateProvince]",
       "RelatedColumns": "[StateProvinceID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing StateProvince.StateProvinceID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Street address information for customers, employees, and vendors."
-  }
+  ]
 }

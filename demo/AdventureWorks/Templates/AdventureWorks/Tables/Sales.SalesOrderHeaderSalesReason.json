@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[SalesOrderHeaderSalesReason]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[ModifiedDate]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesOrderID]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to SalesOrderHeader.SalesOrderID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesReasonID]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to SalesReason.SalesReasonID."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -51,10 +46,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SalesOrderID],[SalesReasonID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[SalesOrderID],[SalesReasonID]"
     }
   ],
   "ForeignKeys": [
@@ -65,10 +57,7 @@
       "RelatedTable": "[SalesOrderHeader]",
       "RelatedColumns": "[SalesOrderID]",
       "DeleteAction": "CASCADE",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesOrderHeader.SalesOrderID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_SalesOrderHeaderSalesReason_SalesReason_SalesReasonID]",
@@ -77,13 +66,7 @@
       "RelatedTable": "[SalesReason]",
       "RelatedColumns": "[SalesReasonID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesReason.SalesReasonID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping sales orders to sales reason codes."
-  }
+  ]
 }

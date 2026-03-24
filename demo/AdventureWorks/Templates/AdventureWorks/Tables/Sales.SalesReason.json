@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[SalesReason]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[ModifiedDate]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales reason description."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ReasonType]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Category the sales reason belongs to."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesReasonID]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for SalesReason records."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -63,13 +56,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SalesReasonID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[SalesReasonID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Lookup table of customer purchase reasons."
-  }
+  ]
 }

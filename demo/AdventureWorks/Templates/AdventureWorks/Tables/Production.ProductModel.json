@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[ProductModel]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[CatalogDescription]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Detailed product catalog information in xml format."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Instructions]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Manufacturing instructions in xml format."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product model description."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductModelID]",
@@ -60,9 +53,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for ProductModel records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -73,9 +64,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -88,10 +77,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[Name]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[Name]"
     },
     {
       "Name": "[AK_ProductModel_rowguid]",
@@ -102,10 +88,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[PK_ProductModel_ProductModelID]",
@@ -116,31 +99,19 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductModelID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ProductModelID]"
     }
   ],
   "XmlIndexes": [
     {
       "Name": "[PXML_ProductModel_CatalogDescription]",
       "Column": "[CatalogDescription]",
-      "IsPrimary": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary XML index."
-      }
+      "IsPrimary": true
     },
     {
       "Name": "[PXML_ProductModel_Instructions]",
       "Column": "[Instructions]",
-      "IsPrimary": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary XML index."
-      }
+      "IsPrimary": true
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Product model classification."
-  }
+  ]
 }

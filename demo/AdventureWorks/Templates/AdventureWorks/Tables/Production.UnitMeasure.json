@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[UnitMeasure]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[ModifiedDate]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unit of measure description."
-      }
+      "OldName": ""
     },
     {
       "Name": "[UnitMeasureCode]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -51,10 +46,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[Name]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[Name]"
     },
     {
       "Name": "[PK_UnitMeasure_UnitMeasureCode]",
@@ -65,13 +57,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[UnitMeasureCode]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[UnitMeasureCode]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Unit of measure lookup table."
-  }
+  ]
 }

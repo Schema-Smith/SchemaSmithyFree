@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[CreditCard]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[CardNumber]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Credit card number."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CardType]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Credit card name."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CreditCardID]",
@@ -35,9 +32,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for CreditCard records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ExpMonth]",
@@ -47,9 +42,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Credit card expiration month."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ExpYear]",
@@ -59,9 +52,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Credit card expiration year."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -72,9 +63,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -87,10 +76,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[CardNumber]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[CardNumber]"
     },
     {
       "Name": "[PK_CreditCard_CreditCardID]",
@@ -101,13 +87,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[CreditCardID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[CreditCardID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Customer credit card information."
-  }
+  ]
 }

@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER PROCEDURE [dbo].[uspGetEmployeeManagers]
+CREATE OR ALTER   PROCEDURE [dbo].[uspGetEmployeeManagers]
     @BusinessEntityID [int]
 AS
 
@@ -36,13 +36,5 @@ BEGIN
     ORDER BY [RecursionLevel], [EMP_cte].[OrganizationNode].ToString()
     OPTION (MAXRECURSION 25) 
 END;
-
-GO
-IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'SCHEMA',N'dbo', N'PROCEDURE',N'uspGetEmployeeManagers', NULL,NULL))
-	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Stored procedure using a recursive query to return the direct and indirect managers of the specified employee.' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'uspGetEmployeeManagers'
-ELSE
-BEGIN
-	EXEC sys.sp_updateextendedproperty @name=N'MS_Description', @value=N'Stored procedure using a recursive query to return the direct and indirect managers of the specified employee.' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'uspGetEmployeeManagers'
-END
 
 GO

@@ -2,6 +2,7 @@
   "Schema": "[Purchasing]",
   "Name": "[PurchaseOrderDetail]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[DueDate]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the product is expected to be received."
-      }
+      "OldName": ""
     },
     {
       "Name": "[LineTotal]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Per product subtotal. Computed as OrderQty * UnitPrice."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[OrderQty]",
@@ -50,9 +45,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Quantity ordered."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductID]",
@@ -62,9 +55,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[PurchaseOrderDetailID]",
@@ -74,9 +65,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. One line number per purchased product."
-      }
+      "OldName": ""
     },
     {
       "Name": "[PurchaseOrderID]",
@@ -86,9 +75,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to PurchaseOrderHeader.PurchaseOrderID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ReceivedQty]",
@@ -99,9 +86,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Quantity actually received from the vendor."
-      }
+      "OldName": ""
     },
     {
       "Name": "[RejectedQty]",
@@ -112,9 +97,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Quantity rejected during inspection."
-      }
+      "OldName": ""
     },
     {
       "Name": "[StockedQty]",
@@ -125,9 +108,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Quantity accepted into inventory. Computed as ReceivedQty - RejectedQty."
-      }
+      "OldName": ""
     },
     {
       "Name": "[UnitPrice]",
@@ -138,9 +119,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Vendor's selling price of a single product."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -153,10 +132,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[ProductID]"
     },
     {
       "Name": "[PK_PurchaseOrderDetail_PurchaseOrderID_PurchaseOrderDetailID]",
@@ -167,10 +143,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[PurchaseOrderID],[PurchaseOrderDetailID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[PurchaseOrderID],[PurchaseOrderDetailID]"
     }
   ],
   "ForeignKeys": [
@@ -181,10 +154,7 @@
       "RelatedTable": "[Product]",
       "RelatedColumns": "[ProductID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_PurchaseOrderDetail_PurchaseOrderHeader_PurchaseOrderID]",
@@ -193,13 +163,7 @@
       "RelatedTable": "[PurchaseOrderHeader]",
       "RelatedColumns": "[PurchaseOrderID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing PurchaseOrderHeader.PurchaseOrderID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Individual products associated with a specific purchase order. See PurchaseOrderHeader."
-  }
+  ]
 }

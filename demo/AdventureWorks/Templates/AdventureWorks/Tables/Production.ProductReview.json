@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[ProductReview]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[Comments]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Reviewer's comments"
-      }
+      "OldName": ""
     },
     {
       "Name": "[EmailAddress]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Reviewer's e-mail address."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductID]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductReviewID]",
@@ -60,9 +53,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for ProductReview records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Rating]",
@@ -73,9 +64,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product rating given by the reviewer. Scale is 1 to 5 with 5 as the highest rating."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ReviewDate]",
@@ -86,9 +75,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date review was submitted."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ReviewerName]",
@@ -98,9 +85,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Name of the reviewer."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -114,10 +99,7 @@
       "ColumnStore": false,
       "FillFactor": 0,
       "IndexColumns": "[ProductID],[ReviewerName]",
-      "IncludeColumns": "[Comments]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IncludeColumns": "[Comments]"
     },
     {
       "Name": "[PK_ProductReview_ProductReviewID]",
@@ -128,10 +110,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductReviewID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ProductReviewID]"
     }
   ],
   "ForeignKeys": [
@@ -142,10 +121,7 @@
       "RelatedTable": "[Product]",
       "RelatedColumns": "[ProductID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
-      }
+      "UpdateAction": "NO ACTION"
     }
   ],
   "FullTextIndex": {
@@ -153,8 +129,5 @@
     "KeyIndex": "[PK_ProductReview_ProductReviewID]",
     "ChangeTracking": "AUTO",
     "Columns": "[Comments]"
-  },
-  "ExtendedProperties": {
-    "MS_Description": "Customer reviews of products they have purchased."
   }
 }

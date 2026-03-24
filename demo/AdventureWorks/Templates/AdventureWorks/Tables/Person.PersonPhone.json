@@ -2,6 +2,7 @@
   "Schema": "[Person]",
   "Name": "[PersonPhone]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[BusinessEntityID]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Business entity identification number. Foreign key to Person.BusinessEntityID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[PhoneNumber]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Telephone number identification number."
-      }
+      "OldName": ""
     },
     {
       "Name": "[PhoneNumberTypeID]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Kind of phone number. Foreign key to PhoneNumberType.PhoneNumberTypeID."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -63,10 +56,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[PhoneNumber]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[PhoneNumber]"
     },
     {
       "Name": "[PK_PersonPhone_BusinessEntityID_PhoneNumber_PhoneNumberTypeID]",
@@ -77,10 +67,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[BusinessEntityID],[PhoneNumber],[PhoneNumberTypeID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[BusinessEntityID],[PhoneNumber],[PhoneNumberTypeID]"
     }
   ],
   "ForeignKeys": [
@@ -91,10 +78,7 @@
       "RelatedTable": "[Person]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Person.BusinessEntityID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_PersonPhone_PhoneNumberType_PhoneNumberTypeID]",
@@ -103,13 +87,7 @@
       "RelatedTable": "[PhoneNumberType]",
       "RelatedColumns": "[PhoneNumberTypeID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing PhoneNumberType.PhoneNumberTypeID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Telephone number and type of a person."
-  }
+  ]
 }

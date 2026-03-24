@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[SpecialOfferProduct]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[ModifiedDate]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductID]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SpecialOfferID]",
@@ -49,9 +44,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for SpecialOfferProduct records."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -64,10 +57,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[IX_SpecialOfferProduct_ProductID]",
@@ -78,10 +68,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[ProductID]"
     },
     {
       "Name": "[PK_SpecialOfferProduct_SpecialOfferID_ProductID]",
@@ -92,10 +79,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SpecialOfferID],[ProductID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[SpecialOfferID],[ProductID]"
     }
   ],
   "ForeignKeys": [
@@ -106,10 +90,7 @@
       "RelatedTable": "[Product]",
       "RelatedColumns": "[ProductID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_SpecialOfferProduct_SpecialOffer_SpecialOfferID]",
@@ -118,13 +99,7 @@
       "RelatedTable": "[SpecialOffer]",
       "RelatedColumns": "[SpecialOfferID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SpecialOffer.SpecialOfferID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping products to special offer discounts."
-  }
+  ]
 }

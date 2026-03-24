@@ -2,6 +2,7 @@
   "Schema": "[dbo]",
   "Name": "[ErrorLog]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[ErrorLine]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "The line number at which the error occurred."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ErrorLogID]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for ErrorLog records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ErrorMessage]",
@@ -35,9 +32,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "The message text of the error that occurred."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ErrorNumber]",
@@ -47,9 +42,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "The error number of the error that occurred."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ErrorProcedure]",
@@ -59,9 +52,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "The name of the stored procedure or trigger where the error occurred."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ErrorSeverity]",
@@ -71,9 +62,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "The severity of the error that occurred."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ErrorState]",
@@ -83,9 +72,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "The state number of the error that occurred."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ErrorTime]",
@@ -96,9 +83,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "The date and time at which the error occurred."
-      }
+      "OldName": ""
     },
     {
       "Name": "[UserName]",
@@ -108,9 +93,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "The user who executed the batch in which the error occurred."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -123,13 +106,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ErrorLogID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ErrorLogID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Audit table tracking errors in the the AdventureWorks database that are caught by the CATCH block of a TRY...CATCH construct. Data is inserted by stored procedure dbo.uspLogError when it is executed from inside the CATCH block of a TRY...CATCH construct."
-  }
+  ]
 }

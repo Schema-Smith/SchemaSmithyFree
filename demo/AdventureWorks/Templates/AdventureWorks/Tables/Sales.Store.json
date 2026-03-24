@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[Store]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[BusinessEntityID]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to Customer.BusinessEntityID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Demographics]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Demographic informationg about the store such as the number of employees, annual sales and store type."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Name of the store."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -61,9 +54,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesPersonID]",
@@ -73,9 +64,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ID of the sales person assigned to the customer. Foreign key to SalesPerson.BusinessEntityID."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -88,10 +77,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[IX_Store_SalesPersonID]",
@@ -102,10 +88,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SalesPersonID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[SalesPersonID]"
     },
     {
       "Name": "[PK_Store_BusinessEntityID]",
@@ -116,20 +99,14 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[BusinessEntityID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[BusinessEntityID]"
     }
   ],
   "XmlIndexes": [
     {
       "Name": "[PXML_Store_Demographics]",
       "Column": "[Demographics]",
-      "IsPrimary": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary XML index."
-      }
+      "IsPrimary": true
     }
   ],
   "ForeignKeys": [
@@ -140,10 +117,7 @@
       "RelatedTable": "[BusinessEntity]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID"
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_Store_SalesPerson_SalesPersonID]",
@@ -152,13 +126,7 @@
       "RelatedTable": "[SalesPerson]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesPerson.SalesPersonID"
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Customers (resellers) of Adventure Works products."
-  }
+  ]
 }

@@ -1,25 +1,38 @@
 {
   "type": "object",
-    "properties": {
-        "Name": {
-            "type": "string"
-        },
-        "ValidationScript": {
-            "type": "string"
-        },
-        "DropUnknownIndexes": {
-            "type": "boolean"
-        },
-        "TemplateOrder": {
-            "type": "array",
-            "items": {
-                "type": "string"
-            }
-        },
-        "ScriptTokens": {
-            "type": "object"
-        }
+  "properties": {
+    "BaselineValidationScript": {
+      "type": "string"
     },
+    "DropUnknownIndexes": {
+      "type": "boolean"
+    },
+    "MinimumVersion": {
+      "type": "string",
+      "pattern": "Sql2016|Sql2017|Sql2019|Sql2022|Sql2025"
+    },
+    "Name": {
+      "type": "string"
+    },
+    "Platform": {
+      "type": "string"
+    },
+    "ScriptTokens": {
+      "type": "object"
+    },
+    "TemplateOrder": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ValidationScript": {
+      "type": "string"
+    },
+    "VersionStampScript": {
+      "type": "string"
+    }
+  },
   "additionalProperties": false,
   "required": [
     "Name",

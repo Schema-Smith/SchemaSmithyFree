@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[ProductInventory]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[Bin]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Storage container on a shelf in an inventory location."
-      }
+      "OldName": ""
     },
     {
       "Name": "[LocationID]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Inventory location identification number. Foreign key to Location.LocationID. "
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductID]",
@@ -49,9 +44,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Quantity]",
@@ -62,9 +55,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Quantity of products in the inventory location."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -75,9 +66,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Shelf]",
@@ -88,9 +77,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Storage compartment within an inventory location."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -103,10 +90,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductID],[LocationID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ProductID],[LocationID]"
     }
   ],
   "ForeignKeys": [
@@ -117,10 +101,7 @@
       "RelatedTable": "[Location]",
       "RelatedColumns": "[LocationID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Location.LocationID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_ProductInventory_Product_ProductID]",
@@ -129,13 +110,7 @@
       "RelatedTable": "[Product]",
       "RelatedColumns": "[ProductID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Product inventory information."
-  }
+  ]
 }

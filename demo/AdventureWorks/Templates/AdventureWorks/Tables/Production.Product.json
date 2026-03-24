@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[Product]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[Class]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "H = High, M = Medium, L = Low"
-      }
+      "OldName": ""
     },
     {
       "Name": "[Color]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product color."
-      }
+      "OldName": ""
     },
     {
       "Name": "[DaysToManufacture]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Number of days required to manufacture the product."
-      }
+      "OldName": ""
     },
     {
       "Name": "[DiscontinuedDate]",
@@ -49,9 +44,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the product was discontinued."
-      }
+      "OldName": ""
     },
     {
       "Name": "[FinishedGoodsFlag]",
@@ -62,9 +55,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Product is not a salable item. 1 = Product is salable."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ListPrice]",
@@ -75,9 +66,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Selling price."
-      }
+      "OldName": ""
     },
     {
       "Name": "[MakeFlag]",
@@ -88,9 +77,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Product is purchased, 1 = Product is manufactured in-house."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -101,9 +88,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -113,9 +98,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Name of the product."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductID]",
@@ -125,9 +108,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Product records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductLine]",
@@ -138,9 +119,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "R = Road, M = Mountain, T = Touring, S = Standard"
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductModelID]",
@@ -150,9 +129,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product is a member of this product model. Foreign key to ProductModel.ProductModelID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductNumber]",
@@ -162,9 +139,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unique product identification number."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductSubcategoryID]",
@@ -174,9 +149,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product is a member of this product subcategory. Foreign key to ProductSubCategory.ProductSubCategoryID. "
-      }
+      "OldName": ""
     },
     {
       "Name": "[ReorderPoint]",
@@ -187,9 +160,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Inventory level that triggers a purchase order or work order. "
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -200,9 +171,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SafetyStockLevel]",
@@ -213,9 +182,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Minimum inventory quantity. "
-      }
+      "OldName": ""
     },
     {
       "Name": "[SellEndDate]",
@@ -225,9 +192,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the product was no longer available for sale."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SellStartDate]",
@@ -237,9 +202,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the product was available for sale."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Size]",
@@ -249,9 +212,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product size."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SizeUnitMeasureCode]",
@@ -261,9 +222,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unit of measure for Size column."
-      }
+      "OldName": ""
     },
     {
       "Name": "[StandardCost]",
@@ -274,9 +233,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Standard cost of the product."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Style]",
@@ -287,9 +244,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "W = Womens, M = Mens, U = Universal"
-      }
+      "OldName": ""
     },
     {
       "Name": "[Weight]",
@@ -300,9 +255,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product weight."
-      }
+      "OldName": ""
     },
     {
       "Name": "[WeightUnitMeasureCode]",
@@ -312,9 +265,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unit of measure for Weight column."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -327,10 +278,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[Name]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[Name]"
     },
     {
       "Name": "[AK_Product_ProductNumber]",
@@ -341,10 +289,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductNumber]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[ProductNumber]"
     },
     {
       "Name": "[AK_Product_rowguid]",
@@ -355,10 +300,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[PK_Product_ProductID]",
@@ -369,10 +311,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ProductID]"
     }
   ],
   "ForeignKeys": [
@@ -383,10 +322,7 @@
       "RelatedTable": "[ProductModel]",
       "RelatedColumns": "[ProductModelID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ProductModel.ProductModelID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_Product_ProductSubcategory_ProductSubcategoryID]",
@@ -395,10 +331,7 @@
       "RelatedTable": "[ProductSubcategory]",
       "RelatedColumns": "[ProductSubcategoryID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ProductSubcategory.ProductSubcategoryID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_Product_UnitMeasure_SizeUnitMeasureCode]",
@@ -407,10 +340,7 @@
       "RelatedTable": "[UnitMeasure]",
       "RelatedColumns": "[UnitMeasureCode]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_Product_UnitMeasure_WeightUnitMeasureCode]",
@@ -419,22 +349,13 @@
       "RelatedTable": "[UnitMeasure]",
       "RelatedColumns": "[UnitMeasureCode]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
-      }
+      "UpdateAction": "NO ACTION"
     }
   ],
   "CheckConstraints": [
     {
       "Name": "[CK_Product_SellEndDate]",
-      "Expression": "[SellEndDate]>=[SellStartDate] OR [SellEndDate] IS NULL",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [SellEndDate] >= [SellStartDate] OR [SellEndDate] IS NULL"
-      }
+      "Expression": "[SellEndDate]>=[SellStartDate] OR [SellEndDate] IS NULL"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Products sold or used in the manfacturing of sold products."
-  }
+  ]
 }

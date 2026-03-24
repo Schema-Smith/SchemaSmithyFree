@@ -89,10 +89,3 @@ CREATE XML SCHEMA COLLECTION [Person].[AdditionalContactInfoSchemaCollection] AS
   </xsd:complexType>
 </xsd:schema>
 '
-GO
-IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'SCHEMA',N'Person', N'XML SCHEMA COLLECTION',N'AdditionalContactInfoSchemaCollection', NULL,NULL))
-	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Collection of XML schemas for the AdditionalContactInfo column in the Person.Contact table.' , @level0type=N'SCHEMA',@level0name=N'Person', @level1type=N'XML SCHEMA COLLECTION',@level1name=N'AdditionalContactInfoSchemaCollection'
-ELSE
-BEGIN
-	EXEC sys.sp_updateextendedproperty @name=N'MS_Description', @value=N'Collection of XML schemas for the AdditionalContactInfo column in the Person.Contact table.' , @level0type=N'SCHEMA',@level0name=N'Person', @level1type=N'XML SCHEMA COLLECTION',@level1name=N'AdditionalContactInfoSchemaCollection'
-END

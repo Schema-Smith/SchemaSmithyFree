@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[ShoppingCartItem]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[DateCreated]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the time the record was created."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -25,9 +24,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductID]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product ordered. Foreign key to Product.ProductID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Quantity]",
@@ -51,9 +46,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product quantity ordered."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ShoppingCartID]",
@@ -63,9 +56,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shopping cart identification number."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ShoppingCartItemID]",
@@ -75,9 +66,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for ShoppingCartItem records."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -90,10 +79,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ShoppingCartID],[ProductID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[ShoppingCartID],[ProductID]"
     },
     {
       "Name": "[PK_ShoppingCartItem_ShoppingCartItemID]",
@@ -104,10 +90,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ShoppingCartItemID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ShoppingCartItemID]"
     }
   ],
   "ForeignKeys": [
@@ -118,13 +101,7 @@
       "RelatedTable": "[Product]",
       "RelatedColumns": "[ProductID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Contains online customer orders until the order is submitted or cancelled."
-  }
+  ]
 }

@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[ProductPhoto]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[LargePhoto]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Large image of the product."
-      }
+      "OldName": ""
     },
     {
       "Name": "[LargePhotoFileName]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Large image file name."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductPhotoID]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for ProductPhoto records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ThumbNailPhoto]",
@@ -60,9 +53,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Small image of the product."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ThumbnailPhotoFileName]",
@@ -72,9 +63,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Small image file name."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -87,13 +76,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductPhotoID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ProductPhotoID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Product images."
-  }
+  ]
 }

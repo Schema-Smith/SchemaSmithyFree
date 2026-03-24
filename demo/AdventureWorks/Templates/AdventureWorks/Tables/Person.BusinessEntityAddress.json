@@ -2,6 +2,7 @@
   "Schema": "[Person]",
   "Name": "[BusinessEntityAddress]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[AddressID]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to Address.AddressID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[AddressTypeID]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to AddressType.AddressTypeID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[BusinessEntityID]",
@@ -35,9 +32,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to BusinessEntity.BusinessEntityID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -61,9 +54,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -76,10 +67,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[IX_BusinessEntityAddress_AddressID]",
@@ -90,10 +78,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[AddressID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[AddressID]"
     },
     {
       "Name": "[IX_BusinessEntityAddress_AddressTypeID]",
@@ -104,10 +89,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[AddressTypeID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[AddressTypeID]"
     },
     {
       "Name": "[PK_BusinessEntityAddress_BusinessEntityID_AddressID_AddressTypeID]",
@@ -118,10 +100,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[BusinessEntityID],[AddressID],[AddressTypeID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[BusinessEntityID],[AddressID],[AddressTypeID]"
     }
   ],
   "ForeignKeys": [
@@ -132,10 +111,7 @@
       "RelatedTable": "[Address]",
       "RelatedColumns": "[AddressID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Address.AddressID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_BusinessEntityAddress_AddressType_AddressTypeID]",
@@ -144,10 +120,7 @@
       "RelatedTable": "[AddressType]",
       "RelatedColumns": "[AddressTypeID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing AddressType.AddressTypeID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_BusinessEntityAddress_BusinessEntity_BusinessEntityID]",
@@ -156,13 +129,7 @@
       "RelatedTable": "[BusinessEntity]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping customers, vendors, and employees to their addresses."
-  }
+  ]
 }

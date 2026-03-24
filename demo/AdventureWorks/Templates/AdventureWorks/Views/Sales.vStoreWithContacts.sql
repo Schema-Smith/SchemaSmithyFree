@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER VIEW [Sales].[vStoreWithContacts] AS 
+CREATE OR ALTER   VIEW [Sales].[vStoreWithContacts] AS 
 
 SELECT 
     s.[BusinessEntityID] 
@@ -30,13 +30,5 @@ FROM [Sales].[Store] s
 	ON pp.[BusinessEntityID] = p.[BusinessEntityID]
 	LEFT OUTER JOIN [Person].[PhoneNumberType] pnt
 	ON pnt.[PhoneNumberTypeID] = pp.[PhoneNumberTypeID];
-
-GO
-IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'SCHEMA',N'Sales', N'VIEW',N'vStoreWithContacts', NULL,NULL))
-	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Stores (including store contacts) that sell Adventure Works Cycles products to consumers.' , @level0type=N'SCHEMA',@level0name=N'Sales', @level1type=N'VIEW',@level1name=N'vStoreWithContacts'
-ELSE
-BEGIN
-	EXEC sys.sp_updateextendedproperty @name=N'MS_Description', @value=N'Stores (including store contacts) that sell Adventure Works Cycles products to consumers.' , @level0type=N'SCHEMA',@level0name=N'Sales', @level1type=N'VIEW',@level1name=N'vStoreWithContacts'
-END
 
 GO

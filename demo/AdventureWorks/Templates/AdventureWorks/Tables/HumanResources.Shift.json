@@ -2,6 +2,7 @@
   "Schema": "[HumanResources]",
   "Name": "[Shift]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[EndTime]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shift end time."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shift description."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ShiftID]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Shift records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[StartTime]",
@@ -60,9 +53,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shift start time."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -75,10 +66,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[Name]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[Name]"
     },
     {
       "Name": "[AK_Shift_StartTime_EndTime]",
@@ -89,10 +77,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[StartTime],[EndTime]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[StartTime],[EndTime]"
     },
     {
       "Name": "[PK_Shift_ShiftID]",
@@ -103,13 +88,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ShiftID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ShiftID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Work shift lookup table."
-  }
+  ]
 }

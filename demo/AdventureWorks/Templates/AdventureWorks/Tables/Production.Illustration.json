@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[Illustration]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[Diagram]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Illustrations used in manufacturing instructions. Stored as XML."
-      }
+      "OldName": ""
     },
     {
       "Name": "[IllustrationID]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Illustration records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -51,13 +46,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[IllustrationID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[IllustrationID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Bicycle assembly diagrams."
-  }
+  ]
 }

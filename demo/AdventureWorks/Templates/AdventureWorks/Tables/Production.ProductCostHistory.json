@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[ProductCostHistory]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[EndDate]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product cost end date."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductID]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID"
-      }
+      "OldName": ""
     },
     {
       "Name": "[StandardCost]",
@@ -49,9 +44,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Standard cost of the product."
-      }
+      "OldName": ""
     },
     {
       "Name": "[StartDate]",
@@ -61,9 +54,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product cost start date."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -76,10 +67,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductID],[StartDate]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ProductID],[StartDate]"
     }
   ],
   "ForeignKeys": [
@@ -90,22 +78,13 @@
       "RelatedTable": "[Product]",
       "RelatedColumns": "[ProductID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
-      }
+      "UpdateAction": "NO ACTION"
     }
   ],
   "CheckConstraints": [
     {
       "Name": "[CK_ProductCostHistory_EndDate]",
-      "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NULL"
-      }
+      "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Changes in the cost of a product over time."
-  }
+  ]
 }

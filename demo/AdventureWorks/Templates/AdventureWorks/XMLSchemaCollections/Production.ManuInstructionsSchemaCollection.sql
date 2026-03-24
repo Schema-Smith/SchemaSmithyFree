@@ -42,10 +42,3 @@ CREATE XML SCHEMA COLLECTION [Production].[ManuInstructionsSchemaCollection] AS 
   </xsd:complexType>
 </xsd:schema>
 '
-GO
-IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'SCHEMA',N'Production', N'XML SCHEMA COLLECTION',N'ManuInstructionsSchemaCollection', NULL,NULL))
-	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Collection of XML schemas for the Instructions column in the Production.ProductModel table.' , @level0type=N'SCHEMA',@level0name=N'Production', @level1type=N'XML SCHEMA COLLECTION',@level1name=N'ManuInstructionsSchemaCollection'
-ELSE
-BEGIN
-	EXEC sys.sp_updateextendedproperty @name=N'MS_Description', @value=N'Collection of XML schemas for the Instructions column in the Production.ProductModel table.' , @level0type=N'SCHEMA',@level0name=N'Production', @level1type=N'XML SCHEMA COLLECTION',@level1name=N'ManuInstructionsSchemaCollection'
-END

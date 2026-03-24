@@ -2,6 +2,7 @@
   "Schema": "[HumanResources]",
   "Name": "[Employee]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[BirthDate]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date of birth."
-      }
+      "OldName": ""
     },
     {
       "Name": "[BusinessEntityID]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Employee records.  Foreign key to BusinessEntity.BusinessEntityID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CurrentFlag]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Inactive, 1 = Active"
-      }
+      "OldName": ""
     },
     {
       "Name": "[Gender]",
@@ -50,9 +45,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "M = Male, F = Female"
-      }
+      "OldName": ""
     },
     {
       "Name": "[HireDate]",
@@ -63,9 +56,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Employee hired on this date."
-      }
+      "OldName": ""
     },
     {
       "Name": "[JobTitle]",
@@ -75,9 +66,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Work title such as Buyer or Sales Representative."
-      }
+      "OldName": ""
     },
     {
       "Name": "[LoginID]",
@@ -87,9 +76,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Network login."
-      }
+      "OldName": ""
     },
     {
       "Name": "[MaritalStatus]",
@@ -100,9 +87,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "M = Married, S = Single"
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -113,9 +98,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[NationalIDNumber]",
@@ -125,9 +108,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unique national identification number such as a social security number."
-      }
+      "OldName": ""
     },
     {
       "Name": "[OrganizationLevel]",
@@ -138,9 +119,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "The depth of the employee in the corporate hierarchy."
-      }
+      "OldName": ""
     },
     {
       "Name": "[OrganizationNode]",
@@ -150,9 +129,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Where the employee is located in corporate hierarchy."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -163,9 +140,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalariedFlag]",
@@ -176,9 +151,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Job classification. 0 = Hourly, not exempt from collective bargaining. 1 = Salaried, exempt from collective bargaining."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SickLeaveHours]",
@@ -190,9 +163,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Number of available sick leave hours."
-      }
+      "OldName": ""
     },
     {
       "Name": "[VacationHours]",
@@ -204,9 +175,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Number of available vacation hours."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -219,10 +188,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[LoginID]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[LoginID]"
     },
     {
       "Name": "[AK_Employee_NationalIDNumber]",
@@ -233,10 +199,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[NationalIDNumber]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[NationalIDNumber]"
     },
     {
       "Name": "[AK_Employee_rowguid]",
@@ -247,10 +210,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[IX_Employee_OrganizationLevel_OrganizationNode]",
@@ -261,10 +221,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[OrganizationLevel],[OrganizationNode]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[OrganizationLevel],[OrganizationNode]"
     },
     {
       "Name": "[IX_Employee_OrganizationNode]",
@@ -275,10 +232,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[OrganizationNode]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[OrganizationNode]"
     },
     {
       "Name": "[PK_Employee_BusinessEntityID]",
@@ -289,10 +243,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[BusinessEntityID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[BusinessEntityID]"
     }
   ],
   "ForeignKeys": [
@@ -303,13 +254,7 @@
       "RelatedTable": "[Person]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Person.BusinessEntityID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Employee information such as salary, department, and title."
-  }
+  ]
 }

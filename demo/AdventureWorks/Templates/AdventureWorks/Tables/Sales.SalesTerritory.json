@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[SalesTerritory]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[CostLastYear]",
@@ -13,9 +14,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Business costs in the territory the previous year."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CostYTD]",
@@ -27,9 +26,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Business costs in the territory year to date."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CountryRegionCode]",
@@ -39,9 +36,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ISO standard country or region code. Foreign key to CountryRegion.CountryRegionCode. "
-      }
+      "OldName": ""
     },
     {
       "Name": "[Group]",
@@ -51,9 +46,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Geographic area to which the sales territory belong."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -64,9 +57,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -76,9 +67,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales territory description"
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -89,9 +78,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesLastYear]",
@@ -103,9 +90,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales in the territory the previous year."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesYTD]",
@@ -117,9 +102,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales in the territory year to date."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TerritoryID]",
@@ -129,9 +112,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for SalesTerritory records."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -144,10 +125,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[Name]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[Name]"
     },
     {
       "Name": "[AK_SalesTerritory_rowguid]",
@@ -158,10 +136,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[PK_SalesTerritory_TerritoryID]",
@@ -172,10 +147,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[TerritoryID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[TerritoryID]"
     }
   ],
   "ForeignKeys": [
@@ -186,13 +158,7 @@
       "RelatedTable": "[CountryRegion]",
       "RelatedColumns": "[CountryRegionCode]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Sales territory lookup table."
-  }
+  ]
 }

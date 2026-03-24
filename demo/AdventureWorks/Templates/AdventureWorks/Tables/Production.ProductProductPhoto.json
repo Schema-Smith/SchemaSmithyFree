@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[ProductProductPhoto]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[ModifiedDate]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Primary]",
@@ -25,9 +24,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Photo is not the principal image. 1 = Photo is the principal image."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductID]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductPhotoID]",
@@ -49,9 +44,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product photo identification number. Foreign key to ProductPhoto.ProductPhotoID."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -64,10 +57,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductID],[ProductPhotoID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Nonclustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[ProductID],[ProductPhotoID]"
     }
   ],
   "ForeignKeys": [
@@ -78,10 +68,7 @@
       "RelatedTable": "[Product]",
       "RelatedColumns": "[ProductID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_ProductProductPhoto_ProductPhoto_ProductPhotoID]",
@@ -90,13 +77,7 @@
       "RelatedTable": "[ProductPhoto]",
       "RelatedColumns": "[ProductPhotoID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ProductPhoto.ProductPhotoID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping products and product photos."
-  }
+  ]
 }

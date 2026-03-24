@@ -64,10 +64,3 @@ CREATE XML SCHEMA COLLECTION [Sales].[StoreSurveySchemaCollection] AS N'
   </xsd:simpleType>
 </xsd:schema>
 '
-GO
-IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'SCHEMA',N'Sales', N'XML SCHEMA COLLECTION',N'StoreSurveySchemaCollection', NULL,NULL))
-	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Collection of XML schemas for the Demographics column in the Sales.Store table.' , @level0type=N'SCHEMA',@level0name=N'Sales', @level1type=N'XML SCHEMA COLLECTION',@level1name=N'StoreSurveySchemaCollection'
-ELSE
-BEGIN
-	EXEC sys.sp_updateextendedproperty @name=N'MS_Description', @value=N'Collection of XML schemas for the Demographics column in the Sales.Store table.' , @level0type=N'SCHEMA',@level0name=N'Sales', @level1type=N'XML SCHEMA COLLECTION',@level1name=N'StoreSurveySchemaCollection'
-END

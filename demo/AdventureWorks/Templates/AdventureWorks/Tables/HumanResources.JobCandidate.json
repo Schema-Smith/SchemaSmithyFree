@@ -2,6 +2,7 @@
   "Schema": "[HumanResources]",
   "Name": "[JobCandidate]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[BusinessEntityID]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Employee identification number if applicant was hired. Foreign key to Employee.BusinessEntityID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[JobCandidateID]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for JobCandidate records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Resume]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Résumé in XML format."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -63,10 +56,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[BusinessEntityID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[BusinessEntityID]"
     },
     {
       "Name": "[PK_JobCandidate_JobCandidateID]",
@@ -77,10 +67,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[JobCandidateID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[JobCandidateID]"
     }
   ],
   "ForeignKeys": [
@@ -91,10 +78,7 @@
       "RelatedTable": "[Employee]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
-      }
+      "UpdateAction": "NO ACTION"
     }
   ],
   "FullTextIndex": {
@@ -102,8 +86,5 @@
     "KeyIndex": "[PK_JobCandidate_JobCandidateID]",
     "ChangeTracking": "AUTO",
     "Columns": "[Resume]"
-  },
-  "ExtendedProperties": {
-    "MS_Description": "Résumés submitted to Human Resources by job applicants."
   }
 }

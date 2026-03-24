@@ -2,6 +2,7 @@
   "Schema": "[HumanResources]",
   "Name": "[EmployeeDepartmentHistory]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[BusinessEntityID]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Employee identification number. Foreign key to Employee.BusinessEntityID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[DepartmentID]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Department in which the employee worked including currently. Foreign key to Department.DepartmentID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[EndDate]",
@@ -35,9 +32,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the employee left the department. NULL = Current department."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ShiftID]",
@@ -60,9 +53,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Identifies which 8-hour shift the employee works. Foreign key to Shift.Shift.ID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[StartDate]",
@@ -72,9 +63,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the employee started work in the department."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -87,10 +76,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[DepartmentID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[DepartmentID]"
     },
     {
       "Name": "[IX_EmployeeDepartmentHistory_ShiftID]",
@@ -101,10 +87,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ShiftID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[ShiftID]"
     },
     {
       "Name": "[PK_EmployeeDepartmentHistory_BusinessEntityID_StartDate_DepartmentID]",
@@ -115,10 +98,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[BusinessEntityID],[StartDate],[DepartmentID],[ShiftID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[BusinessEntityID],[StartDate],[DepartmentID],[ShiftID]"
     }
   ],
   "ForeignKeys": [
@@ -129,10 +109,7 @@
       "RelatedTable": "[Department]",
       "RelatedColumns": "[DepartmentID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Department.DepartmentID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_EmployeeDepartmentHistory_Employee_BusinessEntityID]",
@@ -141,10 +118,7 @@
       "RelatedTable": "[Employee]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_EmployeeDepartmentHistory_Shift_ShiftID]",
@@ -153,22 +127,13 @@
       "RelatedTable": "[Shift]",
       "RelatedColumns": "[ShiftID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Shift.ShiftID"
-      }
+      "UpdateAction": "NO ACTION"
     }
   ],
   "CheckConstraints": [
     {
       "Name": "[CK_EmployeeDepartmentHistory_EndDate]",
-      "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NUL"
-      }
+      "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Employee department transfers."
-  }
+  ]
 }

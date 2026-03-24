@@ -152,10 +152,3 @@ CREATE XML SCHEMA COLLECTION [HumanResources].[HRResumeSchemaCollection] AS N'
   </xsd:complexType>
 </xsd:schema>
 '
-GO
-IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'SCHEMA',N'HumanResources', N'XML SCHEMA COLLECTION',N'HRResumeSchemaCollection', NULL,NULL))
-	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Collection of XML schemas for the Resume column in the HumanResources.JobCandidate table.' , @level0type=N'SCHEMA',@level0name=N'HumanResources', @level1type=N'XML SCHEMA COLLECTION',@level1name=N'HRResumeSchemaCollection'
-ELSE
-BEGIN
-	EXEC sys.sp_updateextendedproperty @name=N'MS_Description', @value=N'Collection of XML schemas for the Resume column in the HumanResources.JobCandidate table.' , @level0type=N'SCHEMA',@level0name=N'HumanResources', @level1type=N'XML SCHEMA COLLECTION',@level1name=N'HRResumeSchemaCollection'
-END

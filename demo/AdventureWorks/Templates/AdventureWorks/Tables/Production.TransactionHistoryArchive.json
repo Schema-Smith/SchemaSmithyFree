@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[TransactionHistoryArchive]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[ActualCost]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product cost."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductID]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Quantity]",
@@ -48,9 +43,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product quantity."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ReferenceOrderID]",
@@ -60,9 +53,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Purchase order, sales order, or work order identification number."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ReferenceOrderLineID]",
@@ -73,9 +64,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Line number associated with the purchase order, sales order, or work order."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TransactionDate]",
@@ -86,9 +75,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time of the transaction."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TransactionID]",
@@ -98,9 +85,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for TransactionHistoryArchive records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TransactionType]",
@@ -111,9 +96,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "W = Work Order, S = Sales Order, P = Purchase Order"
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -126,10 +109,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[ProductID]"
     },
     {
       "Name": "[IX_TransactionHistoryArchive_ReferenceOrderID_ReferenceOrderLineID]",
@@ -140,10 +120,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ReferenceOrderID],[ReferenceOrderLineID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[ReferenceOrderID],[ReferenceOrderLineID]"
     },
     {
       "Name": "[PK_TransactionHistoryArchive_TransactionID]",
@@ -154,13 +131,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[TransactionID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[TransactionID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Transactions for previous years."
-  }
+  ]
 }

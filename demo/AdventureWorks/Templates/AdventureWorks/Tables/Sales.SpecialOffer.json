@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[SpecialOffer]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[Category]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Group the discount applies to such as Reseller or Customer."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Description]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount description."
-      }
+      "OldName": ""
     },
     {
       "Name": "[DiscountPct]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount precentage."
-      }
+      "OldName": ""
     },
     {
       "Name": "[EndDate]",
@@ -49,9 +44,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount end date."
-      }
+      "OldName": ""
     },
     {
       "Name": "[MaxQty]",
@@ -62,9 +55,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Maximum discount percent allowed."
-      }
+      "OldName": ""
     },
     {
       "Name": "[MinQty]",
@@ -76,9 +67,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Minimum discount percent allowed."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -89,9 +78,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -102,9 +89,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SpecialOfferID]",
@@ -114,9 +99,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for SpecialOffer records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[StartDate]",
@@ -126,9 +109,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount start date."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Type]",
@@ -138,9 +119,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount type category."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -153,10 +132,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[PK_SpecialOffer_SpecialOfferID]",
@@ -167,22 +143,13 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SpecialOfferID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[SpecialOfferID]"
     }
   ],
   "CheckConstraints": [
     {
       "Name": "[CK_SpecialOffer_EndDate]",
-      "Expression": "[EndDate]>=[StartDate]",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [EndDate] >= [StartDate]"
-      }
+      "Expression": "[EndDate]>=[StartDate]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Sale discounts lookup table."
-  }
+  ]
 }

@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER TRIGGER [Person].[iuPerson] ON [Person].[Person] 
+CREATE OR ALTER   TRIGGER [Person].[iuPerson] ON [Person].[Person] 
 AFTER INSERT, UPDATE NOT FOR REPLICATION AS 
 
 BEGIN
@@ -37,13 +37,5 @@ BEGIN
                 /IndividualSurvey/TotalPurchaseYTD') <> 1;
     END;
 END;
-
-GO
-IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'SCHEMA',N'Person', N'TABLE',N'Person', N'TRIGGER',N'iuPerson'))
-	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'AFTER INSERT, UPDATE trigger inserting Individual only if the Customer does not exist in the Store table and setting the ModifiedDate column in the Person table to the current date.' , @level0type=N'SCHEMA',@level0name=N'Person', @level1type=N'TABLE',@level1name=N'Person', @level2type=N'TRIGGER',@level2name=N'iuPerson'
-ELSE
-BEGIN
-	EXEC sys.sp_updateextendedproperty @name=N'MS_Description', @value=N'AFTER INSERT, UPDATE trigger inserting Individual only if the Customer does not exist in the Store table and setting the ModifiedDate column in the Person table to the current date.' , @level0type=N'SCHEMA',@level0name=N'Person', @level1type=N'TABLE',@level1name=N'Person', @level2type=N'TRIGGER',@level2name=N'iuPerson'
-END
 
 GO

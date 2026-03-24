@@ -4,7 +4,7 @@ GO
 
 --A stored procedure which demonstrates integrated full text search
 
-CREATE OR ALTER PROCEDURE [dbo].[uspSearchCandidateResumes]
+CREATE OR ALTER   PROCEDURE [dbo].[uspSearchCandidateResumes]
     @searchString [nvarchar](1000),   
     @useInflectional [bit]=0,
     @useThesaurus [bit]=0,

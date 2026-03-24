@@ -2,6 +2,7 @@
   "Schema": "[Person]",
   "Name": "[StateProvince]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[CountryRegionCode]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ISO standard country or region code. Foreign key to CountryRegion.CountryRegionCode. "
-      }
+      "OldName": ""
     },
     {
       "Name": "[IsOnlyStateProvinceFlag]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = StateProvinceCode exists. 1 = StateProvinceCode unavailable, using CountryRegionCode."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -49,9 +44,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "State or province description."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -62,9 +55,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[StateProvinceCode]",
@@ -74,9 +65,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ISO standard state or province code."
-      }
+      "OldName": ""
     },
     {
       "Name": "[StateProvinceID]",
@@ -86,9 +75,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for StateProvince records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TerritoryID]",
@@ -98,9 +85,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ID of the territory in which the state or province is located. Foreign key to SalesTerritory.SalesTerritoryID."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -113,10 +98,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[Name]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[Name]"
     },
     {
       "Name": "[AK_StateProvince_rowguid]",
@@ -127,10 +109,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[AK_StateProvince_StateProvinceCode_CountryRegionCode]",
@@ -141,10 +120,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[StateProvinceCode],[CountryRegionCode]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[StateProvinceCode],[CountryRegionCode]"
     },
     {
       "Name": "[PK_StateProvince_StateProvinceID]",
@@ -155,10 +131,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[StateProvinceID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[StateProvinceID]"
     }
   ],
   "ForeignKeys": [
@@ -169,10 +142,7 @@
       "RelatedTable": "[CountryRegion]",
       "RelatedColumns": "[CountryRegionCode]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_StateProvince_SalesTerritory_TerritoryID]",
@@ -181,13 +151,7 @@
       "RelatedTable": "[SalesTerritory]",
       "RelatedColumns": "[TerritoryID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesTerritory.TerritoryID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "State and province lookup table."
-  }
+  ]
 }

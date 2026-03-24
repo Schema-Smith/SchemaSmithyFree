@@ -2,6 +2,7 @@
   "Schema": "[Purchasing]",
   "Name": "[PurchaseOrderHeader]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[EmployeeID]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Employee who created the purchase order. Foreign key to Employee.BusinessEntityID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Freight]",
@@ -25,9 +24,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shipping cost."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -38,9 +35,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[OrderDate]",
@@ -51,9 +46,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Purchase order creation date."
-      }
+      "OldName": ""
     },
     {
       "Name": "[PurchaseOrderID]",
@@ -63,9 +56,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key."
-      }
+      "OldName": ""
     },
     {
       "Name": "[RevisionNumber]",
@@ -76,9 +67,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Incremental number to track changes to the purchase order over time."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ShipDate]",
@@ -88,9 +77,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Estimated shipment date from the vendor."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ShipMethodID]",
@@ -100,9 +87,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shipping method. Foreign key to ShipMethod.ShipMethodID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Status]",
@@ -114,9 +99,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Order current status. 1 = Pending; 2 = Approved; 3 = Rejected; 4 = Complete"
-      }
+      "OldName": ""
     },
     {
       "Name": "[SubTotal]",
@@ -128,9 +111,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Purchase order subtotal. Computed as SUM(PurchaseOrderDetail.LineTotal)for the appropriate PurchaseOrderID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TaxAmt]",
@@ -142,9 +123,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Tax amount."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TotalDue]",
@@ -155,9 +134,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Total due to vendor. Computed as Subtotal + TaxAmt + Freight."
-      }
+      "OldName": ""
     },
     {
       "Name": "[VendorID]",
@@ -167,9 +144,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Vendor with whom the purchase order is placed. Foreign key to Vendor.BusinessEntityID."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -182,10 +157,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[EmployeeID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[EmployeeID]"
     },
     {
       "Name": "[IX_PurchaseOrderHeader_VendorID]",
@@ -196,10 +168,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[VendorID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[VendorID]"
     },
     {
       "Name": "[PK_PurchaseOrderHeader_PurchaseOrderID]",
@@ -210,10 +179,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[PurchaseOrderID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[PurchaseOrderID]"
     }
   ],
   "ForeignKeys": [
@@ -224,10 +190,7 @@
       "RelatedTable": "[Employee]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_PurchaseOrderHeader_ShipMethod_ShipMethodID]",
@@ -236,10 +199,7 @@
       "RelatedTable": "[ShipMethod]",
       "RelatedColumns": "[ShipMethodID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ShipMethod.ShipMethodID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_PurchaseOrderHeader_Vendor_VendorID]",
@@ -248,22 +208,13 @@
       "RelatedTable": "[Vendor]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Vendor.VendorID."
-      }
+      "UpdateAction": "NO ACTION"
     }
   ],
   "CheckConstraints": [
     {
       "Name": "[CK_PurchaseOrderHeader_ShipDate]",
-      "Expression": "[ShipDate]>=[OrderDate] OR [ShipDate] IS NULL",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [ShipDate] >= [OrderDate] OR [ShipDate] IS NULL"
-      }
+      "Expression": "[ShipDate]>=[OrderDate] OR [ShipDate] IS NULL"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "General purchase order information. See PurchaseOrderDetail."
-  }
+  ]
 }

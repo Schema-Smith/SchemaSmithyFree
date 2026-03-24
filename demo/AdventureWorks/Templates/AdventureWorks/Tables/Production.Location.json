@@ -2,6 +2,7 @@
   "Schema": "[Production]",
   "Name": "[Location]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[Availability]",
@@ -13,9 +14,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Work capacity (in hours) of the manufacturing location."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CostRate]",
@@ -27,9 +26,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Standard hourly cost of the manufacturing location."
-      }
+      "OldName": ""
     },
     {
       "Name": "[LocationID]",
@@ -39,9 +36,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Location records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -52,9 +47,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -64,9 +57,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Location description."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -79,10 +70,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[Name]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[Name]"
     },
     {
       "Name": "[PK_Location_LocationID]",
@@ -93,13 +81,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[LocationID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[LocationID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Product inventory and manufacturing locations."
-  }
+  ]
 }

@@ -2,6 +2,7 @@
   "Schema": "[Person]",
   "Name": "[PhoneNumberType]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[ModifiedDate]",
@@ -12,9 +13,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Name]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Name of the telephone number type"
-      }
+      "OldName": ""
     },
     {
       "Name": "[PhoneNumberTypeID]",
@@ -36,9 +33,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for telephone number type records."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -51,13 +46,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[PhoneNumberTypeID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[PhoneNumberTypeID]"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Type of phone number of a person."
-  }
+  ]
 }

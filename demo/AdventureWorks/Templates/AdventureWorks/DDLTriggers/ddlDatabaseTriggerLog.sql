@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER TRIGGER [ddlDatabaseTriggerLog] ON DATABASE 
+CREATE OR ALTER   TRIGGER [ddlDatabaseTriggerLog] ON DATABASE 
 FOR DDL_DATABASE_LEVEL_EVENTS AS 
 
 BEGIN
@@ -47,13 +47,5 @@ BEGIN
         @data
         );
 END;
-
-GO
-IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'TRIGGER',N'ddlDatabaseTriggerLog', NULL,NULL, NULL,NULL))
-	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Database trigger to audit all of the DDL changes made to the AdventureWorks 2016 database.' , @level0type=N'TRIGGER',@level0name=N'ddlDatabaseTriggerLog'
-ELSE
-BEGIN
-	EXEC sys.sp_updateextendedproperty @name=N'MS_Description', @value=N'Database trigger to audit all of the DDL changes made to the AdventureWorks 2016 database.' , @level0type=N'TRIGGER',@level0name=N'ddlDatabaseTriggerLog'
-END
 
 GO

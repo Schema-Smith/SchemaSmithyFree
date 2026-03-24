@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[CurrencyRate]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[AverageRate]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Average exchange rate for the day."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CurrencyRateDate]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the exchange rate was obtained."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CurrencyRateID]",
@@ -35,9 +32,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for CurrencyRate records."
-      }
+      "OldName": ""
     },
     {
       "Name": "[EndOfDayRate]",
@@ -47,9 +42,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Final exchange rate for the day."
-      }
+      "OldName": ""
     },
     {
       "Name": "[FromCurrencyCode]",
@@ -59,9 +52,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Exchange rate was converted from this currency code."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -72,9 +63,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ToCurrencyCode]",
@@ -84,9 +73,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Exchange rate was converted to this currency code."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -99,10 +86,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[CurrencyRateDate],[FromCurrencyCode],[ToCurrencyCode]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[CurrencyRateDate],[FromCurrencyCode],[ToCurrencyCode]"
     },
     {
       "Name": "[PK_CurrencyRate_CurrencyRateID]",
@@ -113,10 +97,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[CurrencyRateID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[CurrencyRateID]"
     }
   ],
   "ForeignKeys": [
@@ -127,10 +108,7 @@
       "RelatedTable": "[Currency]",
       "RelatedColumns": "[CurrencyCode]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Currency.FromCurrencyCode."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_CurrencyRate_Currency_ToCurrencyCode]",
@@ -139,13 +117,7 @@
       "RelatedTable": "[Currency]",
       "RelatedColumns": "[CurrencyCode]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Currency.ToCurrencyCode."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Currency exchange rates."
-  }
+  ]
 }

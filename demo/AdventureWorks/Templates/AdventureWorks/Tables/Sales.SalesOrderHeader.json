@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[SalesOrderHeader]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[AccountNumber]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Financial accounting number reference."
-      }
+      "OldName": ""
     },
     {
       "Name": "[BillToAddressID]",
@@ -23,9 +22,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Customer billing address. Foreign key to Address.AddressID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Comment]",
@@ -35,9 +32,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales representative comments."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CreditCardApprovalCode]",
@@ -47,9 +42,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Approval code provided by the credit card company."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CreditCardID]",
@@ -59,9 +52,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Credit card identification number. Foreign key to CreditCard.CreditCardID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CurrencyRateID]",
@@ -71,9 +62,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Currency exchange rate used. Foreign key to CurrencyRate.CurrencyRateID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[CustomerID]",
@@ -83,9 +72,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Customer identification number. Foreign key to Customer.BusinessEntityID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[DueDate]",
@@ -95,9 +82,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the order is due to the customer."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Freight]",
@@ -109,9 +94,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shipping cost."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -122,9 +105,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[OnlineOrderFlag]",
@@ -135,9 +116,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Order placed by sales person. 1 = Order placed online by customer."
-      }
+      "OldName": ""
     },
     {
       "Name": "[OrderDate]",
@@ -148,9 +127,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Dates the sales order was created."
-      }
+      "OldName": ""
     },
     {
       "Name": "[PurchaseOrderNumber]",
@@ -160,9 +137,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Customer purchase order number reference. "
-      }
+      "OldName": ""
     },
     {
       "Name": "[RevisionNumber]",
@@ -173,9 +148,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Incremental number to track changes to the sales order over time."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -186,9 +159,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesOrderID]",
@@ -198,9 +169,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesOrderNumber]",
@@ -211,9 +180,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unique sales order identification number."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesPersonID]",
@@ -223,9 +190,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales person who created the sales order. Foreign key to SalesPerson.BusinessEntityID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ShipDate]",
@@ -235,9 +200,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the order was shipped to the customer."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ShipMethodID]",
@@ -247,9 +210,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shipping method. Foreign key to ShipMethod.ShipMethodID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ShipToAddressID]",
@@ -259,9 +220,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Customer shipping address. Foreign key to Address.AddressID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[Status]",
@@ -273,9 +232,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Order current status. 1 = In process; 2 = Approved; 3 = Backordered; 4 = Rejected; 5 = Shipped; 6 = Cancelled"
-      }
+      "OldName": ""
     },
     {
       "Name": "[SubTotal]",
@@ -287,9 +244,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales subtotal. Computed as SUM(SalesOrderDetail.LineTotal)for the appropriate SalesOrderID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TaxAmt]",
@@ -301,9 +256,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Tax amount."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TerritoryID]",
@@ -313,9 +266,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Territory in which the sale was made. Foreign key to SalesTerritory.SalesTerritoryID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[TotalDue]",
@@ -326,9 +277,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Total due from customer. Computed as Subtotal + TaxAmt + Freight."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -341,10 +290,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[AK_SalesOrderHeader_SalesOrderNumber]",
@@ -355,10 +301,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SalesOrderNumber]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
-      }
+      "IndexColumns": "[SalesOrderNumber]"
     },
     {
       "Name": "[IX_SalesOrderHeader_CustomerID]",
@@ -369,10 +312,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[CustomerID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[CustomerID]"
     },
     {
       "Name": "[IX_SalesOrderHeader_SalesPersonID]",
@@ -383,10 +323,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SalesPersonID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[SalesPersonID]"
     },
     {
       "Name": "[PK_SalesOrderHeader_SalesOrderID]",
@@ -397,10 +334,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SalesOrderID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[SalesOrderID]"
     }
   ],
   "ForeignKeys": [
@@ -411,10 +345,7 @@
       "RelatedTable": "[Address]",
       "RelatedColumns": "[AddressID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Address.AddressID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_SalesOrderHeader_Address_ShipToAddressID]",
@@ -423,10 +354,7 @@
       "RelatedTable": "[Address]",
       "RelatedColumns": "[AddressID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Address.AddressID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_SalesOrderHeader_CreditCard_CreditCardID]",
@@ -435,10 +363,7 @@
       "RelatedTable": "[CreditCard]",
       "RelatedColumns": "[CreditCardID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing CreditCard.CreditCardID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_SalesOrderHeader_CurrencyRate_CurrencyRateID]",
@@ -447,10 +372,7 @@
       "RelatedTable": "[CurrencyRate]",
       "RelatedColumns": "[CurrencyRateID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing CurrencyRate.CurrencyRateID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_SalesOrderHeader_Customer_CustomerID]",
@@ -459,10 +381,7 @@
       "RelatedTable": "[Customer]",
       "RelatedColumns": "[CustomerID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Customer.CustomerID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_SalesOrderHeader_SalesPerson_SalesPersonID]",
@@ -471,10 +390,7 @@
       "RelatedTable": "[SalesPerson]",
       "RelatedColumns": "[BusinessEntityID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesPerson.SalesPersonID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_SalesOrderHeader_SalesTerritory_TerritoryID]",
@@ -483,10 +399,7 @@
       "RelatedTable": "[SalesTerritory]",
       "RelatedColumns": "[TerritoryID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesTerritory.TerritoryID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_SalesOrderHeader_ShipMethod_ShipMethodID]",
@@ -495,29 +408,17 @@
       "RelatedTable": "[ShipMethod]",
       "RelatedColumns": "[ShipMethodID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ShipMethod.ShipMethodID."
-      }
+      "UpdateAction": "NO ACTION"
     }
   ],
   "CheckConstraints": [
     {
       "Name": "[CK_SalesOrderHeader_DueDate]",
-      "Expression": "[DueDate]>=[OrderDate]",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [DueDate] >= [OrderDate]"
-      }
+      "Expression": "[DueDate]>=[OrderDate]"
     },
     {
       "Name": "[CK_SalesOrderHeader_ShipDate]",
-      "Expression": "[ShipDate]>=[OrderDate] OR [ShipDate] IS NULL",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [ShipDate] >= [OrderDate] OR [ShipDate] IS NULL"
-      }
+      "Expression": "[ShipDate]>=[OrderDate] OR [ShipDate] IS NULL"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "General sales order information."
-  }
+  ]
 }

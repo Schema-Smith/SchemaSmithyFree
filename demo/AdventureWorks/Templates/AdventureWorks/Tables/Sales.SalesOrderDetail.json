@@ -2,6 +2,7 @@
   "Schema": "[Sales]",
   "Name": "[SalesOrderDetail]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[CarrierTrackingNumber]",
@@ -11,9 +12,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shipment tracking number supplied by the shipper."
-      }
+      "OldName": ""
     },
     {
       "Name": "[LineTotal]",
@@ -24,9 +23,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Per product subtotal. Computed as UnitPrice * (1 - UnitPriceDiscount) * OrderQty."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ModifiedDate]",
@@ -37,9 +34,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
-      }
+      "OldName": ""
     },
     {
       "Name": "[OrderQty]",
@@ -50,9 +45,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Quantity ordered per product."
-      }
+      "OldName": ""
     },
     {
       "Name": "[ProductID]",
@@ -62,9 +55,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product sold to customer. Foreign key to Product.ProductID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[rowguid]",
@@ -75,9 +66,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesOrderDetailID]",
@@ -87,9 +76,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. One incremental unique number per product sold."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SalesOrderID]",
@@ -99,9 +86,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to SalesOrderHeader.SalesOrderID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[SpecialOfferID]",
@@ -111,9 +96,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Promotional code. Foreign key to SpecialOffer.SpecialOfferID."
-      }
+      "OldName": ""
     },
     {
       "Name": "[UnitPrice]",
@@ -124,9 +107,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Selling price of a single product."
-      }
+      "OldName": ""
     },
     {
       "Name": "[UnitPriceDiscount]",
@@ -138,9 +119,7 @@
       "Sparse": false,
       "Collation": "",
       "DataMaskFunction": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount amount."
-      }
+      "OldName": ""
     }
   ],
   "Indexes": [
@@ -153,10 +132,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[rowguid]",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
-      }
+      "IndexColumns": "[rowguid]"
     },
     {
       "Name": "[IX_SalesOrderDetail_ProductID]",
@@ -167,10 +143,7 @@
       "Clustered": false,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ProductID]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
-      }
+      "IndexColumns": "[ProductID]"
     },
     {
       "Name": "[PK_SalesOrderDetail_SalesOrderID_SalesOrderDetailID]",
@@ -181,10 +154,7 @@
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[SalesOrderID],[SalesOrderDetailID]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
-      }
+      "IndexColumns": "[SalesOrderID],[SalesOrderDetailID]"
     }
   ],
   "ForeignKeys": [
@@ -195,10 +165,7 @@
       "RelatedTable": "[SalesOrderHeader]",
       "RelatedColumns": "[SalesOrderID]",
       "DeleteAction": "CASCADE",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesOrderHeader.PurchaseOrderID."
-      }
+      "UpdateAction": "NO ACTION"
     },
     {
       "Name": "[FK_SalesOrderDetail_SpecialOfferProduct_SpecialOfferIDProductID]",
@@ -207,13 +174,7 @@
       "RelatedTable": "[SpecialOfferProduct]",
       "RelatedColumns": "[SpecialOfferID],[ProductID]",
       "DeleteAction": "NO ACTION",
-      "UpdateAction": "NO ACTION",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SpecialOfferProduct.SpecialOfferIDProductID."
-      }
+      "UpdateAction": "NO ACTION"
     }
-  ],
-  "ExtendedProperties": {
-    "MS_Description": "Individual products associated with a specific sales order. See SalesOrderHeader."
-  }
+  ]
 }
