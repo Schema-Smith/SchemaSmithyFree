@@ -11,8 +11,8 @@ RUN apt-key add /var/opt/mssql/ms-key.cer
 RUN curl https://packages.microsoft.com/config/ubuntu/22.04/mssql-server-2022.list -o /etc/apt/sources.list.d/mssql-server-2022.list
 RUN apt-get update
 
-# Install SQL Server full-text-search
-RUN apt-get install -y mssql-server-fts
+# Install SQL Server full-text-search and command-line tools
+RUN ACCEPT_EULA=Y apt-get install -y mssql-server-fts mssql-tools18
 
 RUN apt-get clean
 RUN rm -rf /var/lib/apt/lists

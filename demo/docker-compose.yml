@@ -1,3 +1,5 @@
+name: schemasmith-community-demo
+
 services:
   quench-northwind:
     build:
