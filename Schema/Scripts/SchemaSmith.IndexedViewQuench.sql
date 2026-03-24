@@ -197,21 +197,148 @@ BEGIN
                     @idxColumns NVARCHAR(MAX), @idxInclude NVARCHAR(MAX),
                     @idxCompression NVARCHAR(200), @idxFillFactor INT;
 
-            -- For index updates on existing views, drop changed indexes first
+            -- For index updates on existing views, diff individual indexes
             IF @needsIndexUpdate = 1 AND @existingObjectId IS NOT NULL
             BEGIN
-                -- Simple approach: drop all existing indexes and recreate from spec
-                -- (Index-only diff optimization deferred to SchemaSmith.IndexedViewIndexQuench.sql)
-                SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName), '; ')
-                FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type > 1;
-                IF @ncDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @ncDropSql;
+                -- Build existing index metadata from sys catalog
+                DECLARE @ExistingIdx TABLE (
+                    Name NVARCHAR(200),
+                    IsUnique BIT,
+                    IsClustered BIT,
+                    IndexColumns NVARCHAR(MAX),
+                    IncludeColumns NVARCHAR(MAX),
+                    CompressionType NVARCHAR(200),
+                    [FillFactor] INT
+                );
 
-                SELECT @clDropSql = 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName)
-                FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type = 1;
-                IF @clDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @clDropSql;
+                DELETE FROM @ExistingIdx;
+                INSERT INTO @ExistingIdx (Name, IsUnique, IsClustered, IndexColumns, IncludeColumns, CompressionType, [FillFactor])
+                SELECT
+                    i.name,
+                    i.is_unique,
+                    CAST(CASE WHEN i.type = 1 THEN 1 ELSE 0 END AS BIT),
+                    STRING_AGG(
+                        CASE WHEN ic.is_included_column = 0
+                            THEN QUOTENAME(c.name) + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END
+                            ELSE NULL END, ','
+                    ) WITHIN GROUP (ORDER BY ic.key_ordinal),
+                    (SELECT STRING_AGG(QUOTENAME(c2.name), ',') WITHIN GROUP (ORDER BY ic2.index_column_id)
+                       FROM sys.index_columns ic2
+                      INNER JOIN sys.columns c2 ON ic2.object_id = c2.object_id AND ic2.column_id = c2.column_id
+                      WHERE ic2.object_id = i.object_id AND ic2.index_id = i.index_id AND ic2.is_included_column = 1),
+                    ISNULL(p.data_compression_desc, 'NONE'),
+                    i.fill_factor
+                FROM sys.indexes i
+                INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+                INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+                LEFT JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id AND p.partition_number = 1
+                WHERE i.object_id = @existingObjectId AND i.type > 0
+                GROUP BY i.name, i.index_id, i.is_unique, i.type, i.fill_factor, p.data_compression_desc, i.object_id;
+
+                -- Parse desired indexes from JSON
+                DECLARE @DesiredIdx TABLE (
+                    Name NVARCHAR(200),
+                    IsUnique BIT,
+                    IsClustered BIT,
+                    IndexColumns NVARCHAR(MAX),
+                    IncludeColumns NVARCHAR(MAX),
+                    CompressionType NVARCHAR(200),
+                    [FillFactor] INT
+                );
+
+                DELETE FROM @DesiredIdx;
+                INSERT INTO @DesiredIdx (Name, IsUnique, IsClustered, IndexColumns, IncludeColumns, CompressionType, [FillFactor])
+                SELECT
+                    [SchemaSmith].[fn_StripBracketWrapping](JSON_VALUE(idx.value, '$.Name')),
+                    CAST(ISNULL(JSON_VALUE(idx.value, '$.Unique'), 'false') AS BIT),
+                    CAST(ISNULL(JSON_VALUE(idx.value, '$.Clustered'), 'false') AS BIT),
+                    REPLACE(JSON_VALUE(idx.value, '$.IndexColumns'), ', ', ','),
+                    REPLACE(ISNULL(JSON_VALUE(idx.value, '$.IncludeColumns'), ''), ', ', ','),
+                    ISNULL(JSON_VALUE(idx.value, '$.CompressionType'), 'NONE'),
+                    CAST(ISNULL(JSON_VALUE(idx.value, '$.FillFactor'), '0') AS INT)
+                FROM OPENJSON(@indexJson) idx;
+
+                -- Determine if the clustered index needs changing
+                -- If so, ALL nonclustered indexes must be dropped first (SQL Server requirement)
+                DECLARE @clusteredNeedsChange BIT = 0;
+
+                -- Clustered changed or removed
+                IF EXISTS (
+                    SELECT 1 FROM @ExistingIdx e
+                    WHERE e.IsClustered = 1
+                    AND (NOT EXISTS (SELECT 1 FROM @DesiredIdx d WHERE d.Name = e.Name AND d.IsClustered = 1)
+                         OR EXISTS (SELECT 1 FROM @DesiredIdx d WHERE d.Name = e.Name AND d.IsClustered = 1
+                                    AND (d.IsUnique != e.IsUnique OR d.IndexColumns != e.IndexColumns
+                                         OR ISNULL(d.IncludeColumns, '') != ISNULL(e.IncludeColumns, '')
+                                         OR d.CompressionType != e.CompressionType
+                                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor]))))
+                )
+                    SET @clusteredNeedsChange = 1;
+
+                -- New clustered index where none existed
+                IF NOT EXISTS (SELECT 1 FROM @ExistingIdx WHERE IsClustered = 1)
+                   AND EXISTS (SELECT 1 FROM @DesiredIdx WHERE IsClustered = 1)
+                    SET @clusteredNeedsChange = 1;
+
+                IF @clusteredNeedsChange = 1
+                BEGIN
+                    -- Clustered index changing — must drop all indexes (nonclustered then clustered)
+                    SET @msg = N'Clustered index changed on ' + @schemaName + N'.' + @viewName + N' — dropping all indexes for recreation';
+                    EXEC [SchemaSmith].[PrintWithNoWait] @msg;
+
+                    SET @ncDropSql = NULL;
+                    SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName), '; ')
+                    FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type > 1;
+                    IF @ncDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @ncDropSql;
+
+                    SET @clDropSql = NULL;
+                    SELECT @clDropSql = 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName)
+                    FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type = 1;
+                    IF @clDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @clDropSql;
+                END
+                ELSE
+                BEGIN
+                    -- Clustered index unchanged — drop only changed and removed nonclustered indexes
+                    DECLARE @dropSql NVARCHAR(MAX);
+
+                    -- Drop changed nonclustered indexes (properties differ from spec)
+                    SET @dropSql = NULL;
+                    SELECT @dropSql = STRING_AGG(
+                        'DROP INDEX ' + QUOTENAME(e.Name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName), '; ')
+                    FROM @ExistingIdx e
+                    INNER JOIN @DesiredIdx d ON d.Name = e.Name
+                    WHERE e.IsClustered = 0
+                    AND (d.IsUnique != e.IsUnique OR d.IsClustered != e.IsClustered
+                         OR d.IndexColumns != e.IndexColumns
+                         OR ISNULL(d.IncludeColumns, '') != ISNULL(e.IncludeColumns, '')
+                         OR d.CompressionType != e.CompressionType
+                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor]));
+                    IF @dropSql IS NOT NULL
+                    BEGIN
+                        SET @msg = N'Dropping changed nonclustered indexes on ' + @schemaName + N'.' + @viewName;
+                        EXEC [SchemaSmith].[PrintWithNoWait] @msg;
+                        IF @WhatIf = 0 EXEC sp_executesql @dropSql;
+                    END;
+
+                    -- Drop removed nonclustered indexes (in DB but not in spec)
+                    SET @dropSql = NULL;
+                    SELECT @dropSql = STRING_AGG(
+                        'DROP INDEX ' + QUOTENAME(e.Name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName), '; ')
+                    FROM @ExistingIdx e
+                    WHERE e.IsClustered = 0
+                    AND NOT EXISTS (SELECT 1 FROM @DesiredIdx d WHERE d.Name = e.Name);
+                    IF @dropSql IS NOT NULL
+                    BEGIN
+                        SET @msg = N'Dropping removed nonclustered indexes on ' + @schemaName + N'.' + @viewName;
+                        EXEC [SchemaSmith].[PrintWithNoWait] @msg;
+                        IF @WhatIf = 0 EXEC sp_executesql @dropSql;
+                    END;
+                END;
             END;
 
-            -- Create indexes (clustered first)
+            -- Create missing indexes (clustered first, then nonclustered)
+            -- For new views: all indexes are missing
+            -- For index updates: only dropped/new indexes are missing (unchanged indexes still exist and are skipped)
             DECLARE idx_cursor CURSOR LOCAL FAST_FORWARD FOR
                 SELECT
                     [SchemaSmith].[fn_StripBracketWrapping](JSON_VALUE(idx.value, '$.Name')),
@@ -228,24 +355,32 @@ BEGIN
             FETCH NEXT FROM idx_cursor INTO @idxName, @idxUnique, @idxClustered, @idxColumns, @idxInclude, @idxCompression, @idxFillFactor;
             WHILE @@FETCH_STATUS = 0
             BEGIN
-                SET @sql = 'CREATE ';
-                IF @idxUnique = 1 SET @sql += 'UNIQUE ';
-                IF @idxClustered = 1 SET @sql += 'CLUSTERED ';
-                SET @sql += 'INDEX ' + QUOTENAME(@idxName) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName) + ' (' + @idxColumns + ')';
-                IF @idxInclude IS NOT NULL SET @sql += ' INCLUDE (' + @idxInclude + ')';
-
-                DECLARE @withOpts NVARCHAR(MAX) = '';
-                IF @idxCompression IS NOT NULL AND @idxCompression != 'NONE'
-                    SET @withOpts += 'DATA_COMPRESSION = ' + @idxCompression;
-                IF @idxFillFactor > 0 OR (@UpdateFillFactor = 1 AND @idxFillFactor > 0)
+                -- Skip indexes that already exist (unchanged during index-only update)
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.indexes si
+                    WHERE si.object_id = OBJECT_ID(QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName))
+                    AND si.name = @idxName
+                )
                 BEGIN
-                    IF LEN(@withOpts) > 0 SET @withOpts += ', ';
-                    SET @withOpts += 'FILLFACTOR = ' + CAST(@idxFillFactor AS NVARCHAR(10));
-                END;
-                IF LEN(@withOpts) > 0 SET @sql += ' WITH (' + @withOpts + ')';
+                    SET @sql = 'CREATE ';
+                    IF @idxUnique = 1 SET @sql += 'UNIQUE ';
+                    IF @idxClustered = 1 SET @sql += 'CLUSTERED ';
+                    SET @sql += 'INDEX ' + QUOTENAME(@idxName) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName) + ' (' + @idxColumns + ')';
+                    IF @idxInclude IS NOT NULL SET @sql += ' INCLUDE (' + @idxInclude + ')';
 
-                EXEC [SchemaSmith].[PrintWithNoWait] @sql;
-                IF @WhatIf = 0 EXEC sp_executesql @sql;
+                    DECLARE @withOpts NVARCHAR(MAX) = '';
+                    IF @idxCompression IS NOT NULL AND @idxCompression != 'NONE'
+                        SET @withOpts += 'DATA_COMPRESSION = ' + @idxCompression;
+                    IF @idxFillFactor > 0 OR (@UpdateFillFactor = 1 AND @idxFillFactor > 0)
+                    BEGIN
+                        IF LEN(@withOpts) > 0 SET @withOpts += ', ';
+                        SET @withOpts += 'FILLFACTOR = ' + CAST(@idxFillFactor AS NVARCHAR(10));
+                    END;
+                    IF LEN(@withOpts) > 0 SET @sql += ' WITH (' + @withOpts + ')';
+
+                    EXEC [SchemaSmith].[PrintWithNoWait] @sql;
+                    IF @WhatIf = 0 EXEC sp_executesql @sql;
+                END;
 
                 FETCH NEXT FROM idx_cursor INTO @idxName, @idxUnique, @idxClustered, @idxColumns, @idxInclude, @idxCompression, @idxFillFactor;
             END;
