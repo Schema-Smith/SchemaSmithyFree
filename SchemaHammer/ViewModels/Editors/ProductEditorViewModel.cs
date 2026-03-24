@@ -36,7 +36,7 @@ public partial class ProductEditorViewModel : EditorBaseViewModel
         catch { return; }
 
         Name = product.Name ?? "";
-        Platform = product.Platform ?? "MSSQL";
+        Platform = product.Platform ?? "SqlServer";
         MinimumVersion = product.MinimumVersion?.ToString() ?? "";
         DropUnknownIndexes = product.DropUnknownIndexes;
         ValidationScript = product.ValidationScript ?? "";

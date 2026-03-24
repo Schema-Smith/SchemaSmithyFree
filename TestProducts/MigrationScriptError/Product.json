@@ -8,5 +8,5 @@
         "MainDB": "TestMain",
         "ReleaseVersion": ""
     },
-    "Platform": "MSSQL"
+    "Platform": "SqlServer"
 }

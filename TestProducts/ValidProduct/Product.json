@@ -11,5 +11,5 @@
         "MainDB": "TestMain",
         "ReleaseVersion": "1.0.0"
     },
-    "Platform": "MSSQL"
+    "Platform": "SqlServer"
 }

@@ -54,8 +54,8 @@ public class Product
 
         var productFilePath = Path.Combine(schemaPackagePath, "Product.json");
         var product = JsonHelper.ProductLoad<Product>(productFilePath);
-        if (!product.Platform.EqualsIgnoringCase(ConfigHelper.Platform))
-            throw new Exception($"Product platform '{product.Platform}' does not match application platform '{ConfigHelper.Platform}'");
+        if (!ConfigHelper.IsValidPlatform(product.Platform))
+            throw new Exception($"Product platform '{product.Platform}' is not supported. Valid platforms: SqlServer, MSSQL (legacy).");
         product.FilePath = productFilePath;
         OverrideProductScriptTokens(config, product);
         product.ScriptTokens.Add("ProductName", product.Name);

@@ -2,6 +2,7 @@
 
 using Schema.Domain;
 using Schema.Isolators;
+using Schema.Utility;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using NSubstitute;
@@ -112,7 +113,7 @@ public class ProductTests
             Assert.That(product.ScriptTokens, Is.Empty);
             Assert.That(product.BaselineValidationScript, Is.Null);
             Assert.That(product.VersionStampScript, Is.Null);
-            Assert.That(product.Platform, Is.EqualTo("MSSQL"));
+            Assert.That(product.Platform, Is.EqualTo("SqlServer"));
             Assert.That(product.FilePath, Is.Null);
         });
     }
@@ -129,7 +130,7 @@ public class ProductTests
             ScriptTokens = new Dictionary<string, string> { ["Env"] = "prod", ["DB"] = "MyDB" },
             BaselineValidationScript = "SELECT 2",
             VersionStampScript = "SELECT 3",
-            Platform = "MSSQL",
+            Platform = "SqlServer",
             FilePath = "ignored/because/json-ignore.json"
         };
 
@@ -146,7 +147,7 @@ public class ProductTests
             Assert.That(deserialized.ScriptTokens["DB"], Is.EqualTo("MyDB"));
             Assert.That(deserialized.BaselineValidationScript, Is.EqualTo("SELECT 2"));
             Assert.That(deserialized.VersionStampScript, Is.EqualTo("SELECT 3"));
-            Assert.That(deserialized.Platform, Is.EqualTo("MSSQL"));
+            Assert.That(deserialized.Platform, Is.EqualTo("SqlServer"));
             // FilePath is [JsonIgnore] — must not round-trip
             Assert.That(deserialized.FilePath, Is.Null);
         });
@@ -266,13 +267,35 @@ public class ProductTests
     }
 
     [Test]
-    public void PlatformDefaultsToMSSQLWhenNotSpecifiedInJson()
+    public void PlatformDefaultsToSqlServerWhenNotSpecifiedInJson()
     {
         var json = """{"Name": "NoPlatform"}""";
 
         var product = JsonConvert.DeserializeObject<Product>(json);
 
-        Assert.That(product.Platform, Is.EqualTo("MSSQL"));
+        Assert.That(product.Platform, Is.EqualTo("SqlServer"));
+    }
+
+    [Test]
+    public void LegacyMSSQLPlatformIsAcceptedAsValid()
+    {
+        Assert.That(ConfigHelper.IsValidPlatform("MSSQL"), Is.True);
+        Assert.That(ConfigHelper.IsValidPlatform("mssql"), Is.True);
+    }
+
+    [Test]
+    public void SqlServerPlatformIsAcceptedAsValid()
+    {
+        Assert.That(ConfigHelper.IsValidPlatform("SqlServer"), Is.True);
+        Assert.That(ConfigHelper.IsValidPlatform("sqlserver"), Is.True);
+    }
+
+    [Test]
+    public void UnsupportedPlatformIsRejected()
+    {
+        Assert.That(ConfigHelper.IsValidPlatform("PostgreSQL"), Is.False);
+        Assert.That(ConfigHelper.IsValidPlatform("MySQL"), Is.False);
+        Assert.That(ConfigHelper.IsValidPlatform(""), Is.False);
     }
 
     [Test]
@@ -326,7 +349,7 @@ public class ProductTests
 
             var ex = Assert.Throws<Exception>(() => Product.Load());
             Assert.That(ex!.Message, Does.Contain("PostgreSQL"));
-            Assert.That(ex.Message, Does.Contain("MSSQL"));
+            Assert.That(ex.Message, Does.Contain("not supported"));
 
             FactoryContainer.Clear();
         }

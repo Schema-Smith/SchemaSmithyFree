@@ -5,5 +5,5 @@
         "MainDB": "",
         "ReleaseVersion": ""
     },
-    "Platform": "MSSQL"
+    "Platform": "SqlServer"
 }

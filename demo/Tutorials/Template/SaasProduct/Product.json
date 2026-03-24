@@ -9,5 +9,5 @@
     "RegistryDb": "Registry",
     "MigrationVersion": "1.0.1"
   },
-  "Platform": "MSSQL"
+  "Platform": "SqlServer"
 }

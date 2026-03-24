@@ -7,5 +7,5 @@
   "ScriptTokens": {
     "ClientDb": "Client"
   },
-  "Platform": "MSSQL"
+  "Platform": "SqlServer"
 }

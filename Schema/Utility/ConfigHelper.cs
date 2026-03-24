@@ -29,7 +29,11 @@ public static class ConfigHelper
         }
     }
 
-    public const string Platform = "MSSQL";
+    public const string Platform = "SqlServer";
+    private static readonly string[] ValidPlatforms = ["SqlServer", "MSSQL"];
+
+    public static bool IsValidPlatform(string platform)
+        => Array.Exists(ValidPlatforms, p => p.Equals(platform, StringComparison.OrdinalIgnoreCase));
 
     public static IConfigurationRoot GetAppSettingsAndUserSecrets(string app, Action<string> logLine)
     {
