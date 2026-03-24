@@ -40,9 +40,9 @@ public class ConnectionStringTests
     [Test]
     public void Build_WithPort_AppendsCommaPort()
     {
-        var result = ConnectionString.Build("myserver", "mydb", "myuser", "mypass", "1440");
+        var result = ConnectionString.Build("myserver", "mydb", "myuser", "mypass", "1450");
 
-        Assert.That(result, Does.Contain("data source=myserver,1440"));
+        Assert.That(result, Does.Contain("data source=myserver,1450"));
     }
 
     [Test]

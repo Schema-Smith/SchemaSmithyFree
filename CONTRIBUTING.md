@@ -16,12 +16,15 @@ The tools in SchemaSmithyFree target:
 * **Database**: Tested against SQL Server `2019-CU27-ubuntu-20.04`. Should work with any database set to compatibility level 130 or higher.
 
 ### Running Locally with Docker
+* **Database**: Tested against SQL Server `2022-latest`. Should work with any database set to compatibility level 130 or higher.
+Running Locally with Docker
 From the project root:
 ```
 docker compose build
 docker compose up
 ```
 This spins up a SQL Server 2019 container and applies the **Test Product** schema. You may also want to pull the [SchemaSmithDemos](https://github.com/Schema-Smith/SchemaSmithDemos) repository and run docker from there instead to apply several demo products for more test data and examples.
+This spins up a SQL Server 2022 container and applies the **Test Product** schema. You may also want to pull the [SchemaSmithDemos](https://github.com/Schema-Smith/SchemaSmithDemos) repository and run docker from there instead to apply several demo products for more test data and examples. 
 
 Connection details are defined in `.env`. Connect at `localhost`.
 

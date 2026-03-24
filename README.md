@@ -24,7 +24,7 @@ docker compose -f demo/docker-compose.yml build
 docker compose -f demo/docker-compose.yml up
 ```
 
-This builds SchemaQuench from source, starts a SQL Server instance, and deploys the Northwind and AdventureWorks demo products. Connect to the server at `localhost:1440` with credentials from `demo/.env`.
+This builds SchemaQuench from source, starts a SQL Server instance, and deploys the Northwind and AdventureWorks demo products. Connect to the server at `localhost:1450` with credentials from `demo/.env`.
 
 ## Building
 
@@ -34,7 +34,7 @@ dotnet build SchemaSmithyFree.sln
 
 ## Running Tests
 
-Integration tests require a SQL Server instance on `localhost,1440`. Start one via the demo docker-compose:
+Integration tests require a SQL Server instance on `localhost,1450`. Start one via the demo docker-compose:
 
 ```bash
 docker compose -f demo/docker-compose.yml up -d demoserver

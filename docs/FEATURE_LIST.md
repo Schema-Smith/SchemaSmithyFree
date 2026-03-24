@@ -290,9 +290,9 @@ Packages can be deployed from **folders** or **ZIP archives**.
 | Linux | Yes | No |
 | macOS | Yes | No |
 
-**Distribution:** Standalone executables, ZIP packages, Docker images, Docker Compose (includes SQL Server 2019 with Full-Text Search for testing).
+**Distribution:** Standalone executables, ZIP packages, Docker images, Docker Compose (includes SQL Server 2022 with Full-Text Search for testing).
 
-**Tested against:** SQL Server 2019. Compatible with compatibility level 130+.
+**Tested against:** SQL Server 2022. Compatible with compatibility level 130+.
 
 ---
 

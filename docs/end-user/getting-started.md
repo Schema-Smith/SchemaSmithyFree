@@ -8,7 +8,7 @@ Applies to: SchemaQuench, SchemaTongs, DataTongs (SQL Server, Community)
 
 - **.NET 9.0 Runtime** — Required for the `net9.0` tools
 - **.NET Framework 4.8.1** — Required for the `net481` tools (Windows only)
-- **SQL Server** — Tested against SQL Server 2019 but should work for any version with a compatibility level of 130 or higher
+- **SQL Server** — Tested against SQL Server 2022 but should work for any version with a compatibility level of 130 or higher
 
 ---
 
@@ -125,7 +125,7 @@ docker compose build
 docker compose up
 ```
 
-This starts a SQL Server 2019 container with Full-Text Search and applies the included test product. Connect at `localhost` on the port defined in `.env` (default: 1440) with the credentials in `.env`.
+This starts a SQL Server 2022 container with Full-Text Search and applies the included test product. Connect at `localhost` on the port defined in `.env` (default: 1450) with the credentials in `.env`.
 
 ---
 

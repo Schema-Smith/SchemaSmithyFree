@@ -37,6 +37,6 @@ docker compose build
 docker compose up
 ```
 
-This applies the included test product to a Linux SQL Server 2019 container. Connect to the server at `localhost` with the credentials defined in `.env`.
+This applies the included test product to a Linux SQL Server 2022 container. Connect to the server at `localhost` with the credentials defined in `.env`.
 
 For more samples, see the [demo repository](https://github.com/Schema-Smith/SchemaSmithDemos). For full documentation, visit [schemasmith.com](https://schemasmith.com/documentation/mssql/community/getting-started.html).

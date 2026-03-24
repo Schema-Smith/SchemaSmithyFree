@@ -30,9 +30,9 @@ docker compose -f demo/docker-compose.yml build
 docker compose -f demo/docker-compose.yml up
 ```
 
-This builds SchemaQuench from source, starts SQL Server 2019 with full-text search, creates demo databases, and deploys both Northwind and AdventureWorks.
+This builds SchemaQuench from source, starts SQL Server 2022 with full-text search, creates demo databases, and deploys both Northwind and AdventureWorks.
 
-Connect to the server at `localhost:1440` with credentials from `.env`.
+Connect to the server at `localhost:1450` with credentials from `.env`.
 
 ## Running Just the SQL Server
 

@@ -37,7 +37,7 @@ services:
       dockerfile: demoserver.Dockerfile
     restart: always
     ports:
-      - "${MSSQL_PORT:-1440}:1433"
+      - "${MSSQL_PORT:-1450}:1433"
     environment:
       - ACCEPT_EULA=Y
       - MSSQL_SA_USERNAME=${MSSQL_SA_USERNAME}
