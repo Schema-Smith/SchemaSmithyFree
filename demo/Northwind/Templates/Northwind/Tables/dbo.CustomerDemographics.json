@@ -2,6 +2,7 @@
   "Schema": "[dbo]",
   "Name": "[CustomerDemographics]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[CustomerDesc]",
@@ -10,7 +11,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     },
     {
       "Name": "[CustomerTypeID]",
@@ -19,7 +21,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     }
   ],
   "Indexes": [

@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER view [dbo].[Order Details Extended] AS
+CREATE OR ALTER   view "Order Details Extended" AS
 
 SELECT "Order Details".OrderID, "Order Details".ProductID, Products.ProductName, 
 	"Order Details".UnitPrice, "Order Details".Quantity, "Order Details".Discount, 

@@ -2,8 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-CREATE OR ALTER view [dbo].[Customer and Suppliers by City] AS
+CREATE OR ALTER   view "Customer and Suppliers by City" AS
 
 SELECT City, CompanyName, ContactName, 'Customers' AS Relationship 
 FROM Customers

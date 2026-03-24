@@ -2,6 +2,7 @@
   "Schema": "[dbo]",
   "Name": "[Categories]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[CategoryID]",
@@ -10,7 +11,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     },
     {
       "Name": "[CategoryName]",
@@ -19,7 +21,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     },
     {
       "Name": "[Description]",
@@ -28,7 +31,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     },
     {
       "Name": "[Picture]",
@@ -37,7 +41,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     }
   ],
   "Indexes": [

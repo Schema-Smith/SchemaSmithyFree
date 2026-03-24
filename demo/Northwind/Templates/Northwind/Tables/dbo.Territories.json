@@ -2,6 +2,7 @@
   "Schema": "[dbo]",
   "Name": "[Territories]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[RegionID]",
@@ -10,7 +11,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     },
     {
       "Name": "[TerritoryDescription]",
@@ -19,7 +21,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     },
     {
       "Name": "[TerritoryID]",
@@ -28,7 +31,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     }
   ],
   "Indexes": [

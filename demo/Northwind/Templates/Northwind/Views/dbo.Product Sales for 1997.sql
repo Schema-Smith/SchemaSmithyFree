@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER view [dbo].[Product Sales for 1997] AS
+CREATE OR ALTER   view "Product Sales for 1997" AS
 
 SELECT Categories.CategoryName, Products.ProductName, 
 Sum(CONVERT(money,("Order Details".UnitPrice*Quantity*(1-Discount)/100))*100) AS ProductSales

@@ -2,6 +2,7 @@
   "Schema": "[dbo]",
   "Name": "[EmployeeTerritories]",
   "CompressionType": "NONE",
+  "OldName": "",
   "Columns": [
     {
       "Name": "[EmployeeID]",
@@ -10,7 +11,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     },
     {
       "Name": "[TerritoryID]",
@@ -19,7 +21,8 @@
       "Persisted": false,
       "Sparse": false,
       "Collation": "",
-      "DataMaskFunction": ""
+      "DataMaskFunction": "",
+      "OldName": ""
     }
   ],
   "Indexes": [

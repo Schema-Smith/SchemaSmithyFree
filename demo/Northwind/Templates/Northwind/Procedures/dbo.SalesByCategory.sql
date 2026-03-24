@@ -1,7 +1,8 @@
 SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE OR ALTER PROCEDURE [dbo].[SalesByCategory]
+
+CREATE OR ALTER   PROCEDURE SalesByCategory
     @CategoryName nvarchar(15), @OrdYear nvarchar(4) = '1998'
 AS
 

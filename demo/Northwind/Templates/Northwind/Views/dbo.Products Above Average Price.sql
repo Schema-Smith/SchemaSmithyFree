@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER view [dbo].[Products Above Average Price] AS
+CREATE OR ALTER   view "Products Above Average Price" AS
 
 SELECT Products.ProductName, Products.UnitPrice
 FROM Products

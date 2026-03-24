@@ -1,7 +1,8 @@
 SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE OR ALTER PROCEDURE [dbo].[CustOrderHist] @CustomerID nchar(5)
+
+CREATE OR ALTER   PROCEDURE CustOrderHist @CustomerID nchar(5)
 AS
 
 SELECT ProductName, Total=SUM(Quantity)

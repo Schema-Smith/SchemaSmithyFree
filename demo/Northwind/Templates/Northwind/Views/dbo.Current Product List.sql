@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER view [dbo].[Current Product List] AS
+CREATE OR ALTER   view "Current Product List" AS
 
 SELECT Product_List.ProductID, Product_List.ProductName
 FROM Products AS Product_List

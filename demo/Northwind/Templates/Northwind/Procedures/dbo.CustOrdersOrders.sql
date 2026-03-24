@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER PROCEDURE [dbo].[CustOrdersOrders] @CustomerID nchar(5)
+CREATE OR ALTER   PROCEDURE CustOrdersOrders @CustomerID nchar(5)
 AS
 
 SELECT OrderID, 

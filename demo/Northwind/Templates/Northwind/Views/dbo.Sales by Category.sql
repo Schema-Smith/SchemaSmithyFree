@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER view [dbo].[Sales by Category] AS
+CREATE OR ALTER   view "Sales by Category" AS
 
 SELECT Categories.CategoryID, Categories.CategoryName, Products.ProductName, 
 	Sum("Order Details Extended".ExtendedPrice) AS ProductSales

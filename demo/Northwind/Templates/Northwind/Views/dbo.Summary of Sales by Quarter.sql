@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER view [dbo].[Summary of Sales by Quarter] AS
+CREATE OR ALTER   view "Summary of Sales by Quarter" AS
 
 SELECT Orders.ShippedDate, Orders.OrderID, "Order Subtotals".Subtotal
 FROM Orders INNER JOIN "Order Subtotals" ON Orders.OrderID = "Order Subtotals".OrderID

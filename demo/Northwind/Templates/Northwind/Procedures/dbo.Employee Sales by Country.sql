@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER procedure [dbo].[Employee Sales by Country] 
+CREATE OR ALTER   procedure "Employee Sales by Country" 
 @Beginning_Date DateTime, @Ending_Date DateTime AS
 
 SELECT Employees.Country, Employees.LastName, Employees.FirstName, Orders.ShippedDate, Orders.OrderID, "Order Subtotals".Subtotal AS SaleAmount

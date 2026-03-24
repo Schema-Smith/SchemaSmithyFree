@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER procedure [dbo].[Sales by Year] 
+CREATE OR ALTER   procedure "Sales by Year" 
 	@Beginning_Date DateTime, @Ending_Date DateTime AS
 
 SELECT Orders.ShippedDate, Orders.OrderID, "Order Subtotals".Subtotal, DATENAME(yy,ShippedDate) AS Year
