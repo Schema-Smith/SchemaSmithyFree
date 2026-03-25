@@ -20,9 +20,9 @@ namespace SchemaTongs;
 
 public class SchemaTongs
 {
-    private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
+    internal readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private string _productPath = "";
-    private string _templatePath = "";
+    internal string _templatePath = "";
     private bool _includeTables;
     private bool _includeSchemas;
     private bool _includeUserDefinedTypes;
@@ -39,10 +39,10 @@ public class SchemaTongs
     private string[] _objectsToCast = [];
     private OrphanHandlingMode _orphanHandlingMode = OrphanHandlingMode.Detect;
     private CheckConstraintStyle _checkConstraintStyle;
-    private bool _validateScripts;
-    private bool _saveInvalidScripts = true;
-    private readonly Dictionary<string, ExtractionFileIndex> _folderIndexes = new();
-    private readonly List<(string Folder, string FileName, string Error)> _invalidObjects = new();
+    internal bool _validateScripts;
+    internal bool _saveInvalidScripts = true;
+    internal readonly Dictionary<string, ExtractionFileIndex> _folderIndexes = new();
+    internal readonly List<(string Folder, string FileName, string Error)> _invalidObjects = new();
 
     private void BuildFileIndexes()
     {
@@ -76,7 +76,7 @@ public class SchemaTongs
         return outputPath;
     }
 
-    private void ValidateAndHandleScript(IDbConnection connection, string folderName, string fileName, string script, string objectType)
+    internal void ValidateAndHandleScript(IDbConnection connection, string folderName, string fileName, string script, string objectType)
     {
         if (!_validateScripts) return;
 
@@ -1018,7 +1018,7 @@ SELECT s.name AS SchemaName, xsc.name AS CollectionName
         }
     }
 
-    private void RenameLegacyTableDataFolder()
+    internal void RenameLegacyTableDataFolder()
     {
         var dir = DirectoryWrapper.GetFromFactory();
         var file = FileWrapper.GetFromFactory();
