@@ -30,6 +30,14 @@ jobs:
           json_schema: "./demo/AdventureWorks/.json-schemas/templates.schema"
           files: "./demo/AdventureWorks/Templates/AdventureWorks/Template.json"
 
+      - name: validate-adventureworks-initialize-template
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          json_schema: "./demo/AdventureWorks/.json-schemas/templates.schema"
+          files: "./demo/AdventureWorks/Templates/Initialize/Template.json"
+
       - name: validate-adventureworks-tables
         uses: GrantBirki/json-yaml-validate@v3.3.0
         with:
@@ -58,6 +66,14 @@ jobs:
           use_gitignore: "false"
           json_schema: "./demo/Northwind/.json-schemas/templates.schema"
           files: "./demo/Northwind/Templates/Northwind/Template.json"
+
+      - name: validate-northwind-initialize-template
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          json_schema: "./demo/Northwind/.json-schemas/templates.schema"
+          files: "./demo/Northwind/Templates/Initialize/Template.json"
 
       - name: validate-northwind-tables
         uses: GrantBirki/json-yaml-validate@v3.3.0

@@ -2,12 +2,14 @@
 
 ## Demo Products
 
-Demo products are well-known, freely available SQL Server sample databases modified for deployment by SchemaSmith.
+Demo products are well-known, freely available SQL Server sample databases modified for deployment by SchemaSmith. Each demo is self-contained: it includes an Initialize template that creates its own database, so no external setup scripts are needed.
 
 | Demo | Source | Status |
 |------|--------|--------|
 | Northwind | [Northwind pubs](https://raw.githubusercontent.com/microsoft/sql-server-samples/master/samples/databases/northwind-pubs/instnwnd.sql) | Done |
 | AdventureWorks | [AdventureWorks OLTP Scripts](https://github.com/Microsoft/sql-server-samples/releases/download/adventureworks/AdventureWorks-oltp-install-script.zip) | Done |
+
+Each demo product includes a `PROVENANCE.md` file documenting the original source, extraction method, and any transformations applied during schema/data extraction.
 
 ## Tutorials
 
@@ -50,9 +52,13 @@ Each demo product is a standard SchemaSmith schema package:
 ProductName/
 ├── .community          ← Community edition marker
 ├── .json-schemas/      ← Generated JSON Schema validation files
+├── PROVENANCE.md       ← Source and extraction method documentation
 ├── Product.json        ← Product definition
 └── Templates/
-    └── TemplateName/
+    ├── Initialize/
+    │   ├── Template.json       ← Database creation template
+    │   └── MigrationScripts/   ← CREATE DATABASE scripts
+    └── ProductName/
         ├── Template.json
         ├── Tables/         ← Table definitions (JSON)
         ├── TableData/      ← Data merge scripts (SQL)
