@@ -114,6 +114,7 @@ public class SchemaTongs
 
         RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb);
         _templatePath = RepositoryHelper.UpdateOrInitTemplate(_productPath, config["Template:Name"], targetDb);
+        RenameLegacyTableDataFolder();
         BuildFileIndexes();
         CastDatabaseObjects(targetDb);
     }
@@ -146,6 +147,12 @@ public class SchemaTongs
         {
             connection.Close();
         }
+
+        var logDirectory = CommandLineParser.ValueOfSwitch("LogPath", null)
+            ?? AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        OrphanHandler.ArchiveExistingCleanupScripts(logDirectory);
+        ProcessOrphanDetection(logDirectory);
 
         _progressLog.Info("");
         _progressLog.Info("Casting Completed Successfully");
@@ -458,7 +465,12 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
         foreach (var (schema, name) in functions)
         {
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "FUNCTION");
-            if (sql == null) continue;
+            if (sql == null)
+            {
+                if (_folderIndexes.ContainsKey("Functions"))
+                    _folderIndexes["Functions"].ExcludeFromOrphans($"{schema}.{name}.sql");
+                continue;
+            }
 
             if (_scriptDynamicDependencyRemovalForFunctions)
             {
@@ -549,7 +561,12 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
         foreach (var (schema, name) in views)
         {
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "VIEW");
-            if (sql == null) continue;
+            if (sql == null)
+            {
+                if (_folderIndexes.ContainsKey("Views"))
+                    _folderIndexes["Views"].ExcludeFromOrphans($"{schema}.{name}.sql");
+                continue;
+            }
 
             var outputPath = ResolveAndWrite("Views", $"{schema}.{name}.sql", sql);
             _progressLog.Info($"  Casting {outputPath}");
@@ -586,7 +603,12 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
         foreach (var (schema, name) in procedures)
         {
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "PROCEDURE");
-            if (sql == null) continue;
+            if (sql == null)
+            {
+                if (_folderIndexes.ContainsKey("Procedures"))
+                    _folderIndexes["Procedures"].ExcludeFromOrphans($"{schema}.{name}.sql");
+                continue;
+            }
 
             var outputPath = ResolveAndWrite("Procedures", $"{schema}.{name}.sql", sql);
             _progressLog.Info($"  Casting {outputPath}");
@@ -622,7 +644,12 @@ SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
         foreach (var (tableSchema, tableName, triggerName) in triggers)
         {
             var sql = ScriptSqlServerProgrammableObject(command, tableSchema, triggerName, "TRIGGER", "TRIGGER", tableName);
-            if (sql == null) continue;
+            if (sql == null)
+            {
+                if (_folderIndexes.ContainsKey("Triggers"))
+                    _folderIndexes["Triggers"].ExcludeFromOrphans($"{tableSchema}.{tableName}.{triggerName}.sql");
+                continue;
+            }
 
             var escapedSchema = Regex.Escape(tableSchema);
             var escapedTable = Regex.Escape(tableName);
@@ -870,6 +897,66 @@ SELECT s.name AS SchemaName, xsc.name AS CollectionName
 
             ResolveAndWrite("Indexed Views", $"{schema}.{name}.json", json);
             _progressLog.Info($"  {schema}.{name}");
+        }
+    }
+
+    private void RenameLegacyTableDataFolder()
+    {
+        var dir = DirectoryWrapper.GetFromFactory();
+        var file = FileWrapper.GetFromFactory();
+        var legacyPath = Path.Combine(_templatePath, "TableData");
+        var newPath = Path.Combine(_templatePath, "Table Data");
+
+        if (dir.Exists(legacyPath) && !dir.Exists(newPath))
+        {
+            dir.CreateDirectory(newPath);
+            foreach (var filePath in dir.GetFiles(legacyPath, "*.*", SearchOption.AllDirectories))
+            {
+                var relativePath = filePath.Substring(legacyPath.Length + 1);
+                var destPath = Path.Combine(newPath, relativePath);
+                var destDir = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(destDir)) dir.CreateDirectory(destDir);
+                file.Copy(filePath, destPath);
+            }
+            dir.Delete(legacyPath, true);
+            _progressLog.Info("Renamed legacy 'TableData' folder to 'Table Data' for consistency.");
+        }
+        else if (dir.Exists(legacyPath) && dir.Exists(newPath))
+        {
+            _progressLog.Warn("Both 'TableData' and 'Table Data' folders exist. Please resolve manually.");
+        }
+    }
+
+    private void ProcessOrphanDetection(string logDirectory)
+    {
+        var fullyExtractedFolders = new Dictionary<string, ExtractionFileIndex>();
+        var hasObjectList = _objectsToCast.Length > 0;
+
+        void AddIfFullyExtracted(bool included, string folderName)
+        {
+            if (!included) return;
+            if (hasObjectList) return; // Skip orphan detection when ObjectList is active
+            if (_folderIndexes.ContainsKey(folderName))
+                fullyExtractedFolders[folderName] = _folderIndexes[folderName];
+        }
+
+        AddIfFullyExtracted(_includeTables, "Tables");
+        AddIfFullyExtracted(_includeSchemas, "Schemas");
+        AddIfFullyExtracted(_includeUserDefinedTypes, "DataTypes");
+        AddIfFullyExtracted(_includeUserDefinedFunctions, "Functions");
+        AddIfFullyExtracted(_includeViews, "Views");
+        AddIfFullyExtracted(_includeStoredProcedures, "Procedures");
+        AddIfFullyExtracted(_includeTableTriggers, "Triggers");
+        AddIfFullyExtracted(_includeFullTextCatalogs, "FullTextCatalogs");
+        AddIfFullyExtracted(_includeFullTextStopLists, "FullTextStopLists");
+        AddIfFullyExtracted(_includeDDLTriggers, "DDLTriggers");
+        AddIfFullyExtracted(_includeXmlSchemaCollections, "XMLSchemaCollections");
+        AddIfFullyExtracted(_includeIndexedViews, "Indexed Views");
+
+        if (fullyExtractedFolders.Count > 0)
+        {
+            _progressLog.Info("Processing orphan detection");
+            OrphanHandler.ProcessOrphans(fullyExtractedFolders, _orphanHandlingMode, logDirectory);
         }
     }
 
