@@ -51,11 +51,12 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(8).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(9).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Tables", "Test.TestTable.json"))), Arg.Any<string>());
+            file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Tables", "Test.CheckConstraintTest.json"))), Arg.Any<string>());
 
             config["ShouldCast:Tables"] = "false";
             FactoryContainer.Clear();
