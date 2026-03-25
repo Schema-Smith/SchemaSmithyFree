@@ -13,7 +13,8 @@
     // Name is used for the new product if one is created and will not rename an existing one.
     "Product": {
         "Path": "",
-        "Name": ""
+        "Name": "",
+        "CheckConstraintStyle": "ColumnLevel" // Used only when creating new Product.json
     },
     // Name will default to Database if not provided.
     // This becomes the folder name for the template that is exported as well as the template name.
@@ -34,6 +35,11 @@
         "XMLSchemaCollections": true,
         "IndexedViews": true,
         "ScriptDynamicDependencyRemovalForFunctions": false,
-        "ObjectList": "" // Comma-separated list of specific objects to extract (blank = all)
+        "ObjectList": "", // Comma-separated list of specific objects to extract (blank = all)
+        "ValidateScripts": false,
+        "SaveInvalidScripts": true
+    },
+    "OrphanHandling": {
+        "Mode": "Detect" // "Detect" | "DetectWithCleanupScripts" | "DetectDeleteAndCleanup"
     }
 }

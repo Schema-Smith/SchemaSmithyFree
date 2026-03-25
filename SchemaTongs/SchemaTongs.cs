@@ -36,6 +36,9 @@ public class SchemaTongs
     private bool _includeIndexedViews;
     private bool _scriptDynamicDependencyRemovalForFunctions;
     private string[] _objectsToCast = [];
+    private OrphanHandlingMode _orphanHandlingMode = OrphanHandlingMode.Detect;
+    private bool _validateScripts;
+    private bool _saveInvalidScripts = true;
     private readonly Dictionary<string, ExtractionFileIndex> _folderIndexes = new();
 
     private void BuildFileIndexes()
@@ -104,6 +107,10 @@ public class SchemaTongs
         _includeIndexedViews = config["ShouldCast:IndexedViews"]?.ToLower() != "false";
         _scriptDynamicDependencyRemovalForFunctions = config["ShouldCast:ScriptDynamicDependencyRemovalForFunctions"]?.ToLower() == "true";
         _objectsToCast = (config["ShouldCast:ObjectList"]?.ToLower() ?? "").Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+        _orphanHandlingMode = Enum.TryParse<OrphanHandlingMode>(config["OrphanHandling:Mode"], true, out var mode)
+            ? mode : OrphanHandlingMode.Detect;
+        _validateScripts = config["ShouldCast:ValidateScripts"]?.ToLower() == "true";
+        _saveInvalidScripts = config["ShouldCast:SaveInvalidScripts"]?.ToLower() != "false";
 
         RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb);
         _templatePath = RepositoryHelper.UpdateOrInitTemplate(_productPath, config["Template:Name"], targetDb);
