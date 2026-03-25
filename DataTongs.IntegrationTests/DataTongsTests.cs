@@ -81,6 +81,122 @@ INSERT INTO [dbo].[TestTable] ([Id], [Name], Description)
         }
     }
 
+    [Test]
+    public void ShouldLogError_WhenTableDoesNotExist()
+    {
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+        lock (FactoryContainer.SharedLockObject)
+        {
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+
+            var config = ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", null);
+            config["Source:database"] = _integrationDb;
+            config["Tables:0:Name"] = "dbo.NonExistentTable";
+            config["Tables:0:KeyColumns"] = "Id";
+
+            var tongs = new DataTongs();
+            tongs.CastData();
+
+            progressLog.Received(1).Error(Arg.Is<string>(s => s.Contains("does not exist")));
+            file.DidNotReceive().WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldSkipScript_WhenTableHasNoData()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_integrationDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+DROP TABLE IF EXISTS [dbo].[EmptyTable];
+CREATE TABLE [dbo].[EmptyTable] ([Id] INT NOT NULL PRIMARY KEY, [Name] NVARCHAR(50) NOT NULL);";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+        lock (FactoryContainer.SharedLockObject)
+        {
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+
+            var config = ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", null);
+            config["Source:database"] = _integrationDb;
+            config["Tables:0:Name"] = "dbo.EmptyTable";
+            config["Tables:0:KeyColumns"] = "Id";
+
+            var tongs = new DataTongs();
+            tongs.CastData();
+
+            progressLog.Received(1).Info(Arg.Is<string>(s => s.Contains("No data found")));
+            file.DidNotReceive().WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldLogError_WhenTableHasNoKeyAndNoKeyColumnsConfigured()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_integrationDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+DROP TABLE IF EXISTS [dbo].[NoKeyTable];
+CREATE TABLE [dbo].[NoKeyTable] ([Data] NVARCHAR(100) NOT NULL);
+INSERT INTO [dbo].[NoKeyTable] VALUES ('test');";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+        lock (FactoryContainer.SharedLockObject)
+        {
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+
+            var config = ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", null);
+            config["Source:database"] = _integrationDb;
+            config["Tables:0:Name"] = "dbo.NoKeyTable";
+
+            var tongs = new DataTongs();
+            tongs.CastData();
+
+            progressLog.Received(1).Error(Arg.Is<string>(s => s.Contains("no primary key or unique index")));
+            file.DidNotReceive().WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
     [OneTimeTearDown]
     public void RunAfterAnyTests()
     {
