@@ -27,10 +27,9 @@ body:
       label: Platform
       description: What platform are you running on?
       options:
-        - Windows (.NET 9.0)
-        - Windows (.NET Framework 4.8.1)
-        - Linux (.NET 9.0)
-        - macOS (.NET 9.0)
+        - Windows (.NET 10)
+        - Linux (.NET 10)
+        - macOS (.NET 10)
         - Docker
     validations:
       required: true

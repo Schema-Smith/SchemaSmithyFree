@@ -273,6 +273,6 @@ SchemaQuench can load schema packages directly from a `.zip` file. Set `SchemaPa
 - Password masking in configuration logs
 - Windows authentication and SQL Server authentication
 - Standardized exit codes across all tools
-- Multi-targeting: .NET 9.0 and .NET Framework 4.8.1
+- .NET 10 (single target framework)
 - Docker Compose support for local development and testing
-- Cross-platform .NET 9.0 execution (Windows, Linux, macOS)
+- Cross-platform .NET 10 execution (Windows, Linux, macOS)

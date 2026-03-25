@@ -16,6 +16,8 @@ The tools in SchemaSmithyFree target:
 * **Database**: Tested against SQL Server `2019-CU27-ubuntu-20.04`. Should work with any database set to compatibility level 130 or higher.
 
 ### Running Locally with Docker
+* **.NET**: `net10.0`
+* **IDEs**: Visual Studio 2026 or JetBrains Rider
 * **Database**: Tested against SQL Server `2022-latest`. Should work with any database set to compatibility level 130 or higher.
 Running Locally with Docker
 From the project root:

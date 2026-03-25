@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DOTNET_VERSION: '9.0.x'
+  DOTNET_VERSION: '10.0.x'
 
 jobs:
   read-version:
@@ -92,10 +92,10 @@ jobs:
         with:
           name: release-${{ matrix.rid }}
           path: |
-            SchemaQuench/bin/Release/net9.0/${{ matrix.rid }}/publish/
-            SchemaTongs/bin/Release/net9.0/${{ matrix.rid }}/publish/
-            DataTongs/bin/Release/net9.0/${{ matrix.rid }}/publish/
-            SchemaHammer/bin/Release/net9.0/${{ matrix.rid }}/publish/
+            SchemaQuench/bin/Release/net10.0/${{ matrix.rid }}/publish/
+            SchemaTongs/bin/Release/net10.0/${{ matrix.rid }}/publish/
+            DataTongs/bin/Release/net10.0/${{ matrix.rid }}/publish/
+            SchemaHammer/bin/Release/net10.0/${{ matrix.rid }}/publish/
           retention-days: 1
 
   package-zip:
@@ -116,7 +116,7 @@ jobs:
           VERSION="${{ needs.read-version.outputs.version }}"
           mkdir -p zip-staging
           for tool in SchemaQuench SchemaTongs DataTongs SchemaHammer; do
-            src="bins/$tool/bin/Release/net9.0/${{ matrix.rid }}/publish"
+            src="bins/$tool/bin/Release/net10.0/${{ matrix.rid }}/publish"
             if [ -d "$src" ]; then
               cp "$src"/* zip-staging/ 2>/dev/null || true
             fi

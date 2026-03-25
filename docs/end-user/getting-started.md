@@ -6,8 +6,7 @@ Applies to: SchemaQuench, SchemaTongs, DataTongs (SQL Server, Community)
 
 ## Prerequisites
 
-- **.NET 9.0 Runtime** — Required for the `net9.0` tools
-- **.NET Framework 4.8.1** — Required for the `net481` tools (Windows only)
+- **.NET 10 Runtime** — Required for the `net10.0` tools
 - **SQL Server** — Tested against SQL Server 2022 but should work for any version with a compatibility level of 130 or higher
 
 ---
@@ -16,7 +15,7 @@ Applies to: SchemaQuench, SchemaTongs, DataTongs (SQL Server, Community)
 
 ### ZIP Package
 
-Download the ZIP package for the target framework (`net9.0` or `net481`). Extract to any directory. Each tool is a standalone executable:
+Download the ZIP package for `net10.0`. Extract to any directory. Each tool is a standalone executable:
 
 - `SchemaQuench.exe` (or `SchemaQuench` on Linux/macOS)
 - `SchemaTongs.exe`

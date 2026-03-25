@@ -284,11 +284,11 @@ Packages can be deployed from **folders** or **ZIP archives**.
 
 ## Platform Support
 
-| Platform | .NET 9.0 | .NET Framework 4.8.1 |
-|----------|----------|---------------------|
-| Windows | Yes | Yes |
-| Linux | Yes | No |
-| macOS | Yes | No |
+| Platform | .NET 10 |
+|----------|---------|
+| Windows | Yes |
+| Linux | Yes |
+| macOS | Yes |
 
 **Distribution:** Standalone executables, ZIP packages, Docker images, Docker Compose (includes SQL Server 2022 with Full-Text Search for testing).
 
