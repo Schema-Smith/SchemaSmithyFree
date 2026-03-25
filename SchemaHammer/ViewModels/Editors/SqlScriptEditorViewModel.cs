@@ -18,6 +18,9 @@ public partial class SqlScriptEditorViewModel : EditorBaseViewModel
     [ObservableProperty]
     private bool _isPreviewMode;
 
+    [ObservableProperty]
+    private bool _isErrorScript;
+
     public string PreviewButtonText => IsPreviewMode ? "Raw" : "Preview";
 
     private string _rawContent = "";
@@ -26,6 +29,7 @@ public partial class SqlScriptEditorViewModel : EditorBaseViewModel
     {
         base.ChangeNode(node);
         IsPreviewMode = false;
+        IsErrorScript = node.Tag.Equals("Sql Error Script", StringComparison.OrdinalIgnoreCase);
         LoadScriptContent(node);
     }
 

@@ -36,6 +36,8 @@
     <StreamGeometry x:Key="FullTextIndexIcon">M10,1 A5,5 0 1,1 9.99,1 M13,9 L15,11 M3,4 L8,4 M3,7 L7,7</StreamGeometry>
     <StreamGeometry x:Key="IndexedViewIcon">M2,2 L14,2 L14,14 L2,14 Z M2,5 L14,5 M2,8 L14,8 M2,11 L14,11 M6,5 L6,14 M10,5 L10,14 M2,2 L14,2 L14,5 L2,5 Z</StreamGeometry>
     <StreamGeometry x:Key="ScriptIcon">M4,2 Q1,2 1,5 L1,7 Q1,8 0,8 Q1,8 1,9 L1,11 Q1,14 4,14 M12,2 Q15,2 15,5 L15,7 Q15,8 16,8 Q15,8 15,9 L15,11 Q15,14 12,14</StreamGeometry>
+    <!-- Error script: script braces with an exclamation marker inside -->
+    <StreamGeometry x:Key="ErrorScriptIcon">M4,2 Q1,2 1,5 L1,7 Q1,8 0,8 Q1,8 1,9 L1,11 Q1,14 4,14 M12,2 Q15,2 15,5 L15,7 Q15,8 16,8 Q15,8 15,9 L15,11 Q15,14 12,14 M8,4 L8,9 M8,11 L8,12</StreamGeometry>
     <StreamGeometry x:Key="FolderIcon">M1,4 L7,4 L8,2 L14,2 L14,13 L1,13 Z</StreamGeometry>
     <StreamGeometry x:Key="FileIcon">M3,1 L10,1 L13,4 L13,15 L3,15 Z M10,1 L10,4 L13,4</StreamGeometry>
 

@@ -25,6 +25,7 @@ public class TreeIconConverter : IMultiValueConverter
         ["Full Text Index"] = "SH.TreeView.IndexIconColor",
         ["Indexed View"] = "SH.TreeView.TableIconColor",
         ["Sql Script"] = "SH.TreeView.ScriptIconColor",
+        ["Sql Error Script"] = "SH.TreeView.ErrorScriptIconColor",
     };
 
     private static readonly Dictionary<string, string> TagToIconResource = new(StringComparer.OrdinalIgnoreCase)
@@ -41,6 +42,7 @@ public class TreeIconConverter : IMultiValueConverter
         ["Full Text Index"] = "FullTextIndexIcon",
         ["Indexed View"] = "IndexedViewIcon",
         ["Sql Script"] = "ScriptIcon",
+        ["Sql Error Script"] = "ErrorScriptIcon",
     };
 
     public object? Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
@@ -83,7 +85,8 @@ public class TreeIconConverter : IMultiValueConverter
         {
             "product" => "ProductIcon",
             "template" => "TemplateIcon",
-            _ => imageKey == "file" ? "FileIcon" : "FolderIcon"
+            "file" or "error-file" => "FileIcon",
+            _ => "FolderIcon"
         };
 
         if (Application.Current?.Resources.TryGetResource(fallbackKey, null, out var fallback) == true

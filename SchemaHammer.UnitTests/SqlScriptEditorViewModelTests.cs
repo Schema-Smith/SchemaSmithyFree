@@ -311,6 +311,69 @@ public class SqlScriptEditorViewModelTests
         Assert.That(vm.ExtractTokenAtPosition(text, 10), Is.Null);
     }
 
+    [Test]
+    public void ChangeNode_WithSqlErrorScriptTag_SetsIsErrorScriptTrue()
+    {
+        var node = new TreeNodeModel
+        {
+            Text = "dbo.FailedFunction.sqlerror",
+            Tag = "Sql Error Script",
+            NodePath = ""
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(node);
+
+        Assert.That(vm.IsErrorScript, Is.True);
+    }
+
+    [Test]
+    public void ChangeNode_WithSqlScriptTag_LeavesIsErrorScriptFalse()
+    {
+        var node = new TreeNodeModel
+        {
+            Text = "dbo.MyFunction.sql",
+            Tag = "Sql Script",
+            NodePath = ""
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(node);
+
+        Assert.That(vm.IsErrorScript, Is.False);
+    }
+
+    [Test]
+    public void ChangeNode_SwitchingFromErrorToRegularScript_ClearsIsErrorScript()
+    {
+        var errorNode = new TreeNodeModel
+        {
+            Text = "dbo.Failed.sqlerror",
+            Tag = "Sql Error Script",
+            NodePath = ""
+        };
+        var regularNode = new TreeNodeModel
+        {
+            Text = "dbo.MyFunction.sql",
+            Tag = "Sql Script",
+            NodePath = ""
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(errorNode);
+        Assert.That(vm.IsErrorScript, Is.True);
+
+        vm.ChangeNode(regularNode);
+        Assert.That(vm.IsErrorScript, Is.False);
+    }
+
+    [Test]
+    public void IsErrorScript_DefaultsToFalse()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.IsErrorScript, Is.False);
+    }
+
     [TearDown]
     public void Cleanup()
     {

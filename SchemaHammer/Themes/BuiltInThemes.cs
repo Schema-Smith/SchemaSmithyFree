@@ -73,6 +73,7 @@ public static class BuiltInThemes
             ["SH.TreeView.CheckConstraintIconColor"] = "#F48771",
             ["SH.TreeView.StatisticIconColor"] = "#A0AEC0",
             ["SH.TreeView.ScriptIconColor"] = "#F48C06",
+            ["SH.TreeView.ErrorScriptIconColor"] = "#E53E3E",
             ["SH.TreeView.FolderIconColor"] = "#E8AB53",
             ["SH.TreeView.FileIconColor"] = "#A0AEC0"
         }
@@ -141,6 +142,7 @@ public static class BuiltInThemes
             ["SH.TreeView.CheckConstraintIconColor"] = "#F48771",
             ["SH.TreeView.StatisticIconColor"] = "#A0AEC0",
             ["SH.TreeView.ScriptIconColor"] = "#F48C06",
+            ["SH.TreeView.ErrorScriptIconColor"] = "#FC8181",
             ["SH.TreeView.FolderIconColor"] = "#E8AB53",
             ["SH.TreeView.FileIconColor"] = "#A0AEC0"
         }

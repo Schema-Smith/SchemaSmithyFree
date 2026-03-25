@@ -172,4 +172,47 @@ public class ProductTreeServiceTests
         var result = service.ReloadProduct();
         Assert.That(result, Is.Empty);
     }
+
+    [Test]
+    public void LoadProduct_SqlErrorFiles_AppearInFolderWithErrorTag()
+    {
+        // ValidProduct/Templates/Main/Functions contains dbo.FailedFunction.sqlerror
+        var service = new ProductTreeService();
+        var roots = service.LoadProduct(ValidProductPath);
+        var templatesContainer = roots.FirstOrDefault(n => n.Tag == "Templates");
+        templatesContainer!.EnsureExpanded();
+        var mainTemplate = templatesContainer.Children.FirstOrDefault(t => t.Text == "Main");
+        mainTemplate!.EnsureExpanded();
+        var functionsFolder = mainTemplate.Children.FirstOrDefault(c => c.Text == "Functions");
+        Assert.That(functionsFolder, Is.Not.Null, "Functions folder should exist");
+        functionsFolder!.EnsureExpanded();
+
+        var errorNode = functionsFolder.Children.FirstOrDefault(c =>
+            c.Text.EndsWith(".sqlerror", StringComparison.OrdinalIgnoreCase));
+
+        Assert.That(errorNode, Is.Not.Null, "A .sqlerror node should be visible in the Functions folder");
+        Assert.That(errorNode!.Tag, Is.EqualTo("Sql Error Script"));
+        Assert.That(errorNode.ImageKey, Is.EqualTo("error-file"));
+    }
+
+    [Test]
+    public void LoadProduct_SqlErrorFolderNode_IncludesBothSqlAndSqlErrorFiles()
+    {
+        // Functions folder has both .sql and .sqlerror files
+        var service = new ProductTreeService();
+        var roots = service.LoadProduct(ValidProductPath);
+        var templatesContainer = roots.FirstOrDefault(n => n.Tag == "Templates");
+        templatesContainer!.EnsureExpanded();
+        var mainTemplate = templatesContainer.Children.FirstOrDefault(t => t.Text == "Main");
+        mainTemplate!.EnsureExpanded();
+        var functionsFolder = mainTemplate.Children.FirstOrDefault(c => c.Text == "Functions");
+        Assert.That(functionsFolder, Is.Not.Null);
+        functionsFolder!.EnsureExpanded();
+
+        var sqlNodes = functionsFolder.Children.Where(c => c.Tag == "Sql Script").ToList();
+        var errorNodes = functionsFolder.Children.Where(c => c.Tag == "Sql Error Script").ToList();
+
+        Assert.That(sqlNodes, Is.Not.Empty, "Regular .sql nodes should be present");
+        Assert.That(errorNodes, Is.Not.Empty, ".sqlerror nodes should be present");
+    }
 }

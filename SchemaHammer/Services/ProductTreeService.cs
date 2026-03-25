@@ -183,18 +183,24 @@ public class ProductTreeService : IProductTreeService
             return null;
 
         var sqlFiles = dir.GetFiles(folderDir, "*.sql", SearchOption.AllDirectories);
-        if (sqlFiles.Length == 0)
+        var errorFiles = dir.GetFiles(folderDir, "*.sqlerror", SearchOption.AllDirectories);
+
+        if (sqlFiles.Length == 0 && errorFiles.Length == 0)
             return null;
 
         var folderNode = MakeNode(displayName, "Sql Script FolderContainer", "folder");
         folderNode.NodePath = folderDir;
 
         var scriptNodes = sqlFiles
-            .OrderBy(f => f)
+            .Select(f => (Path: f, IsError: false))
+            .Concat(errorFiles.Select(f => (Path: f, IsError: true)))
+            .OrderBy(f => f.Path)
             .Select(f =>
             {
-                var scriptNode = MakeNode(Path.GetFileName(f), "Sql Script", "file");
-                scriptNode.NodePath = f;
+                var tag = f.IsError ? "Sql Error Script" : "Sql Script";
+                var imageKey = f.IsError ? "error-file" : "file";
+                var scriptNode = MakeNode(Path.GetFileName(f.Path), tag, imageKey);
+                scriptNode.NodePath = f.Path;
                 return scriptNode;
             })
             .ToList();

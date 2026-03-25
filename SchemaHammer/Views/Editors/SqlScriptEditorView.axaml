@@ -23,6 +23,17 @@
             </DockPanel>
         </Border>
 
+        <!-- Error Script Warning Banner -->
+        <Border DockPanel.Dock="Top"
+                Background="#C53030"
+                Padding="12,6"
+                IsVisible="{Binding IsErrorScript}">
+            <TextBlock Text="⚠ This file contains a script extraction error. The content is the raw error output from SchemaTongs and is not a valid SQL script."
+                       Foreground="White"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+        </Border>
+
         <!-- Find Bar -->
         <controls:FindBarControl DockPanel.Dock="Top" Name="FindBar" />
 

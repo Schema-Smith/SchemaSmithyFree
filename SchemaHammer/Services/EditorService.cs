@@ -35,6 +35,7 @@ public class EditorService : IEditorService
             "Full Text Index" => "Full Text Index",
             "Indexed View" => "Indexed View",
             "Sql Script" => "Sql Script",
+            "Sql Error Script" => "Sql Script",
             _ => null
         };
     }

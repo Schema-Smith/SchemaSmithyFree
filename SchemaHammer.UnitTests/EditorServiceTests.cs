@@ -229,4 +229,42 @@ public class EditorServiceTests
         var service = new EditorService();
         Assert.That(service.GetEditorTag("Script FolderContainer"), Is.EqualTo("Container"));
     }
+
+    [Test]
+    public void GetEditorTag_ReturnsSqlScriptForSqlErrorScript()
+    {
+        var service = new EditorService();
+        Assert.That(service.GetEditorTag("Sql Error Script"), Is.EqualTo("Sql Script"));
+    }
+
+    [Test]
+    public void GetEditor_ReturnsSqlScriptEditorForSqlErrorScriptNode()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel
+        {
+            Text = "dbo.FailedFunction.sqlerror",
+            Tag = "Sql Error Script"
+        };
+
+        var editor = service.GetEditor(node);
+
+        Assert.That(editor, Is.TypeOf<SqlScriptEditorViewModel>());
+    }
+
+    [Test]
+    public void GetEditor_SqlErrorScriptNode_SetsIsErrorScriptOnViewModel()
+    {
+        var service = new EditorService();
+        var node = new TreeNodeModel
+        {
+            Text = "dbo.FailedFunction.sqlerror",
+            Tag = "Sql Error Script"
+        };
+
+        var editor = service.GetEditor(node) as SqlScriptEditorViewModel;
+
+        Assert.That(editor, Is.Not.Null);
+        Assert.That(editor!.IsErrorScript, Is.True);
+    }
 }
