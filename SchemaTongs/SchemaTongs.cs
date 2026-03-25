@@ -36,6 +36,30 @@ public class SchemaTongs
     private bool _includeIndexedViews;
     private bool _scriptDynamicDependencyRemovalForFunctions;
     private string[] _objectsToCast = [];
+    private readonly Dictionary<string, ExtractionFileIndex> _folderIndexes = new();
+
+    private void BuildFileIndexes()
+    {
+        var folderNames = new[] { "Tables", "Schemas", "DataTypes", "Functions", "Views",
+            "Procedures", "Triggers", "FullTextCatalogs", "FullTextStopLists",
+            "DDLTriggers", "XMLSchemaCollections", "Indexed Views", "Table Data" };
+
+        foreach (var folder in folderNames)
+        {
+            var folderPath = Path.Combine(_templatePath, folder);
+            _folderIndexes[folder] = ExtractionFileIndex.Build(folderPath);
+        }
+    }
+
+    private string ResolveAndWrite(string folderName, string fileName, string content)
+    {
+        var basePath = Path.Combine(_templatePath, folderName);
+        var index = _folderIndexes.ContainsKey(folderName) ? _folderIndexes[folderName] : null;
+        var outputPath = index?.ResolvePath(fileName, basePath) ?? Path.Combine(basePath, fileName);
+        FileWrapper.GetFromFactory().WriteAllText(outputPath, content);
+        index?.MarkWritten(outputPath);
+        return outputPath;
+    }
 
     private IDbConnection GetConnection(string targetDb)
     {
@@ -83,6 +107,7 @@ public class SchemaTongs
 
         RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb);
         _templatePath = RepositoryHelper.UpdateOrInitTemplate(_productPath, config["Template:Name"], targetDb);
+        BuildFileIndexes();
         CastDatabaseObjects(targetDb);
     }
 
@@ -158,10 +183,9 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 continue;
             }
 
-            var filename = Path.Combine(tableDir, $"{reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}.json");
-            _progressLog.Info($"    Casting {filename}");
             _ = JsonConvert.DeserializeObject<Schema.Domain.Table>(json); // make sure the json is valid
-            FileWrapper.GetFromFactory().WriteAllText(filename, json);
+            var outputPath = ResolveAndWrite("Tables", $"{reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}.json", json);
+            _progressLog.Info($"    Casting {outputPath}");
         }
     }
 
@@ -197,22 +221,21 @@ SELECT s.name
             var script = $"IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = N'{EscapeSql(name)}')\r\n" +
                          $"EXEC sys.sp_executesql N'CREATE SCHEMA [{name}]'\r\n";
 
-            var fileName = Path.Combine(castPath, $"{name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            var outputPath = ResolveAndWrite("Schemas", $"{name}.sql", script);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
 
     private void ScriptSqlServerUserDefinedTypes(IDbCommand command)
     {
         _progressLog.Info("Casting User Defined Types");
-        var castPath = Path.Combine(_templatePath, "DataTypes");
-        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
-        ScriptSqlServerAliasTypes(command, castPath);
-        ScriptSqlServerTableTypes(command, castPath);
+        var dataTypesPath = Path.Combine(_templatePath, "DataTypes");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(dataTypesPath);
+        ScriptSqlServerAliasTypes(command);
+        ScriptSqlServerTableTypes(command);
     }
 
-    private void ScriptSqlServerAliasTypes(IDbCommand command, string castPath)
+    private void ScriptSqlServerAliasTypes(IDbCommand command)
     {
         command.CommandText = @"
 SELECT s.name AS SchemaName, t.name AS TypeName,
@@ -244,13 +267,12 @@ SELECT s.name AS SchemaName, t.name AS TypeName,
             var script = $"IF NOT EXISTS (SELECT * FROM sys.types st JOIN sys.schemas ss ON st.schema_id = ss.schema_id WHERE st.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
                          $"CREATE TYPE [{schema}].[{name}] FROM {typeSpec} {nullSpec}";
 
-            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            var outputPath = ResolveAndWrite("DataTypes", $"{schema}.{name}.sql", script);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
 
-    private void ScriptSqlServerTableTypes(IDbCommand command, string castPath)
+    private void ScriptSqlServerTableTypes(IDbCommand command)
     {
         command.CommandText = @"
 SELECT s.name AS SchemaName, tt.name AS TypeName, tt.type_table_object_id
@@ -394,9 +416,8 @@ SELECT cc.name, cc.definition
             var script = $"IF NOT EXISTS (SELECT * FROM sys.types st JOIN sys.schemas ss ON st.schema_id = ss.schema_id WHERE st.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
                          createScript;
 
-            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            var outputPath = ResolveAndWrite("DataTypes", $"{schema}.{name}.sql", script);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
 
@@ -486,9 +507,8 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                     sql = sql.Substring(0, firstGoEnd) + dependencyBlock + sql.Substring(firstGoEnd);
             }
 
-            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+            var outputPath = ResolveAndWrite("Functions", $"{schema}.{name}.sql", sql);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
 
@@ -524,9 +544,8 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "VIEW");
             if (sql == null) continue;
 
-            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+            var outputPath = ResolveAndWrite("Views", $"{schema}.{name}.sql", sql);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
 
@@ -562,9 +581,8 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "PROCEDURE");
             if (sql == null) continue;
 
-            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+            var outputPath = ResolveAndWrite("Procedures", $"{schema}.{name}.sql", sql);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
     private void ScriptSqlServerTableTriggers(IDbCommand command)
@@ -604,9 +622,8 @@ SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
             var tablePattern = $@"(?<=\bON\s+)\[?{escapedSchema}\]?\.\[?{escapedTable}\]?";
             sql = Regex.Replace(sql, tablePattern, $"[{tableSchema}].[{tableName}]", RegexOptions.IgnoreCase);
 
-            var fileName = Path.Combine(castPath, $"{tableSchema}.{tableName}.{triggerName}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+            var outputPath = ResolveAndWrite("Triggers", $"{tableSchema}.{tableName}.{triggerName}.sql", sql);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
     private void ScriptSqlServerFullTextCatalogs(IDbCommand command)
@@ -633,9 +650,8 @@ SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
             var script = $"IF NOT EXISTS (SELECT * FROM sysfulltextcatalogs ftc WHERE ftc.name = N'{EscapeSql(name)}')\r\n" +
                          $"CREATE FULLTEXT CATALOG [{name}] ";
 
-            var fileName = Path.Combine(castPath, $"{name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            var outputPath = ResolveAndWrite("FullTextCatalogs", $"{name}.sql", script);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
 
@@ -686,9 +702,8 @@ SELECT stopword, language
 
             script += "END\r\n";
 
-            var fileName = Path.Combine(castPath, $"{name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            var outputPath = ResolveAndWrite("FullTextStopLists", $"{name}.sql", script);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
     private void ScriptSqlServerDDLTriggers(IDbCommand command)
@@ -767,9 +782,8 @@ SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
                       $"{definition}\r\n\r\n" +
                       $"GO\r\n";
 
-            var fileName = Path.Combine(castPath, $"{triggerName}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
+            var outputPath = ResolveAndWrite("DDLTriggers", $"{triggerName}.sql", sql);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
     private void ScriptSqlServerXmlSchemaCollections(IDbCommand command)
@@ -804,9 +818,8 @@ SELECT s.name AS SchemaName, xsc.name AS CollectionName
                 $"CREATE XML SCHEMA COLLECTION [{schema}].[{name}] AS N'{xmlContent}'";
             script = FormatXmlInScript(script);
 
-            var fileName = Path.Combine(castPath, $"{schema}.{name}.sql");
-            _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            var outputPath = ResolveAndWrite("XMLSchemaCollections", $"{schema}.{name}.sql", script);
+            _progressLog.Info($"  Casting {outputPath}");
         }
     }
 
@@ -848,8 +861,7 @@ SELECT s.name AS SchemaName, xsc.name AS CollectionName
                 continue;
             }
 
-            var fileName = Path.Combine(indexedViewsPath, $"{schema}.{name}.json");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, json);
+            ResolveAndWrite("Indexed Views", $"{schema}.{name}.json", json);
             _progressLog.Info($"  {schema}.{name}");
         }
     }
