@@ -61,4 +61,61 @@ public class CleanupScriptGeneratorTests
         Assert.That(script, Does.Contain("DROP VIEW IF EXISTS [dbo].[View2];"));
         Assert.That(script, Does.Contain("DROP VIEW IF EXISTS [dbo].[View3];"));
     }
+
+    [Test]
+    public void GenerateInvalidObjectCleanupScript_MultipleDroppableObjects_GeneratesHeaderAndDropStatements()
+    {
+        var invalidObjects = new List<(string Folder, string FileName, string Error)>
+        {
+            ("Views", "dbo.BadView.sql", "Invalid column name"),
+            ("Procedures", "dbo.BrokenProc.sql", "Syntax error near GO")
+        };
+
+        var result = CleanupScriptGenerator.GenerateInvalidObjectCleanupScript(invalidObjects);
+
+        Assert.That(result, Does.Contain("2 invalid objects"));
+        Assert.That(result, Does.Contain("-- Error: Invalid column name"));
+        Assert.That(result, Does.Contain("DROP VIEW IF EXISTS [dbo].[BadView];"));
+        Assert.That(result, Does.Contain("-- Error: Syntax error near GO"));
+        Assert.That(result, Does.Contain("DROP PROCEDURE IF EXISTS [dbo].[BrokenProc];"));
+    }
+
+    [Test]
+    public void GenerateInvalidObjectCleanupScript_MixedDroppableAndUndroppable_SkipsUndroppable()
+    {
+        var invalidObjects = new List<(string Folder, string FileName, string Error)>
+        {
+            ("Views", "dbo.BadView.sql", "Invalid column"),
+            ("Tables", "dbo.SomeTable.json", "Missing column")
+        };
+
+        var result = CleanupScriptGenerator.GenerateInvalidObjectCleanupScript(invalidObjects);
+
+        Assert.That(result, Does.Contain("DROP VIEW IF EXISTS [dbo].[BadView];"));
+        Assert.That(result, Does.Not.Contain("SomeTable"));
+    }
+
+    [Test]
+    public void GenerateInvalidObjectCleanupScript_EmptyList_GeneratesHeaderOnly()
+    {
+        var invalidObjects = new List<(string Folder, string FileName, string Error)>();
+
+        var result = CleanupScriptGenerator.GenerateInvalidObjectCleanupScript(invalidObjects);
+
+        Assert.That(result, Does.Contain("0 invalid objects"));
+        Assert.That(result, Does.Not.Contain("DROP"));
+    }
+
+    [Test]
+    public void GenerateInvalidObjectCleanupScript_SqlerrorExtension_GeneratesDropStatement()
+    {
+        var invalidObjects = new List<(string Folder, string FileName, string Error)>
+        {
+            ("Functions", "dbo.fn_Broken.sqlerror", "Parse error")
+        };
+
+        var result = CleanupScriptGenerator.GenerateInvalidObjectCleanupScript(invalidObjects);
+
+        Assert.That(result, Does.Contain("DROP FUNCTION IF EXISTS [dbo].[fn_Broken];"));
+    }
 }
