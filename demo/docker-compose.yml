@@ -30,8 +30,8 @@ services:
     volumes:
       - ./AdventureWorks:/metadata
     depends_on:
-      demoserver:
-        condition: service_healthy
+      quench-northwind:
+        condition: service_completed_successfully
 
   demoserver:
     build:
