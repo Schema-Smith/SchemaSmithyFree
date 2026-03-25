@@ -74,14 +74,21 @@ public class DataTongs
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(table.KeyColumns))
+            var keyColumns = string.IsNullOrWhiteSpace(table.KeyColumns)
+                ? GetKeyColumns(cmd, tableSchema, tableName)
+                : table.KeyColumns;
+
+            if (string.IsNullOrWhiteSpace(keyColumns))
             {
-                _progressLog.Error($"  Table {table.TableName} has no KeyColumns defined. KeyColumns must be a comma-separated string (e.g., \"KeyColumns\": \"Col1, Col2\"). Skipping table.");
+                _progressLog.Error($"  Table {table.TableName} has no primary key or unique index and no KeyColumns configured. Skipping table.");
                 continue;
             }
 
-            var matchColumns = string.Join(" AND ", table.KeyColumns.Split(',').Select(c => $"Source.[{c.Trim().Trim(']', '[')}] = Target.[{c.Trim().Trim(']', '[')}]"));
-            var orderColumns = string.Join(",", table.KeyColumns.Split(',').Select(c => $"[{c.Trim().Trim(']', '[')}]"));
+            var matchColumns = string.Join(" AND ", keyColumns.Split(',')
+                .Select(c => c.Trim().StartsWith("*")
+                    ? $"(Source.[{c.Trim()[1..].Trim(']', '[')}] = Target.[{c.Trim()[1..].Trim(']', '[')}] OR (Source.[{c.Trim()[1..].Trim(']', '[')}] IS NULL AND Target.[{c.Trim()[1..].Trim(']', '[')}] IS NULL))"
+                    : $"Source.[{c.Trim().Trim(']', '[')}] = Target.[{c.Trim().Trim(']', '[')}]"));
+            var orderColumns = string.Join(",", keyColumns.Split(',').Select(c => $"[{c.Trim().TrimStart('*').Trim(']', '[')}]"));
 
             var selectColumns = GetSelectColumns(cmd, tableSchema, tableName);
             var tableData = GetTableData(cmd, selectColumns, tableSchema, tableName, orderColumns, table.Filter);
@@ -290,6 +297,33 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
     AND c.DATA_TYPE NOT IN ('sql_variant', 'rowversion', 'timestamp')
 ";
         return cmd.ExecuteScalar()?.ToString();
+    }
+
+    private static string GetKeyColumns(IDbCommand cmd, string tableSchema, string tableName)
+    {
+        tableSchema = tableSchema.Trim().Trim('[', ']');
+        tableName = tableName.Trim().Trim('[', ']');
+
+        cmd.CommandText = $@"
+SELECT STRING_AGG(CASE WHEN sc.is_nullable = 1 THEN '*' ELSE '' END + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',')
+  FROM sys.indexes si WITH (NOLOCK)
+  JOIN sys.index_columns ic WITH (NOLOCK) ON ic.[object_id] = si.[object_id]
+                                         AND ic.index_id = si.index_id
+  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = ic.[object_id]
+                                   AND sc.column_id = ic.column_id
+  WHERE si.[object_id] = OBJECT_ID('{tableSchema}.{tableName}')
+    AND si.index_id = (SELECT TOP 1 si2.index_id
+                         FROM sys.indexes si2 WITH (NOLOCK)
+                         WHERE si2.[object_id] = si.[object_id]
+                           AND si2.is_unique = 1
+                         ORDER BY CASE WHEN is_primary_key = 1 THEN 0 ELSE 1 END,
+                                  (SELECT COUNT(*)
+                                    FROM sys.index_columns ic2 WITH (NOLOCK)
+                                    JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = ic2.[object_id] AND sc.column_id = ic2.column_id
+                                    WHERE ic2.[object_id] = si2.[object_id]
+                                      AND sc.is_nullable = 0))
+";
+        return cmd.ExecuteScalar()?.ToString() ?? "";
     }
 
     private class TableConfig
