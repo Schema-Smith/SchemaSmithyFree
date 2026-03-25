@@ -48,7 +48,7 @@ dotnet publish SchemaQuench/SchemaQuench.csproj -r win-x64 -c Release
 
 All projects target `net10.0` (centralized in `Directory.Build.props`). Single-file self-contained deployment (no IL trimming). Published for 6 RIDs: `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`.
 
-`Directory.Build.props` sets `TargetFramework`, `TreatWarningsAsErrors=true`, and strips debug symbols in non-Debug builds. `global.json` pins the SDK version.
+`Directory.Build.props` sets `TargetFramework`, `TreatWarningsAsErrors=true`, and strips debug symbols in non-Debug builds. `global.json` pins the SDK version. `Directory.Packages.props` centralizes all NuGet package versions — update versions there, not in individual `.csproj` files. `.editorconfig` defines formatting rules and naming conventions at suggestion severity.
 
 ### Project Structure
 

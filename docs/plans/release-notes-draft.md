@@ -7,6 +7,10 @@
 - **Config file renamed:** `appsettings.json` is now `{ToolName}.settings.json` (e.g., `SchemaQuench.settings.json`). Rename your existing config files to match.
 - **Environment variable prefix:** `QuenchSettings_` prefix is no longer supported. Use `SmithySettings_` instead.
 
+### .NET 10
+
+All tools now target .NET 10 (previously .NET 9). Requires .NET 10 runtime for framework-dependent deployments. Self-contained builds (ZIP downloads) bundle the runtime — no separate install needed.
+
 ### New Features
 
 - **IndexOnlyTableQuenches:** New template-level setting that restricts quench to index management only — skips table/column/FK changes. Supports use cases like indexing replicated databases or third-party schemas.
