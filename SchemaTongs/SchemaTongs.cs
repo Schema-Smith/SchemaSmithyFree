@@ -42,6 +42,7 @@ public class SchemaTongs
     private bool _validateScripts;
     private bool _saveInvalidScripts = true;
     private readonly Dictionary<string, ExtractionFileIndex> _folderIndexes = new();
+    private readonly List<(string Folder, string FileName, string Error)> _invalidObjects = new();
 
     private void BuildFileIndexes()
     {
@@ -61,9 +62,49 @@ public class SchemaTongs
         var basePath = Path.Combine(_templatePath, folderName);
         var index = _folderIndexes.ContainsKey(folderName) ? _folderIndexes[folderName] : null;
         var outputPath = index?.ResolvePath(fileName, basePath) ?? Path.Combine(basePath, fileName);
+
+        // If writing .sql, remove any existing .sqlerror for the same object
+        if (Path.GetExtension(fileName).Equals(".sql", StringComparison.OrdinalIgnoreCase))
+        {
+            var errorPath = Path.ChangeExtension(outputPath, ".sqlerror");
+            var file = FileWrapper.GetFromFactory();
+            if (file.Exists(errorPath)) file.Delete(errorPath);
+        }
+
         FileWrapper.GetFromFactory().WriteAllText(outputPath, content);
         index?.MarkWritten(outputPath);
         return outputPath;
+    }
+
+    private void ValidateAndHandleScript(IDbConnection connection, string folderName, string fileName, string script, string objectType)
+    {
+        if (!_validateScripts) return;
+
+        var result = ScriptValidator.ValidateScript(connection, script, objectType);
+        if (result.IsValid) return;
+
+        _progressLog.Warn($"    Invalid script: {fileName} — {result.ErrorMessage}");
+        _invalidObjects.Add((folderName, fileName, result.ErrorMessage));
+
+        var file = FileWrapper.GetFromFactory();
+        var basePath = Path.Combine(_templatePath, folderName);
+        var index = _folderIndexes.ContainsKey(folderName) ? _folderIndexes[folderName] : null;
+        var sqlPath = index?.ResolvePath(fileName, basePath) ?? Path.Combine(basePath, fileName);
+        var errorPath = Path.ChangeExtension(sqlPath, ".sqlerror");
+
+        if (_saveInvalidScripts)
+        {
+            file.WriteAllText(errorPath, script);
+            if (!sqlPath.Equals(errorPath, StringComparison.OrdinalIgnoreCase))
+                file.Delete(sqlPath);
+            index?.MarkWritten(errorPath);
+        }
+        else
+        {
+            file.Delete(sqlPath);
+            if (file.Exists(errorPath)) file.Delete(errorPath);
+            index?.MarkWritten(sqlPath); // Mark as processed to prevent orphan detection
+        }
     }
 
     private IDbConnection GetConnection(string targetDb)
@@ -187,6 +228,14 @@ public class SchemaTongs
 
         OrphanHandler.ArchiveExistingCleanupScripts(logDirectory);
         ProcessOrphanDetection(logDirectory);
+
+        if (_invalidObjects.Count > 0)
+        {
+            var invalidScript = CleanupScriptGenerator.GenerateInvalidObjectCleanupScript(_invalidObjects);
+            var scriptPath = Path.Combine(logDirectory, "_InvalidObjectCleanup.sql");
+            FileWrapper.GetFromFactory().WriteAllText(scriptPath, invalidScript);
+            _progressLog.Info($"Generated _InvalidObjectCleanup.sql with {_invalidObjects.Count} invalid object(s)");
+        }
 
         _progressLog.Info("");
         _progressLog.Info("Casting Completed Successfully");
@@ -592,6 +641,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
 
             var outputPath = ResolveAndWrite("Functions", $"{schema}.{name}.sql", sql);
             _progressLog.Info($"  Casting {outputPath}");
+            ValidateAndHandleScript(command.Connection, "Functions", $"{schema}.{name}.sql", sql, "FUNCTION");
         }
     }
 
@@ -634,6 +684,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
 
             var outputPath = ResolveAndWrite("Views", $"{schema}.{name}.sql", sql);
             _progressLog.Info($"  Casting {outputPath}");
+            ValidateAndHandleScript(command.Connection, "Views", $"{schema}.{name}.sql", sql, "VIEW");
         }
     }
 
@@ -676,6 +727,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
 
             var outputPath = ResolveAndWrite("Procedures", $"{schema}.{name}.sql", sql);
             _progressLog.Info($"  Casting {outputPath}");
+            ValidateAndHandleScript(command.Connection, "Procedures", $"{schema}.{name}.sql", sql, "PROCEDURE");
         }
     }
     private void ScriptSqlServerTableTriggers(IDbCommand command)
@@ -722,6 +774,7 @@ SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
 
             var outputPath = ResolveAndWrite("Triggers", $"{tableSchema}.{tableName}.{triggerName}.sql", sql);
             _progressLog.Info($"  Casting {outputPath}");
+            ValidateAndHandleScript(command.Connection, "Triggers", $"{tableSchema}.{tableName}.{triggerName}.sql", sql, "TRIGGER");
         }
     }
     private void ScriptSqlServerFullTextCatalogs(IDbCommand command)
@@ -882,6 +935,7 @@ SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
 
             var outputPath = ResolveAndWrite("DDLTriggers", $"{triggerName}.sql", sql);
             _progressLog.Info($"  Casting {outputPath}");
+            ValidateAndHandleScript(command.Connection, "DDLTriggers", $"{triggerName}.sql", sql, "TRIGGER");
         }
     }
     private void ScriptSqlServerXmlSchemaCollections(IDbCommand command)

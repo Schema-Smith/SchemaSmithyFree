@@ -44,6 +44,24 @@ public static class CleanupScriptGenerator
         return $"DROP {keyword} IF EXISTS [{schema}].[{objectName}];";
     }
 
+    public static string GenerateInvalidObjectCleanupScript(List<(string Folder, string FileName, string Error)> invalidObjects)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"-- {invalidObjects.Count} invalid objects detected during extraction on {DateTime.Now:yyyy-MM-dd}");
+        sb.AppendLine();
+        foreach (var (folder, fileName, error) in invalidObjects)
+        {
+            var drop = GenerateDropStatement(fileName, folder);
+            if (drop != null)
+            {
+                sb.AppendLine($"-- Error: {error}");
+                sb.AppendLine(drop);
+                sb.AppendLine();
+            }
+        }
+        return sb.ToString();
+    }
+
     public static string GenerateCleanupScript(List<string> orphanFileNames, string folderName)
     {
         var sb = new StringBuilder();
