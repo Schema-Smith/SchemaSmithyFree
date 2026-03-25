@@ -5,6 +5,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Schema.DataAccess;
+using Schema.Domain;
 using Schema.Isolators;
 using Schema.Utility;
 using System;
@@ -37,6 +38,7 @@ public class SchemaTongs
     private bool _scriptDynamicDependencyRemovalForFunctions;
     private string[] _objectsToCast = [];
     private OrphanHandlingMode _orphanHandlingMode = OrphanHandlingMode.Detect;
+    private CheckConstraintStyle _checkConstraintStyle;
     private bool _validateScripts;
     private bool _saveInvalidScripts = true;
     private readonly Dictionary<string, ExtractionFileIndex> _folderIndexes = new();
@@ -112,7 +114,39 @@ public class SchemaTongs
         _validateScripts = config["ShouldCast:ValidateScripts"]?.ToLower() == "true";
         _saveInvalidScripts = config["ShouldCast:SaveInvalidScripts"]?.ToLower() != "false";
 
+        var productFile = Path.Combine(_productPath, "Product.json");
+        var productFileExistedBeforeInit = FileWrapper.GetFromFactory().Exists(productFile);
+        if (productFileExistedBeforeInit)
+        {
+            var product = JsonHelper.Load<Product>(productFile);
+            _checkConstraintStyle = product?.CheckConstraintStyle ?? CheckConstraintStyle.ColumnLevel;
+
+            var configStyle = config["Product:CheckConstraintStyle"];
+            if (!string.IsNullOrEmpty(configStyle) &&
+                Enum.TryParse<CheckConstraintStyle>(configStyle, true, out var cfgStyle) &&
+                cfgStyle != _checkConstraintStyle)
+            {
+                _progressLog.Warn($"SchemaTongs config specifies CheckConstraintStyle '{cfgStyle}' but Product.json is set to '{_checkConstraintStyle}'. Extracting as '{_checkConstraintStyle}' per the product definition. Update Product.json to change this.");
+            }
+        }
+        else
+        {
+            var configStyle = config["Product:CheckConstraintStyle"];
+            if (!string.IsNullOrEmpty(configStyle) && Enum.TryParse<CheckConstraintStyle>(configStyle, true, out var style))
+                _checkConstraintStyle = style;
+        }
+
         RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb);
+
+        if (!productFileExistedBeforeInit && _checkConstraintStyle != CheckConstraintStyle.ColumnLevel)
+        {
+            var newProduct = JsonHelper.Load<Product>(productFile);
+            if (newProduct != null)
+            {
+                newProduct.CheckConstraintStyle = _checkConstraintStyle;
+                JsonHelper.Write(productFile, newProduct);
+            }
+        }
         _templatePath = RepositoryHelper.UpdateOrInitTemplate(_productPath, config["Template:Name"], targetDb);
         RenameLegacyTableDataFolder();
         BuildFileIndexes();
@@ -197,10 +231,40 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 continue;
             }
 
-            _ = JsonConvert.DeserializeObject<Schema.Domain.Table>(json); // make sure the json is valid
+            var table = JsonConvert.DeserializeObject<Table>(json); // make sure the json is valid
+            if (_checkConstraintStyle == CheckConstraintStyle.TableLevel && table != null)
+            {
+                PromoteCheckConstraintsToTableLevel(commandJson, table, $"{reader["TABLE_SCHEMA"]}", $"{reader["TABLE_NAME"]}");
+                json = JsonConvert.SerializeObject(table, Formatting.Indented);
+            }
             var outputPath = ResolveAndWrite("Tables", $"{reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}.json", json);
             _progressLog.Info($"    Casting {outputPath}");
         }
+    }
+
+    internal static void PromoteCheckConstraintsToTableLevel(IDbCommand command, Table table, string schema, string tableName)
+    {
+        command.CommandText = $@"
+SELECT cc.name AS [Name], SchemaSmith.fn_StripParenWrapping(cc.definition) AS [Expression]
+  FROM sys.check_constraints cc WITH (NOLOCK)
+ WHERE cc.parent_object_id = OBJECT_ID('{EscapeSql(schema)}.{EscapeSql(tableName)}')
+ ORDER BY cc.name";
+
+        var allConstraints = new List<CheckConstraint>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+                allConstraints.Add(new CheckConstraint
+                {
+                    Name = $"[{reader.GetString(0)}]",
+                    Expression = reader.GetString(1)
+                });
+        }
+
+        foreach (var col in table.Columns)
+            col.CheckExpression = null;
+
+        table.CheckConstraints = allConstraints;
     }
 
     private void ScriptSqlServerSchemas(IDbCommand command)
