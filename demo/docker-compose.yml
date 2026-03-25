@@ -46,10 +46,10 @@ services:
       - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
     healthcheck:
       test: /tmp/devdatabase/is-ready.sh
-      interval: 60s
+      interval: 5s
       timeout: 3s
-      retries: 10
-      start_period: 60s
+      retries: 30
+      start_period: 10s
 
   completed:
     image: alpine
