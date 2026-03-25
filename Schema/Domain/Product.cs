@@ -9,6 +9,7 @@ using Schema.Isolators;
 using Schema.Utility;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace Schema.Domain;
 
@@ -25,6 +26,8 @@ public class Product
     public string VersionStampScript { get; set; }
     public string Platform { get; set; } = ConfigHelper.Platform;
     public SqlServerVersion? MinimumVersion { get; set; }
+    [JsonConverter(typeof(StringEnumConverter))]
+    public CheckConstraintStyle CheckConstraintStyle { get; set; }
 
     [JsonIgnore]
     public string FilePath { get; set; }
