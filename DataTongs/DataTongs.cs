@@ -74,6 +74,12 @@ public class DataTongs
                 continue;
             }
 
+            if (string.IsNullOrWhiteSpace(table.KeyColumns))
+            {
+                _progressLog.Error($"  Table {table.TableName} has no KeyColumns defined. KeyColumns must be a comma-separated string (e.g., \"KeyColumns\": \"Col1, Col2\"). Skipping table.");
+                continue;
+            }
+
             var matchColumns = string.Join(" AND ", table.KeyColumns.Split(',').Select(c => $"Source.[{c.Trim().Trim(']', '[')}] = Target.[{c.Trim().Trim(']', '[')}]"));
             var orderColumns = string.Join(",", table.KeyColumns.Split(',').Select(c => $"[{c.Trim().Trim(']', '[')}]"));
 
