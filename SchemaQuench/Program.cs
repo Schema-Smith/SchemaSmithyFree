@@ -1,7 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System;
 
-﻿using System;
+using System;
 using Schema.Utility;
 
 namespace SchemaQuench;
@@ -14,7 +14,7 @@ public static class Program
 
         var skipKindlingForge = args.Length > 0 && args[0] == "SkipKindlingForge";
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
-        ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench",LogFactory.GetLogger("ProgressLog").Info);
+        ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", LogFactory.GetLogger("ProgressLog").Info);
         new ProductQuencher().Quench(skipKindlingForge);
         LogBackup.BackupLogsAndExit("SchemaQuench");
     }

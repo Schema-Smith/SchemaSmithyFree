@@ -1,7 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using log4net;
 
-﻿using log4net;
+using log4net;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -383,7 +383,7 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
             if (needDBReset) ResetDb(destCmd);
         }
     }
-    
+
     private void ResetDb(IDbCommand destCmd)
     {
         try

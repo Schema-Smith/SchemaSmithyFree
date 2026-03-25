@@ -1,7 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System;
 
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -37,7 +37,7 @@ public static class ConfigurationLogger
                 indents++;
                 key = TryIndexToItemName(key.Substring(key.IndexOf(":", StringComparison.Ordinal) + 1), entries, entry, arrayNameKeys);
             }
-            var value = key.ContainsIgnoringCase("Password") || key.ContainsIgnoringCase("Pwd") 
+            var value = key.ContainsIgnoringCase("Password") || key.ContainsIgnoringCase("Pwd")
                 ? "**********" // Mask sensitive information
                 : entry.Value ?? "";
             logLine?.Invoke($"{new string(' ', indents * 2)}{key}: {value}");

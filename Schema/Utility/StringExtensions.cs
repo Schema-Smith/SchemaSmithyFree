@@ -1,7 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System.Text.RegularExpressions;
 
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using System;
 using System.IO;
 

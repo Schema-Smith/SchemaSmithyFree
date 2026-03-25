@@ -1,7 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System.IO;
 
-﻿using System.IO;
+using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Schema.Domain;
@@ -19,7 +19,7 @@ public static class RepositoryHelper
         var productFile = Path.Combine(productPath, "Product.json");
         if (string.IsNullOrEmpty(productName)) productName = Path.GetFileName(productPath.TrimEnd(' ', '/', '\\'));
         if (string.IsNullOrEmpty(templateName)) templateName = dbName;
-        var product = new Product { Name = productName, ValidationScript = "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] = '{{" + templateName + "Db}}') THEN 1 ELSE 0 END AS BIT)"};
+        var product = new Product { Name = productName, ValidationScript = "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] = '{{" + templateName + "Db}}') THEN 1 ELSE 0 END AS BIT)" };
         if (file.Exists(productFile)) product = JsonHelper.Load<Product>(productFile) ?? product;
         product.FilePath = productFile;
         if (!product.ScriptTokens.Any(t => t.Key.EqualsIgnoringCase($"{templateName}Db"))) product.ScriptTokens.Add($"{templateName}Db", dbName);
@@ -50,7 +50,7 @@ public static class RepositoryHelper
         foreach (var folder in Template.GetTemplateFolders())
             directory.CreateDirectory(Path.Combine(templatePath, folder.FolderPath));
         directory.CreateDirectory(Path.Combine(templatePath, "Indexed Views"));
-        if (!file.Exists(templateFile)) 
+        if (!file.Exists(templateFile))
         {
             var template = new Template { Name = templateName, DatabaseIdentificationScript = "SELECT [Name] FROM master.sys.databases WHERE [Name] = '{{" + templateName + "Db}}'" };
             JsonHelper.Write(templateFile, template);

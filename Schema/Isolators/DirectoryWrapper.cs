@@ -1,7 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System.IO;
 
-﻿using System.IO;
+using System.IO;
 using Schema.Utility;
 
 namespace Schema.Isolators;
@@ -25,7 +25,7 @@ public class DirectoryWrapper : IDirectory
 
     public string[] GetDirectories(string path, string searchPattern, SearchOption searchOption)
     {
-        return Directory.GetDirectories(path, searchPattern, searchOption); 
+        return Directory.GetDirectories(path, searchPattern, searchOption);
     }
 
     public void Delete(string path, bool recursive = false)

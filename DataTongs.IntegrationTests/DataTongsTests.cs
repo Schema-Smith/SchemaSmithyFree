@@ -1,7 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System;
 
-﻿using System;
+using System;
 using System.Data;
 using log4net;
 using NSubstitute;
@@ -86,7 +86,7 @@ INSERT INTO [dbo].[TestTable] ([Id], [Name], Description)
     {
         DropTestDatabases();
     }
-    
+
     private static string GenerateUniqueDBName(string dbName)
     {
         dbName = dbName ?? throw new ArgumentNullException(nameof(dbName));
