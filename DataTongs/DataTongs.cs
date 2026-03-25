@@ -159,8 +159,8 @@ WHEN NOT MATCHED THEN
     {
         cmd.CommandText = $@"
 SELECT CAST((
-SELECT {selectColumns} 
-  FROM [{tableSchema}].[{tableName}] WITH (NOLOCK) 
+SELECT {selectColumns}
+  FROM [{tableSchema}].[{tableName}] WITH (NOLOCK)
   {(string.IsNullOrWhiteSpace(filter) ? "" : $"WHERE {filter}")}
   ORDER BY {orderColumns}
   FOR JSON AUTO) AS NVARCHAR(MAX))
@@ -269,8 +269,10 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY'
     private static string? GetSelectColumns(IDbCommand cmd, string tableSchema, string tableName)
     {
         cmd.CommandText = $@"
-SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' 
+SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
                        THEN '[' + c.COLUMN_NAME + '].ToString() AS [' + c.COLUMN_NAME + '], [' + c.COLUMN_NAME + '].STSrid AS [' + c.COLUMN_NAME + '.STSrid]'
+                       WHEN c.DATA_TYPE = 'HIERARCHYID'
+                       THEN '[' + c.COLUMN_NAME + '].ToString() AS [' + c.COLUMN_NAME + ']'
                        ELSE '[' + c.COLUMN_NAME + ']' END, ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
   FROM INFORMATION_SCHEMA.COLUMNS c
   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
@@ -278,7 +280,8 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY'
                                                  AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
   WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
     AND cc.[name] IS NULL
-	AND sc.is_rowguidcol = 0
+    AND sc.is_rowguidcol = 0
+    AND c.DATA_TYPE NOT IN ('sql_variant', 'rowversion', 'timestamp')
 ";
         return cmd.ExecuteScalar()?.ToString();
     }
