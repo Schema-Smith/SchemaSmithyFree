@@ -61,7 +61,7 @@ ProductName/
     └── ProductName/
         ├── Template.json
         ├── Tables/         ← Table definitions (JSON)
-        ├── TableData/      ← Data merge scripts (SQL)
+        ├── Table Data/     ← Data merge scripts (SQL)
         ├── Views/          ← View scripts
         ├── Procedures/     ← Stored procedure scripts
         └── ...

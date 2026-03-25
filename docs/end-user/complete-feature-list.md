@@ -126,7 +126,7 @@ Scripts and objects are applied in a defined order through dedicated slots:
 | Before | Migration scripts (Before Scripts folder) | No |
 | Objects | Programmable objects (functions, procedures, etc.) | Yes |
 | AfterTablesObjects | Views, triggers (plus retry of Objects) | Yes |
-| TableData | Table data scripts (Table Data folder) | Yes |
+| Table Data | Table data scripts (`Table Data` folder) | Yes |
 | After | Migration scripts (After Scripts folder) | No |
 
 Slots marked with "Retry Loop" use a dependency resolution loop -- scripts that fail due to missing dependencies are retried until no more progress can be made.

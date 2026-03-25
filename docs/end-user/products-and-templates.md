@@ -97,7 +97,7 @@ Each template contains a fixed set of script folders. SQL files placed in these 
 | `DDLTriggers` | AfterTablesObjects | Looped with dependency retry (after table quench) |
 | `MigrationScripts/BetweenTablesAndKeys` | BetweenTablesAndKeys | Sequential, tracked (run once unless `[ALWAYS]`) |
 | `MigrationScripts/AfterTablesScripts` | AfterTablesScripts | Sequential, tracked (run once unless `[ALWAYS]`) |
-| `TableData` | TableData | Looped with dependency retry |
+| `Table Data` | TableData | Looped with dependency retry |
 | `MigrationScripts/After` | After | Sequential, tracked (run once unless `[ALWAYS]`) |
 
 **BetweenTablesAndKeys** scripts run after table structures are created but before foreign key constraints are applied. Use this slot for data migration that must happen after the table exists but cannot wait until after FK constraints are in place (for example, populating a new NOT NULL column with a default before the FK constraint would otherwise block the data load).
@@ -118,7 +118,7 @@ Quench slots control the order of execution within a template. Each database is 
 4. **BetweenTablesAndKeys** — Migration scripts executed after table structures are created but before foreign key constraints are applied. Sequential and tracked. Use for data migration that must happen before FK constraints are enforced.
 5. **AfterTablesObjects** — Triggers and DDL triggers executed in a dependency retry loop after the full table quench (including FK constraints).
 6. **AfterTablesScripts** — Migration scripts executed after the full table quench (including FK constraints) but before triggers are deployed. Sequential and tracked.
-7. **TableData** — Data scripts executed in a dependency retry loop.
+7. **Table Data** — Data scripts executed in a dependency retry loop.
 8. **After** — Final migration scripts executed sequentially with the same tracking as Before scripts.
 
 ---

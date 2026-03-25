@@ -89,6 +89,38 @@ This is useful when functions are referenced by computed columns or constraints,
 
 ---
 
+## Subfolder Preservation
+
+Script folders such as `Procedures/`, `Views/`, and `Functions/` support user-created subfolders for organizing scripts. SchemaTongs preserves these subfolders across re-extraction runs. Extracted scripts are written back to the same subfolder they occupied on the previous extraction. New objects (those not yet in the package) are written to the folder root.
+
+---
+
+## Orphan Detection
+
+When a database object is dropped or renamed, the corresponding script file in the schema package becomes an orphan — it no longer has a matching object in the source database. SchemaTongs can detect and optionally clean up these orphaned files.
+
+Configure orphan behavior with `OrphanHandling:Mode`:
+
+| Mode | Behavior |
+|------|----------|
+| `Detect` (default) | Orphaned files are logged as warnings. No files are modified. |
+| `DetectWithCleanupScripts` | Orphaned files are logged. A cleanup DROP script is generated in `MigrationScripts/After/` for each orphaned script. |
+| `DetectDeleteAndCleanup` | Orphaned files are deleted from the package. Cleanup DROP scripts are generated in `MigrationScripts/After/`. |
+
+See [SchemaTongs Configuration — Orphan Handling](configuration.md#orphan-handling) for details.
+
+---
+
+## Script Validation
+
+When `ShouldCast:ValidateScripts` is enabled, each extracted SQL script is parsed for syntax errors after extraction. Scripts that fail validation are saved with a `.sqlerror` extension instead of `.sql` (or omitted entirely if `ShouldCast:SaveInvalidScripts` is `false`).
+
+SchemaQuench skips `.sqlerror` files — only `.sql` files are loaded and executed. SchemaHammer displays `.sqlerror` files with an error indicator in the script tree. If a validation failure is a false positive (for example, a cross-database reference that the parser cannot resolve), rename the file from `.sqlerror` to `.sql` to include it in the next quench run.
+
+See [SchemaTongs Configuration — Script Validation](configuration.md#script-validation) for details.
+
+---
+
 ## Package Initialization
 
 When SchemaTongs runs against a path that does not yet contain a schema package:
@@ -101,6 +133,8 @@ When SchemaTongs runs against a path that does not yet contain a schema package:
 6. Creates a `.json-schemas/` directory with JSON schema validation files for Product, Template, and Table JSON formats
 
 On subsequent runs against an existing package, SchemaTongs overwrites scripts and table definitions but does not modify `Product.json` or `Template.json`.
+
+The `Product:CheckConstraintStyle` setting controls how check constraints are written into the newly initialized `Product.json`. Set it to `TableLevel` to promote all check constraints to named table-level entries. This setting has no effect on subsequent runs — it only applies when a new `Product.json` is created.
 
 ---
 

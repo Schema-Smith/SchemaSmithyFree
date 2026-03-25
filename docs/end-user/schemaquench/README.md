@@ -42,7 +42,7 @@ For each database identified by a template:
 7. **Table quench (keys and constraints)** — Applies foreign key constraints and remaining table constraints from `Tables/*.json`.
 8. **AfterTablesScripts** — Executes migration scripts from `MigrationScripts/AfterTablesScripts`. Sequential and tracked. Runs after the full table quench but before triggers.
 9. **AfterTablesObjects scripts** — Executes scripts from Triggers and DDLTriggers folders in a dependency retry loop. Includes any unresolved Objects scripts from step 4.
-10. **TableData scripts** — Executes scripts from the TableData folder in a dependency retry loop.
+10. **Table Data scripts** — Executes scripts from the `Table Data` folder in a dependency retry loop.
 11. **After scripts** — Executes migration scripts from `MigrationScripts/After` with the same tracking as Before scripts.
 12. **Stamp version** — Executes `Template.VersionStampScript` if configured.
 
@@ -64,7 +64,7 @@ These objects are created or updated on every quench run to ensure they match th
 
 ## Dependency Retry Loop
 
-Scripts in the Objects, AfterTablesObjects, and TableData quench slots are executed using a dependency retry loop:
+Scripts in the Objects, AfterTablesObjects, and Table Data quench slots are executed using a dependency retry loop:
 
 1. Execute all pending scripts in the slot.
 2. If any script fails (typically due to an unresolved dependency), mark it as failed.
@@ -81,7 +81,7 @@ When `WhatIfONLY` is set to `true` in configuration, SchemaQuench performs a dry
 
 - Validation scripts execute normally
 - Table quench runs in WhatIf mode, generating the SQL that would be executed without applying it
-- Before, Objects, BetweenTablesAndKeys, AfterTablesScripts, AfterTablesObjects, TableData, After, and product Before/After scripts are skipped entirely
+- Before, Objects, BetweenTablesAndKeys, AfterTablesScripts, AfterTablesObjects, Table Data, After, and product Before/After scripts are skipped entirely
 
 The generated SQL is written to `SchemaQuench - Quench Tables {DatabaseName}.sql` in the log directory.
 

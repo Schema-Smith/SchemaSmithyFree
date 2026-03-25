@@ -36,7 +36,7 @@ MyProduct/
       MigrationScripts/
         Before/
         After/
-      TableData/
+      Table Data/
     Secondary/
       Template.json
       Tables/
@@ -57,7 +57,7 @@ MyProduct/
 |------|------|
 | **SchemaTongs** | Creates schema packages by extracting objects from a live database. Initializes the folder structure, generates Table JSON and SQL script files. |
 | **SchemaQuench** | Reads schema packages and applies them to target databases. Consumes Product.json, Template.json, Table JSON files, and all SQL scripts. |
-| **DataTongs** | Generates MERGE scripts from live table data. Output scripts can be placed into a schema package's `TableData` or `MigrationScripts` folders. |
+| **DataTongs** | Generates MERGE scripts from live table data. Output scripts can be placed into a schema package's `Table Data` or `MigrationScripts` folders. |
 
 ---
 

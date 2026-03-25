@@ -6,7 +6,7 @@ Applies to: DataTongs (SQL Server, Community)
 
 ## What DataTongs Does
 
-DataTongs extracts table data from a live SQL Server database and generates standalone MERGE scripts for data synchronization. These scripts can be placed into a schema package's `TableData` or `MigrationScripts` folders for execution by SchemaQuench.
+DataTongs extracts table data from a live SQL Server database and generates standalone MERGE scripts for data synchronization. These scripts can be placed into a schema package's `Table Data` or `MigrationScripts` folders for execution by SchemaQuench.
 
 ---
 

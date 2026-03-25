@@ -29,10 +29,14 @@ SchemaTongs reads its configuration from multiple sources, merged in the followi
     },
     "Product": {
         "Path": "",
-        "Name": ""
+        "Name": "",
+        "CheckConstraintStyle": "ColumnLevel"
     },
     "Template": {
         "Name": ""
+    },
+    "OrphanHandling": {
+        "Mode": "Detect"
     },
     "ShouldCast": {
         "Tables": true,
@@ -48,6 +52,8 @@ SchemaTongs reads its configuration from multiple sources, merged in the followi
         "XMLSchemaCollections": true,
         "IndexedViews": true,
         "ScriptDynamicDependencyRemovalForFunctions": false,
+        "ValidateScripts": false,
+        "SaveInvalidScripts": true,
         "ObjectList": ""
     }
 }
@@ -74,7 +80,24 @@ SchemaTongs reads its configuration from multiple sources, merged in the followi
 |-----|------|---------|-------------|
 | `Product:Path` | string | _(required)_ | Directory where the schema package will be created or updated |
 | `Product:Name` | string | _(empty)_ | Product name written to `Product.json`. If blank, defaults to the directory name. |
+| `Product:CheckConstraintStyle` | string | `ColumnLevel` | Controls how check constraints are written when initializing a new `Product.json`. `ColumnLevel` (default) keeps check constraints as column-level `CheckExpression` properties. `TableLevel` promotes all check constraints to named table-level entries. Only applied when creating a new product — does not modify an existing `Product.json`. |
 | `Template:Name` | string | _(empty)_ | Template name. If blank, defaults to `"Default"`. |
+
+### Orphan Handling
+
+Orphaned scripts are files that exist in the schema package but no longer correspond to any object in the source database. On re-extraction, SchemaTongs can detect and optionally remove them.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `OrphanHandling:Mode` | string | `Detect` | Controls what happens to orphaned scripts. See [Orphan Handling Modes](#orphan-handling-modes) below. |
+
+#### Orphan Handling Modes
+
+| Mode | Behavior |
+|------|----------|
+| `Detect` | Orphaned files are logged as warnings. No files are modified. |
+| `DetectWithCleanupScripts` | Orphaned files are logged. For each orphan in a script folder (not `Tables/`), a cleanup script is generated and placed in `MigrationScripts/After/` that drops the corresponding database object. |
+| `DetectDeleteAndCleanup` | Orphaned files are deleted from the package. Cleanup scripts are generated in `MigrationScripts/After/` as with `DetectWithCleanupScripts`. |
 
 ### Extraction Control (ShouldCast)
 
@@ -93,6 +116,8 @@ SchemaTongs reads its configuration from multiple sources, merged in the followi
 | `ShouldCast:XMLSchemaCollections` | bool | `true` | Extract XML schema collections |
 | `ShouldCast:IndexedViews` | bool | `true` | Extract indexed (materialized) view definitions |
 | `ShouldCast:ScriptDynamicDependencyRemovalForFunctions` | bool | `false` | Generate dynamic SQL to remove dependencies before updating functions |
+| `ShouldCast:ValidateScripts` | bool | `false` | When `true`, each extracted SQL script is parsed for syntax errors after extraction. Scripts that fail validation are saved with a `.sqlerror` extension (or removed if `SaveInvalidScripts` is `false`). See [Script Validation](#script-validation) below. |
+| `ShouldCast:SaveInvalidScripts` | bool | `true` | When `ValidateScripts` is enabled and `SaveInvalidScripts` is `true` (the default), scripts that fail validation are saved with a `.sqlerror` extension instead of `.sql`. When `false`, invalid scripts are not written to disk at all. |
 | `ShouldCast:ObjectList` | string | _(empty)_ | Comma or semicolon-separated list of specific objects to extract. When empty, all matching objects are extracted. |
 
 ---
@@ -113,8 +138,12 @@ Configuration keys can be overridden using environment variables. For the genera
 | `Source:ConnectionProperties:<name>` | `SmithySettings_Source__ConnectionProperties__<name>` |
 | `Product:Path` | `SmithySettings_Product__Path` |
 | `Product:Name` | `SmithySettings_Product__Name` |
+| `Product:CheckConstraintStyle` | `SmithySettings_Product__CheckConstraintStyle` |
 | `Template:Name` | `SmithySettings_Template__Name` |
+| `OrphanHandling:Mode` | `SmithySettings_OrphanHandling__Mode` |
 | `ShouldCast:Tables` | `SmithySettings_ShouldCast__Tables` |
+| `ShouldCast:ValidateScripts` | `SmithySettings_ShouldCast__ValidateScripts` |
+| `ShouldCast:SaveInvalidScripts` | `SmithySettings_ShouldCast__SaveInvalidScripts` |
 | `ShouldCast:ObjectList` | `SmithySettings_ShouldCast__ObjectList` |
 
 ### Example
@@ -194,6 +223,38 @@ SchemaTongs --ConnectionString:"data source=myserver;Initial Catalog=mydb;User I
 ```
 
 When `--ConnectionString` is provided, `Source:Server`, `Source:User`, `Source:Password`, `Source:Port`, `Source:Database`, and `Source:ConnectionProperties` are all ignored.
+
+---
+
+## Script Validation
+
+When `ShouldCast:ValidateScripts` is `true`, each extracted SQL script is tested for syntax errors immediately after extraction. SchemaTongs parses the script using the same batch splitter used by SchemaQuench.
+
+Scripts that fail validation are treated according to `ShouldCast:SaveInvalidScripts`:
+
+- **`SaveInvalidScripts: true` (default)** — The script is saved with a `.sqlerror` extension instead of `.sql`. The `.sqlerror` file is not executed by SchemaQuench (which only processes `.sql` files), but it is visible in SchemaHammer with an error indicator.
+- **`SaveInvalidScripts: false`** — The script is not written to disk at all.
+
+### When Validation Fails
+
+Validation failures are not always genuine errors. Common false positives include:
+
+- **Cross-database references** — Scripts that reference objects in another database (e.g., `OtherDB.dbo.MyTable`) may fail validation if the cross-database context is not available at parse time.
+- **Temporary objects** — References to temp tables or variables created earlier in the same batch.
+
+If a `.sqlerror` file is a false positive, you can manually rename it from `.sqlerror` to `.sql`. SchemaQuench will then execute it on the next quench run.
+
+### .sqlerror Files
+
+`.sqlerror` files are SQL scripts that failed extraction validation. They serve as a record of potential problems without blocking extraction of the rest of the package.
+
+| Tool | Behavior |
+|------|----------|
+| **SchemaQuench** | Skips `.sqlerror` files — only `.sql` files are loaded and executed |
+| **SchemaHammer** | Displays `.sqlerror` files in the script tree with an error indicator |
+| **SchemaTongs** | On re-extraction with `SaveInvalidScripts: true`, overwrites `.sqlerror` with the latest extracted content (still as `.sqlerror` if still invalid) |
+
+To include a `.sqlerror` script in the next quench: rename it to `.sql`.
 
 ---
 

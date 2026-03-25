@@ -4,6 +4,20 @@ All notable changes to SchemaSmith Community Edition are documented here.
 
 For full release details and download links, see [GitHub Releases](https://github.com/Schema-Smith/SchemaSmithyFree/releases).
 
+## [Unreleased]
+
+### Added
+
+- **SchemaTongs: Subfolder preservation** — Script folders (`Procedures/`, `Views/`, etc.) now support user-created subfolders for organizing scripts. Extracted scripts are written back to the same subfolder on re-extraction; new objects are placed in the folder root.
+- **SchemaTongs: Orphan detection** — New `OrphanHandling:Mode` setting detects script files that no longer correspond to any database object. Modes: `Detect` (log warnings only), `DetectWithCleanupScripts` (log and generate DROP scripts in `MigrationScripts/After/`), `DetectDeleteAndCleanup` (delete orphans and generate DROP scripts).
+- **SchemaTongs: Script validation** — New `ShouldCast:ValidateScripts` setting (default: `false`) parses each extracted SQL script for syntax errors. Scripts that fail validation are saved as `.sqlerror` files (or discarded if `ShouldCast:SaveInvalidScripts` is `false`). SchemaQuench skips `.sqlerror` files; SchemaHammer displays them with an error indicator.
+- **SchemaTongs: CheckConstraintStyle** — New `Product:CheckConstraintStyle` setting controls whether check constraints in a newly initialized `Product.json` are written as column-level `CheckExpression` properties (`ColumnLevel`, default) or promoted to named table-level constraints (`TableLevel`). Has no effect on existing products.
+- **SchemaHammer: .sqlerror display** — `.sqlerror` files are displayed in the script tree with an error indicator. Content is shown read-only with syntax highlighting.
+
+### Changed
+
+- **`TableData` folder renamed to `Table Data`** — The script folder for data synchronization scripts is now named `Table Data` (with a space) for improved readability in file explorers. Legacy `TableData` folders are automatically renamed on re-extraction.
+
 ## [v1.1.8](https://github.com/Schema-Smith/SchemaSmithyFree/releases/tag/v1.1.8) — 2026-02-08
 
 ### Fixed

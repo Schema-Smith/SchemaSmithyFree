@@ -76,3 +76,11 @@ SchemaHammer is a new read-only desktop application for browsing SchemaSmith sch
 - **SchemaPropertyAttribute:** Domain model properties now carry validation metadata (Required, Pattern, Min/Max) used by the schema generator.
 - **ExtendedProperties removed from schemas:** Table JSON schemas no longer include ExtendedProperties fields. Custom properties are an Enterprise feature.
 - **Product.Platform added to schema:** The products.schema now correctly includes the Platform property.
+
+### SchemaTongs Extraction Enhancements
+
+- **Subfolder preservation:** Script folders now support user-created subfolders for organizing scripts by area or team. SchemaTongs preserves subfolder placement across re-extractions — re-extracted scripts land in the same subfolder, and new objects are written to the folder root.
+- **Orphan detection:** New `OrphanHandling:Mode` setting detects scripts that no longer correspond to any database object. Modes: `Detect` (log only), `DetectWithCleanupScripts` (log + generate DROP scripts in `MigrationScripts/After/`), `DetectDeleteAndCleanup` (delete orphans + generate DROP scripts).
+- **Script validation:** New `ShouldCast:ValidateScripts` flag (default: `false`) validates each extracted script for syntax errors. Invalid scripts are saved as `.sqlerror` files (skipped by SchemaQuench, shown with error indicator in SchemaHammer). Set `ShouldCast:SaveInvalidScripts` to `false` to discard invalid scripts entirely instead.
+- **CheckConstraintStyle:** New `Product:CheckConstraintStyle` setting (`ColumnLevel` default, `TableLevel`) controls how check constraints are written into a newly created `Product.json`. `TableLevel` promotes all check constraints to named table-level entries for easier constraint management.
+- **`Table Data` folder rename:** The data synchronization script folder is now named `Table Data` (with a space). Legacy `TableData` folders are auto-renamed on re-extraction.

@@ -78,7 +78,7 @@ Key types: `Product` (package metadata, script tokens, MinimumVersion), `Templat
 ### Key Concepts
 
 - **Schema packages** — Directory structure: Product.json + Templates/ with Template.json, table definitions (JSON), and SQL scripts organized by quench slot
-- **Quench slots** — Execution order for SQL scripts: Before → Objects → AfterTablesObjects → TableData → After
+- **Quench slots** — Execution order for SQL scripts: Before → Objects → AfterTablesObjects → Table Data → After
 - **Script tokens** — `{{TokenName}}` placeholders resolved from Product.json, Template.json, and config overrides
 - **Config loading** — `{ToolName}.settings.json` → user secrets (DEBUG) → `SmithySettings_` env vars
 

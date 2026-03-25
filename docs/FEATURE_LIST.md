@@ -48,7 +48,7 @@ Applies schema packages to target SQL Server databases using state-based compari
 2. **Objects** — Schemas, types, functions, views, procedures with automatic dependency retry loop
 3. **Table Quench** — State-based table creation/alteration/dropping via JSON definitions
 4. **AfterTablesObjects** — Triggers and DDL triggers with dependency retry
-5. **TableData** — Data synchronization scripts with dependency retry
+5. **Table Data** — Data synchronization scripts with dependency retry (`Table Data/` folder)
 6. **After** — Sequential, tracked migration scripts (`MigrationScripts/After/`)
 
 **Table Quench (State-Based Table Management):**
@@ -226,7 +226,7 @@ Product/
       MigrationScripts/
         Before/         (SQL)
         After/          (SQL)
-      TableData/        (SQL)
+      Table Data/       (SQL)
 ```
 
 Packages can be deployed from **folders** or **ZIP archives**.

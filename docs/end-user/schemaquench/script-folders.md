@@ -40,9 +40,9 @@ These slots are sequential and tracked, like `Before` and `After`.
 
 **AfterTablesScripts** (`MigrationScripts/AfterTablesScripts`) runs after the full table quench (including FK constraints) but before triggers are deployed. Use this for scripts that depend on the finalized table and key structure but must run before trigger logic is active.
 
-### TableData (Dependency Retry Loop)
+### Table Data (Dependency Retry Loop)
 
-Scripts in the `TableData` slot also use the [dependency retry loop](README.md#dependency-retry-loop). This handles cases where data scripts depend on other tables or data being present.
+Scripts in the `Table Data` slot also use the [dependency retry loop](README.md#dependency-retry-loop). This handles cases where data scripts depend on other tables or data being present.
 
 ---
 

@@ -92,7 +92,7 @@ Tokens are resolved in:
 
 - **Product.json** — `ValidationScript`, `BaselineValidationScript`, `VersionStampScript`
 - **Template.json** — `DatabaseIdentificationScript`, `VersionStampScript`, `BaselineValidationScript`
-- **SQL script files** — All `.sql` files in all script folders (Before, Objects, AfterTablesObjects, BetweenTablesAndKeys, AfterTablesScripts, TableData, After, and product Before/After) have tokens replaced before execution
+- **SQL script files** — All `.sql` files in all script folders (Before, Objects, AfterTablesObjects, BetweenTablesAndKeys, AfterTablesScripts, Table Data, After, and product Before/After) have tokens replaced before execution
 
 ---
 

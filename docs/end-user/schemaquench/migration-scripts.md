@@ -15,7 +15,7 @@ Migration scripts are SQL files placed in the `MigrationScripts/Before` and `Mig
 | Folder | Quench Slot | When It Runs |
 |---|---|---|
 | `MigrationScripts/Before` | Before | After Kindling, before Objects scripts |
-| `MigrationScripts/After` | After | After all table changes and TableData scripts |
+| `MigrationScripts/After` | After | After all table changes and Table Data scripts |
 
 ---
 

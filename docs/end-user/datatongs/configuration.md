@@ -184,7 +184,7 @@ When `--ConnectionString` is provided, `Source:Server`, `Source:User`, `Source:P
         "Server": "dbserver\\SQL2019",
         "Database": "ReferenceData"
     },
-    "OutputPath": "C:\\SchemaPackage\\Templates\\Main\\TableData",
+    "OutputPath": "C:\\SchemaPackage\\Templates\\Main\\Table Data",
     "Tables": [
         { "Name": "dbo.Country", "KeyColumns": "CountryCode" },
         { "Name": "dbo.Currency", "KeyColumns": "CurrencyCode" },
