@@ -46,6 +46,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="SchemaTongs.UnitTests" />
+    <InternalsVisibleTo Include="SchemaTongs.IntegrationTests" />
   </ItemGroup>
 
 </Project>

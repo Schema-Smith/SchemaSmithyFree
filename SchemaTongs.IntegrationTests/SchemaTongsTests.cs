@@ -10,6 +10,7 @@ using Schema.Isolators;
 using Schema.Utility;
 using log4net;
 using NSubstitute;
+using Schema.Domain;
 
 namespace SchemaTongs.IntegrationTests;
 
@@ -579,6 +580,59 @@ public class SchemaTongsTests
         }
     }
 
+    [Test]
+    public void PromoteCheckConstraintsToTableLevel_TableWithConstraints_PopulatesTableLevelList()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_integrationDb);
+        using var cmd = conn.CreateCommand();
+
+        var table = new Table
+        {
+            Columns = new System.Collections.Generic.List<Column>
+            {
+                new() { Name = "Age", CheckExpression = "some existing value" },
+                new() { Name = "Status", CheckExpression = "another value" }
+            }
+        };
+
+        global::SchemaTongs.SchemaTongs.PromoteCheckConstraintsToTableLevel(cmd, table, "Test", "CheckConstraintTest");
+
+        Assert.That(table.CheckConstraints, Has.Count.EqualTo(2));
+        Assert.That(table.CheckConstraints[0].Name, Is.EqualTo("[CK_Age]"));
+        Assert.That(table.CheckConstraints[0].Expression, Does.Contain("Age"));
+        Assert.That(table.CheckConstraints[1].Name, Is.EqualTo("[CK_Status]"));
+        Assert.That(table.CheckConstraints[1].Expression, Does.Contain("Status"));
+
+        // Column-level checks should be cleared
+        foreach (var col in table.Columns)
+            Assert.That(col.CheckExpression, Is.Null);
+    }
+
+    [Test]
+    public void PromoteCheckConstraintsToTableLevel_TableWithNoConstraints_ReturnsEmptyList()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_integrationDb);
+        using var cmd = conn.CreateCommand();
+
+        var table = new Table
+        {
+            Columns = new System.Collections.Generic.List<Column>
+            {
+                new() { Name = "Column1", CheckExpression = "old check" }
+            }
+        };
+
+        // TestTable has no check constraints
+        global::SchemaTongs.SchemaTongs.PromoteCheckConstraintsToTableLevel(cmd, table, "Test", "TestTable");
+
+        Assert.That(table.CheckConstraints, Is.Empty);
+        Assert.That(table.Columns[0].CheckExpression, Is.Null);
+    }
+
     [OneTimeTearDown]
     public void RunAfterAnyTests()
     {
@@ -751,6 +805,16 @@ GROUP BY Column1, Column2;
         cmd.CommandText = @"
 CREATE UNIQUE CLUSTERED INDEX CIX_TestIndexedView ON Test.TestIndexedView (Column1);
 ";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = @"
+CREATE TABLE Test.CheckConstraintTest (
+    Id INT NOT NULL,
+    Age INT NOT NULL,
+    Status NVARCHAR(10) NOT NULL,
+    CONSTRAINT CK_Age CHECK (Age >= 0 AND Age <= 150),
+    CONSTRAINT CK_Status CHECK (Status IN ('Active', 'Inactive'))
+)";
         cmd.ExecuteNonQuery();
 
         conn.Close();
