@@ -93,6 +93,12 @@ public class DataTongs
             var selectColumns = GetSelectColumns(cmd, tableSchema, tableName);
             var tableData = GetTableData(cmd, selectColumns, tableSchema, tableName, orderColumns, table.Filter);
 
+            if (string.IsNullOrWhiteSpace(tableData))
+            {
+                _progressLog.Info($"    No data found — skipping script generation.");
+                continue;
+            }
+
             var mergeSQL = BuildMergeSql(cmd, tableSchema, tableName, tableData, matchColumns, disableTriggers, mergeUpdate, mergeDelete, table.Filter);
 
             FileWrapper.GetFromFactory().WriteAllText(Path.Combine(outputPath, $"Populate {tableSchema}.{tableName}.sql"), mergeSQL);
