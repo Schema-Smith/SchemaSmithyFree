@@ -145,7 +145,7 @@ public class Template
             new TemplateFolder { FolderPath = "MigrationScripts/AfterTablesScripts", QuenchSlot = TemplateQuenchSlot.AfterTablesScripts },
             new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects },
             new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects },
-            new TemplateFolder { FolderPath = "TableData", QuenchSlot = TemplateQuenchSlot.TableData },
+            new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
             new TemplateFolder { FolderPath = "MigrationScripts/After", QuenchSlot = TemplateQuenchSlot.After },
         ];
     }

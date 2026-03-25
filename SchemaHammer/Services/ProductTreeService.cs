@@ -151,7 +151,7 @@ public class ProductTreeService : IProductTreeService
 
         // TableData
         AddScriptFolderNodes(children, templateDirPath, templateName,
-            ["TableData"]);
+            ["Table Data"]);
 
         // After scripts
         AddScriptFolderNodes(children, templateDirPath, templateName,

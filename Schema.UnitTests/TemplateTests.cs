@@ -242,6 +242,50 @@ public class TemplateTests
     }
 
     [Test]
+    public void GetTemplateFolders_TableDataFolder_HasSpaceInName()
+    {
+        var folders = Template.GetTemplateFolders();
+        var tableDataFolder = folders.Single(f => f.QuenchSlot == TemplateQuenchSlot.TableData);
+        Assert.That(tableDataFolder.FolderPath, Is.EqualTo("Table Data"));
+    }
+
+    [Test]
+    public void ShouldLoadTableDataScripts_FromLegacyTableDataFolder_WhenTableDataWithSpaceAbsent()
+    {
+        // Simulates a legacy package that has "TableData" (no space) but not "Table Data" (with space).
+        // ScriptFolder should fall back to the legacy path so old packages still work.
+        var templateJsonFile = Path.Combine("SchemaPackagePath", "Templates", "Test", "Template.json");
+        var legacyFolderPath = Path.Combine("SchemaPackagePath", "Templates", "Test", "TableData");
+        var newFolderPath = Path.Combine("SchemaPackagePath", "Templates", "Test", "Table Data");
+        var sqlFile = Path.Combine(legacyFolderPath, "SeedData.sql");
+
+        var config = SetupConfig();
+        var mockDirectoryWrapper = Substitute.For<IDirectory>();
+        // All folders exist except "Table Data" (new) — "TableData" (legacy) does exist
+        mockDirectoryWrapper.Exists(Arg.Is<string>(p => p != newFolderPath)).Returns(true);
+        mockDirectoryWrapper.Exists(newFolderPath).Returns(false);
+        mockDirectoryWrapper.GetFiles(legacyFolderPath, "*.sql", SearchOption.AllDirectories).Returns([sqlFile]);
+
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockFileWrapper.ReadAllText(templateJsonFile).Returns(templateJson);
+        mockFileWrapper.ReadAllText(sqlFile).Returns($"INSERT INTO dbo.Ref{Environment.NewLine}GO{Environment.NewLine}");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(config);
+            FactoryContainer.Register(mockDirectoryWrapper);
+            FactoryContainer.Register(mockFileWrapper);
+
+            var template = Template.Load("Test", GetTestProduct());
+            Assert.That(template.TableDataScripts, Has.Count.EqualTo(1));
+            Assert.That(template.TableDataScripts.First().Name, Is.EqualTo("SeedData.sql"));
+
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
     public void IndexOnlyTableQuenches_DefaultsFalse()
     {
         var template = new Template();
