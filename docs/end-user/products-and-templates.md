@@ -19,7 +19,9 @@ The `Product.json` file is the root configuration for a schema package. It lives
 | `BaselineValidationScript` | string | No | T-SQL expression evaluated after server validation but before template processing. Used to verify the server is in an expected baseline state. |
 | `VersionStampScript` | string | No | T-SQL executed after all templates complete successfully. Typically used to record the release version on the server. |
 | `DropUnknownIndexes` | bool | No | Default: `false`. When `true`, the table quench process drops indexes on managed tables that are not defined in the table JSON. |
-| `Platform` | string | No | Default: `"MSSQL"`. Must match the tool's platform. |
+| `MinimumVersion` | string | No | Minimum SQL Server version required (e.g., `"Sql2016"`, `"Sql2019"`, `"Sql2022"`, `"Sql2025"`). When set, enables version-gated features. |
+| `CheckConstraintStyle` | string | No | Default: `"ColumnLevel"`. Controls how SchemaTongs writes check constraints on initialization: `"ColumnLevel"` (inline `CheckExpression`) or `"TableLevel"` (named table-level constraints). Has no effect on existing products. |
+| `Platform` | string | No | Default: `"MSSQL"`. Also accepts `"SqlServer"`. Must match the tool's platform. |
 
 ### Example
 

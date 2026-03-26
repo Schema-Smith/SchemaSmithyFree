@@ -8,7 +8,7 @@ Applies to: SchemaQuench, SchemaTongs (SQL Server, Community)
 
 Tables are defined as JSON files in the `Tables/` directory of each template. Each file defines one table and is named `schema.tablename.json` (e.g., `dbo.Customer.json`).
 
-SchemaTongs generates these files during extraction. SchemaQuench reads them during deployment and uses the `SchemaSmith.TableQuench` stored procedure to create, alter, or restructure tables to match the definition.
+SchemaTongs generates these files during extraction. SchemaQuench reads them during deployment and uses modular stored procedures to create, alter, or restructure tables to match the definition.
 
 ---
 
@@ -21,6 +21,7 @@ SchemaTongs generates these files during extraction. SchemaQuench reads them dur
 | `CompressionType` | string | `"NONE"` | Data compression: `"NONE"`, `"ROW"`, or `"PAGE"` |
 | `IsTemporal` | bool | `false` | Marks the table as a system-versioned temporal table |
 | `OldName` | string | | Previous table name. When set, the table is renamed from `OldName` to `Name` during quench. |
+| `UpdateFillFactor` | bool | `false` | When `true`, index fill factors on this table are updated to match JSON definitions during quench. OR'd with template-level and index-level settings. |
 | `Columns` | array | | Column definitions |
 | `Indexes` | array | | Index and constraint definitions |
 | `XmlIndexes` | array | | XML index definitions |
@@ -75,6 +76,7 @@ Identity columns are specified using the SQL Server identity syntax within the `
 | `ColumnStore` | bool | `false` | Columnstore index |
 | `CompressionType` | string | `"NONE"` | Index compression: `"NONE"`, `"ROW"`, or `"PAGE"` |
 | `FillFactor` | int | `0` | Fill factor percentage (0 = server default) |
+| `UpdateFillFactor` | bool | `false` | When `true`, this index's fill factor is updated during quench. OR'd with template-level and table-level settings. |
 | `IndexColumns` | string | _(required)_ | Comma-separated column names with optional sort direction (e.g., `"LastName ASC, FirstName ASC"`) |
 | `IncludeColumns` | string | | Comma-separated INCLUDE columns |
 | `FilterExpression` | string | | Filtered index WHERE clause (e.g., `"[IsActive] = 1"`) |

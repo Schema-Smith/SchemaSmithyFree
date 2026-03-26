@@ -72,8 +72,10 @@ Tables to extract are configured in the `Tables` array in `DataTongs.settings.js
 | Field | Required | Description |
 |-------|----------|-------------|
 | `Name` | Yes | Table name in `schema.table` format. If no schema is specified, `dbo` is assumed. |
-| `KeyColumns` | Yes | Comma-separated column names used in the MERGE `ON` clause to match source and target rows. |
+| `KeyColumns` | No | Comma-separated column names used in the MERGE `ON` clause. When blank, auto-detected from the table's primary key or best unique index. Prefix a column with `*` to indicate it is nullable (e.g., `*NullableCode`). |
 | `Filter` | No | SQL `WHERE` clause (without the `WHERE` keyword) to filter which rows are extracted. Also applied to `WHEN NOT MATCHED BY SOURCE` when `MergeDelete` is enabled. |
+
+Empty tables are automatically skipped during extraction.
 
 ---
 
@@ -83,10 +85,13 @@ Tables to extract are configured in the `Tables` array in `DataTongs.settings.js
 - **Computed columns** — Excluded from extraction and all MERGE clauses.
 - **ROWGUIDCOL columns** — Excluded from extraction.
 - **Geography columns** — Extracted using `STAsText()` (WKT format) with `STSrid`. Restored using `geography::STGeomFromText()`.
+- **Geometry columns** — Extracted using `STAsText()` (WKT format) with `STSrid`. Restored using `geometry::STGeomFromText()`.
+- **HierarchyID columns** — Extracted as canonical string. Restored using `hierarchyid::Parse()`.
 - **XML columns** — Cast to `NVARCHAR(MAX)` for comparison in change detection.
 - **NTEXT columns** — Cast to `NVARCHAR(MAX)` for comparison.
 - **TEXT columns** — Cast to `VARCHAR(MAX)` for comparison.
 - **IMAGE columns** — Cast to `VARBINARY(MAX)` for comparison.
+- **sql_variant, rowversion, timestamp columns** — Automatically excluded from extraction.
 
 ---
 

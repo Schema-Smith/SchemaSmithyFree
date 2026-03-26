@@ -63,7 +63,7 @@ DataTongs reads its configuration from multiple sources, merged in the following
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `Name` | string | _(required)_ | Table name in `schema.table` format. If no schema prefix, `dbo` is assumed. |
-| `KeyColumns` | string | _(required)_ | Comma-separated column names for the MERGE `ON` clause. |
+| `KeyColumns` | string | _(auto-detected)_ | Comma-separated column names for the MERGE `ON` clause. When blank, auto-detected from the table's primary key or best unique index. Prefix a column with `*` to indicate it is nullable. |
 | `Filter` | string | _(empty)_ | SQL `WHERE` clause (without `WHERE`) to filter extracted rows. Also applied to `WHEN NOT MATCHED BY SOURCE` when `MergeDelete` is enabled. |
 
 ### Script Generation (ShouldCast)

@@ -53,10 +53,17 @@ For each database identified by a template:
 SchemaQuench deploys helper procedures and objects to each target database during the "Kindle the Forge" step:
 
 - **SchemaSmith schema** — All helper objects live in the `SchemaSmith` schema.
-- **SchemaSmith.TableQuench** — The stored procedure that performs table structure changes based on JSON definitions.
+- **SchemaSmith.MissingTableAndColumnQuench** — Creates missing tables and adds missing columns.
+- **SchemaSmith.ModifiedTableQuench** — Alters existing columns (type, nullability, defaults, etc.).
+- **SchemaSmith.MissingIndexesAndConstraintsQuench** — Creates missing indexes, constraints, and statistics.
+- **SchemaSmith.ForeignKeyQuench** — Creates and drops foreign keys.
+- **SchemaSmith.IndexOnlyQuench** — Index-only management mode (used when `IndexOnlyTableQuenches` is enabled).
+- **SchemaSmith.IndexedViewQuench** — Deploys indexed views with diff-based change detection.
 - **SchemaSmith.GenerateTableJson** — Generates table JSON from an existing table (used by SchemaTongs).
+- **SchemaSmith.GenerateIndexedViewJson** — Generates indexed view JSON from existing views (used by SchemaTongs).
+- **SchemaSmith.PrintWithNoWait** — Real-time progress logging using RAISERROR WITH NOWAIT.
 - **Helper functions** — `fn_SafeBracketWrap`, `fn_StripBracketWrapping`, `fn_StripParenWrapping`, `fn_FormatJson`.
-- **CompletedMigrationScripts table** — Tracks which Before/After migration scripts have been executed for each product.
+- **CompletedMigrationScripts table** — Tracks which migration scripts have been executed for each product.
 
 These objects are created or updated on every quench run to ensure they match the version of SchemaQuench being used.
 
@@ -81,7 +88,9 @@ When `WhatIfONLY` is set to `true` in configuration, SchemaQuench performs a dry
 
 - Validation scripts execute normally
 - Table quench runs in WhatIf mode, generating the SQL that would be executed without applying it
-- Before, Objects, BetweenTablesAndKeys, AfterTablesScripts, AfterTablesObjects, Table Data, After, and product Before/After scripts are skipped entirely
+- Migration scripts show detailed status: "Would APPLY" for pending scripts, "Would SKIP (previously quenched)" for already-executed scripts
+- Stored procedures execute in WhatIf mode to report what changes they would make
+- Before, Objects, BetweenTablesAndKeys, AfterTablesScripts, AfterTablesObjects, Table Data, After, and product Before/After scripts are logged but not executed
 
 The generated SQL is written to `SchemaQuench - Quench Tables {DatabaseName}.sql` in the log directory.
 

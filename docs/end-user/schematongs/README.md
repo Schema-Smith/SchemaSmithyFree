@@ -6,7 +6,7 @@ Applies to: SchemaTongs (SQL Server, Community)
 
 ## What SchemaTongs Does
 
-SchemaTongs extracts database schema from a live SQL Server and writes it into schema package format. It connects to a source database, reads its objects using direct SQL queries against system views, and generates the JSON and SQL files that make up a schema package.
+SchemaTongs extracts database schema from a live SQL Server and writes it into schema package format. It connects to a source database, reads its objects using direct SQL queries against system views (no external dependencies — SMO was removed in v2), and generates the JSON and SQL files that make up a schema package.
 
 SchemaTongs can create a new schema package from scratch or update an existing one. When updating, it overwrites object scripts and table definitions with the current state of the database.
 
@@ -15,8 +15,8 @@ SchemaTongs can create a new schema package from scratch or update an existing o
 ## How It Works
 
 1. **Connect** — Connects to the source SQL Server database using the configured credentials.
-2. **Deploy helpers** — Installs or updates the `SchemaSmith.GenerateTableJson` stored procedure in the source database (used to extract table definitions).
-3. **Initialize or update package** — Creates the schema package directory structure if it does not exist, including `Product.json`, `Template.json`, all 13 default script folders, and JSON schema validation files.
+2. **Deploy helpers** — Installs or updates `SchemaSmith.GenerateTableJson` and `SchemaSmith.GenerateIndexedViewJson` stored procedures in the source database.
+3. **Initialize or update package** — Creates the schema package directory structure if it does not exist, including `Product.json`, `Template.json`, all default script folders, and JSON schema validation files (runtime-generated).
 4. **Extract objects** — Reads each enabled object type from the database and writes SQL scripts and table JSON files to the appropriate folders.
 
 ---
@@ -26,6 +26,7 @@ SchemaTongs can create a new schema package from scratch or update an existing o
 | Object Type | ShouldCast Flag | Output Location | File Naming |
 |---|---|---|---|
 | Tables | `Tables` | `Tables/` | `schema.tablename.json` |
+| Indexed views | `IndexedViews` | `Indexed Views/` | `schema.viewname.json` |
 | Schemas | `Schemas` | `Schemas/` | `schemaname.sql` |
 | User-defined data types | `UserDefinedTypes` | `DataTypes/` | `schema.typename.sql` |
 | User-defined table types | `UserDefinedTypes` | `DataTypes/` | `schema.typename.sql` |

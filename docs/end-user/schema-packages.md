@@ -17,12 +17,18 @@ The schema package represents the **desired end state** of the target databases.
 ```
 MyProduct/
   Product.json
+  .json-schemas/                  (runtime-generated validation schemas)
+  ProductScripts/
+    Before/                       (SQL — runs once before all templates)
+    After/                        (SQL — runs once after all templates)
   Templates/
     Main/
       Template.json
       Tables/
         dbo.Customer.json
         dbo.Order.json
+      Indexed Views/
+        dbo.vw_Summary.json
       Schemas/
       DataTypes/
       FullTextCatalogs/
@@ -35,6 +41,8 @@ MyProduct/
       DDLTriggers/
       MigrationScripts/
         Before/
+        BetweenTablesAndKeys/     (after table structures, before FK constraints)
+        AfterTablesScripts/       (after full table quench, before triggers)
         After/
       Table Data/
     Secondary/

@@ -6,7 +6,7 @@ Applies to: SchemaQuench (SQL Server, Community)
 
 ## Overview
 
-Migration scripts are SQL files placed in the `MigrationScripts/Before` and `MigrationScripts/After` folders within a template. Unlike object scripts (which run in a dependency retry loop every quench), migration scripts are tracked and run only once per product.
+Migration scripts are SQL files placed in the `MigrationScripts/` subfolders within a template. Unlike object scripts (which run in a dependency retry loop every quench), migration scripts are tracked and run only once per product.
 
 ---
 
@@ -15,6 +15,8 @@ Migration scripts are SQL files placed in the `MigrationScripts/Before` and `Mig
 | Folder | Quench Slot | When It Runs |
 |---|---|---|
 | `MigrationScripts/Before` | Before | After Kindling, before Objects scripts |
+| `MigrationScripts/BetweenTablesAndKeys` | BetweenTablesAndKeys | After table structures exist, before FK constraints are applied. Ideal for data migration that needs tables but not yet referential integrity. |
+| `MigrationScripts/AfterTablesScripts` | AfterTablesScripts | After the full table quench (structures + keys), before triggers. Ideal for post-table-change data fixups. |
 | `MigrationScripts/After` | After | After all table changes and Table Data scripts |
 
 ---
