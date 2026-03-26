@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
 using Microsoft.Extensions.Configuration;

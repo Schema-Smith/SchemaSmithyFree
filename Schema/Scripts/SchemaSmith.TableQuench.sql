@@ -1,3 +1,4 @@
+-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 CREATE OR ALTER PROCEDURE [SchemaSmith].[TableQuench] 
   @ProductName NVARCHAR(50),
   @TableDefinitions NVARCHAR(MAX),

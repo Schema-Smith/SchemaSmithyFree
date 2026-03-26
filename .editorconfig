@@ -1,0 +1,102 @@
+# Top-level EditorConfig
+root = true
+
+# Default settings for all files
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# Shell scripts must use LF (CI runs on Linux)
+[*.sh]
+end_of_line = lf
+
+# XML project files — .csproj files use tabs in this repo
+[*.csproj]
+indent_style = tab
+
+[*.{props,targets}]
+indent_size = 2
+
+# Markdown — trailing spaces are significant (line breaks)
+[*.md]
+trim_trailing_whitespace = false
+
+# YAML files
+[*.{yml,yaml}]
+indent_size = 2
+
+# JSON files
+[*.json]
+indent_size = 2
+
+# C# naming conventions (all suggestion severity — IDE hints only, no build impact)
+[*.cs]
+
+# PascalCase for public/internal types, methods, properties, events
+dotnet_naming_rule.public_members_pascal_case.severity = suggestion
+dotnet_naming_rule.public_members_pascal_case.symbols = public_symbols
+dotnet_naming_rule.public_members_pascal_case.style = pascal_case_style
+
+dotnet_naming_symbols.public_symbols.applicable_kinds = class, struct, interface, enum, delegate, method, property, event, namespace
+dotnet_naming_symbols.public_symbols.applicable_accessibilities = public, internal, protected, protected_internal
+
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+# PascalCase for constants
+dotnet_naming_rule.constants_pascal_case.severity = suggestion
+dotnet_naming_rule.constants_pascal_case.symbols = constant_symbols
+dotnet_naming_rule.constants_pascal_case.style = pascal_case_style
+
+dotnet_naming_symbols.constant_symbols.applicable_kinds = field
+dotnet_naming_symbols.constant_symbols.required_modifiers = const
+
+# Interfaces must start with I
+dotnet_naming_rule.interfaces_prefix.severity = suggestion
+dotnet_naming_rule.interfaces_prefix.symbols = interface_symbols
+dotnet_naming_rule.interfaces_prefix.style = interface_style
+
+dotnet_naming_symbols.interface_symbols.applicable_kinds = interface
+
+dotnet_naming_style.interface_style.required_prefix = I
+dotnet_naming_style.interface_style.capitalization = pascal_case
+
+# Type parameters must start with T
+dotnet_naming_rule.type_parameters_prefix.severity = suggestion
+dotnet_naming_rule.type_parameters_prefix.symbols = type_parameter_symbols
+dotnet_naming_rule.type_parameters_prefix.style = type_parameter_style
+
+dotnet_naming_symbols.type_parameter_symbols.applicable_kinds = type_parameter
+
+dotnet_naming_style.type_parameter_style.required_prefix = T
+dotnet_naming_style.type_parameter_style.capitalization = pascal_case
+
+# Private fields use _camelCase
+dotnet_naming_rule.private_fields_underscore.severity = suggestion
+dotnet_naming_rule.private_fields_underscore.symbols = private_field_symbols
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel_case_style
+
+dotnet_naming_symbols.private_field_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_field_symbols.applicable_accessibilities = private, private_protected
+
+dotnet_naming_style.underscore_camel_case_style.required_prefix = _
+dotnet_naming_style.underscore_camel_case_style.capitalization = camel_case
+
+# Parameters use camelCase
+dotnet_naming_rule.parameters_camel_case.severity = suggestion
+dotnet_naming_rule.parameters_camel_case.symbols = parameter_symbols
+dotnet_naming_rule.parameters_camel_case.style = camel_case_style
+
+dotnet_naming_symbols.parameter_symbols.applicable_kinds = parameter
+
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+
+# Local variables use camelCase
+dotnet_naming_rule.locals_camel_case.severity = suggestion
+dotnet_naming_rule.locals_camel_case.symbols = local_symbols
+dotnet_naming_rule.locals_camel_case.style = camel_case_style
+
+dotnet_naming_symbols.local_symbols.applicable_kinds = local

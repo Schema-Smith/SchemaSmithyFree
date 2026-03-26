@@ -1,4 +1,5 @@
-﻿namespace Schema.Domain;
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+namespace Schema.Domain;
 
 public enum QuenchSlot : ushort
 {

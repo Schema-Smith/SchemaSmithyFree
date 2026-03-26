@@ -1,4 +1,5 @@
-﻿// See https://aka.ms/new-console-template for more information
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+// See https://aka.ms/new-console-template for more information
 
 using System;
 

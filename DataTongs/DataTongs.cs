@@ -1,4 +1,5 @@
-﻿using System;
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+using System;
 using System.Data;
 using System.IO;
 using System.Linq;

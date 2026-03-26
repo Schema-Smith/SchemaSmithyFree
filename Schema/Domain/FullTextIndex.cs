@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+using Newtonsoft.Json;
 
 namespace Schema.Domain;
 

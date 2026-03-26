@@ -1,4 +1,5 @@
-﻿using NSubstitute;
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+using NSubstitute;
 using Schema.Isolators;
 using Schema.Domain;
 using System;

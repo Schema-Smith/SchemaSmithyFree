@@ -1,3 +1,4 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System;
 using System.IO;
 using System.Linq;

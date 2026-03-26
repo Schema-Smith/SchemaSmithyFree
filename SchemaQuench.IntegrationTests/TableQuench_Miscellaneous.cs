@@ -1,4 +1,5 @@
-﻿using Schema.DataAccess;
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+using Schema.DataAccess;
 using Microsoft.Data.SqlClient;
 using System;
 
