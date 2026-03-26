@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using log4net;
 using NSubstitute;
 using Schema.Isolators;
@@ -26,8 +27,9 @@ public class OrphanHandlerTests
         LogFactory.Clear();
     }
 
-    private static ExtractionFileIndex CreateIndexWithOrphans(string basePath, string[] orphanFiles)
+    private static ExtractionFileIndex CreateIndexWithOrphans(string basePath, string[] orphanFileNames)
     {
+        var orphanFiles = orphanFileNames.Select(f => Path.Combine(basePath, f)).ToArray();
         var dir = Substitute.For<IDirectory>();
         dir.Exists(basePath).Returns(true);
         dir.GetFiles(basePath, "*.*", SearchOption.AllDirectories).Returns(orphanFiles);
@@ -48,10 +50,7 @@ public class OrphanHandlerTests
         var file = Substitute.For<IFile>();
         var dir = Substitute.For<IDirectory>();
 
-        var index = CreateIndexWithOrphans("C:\\pkg\\Views", new[]
-        {
-            "C:\\pkg\\Views\\dbo.OldView.sql"
-        });
+        var index = CreateIndexWithOrphans("C:\\pkg\\Views", new[] { "dbo.OldView.sql" });
         var folderIndexes = new Dictionary<string, ExtractionFileIndex>
         {
             ["Views"] = index
@@ -75,10 +74,7 @@ public class OrphanHandlerTests
         var file = Substitute.For<IFile>();
         var dir = Substitute.For<IDirectory>();
 
-        var index = CreateIndexWithOrphans("C:\\pkg\\Views", new[]
-        {
-            "C:\\pkg\\Views\\dbo.OldView.sql"
-        });
+        var index = CreateIndexWithOrphans("C:\\pkg\\Views", new[] { "dbo.OldView.sql" });
         var folderIndexes = new Dictionary<string, ExtractionFileIndex>
         {
             ["Views"] = index
@@ -104,10 +100,7 @@ public class OrphanHandlerTests
         var file = Substitute.For<IFile>();
         var dir = Substitute.For<IDirectory>();
 
-        var index = CreateIndexWithOrphans("C:\\pkg\\Views", new[]
-        {
-            "C:\\pkg\\Views\\dbo.OldView.sql"
-        });
+        var index = CreateIndexWithOrphans("C:\\pkg\\Views", new[] { "dbo.OldView.sql" });
         var folderIndexes = new Dictionary<string, ExtractionFileIndex>
         {
             ["Views"] = index
@@ -124,7 +117,7 @@ public class OrphanHandlerTests
         file.Received(1).WriteAllText(
             Arg.Is<string>(p => p.Contains("_OrphanCleanup_Views.sql")),
             Arg.Any<string>());
-        file.Received(1).Delete("C:\\pkg\\Views\\dbo.OldView.sql");
+        file.Received(1).Delete(Path.Combine("C:\\pkg\\Views", "dbo.OldView.sql"));
     }
 
     [Test]
@@ -134,19 +127,21 @@ public class OrphanHandlerTests
         var dir = Substitute.For<IDirectory>();
 
         // Build an index and mark everything as written so no orphans remain
+        var basePath = "C:\\pkg\\Views";
+        var viewFile = Path.Combine(basePath, "dbo.MyView.sql");
         var innerDir = Substitute.For<IDirectory>();
-        innerDir.Exists("C:\\pkg\\Views").Returns(true);
-        innerDir.GetFiles("C:\\pkg\\Views", "*.*", SearchOption.AllDirectories)
-            .Returns(new[] { "C:\\pkg\\Views\\dbo.MyView.sql" });
+        innerDir.Exists(basePath).Returns(true);
+        innerDir.GetFiles(basePath, "*.*", SearchOption.AllDirectories)
+            .Returns(new[] { viewFile });
 
         ExtractionFileIndex index;
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register<IDirectory>(innerDir);
-            index = ExtractionFileIndex.Build("C:\\pkg\\Views");
+            index = ExtractionFileIndex.Build(basePath);
             FactoryContainer.Clear();
         }
-        index.MarkWritten("C:\\pkg\\Views\\dbo.MyView.sql");
+        index.MarkWritten(viewFile);
 
         var folderIndexes = new Dictionary<string, ExtractionFileIndex>
         {
@@ -173,10 +168,7 @@ public class OrphanHandlerTests
         var dir = Substitute.For<IDirectory>();
 
         // JSON files in Tables folder — no cleanup script should be generated
-        var index = CreateIndexWithOrphans("C:\\pkg\\Tables", new[]
-        {
-            "C:\\pkg\\Tables\\dbo.OldTable.json"
-        });
+        var index = CreateIndexWithOrphans("C:\\pkg\\Tables", new[] { "dbo.OldTable.json" });
         var folderIndexes = new Dictionary<string, ExtractionFileIndex>
         {
             ["Tables"] = index
@@ -193,7 +185,7 @@ public class OrphanHandlerTests
         // No cleanup script for JSON orphans
         file.DidNotReceive().WriteAllText(Arg.Any<string>(), Arg.Any<string>());
         // But the file should still be deleted
-        file.Received(1).Delete("C:\\pkg\\Tables\\dbo.OldTable.json");
+        file.Received(1).Delete(Path.Combine("C:\\pkg\\Tables", "dbo.OldTable.json"));
     }
 
     [Test]
@@ -202,25 +194,28 @@ public class OrphanHandlerTests
         var file = Substitute.For<IFile>();
         var dir = Substitute.For<IDirectory>();
 
-        var existingScript = "C:\\logs\\_OrphanCleanup_Views.sql";
-        dir.Exists("C:\\logs").Returns(true);
-        dir.GetFiles("C:\\logs", "_OrphanCleanup_*.sql", SearchOption.TopDirectoryOnly)
+        var logDir = "C:\\logs";
+        var existingScript = Path.Combine(logDir, "_OrphanCleanup_Views.sql");
+        var backupDir = Path.Combine(logDir, "SchemaTongs.0001");
+
+        dir.Exists(logDir).Returns(true);
+        dir.GetFiles(logDir, "_OrphanCleanup_*.sql", SearchOption.TopDirectoryOnly)
             .Returns(new[] { existingScript });
-        dir.GetFiles("C:\\logs", "_InvalidObjectCleanup.sql", SearchOption.TopDirectoryOnly)
+        dir.GetFiles(logDir, "_InvalidObjectCleanup.sql", SearchOption.TopDirectoryOnly)
             .Returns(System.Array.Empty<string>());
         // First backup dir does not exist yet
-        dir.Exists("C:\\logs\\SchemaTongs.0001").Returns(false);
+        dir.Exists(backupDir).Returns(false);
 
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register<IFile>(file);
             FactoryContainer.Register<IDirectory>(dir);
-            OrphanHandler.ArchiveExistingCleanupScripts("C:\\logs");
+            OrphanHandler.ArchiveExistingCleanupScripts(logDir);
             FactoryContainer.Clear();
         }
 
-        dir.Received(1).CreateDirectory("C:\\logs\\SchemaTongs.0001");
-        file.Received(1).Copy(existingScript, "C:\\logs\\SchemaTongs.0001\\_OrphanCleanup_Views.sql");
+        dir.Received(1).CreateDirectory(backupDir);
+        file.Received(1).Copy(existingScript, Path.Combine(backupDir, "_OrphanCleanup_Views.sql"));
         file.Received(1).Delete(existingScript);
     }
 

@@ -28,23 +28,21 @@ public class ExtractionFileIndexTests
     [Test]
     public void Build_FindsFilesRecursively_IndexesByFileName()
     {
+        var basePath = "C:\\pkg\\Views";
+        var viewFile = Path.Combine(basePath, "dbo.MyView.sql");
+        var reportFile = Path.Combine(basePath, "Reporting", "dbo.SalesReport.sql");
+
         var dir = Substitute.For<IDirectory>();
-        dir.Exists("C:\\pkg\\Views").Returns(true);
-        dir.GetFiles("C:\\pkg\\Views", "*.*", SearchOption.AllDirectories)
-            .Returns(new[]
-            {
-                "C:\\pkg\\Views\\dbo.MyView.sql",
-                "C:\\pkg\\Views\\Reporting\\dbo.SalesReport.sql"
-            });
+        dir.Exists(basePath).Returns(true);
+        dir.GetFiles(basePath, "*.*", SearchOption.AllDirectories)
+            .Returns(new[] { viewFile, reportFile });
 
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register<IDirectory>(dir);
-            var index = ExtractionFileIndex.Build("C:\\pkg\\Views");
-            Assert.That(index.ResolvePath("dbo.MyView.sql", "C:\\pkg\\Views"),
-                Is.EqualTo("C:\\pkg\\Views\\dbo.MyView.sql"));
-            Assert.That(index.ResolvePath("dbo.SalesReport.sql", "C:\\pkg\\Views"),
-                Is.EqualTo("C:\\pkg\\Views\\Reporting\\dbo.SalesReport.sql"));
+            var index = ExtractionFileIndex.Build(basePath);
+            Assert.That(index.ResolvePath("dbo.MyView.sql", basePath), Is.EqualTo(viewFile));
+            Assert.That(index.ResolvePath("dbo.SalesReport.sql", basePath), Is.EqualTo(reportFile));
             FactoryContainer.Clear();
         }
     }
@@ -70,21 +68,21 @@ public class ExtractionFileIndexTests
     [Test]
     public void ResolvePath_MultipleMatches_ReturnsBaseFolderPath()
     {
+        var basePath = "C:\\pkg\\Views";
+        var file1 = Path.Combine(basePath, "dbo.MyView.sql");
+        var file2 = Path.Combine(basePath, "Reporting", "dbo.MyView.sql");
+
         var dir = Substitute.For<IDirectory>();
-        dir.Exists("C:\\pkg\\Views").Returns(true);
-        dir.GetFiles("C:\\pkg\\Views", "*.*", SearchOption.AllDirectories)
-            .Returns(new[]
-            {
-                "C:\\pkg\\Views\\dbo.MyView.sql",
-                "C:\\pkg\\Views\\Reporting\\dbo.MyView.sql"
-            });
+        dir.Exists(basePath).Returns(true);
+        dir.GetFiles(basePath, "*.*", SearchOption.AllDirectories)
+            .Returns(new[] { file1, file2 });
 
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register<IDirectory>(dir);
-            var index = ExtractionFileIndex.Build("C:\\pkg\\Views");
-            var result = index.ResolvePath("dbo.MyView.sql", "C:\\pkg\\Views");
-            Assert.That(result, Is.EqualTo(Path.Combine("C:\\pkg\\Views", "dbo.MyView.sql")));
+            var index = ExtractionFileIndex.Build(basePath);
+            var result = index.ResolvePath("dbo.MyView.sql", basePath);
+            Assert.That(result, Is.EqualTo(Path.Combine(basePath, "dbo.MyView.sql")));
             FactoryContainer.Clear();
         }
     }
@@ -92,20 +90,20 @@ public class ExtractionFileIndexTests
     [Test]
     public void ResolvePath_MultipleMatches_LogsWarning()
     {
+        var basePath = "C:\\pkg\\Views";
+        var file1 = Path.Combine(basePath, "dbo.MyView.sql");
+        var file2 = Path.Combine(basePath, "Reporting", "dbo.MyView.sql");
+
         var dir = Substitute.For<IDirectory>();
-        dir.Exists("C:\\pkg\\Views").Returns(true);
-        dir.GetFiles("C:\\pkg\\Views", "*.*", SearchOption.AllDirectories)
-            .Returns(new[]
-            {
-                "C:\\pkg\\Views\\dbo.MyView.sql",
-                "C:\\pkg\\Views\\Reporting\\dbo.MyView.sql"
-            });
+        dir.Exists(basePath).Returns(true);
+        dir.GetFiles(basePath, "*.*", SearchOption.AllDirectories)
+            .Returns(new[] { file1, file2 });
 
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register<IDirectory>(dir);
-            var index = ExtractionFileIndex.Build("C:\\pkg\\Views");
-            index.ResolvePath("dbo.MyView.sql", "C:\\pkg\\Views");
+            var index = ExtractionFileIndex.Build(basePath);
+            index.ResolvePath("dbo.MyView.sql", basePath);
             _progressLog.Received(1).Warn(Arg.Is<string>(s => s.Contains("dbo.MyView.sql") && s.Contains("multiple subfolders")));
             FactoryContainer.Clear();
         }
@@ -114,23 +112,23 @@ public class ExtractionFileIndexTests
     [Test]
     public void GetOrphans_ReturnsFilesNotWrittenTo()
     {
+        var basePath = "C:\\pkg\\Views";
+        var fileA = Path.Combine(basePath, "dbo.ViewA.sql");
+        var fileB = Path.Combine(basePath, "dbo.ViewB.sql");
+
         var dir = Substitute.For<IDirectory>();
-        dir.Exists("C:\\pkg\\Views").Returns(true);
-        dir.GetFiles("C:\\pkg\\Views", "*.*", SearchOption.AllDirectories)
-            .Returns(new[]
-            {
-                "C:\\pkg\\Views\\dbo.ViewA.sql",
-                "C:\\pkg\\Views\\dbo.ViewB.sql"
-            });
+        dir.Exists(basePath).Returns(true);
+        dir.GetFiles(basePath, "*.*", SearchOption.AllDirectories)
+            .Returns(new[] { fileA, fileB });
 
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register<IDirectory>(dir);
-            var index = ExtractionFileIndex.Build("C:\\pkg\\Views");
-            index.MarkWritten("C:\\pkg\\Views\\dbo.ViewA.sql");
+            var index = ExtractionFileIndex.Build(basePath);
+            index.MarkWritten(fileA);
             var orphans = index.GetOrphans();
             Assert.That(orphans, Has.Count.EqualTo(1));
-            Assert.That(orphans[0], Is.EqualTo("C:\\pkg\\Views\\dbo.ViewB.sql"));
+            Assert.That(orphans[0], Is.EqualTo(fileB));
             FactoryContainer.Clear();
         }
     }
@@ -138,18 +136,18 @@ public class ExtractionFileIndexTests
     [Test]
     public void ExcludeFromOrphans_PreventsOrphanDetection()
     {
+        var basePath = "C:\\pkg\\Views";
+        var file = Path.Combine(basePath, "dbo.EncryptedView.sql");
+
         var dir = Substitute.For<IDirectory>();
-        dir.Exists("C:\\pkg\\Views").Returns(true);
-        dir.GetFiles("C:\\pkg\\Views", "*.*", SearchOption.AllDirectories)
-            .Returns(new[]
-            {
-                "C:\\pkg\\Views\\dbo.EncryptedView.sql"
-            });
+        dir.Exists(basePath).Returns(true);
+        dir.GetFiles(basePath, "*.*", SearchOption.AllDirectories)
+            .Returns(new[] { file });
 
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register<IDirectory>(dir);
-            var index = ExtractionFileIndex.Build("C:\\pkg\\Views");
+            var index = ExtractionFileIndex.Build(basePath);
             index.ExcludeFromOrphans("dbo.EncryptedView.sql");
             var orphans = index.GetOrphans();
             Assert.That(orphans, Is.Empty);
@@ -160,33 +158,30 @@ public class ExtractionFileIndexTests
     [Test]
     public void Build_IndexesSqlSqlerrorAndJsonFiles()
     {
+        var basePath = "C:\\pkg\\Views";
+        var sqlFile = Path.Combine(basePath, "dbo.MyView.sql");
+        var sqlerrorFile = Path.Combine(basePath, "dbo.MyView.sqlerror");
+        var jsonFile = Path.Combine(basePath, "schema.json");
+        var txtFile = Path.Combine(basePath, "notes.txt");
+
         var dir = Substitute.For<IDirectory>();
-        dir.Exists("C:\\pkg\\Views").Returns(true);
-        dir.GetFiles("C:\\pkg\\Views", "*.*", SearchOption.AllDirectories)
-            .Returns(new[]
-            {
-                "C:\\pkg\\Views\\dbo.MyView.sql",
-                "C:\\pkg\\Views\\dbo.MyView.sqlerror",
-                "C:\\pkg\\Views\\schema.json",
-                "C:\\pkg\\Views\\notes.txt"
-            });
+        dir.Exists(basePath).Returns(true);
+        dir.GetFiles(basePath, "*.*", SearchOption.AllDirectories)
+            .Returns(new[] { sqlFile, sqlerrorFile, jsonFile, txtFile });
 
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register<IDirectory>(dir);
-            var index = ExtractionFileIndex.Build("C:\\pkg\\Views");
+            var index = ExtractionFileIndex.Build(basePath);
 
             // Indexed files resolve to their paths
-            Assert.That(index.ResolvePath("dbo.MyView.sql", "C:\\pkg\\Views"),
-                Is.EqualTo("C:\\pkg\\Views\\dbo.MyView.sql"));
-            Assert.That(index.ResolvePath("dbo.MyView.sqlerror", "C:\\pkg\\Views"),
-                Is.EqualTo("C:\\pkg\\Views\\dbo.MyView.sqlerror"));
-            Assert.That(index.ResolvePath("schema.json", "C:\\pkg\\Views"),
-                Is.EqualTo("C:\\pkg\\Views\\schema.json"));
+            Assert.That(index.ResolvePath("dbo.MyView.sql", basePath), Is.EqualTo(sqlFile));
+            Assert.That(index.ResolvePath("dbo.MyView.sqlerror", basePath), Is.EqualTo(sqlerrorFile));
+            Assert.That(index.ResolvePath("schema.json", basePath), Is.EqualTo(jsonFile));
 
             // .txt is not indexed — falls back to base folder
-            Assert.That(index.ResolvePath("notes.txt", "C:\\pkg\\Views"),
-                Is.EqualTo(Path.Combine("C:\\pkg\\Views", "notes.txt")));
+            Assert.That(index.ResolvePath("notes.txt", basePath),
+                Is.EqualTo(Path.Combine(basePath, "notes.txt")));
 
             FactoryContainer.Clear();
         }
