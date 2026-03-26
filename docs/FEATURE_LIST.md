@@ -4,15 +4,16 @@ SchemaSmithyFree is a **state-based database migration toolset for SQL Server**,
 
 ---
 
-## Three CLI Tools
+## Four Tools
 
 ### 1. SchemaTongs — Schema Extraction
-Extracts a live SQL Server database's schema into a versioned schema package.
+Extracts a live SQL Server database's schema into a versioned schema package using pure SQL queries — no external dependencies (SMO removed in v2).
 
-**Extractable Object Types (11):**
+**Extractable Object Types (12):**
 | Object | Output Format | Folder |
 |--------|--------------|--------|
 | Tables | JSON definitions | `Tables/` |
+| Indexed views | JSON definitions | `Indexed Views/` |
 | Schemas | SQL scripts | `Schemas/` |
 | User-defined data types | SQL | `DataTypes/` |
 | User-defined table types | SQL | `DataTypes/` |
@@ -33,9 +34,26 @@ Extracts a live SQL Server database's schema into a versioned schema package.
 - Auto-exclusion of system objects, SchemaSmith infrastructure, and encrypted objects
 - Dynamic dependency removal scripting for functions (drops/recreates computed columns, constraints, indexes that reference a function)
 
+**Orphan Detection:**
+- Detects script files that no longer correspond to database objects
+- Three modes: `Detect` (log only), `DetectWithCleanupScripts` (generate DROP scripts), `DetectDeleteAndCleanup` (delete and generate DROP scripts)
+
+**Script Validation:**
+- Post-extraction syntax validation of extracted SQL
+- Invalid scripts saved as `.sqlerror` files (configurable via `SaveInvalidScripts`)
+- SchemaQuench skips `.sqlerror` files; SchemaHammer displays them with error indicators
+
+**Subfolder Preservation:**
+- User-created subfolders within script directories are preserved on re-extraction
+- `ExtractionFileIndex` per-folder tracking ensures scripts return to their original subfolder
+
+**CheckConstraintStyle:**
+- Product-level setting: `ColumnLevel` (default) or `TableLevel`
+- Controls whether check constraints are written as column properties or named table-level constraints
+
 **Package Initialization:**
-- First run auto-creates full directory structure with all 13 folders
-- Generates `Product.json`, `Template.json`, and JSON schema validation files
+- First run auto-creates full directory structure with all folders
+- Generates `Product.json`, `Template.json`, and JSON schema validation files (runtime-generated via SchemaGenerator)
 - Subsequent runs update scripts and table definitions without overwriting config
 
 ---
@@ -43,20 +61,38 @@ Extracts a live SQL Server database's schema into a versioned schema package.
 ### 2. SchemaQuench — Schema Deployment Engine
 Applies schema packages to target SQL Server databases using state-based comparison.
 
-**Execution Slots (in order):**
-1. **Before** — Sequential, tracked migration scripts (`MigrationScripts/Before/`)
-2. **Objects** — Schemas, types, functions, views, procedures with automatic dependency retry loop
-3. **Table Quench** — State-based table creation/alteration/dropping via JSON definitions
-4. **AfterTablesObjects** — Triggers and DDL triggers with dependency retry
-5. **Table Data** — Data synchronization scripts with dependency retry (`Table Data/` folder)
-6. **After** — Sequential, tracked migration scripts (`MigrationScripts/After/`)
+**Execution Slots (9 total, in order):**
+
+*Product-level (outside template loop):*
+1. **Product Before** — Product-level scripts (`ProductScripts/Before/`)
+
+*Template-level (per database):*
+2. **Before** — Sequential, tracked migration scripts (`MigrationScripts/Before/`)
+3. **Objects** — Schemas, types, functions, views, procedures with automatic dependency retry loop
+4. **Table Quench** — State-based table creation/alteration/dropping via modular procedures
+5. **BetweenTablesAndKeys** — Migration scripts after table structure but before foreign keys (`MigrationScripts/BetweenTablesAndKeys/`)
+6. **AfterTablesScripts** — Migration scripts after tables are fully updated (`MigrationScripts/AfterTablesScripts/`)
+7. **AfterTablesObjects** — Triggers and DDL triggers with dependency retry
+8. **Table Data** — Data synchronization scripts with dependency retry (`Table Data/` folder)
+9. **After** — Sequential, tracked migration scripts (`MigrationScripts/After/`)
+
+*Product-level (after all templates):*
+10. **Product After** — Product-level scripts (`ProductScripts/After/`)
 
 **Table Quench (State-Based Table Management):**
+- Modular architecture: 4 focused procedures (MissingTableAndColumnQuench, ModifiedTableQuench, MissingIndexesAndConstraintsQuench, ForeignKeyQuench) replacing monolithic TableQuench
 - Creates, alters, and drops columns, indexes, constraints automatically
 - Compares desired JSON state vs. current database state, makes only necessary changes
+- Per-table and per-index `UpdateFillFactor` for granular fill factor control (OR'd with template setting)
 - Automatic index rebuilds when table structure changes
 - Debug SQL output file for audit trail
 - Idempotent — safe to run repeatedly
+
+**Indexed View Deployment:**
+- Diff-based change detection — views only rebuild when definitions change
+- Index-only changes (add/modify/drop indexes on a view) don't trigger view rebuilds
+- Ownership tracking via extended properties to prevent cross-product conflicts
+- Clustered index required — validated at quench time
 
 **Migration Script Features:**
 - One-time execution tracking via `CompletedMigrationScripts` table
@@ -91,10 +127,22 @@ Applies schema packages to target SQL Server databases using state-based compari
 - Version stamp scripts at product and template level
 - Aborts on validation failure
 
+**Additional SchemaQuench Settings:**
+- `RunScriptsTwice` — Re-executes object scripts to resolve cross-dependencies (e.g., views referencing other views)
+- `MinimumVersion` — Product-level SqlServerVersion enum (Sql2016–Sql2025) for version-gated features
+
 **Auto-Deployed Infrastructure ("Kindling the Forge"):**
 - `SchemaSmith` schema created automatically
-- `SchemaSmith.TableQuench` stored procedure for table modifications
-- `SchemaSmith.GenerateTableJson` for reverse-engineering table JSON
+- `SchemaSmith.MissingTableAndColumnQuench` — Creates missing tables, adds missing columns
+- `SchemaSmith.ModifiedTableQuench` — Alters existing columns (type, nullability, defaults, etc.)
+- `SchemaSmith.MissingIndexesAndConstraintsQuench` — Creates missing indexes, constraints, statistics
+- `SchemaSmith.ForeignKeyQuench` — Creates and drops foreign keys
+- `SchemaSmith.IndexOnlyQuench` — Index-only management mode (skips table/column changes)
+- `SchemaSmith.IndexedViewQuench` — Indexed view deployment with diff-based change detection
+- `SchemaSmith.GenerateTableJson` — Reverse-engineers table state to JSON
+- `SchemaSmith.GenerateIndexedViewJson` — Reverse-engineers indexed view state to JSON
+- `SchemaSmith.PrintWithNoWait` — Real-time progress logging via RAISERROR WITH NOWAIT
+- `ParseTableJsonIntoTempTables` — Shared JSON parsing for modular procedures (embedded, executed inline)
 - Helper functions (`fn_SafeBracketWrap`, `fn_StripBracketWrapping`, `fn_StripParenWrapping`, `fn_FormatJson`)
 - `CompletedMigrationScripts` tracking table
 - Updated to match tool version on every run
@@ -117,13 +165,18 @@ Extracts table data and generates self-contained MERGE scripts.
 
 **Table Selection:**
 - Name (schema.table format)
-- Key columns for MERGE ON clause
+- Key columns for MERGE ON clause (optional — auto-detected from primary key or best unique index when blank)
+- Nullable key columns supported with `*` prefix
 - Optional WHERE filter for row subsetting
+- Empty tables automatically skipped
 
 **Special Data Type Handling:**
 - Geography → WKT (Well-Known Text) with `STGeomFromText()` restoration
+- Geometry → WKT with `geometry::STGeomFromText()` restoration
+- HierarchyID → canonical string with `hierarchyid::Parse()` restoration
 - XML → CAST to NVARCHAR(MAX)
 - NTEXT/TEXT/IMAGE → CAST to comparable types
+- sql_variant, rowversion, and timestamp columns automatically excluded
 - Computed columns and ROWGUIDCOL columns automatically excluded
 - Identity columns detected and managed
 
@@ -162,6 +215,7 @@ A read-only desktop application for browsing SchemaSmith schema packages visuall
 - Data compression (NONE, ROW, PAGE)
 - Temporal tables (system-versioned)
 - Table rename tracking via `OldName`
+- `UpdateFillFactor` — per-table fill factor override (OR'd with template and index settings)
 
 **Column-Level:**
 - All SQL Server data types with precision/scale/length
@@ -183,6 +237,7 @@ A read-only desktop application for browsing SchemaSmith schema packages visuall
 - Filtered indexes with WHERE expressions
 - Covering indexes with INCLUDE columns
 - Fill factor control
+- `UpdateFillFactor` — per-index fill factor override (OR'd with template and table settings)
 - Index-level compression (NONE, ROW, PAGE)
 - DESC column ordering
 - XML indexes (PRIMARY, and secondary PATH/VALUE/PROPERTY)
@@ -209,24 +264,32 @@ A read-only desktop application for browsing SchemaSmith schema packages visuall
 ```
 Product/
   Product.json
+  .json-schemas/          (runtime-generated validation schemas)
+  .community              (edition marker)
+  ProductScripts/
+    Before/               (SQL — runs once before all templates)
+    After/                (SQL — runs once after all templates)
   Templates/
     TemplateName/
       Template.json
-      Tables/           (JSON per table)
-      Schemas/          (SQL)
-      DataTypes/        (SQL)
-      FullTextCatalogs/ (SQL)
-      FullTextStopLists/(SQL)
+      Tables/             (JSON per table)
+      Indexed Views/      (JSON per indexed view)
+      Schemas/            (SQL)
+      DataTypes/          (SQL)
+      FullTextCatalogs/   (SQL)
+      FullTextStopLists/  (SQL)
       XMLSchemaCollections/ (SQL)
-      Functions/        (SQL)
-      Views/            (SQL)
-      Procedures/       (SQL)
-      Triggers/         (SQL)
-      DDLTriggers/      (SQL)
+      Functions/          (SQL)
+      Views/              (SQL)
+      Procedures/         (SQL)
+      Triggers/           (SQL)
+      DDLTriggers/        (SQL)
       MigrationScripts/
-        Before/         (SQL)
-        After/          (SQL)
-      Table Data/       (SQL)
+        Before/                 (SQL)
+        BetweenTablesAndKeys/   (SQL)
+        AfterTablesScripts/     (SQL)
+        After/                  (SQL)
+      Table Data/         (SQL)
 ```
 
 Packages can be deployed from **folders** or **ZIP archives**.
@@ -254,13 +317,18 @@ Packages can be deployed from **folders** or **ZIP archives**.
 **Authentication:**
 - Windows integrated authentication (default when user/password blank)
 - SQL Server authentication (user + password)
-- TrustServerCertificate enabled
+
+**Connection Properties:**
+- `ConnectionProperties` config section for arbitrary connection string properties (e.g., `TrustServerCertificate`, `ApplicationIntent`)
+- `Port` field for non-default SQL Server ports
+- `--ConnectionString` CLI override for full connection string control
 
 **CLI Switches (all tools):**
 - `--version` / `-v` / `--ver`
 - `--help` / `-h` / `-?`
 - `--ConfigFile:<path>`
 - `--LogPath:<path>`
+- `--ConnectionString:<connstr>`
 - Switch prefixes: `--` or `/`, separators: `:` or `=`
 
 ---
@@ -284,13 +352,15 @@ Packages can be deployed from **folders** or **ZIP archives**.
 
 ## Platform Support
 
-| Platform | .NET 10 |
-|----------|---------|
-| Windows | Yes |
-| Linux | Yes |
-| macOS | Yes |
+Self-contained single-file executables — no .NET runtime install required.
 
-**Distribution:** Standalone executables, ZIP packages, Docker images, Docker Compose (includes SQL Server 2022 with Full-Text Search for testing).
+| Platform | x64 | ARM64 |
+|----------|-----|-------|
+| Windows | win-x64 | win-arm64 |
+| Linux | linux-x64 | linux-arm64 |
+| macOS | osx-x64 | osx-arm64 |
+
+**Distribution:** Self-contained executables (GitHub Release ZIPs), Chocolatey packages, Docker images, Docker Compose.
 
 **Tested against:** SQL Server 2022. Compatible with compatibility level 130+.
 

@@ -8,15 +8,61 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ### Added
 
-- **SchemaTongs: Subfolder preservation** — Script folders (`Procedures/`, `Views/`, etc.) now support user-created subfolders for organizing scripts. Extracted scripts are written back to the same subfolder on re-extraction; new objects are placed in the folder root.
-- **SchemaTongs: Orphan detection** — New `OrphanHandling:Mode` setting detects script files that no longer correspond to any database object. Modes: `Detect` (log warnings only), `DetectWithCleanupScripts` (log and generate DROP scripts in `MigrationScripts/After/`), `DetectDeleteAndCleanup` (delete orphans and generate DROP scripts).
-- **SchemaTongs: Script validation** — New `ShouldCast:ValidateScripts` setting (default: `false`) parses each extracted SQL script for syntax errors. Scripts that fail validation are saved as `.sqlerror` files (or discarded if `ShouldCast:SaveInvalidScripts` is `false`). SchemaQuench skips `.sqlerror` files; SchemaHammer displays them with an error indicator.
-- **SchemaTongs: CheckConstraintStyle** — New `Product:CheckConstraintStyle` setting controls whether check constraints in a newly initialized `Product.json` are written as column-level `CheckExpression` properties (`ColumnLevel`, default) or promoted to named table-level constraints (`TableLevel`). Has no effect on existing products.
-- **SchemaHammer: .sqlerror display** — `.sqlerror` files are displayed in the script tree with an error indicator. Content is shown read-only with syntax highlighting.
+- **SchemaHammer** — Read-only desktop schema viewer with 13 property editors, T-SQL syntax highlighting, tree and code search, lazy loading, back button with history, recent products
+- **Modular table quench** — Monolithic TableQuench replaced with focused procedures: MissingTableAndColumnQuench, ModifiedTableQuench, MissingIndexesAndConstraintsQuench, ForeignKeyQuench, plus ParseTableJsonIntoTempTables for shared JSON parsing
+- **IndexOnlyQuench** — Template-level `IndexOnlyTableQuenches` mode for managing indexes without modifying table structure
+- **Expanded execution slots** — 9 total (7 template + 2 product): added BetweenTablesAndKeys, AfterTablesScripts, Product Before, Product After
+- **Indexed view support** — SchemaTongs extraction, SchemaQuench diff-based deployment; index-only changes skip view rebuild
+- **GenerateIndexedViewJson** — Stored procedure for indexed view extraction
+- **IndexedViewQuench** — Stored procedure for indexed view deployment with ownership tracking
+- **MinimumVersion** — Product-level property with SqlServerVersion enum (Sql2016–Sql2025)
+- **Per-table and per-index UpdateFillFactor** — Granular fill factor control at table and index level (OR'd with template setting)
+- **ConnectionProperties** — Config section for arbitrary connection string properties, plus `Port` field and `--ConnectionString` CLI override
+- **DataTongs: Auto PK detection** — KeyColumns is now optional; auto-detected from primary key or best unique index when blank
+- **DataTongs: Geometry and HierarchyID support** — Added handling for GEOMETRY, HIERARCHYID data types; sql_variant/rowversion/timestamp excluded
+- **PrintWithNoWait** — Stored procedure for real-time progress logging using RAISERROR WITH NOWAIT
+- **WhatIf improvements** — Detailed per-script logging across all phases ("Would APPLY"/"Would SKIP (previously quenched)")
+- **RunScriptsTwice** — SchemaQuench setting for resolving cross-dependencies between objects (e.g., views referencing other views)
+- **SchemaTongs: Subfolder preservation** — ExtractionFileIndex per-folder tracking; scripts written back to same subfolder on re-extraction
+- **SchemaTongs: Orphan detection** — 3 modes: Detect, DetectWithCleanupScripts, DetectDeleteAndCleanup
+- **SchemaTongs: Script validation** — Post-extraction syntax validation with `.sqlerror` files for invalid SQL
+- **SchemaTongs: CheckConstraintStyle** — Product-level switch for ColumnLevel or TableLevel constraint extraction
+- **SchemaHammer: .sqlerror display** — Error indicator and warning banner for invalid scripts
+- **Demo products** — AdventureWorks (71 tables) and Northwind (13 tables) with MERGE data scripts and PROVENANCE documentation
+- **Self-contained executables** — Single-file builds for all tools across 6 RIDs (win/linux/osx × x64/arm64)
+- **Runtime JSON schema generator** — SchemaGenerator replaces static schema files; schemas regenerated on every product init
+- **Release workflow** — Automated build, package, and GitHub Release creation via workflow_dispatch
+- **Copyright header CI** — Validates headers on all .cs and .sql files on every push
+- **TreatWarningsAsErrors** — Enabled globally in Directory.Build.props
 
 ### Changed
 
-- **`TableData` folder renamed to `Table Data`** — The script folder for data synchronization scripts is now named `Table Data` (with a space) for improved readability in file explorers. Legacy `TableData` folders are automatically renamed on re-extraction.
+- **.NET 10** — Upgraded from .NET 9 / .NET 4.8.1 dual-targeting to .NET 10 single target
+- **Config files renamed** — `appsettings.json` → `SchemaQuench.settings.json`, `SchemaTongs.settings.json`, `DataTongs.settings.json`
+- **SSCL v2.0 license** — Removed organization size and revenue restrictions; feature-based tiers only
+- **SchemaTongs: Pure SQL extraction** — Complete rewrite from SMO-based to direct SQL queries; Microsoft.SqlServer.SqlManagementObjects dependency removed
+- **`TableData` folder renamed to `Table Data`** — Legacy folders auto-renamed on re-extraction
+- **SQL Server 2022 in CI** — Upgraded from 2019; port changed from 1440 to 1450
+- **Central NuGet package management** — Version centralization via Directory.Packages.props
+- **Demo products reorganized** — Moved to `demo/` directory with dedicated docker-compose
+- **Platform naming** — MSSQL → SqlServer in code and Product.json (accepts both on read)
+
+### Removed
+
+- **WiX MSI installer** — Setup/ and SetupAll/ projects removed; distribution via self-contained executables, ZIPs, Chocolatey, and Docker
+- **.NET Framework 4.8.1 builds** — All net481 targets and Chocolatey netfx481 packages removed
+- **SMO dependency** — Microsoft.SqlServer.SqlManagementObjects NuGet package removed
+- **ZipAllTools project** — Replaced by package-tools.ps1/sh scripts
+- **Static JSON schema files** — Replaced by runtime SchemaGenerator
+
+### Fixed
+
+- **Column rename via OldName** — Bracket-wrapped names passed to `COLUMNPROPERTY()` silently returned NULL, skipping sp_rename
+- **Table/column rename NewColumn flag** — Incorrect marking during renames caused duplicate column creation instead of rename
+- **GenerateTableJSON partition reference** — All indexes reported same compression as clustered index due to wrong object reference
+- **GenerateTableJSON check constraint lookup** — Replaced `COLUMNPROPERTY()` with direct `sys.columns` join
+- **fn_StripParenWrapping** — Trailing whitespace edge case in parenthesis stripping
+- **ZipDirectoryWrapper.Exists** — Boundary check prevented correct path matching for zip archive directory entries
 
 ## [v1.1.8](https://github.com/Schema-Smith/SchemaSmithyFree/releases/tag/v1.1.8) — 2026-02-08
 
