@@ -3,6 +3,7 @@
 using NSubstitute;
 using SchemaHammer.Models;
 using SchemaHammer.Services;
+using SchemaHammer.Themes;
 using SchemaHammer.ViewModels;
 using SchemaHammer.ViewModels.Editors;
 
@@ -513,5 +514,194 @@ public class MainWindowViewModelTests
 
         Assert.That(vm.ProductStatusTooltip, Does.Contain("5"));
         Assert.That(vm.ProductStatusTooltip, Does.Contain("ms"));
+    }
+
+    [Test]
+    public void LoadProductFromPath_WithNullProductName_UsesFolderName()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        treeService.LoadProduct(Arg.Any<string>()).Returns([]);
+        treeService.Product.Returns((Schema.Domain.Product?)null);
+
+        var settingsService = Substitute.For<IUserSettingsService>();
+        settingsService.Settings.Returns(new UserSettings());
+
+        var vm = CreateViewModel(settings: settingsService, tree: treeService);
+        vm.LoadProductFromPath("/some/MyFolder");
+
+        Assert.That(vm.Title, Does.Contain("Unknown"));
+        Assert.That(vm.ProductStatus, Is.EqualTo("NO PRODUCT"));
+    }
+
+    [Test]
+    public void LoadProductFromPath_WithLastSelectedNodePath_RestoresSelection()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        var childNode = new TreeNodeModel { Text = "Main", Tag = "Template" };
+        treeService.LoadProduct(Arg.Any<string>()).Returns(new List<TreeNodeModel> { childNode });
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "TestProduct" });
+
+        var settingsService = Substitute.For<IUserSettingsService>();
+        var settings = new UserSettings { LastSelectedNodePath = @"TestProduct\Main" };
+        settingsService.Settings.Returns(settings);
+
+        var vm = new MainWindowViewModel(settingsService, new NavigationService(), new EditorService(), treeService, Substitute.For<ISchemaFileService>());
+        vm.LoadProductFromPath("/some/path");
+
+        Assert.That(vm.TreeViewModel.SelectedNode, Is.SameAs(childNode));
+    }
+
+    [Test]
+    public void LoadProductFromPath_WithNonMatchingLastSelectedNodePath_DoesNotSetSelection()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        treeService.LoadProduct(Arg.Any<string>()).Returns([]);
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "TestProduct" });
+
+        var settingsService = Substitute.For<IUserSettingsService>();
+        var settings = new UserSettings { LastSelectedNodePath = @"TestProduct\NonExistent\Path" };
+        settingsService.Settings.Returns(settings);
+
+        var vm = new MainWindowViewModel(settingsService, new NavigationService(), new EditorService(), treeService, Substitute.For<ISchemaFileService>());
+        vm.LoadProductFromPath("/some/path");
+
+        Assert.That(vm.TreeViewModel.SelectedNode, Is.Null);
+    }
+
+    [Test]
+    public void LoadProductFromPath_WithEmptyLastSelectedNodePath_DoesNotSetSelection()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        treeService.LoadProduct(Arg.Any<string>()).Returns([]);
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "TestProduct" });
+
+        var settingsService = Substitute.For<IUserSettingsService>();
+        var settings = new UserSettings { LastSelectedNodePath = "" };
+        settingsService.Settings.Returns(settings);
+
+        var vm = new MainWindowViewModel(settingsService, new NavigationService(), new EditorService(), treeService, Substitute.For<ISchemaFileService>());
+        vm.LoadProductFromPath("/some/path");
+
+        Assert.That(vm.TreeViewModel.SelectedNode, Is.Null);
+    }
+
+    [Test]
+    public void LoadProductFromPath_ResetsCurrentEditorToWelcome()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        treeService.LoadProduct(Arg.Any<string>()).Returns([]);
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "Test" });
+
+        var settingsService = Substitute.For<IUserSettingsService>();
+        settingsService.Settings.Returns(new UserSettings());
+
+        var vm = CreateViewModel(settings: settingsService, tree: treeService);
+        vm.LoadProductFromPath("/some/path");
+
+        Assert.That(vm.CurrentEditor, Is.TypeOf<WelcomeViewModel>());
+    }
+
+    [Test]
+    public void LoadProductFromPath_ClearsNavigationHistory()
+    {
+        var nav = new NavigationService();
+        nav.Push(new TreeNodeModel { Text = "Old", Tag = "Table" });
+
+        var treeService = Substitute.For<IProductTreeService>();
+        treeService.LoadProduct(Arg.Any<string>()).Returns([]);
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "Test" });
+
+        var settingsService = Substitute.For<IUserSettingsService>();
+        settingsService.Settings.Returns(new UserSettings());
+
+        var vm = new MainWindowViewModel(settingsService, nav, new EditorService(), treeService, Substitute.For<ISchemaFileService>());
+        vm.LoadProductFromPath("/some/path");
+
+        Assert.That(vm.CanNavigateBack, Is.False);
+        Assert.That(vm.NavigationHistory, Is.Empty);
+    }
+
+    [Test]
+    public void ReloadTree_ResetsCurrentEditorToWelcome()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        treeService.ReloadProduct().Returns([]);
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "Test", FilePath = "/some/Product.json" });
+
+        var vm = CreateViewModel(tree: treeService);
+        vm.ReloadTreeCommand.Execute(null);
+
+        Assert.That(vm.CurrentEditor, Is.TypeOf<WelcomeViewModel>());
+    }
+
+    [Test]
+    public void ReloadTree_SetsProductStatusTooltip()
+    {
+        var treeService = Substitute.For<IProductTreeService>();
+        treeService.ReloadProduct().Returns([]);
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "Test", FilePath = "/some/path/Product.json" });
+        treeService.SearchList.Returns(new List<TreeNodeModel> { new(), new() });
+
+        var vm = CreateViewModel(tree: treeService);
+        vm.ReloadTreeCommand.Execute(null);
+
+        Assert.That(vm.ProductStatusTooltip, Does.Contain("ms"));
+    }
+
+    [Test]
+    public void OpenThemeSettings_WithThemeServiceInstance_TogglesTheme()
+    {
+        var settingsService = Substitute.For<IUserSettingsService>();
+        settingsService.Settings.Returns(new UserSettings());
+        var vm = CreateViewModel(settings: settingsService);
+
+        var themeService = new ThemeService();
+        ThemeService.Instance = themeService;
+        try
+        {
+            vm.OpenThemeSettingsCommand.Execute(null);
+
+            Assert.That(settingsService.Settings.ActiveThemeName, Is.Not.Null);
+            settingsService.Received().Save();
+        }
+        finally
+        {
+            ThemeService.Instance = null;
+        }
+    }
+
+    [Test]
+    public void ChooseProduct_WithNoApplication_DoesNotThrow()
+    {
+        var vm = CreateViewModel();
+        Assert.DoesNotThrowAsync(async () => await vm.ChooseProductCommand.ExecuteAsync(null));
+    }
+
+    [Test]
+    public void OnNodeSelected_SetsLastSelectedNodePath()
+    {
+        var settingsService = Substitute.For<IUserSettingsService>();
+        settingsService.Settings.Returns(new UserSettings());
+
+        var vm = CreateViewModel(settings: settingsService);
+        var node = new TreeNodeModel { Text = "TestNode", Tag = "Table" };
+
+        vm.TreeViewModel.SelectedNode = node;
+
+        Assert.That(settingsService.Settings.LastSelectedNodePath, Is.EqualTo("TestNode"));
+    }
+
+    [Test]
+    public void OnNodeSelected_EditorGetsNavigateToNodeCallback()
+    {
+        var editorService = Substitute.For<IEditorService>();
+        var editor = new TableEditorViewModel();
+        var node = new TreeNodeModel { Text = "MyTable", Tag = "Table" };
+        editorService.GetEditor(node).Returns(editor);
+
+        var vm = CreateViewModel(editor: editorService);
+        vm.TreeViewModel.SelectedNode = node;
+
+        Assert.That(editor.NavigateToNode, Is.Not.Null);
     }
 }
