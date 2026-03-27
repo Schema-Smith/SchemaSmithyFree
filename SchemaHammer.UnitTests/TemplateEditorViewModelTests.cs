@@ -118,6 +118,31 @@ public class TemplateEditorViewModelTests
         Assert.That(EditorBaseViewModel.PendingTokenName, Is.Null);
     }
 
+    [Test]
+    public void ChangeNode_WithNoPendingTokenName_SetsSelectedTabIndexToZero()
+    {
+        // Exercises the else branch: PendingTokenName == null → SelectedTabIndex = 0
+        EditorBaseViewModel.PendingTokenName = null;
+        var vm = new TemplateEditorViewModel();
+        vm.ChangeNode(MakeTemplateNode());
+
+        Assert.That(vm.SelectedTabIndex, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void ChangeNode_WithPendingTokenNameNotInTemplate_SelectedScriptTokenHasNullKey()
+    {
+        // PendingTokenName is set but the token does not exist in ScriptTokens —
+        // FirstOrDefault returns default(KeyValuePair<string,string>) when no match found
+        EditorBaseViewModel.PendingTokenName = "TokenThatDoesNotExist";
+        var vm = new TemplateEditorViewModel();
+        vm.ChangeNode(MakeTemplateNode());
+
+        Assert.That(vm.SelectedTabIndex, Is.EqualTo(1));
+        // Default KVP has null Key when no match is found
+        Assert.That(vm.SelectedScriptToken?.Key, Is.Null);
+    }
+
     [TearDown]
     public void Cleanup()
     {

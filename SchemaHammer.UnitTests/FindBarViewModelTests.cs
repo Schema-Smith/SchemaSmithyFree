@@ -176,4 +176,49 @@ public class FindBarViewModelTests
 
         Assert.That(vm.CurrentMatchIndex, Is.EqualTo(0));
     }
+
+    [Test]
+    public void UpdateCurrentMatchIndex_MatchBeforeSelectionPosition_CountsCorrectly()
+    {
+        // "abc abc abc" — after two FindNext calls the selection is on the second match.
+        // UpdateCurrentMatchIndex must walk past the first match (index += SearchTerm.Length branch)
+        // before finding the match at or after SelectionStart.
+        var vm = new FindBarViewModel(new SearchService());
+        vm.SetEditorText("abc abc abc");
+        vm.SearchTerm = "abc";
+
+        vm.FindNextCommand.Execute(null); // CurrentMatchIndex == 1 (first match at 0)
+        vm.FindNextCommand.Execute(null); // CurrentMatchIndex == 2 (second match at 4)
+
+        Assert.That(vm.CurrentMatchIndex, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void UpdateCurrentMatchIndex_ThirdMatchOutOfThree_ReturnsThree()
+    {
+        // Exercises the inner loop walking past two prior matches before finding the third.
+        var vm = new FindBarViewModel(new SearchService());
+        vm.SetEditorText("aa aa aa");
+        vm.SearchTerm = "aa";
+
+        vm.FindNextCommand.Execute(null); // match 1 at 0
+        vm.FindNextCommand.Execute(null); // match 2 at 3
+        vm.FindNextCommand.Execute(null); // match 3 at 6
+
+        Assert.That(vm.CurrentMatchIndex, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void UpdateCurrentMatchIndex_MatchCase_WalksMultipleMatches()
+    {
+        var vm = new FindBarViewModel(new SearchService());
+        vm.SetEditorText("XX XX XX");
+        vm.MatchCase = true;
+        vm.SearchTerm = "XX";
+
+        vm.FindNextCommand.Execute(null); // match 1
+        vm.FindNextCommand.Execute(null); // match 2 — loops past first
+
+        Assert.That(vm.CurrentMatchIndex, Is.EqualTo(2));
+    }
 }

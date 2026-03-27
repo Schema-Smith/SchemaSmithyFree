@@ -678,6 +678,28 @@ public class MainWindowViewModelTests
     }
 
     [Test]
+    public void UpdateSchemaFiles_ProductWithNullFilePath_DoesNotThrow()
+    {
+        // Product is not null but FilePath is null → productPath is empty → early return
+        var treeService = Substitute.For<IProductTreeService>();
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "Test", FilePath = null });
+
+        var vm = CreateViewModel(tree: treeService);
+        Assert.DoesNotThrowAsync(async () => await vm.UpdateSchemaFilesCommand.ExecuteAsync(null));
+    }
+
+    [Test]
+    public void UpdateSchemaFiles_ProductWithEmptyFilePath_DoesNotThrow()
+    {
+        // Product is not null but FilePath is "" → productPath is "" → early return
+        var treeService = Substitute.For<IProductTreeService>();
+        treeService.Product.Returns(new Schema.Domain.Product { Name = "Test", FilePath = "" });
+
+        var vm = CreateViewModel(tree: treeService);
+        Assert.DoesNotThrowAsync(async () => await vm.UpdateSchemaFilesCommand.ExecuteAsync(null));
+    }
+
+    [Test]
     public void OnNodeSelected_SetsLastSelectedNodePath()
     {
         var settingsService = Substitute.For<IUserSettingsService>();
