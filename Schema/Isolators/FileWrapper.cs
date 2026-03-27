@@ -1,7 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System.IO;
-
-using System.IO;
 using Schema.Utility;
 
 namespace Schema.Isolators;

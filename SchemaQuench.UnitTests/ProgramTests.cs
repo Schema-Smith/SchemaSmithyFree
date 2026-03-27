@@ -1,7 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System;
-
-using System;
 using log4net;
 using Schema.Isolators;
 using Schema.Utility;

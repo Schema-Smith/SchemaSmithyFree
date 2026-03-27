@@ -1,7 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using Schema.Isolators;
-
-using Schema.Isolators;
 using Schema.DataAccess;
 using System.Collections.Generic;
 

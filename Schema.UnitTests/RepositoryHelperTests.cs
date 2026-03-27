@@ -1,7 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System.Collections.Generic;
-
-using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
 using NSubstitute;

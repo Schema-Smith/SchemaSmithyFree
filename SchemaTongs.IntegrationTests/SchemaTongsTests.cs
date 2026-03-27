@@ -1,7 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System.Data;
-
-using System.Data;
 using System;
 using System.IO;
 using Microsoft.Extensions.Configuration;

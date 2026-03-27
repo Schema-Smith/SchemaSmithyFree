@@ -1,7 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using Schema.DataAccess;
-
-using Schema.DataAccess;
 using System;
 
 namespace Schema.UnitTests;

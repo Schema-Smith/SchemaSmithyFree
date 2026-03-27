@@ -1,8 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System;
 
-using System;
-
 namespace Schema.Isolators;
 
 public class EnvironmentWrapper : IEnvironment
