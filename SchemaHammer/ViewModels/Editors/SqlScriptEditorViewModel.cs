@@ -5,12 +5,35 @@ using CommunityToolkit.Mvvm.Input;
 using Schema.Domain;
 using Schema.Utility;
 using SchemaHammer.Models;
+using SchemaHammer.Services;
 
 namespace SchemaHammer.ViewModels.Editors;
 
 public partial class SqlScriptEditorViewModel : EditorBaseViewModel
 {
     public override string EditorTitle => Node?.Text ?? "Script";
+
+    public FindBarViewModel FindBar { get; }
+
+    public bool IsFindBarVisible => FindBar.IsVisible;
+
+    public SqlScriptEditorViewModel() : this(new SearchService()) { }
+
+    public SqlScriptEditorViewModel(ISearchService searchService)
+    {
+        FindBar = new FindBarViewModel(searchService);
+    }
+
+    public void ShowFindBar()
+    {
+        FindBar.SetEditorText(DisplayContent);
+        FindBar.IsVisible = true;
+    }
+
+    public void HideFindBar()
+    {
+        FindBar.IsVisible = false;
+    }
 
     [ObservableProperty]
     private string _displayContent = "";

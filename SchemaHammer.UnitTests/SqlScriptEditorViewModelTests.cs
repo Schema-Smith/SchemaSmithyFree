@@ -374,6 +374,66 @@ public class SqlScriptEditorViewModelTests
         Assert.That(vm.IsErrorScript, Is.False);
     }
 
+    [Test]
+    public void ShowFindBar_SetsIsVisibleTrue()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.FindBar.IsVisible, Is.False);
+
+        vm.ShowFindBar();
+
+        Assert.That(vm.FindBar.IsVisible, Is.True);
+        Assert.That(vm.IsFindBarVisible, Is.True);
+    }
+
+    [Test]
+    public void ShowFindBar_SetsEditorText()
+    {
+        var scriptPath = Path.Combine(ValidProductPath,
+            "Templates", "Main", "Functions", "dbo.MyFunction.sql");
+        var node = new TreeNodeModel
+        {
+            Text = "dbo.MyFunction.sql",
+            Tag = "Sql Script",
+            NodePath = scriptPath
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(node);
+
+        // Set a search term so we can verify editor text was passed to FindBar
+        vm.FindBar.SearchTerm = "INSERT";
+        vm.ShowFindBar();
+
+        // If editor text was set, the match count should be > 0
+        Assert.That(vm.FindBar.MatchCount, Is.GreaterThan(0));
+    }
+
+    [Test]
+    public void HideFindBar_SetsIsVisibleFalse()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        vm.ShowFindBar();
+        Assert.That(vm.IsFindBarVisible, Is.True);
+
+        vm.HideFindBar();
+
+        Assert.That(vm.FindBar.IsVisible, Is.False);
+        Assert.That(vm.IsFindBarVisible, Is.False);
+    }
+
+    [Test]
+    public void ShowFindBar_WhenAlreadyVisible_StaysVisible()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        vm.ShowFindBar();
+        Assert.That(vm.IsFindBarVisible, Is.True);
+
+        vm.ShowFindBar();
+
+        Assert.That(vm.IsFindBarVisible, Is.True);
+    }
+
     [TearDown]
     public void Cleanup()
     {
