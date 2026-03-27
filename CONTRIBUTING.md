@@ -1,7 +1,7 @@
 # Contributing to SchemaSmithyFree
 First off, thank you for considering contributing to SchemaSmithyFree!
 
-Contributions are what make open source projects thrive, and we welcome pull requests, bug reports, and feature suggestions.
+Contributions are what make community-driven projects thrive, and we welcome pull requests, bug reports, and feature suggestions.
 
 # Ways to Contribute
 * **Report bugs** — Open an issue with detailed steps to reproduce.
