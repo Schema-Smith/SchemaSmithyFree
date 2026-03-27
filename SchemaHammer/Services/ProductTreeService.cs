@@ -234,7 +234,7 @@ public class ProductTreeService : IProductTreeService
         foreach (var filePath in jsonFiles)
         {
             var table = Table.Load(filePath);
-            var nodeText = Path.GetFileNameWithoutExtension(filePath);
+            var nodeText = FileNameEncoder.Decode(Path.GetFileNameWithoutExtension(filePath));
 
             var tableNode = new TableNodeModel
             {
@@ -319,7 +319,7 @@ public class ProductTreeService : IProductTreeService
         foreach (var filePath in jsonFiles)
         {
             var iv = JsonHelper.ProductLoad<IndexedView>(filePath);
-            var nodeText = Path.GetFileNameWithoutExtension(filePath);
+            var nodeText = FileNameEncoder.Decode(Path.GetFileNameWithoutExtension(filePath));
 
             var ivNode = new IndexedViewNodeModel
             {
