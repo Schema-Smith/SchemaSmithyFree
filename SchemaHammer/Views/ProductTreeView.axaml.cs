@@ -27,12 +27,8 @@ public partial class ProductTreeView : UserControl
 
     private void OnNodeSelected(TreeNodeModel node, TreeNodeModel? _)
     {
-        var ancestor = node.Parent;
-        while (ancestor != null)
-        {
-            ancestor.IsExpanded = true;
-            ancestor = ancestor.Parent;
-        }
+        if (DataContext is ProductTreeViewModel vm)
+            vm.ExpandToNode(node);
 
         Dispatcher.UIThread.Post(() =>
         {

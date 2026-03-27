@@ -31,4 +31,14 @@ public partial class ProductTreeViewModel : ObservableObject
         foreach (var node in nodes)
             RootNodes.Add(node);
     }
+
+    public void ExpandToNode(TreeNodeModel node)
+    {
+        var ancestor = node.Parent;
+        while (ancestor != null)
+        {
+            ancestor.IsExpanded = true;
+            ancestor = ancestor.Parent;
+        }
+    }
 }

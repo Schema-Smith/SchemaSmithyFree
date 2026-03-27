@@ -71,4 +71,58 @@ public class ProductTreeViewModelTests
         Assert.That(vm.RootNodes, Has.Count.EqualTo(2));
         Assert.That(vm.RootNodes[0].Text, Is.EqualTo("New1"));
     }
+
+    [Test]
+    public void ExpandToNode_SetsParentChainExpanded()
+    {
+        var vm = new ProductTreeViewModel();
+        var root = new TreeNodeModel { Text = "Root" };
+        var child = new TreeNodeModel { Text = "Child", Parent = root };
+        var grandchild = new TreeNodeModel { Text = "Grandchild", Parent = child };
+
+        vm.ExpandToNode(grandchild);
+
+        Assert.That(root.IsExpanded, Is.True);
+        Assert.That(child.IsExpanded, Is.True);
+        Assert.That(grandchild.IsExpanded, Is.False);
+    }
+
+    [Test]
+    public void ExpandToNode_RootNode_NoError()
+    {
+        var vm = new ProductTreeViewModel();
+        var root = new TreeNodeModel { Text = "Root" };
+
+        Assert.DoesNotThrow(() => vm.ExpandToNode(root));
+        Assert.That(root.IsExpanded, Is.False);
+    }
+
+    [Test]
+    public void ExpandToNode_DeeplyNested_ExpandsAll()
+    {
+        var vm = new ProductTreeViewModel();
+        var nodes = new TreeNodeModel[5];
+        for (var i = 0; i < 5; i++)
+        {
+            nodes[i] = new TreeNodeModel { Text = $"Level{i}" };
+            if (i > 0) nodes[i].Parent = nodes[i - 1];
+        }
+
+        vm.ExpandToNode(nodes[4]);
+
+        for (var i = 0; i < 4; i++)
+            Assert.That(nodes[i].IsExpanded, Is.True, $"Level{i} should be expanded");
+        Assert.That(nodes[4].IsExpanded, Is.False, "Target node itself should not be expanded");
+    }
+
+    [Test]
+    public void ExpandToNode_AlreadyExpanded_NoError()
+    {
+        var vm = new ProductTreeViewModel();
+        var root = new TreeNodeModel { Text = "Root", IsExpanded = true };
+        var child = new TreeNodeModel { Text = "Child", Parent = root };
+
+        Assert.DoesNotThrow(() => vm.ExpandToNode(child));
+        Assert.That(root.IsExpanded, Is.True);
+    }
 }
