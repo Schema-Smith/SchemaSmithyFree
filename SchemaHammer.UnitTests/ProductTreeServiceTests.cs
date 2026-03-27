@@ -259,7 +259,7 @@ public class ProductTreeServiceTests
         var tablesContainer = mainTemplate.Children.FirstOrDefault(c => c.Text == "Tables");
         tablesContainer!.EnsureExpanded();
 
-        return tablesContainer.Children.FirstOrDefault() as SchemaHammer.Models.TableNodeModel;
+        return tablesContainer.Children.FirstOrDefault(c => c.Text == "dbo.TestTable") as SchemaHammer.Models.TableNodeModel;
     }
 
     [Test]
@@ -269,6 +269,23 @@ public class ProductTreeServiceTests
         // Never loaded — should return empty
         var result = service.ReloadProduct();
         Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public void LoadProduct_EncodedTableFilename_DecodesForDisplay()
+    {
+        var service = new ProductTreeService();
+        var roots = service.LoadProduct(ValidProductPath);
+        var templatesContainer = roots.FirstOrDefault(n => n.Tag == "Templates");
+        templatesContainer!.EnsureExpanded();
+        var mainTemplate = templatesContainer.Children.FirstOrDefault(t => t.Text == "Main");
+        mainTemplate!.EnsureExpanded();
+        var tablesContainer = mainTemplate.Children.FirstOrDefault(c => c.Text == "Tables");
+        tablesContainer!.EnsureExpanded();
+
+        var decodedNode = tablesContainer.Children.FirstOrDefault(c => c.Text == "dbo.My:Table");
+        Assert.That(decodedNode, Is.Not.Null,
+            "Table with encoded filename dbo.My%3ATable.json should display with decoded name 'dbo.My:Table'");
     }
 
     [Test]

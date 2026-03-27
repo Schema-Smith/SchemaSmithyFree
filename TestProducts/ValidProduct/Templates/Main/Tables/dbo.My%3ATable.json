@@ -1,0 +1,15 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[My:Table]",
+  "CompressionType": "NONE",
+  "Columns": [
+    {
+      "Name": "[Id]",
+      "DataType": "INT"
+    }
+  ],
+  "Indexes": [],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "Statistics": []
+}
