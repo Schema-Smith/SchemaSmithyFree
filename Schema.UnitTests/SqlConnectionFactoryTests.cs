@@ -1,4 +1,5 @@
-﻿using System.Data;
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+using System.Data;
 using Schema.DataAccess;
 
 namespace Schema.UnitTests;

@@ -1,32 +1,69 @@
 SchemaSmith Community License (SSCL)
-Version 1.0
-1. License Grant
-SchemaSmith ("Licensor") grants you ("Licensee") a non-exclusive, non-transferable, royalty-free license to use, modify, and distribute the SchemaSmith software ("Software") under the terms of this agreement.
-2. Free Use Cases
-This license allows free use of the Software under the following conditions:
-* Open Source & Academic Use: If you are an individual, open-source project (licensed under an OSI-approved license), or academic institution, you may use the Software freely.
+Version 2.0
 
-* Non-Production Environments: Any organization may use the Software freely for development, testing or demonstration purposes.  
+Copyright (c) 2024-present SchemaSmith Contributors
 
-A production environment is defined as an environment that is accessed by end-users of an application, such as an Internet website.
+1. Permissions
 
-* Individual or Small Company Use: Any company that is not an Enterprise may use the Software freely in production environments.
-3. Enterprise Licensing Requirement
-A paid enterprise license is required if your organization meets either of the following conditions:
-   * Your company has more than 50 employees.
+   You are granted a non-exclusive, worldwide, royalty-free license to:
 
-   * Your company generates more than $5 million USD in annual gross revenue.
-4. SaaS & Resale Restriction
-If you incorporate the Software into a commercial SaaS product, hosted service, or resale offering, you must obtain a paid enterprise license regardless of company size or revenue.
-5. Restrictions
-Except as expressly permitted, you may not:
-      * Remove or modify copyright notices.
+   a) Use the software for any purpose — personal, commercial, internal,
+      educational — without restriction on organization size, revenue,
+      database size, or number of environments.
 
-      * Use the Software for illegal activities.
+   b) Modify the software for your own use.
 
-      * Misrepresent the Software as your own proprietary product.
-6. Disclaimer of Warranty & Liability
-THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. LICENSOR SHALL NOT BE LIABLE FOR ANY DAMAGES ARISING FROM THE USE OF THIS SOFTWARE.
-7. Governing Law
-This license shall be governed by the laws of the state of Florida.
-For enterprise licensing inquiries, please contact Sales@SchemaSmith.com.
+   c) Submit contributions (pull requests, patches, issues) to the
+      official SchemaSmith repositories.
+
+2. Patent Grant
+
+   Each contributor grants you a perpetual, worldwide, royalty-free,
+   non-exclusive patent license to make, use, and run their contributions
+   to this software.
+
+3. Restrictions
+
+   You may NOT:
+
+   a) Redistribute the software — in source or binary form — as a
+      standalone product, as part of another product, or as a service,
+      whether free or paid.
+
+   b) Offer the software as a hosted or managed service (SaaS, PaaS,
+      or similar) where third parties interact with SchemaSmith
+      functionality.
+
+   c) Remove, alter, or obscure any copyright notices, license text,
+      or attribution.
+
+   d) Use the SchemaSmith name, logo, or branding to imply endorsement
+      of your product or service.
+
+   For clarity: using SchemaSmith to manage your own databases — even
+   in a commercial product's infrastructure — is permitted. The
+   restriction is on redistributing or reselling SchemaSmith itself.
+
+4. Contributions
+
+   By submitting a contribution to this project, you agree that your
+   contribution is licensed under the same terms as this license, that
+   you have the right to make the contribution, and that you grant the
+   SchemaSmith project maintainers the right to use your contribution
+   in all SchemaSmith editions, including commercial editions.
+
+5. No Warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED. THE AUTHORS SHALL NOT BE LIABLE FOR ANY CLAIM,
+   DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+
+6. Governing Law
+
+   This license is governed by the laws of the State of Florida, USA.
+
+7. Enterprise Edition
+
+   SchemaSmith Enterprise is a separately licensed product with
+   additional features. This license applies only to the Community
+   edition. For Enterprise licensing, contact Sales@SchemaSmith.com.

@@ -7,20 +7,21 @@ Contributions are what make open source projects thrive, and we welcome pull req
 * **Report bugs** — Open an issue with detailed steps to reproduce.
 * **Suggest enhancements** — Share your ideas for improving SchemaSmithyFree in an issue.
 * **Submit code** — Add features, fix bugs, or improve documentation.
-* **Improve docs** — Our wiki and README are always evolving. Contributions are welcome.
+* **Improve docs** — Our [documentation site](https://schemasmith.com/documentation/mssql/community/getting-started.html) and README are always evolving. Contributions are welcome.
 
 # Development Setup
 The tools in SchemaSmithyFree target:
 * **.NET**: `net9.0`, `net481`
 * **IDEs**: Visual Studio 2022 or JetBrains Rider
 * **Database**: Tested against SQL Server `2019-CU27-ubuntu-20.04`. Should work with any database set to compatibility level 130 or higher.
-Running Locally with Docker
+
+### Running Locally with Docker
 From the project root:
 ```
 docker compose build
 docker compose up
 ```
-This spins up a SQL Server 2019 container and applies the **Test Product** schema. You may also want to pull the [SchemaSmithDemos](https://github.com/Schema-Smith/SchemaSmithDemos) repository and run docker from there instead to apply several demo products for more test data and examples. 
+This spins up a SQL Server 2019 container and applies the **Test Product** schema. You may also want to pull the [SchemaSmithDemos](https://github.com/Schema-Smith/SchemaSmithDemos) repository and run docker from there instead to apply several demo products for more test data and examples.
 
 Connection details are defined in `.env`. Connect at `localhost`.
 
@@ -48,8 +49,7 @@ Connection details are defined in `.env`. Connect at `localhost`.
 # Community & Communication
 * Be respectful and constructive in discussions.
 * Assume positive intent.
-* Remember we’re all working to make SchemaSmithyFree better.
+* Remember we're all working to make SchemaSmithyFree better.
 
 # License
-By contributing, you agree that your contributions will be licensed under the same license as the project.
-
+By contributing, you agree that your contributions will be licensed under the [SSCL v2.0](LICENSE), the same license as the project.

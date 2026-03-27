@@ -1,4 +1,5 @@
-﻿using System;
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+using System;
 using Schema.DataAccess;
 
 namespace SchemaQuench.IntegrationTests;

@@ -1,34 +1,46 @@
-# SchemaQuench
-![.Build validate](https://github.com/Schema-Smith/SchemaSmithyFree/actions/workflows/continuous-integration.yml/badge.svg)
+# SchemaSmith Community Edition
 
-SchemaQuench is an opinionated, state based, database migration tool.  Similar in concept to HashiCorp's Terraform, SchemaQuench takes the desired end state for a set of databases in the form of metadata and transforms whatever server it is applied to making it match that state.   
+*Terraform for SQL Server databases*
 
-## Why not just use migrations to maintain a server?
+![Build](https://github.com/Schema-Smith/SchemaSmithyFree/actions/workflows/continuous-integration.yml/badge.svg)
+[![License: SSCL v2.0](https://img.shields.io/badge/license-SSCL%20v2.0-blue)](LICENSE)
 
-Migrations show the evolution of a database over time.  While that may be fine for seeing how a database has progressed, you can not tell what the current state of that database is at this very moment.  That is where a state based approach is superior.  
+SchemaSmith is a state-based database schema management toolset for SQL Server. Define your desired database state as metadata — tables, views, procedures, triggers — and SchemaSmith transforms any target server to match.
 
-The state of your metadata repository at the time of your last release is an exact representation of what your server should be.  Going with this approach, treats your sql server code like any other production code, guaranteeing that they are always in sync.   
+## Why State-Based?
 
-## Technical Notes
+Migrations show the evolution of a database over time, but you can't tell what the current state is at a glance. With a state-based approach, your metadata repository is an exact representation of what your server should be — treating SQL Server code like any other production code, guaranteeing they are always in sync.
 
-> Target Frameworks: net9.0, net481
-> 
-> IDEs: Visual Studio 2022, JetBrains Rider
-> 
-> MSSQL Server: Currently testing against 2019-CU27-ubuntu-20.04 but should work for any version with a compatibility level of 130 or higher on the databases
+## Tools
 
-## Quick start
+- **SchemaQuench** — Deploys schema packages to databases
+- **SchemaTongs** — Extracts database schemas into schema packages
+- **DataTongs** — Extracts table data and generates MERGE scripts
 
-If you have docker, you can run 
+## Quick Start
+
+If you have Docker, run from the project root:
 
 ```bash
 docker compose build
 docker compose up
 ```
 
-from the root of the project and the [Test Product](TestProducts/ValidProduct/Product.json) will be applied to a linux sql 2019 docker container.  You can connect to the server at localhost with the user, password and port defined in [.env](.env).
+This applies the [Test Product](TestProducts/ValidProduct/Product.json) to a SQL Server container. Connect at `localhost` with credentials from [.env](.env).
 
-## Additional Resources 
+For more samples, see the [SchemaSmithDemos](https://github.com/Schema-Smith/SchemaSmithDemos) repository.
 
-- For more samples, see our [demo repository](https://github.com/Schema-Smith/SchemaSmithDemos).
-- Checkout our [website](https://schemasmith.com/documentation/mssql/community/getting-started.html) for documentation about how these tools work to make deploying sql server schema effortless.
+## Technical Notes
+
+- **Target Frameworks**: net9.0, net481
+- **IDEs**: Visual Studio 2022 or JetBrains Rider
+- **Database**: Tested against SQL Server 2019-CU27. Should work with any version at compatibility level 130 or higher.
+
+## License
+
+SchemaSmith Community Edition is licensed under [SSCL v2.0](LICENSE). No organization size or revenue restrictions — use for any purpose, personal or commercial. Tiers are feature-based only: Community is free, Enterprise adds multi-platform support and advanced features.
+
+## Additional Resources
+
+- [Documentation](https://schemasmith.com/documentation/mssql/community/getting-started.html)
+- [Community Command Center](https://github.com/Schema-Smith/Community) — roadmap, plans, feature matrices

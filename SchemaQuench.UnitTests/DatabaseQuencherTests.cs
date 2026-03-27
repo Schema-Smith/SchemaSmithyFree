@@ -1,4 +1,5 @@
-﻿using log4net;
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+using log4net;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Isolators;
@@ -57,7 +58,7 @@ public class DatabaseQuencherTests
             var quencher = new DatabaseQuencher("TestKindlingForge", template, "StrapMe", false, "0", "0");
             quencher.Quench();
 
-            var expectedBoostrapCommand = commands.FirstOrDefault(c => c.StartsWith("CREATE OR ALTER PROCEDURE [SchemaSmith].[TableQuench]"));
+            var expectedBoostrapCommand = commands.FirstOrDefault(c => c.Contains("CREATE OR ALTER PROCEDURE [SchemaSmith].[TableQuench]"));
             Assert.That(expectedBoostrapCommand, Is.Not.Null);
 
             FactoryContainer.Clear();

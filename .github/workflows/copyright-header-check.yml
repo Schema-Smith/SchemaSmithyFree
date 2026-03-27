@@ -1,0 +1,59 @@
+name: copyright-header-check
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  check-headers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout files
+        uses: actions/checkout@v4
+
+      - name: Check copyright headers
+        run: |
+          CS_HEADER="// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0."
+          SQL_HEADER="-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0."
+          FAILED=0
+
+          # Check .cs files (exclude bin, obj, demo, TestProducts, MigrationScripts)
+          while IFS= read -r file; do
+            first_line=$(head -1 "$file")
+            if [ "$first_line" != "$CS_HEADER" ]; then
+              echo "MISSING: $file"
+              FAILED=1
+            fi
+          done < <(find . -name '*.cs' \
+            -not -path '*/bin/*' \
+            -not -path '*/obj/*' \
+            -not -path './demo/*' \
+            -not -path '*/TestProducts/*' \
+            -not -path '*/MigrationScripts/*')
+
+          # Check .sql files under Schema/Scripts/
+          while IFS= read -r file; do
+            first_line=$(head -1 "$file")
+            if [ "$first_line" != "$SQL_HEADER" ]; then
+              echo "MISSING: $file"
+              FAILED=1
+            fi
+          done < <(find ./Schema/Scripts -name '*.sql' 2>/dev/null)
+
+          if [ "$FAILED" -eq 1 ]; then
+            echo ""
+            echo "ERROR: The above files are missing the required copyright header."
+            echo ""
+            echo "Expected first line for .cs files:"
+            echo "  $CS_HEADER"
+            echo ""
+            echo "Expected first line for .sql files in Schema/Scripts/:"
+            echo "  $SQL_HEADER"
+            exit 1
+          fi
+
+          echo "All files have correct copyright headers."

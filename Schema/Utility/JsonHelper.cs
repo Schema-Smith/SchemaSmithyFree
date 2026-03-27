@@ -1,4 +1,5 @@
-﻿using Schema.Isolators;
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+using Schema.Isolators;
 using Newtonsoft.Json;
 using System;
 
