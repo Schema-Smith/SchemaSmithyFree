@@ -32,16 +32,10 @@ public class TableNodeModel : TreeNodeModel
         AddContainer("Check Constraints", "Check Constraint Container", CheckConstraintNodes);
         AddContainer("Statistics", "Statistic Container", StatisticNodes);
 
-        if (TableData.FullTextIndex != null)
+        if (FullTextIndexNodes.Length > 0)
         {
-            var ftNode = new TreeNodeModel
-            {
-                Text = "Full Text Index",
-                Tag = "Full Text Index",
-                ImageKey = "file",
-                Parent = this,
-                TemplateName = TemplateName
-            };
+            var ftNode = FullTextIndexNodes[0];
+            ftNode.Parent = this;
             Children.Add(ftNode);
         }
 

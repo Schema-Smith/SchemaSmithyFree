@@ -372,7 +372,7 @@ public class ProductTreeService : IProductTreeService
     private static string TrimBrackets(string name)
     {
         if (string.IsNullOrEmpty(name)) return name ?? "";
-        return name.Trim('[', ']');
+        return name.Replace("[", "").Replace("]", "");
     }
 
     private static void SetLazyChildren(TreeNodeModel parent, List<TreeNodeModel> children)

@@ -165,6 +165,104 @@ public class ProductTreeServiceTests
     }
 
     [Test]
+    public void LoadProduct_ColumnNodeText_HasBracketsStripped()
+    {
+        var service = new ProductTreeService();
+        service.LoadProduct(ValidProductPath);
+
+        // Expand tables so child nodes are populated
+        var tableNode = GetFirstTableNode(service);
+        Assert.That(tableNode, Is.Not.Null);
+
+        // Column names in JSON are bracket-quoted (e.g. [TestID]).
+        // TrimBrackets must strip ALL brackets so qualified names work too.
+        var columnNodes = tableNode!.ColumnNodes;
+        Assert.That(columnNodes, Is.Not.Empty);
+        foreach (var col in columnNodes)
+        {
+            Assert.That(col.Text, Does.Not.Contain("["),
+                $"Column node text '{col.Text}' still contains brackets");
+            Assert.That(col.Text, Does.Not.Contain("]"),
+                $"Column node text '{col.Text}' still contains brackets");
+        }
+    }
+
+    [Test]
+    public void LoadProduct_IndexNodeText_HasBracketsStripped()
+    {
+        var service = new ProductTreeService();
+        service.LoadProduct(ValidProductPath);
+
+        var tableNode = GetFirstTableNode(service);
+        Assert.That(tableNode, Is.Not.Null);
+
+        var indexNodes = tableNode!.IndexNodes;
+        Assert.That(indexNodes, Is.Not.Empty);
+        foreach (var idx in indexNodes)
+        {
+            Assert.That(idx.Text, Does.Not.Contain("["),
+                $"Index node text '{idx.Text}' still contains brackets");
+        }
+    }
+
+    [Test]
+    public void LoadProduct_FullTextIndex_NodeInTreeMatchesSearchList()
+    {
+        var service = new ProductTreeService();
+        service.LoadProduct(ValidProductPath);
+
+        var tableNode = GetFirstTableNode(service);
+        Assert.That(tableNode, Is.Not.Null);
+        Assert.That(tableNode!.TableData?.FullTextIndex, Is.Not.Null,
+            "ValidProduct TestTable should have a FullTextIndex");
+
+        // The pre-built FullTextIndexNodes should exist
+        Assert.That(tableNode.FullTextIndexNodes, Is.Not.Empty,
+            "FullTextIndexNodes should be populated");
+
+        // After expanding the table, the FTI node in the tree should be
+        // the SAME object as the one in FullTextIndexNodes (not a new copy)
+        tableNode.ExpandTable();
+        var ftNodeInTree = tableNode.Children
+            .FirstOrDefault(c => c.Tag == "Full Text Index");
+        Assert.That(ftNodeInTree, Is.Not.Null, "FTI node should appear in expanded tree");
+        Assert.That(ftNodeInTree, Is.SameAs(tableNode.FullTextIndexNodes[0]),
+            "FTI node in tree must be the same object as FullTextIndexNodes[0] for search navigation");
+    }
+
+    [Test]
+    public void LoadProduct_FullTextIndex_NodeInSearchList()
+    {
+        var service = new ProductTreeService();
+        service.LoadProduct(ValidProductPath);
+
+        var tableNode = GetFirstTableNode(service);
+        Assert.That(tableNode, Is.Not.Null);
+
+        // The FTI node from FullTextIndexNodes should be in SearchList
+        var ftiNode = tableNode!.FullTextIndexNodes.FirstOrDefault();
+        Assert.That(ftiNode, Is.Not.Null);
+        Assert.That(service.SearchList, Does.Contain(ftiNode),
+            "FullTextIndexNodes[0] should be in the SearchList for tree search to find it");
+    }
+
+    private static SchemaHammer.Models.TableNodeModel? GetFirstTableNode(ProductTreeService service)
+    {
+        var roots = service.LoadProduct(
+            Path.GetFullPath(Path.Combine(TestContext.CurrentContext.TestDirectory,
+                "..", "..", "..", "..", "TestProducts", "ValidProduct")));
+
+        var templatesContainer = roots.FirstOrDefault(n => n.Tag == "Templates");
+        templatesContainer!.EnsureExpanded();
+        var mainTemplate = templatesContainer.Children.FirstOrDefault(t => t.Text == "Main");
+        mainTemplate!.EnsureExpanded();
+        var tablesContainer = mainTemplate.Children.FirstOrDefault(c => c.Text == "Tables");
+        tablesContainer!.EnsureExpanded();
+
+        return tablesContainer.Children.FirstOrDefault() as SchemaHammer.Models.TableNodeModel;
+    }
+
+    [Test]
     public void ReloadProduct_WithNoProduct_ReturnsEmpty()
     {
         var service = new ProductTreeService();

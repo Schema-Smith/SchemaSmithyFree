@@ -72,6 +72,29 @@ public class EditorBaseViewModelTests
     }
 
     [Test]
+    public void StripBrackets_HandlesQualifiedName()
+    {
+        // [dbo].[Users] should strip ALL brackets, not just outer ones
+        var result = EditorBaseViewModel.StripBrackets("[dbo].[Users]");
+        Assert.That(result, Is.EqualTo("dbo.Users"));
+    }
+
+    [Test]
+    public void StripBrackets_HandlesMultipleBracketedParts()
+    {
+        var result = EditorBaseViewModel.StripBrackets("[Schema].[Table].[Column]");
+        Assert.That(result, Is.EqualTo("Schema.Table.Column"));
+    }
+
+    [Test]
+    public void NameMatchesNodeText_MatchesQualifiedName()
+    {
+        // Domain name [dbo].[Users] should match tree text "dbo.Users"
+        var result = EditorBaseViewModel.NameMatchesNodeText("[dbo].[Users]", "dbo.Users");
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
     public void ChangeNode_SetsNodeAndEditorLabel()
     {
         var vm = new ConcreteEditorViewModel();
