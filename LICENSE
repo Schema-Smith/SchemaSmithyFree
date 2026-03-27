@@ -123,57 +123,6 @@ Copyright (c) 2024-present SchemaSmith Contributors
 
 9. Enterprise Edition
 
-   c) Submit contributions (pull requests, patches, issues) to the
-      official SchemaSmith repositories.
-
-2. Patent Grant
-
-   Each contributor grants you a perpetual, worldwide, royalty-free,
-   non-exclusive patent license to make, use, and run their contributions
-   to this software.
-
-3. Restrictions
-
-   You may NOT:
-
-   a) Redistribute the software — in source or binary form — as a
-      standalone product, as part of another product, or as a service,
-      whether free or paid.
-
-   b) Offer the software as a hosted or managed service (SaaS, PaaS,
-      or similar) where third parties interact with SchemaSmith
-      functionality.
-
-   c) Remove, alter, or obscure any copyright notices, license text,
-      or attribution.
-
-   d) Use the SchemaSmith name, logo, or branding to imply endorsement
-      of your product or service.
-
-   For clarity: using SchemaSmith to manage your own databases — even
-   in a commercial product's infrastructure — is permitted. The
-   restriction is on redistributing or reselling SchemaSmith itself.
-
-4. Contributions
-
-   By submitting a contribution to this project, you agree that your
-   contribution is licensed under the same terms as this license, that
-   you have the right to make the contribution, and that you grant the
-   SchemaSmith project maintainers the right to use your contribution
-   in all SchemaSmith editions, including commercial editions.
-
-5. No Warranty
-
-   THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND,
-   EXPRESS OR IMPLIED. THE AUTHORS SHALL NOT BE LIABLE FOR ANY CLAIM,
-   DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
-
-6. Governing Law
-
-   This license is governed by the laws of the State of Florida, USA.
-
-7. Enterprise Edition
-
    SchemaSmith Enterprise is a separately licensed product with
    additional features. This license applies only to the Community
    edition. For Enterprise licensing, contact Sales@SchemaSmith.com.
