@@ -33,10 +33,10 @@ public abstract partial class EditorBaseViewModel : ObservableObject
         OnPropertyChanged(nameof(EditorTitle));
     }
 
-    /// <summary>Strips SQL Server bracket quoting from an identifier name: [Name] → Name</summary>
+    /// <summary>Strips SQL Server bracket quoting from an identifier name: [dbo].[Users] → dbo.Users</summary>
     internal static string StripBrackets(string? name)
     {
-        return name?.Trim('[', ']') ?? "";
+        return name?.Replace("[", "").Replace("]", "") ?? "";
     }
 
     /// <summary>Checks whether a domain object name (possibly bracketed) matches tree node text (unbracketed).</summary>

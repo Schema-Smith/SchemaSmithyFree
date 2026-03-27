@@ -100,17 +100,20 @@ public class TableNodeModelTests
         table.Columns.Add(new Column { Name = "Id", DataType = "int" });
         table.FullTextIndex = new FullTextIndex();
 
+        var ftiNode = new TreeNodeModel { Text = "Full Text Index", Tag = "Full Text Index", ImageKey = "file" };
         var node = new TableNodeModel
         {
             Text = "dbo.T",
             Tag = "Table",
             TableData = table,
-            ColumnNodes = [new TreeNodeModel { Text = "Id", Tag = "Column" }]
+            ColumnNodes = [new TreeNodeModel { Text = "Id", Tag = "Column" }],
+            FullTextIndexNodes = [ftiNode]
         };
 
         node.ExpandTable();
 
         Assert.That(node.Children.Any(c => c.Tag == "Full Text Index"), Is.True);
+        Assert.That(node.Children.First(c => c.Tag == "Full Text Index"), Is.SameAs(ftiNode));
     }
 
     [Test]
