@@ -286,7 +286,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 PromoteCheckConstraintsToTableLevel(commandJson, table, $"{reader["TABLE_SCHEMA"]}", $"{reader["TABLE_NAME"]}");
                 json = JsonConvert.SerializeObject(table, Formatting.Indented);
             }
-            var outputPath = ResolveAndWrite("Tables", $"{reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}.json", json);
+            var outputPath = ResolveAndWrite("Tables", SchemaTongsEncoder.EncodeFileName((string)reader["TABLE_SCHEMA"], (string)reader["TABLE_NAME"], ".json"), json);
             _progressLog.Info($"    Casting {outputPath}");
         }
     }
@@ -348,7 +348,7 @@ SELECT s.name
             var script = $"IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = N'{EscapeSql(name)}')\r\n" +
                          $"EXEC sys.sp_executesql N'CREATE SCHEMA [{name}]'\r\n";
 
-            var outputPath = ResolveAndWrite("Schemas", $"{name}.sql", script);
+            var outputPath = ResolveAndWrite("Schemas", SchemaTongsEncoder.EncodeFileName(name, ".sql"), script);
             _progressLog.Info($"  Casting {outputPath}");
         }
     }
@@ -394,7 +394,7 @@ SELECT s.name AS SchemaName, t.name AS TypeName,
             var script = $"IF NOT EXISTS (SELECT * FROM sys.types st JOIN sys.schemas ss ON st.schema_id = ss.schema_id WHERE st.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
                          $"CREATE TYPE [{schema}].[{name}] FROM {typeSpec} {nullSpec}";
 
-            var outputPath = ResolveAndWrite("DataTypes", $"{schema}.{name}.sql", script);
+            var outputPath = ResolveAndWrite("DataTypes", SchemaTongsEncoder.EncodeFileName(schema, name, ".sql"), script);
             _progressLog.Info($"  Casting {outputPath}");
         }
     }
@@ -543,7 +543,7 @@ SELECT cc.name, cc.definition
             var script = $"IF NOT EXISTS (SELECT * FROM sys.types st JOIN sys.schemas ss ON st.schema_id = ss.schema_id WHERE st.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
                          createScript;
 
-            var outputPath = ResolveAndWrite("DataTypes", $"{schema}.{name}.sql", script);
+            var outputPath = ResolveAndWrite("DataTypes", SchemaTongsEncoder.EncodeFileName(schema, name, ".sql"), script);
             _progressLog.Info($"  Casting {outputPath}");
         }
     }
@@ -639,7 +639,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                     sql = sql.Substring(0, firstGoEnd) + dependencyBlock + sql.Substring(firstGoEnd);
             }
 
-            var outputPath = ResolveAndWrite("Functions", $"{schema}.{name}.sql", sql);
+            var outputPath = ResolveAndWrite("Functions", SchemaTongsEncoder.EncodeFileName(schema, name, ".sql"), sql);
             _progressLog.Info($"  Casting {outputPath}");
             ValidateAndHandleScript(command.Connection, "Functions", $"{schema}.{name}.sql", sql, "FUNCTION");
         }
@@ -682,7 +682,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                 continue;
             }
 
-            var outputPath = ResolveAndWrite("Views", $"{schema}.{name}.sql", sql);
+            var outputPath = ResolveAndWrite("Views", SchemaTongsEncoder.EncodeFileName(schema, name, ".sql"), sql);
             _progressLog.Info($"  Casting {outputPath}");
             ValidateAndHandleScript(command.Connection, "Views", $"{schema}.{name}.sql", sql, "VIEW");
         }
@@ -725,7 +725,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                 continue;
             }
 
-            var outputPath = ResolveAndWrite("Procedures", $"{schema}.{name}.sql", sql);
+            var outputPath = ResolveAndWrite("Procedures", SchemaTongsEncoder.EncodeFileName(schema, name, ".sql"), sql);
             _progressLog.Info($"  Casting {outputPath}");
             ValidateAndHandleScript(command.Connection, "Procedures", $"{schema}.{name}.sql", sql, "PROCEDURE");
         }
@@ -772,7 +772,7 @@ SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
             var tablePattern = $@"(?<=\bON\s+)\[?{escapedSchema}\]?\.\[?{escapedTable}\]?";
             sql = Regex.Replace(sql, tablePattern, $"[{tableSchema}].[{tableName}]", RegexOptions.IgnoreCase);
 
-            var outputPath = ResolveAndWrite("Triggers", $"{tableSchema}.{tableName}.{triggerName}.sql", sql);
+            var outputPath = ResolveAndWrite("Triggers", SchemaTongsEncoder.EncodeTriggerFileName(tableSchema, tableName, triggerName, ".sql"), sql);
             _progressLog.Info($"  Casting {outputPath}");
             ValidateAndHandleScript(command.Connection, "Triggers", $"{tableSchema}.{tableName}.{triggerName}.sql", sql, "TRIGGER");
         }
@@ -801,7 +801,7 @@ SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
             var script = $"IF NOT EXISTS (SELECT * FROM sysfulltextcatalogs ftc WHERE ftc.name = N'{EscapeSql(name)}')\r\n" +
                          $"CREATE FULLTEXT CATALOG [{name}] ";
 
-            var outputPath = ResolveAndWrite("FullTextCatalogs", $"{name}.sql", script);
+            var outputPath = ResolveAndWrite("FullTextCatalogs", SchemaTongsEncoder.EncodeFileName(name, ".sql"), script);
             _progressLog.Info($"  Casting {outputPath}");
         }
     }
@@ -853,7 +853,7 @@ SELECT stopword, language
 
             script += "END\r\n";
 
-            var outputPath = ResolveAndWrite("FullTextStopLists", $"{name}.sql", script);
+            var outputPath = ResolveAndWrite("FullTextStopLists", SchemaTongsEncoder.EncodeFileName(name, ".sql"), script);
             _progressLog.Info($"  Casting {outputPath}");
         }
     }
@@ -933,7 +933,7 @@ SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
                       $"{definition}\r\n\r\n" +
                       $"GO\r\n";
 
-            var outputPath = ResolveAndWrite("DDLTriggers", $"{triggerName}.sql", sql);
+            var outputPath = ResolveAndWrite("DDLTriggers", SchemaTongsEncoder.EncodeFileName(triggerName, ".sql"), sql);
             _progressLog.Info($"  Casting {outputPath}");
             ValidateAndHandleScript(command.Connection, "DDLTriggers", $"{triggerName}.sql", sql, "TRIGGER");
         }
@@ -970,7 +970,7 @@ SELECT s.name AS SchemaName, xsc.name AS CollectionName
                 $"CREATE XML SCHEMA COLLECTION [{schema}].[{name}] AS N'{xmlContent}'";
             script = FormatXmlInScript(script);
 
-            var outputPath = ResolveAndWrite("XMLSchemaCollections", $"{schema}.{name}.sql", script);
+            var outputPath = ResolveAndWrite("XMLSchemaCollections", SchemaTongsEncoder.EncodeFileName(schema, name, ".sql"), script);
             _progressLog.Info($"  Casting {outputPath}");
         }
     }
@@ -1013,7 +1013,7 @@ SELECT s.name AS SchemaName, xsc.name AS CollectionName
                 continue;
             }
 
-            ResolveAndWrite("Indexed Views", $"{schema}.{name}.json", json);
+            ResolveAndWrite("Indexed Views", SchemaTongsEncoder.EncodeFileName(schema, name, ".json"), json);
             _progressLog.Info($"  {schema}.{name}");
         }
     }
