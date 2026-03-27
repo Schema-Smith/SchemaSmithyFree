@@ -99,7 +99,7 @@ public class DataTongs
 
             var mergeSQL = BuildMergeSql(cmd, tableSchema, tableName, tableData, matchColumns, disableTriggers, mergeUpdate, mergeDelete, table.Filter);
 
-            FileWrapper.GetFromFactory().WriteAllText(Path.Combine(outputPath, $"Populate {tableSchema}.{tableName}.sql"), mergeSQL);
+            FileWrapper.GetFromFactory().WriteAllText(Path.Combine(outputPath, $"Populate {FileNameEncoder.Encode(tableSchema)}.{FileNameEncoder.Encode(tableName)}.sql"), mergeSQL);
         }
         sourceConnection.Close();
         _progressLog.Info("DataTongs completed successfully.");
