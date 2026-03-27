@@ -27,8 +27,25 @@ Copyright (c) 2024-present SchemaSmith Contributors
    You may NOT:
 
    a) Redistribute the software — in source or binary form — as a
-      standalone product, as part of another product, or as a service,
-      whether free or paid.
+      standalone product, as a component marketed or provided to third
+      parties within another product, or as a service, whether free or
+      paid.
+
+      The following do not constitute redistribution or offering the
+      software as a service:
+
+      - Using the software to manage databases for your own products
+        or services, whether you or your customers host those databases.
+
+      - Providing setup, configuration, or implementation services that
+        enable a licensed user to operate the software for their own
+        use.
+
+      However, operating the software on an ongoing basis on behalf of
+      third parties — such as providing perpetual database management,
+      maintenance, or migration services where SchemaSmith is the
+      primary tool — is considered offering the software as a service
+      and is not permitted under this license.
 
    b) Offer the software as a hosted or managed service (SaaS, PaaS,
       or similar) where third parties interact with SchemaSmith
@@ -40,29 +57,71 @@ Copyright (c) 2024-present SchemaSmith Contributors
    d) Use the SchemaSmith name, logo, or branding to imply endorsement
       of your product or service.
 
-   For clarity: using SchemaSmith to manage your own databases — even
-   in a commercial product's infrastructure — is permitted. The
-   restriction is on redistributing or reselling SchemaSmith itself.
+   For clarity: using SchemaSmith to manage databases for your own
+   products is always permitted, whether you or your customers host
+   those databases. Consultants may help you set up and configure
+   SchemaSmith — but ongoing database management using SchemaSmith
+   must be performed by your own organization, not outsourced to a
+   third party as a perpetual service.
 
 4. Contributions
 
-   By submitting a contribution to this project, you agree that your
-   contribution is licensed under the same terms as this license, that
-   you have the right to make the contribution, and that you grant the
-   SchemaSmith project maintainers the right to use your contribution
-   in all SchemaSmith editions, including commercial editions.
+   By submitting a contribution to this project, you agree that:
+
+   a) Your contribution is licensed under the same terms as this
+      license.
+
+   b) You have the legal right to make the contribution and, to the
+      best of your knowledge, it does not violate any third party's
+      intellectual property rights.
+
+   c) You grant the SchemaSmith project maintainers a perpetual,
+      worldwide, royalty-free, non-exclusive license to use, modify,
+      and distribute your contribution in all SchemaSmith database
+      management products, including commercial editions.
+
+   d) You retain all ownership rights to your contributions.
 
 5. No Warranty
 
    THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND,
-   EXPRESS OR IMPLIED. THE AUTHORS SHALL NOT BE LIABLE FOR ANY CLAIM,
-   DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+   OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+   HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
+   WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
+   FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+   OTHER DEALINGS IN THE SOFTWARE.
 
-6. Governing Law
+6. Termination
 
-   This license is governed by the laws of the State of Florida, USA.
+   This license terminates automatically if you breach any of its
+   terms. Upon termination, you must cease all use of the software
+   and destroy all copies in your possession.
 
-7. Enterprise Edition
+   If you cure the breach within 30 days of becoming aware of it,
+   your license is automatically reinstated, provided this is your
+   first breach. For subsequent breaches, reinstatement requires
+   written permission from the SchemaSmith project maintainers.
+
+   Termination of this license does not affect any contribution
+   licenses granted under Section 4, which survive termination.
+
+7. Governing Law
+
+   This license is governed by the laws of the State of Florida, USA,
+   without regard to its conflict of laws provisions. Any disputes
+   arising under this license shall be subject to the exclusive
+   jurisdiction of the state and federal courts located in Florida.
+
+8. License Versioning
+
+   This license applies to the version of the software with which it
+   is distributed. Updated versions of the software may be released
+   under updated license terms. Your use of any version of the
+   software is governed by the license distributed with that version.
+
+9. Enterprise Edition
 
    SchemaSmith Enterprise is a separately licensed product with
    additional features. This license applies only to the Community
