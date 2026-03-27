@@ -41,6 +41,10 @@ Copyright (c) 2024-present SchemaSmith Contributors
         enable a licensed user to operate the software for their own
         use.
 
+      - Including the software's deployment components in your product's
+        installation or update process solely to apply database changes
+        required by your own product.
+
       However, operating the software on an ongoing basis on behalf of
       third parties — such as providing perpetual database management,
       maintenance, or migration services where SchemaSmith is the
