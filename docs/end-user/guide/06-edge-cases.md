@@ -44,7 +44,7 @@ MigrationScripts/Before/
   002_RefreshPermissions [ALWAYS].sql
 ```
 
-The `[ALWAYS]` marker is case-insensitive and can appear anywhere in the filename, though placing it at the end before `.sql` is the clearest convention.
+The `[ALWAYS]` marker is case-sensitive and must be uppercase. It must appear at the end of the filename (before the `.sql` extension).
 
 ### Escape hatch, not default workflow
 

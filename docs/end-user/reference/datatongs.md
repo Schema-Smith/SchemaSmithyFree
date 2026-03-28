@@ -206,7 +206,7 @@ DataTongs validates that each table exists in the source database before attempt
 
 Key columns define the MERGE `ON` clause -- they determine how source rows are matched to target rows.
 
-**Auto-detection:** When `KeyColumns` is blank, DataTongs automatically detects the best key by querying the table's indexes. It selects the primary key if one exists. If there is no primary key, it falls back to the unique index with the fewest nullable columns. This handles the vast majority of tables without any manual configuration.
+**Auto-detection:** When `KeyColumns` is blank, DataTongs automatically detects the best key by querying the table's indexes. It selects the primary key if one exists. If there is no primary key, it falls back to the first available unique index. Nullable columns in the detected key are automatically prefixed with `*` for NULL-safe comparison. This handles the vast majority of tables without any manual configuration.
 
 **Manual override:** When you specify `KeyColumns`, DataTongs uses your list instead of auto-detection. Separate multiple columns with commas:
 
@@ -334,7 +334,7 @@ For change detection in the UPDATE clause, geography columns are compared using 
 
 ### Geometry Columns
 
-Geometry data is extracted as Well-Known Text (WKT) using `.ToString()`, with the SRID captured via `.STSrid`.
+Geometry data is extracted using `.ToString()` (WKT format) with the SRID captured via `.STSrid`. Note: extraction works correctly, but MERGE script restoration for geometry columns is not fully implemented — geography columns have complete round-trip support while geometry columns may require manual adjustment of the generated scripts.
 
 ### HierarchyID Columns
 
@@ -364,7 +364,7 @@ The following column types are automatically excluded from extraction and all ME
 |------|--------|
 | `sql_variant` | Cannot be reliably serialized to JSON and restored with full type fidelity. |
 | `rowversion` / `timestamp` | Server-managed binary values that are automatically assigned on insert and update. |
-| ROWGUIDCOL columns | Columns marked with the `ROWGUIDCOL` property are excluded from INSERT and UPDATE clauses. |
+| ROWGUIDCOL columns | Columns marked with the `ROWGUIDCOL` property are excluded from extraction and all MERGE clauses (SELECT, INSERT, UPDATE). |
 
 ---
 

@@ -10,13 +10,13 @@ For background on how the tools work, see the individual reference pages: [Schem
 
 Every SchemaSmith CLI tool writes two log files during each run:
 
-- **Progress log** (`ToolName - ProgressLog.log`) -- a step-by-step record of what the tool did. Start here.
-- **Error log** (`ToolName - ErrorLog.log`) -- detailed exception information when something fails. Check this for stack traces and SQL error details.
+- **Progress log** (`ToolName - Progress.log`) -- a step-by-step record of what the tool did. Start here.
+- **Error log** (`ToolName - Errors.log`) -- detailed exception information when something fails. Check this for stack traces and SQL error details.
 
 Logs are written to the tool's working directory by default. You can redirect them with `--LogPath`:
 
 ```
-SchemaQuench --LogPath /var/log/schemasmith
+SchemaQuench --LogPath:/var/log/schemasmith
 ```
 
 ### Numbered backup directories
@@ -171,7 +171,7 @@ See [SchemaTongs Reference](../reference/schematongs.md) for the full list of Sh
 **Cause:** SchemaTongs found `.sql` files in the template directory that do not correspond to any object in the live database. This usually means the object was dropped or renamed in the database since the last extraction.
 
 **Fix:** Review the listed files:
-- If the objects were intentionally removed from the database, the orphan files should be cleaned up. Set `OrphanHandling:Mode` to `DetectAndCleanup` to generate DROP scripts, or `DetectDeleteAndCleanup` to also delete the orphan files.
+- If the objects were intentionally removed from the database, the orphan files should be cleaned up. Set `OrphanHandling:Mode` to `DetectWithCleanupScripts` to generate DROP scripts, or `DetectDeleteAndCleanup` to also delete the orphan files.
 - If the objects should still exist, investigate why they are missing from the database.
 - Orphan detection is skipped when `ObjectList` is active, since a partial extraction cannot determine what is truly orphaned.
 

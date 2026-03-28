@@ -112,7 +112,8 @@ When SchemaQuench runs, `ProductQuencher.Quench()` executes these steps in order
 8. **Product After scripts** -- Executes scripts from the `After Product` folder.
 9. **Stamp product version** -- If `Product.VersionStampScript` is configured, executes it.
 10. **Log completion** -- Logs "Completed quench of {ProductName}".
-11. **Backup logs and exit** -- Copies log files to a numbered backup directory and exits with code 0.
+
+After `Quench()` returns, the calling program backs up log files to a numbered directory and exits with code 0 (see [Exit Codes](configuration.md#exit-codes)).
 
 ---
 
@@ -139,7 +140,7 @@ For each database identified by a template's `DatabaseIdentificationScript`, `Da
 17. **After scripts** -- Executes migration scripts from `MigrationScripts/After`. Sequential and tracked.
 18. **Stamp version** -- Executes `Template.VersionStampScript` if configured.
 
-When `UpdateTables` is `false`, steps 4 through 16 are skipped entirely. When `IndexOnlyTableQuenches` is enabled on a template, the full table quench sequence (steps 4-15) is replaced by a single call to `SchemaSmith.IndexOnlyQuench`, which manages indexes only.
+When `UpdateTables` is `false`, steps 4 through 16 are skipped entirely. When `IndexOnlyTableQuenches` is enabled on a template, steps 4–8 (ParseJson, MissingTableAndColumnQuench, second Objects pass, Before scripts, and ModifiedTableQuench) are replaced by a single call to `SchemaSmith.IndexOnlyQuench`. Steps 9–16 still execute, except that MissingIndexesAndConstraintsQuench (step 11) and ForeignKeyQuench (step 15) are individually skipped.
 
 ---
 
@@ -273,6 +274,7 @@ Migration scripts (scripts in the Before, BetweenTablesAndKeys, AfterTablesScrip
 | `ProductName` | The product name from `Product.json`. |
 | `QuenchSlot` | The slot the script belongs to (Before, BetweenTablesAndKeys, AfterTablesScripts, After). |
 | `ScriptPath` | The relative path of the script within the template. |
+| `QuenchDate` | Timestamp when the script was executed (`GETDATE()` at insertion). |
 
 ### Execution Rules
 
@@ -326,7 +328,7 @@ On the **final attempt** (the last pass when errors are reported), failures are 
 
 This mechanism allows scripts with interdependencies to coexist in the same folder without requiring a specific naming order. For example, if View B references View A, and View B is alphabetically first, it will fail on the first pass but succeed on the retry after View A has been created.
 
-The Objects slot gets three opportunities to resolve: before the table quench, after missing tables are created, and after table modifications are complete. This handles cases where a view or function references a table column that does not yet exist on the first pass.
+The Objects slot gets four opportunities to resolve: (1) before the table quench, (2) after missing tables are created, (3) after table modifications are complete, and (4) during the AfterTablesObjects pass alongside triggers. This handles cases where a view or function references a table column that does not yet exist on the first pass.
 
 ---
 

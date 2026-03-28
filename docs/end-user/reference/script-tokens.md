@@ -55,10 +55,10 @@ Tokens are replaced in every SQL context SchemaSmith processes:
 | `Functions/` | Template |
 | `Views/` | Template |
 | `Procedures/` | Template |
-| `Triggers/` | Template |
-| `DDLTriggers/` | Template |
 | `MigrationScripts/BetweenTablesAndKeys/` | Template |
 | `MigrationScripts/AfterTablesScripts/` | Template |
+| `Triggers/` | Template |
+| `DDLTriggers/` | Template |
 | `Table Data/` | Template |
 | `MigrationScripts/After/` | Template |
 

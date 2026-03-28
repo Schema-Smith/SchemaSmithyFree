@@ -164,7 +164,7 @@ SchemaSmith tools are self-contained executables. There is no SDK or runtime to 
 ```
 Pull Request Pipeline:
   1. Build/test application code
-  2. SchemaQuench --WhatIf against a disposable database
+  2. SchemaQuench with WhatIfONLY=true against a disposable database
      → Catches SQL errors, missing tokens, broken references
      → Fails the PR check if deployment would fail
 
@@ -225,25 +225,22 @@ SchemaQuench deploys scripts in a precise order. Understanding the execution slo
 
 | Order | Folder | Purpose |
 |---|---|---|
-| 1 | `MigrationScripts/Before/` | Pre-migration: rename columns, move data, prepare for schema changes |
-| 2 | `Schemas/` | Database schemas (dbo, sales, hr) |
-| 3 | `DataTypes/` | User-defined types |
-| 4 | `FullTextCatalogs/` | Full-text catalog definitions |
-| 5 | `FullTextStopLists/` | Full-text stop list definitions |
-| 6 | `XMLSchemaCollections/` | XML schema collections |
-| 7 | `Functions/` | User-defined functions |
-| 8 | `Views/` | Views |
-| 9 | `Procedures/` | Stored procedures |
-| 10 | `MigrationScripts/BetweenTablesAndKeys/` | Runs after tables exist but before foreign keys. Data transformations that need the new column structure. |
-| 11 | `MigrationScripts/AfterTablesScripts/` | Runs after tables and keys, before triggers. Post-structure cleanup. |
-| 12 | `Triggers/` | Table triggers |
-| 13 | `DDLTriggers/` | DDL triggers |
-| 14 | `Table Data/` | Reference data MERGE scripts (from DataTongs or hand-written) |
-| 15 | `MigrationScripts/After/` | Post-migration: final data fixes, cleanup, verification |
+| 1 | `Schemas/` through `Procedures/` | Programmable objects with dependency retry (schemas, types, catalogs, stop lists, XML collections, functions, views, procedures) |
+| 2 | _(Table creation)_ | New tables and columns created from table JSON |
+| 3 | `MigrationScripts/Before/` | Pre-modification migration: data preparation before columns are altered or dropped |
+| 4 | _(Table modification)_ | Existing tables altered to match JSON (column changes, index updates) |
+| 5 | `MigrationScripts/BetweenTablesAndKeys/` | Runs after table structure is final but before FK constraints. Data transformations that need the new column structure. |
+| 6 | _(Indexes and constraints)_ | Missing indexes, check constraints, default constraints, statistics |
+| 7 | `MigrationScripts/AfterTablesScripts/` | Runs after structure and indexes, before triggers. Post-structure cleanup. |
+| 8 | `Triggers/` and `DDLTriggers/` | Table triggers and DDL triggers with dependency retry |
+| 9 | `Table Data/` | Reference data MERGE scripts (from DataTongs or hand-written) |
+| 10 | _(Foreign keys)_ | Foreign key constraints applied after all data is in place |
+| 11 | _(Indexed views)_ | Indexed views created or updated |
+| 12 | `MigrationScripts/After/` | Post-migration: final data fixes, cleanup, verification |
 
 **Why BetweenTablesAndKeys exists:** When you split a table or restructure foreign keys, you need a window after the new tables are created but before SchemaSmith tries to create the foreign keys. This slot gives you that window to move data into the new structure so the FK constraints succeed.
 
-**Why AfterTablesScripts exists:** Sometimes you need to run scripts after the full table structure (including keys and indexes) is in place, but before triggers are enabled. Data backfills that must satisfy constraints but should not fire triggers go here.
+**Why AfterTablesScripts exists:** Sometimes you need to run scripts after indexes and constraints are in place but before triggers are enabled. Data backfills that must satisfy constraints but should not fire triggers go here.
 
 **When to use Product Before/After:** These run outside any template context — they execute against the server, not a specific database. Use them for cross-database operations, linked server setup, or anything that spans multiple templates.
 

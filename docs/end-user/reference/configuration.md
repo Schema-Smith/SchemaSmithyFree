@@ -38,7 +38,7 @@ Every SchemaSmith CLI tool recognizes these switches. They are processed before 
 
 | Switch | Aliases | Description |
 |---|---|---|
-| `--version` | `-v`, `--ver` | Print the tool name, edition, and version number, then exit. |
+| `--version` | `-v`, `--ver` | Print the tool name, platform, edition, and version number, then exit. |
 | `--help` | `-h`, `-?` | Print the available command-line switches, then exit. |
 | `--ConfigFile:<path>` | | Path to the settings file. Overrides the default `<ToolName>.settings.json`. |
 | `--LogPath:<path>` | | Directory for log files and backup subdirectories. Defaults to the tool's executable directory. |

@@ -12,13 +12,7 @@ SchemaHammer is included in the SchemaSmith distribution. Launch it from the com
 SchemaHammer
 ```
 
-You can also pass the path to a product directory directly:
-
-```bash
-SchemaHammer path/to/product
-```
-
-When launched without arguments, SchemaHammer opens the welcome screen. If you previously had a product open, it automatically reloads that product and restores your last-selected node.
+When launched, SchemaHammer opens the welcome screen. If you previously had a product open, it automatically reloads that product and restores your last-selected node.
 
 ---
 
@@ -47,8 +41,8 @@ The left panel displays the schema package as a hierarchical tree:
     - **Tables** -- Table definitions belonging to the template.
       - Columns, Indexes, Foreign Keys, Check Constraints, Statistics, XML Indexes, Full-Text Indexes
     - **Scripts** -- Migration script folders and individual script files.
-    - **Indexed Views** -- Indexed view definitions, structured similarly to tables.
-      - Columns, Indexes, Statistics
+    - **Indexed Views** -- Indexed view definitions.
+      - Indexes
 
 ### Lazy Loading
 
@@ -226,7 +220,7 @@ The button label switches between "Preview" and "Raw" to indicate the current st
 
 ## Token Navigation
 
-In any SQL script, `{{{TokenName}}}` placeholders appear as clickable links. Double-click a token to navigate directly to its definition:
+SchemaHammer can navigate from a `{{TokenName}}` reference in a SQL script to its definition in the Script Tokens tab. When token navigation is triggered:
 
 1. SchemaHammer checks the parent template's script tokens first.
 2. If the token is not defined at the template level, it falls back to the product's script tokens.
@@ -299,7 +293,7 @@ The find bar is read-only -- there is no replace function.
 
 ## Themes
 
-SchemaHammer ships with light and dark themes. Toggle between them via **View > Toggle Theme**. Your preference is saved and restored on the next launch.
+SchemaHammer ships with light and dark themes. Toggle between them via **Tools > Toggle Theme**. Your preference is saved and restored on the next launch.
 
 ---
 

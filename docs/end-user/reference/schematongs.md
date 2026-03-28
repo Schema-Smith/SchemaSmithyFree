@@ -130,7 +130,7 @@ The `--ConnectionString` switch bypasses all `Source` settings entirely. When pr
 | `Product:Path` | string | _(required)_ | Directory where the schema package is created or updated. |
 | `Product:Name` | string | _(directory name)_ | Product name written to `Product.json`. If blank, defaults to the last segment of `Product:Path`. |
 | `Product:CheckConstraintStyle` | string | `ColumnLevel` | Controls how check constraints are written when creating a new `Product.json`. See [CheckConstraintStyle](#checkconstraintstyle). |
-| `Template:Name` | string | `"Default"` | Template name. Creates the template directory under `Templates/<Name>/`. |
+| `Template:Name` | string | Source database name | Template name. Creates the template directory under `Templates/<Name>/`. Defaults to the `Source:Database` value when not specified. |
 
 ---
 
@@ -315,17 +315,17 @@ New objects always appear in the root of their folder. Move them into subfolders
 When SchemaTongs runs against a path that does not yet contain a schema package, it creates the full structure:
 
 1. Creates the product directory at `Product:Path`.
-2. Generates `Product.json` with the configured product name and a `Platform` of `"MSSQL"`.
+2. Generates `Product.json` with the configured product name and a `Platform` of `"SqlServer"`.
 3. Creates the template directory under `Templates/<TemplateName>/`.
 4. Generates `Template.json` with a `DatabaseIdentificationScript` targeting the source database.
 5. Creates all standard script folders: `Tables/`, `Schemas/`, `DataTypes/`, `Functions/`, `Views/`, `Procedures/`, `Triggers/`, `FullTextCatalogs/`, `FullTextStopLists/`, `DDLTriggers/`, `XMLSchemaCollections/`, `Indexed Views/`, `Table Data/`, and `MigrationScripts/` (with `Before/`, `After/`, `AfterTablesScripts/`, and `BetweenTablesAndKeys/` subdirectories).
-6. Creates a `.json-schemas/` directory with JSON schema validation files for Product, Template, and Table JSON formats.
+6. Creates a `.json-schemas/` directory with JSON schema validation files for Product, Template, Table, and Indexed View JSON formats.
 
 On subsequent runs against an existing package, SchemaTongs overwrites object scripts and table definitions with the current database state. It does not modify `Product.json` or `Template.json`.
 
 ### Helper Stored Procedures
 
-On every run, SchemaTongs deploys (or updates) two stored procedures in the source database under the `SchemaSmith` schema:
+On every run, SchemaTongs deploys (or updates) a stored procedure and a scalar function in the source database under the `SchemaSmith` schema:
 
 - `SchemaSmith.GenerateTableJSON` -- Generates the JSON representation of a table's full structure.
 - `SchemaSmith.GenerateIndexedViewJson` -- Generates the JSON representation of an indexed view.

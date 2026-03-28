@@ -183,15 +183,18 @@ SchemaQuench follows a clear sequence when deploying a schema package:
 
 The execution slots give you precise control over ordering when it matters. Within a single template, changes execute in this sequence:
 
-1. Before migration scripts
-2. Programmable objects (schemas, types, functions, views, procedures)
-3. Table structure changes (columns, indexes)
-4. Between-tables-and-keys migration scripts
-5. Foreign keys and constraints
-6. After-tables migration scripts
-7. After-tables objects (triggers, DDL triggers)
-8. Table data (MERGE scripts)
-9. After migration scripts
+1. Programmable objects (schemas, types, functions, views, procedures) — with dependency retry
+2. New tables and columns created
+3. Before migration scripts
+4. Existing table modifications (column type changes, index updates)
+5. Between-tables-and-keys migration scripts
+6. Missing indexes and constraints
+7. After-tables migration scripts
+8. Triggers and DDL triggers
+9. Table data (MERGE scripts)
+10. Foreign key constraints
+11. Indexed views
+12. After migration scripts
 
 Most of the time you do not think about slots — tables and objects just deploy correctly. The migration script slots exist for cases where you need to run something at a specific point in the sequence, like populating data before a NOT NULL constraint takes effect.
 
