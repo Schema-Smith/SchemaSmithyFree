@@ -103,20 +103,20 @@ Define tokens in `Template.json` under the `ScriptTokens` property. Template tok
 }
 ```
 
-Within the Reporting template, `{{MainDB}}` resolves to `ReportingAlias` instead of whatever the product defined. The `{{SchemaOwner}}` token is available only within this template. Other templates and product-level scripts are not affected.
+Within the Reporting template, `{{MainDB}}` resolves to `ReportingAlias` instead of whatever the product defined. The `{{SchemaOwner}}` token is available only within this template. Other templates and product-level scripts aren't affected.
 
 ---
 
 ## Automatic Tokens
 
-SchemaSmith adds two tokens automatically. You do not need to define them.
+SchemaSmith adds two tokens automatically. You don't need to define them.
 
 | Token | Value | Available in |
 |---|---|---|
 | `{{ProductName}}` | The `Name` from `Product.json` | All product and template scripts |
 | `{{TemplateName}}` | The `Name` from `Template.json` | Template scripts only |
 
-`ProductName` is added after config/environment overrides are applied, so it always reflects the product name from the package (it cannot be overridden via config).
+`ProductName` is added after config/environment overrides are applied, so it always reflects the product name from the package (it can't be overridden via config).
 
 `TemplateName` is added after template tokens are merged, so it always reflects the current template's name.
 
@@ -148,7 +148,7 @@ Add a `ScriptTokens` section to your tool's settings file (e.g., `SchemaQuench.s
 }
 ```
 
-Config overrides only apply to tokens that **already exist** in `Product.json`. You cannot introduce new tokens via configuration alone.
+Config overrides only apply to tokens that **already exist** in `Product.json`. You can't introduce new tokens via configuration alone.
 
 ---
 
@@ -201,7 +201,7 @@ When the same token name appears in multiple places, the most specific definitio
 4. When each template loads, its `ScriptTokens` are merged on top of the resolved product tokens. Template tokens with matching keys win.
 5. The automatic `TemplateName` token is added.
 
-Config and environment overrides apply at the product level only. They do not directly override template-level tokens. However, since template tokens take priority over product tokens, a template token will still win over a config/environment override for the same key.
+Config and environment overrides apply at the product level only. They don't directly override template-level tokens. However, since template tokens take priority over product tokens, a template token will still win over a config/environment override for the same key.
 
 ---
 

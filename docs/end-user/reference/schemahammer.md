@@ -46,7 +46,7 @@ The left panel displays the schema package as a hierarchical tree:
 
 ### Lazy Loading
 
-Tables and indexed views do not load their child nodes (columns, indexes, foreign keys, etc.) until you expand them. This keeps the tree responsive when opening large products with hundreds of tables. Once expanded, children remain loaded for the rest of the session.
+Tables and indexed views don't load their child nodes (columns, indexes, foreign keys, etc.) until you expand them. This keeps the tree responsive when opening large products with hundreds of tables. Once expanded, children remain loaded for the rest of the session.
 
 ### Selecting Nodes
 
@@ -223,7 +223,7 @@ The button label switches between "Preview" and "Raw" to indicate the current st
 SchemaHammer can navigate from a `{{TokenName}}` reference in a SQL script to its definition in the Script Tokens tab. When token navigation is triggered:
 
 1. SchemaHammer checks the parent template's script tokens first.
-2. If the token is not defined at the template level, it falls back to the product's script tokens.
+2. If the token isn't defined at the template level, it falls back to the product's script tokens.
 3. The corresponding Product or Template editor opens with the **Script Tokens** tab selected and the matching token highlighted.
 
 This makes it fast to trace where a value comes from when reading migration scripts.
@@ -234,7 +234,7 @@ This makes it fast to trace where a value comes from when reading migration scri
 
 When a product has hundreds of tables, scrolling through the tree gets old fast. Tree search filters the product tree by object name.
 
-**Open:** Press **Ctrl+F** (when the SQL editor is not focused) or go to **Search > Search Tree**.
+**Open:** Press **Ctrl+F** (when the SQL editor isn't focused) or go to **Search > Search Tree**.
 
 | Setting | Behavior |
 |---------|----------|
@@ -281,7 +281,7 @@ When a SQL script is open and focused, press **Ctrl+F** to open the find bar at 
 | **Match count** | Displays current position and total (e.g., "3 of 12") |
 | **Escape** | Close the find bar |
 
-The find bar is read-only -- there is no replace function.
+The find bar is read-only -- there's no replace function.
 
 ---
 

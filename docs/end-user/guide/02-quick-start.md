@@ -1,6 +1,6 @@
 # Quick Start
 
-In the next 15 minutes, you will extract a real database into version-controlled files, browse those files visually, deploy them to a fresh empty database, make a schema change, and watch SchemaSmith compute the exact ALTER script to bring the target in line. By the end, you will have completed the full SchemaSmith cycle — and you'll understand why teams stop writing migration scripts once they've seen this.
+In the next 15 minutes, you'll extract a real database into version-controlled files, browse those files visually, deploy them to a fresh empty database, make a schema change, and watch SchemaSmith compute the exact ALTER script to bring the target in line. By the end, you'll have completed the full SchemaSmith cycle — and you'll understand why teams stop writing migration scripts once they've seen this.
 
 ## Prerequisites
 
@@ -117,7 +117,7 @@ my-northwind/
 
 Every table is a JSON file describing its columns, indexes, and constraints. Every stored procedure and view is a plain SQL file. This is your entire database — materialized as readable, diffable, reviewable source files. Commit this to Git and you have a complete history of every schema change from this point forward. For the full set of extraction options, see the [SchemaTongs Reference](../reference/schematongs.md).
 
-That's the cast — a live database, captured in files you can read, review, and version.
+That's the cast. A live database, captured in files you can read, review, and version.
 
 ## Step 3: Explore with SchemaHammer
 
@@ -135,7 +135,7 @@ No server connection needed -- SchemaHammer reads the files directly. Take a min
 
 ## Step 4: Quench with SchemaQuench
 
-Here is where it gets powerful. Let's deploy — quench — the Northwind schema to a completely empty database on the same server. Your declared state is about to harden into a live database. Create a SchemaQuench configuration file called `quench-deploy.json`:
+Here's where it gets powerful. Let's deploy — quench — the Northwind schema to a completely empty database on the same server. Your declared state is about to harden into a live database. Create a SchemaQuench configuration file called `quench-deploy.json`:
 
 ```json
 {
@@ -152,7 +152,7 @@ Here is where it gets powerful. Let's deploy — quench — the Northwind schema
 }
 ```
 
-Notice the `ScriptTokens` section: we are telling SchemaQuench to use `NorthwindClone` as the database name instead of `Northwind`. The `{{NorthwindDb}}` token in the template's scripts will resolve to this value, creating a brand-new database. You will learn more about tokens in [Core Concepts](03-core-concepts.md), and the full token system is documented in the [Script Tokens Reference](../reference/script-tokens.md).
+Notice the `ScriptTokens` section: we're telling SchemaQuench to use `NorthwindClone` as the database name instead of `Northwind`. The `{{NorthwindDb}}` token in the template's scripts will resolve to this value, creating a brand-new database. You'll learn more about tokens in [Core Concepts](03-core-concepts.md), and the full token system is documented in the [Script Tokens Reference](../reference/script-tokens.md).
 
 Run the deployment:
 
@@ -160,7 +160,7 @@ Run the deployment:
 SchemaQuench --ConfigFile:quench-deploy.json
 ```
 
-SchemaQuench reads the schema package, connects to the target server, and builds the entire database from scratch: creates `NorthwindClone`, runs migration scripts, creates all 13 tables with their columns and indexes, deploys all views and stored procedures. A complete, reproducible database from source files. Connect to `localhost,1450` with any SQL client and you will find `NorthwindClone` with the full Northwind schema.
+SchemaQuench reads the schema package, connects to the target server, and builds the entire database from scratch: creates `NorthwindClone`, runs migration scripts, creates all 13 tables with their columns and indexes, deploys all views and stored procedures. A complete, reproducible database from source files. Connect to `localhost,1450` with any SQL client and you'll find `NorthwindClone` with the full Northwind schema.
 
 One package. One command. A complete database — built exactly as declared, every time. That's what quenching looks like.
 
@@ -168,7 +168,7 @@ One package. One command. A complete database — built exactly as declared, eve
 
 Now for the real satisfaction. Let's modify the schema and watch SchemaSmith figure out exactly what needs to change.
 
-Open `demo/Northwind/Templates/Northwind/Tables/dbo.Shippers.json`. Here is what it looks like right now:
+Open `demo/Northwind/Templates/Northwind/Tables/dbo.Shippers.json`. Here's what it looks like right now:
 
 ```json
 {
@@ -264,7 +264,7 @@ Save this as `quench-whatif.json` and run:
 SchemaQuench --ConfigFile:quench-whatif.json
 ```
 
-In the output, you will see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live database (which has no Email column) and determined that an ALTER TABLE ADD is needed. No changes were applied -- WhatIf mode is read-only. Preview before you commit. Confidence before you deploy.
+In the output, you'll see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live database (which has no Email column) and determined that an ALTER TABLE ADD is needed. No changes were applied -- WhatIf mode is read-only. Preview before you commit. Confidence before you deploy.
 
 Now apply it for real. Change `"WhatIfONLY": true` to `"WhatIfONLY": false` (or use the `quench-deploy.json` from Step 4 with `"NorthwindDb": "Northwind"`) and run again:
 
@@ -276,7 +276,7 @@ SchemaQuench connects to the Northwind database, sees that `dbo.Shippers` is mis
 
 ## Step 6: See It in SchemaHammer
 
-Open SchemaHammer again (or press **F5** if it is still open to reload the tree):
+Open SchemaHammer again (or press **F5** if it's still open to reload the tree):
 
 ```bash
 SchemaHammer demo/Northwind

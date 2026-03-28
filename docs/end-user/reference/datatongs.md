@@ -83,7 +83,7 @@ When `--ConnectionString` is provided, all `Source` keys are ignored.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `OutputPath` | string | `"."` | Directory where generated MERGE scripts are written. Created automatically if it does not exist. |
+| `OutputPath` | string | `"."` | Directory where generated MERGE scripts are written. Created automatically if it doesn't exist. |
 
 ### Tables Array
 
@@ -112,13 +112,13 @@ export SmithySettings_ShouldCast__MergeDelete="false"
 export SmithySettings_OutputPath="/output/scripts"
 ```
 
-The `Tables` array cannot be configured via environment variables -- use the JSON configuration file for table definitions.
+The `Tables` array can't be configured via environment variables -- use the JSON configuration file for table definitions.
 
 ---
 
 ## MERGE Script Anatomy
 
-Understanding the generated output helps when you need to troubleshoot or customize. Each generated file contains a single, self-contained MERGE statement. Here is the full structure, using the Northwind `Shippers` table as an example:
+Understanding the generated output helps when you need to troubleshoot or customize. Each generated file contains a single, self-contained MERGE statement. Here's the full structure, using the Northwind `Shippers` table as an example:
 
 ```sql
 DECLARE @v_json NVARCHAR(MAX) = '[
@@ -182,7 +182,7 @@ ALTER TABLE [dbo].[Shippers] ENABLE TRIGGER ALL;       -- if DisableTriggers
 
 7. **`WHEN NOT MATCHED`** -- Inserts rows that exist in the source but not in the target.
 
-8. **`WHEN NOT MATCHED BY SOURCE`** -- Deletes rows that exist in the target but not in the source. When a `Filter` is configured, the delete clause includes the filter condition so that rows outside the filter are not affected.
+8. **`WHEN NOT MATCHED BY SOURCE`** -- Deletes rows that exist in the target but not in the source. When a `Filter` is configured, the delete clause includes the filter condition so that rows outside the filter aren't affected.
 
 9. **Identity and trigger cleanup** -- Reverses the preamble.
 
@@ -200,13 +200,13 @@ Specify tables in `schema.table` format. If you omit the schema, `dbo` is assume
 { "Name": "Products" }              // treated as dbo.Products
 ```
 
-DataTongs validates that each table exists in the source database before attempting extraction. Tables that do not exist are skipped with an error message.
+DataTongs validates that each table exists in the source database before attempting extraction. Tables that don't exist are skipped with an error message.
 
 ### Key Columns
 
 Key columns define the MERGE `ON` clause -- they determine how source rows are matched to target rows.
 
-**Auto-detection:** When `KeyColumns` is blank, DataTongs automatically detects the best key by querying the table's indexes. It selects the primary key if one exists. If there is no primary key, it falls back to the first available unique index. Nullable columns in the detected key are automatically prefixed with `*` for NULL-safe comparison. This handles the vast majority of tables without any manual configuration.
+**Auto-detection:** When `KeyColumns` is blank, DataTongs automatically detects the best key by querying the table's indexes. It selects the primary key if one exists. If there's no primary key, it falls back to the first available unique index. Nullable columns in the detected key are automatically prefixed with `*` for NULL-safe comparison. This handles the vast majority of tables without any manual configuration.
 
 **Manual override:** When you specify `KeyColumns`, DataTongs uses your list instead of auto-detection. Separate multiple columns with commas:
 
@@ -289,7 +289,7 @@ When enabled, the MERGE includes a `WHEN MATCHED` clause that updates existing r
 
 **Default:** `true`
 
-When enabled, the MERGE includes a `WHEN NOT MATCHED BY SOURCE` clause that deletes rows from the target that do not exist in the source data. When a `Filter` is configured, the delete clause includes the filter condition:
+When enabled, the MERGE includes a `WHEN NOT MATCHED BY SOURCE` clause that deletes rows from the target that don't exist in the source data. When a `Filter` is configured, the delete clause includes the filter condition:
 
 ```sql
 WHEN NOT MATCHED BY SOURCE AND (IsActive = 1) THEN
@@ -328,7 +328,7 @@ SET IDENTITY_INSERT [schema].[table] ON;
 SET IDENTITY_INSERT [schema].[table] OFF;
 ```
 
-Identity columns are included in the `INSERT` clause (so rows retain their original identity values) but excluded from the `UPDATE SET` clause (identity values cannot be updated).
+Identity columns are included in the `INSERT` clause (so rows retain their original identity values) but excluded from the `UPDATE SET` clause (identity values can't be updated).
 
 ### Computed Columns
 
@@ -351,7 +351,7 @@ For change detection in the UPDATE clause, geography columns are compared using 
 
 ### Geometry Columns
 
-Geometry data is extracted using `.ToString()` (WKT format) with the SRID captured via `.STSrid`. Note: extraction works correctly, but MERGE script restoration for geometry columns is not fully implemented — geography columns have complete round-trip support while geometry columns may require manual adjustment of the generated scripts.
+Geometry data is extracted using `.ToString()` (WKT format) with the SRID captured via `.STSrid`. Note: extraction works correctly, but MERGE script restoration for geometry columns isn't fully implemented — geography columns have complete round-trip support while geometry columns may require manual adjustment of the generated scripts.
 
 ### HierarchyID Columns
 
@@ -359,7 +359,7 @@ Extracted as a canonical string representation using `.ToString()`. The OPENJSON
 
 ### XML Columns
 
-XML columns are mapped through OPENJSON using their native XML type (preserving any XML schema collection binding). For change detection in the UPDATE clause, both source and target values are cast to `NVARCHAR(MAX)` before comparison, since XML does not support direct equality.
+XML columns are mapped through OPENJSON using their native XML type (preserving any XML schema collection binding). For change detection in the UPDATE clause, both source and target values are cast to `NVARCHAR(MAX)` before comparison, since XML doesn't support direct equality.
 
 ### NTEXT Columns
 
@@ -379,7 +379,7 @@ The following column types are automatically excluded from extraction and all ME
 
 | Type | Reason |
 |------|--------|
-| `sql_variant` | Cannot be reliably serialized to JSON and restored with full type fidelity. |
+| `sql_variant` | Can't be reliably serialized to JSON and restored with full type fidelity. |
 | `rowversion` / `timestamp` | Server-managed binary values that are automatically assigned on insert and update. |
 | ROWGUIDCOL columns | Columns marked with the `ROWGUIDCOL` property are excluded from extraction and all MERGE clauses (SELECT, INSERT, UPDATE). |
 
@@ -430,7 +430,7 @@ Table and schema names containing characters that are illegal in file names (suc
 
 ### Output Directory
 
-Files are written to the directory specified by `OutputPath`. The directory is created automatically if it does not exist. The typical placement is a schema package's `Table Data` folder:
+Files are written to the directory specified by `OutputPath`. The directory is created automatically if it doesn't exist. The typical placement is a schema package's `Table Data` folder:
 
 ```json
 "OutputPath": "C:\\SchemaPackage\\Templates\\Main\\Table Data"

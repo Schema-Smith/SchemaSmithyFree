@@ -46,7 +46,7 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
 | `WhatIfONLY` | bool | `false` | Dry-run mode. Table quench generates SQL without executing. Script slots are logged but not executed. |
 | `KindleTheForge` | bool | `true` | Deploy SchemaSmith helper procedures and the migration tracking table to each target database before quenching. |
 | `UpdateTables` | bool | `true` | Apply table structure changes (columns, indexes, constraints, foreign keys) from the schema package. |
-| `DropTablesRemovedFromProduct` | bool | `true` | Drop tables that exist in the database but are not defined in the schema package. |
+| `DropTablesRemovedFromProduct` | bool | `true` | Drop tables that exist in the database but aren't defined in the schema package. |
 | `RunScriptsTwice` | bool | `false` | Run object scripts twice to verify idempotency. A CI/testing tool, not for production. |
 | `TrackRunOnceMigrations` | bool | `true` | Track run-once migration scripts in `CompletedMigrationScripts`. When `false`, all scripts run on every deployment (like `[ALWAYS]`). Designed for datafix and patch pipelines. |
 | `PruneObsoleteMigrationTracking` | bool | `true` | Remove tracking entries for scripts no longer in the package. When `false`, existing entries are preserved. Ignored when `TrackRunOnceMigrations` is `false`. |
@@ -188,14 +188,14 @@ See exactly what SchemaQuench would do before it touches a single table. Set `Wh
 - **Validation scripts** execute normally (server validation, baseline validation).
 - **Table quench procedures** run with `@WhatIf = 1`, generating the SQL that would be executed and logging it without applying changes.
 - **Migration scripts** (Before, BetweenTablesAndKeys, AfterTablesScripts, After) show detailed status for each script:
-  - `Would APPLY: {script}` for scripts that have not yet been tracked.
+  - `Would APPLY: {script}` for scripts that haven't yet been tracked.
   - `Would SKIP (previously quenched): {script}` for scripts already recorded in `CompletedMigrationScripts`.
 - **Object scripts** (Objects, AfterTablesObjects, Table Data) are logged but not executed.
 - **Product Before/After scripts** are logged but not executed.
 
-**Important limitation:** WhatIf shows the top level of changes, not the full cascade. Because nothing actually executes, WhatIf cannot show ripple effects that depend on earlier changes having been applied. For example, if an object script drops an index, that script does not run in WhatIf mode, so the index still exists when WhatIf analyzes table changes — meaning the table diff will not show the index as needing to be recreated. WhatIf is a confidence check, not a guarantee. It catches the majority of issues but the full deployment may produce additional changes that WhatIf could not predict.
+**Important limitation:** WhatIf shows the top level of changes, not the full cascade. Because nothing actually executes, WhatIf can't show ripple effects that depend on earlier changes having been applied. For example, if an object script drops an index, that script doesn't run in WhatIf mode, so the index still exists when WhatIf analyzes table changes — meaning the table diff won't show the index as needing to be recreated. WhatIf is a confidence check, not a guarantee. It catches the majority of issues but the full deployment may produce additional changes that WhatIf couldn't predict.
 
-- **Version stamp scripts** are not executed; a log message indicates the stamp would occur.
+- **Version stamp scripts** aren't executed; a log message indicates the stamp would occur.
 
 ### Debug SQL Output
 
@@ -226,7 +226,7 @@ SmithySettings_WhatIfONLY=true SchemaQuench
 
 | Environment | Guidance |
 |-------------|----------|
-| Development | Optional — quench directly if you are comfortable with the changes. |
+| Development | Optional — quench directly if you're comfortable with the changes. |
 | Staging | Recommended — review WhatIf output to catch surprises before production-like data. |
 | Production | Non-negotiable — always WhatIf first, read the generated SQL, then deploy in a separate run. |
 
@@ -246,7 +246,7 @@ Before SchemaQuench can shape your database, it needs its tools in place. Kindle
 
 KindleTheForge runs on every quench to ensure the helper procedures match the version of SchemaQuench being used. In a normal release pipeline, always leave this `true`.
 
-**When to set false — the datafix pipeline:** When the deployment user has read/write access but no DDL modification ability, and you are running only migration scripts to fix data. Turning off KindleTheForge (along with `UpdateTables: false` and `DropTablesRemovedFromProduct: false`) reduces the scope of what executes and the permissions required. This is a deliberate permission boundary — data fixes should not make structural changes that the next full release would overwrite or conflict with.
+**When to set false — the datafix pipeline:** When the deployment user has read/write access but no DDL modification ability, and you're running only migration scripts to fix data. Turning off KindleTheForge (along with `UpdateTables: false` and `DropTablesRemovedFromProduct: false`) reduces the scope of what executes and the permissions required. This is a deliberate permission boundary — data fixes shouldn't make structural changes that the next full release would overwrite or conflict with.
 
 ---
 
@@ -260,7 +260,7 @@ Not a stored procedure but an inline SQL script. Parses the table JSON definitio
 
 ### SchemaSmith.MissingTableAndColumnQuench
 
-Creates tables that exist in the schema package but not in the database. Adds columns that exist in the table definition but are missing from the existing table. Does not modify existing columns -- that is handled by `ModifiedTableQuench`.
+Creates tables that exist in the schema package but not in the database. Adds columns that exist in the table definition but are missing from the existing table. Doesn't modify existing columns -- that's handled by `ModifiedTableQuench`.
 
 ### SchemaSmith.ModifiedTableQuench
 
@@ -272,11 +272,11 @@ Creates indexes, check constraints, default constraints, and statistics that exi
 
 ### SchemaSmith.ForeignKeyQuench
 
-Creates foreign keys defined in the schema package that are missing from the database. Drops foreign keys that exist in the database but are not defined in the schema package (for tables managed by the product). Runs late in the sequence so that all referenced tables and columns exist.
+Creates foreign keys defined in the schema package that are missing from the database. Drops foreign keys that exist in the database but aren't defined in the schema package (for tables managed by the product). Runs late in the sequence so that all referenced tables and columns exist.
 
 ### SchemaSmith.IndexOnlyQuench
 
-An alternative to the full table quench sequence. When `IndexOnlyTableQuenches` is enabled on a template, this single procedure replaces the `MissingTableAndColumnQuench` / `ModifiedTableQuench` / `MissingIndexesAndConstraintsQuench` / `ForeignKeyQuench` sequence. It manages indexes only -- it does not create tables, add columns, or manage foreign keys.
+An alternative to the full table quench sequence. When `IndexOnlyTableQuenches` is enabled on a template, this single procedure replaces the `MissingTableAndColumnQuench` / `ModifiedTableQuench` / `MissingIndexesAndConstraintsQuench` / `ForeignKeyQuench` sequence. It manages indexes only -- it doesn't create tables, add columns, or manage foreign keys.
 
 ### SchemaSmith.IndexedViewQuench
 
@@ -299,7 +299,7 @@ SchemaQuench remembers what it has already run, so you never have to worry about
 
 - On each quench run, SchemaQuench checks which scripts in each slot have already been recorded.
 - Scripts that appear in the tracking table are skipped.
-- Scripts that do not appear are executed, and on success, a tracking entry is inserted.
+- Scripts that don't appear are executed, and on success, a tracking entry is inserted.
 
 ### The [ALWAYS] Suffix
 
@@ -347,7 +347,7 @@ On the **final attempt** (the last pass when errors are reported), failures are 
 
 This mechanism allows scripts with interdependencies to coexist in the same folder without requiring a specific naming order. For example, if View B references View A, and View B is alphabetically first, it will fail on the first pass but succeed on the retry after View A has been created.
 
-The Objects slot gets four opportunities to resolve: (1) before the table quench, (2) after missing tables are created, (3) after table modifications are complete, and (4) during the AfterTablesObjects pass alongside triggers. This handles cases where a view or function references a table column that does not yet exist on the first pass.
+The Objects slot gets four opportunities to resolve: (1) before the table quench, (2) after missing tables are created, (3) after table modifications are complete, and (4) during the AfterTablesObjects pass alongside triggers. This handles cases where a view or function references a table column that doesn't yet exist on the first pass.
 
 ---
 
@@ -356,13 +356,13 @@ The Objects slot gets four opportunities to resolve: (1) before the table quench
 When `DropTablesRemovedFromProduct` is `true` (the default), the `ModifiedTableQuench` procedure drops tables that:
 
 - Exist in the target database.
-- Are not defined in any table JSON file in the schema package.
+- Aren't defined in any table JSON file in the schema package.
 - Were previously managed by this product.
 
 This keeps the database clean as tables are removed from the schema package over time.
 
 **Environment guidance:**
-- **CI and local dev** — `true`. Catch product areas that reference tables you plan to remove. Fail fast in disposable environments where data loss does not matter.
+- **CI and local dev** — `true`. Catch product areas that reference tables you plan to remove. Fail fast in disposable environments where data loss doesn't matter.
 - **Test/staging** — `true`. Same rationale, but verify the drop is intentional before promoting to production.
 - **Production** — Often `false`. Dropping a table is a hard drop with no built-in recovery. Teams that need rollback-friendly deployments should leave this off in production. Instead, craft specialized migration scripts to rename or archive the table for a retention period before the actual drop.
 

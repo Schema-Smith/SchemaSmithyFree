@@ -1,6 +1,6 @@
 # Rollback and Recovery
 
-What if rolling back a database change was as simple as deploying the previous version? With state-based deployments, it is. Deploy the prior release's schema package, and SchemaQuench computes the delta to bring the database back to that state. No rollback scripts. No pre-planned undo steps. The same tool that deploys forward also deploys backward.
+What if rolling back a database change was as simple as deploying the previous version? With state-based deployments, it's exactly that. Deploy the prior release's schema package, and SchemaQuench computes the delta to bring the database back to that state. No rollback scripts. No pre-planned undo steps. The same tool that deploys forward also deploys backward.
 
 ## What rolls back automatically
 
@@ -33,7 +33,7 @@ While schema structure reverts automatically, **data preservation** for destruct
 | **Table drops with data** | Tables removed from your product definition are dropped. Use migration scripts to preserve data before rollback. |
 | **Data transformations** | Complex data migrations (splitting columns, merging tables) require migration scripts to transform data appropriately during rollback. |
 
-Most rollbacks do not require migration scripts. Data preservation is only needed when rolling back involves data loss — either from columns added in the newer release, or when restoring data that was dropped. The declarative model handles structure; you handle data when the operation is destructive.
+Most rollbacks don't require migration scripts. Data preservation is only needed when rolling back involves data loss — either from columns added in the newer release, or when restoring data that was dropped. The declarative model handles structure; you handle data when the operation is destructive.
 
 ## How to roll back a release
 
@@ -65,7 +65,7 @@ Most rollbacks do not require migration scripts. Data preservation is only neede
 
 **Document data dependencies.** When adding columns or tables that will contain important data, document whether rollback requires data preservation scripts. Include this in your release notes.
 
-**Test rollbacks regularly.** Practice rollback procedures in dev or staging. When you need to roll back production, you will already know the process works.
+**Test rollbacks regularly.** Practice rollback procedures in dev or staging. When you need to roll back production, you'll already know the process works.
 
 **Back up before major rollbacks.** For significant rollbacks, take a database backup first. This gives you a safety net if you discover unexpected data dependencies after the rollback completes.
 
@@ -73,4 +73,4 @@ Most rollbacks do not require migration scripts. Data preservation is only neede
 
 ---
 
-Rollback is the safety net that makes forward progress possible. When you know you can go back, you move forward with confidence. Now let's look at the power features that make SchemaSmith scale — tokens, multi-database products, reference data, and execution slot mastery. [Power Workflows](09-power-workflows.md)
+Rollback is the safety net that makes forward progress possible. Know you can go back, move forward with confidence. Now let's look at the power features that make SchemaSmith scale — tokens, multi-database products, reference data, and execution slots. [Power Workflows](09-power-workflows.md)
