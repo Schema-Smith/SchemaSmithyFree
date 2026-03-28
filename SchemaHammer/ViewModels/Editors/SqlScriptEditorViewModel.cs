@@ -91,7 +91,7 @@ public partial class SqlScriptEditorViewModel : EditorBaseViewModel
         var tokens = CollectScriptTokens();
         foreach (var (key, value) in tokens)
         {
-            content = content.Replace($"{{{{{{{key}}}}}}}", value);
+            content = content.Replace($"{{{{{{{key}}}}}}}", value, StringComparison.OrdinalIgnoreCase);
         }
         return content;
     }
