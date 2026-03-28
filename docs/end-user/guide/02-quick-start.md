@@ -83,7 +83,7 @@ Now let's go the other direction. Pretend you have a database and want to bring 
 Run the extraction:
 
 ```bash
-SchemaTongs --settings tongs-extract.json
+SchemaTongs --ConfigFile:tongs-extract.json
 ```
 
 Look at what appeared in the `my-northwind/` folder. You now have a complete schema package:
@@ -155,7 +155,7 @@ Notice the `ScriptTokens` section: we are telling SchemaQuench to use `Northwind
 Run the deployment:
 
 ```bash
-SchemaQuench --settings quench-deploy.json
+SchemaQuench --ConfigFile:quench-deploy.json
 ```
 
 SchemaQuench reads the schema package, connects to the target server, and builds the entire database from scratch: creates `NorthwindClone`, runs migration scripts, creates all 13 tables with their columns and indexes, deploys all views and stored procedures. A complete, reproducible database from source files. Connect to `localhost,1450` with any SQL client and you will find `NorthwindClone` with the full Northwind schema.
@@ -259,7 +259,7 @@ Now let's see what SchemaSmith will do -- without actually touching the database
 Save this as `quench-whatif.json` and run:
 
 ```bash
-SchemaQuench --settings quench-whatif.json
+SchemaQuench --ConfigFile:quench-whatif.json
 ```
 
 In the output, you will see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live database (which has no Email column) and determined that an ALTER TABLE ADD is needed. No changes were applied -- WhatIf mode is read-only.
@@ -267,7 +267,7 @@ In the output, you will see `[WhatIf]` entries showing the computed changes. Sch
 Now apply it for real. Change `"WhatIfONLY": true` to `"WhatIfONLY": false` (or use the `quench-deploy.json` from Step 4 with `"NorthwindDb": "Northwind"`) and run again:
 
 ```bash
-SchemaQuench --settings quench-deploy.json
+SchemaQuench --ConfigFile:quench-deploy.json
 ```
 
 SchemaQuench connects to the Northwind database, sees that `dbo.Shippers` is missing the `[Email]` column, and adds it. Every other table, view, and procedure is already in sync, so nothing else changes. Exactly the right delta, computed automatically.
