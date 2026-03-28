@@ -77,7 +77,7 @@ For the full exit code reference, see [Configuration Reference -- Exit Codes](..
 }
 ```
 
-This gives object scripts an additional full pass before tables are created, which can resolve ordering issues when objects depend on each other across the table-creation boundary. For more on this feature, see [Edge Cases -- RunScriptsTwice](06-edge-cases.md#runscriptstwice).
+This gives object scripts an additional full pass before tables are created, which can resolve ordering issues when objects depend on each other across the table-creation boundary. For more on this feature, see [Edge Cases -- RunScriptsTwice](10-edge-cases.md#runscriptstwice).
 
 ### Foreign key errors during deployment
 
@@ -85,7 +85,7 @@ This gives object scripts an additional full pass before tables are created, whi
 
 **Cause:** Foreign keys are applied after table modifications. If you need to run data migration scripts between table changes and foreign key creation, the `BetweenTablesAndKeys` migration slot is exactly the right tool for the job.
 
-**Fix:** Place your data fixup or migration scripts in the `MigrationScripts/BetweenTablesAndKeys/` folder of your template. These run after tables and columns are updated but before foreign keys and constraints are applied. See [Edge Cases -- Migration Scripts](06-edge-cases.md#migration-scripts) for practical guidance, and the [SchemaQuench Reference](../reference/schemaquench.md#execution-slots) for the full deployment order.
+**Fix:** Place your data fixup or migration scripts in the `MigrationScripts/BetweenTablesAndKeys/` folder of your template. These run after tables and columns are updated but before foreign keys and constraints are applied. See [Edge Cases -- Migration Scripts](10-edge-cases.md#migration-scripts) for practical guidance, and the [SchemaQuench Reference](../reference/schemaquench.md#execution-slots) for the full deployment order.
 
 ### Validation script returns false
 
@@ -133,7 +133,7 @@ If using Windows authentication, omit `User` and `Password` entirely.
 
 **Fix:**
 1. Compare your schema package against the live database to identify what drifted.
-2. If someone made manual changes to the database, decide whether to update your package (cast with SchemaTongs, as described in [Day-to-Day Workflows -- Extracting Changes](04-day-to-day-workflows.md#extracting-changes-from-a-live-database)) or let SchemaQuench bring the database back in line.
+2. If someone made manual changes to the database, decide whether to update your package (cast with SchemaTongs, as described in [Defining Your Schema -- Extracting Changes](04-defining-your-schema.md#extracting-changes-from-a-live-database)) or let SchemaQuench bring the database back in line.
 3. If your package has unexpected definitions, check for uncommitted changes or the wrong package version.
 
 ---

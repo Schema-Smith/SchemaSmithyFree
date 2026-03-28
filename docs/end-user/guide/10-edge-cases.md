@@ -240,4 +240,4 @@ SchemaTongs uses the same `ConnectionProperties` structure under its `Source` co
 
 ---
 
-Between the daily workflows, power features, and these escape hatches, you have everything you need. If something goes wrong, the next chapter will help you diagnose it. [Troubleshooting](07-troubleshooting.md)
+Between the power workflows and these escape hatches, you have everything you need. If something goes wrong, the next chapter will help you diagnose it. [Troubleshooting](11-troubleshooting.md)
