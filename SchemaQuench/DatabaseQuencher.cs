@@ -14,7 +14,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace SchemaQuench;
 
-public class DatabaseQuencher(string productName, Template template, string dbName, bool suppressKindlingForgeForTesting, string dropUnknownIndexes, string whatIfOnly, bool updateTables = true, bool dropTablesRemovedFromProduct = true, bool runScriptsTwice = false)
+public class DatabaseQuencher(string productName, Template template, string dbName, bool suppressKindlingForgeForTesting, string dropUnknownIndexes, string whatIfOnly, bool updateTables = true, bool dropTablesRemovedFromProduct = true, bool runScriptsTwice = false, bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true)
 {
     public bool QuenchSuccessful { get; private set; }
 
@@ -294,7 +294,7 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
     {
         if (!scripts.Any()) return;
         ProgressLog($"  [WhatIf] Would quench {slot.ToLower()} scripts:");
-        var alreadyRan = GetCompletedEntriesBySlot(destCmd, slot);
+        var alreadyRan = trackRunOnceMigrations ? GetCompletedEntriesBySlot(destCmd, slot) : [];
         foreach (var script in scripts)
         {
             if (ShouldAlwaysRun(script.Name) || !alreadyRan.Contains(GetRelativeScriptPath(script.LogPath)))
@@ -397,14 +397,14 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
 
     private void QuenchTemplateScripts(IDbCommand destCmd, string slot, List<SqlScript> scripts)
     {
-        var alreadyRan = GetCompletedEntriesBySlot(destCmd, slot);
+        var alreadyRan = trackRunOnceMigrations ? GetCompletedEntriesBySlot(destCmd, slot) : [];
         foreach (var script in scripts.Where(s => !s.HasBeenQuenched))
         {
             if (ShouldAlwaysRun(script.Name) || !alreadyRan.Contains(GetRelativeScriptPath(script.LogPath)))
             {
                 QuenchOneScript(destCmd, script);
 
-                if (script.HasBeenQuenched && !ShouldAlwaysRun(script.Name))
+                if (script.HasBeenQuenched && trackRunOnceMigrations && !ShouldAlwaysRun(script.Name))
                     MarkScriptCompleted(destCmd, script.LogPath, slot);
             }
             else
@@ -414,7 +414,8 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
             }
         }
 
-        RemoveObsoleteCompletedScriptEntries(destCmd, slot, scripts, alreadyRan);
+        if (trackRunOnceMigrations && pruneObsoleteMigrationTracking)
+            RemoveObsoleteCompletedScriptEntries(destCmd, slot, scripts, alreadyRan);
 
         _debugFileLocation = "";
         LogScriptErrors(scripts);
