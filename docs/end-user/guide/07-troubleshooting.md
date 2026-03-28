@@ -1,6 +1,6 @@
 # Chapter 7 -- Troubleshooting
 
-When something goes wrong, this chapter helps you find the answer fast. Issues are organized by symptom so you can jump directly to what you are seeing.
+When something goes wrong, let's figure out what happened. This chapter helps you find the answer fast. Issues are organized by symptom so you can jump directly to what you are seeing.
 
 For background on how the tools work, see the individual reference pages: [SchemaTongs](../reference/schematongs.md), [SchemaQuench](../reference/schemaquench.md), [SchemaHammer](../reference/schemahammer.md), [DataTongs](../reference/datatongs.md), and [Configuration](../reference/configuration.md).
 
@@ -8,7 +8,7 @@ For background on how the tools work, see the individual reference pages: [Schem
 
 ## Reading Logs
 
-Every SchemaSmith CLI tool writes two log files during each run:
+Every SchemaSmith CLI tool writes two log files during each run. These are the first place to look when something does not go as expected:
 
 - **Progress log** (`ToolName - Progress.log`) -- a step-by-step record of what the tool did. Start here.
 - **Error log** (`ToolName - Errors.log`) -- detailed exception information when something fails. Check this for stack traces and SQL error details.
@@ -21,7 +21,7 @@ SchemaQuench --LogPath:/var/log/schemasmith
 
 ### Numbered backup directories
 
-After each run, the tool copies its logs into a numbered backup directory (e.g., `SchemaQuench.0001/`, `SchemaQuench.0002/`). This preserves the history of previous runs so you can compare what changed between deployments.
+After each run, the tool copies its logs into a numbered backup directory (e.g., `SchemaQuench.0001/`, `SchemaQuench.0002/`). This preserves the history of previous runs so you can compare what changed between deployments. When you are tracking down a regression, these numbered backups are your timeline.
 
 ### Password masking in logs
 
@@ -83,7 +83,7 @@ This gives object scripts an additional full pass before tables are created, whi
 
 **Symptom:** Foreign key creation fails because the referenced table or column does not exist, or data violates the constraint.
 
-**Cause:** Foreign keys are applied after table modifications. If you need to run data migration scripts between table changes and foreign key creation, use the `BetweenTablesAndKeys` migration slot.
+**Cause:** Foreign keys are applied after table modifications. If you need to run data migration scripts between table changes and foreign key creation, the `BetweenTablesAndKeys` migration slot is exactly the right tool for the job.
 
 **Fix:** Place your data fixup or migration scripts in the `MigrationScripts/BetweenTablesAndKeys/` folder of your template. These run after tables and columns are updated but before foreign keys and constraints are applied. See [Edge Cases -- Migration Scripts](06-edge-cases.md#migration-scripts) for practical guidance, and the [SchemaQuench Reference](../reference/schemaquench.md#execution-slots) for the full deployment order.
 
@@ -91,7 +91,7 @@ This gives object scripts an additional full pass before tables are created, whi
 
 **Symptom:** The progress log shows "Validate Server" followed by "Invalid server for this product" and the deployment stops.
 
-**Cause:** Your `Product.ValidationScript` ran against the target server and returned a value that is not `true`. This is by design -- the validation script is a safety gate that prevents deploying to the wrong server.
+**Cause:** Your `Product.ValidationScript` ran against the target server and returned a value that is not `true`. This is the safety gate working as designed — it prevents quenching to the wrong server.
 
 **Fix:** Check the SQL in your `Product.json` `ValidationScript` field. Run it manually against the target server to see what it returns. Common issues:
 - The script checks for a specific server name or database that does not exist on this target.
@@ -103,7 +103,7 @@ This gives object scripts an additional full pass before tables are created, whi
 
 **Cause:** SchemaQuench could not connect to the target SQL Server.
 
-**Fix:** Verify your connection settings:
+**Fix:** Let's walk through the connection settings:
 - `Target:Server` -- the server hostname or IP address
 - `Target:Port` -- if SQL Server is not on the default port
 - `Target:User` and `Target:Password` -- if using SQL authentication
@@ -129,11 +129,11 @@ If using Windows authentication, omit `User` and `Password` entirely.
 
 **Symptom:** Running with `WhatIfONLY: true` shows changes you did not expect -- tables being modified, columns being added or dropped.
 
-**Cause:** The live database has drifted from what the schema package defines. WhatIf is showing you the delta between your package and the actual database state.
+**Cause:** The live database has drifted from what the schema package defines. WhatIf is showing you the delta between your package and the actual database state. This is WhatIf doing exactly what it should.
 
-**Fix:** This is not an error -- it is WhatIf working correctly. If the changes look wrong:
+**Fix:**
 1. Compare your schema package against the live database to identify what drifted.
-2. If someone made manual changes to the database, decide whether to update your package (extract with SchemaTongs, as described in [Day-to-Day Workflows -- Extracting Changes](04-day-to-day-workflows.md#extracting-changes-from-a-live-database)) or let SchemaQuench bring the database back in line.
+2. If someone made manual changes to the database, decide whether to update your package (cast with SchemaTongs, as described in [Day-to-Day Workflows -- Extracting Changes](04-day-to-day-workflows.md#extracting-changes-from-a-live-database)) or let SchemaQuench bring the database back in line.
 3. If your package has unexpected definitions, check for uncommitted changes or the wrong package version.
 
 ---
@@ -150,7 +150,7 @@ If using Windows authentication, omit `User` and `Password` entirely.
 
 ### Objects not appearing in extraction output
 
-**Symptom:** You know an object exists in the database, but SchemaTongs did not extract it.
+**Symptom:** You know an object exists in the database, but SchemaTongs did not cast it.
 
 **Cause:** SchemaTongs filters extraction based on two settings:
 
@@ -253,7 +253,7 @@ See [DataTongs Reference](../reference/datatongs.md) for details.
 **Fix:**
 1. Verify the `Product.json` file exists at the expected path.
 2. Open it in a text editor and check for JSON syntax errors (missing commas, unmatched braces).
-3. If the file was corrupted, re-extract with SchemaTongs to regenerate it.
+3. If the file was corrupted, cast with SchemaTongs to regenerate it.
 
 ### Token preview not resolving
 
