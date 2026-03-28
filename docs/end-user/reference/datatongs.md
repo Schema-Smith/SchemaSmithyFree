@@ -272,7 +272,12 @@ MERGE INTO [dbo].[Country] AS Target
 ALTER TABLE [dbo].[Country] ENABLE TRIGGER ALL;
 ```
 
-Use this when the target table has triggers that should not fire during data synchronization (for example, audit triggers that would log every MERGE operation as a user change).
+**When to enable:**
+- Audit triggers that would fire on every row during a MERGE sync — generating thousands of audit records for what is really a bulk data refresh, not user activity.
+- Notification triggers that would send alerts for every row change.
+- Any trigger whose side effects are undesirable during data delivery.
+
+For more granular control, the generated MERGE scripts are plain SQL files. Edit the script to disable specific triggers rather than all of them.
 
 ### MergeUpdate
 
@@ -294,6 +299,18 @@ WHEN NOT MATCHED BY SOURCE AND (IsActive = 1) THEN
 This ensures that only rows matching the filter are candidates for deletion. Rows outside the filter are never removed.
 
 When disabled, the MERGE only inserts and updates -- no rows are ever deleted from the target.
+
+### Delivery Scenarios
+
+These settings compose into three practical patterns:
+
+| Scenario | MergeUpdate | MergeDelete | Effect |
+|----------|-------------|-------------|--------|
+| **Full sync** (default) | `true` | `true` | Insert missing, update changed, delete removed. Target matches source exactly. |
+| **Add and update, no deletes** | `true` | `false` | Insert missing, update changed, leave extra rows alone. Good when targets have environment-specific additions. |
+| **Seed only** | `false` | `false` | Insert missing rows only. Existing rows untouched, nothing deleted. Good for seed data without overwriting local customizations. |
+
+The demo products (Northwind and AdventureWorks) use insert+update with no deletes (`MergeDelete: false`) and `DisableTriggers: true`. They deliver data for every table, so if delete were enabled, any rows a user added while experimenting would be removed on the next deployment.
 
 ---
 
