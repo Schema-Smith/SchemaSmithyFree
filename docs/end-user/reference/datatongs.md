@@ -1,6 +1,6 @@
 # DataTongs Reference
 
-DataTongs extracts table data from a live SQL Server database and generates self-contained MERGE scripts that can synchronize that data into any target database with a matching schema. Point it at a source database, list the tables you care about, and DataTongs produces one SQL file per table -- ready to drop into a schema package's `Table Data` folder for execution by SchemaQuench, or to run directly against any SQL Server instance.
+Lookup tables, configuration rows, seed data -- every database has reference data that needs to travel with the schema. DataTongs grips that data from a live SQL Server and produces self-contained MERGE scripts that synchronize it into any target database. Point it at a source, list the tables you care about, and it produces one SQL file per table -- ready to drop into a schema package's `Table Data` folder or run directly against any SQL Server instance.
 
 ---
 
@@ -118,7 +118,7 @@ The `Tables` array cannot be configured via environment variables -- use the JSO
 
 ## MERGE Script Anatomy
 
-Each generated file contains a single, self-contained MERGE statement. Here is the full structure, using the Northwind `Shippers` table as an example:
+Understanding the generated output helps when you need to troubleshoot or customize. Each generated file contains a single, self-contained MERGE statement. Here is the full structure, using the Northwind `Shippers` table as an example:
 
 ```sql
 DECLARE @v_json NVARCHAR(MAX) = '[
@@ -299,7 +299,7 @@ When disabled, the MERGE only inserts and updates -- no rows are ever deleted fr
 
 ## Special Type Handling
 
-DataTongs automatically detects column types and applies the correct extraction and restoration strategy for each. No manual configuration is needed.
+SQL Server has a lot of column types, and they don't all serialize to JSON the same way. DataTongs automatically detects column types and applies the correct extraction and restoration strategy for each. No manual configuration is needed.
 
 ### Identity Columns
 
@@ -423,7 +423,7 @@ Files are written to the directory specified by `OutputPath`. The directory is c
 
 ## Change Detection
 
-The `WHEN MATCHED` clause does not blindly update every matched row. It fires only when the source row actually differs from the target row. DataTongs generates a type-aware comparison for every non-key, non-identity column:
+Nobody wants a MERGE that updates every row just because it can. The `WHEN MATCHED` clause fires only when the source row actually differs from the target row. DataTongs generates a type-aware comparison for every non-key, non-identity column:
 
 **Standard columns:**
 

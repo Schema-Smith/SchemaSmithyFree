@@ -1,12 +1,12 @@
 # SchemaSmith Community Documentation
 
-SchemaSmith is a state-based schema management toolset for SQL Server. Declare what your database should look like — tables as JSON, programmable objects as SQL — and let the tools handle extraction, review, deployment, and data management.
+Welcome to the shop. Everything you need to master SchemaSmith is here -- the guide walks you through it front to back, and the reference docs are always within arm's reach when you need the details. Pick a starting point and dig in.
 
 ---
 
 ## Start Here
 
-New to SchemaSmith? Start with the guide and follow it front to back:
+New to SchemaSmith? The guide takes you from "what is this?" to confidently managing databases. Start at the beginning and follow the thread:
 
 **[Why SchemaSmith →](guide/01-why-schemasmith.md)**
 
@@ -30,7 +30,7 @@ A hands-on journey from first contact to power usage.
 
 ## Reference
 
-Jump to the details you need.
+Already know what you're looking for? Jump straight to the details.
 
 | Reference | Covers |
 |-----------|--------|
@@ -46,7 +46,7 @@ Jump to the details you need.
 
 ## Demo Products
 
-The repository includes two complete demo products for hands-on exploration:
+Nothing beats working with real data. The repository includes two complete demo products you can extract, deploy, and explore:
 
 - **[Northwind](../../demo/Northwind/)** — 13 tables, ideal for getting started
 - **[AdventureWorks](../../demo/AdventureWorks/)** — 71 tables, real-world complexity

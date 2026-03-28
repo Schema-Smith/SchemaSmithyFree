@@ -1,16 +1,16 @@
 # Edge Cases and Escape Hatches
 
-Most of the time, SchemaSmith's [state-based approach](03-core-concepts.md#state-based-vs-migration-based) handles everything. You declare the desired state, deploy, and the tooling figures out the diff. But some situations are inherently imperative — data transforms, rename operations, dependency tangles, version constraints. For those, SchemaSmith provides deliberate escape hatches. You will not need these every day, but when you do, they are ready.
+Most of the time, SchemaSmith's [state-based approach](03-core-concepts.md#state-based-vs-migration-based) handles everything. You declare the desired state, quench, and the tooling figures out the diff. But some situations are inherently imperative — data transforms, rename operations, dependency tangles, version constraints. For those, SchemaSmith provides deliberate escape hatches. You will not need these every day, but when you do, here is exactly how to reach for them.
 
 ## Migration scripts
 
-State-based deployment excels at structural changes: add a column, change a data type, create an index. But some operations require explicit steps that cannot be inferred from a before-and-after comparison. Splitting a table in two. Backfilling a new column from existing data. Running a one-time data cleanup. These are migration script territory.
+State-based deployment excels at structural changes: add a column, change a data type, create an index. But some operations require explicit steps that cannot be inferred from a before-and-after comparison. Splitting a table in two. Backfilling a new column from existing data. Running a one-time data cleanup. These are migration script territory — the escape hatch for when the declarative approach needs a hand.
 
 ### How tracking works
 
 Migration scripts live under `MigrationScripts/` within a template folder. SchemaQuench tracks each script in a `CompletedMigrationScripts` table using the script's relative path as the key. Once a script runs successfully against a database, it will not run again on subsequent deployments.
 
-This makes migration scripts safe to leave in your schema package permanently. They serve as a historical record of imperative changes — a built-in audit trail.
+This makes migration scripts safe to leave in your schema package permanently. They serve as a historical record of imperative changes — a built-in audit trail that stays with your project.
 
 ### The four migration slots
 
@@ -48,13 +48,13 @@ The `[ALWAYS]` marker is case-sensitive and must be uppercase. It must appear at
 
 ### Escape hatch, not default workflow
 
-Reach for migration scripts when state-based cannot express what you need. If you find yourself writing migration scripts for routine schema changes, step back and consider whether the declarative approach can handle it instead. The goal is a schema package where the JSON and SQL files describe the target state, with migration scripts reserved for the genuinely imperative operations.
+Reach for migration scripts when state-based cannot express what you need. If you find yourself writing migration scripts for routine schema changes, step back — the declarative approach can almost certainly handle it. The goal is a schema package where the JSON and SQL files describe the target state, with migration scripts reserved for the genuinely imperative operations. Keep the escape hatch for when you truly need it.
 
 > For the complete deployment sequence and slot details, see [SchemaQuench Reference](../reference/schemaquench.md).
 
 ## Table and column renames via OldName
 
-Renaming is the classic case where state-based falls short. If you change a table name from `CustomerOrders` to `Orders` in your JSON, SchemaSmith sees "drop `CustomerOrders`, create `Orders`" — losing all your data. The `OldName` property bridges that gap.
+Renaming is the classic case where state-based falls short. If you change a table name from `CustomerOrders` to `Orders` in your JSON, SchemaSmith sees "drop `CustomerOrders`, create `Orders`" — losing all your data. The `OldName` property bridges that gap, preserving your data through the rename.
 
 ### Renaming a column
 
@@ -71,7 +71,7 @@ Suppose you need to rename the `Qty` column to `Quantity` on your `OrderLines` t
 }
 ```
 
-**Step 2: Deploy.**
+**Step 2: Quench.**
 
 SchemaSmith sees `OldName: "Qty"` on the column named `Quantity` and executes `sp_rename` instead of a drop-and-recreate. Your data stays intact.
 
@@ -101,7 +101,7 @@ The same pattern works at the table level. In the table's JSON file:
 }
 ```
 
-Deploy, verify, remove `OldName`. The workflow is identical.
+Quench, verify, remove `OldName`. The workflow is identical.
 
 > For the full table and column JSON schema, see [Schema Packages Reference](../reference/schema-packages.md).
 
@@ -125,7 +125,7 @@ The cost is straightforward: object scripts execute twice, so deployment takes r
 
 ## MinimumVersion gating
 
-Some SQL Server features only exist on certain versions. Temporal tables require SQL Server 2016 or later. If your schema package uses version-specific features, `MinimumVersion` in `Product.json` prevents accidental deployment to an unsupported server.
+Some SQL Server features only exist on certain versions. Temporal tables require SQL Server 2016 or later. If your schema package uses version-specific features, `MinimumVersion` in `Product.json` prevents accidental deployment to an unsupported server — catching the problem before it starts, not halfway through with cryptic SQL errors.
 
 ```json
 {
@@ -145,7 +145,7 @@ The supported version values are:
 | `Sql2022` | SQL Server 2022 |
 | `Sql2025` | SQL Server 2025 |
 
-When `MinimumVersion` is set, SchemaQuench checks the target server's version before deployment begins. If the server is below the minimum, deployment stops with a clear error rather than failing partway through with cryptic SQL errors.
+When `MinimumVersion` is set, SchemaQuench checks the target server's version before deployment begins. If the server is below the minimum, deployment stops with a clear error.
 
 When `MinimumVersion` is omitted (the default), no version check is performed.
 
@@ -153,7 +153,7 @@ When `MinimumVersion` is omitted (the default), no version check is performed.
 
 ## Orphan handling strategies
 
-When SchemaTongs extracts your database schema, it may find objects on the server that do not exist in your schema package — views someone created manually, tables from an old feature, procedures that were never removed. These are orphans. SchemaTongs offers three strategies for dealing with them:
+When SchemaTongs casts your database schema, it may find objects on the server that do not exist in your schema package — views someone created manually, tables from an old feature, procedures that were never removed. These are orphans. SchemaTongs offers three strategies for dealing with them:
 
 | Mode | Behavior |
 |------|----------|
@@ -169,13 +169,13 @@ When SchemaTongs extracts your database schema, it may find objects on the serve
 }
 ```
 
-Start with `Detect` to understand what is out there. Move to `DetectWithCleanupScripts` when you are ready to act but want manual review. Use `DetectDeleteAndCleanup` only when you trust the extraction and want a fully clean schema package.
+Start with `Detect` to understand what is out there. Move to `DetectWithCleanupScripts` when you are ready to act but want manual review. Use `DetectDeleteAndCleanup` only when you trust the extraction and want a fully clean schema package. You control the pace.
 
 > For the complete extraction configuration, see [SchemaTongs Reference](../reference/schematongs.md).
 
 ## Complex type handling in DataTongs
 
-DataTongs generates MERGE scripts from live data. Most column types serialize to JSON naturally, but a few require special handling. DataTongs manages all of these automatically — no configuration needed. This section documents the behavior so you know what to expect.
+DataTongs generates MERGE scripts from live data. Most column types serialize to JSON naturally, but a few require special handling. DataTongs manages all of these automatically — no configuration needed. This section documents the behavior so you know what to expect when you encounter these types.
 
 **Geography and Geometry** — Stored as Well-Known Text (WKT) with the SRID preserved separately. On import, `geography::STGeomFromText()` reconstructs the spatial value. Round-trip fidelity is maintained.
 

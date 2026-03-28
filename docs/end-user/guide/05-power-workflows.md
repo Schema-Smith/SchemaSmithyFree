@@ -1,6 +1,6 @@
 # Power Workflows
 
-You are comfortable with the [daily rhythm](04-day-to-day-workflows.md). Now here is where it gets really interesting. These features turn SchemaSmith from a convenient deployment tool into serious infrastructure — handling multi-environment deployments, multi-database products, reference data pipelines, and CI/CD integration. Each one solves a real problem that would otherwise require manual intervention or fragile scripting.
+You are comfortable with the [daily rhythm](04-day-to-day-workflows.md). Now here is where the forge really opens up. These features turn SchemaSmith from a convenient deployment tool into serious infrastructure — handling multi-environment deployments, multi-database products, reference data pipelines, and CI/CD integration. Each one solves a real problem that would otherwise require manual intervention or fragile scripting.
 
 ## Script tokens
 
@@ -54,11 +54,13 @@ For deployment to staging or production, override any token without touching the
 SmithySettings_ScriptTokens__ReportingDB=ProdReporting
 ```
 
-The precedence chain is: environment variable > template > product. So when you deploy to production with this variable set, the deployed script becomes:
+The precedence chain is: environment variable > template > product. So when you quench to production with this variable set, the deployed script becomes:
 
 ```sql
       JOIN [ProdReporting].[dbo].[Regions] r ON s.RegionID = r.RegionID
 ```
+
+One script. Three environments. Zero manual edits between them.
 
 Two tokens are always available automatically: `{{ProductName}}` (from `Product.json` Name) and `{{TemplateName}}` (from `Template.json` Name). Token replacement is case-insensitive.
 
@@ -66,7 +68,7 @@ For the full list of behaviors and edge cases, see [Script Tokens Reference](../
 
 ## Multi-database products
 
-Some applications span more than one database — a main transactional database plus a reporting database, or a primary database plus an audit log. SchemaSmith handles this as a single product with multiple templates.
+Some applications span more than one database — a main transactional database plus a reporting database, or a primary database plus an audit log. SchemaSmith handles this as a single product with multiple templates. One quench, all databases updated.
 
 **Product.json defines the deployment order:**
 
@@ -103,13 +105,13 @@ Some applications span more than one database — a main transactional database 
 }
 ```
 
-Each template has its own complete folder structure — `Tables/`, `Procedures/`, `MigrationScripts/`, and so on. SchemaQuench deploys them in the order specified by `TemplateOrder`. One run, both databases updated, all in a single atomic operation from the pipeline's perspective.
+Each template has its own complete folder structure — `Tables/`, `Procedures/`, `MigrationScripts/`, and so on. SchemaQuench quenches them in the order specified by `TemplateOrder`. One run, both databases updated, all in a single atomic operation from the pipeline's perspective.
 
 For the full package structure, see [Schema Packages Reference](../reference/schema-packages.md).
 
 ## Reference data management with DataTongs
 
-Lookup tables — countries, status codes, permission types — need to be consistent across all environments. DataTongs extracts reference data from a source database and generates idempotent MERGE scripts that become part of your schema package.
+Lookup tables — countries, status codes, permission types — need to be consistent across all environments. DataTongs grips your reference data at the source and extracts it into idempotent MERGE scripts that become part of your schema package.
 
 **The workflow:**
 
@@ -142,13 +144,13 @@ Lookup tables — countries, status codes, permission types — need to be consi
 
 The generated MERGE scripts handle inserts, updates, and deletes. They use JSON-based data embedding, so the scripts are self-contained SQL files with no external dependencies.
 
-**The golden source pattern:** Extract from production (the source of truth), commit the generated scripts to your repository, and deploy to all other environments via SchemaQuench. Every environment gets exactly the same reference data. Changes are tracked in version control like any other schema change.
+**The golden source pattern:** Extract from production (the source of truth), commit the generated scripts to your repository, and quench to all other environments via SchemaQuench. Every environment gets exactly the same reference data. Changes are tracked in version control like any other schema change. No more "staging has stale lookup data" surprises.
 
 For configuration details including key column detection, nullable key handling, and filter options, see [DataTongs Reference](../reference/datatongs.md).
 
 ## CI/CD integration
 
-SchemaSmith tools are self-contained executables. There is no SDK or runtime to install in your pipeline — just download and run.
+SchemaSmith tools are self-contained executables. No SDK to install. No runtime to configure. Download and run — your pipeline stays clean.
 
 **Configuration via environment variables** means no secrets in config files. Every setting from a `.settings.json` file can be overridden with an environment variable using the `SmithySettings_` prefix. Nested properties use double underscores:
 
@@ -175,20 +177,20 @@ Merge-to-Main Pipeline:
   4. SchemaQuench deploy to production (manual approval gate)
 ```
 
-The WhatIf mode is particularly valuable in PR pipelines. It runs the full deployment logic — token replacement, validation scripts, object creation — against a real database, but rolls back instead of committing. You catch deployment failures before the code merges.
+The WhatIf mode is particularly valuable in PR pipelines. It runs the full deployment logic — token replacement, validation scripts, object creation — against a real database, but rolls back instead of committing. You catch deployment failures before the code merges. Problems surface in the pull request, not at 2 AM during a release.
 
 For the complete environment variable mapping and configuration precedence, see the [Configuration Reference](../reference/configuration.md#environment-variables). For SchemaQuench-specific deployment settings, see the [SchemaQuench Reference](../reference/schemaquench.md#configuration-reference).
 
 ## Validation scripts
 
-The `ValidationScript` in Product.json runs before SchemaQuench deploys anything. It is a gate: if the script returns 0 or false, deployment stops. This prevents accidentally deploying to the wrong server or an unprepared environment.
+The `ValidationScript` in Product.json runs before SchemaQuench deploys anything. It is your safety gate: if the script returns 0 or false, deployment stops. This prevents accidentally quenching to the wrong server or an unprepared environment.
 
 **Common use cases:**
 
 Verify the target database exists:
 ```sql
 SELECT CAST(CASE WHEN EXISTS(
-    SELECT * FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'
+    SELECT * FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}')
 ) THEN 1 ELSE 0 END AS BIT)
 ```
 
@@ -206,13 +208,13 @@ SELECT CAST(CASE WHEN EXISTS(
 ) THEN 1 ELSE 0 END AS BIT)
 ```
 
-The validation script supports token replacement, so you can use `{{ProductName}}`, `{{MainDB}}`, or any custom token. If validation fails, SchemaQuench logs the failure and exits without modifying anything.
+The validation script supports token replacement, so you can use `{{ProductName}}`, `{{MainDB}}`, or any custom token. If validation fails, SchemaQuench logs the failure and exits without modifying anything. Nothing touched. Nothing broken. Exactly how a safety gate should work.
 
 Products also support `BaselineValidationScript`, which runs only during initial baseline deployments to verify the target is in the expected starting state.
 
 ## Script folder execution order
 
-SchemaQuench deploys scripts in a precise order. Understanding the execution slots lets you place scripts exactly where they need to run in the deployment lifecycle.
+SchemaQuench quenches scripts in a precise order. Understanding the execution slots lets you place scripts exactly where they need to run in the deployment lifecycle. You decide where each script belongs; SchemaQuench handles the sequencing.
 
 **Product-level slots (run once per deployment):**
 
@@ -248,9 +250,9 @@ For the complete deployment flow including table and indexed view processing wit
 
 ## Extraction intelligence
 
-SchemaTongs does more than dump scripts to flat folders. It has features that keep large schema packages organized and clean.
+SchemaTongs does more than dump scripts to flat folders. When you cast your database schema, the tool brings real intelligence to the extraction.
 
-**Subfolder preservation.** You can organize scripts by domain — `Tables/Sales/`, `Tables/HR/`, `Procedures/Reporting/`. When SchemaTongs extracts, it preserves existing subfolder locations. If `dbo.Orders.json` already lives in `Tables/Sales/`, the next extraction updates it in place rather than creating a duplicate in the root `Tables/` folder. New objects that have not been organized yet go to the root folder.
+**Subfolder preservation.** You can organize scripts by domain — `Tables/Sales/`, `Tables/HR/`, `Procedures/Reporting/`. When SchemaTongs casts, it preserves existing subfolder locations. If `dbo.Orders.json` already lives in `Tables/Sales/`, the next extraction updates it in place rather than creating a duplicate in the root `Tables/` folder. New objects that have not been organized yet go to the root folder. Your organization stays intact.
 
 **Orphan detection.** When a database object is dropped, its script file becomes an orphan. SchemaTongs offers three modes for handling this:
 
