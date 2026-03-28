@@ -105,11 +105,11 @@ Quench, verify, remove `OldName`. The workflow is identical.
 
 > For the full table and column JSON schema, see [Schema Packages Reference](../reference/schema-packages.md).
 
-## RunScriptsTwice
+## RunScriptsTwice — idempotency testing
 
-Object scripts (views, functions, stored procedures) can have cross-dependencies. View A references Function B, but Function B has not been deployed yet when View A runs. SchemaQuench handles most of these automatically — it runs object scripts, collects failures, then retries the failures after more objects have been created.
+Cross-dependencies between object scripts (views, functions, stored procedures) are already handled by SchemaQuench's built-in [dependency retry loop](../reference/schemaquench.md#dependency-retry-loop) — it runs scripts, collects failures, and retries until all succeed or no progress is made. `RunScriptsTwice` is not about dependency resolution. It is about **idempotency testing**.
 
-For deeply chained dependencies where the built-in retry loop is not enough, there is `RunScriptsTwice`. When enabled, SchemaQuench runs the entire set of object scripts a second time after the first pass completes. This resolves chains where Object A depends on B depends on C, and the single retry was not sufficient.
+When `RunScriptsTwice` is enabled, SchemaQuench runs the entire set of object scripts twice in succession. Both runs must succeed. This answers the question: "Can my `[ALWAYS]` scripts and object scripts run again safely without breaking?" If a script fails on the second run, you have found a bug before it reaches production.
 
 **Enable it in your SchemaQuench configuration:**
 
@@ -119,13 +119,16 @@ For deeply chained dependencies where the built-in retry loop is not enough, the
 }
 ```
 
-The cost is straightforward: object scripts execute twice, so deployment takes roughly double the time for that phase. Use it only when you encounter unresolvable dependency errors during deployment, and remove it when the dependency chain is simplified.
+**When to use it:**
+- **CI pipelines** — Enable to verify that `[ALWAYS]` scripts are truly idempotent. If a script fails on the second run, you have caught an idempotency bug.
+- **Local development** — Enable when authoring `[ALWAYS]` scripts to verify idempotency as you write them.
+- **Not for production deployments** — It doubles the execution time for the object script phase with no production benefit. It is a testing tool.
 
-> See [SchemaQuench Reference](../reference/schemaquench.md) for the full configuration options.
+> See [SchemaQuench Reference -- RunScriptsTwice](../reference/schemaquench.md#runscriptstwice) for the full configuration details.
 
-## MinimumVersion gating
+## MinimumVersion
 
-Some SQL Server features only exist on certain versions. Temporal tables require SQL Server 2016 or later. If your schema package uses version-specific features, `MinimumVersion` in `Product.json` prevents accidental deployment to an unsupported server — catching the problem before it starts, not halfway through with cryptic SQL errors.
+`MinimumVersion` in `Product.json` declares the minimum SQL Server version this product targets. It is currently **metadata only** — SchemaQuench does not enforce it at runtime. An upcoming enhancement will use MinimumVersion to adapt generated tool code to match the target server version, making it functional rather than purely declarative.
 
 ```json
 {
@@ -145,9 +148,17 @@ The supported version values are:
 | `Sql2022` | SQL Server 2022 |
 | `Sql2025` | SQL Server 2025 |
 
-When `MinimumVersion` is set, SchemaQuench checks the target server's version before deployment begins. If the server is below the minimum, deployment stops with a clear error.
+**If you need version gating today**, use `ValidationScript` with a `SERVERPROPERTY` check:
 
-When `MinimumVersion` is omitted (the default), no version check is performed.
+```json
+{
+  "Name": "MyProduct",
+  "MinimumVersion": "Sql2016",
+  "ValidationScript": "SELECT CAST(CASE WHEN SERVERPROPERTY('ProductMajorVersion') >= 13 THEN 1 ELSE 0 END AS BIT)"
+}
+```
+
+This gives you a hard deployment gate while MinimumVersion remains declarative. Script tokens and T-SQL conditional logic in migration scripts can handle version-specific structural changes.
 
 > See the [Schema Packages Reference](../reference/schema-packages.md) for the full Product.json specification.
 
@@ -237,6 +248,42 @@ Each key-value pair is appended to the connection string as `Key=Value;`. This w
 SchemaTongs uses the same `ConnectionProperties` structure under its `Source` configuration section.
 
 > For the complete connection configuration, see [Configuration Reference](../reference/configuration.md).
+
+## The adoption approach
+
+Multiple settings in SchemaSmith share the same story: **start conservative, align in stages, enforce once you are ready.** Whether it is indexes, fill factors, table drops, or the whole schema adoption journey — the pattern is the same.
+
+### Why big-bang alignment fails
+
+Attempting to bring everything into alignment in a single deployment is one of the most common mistakes teams make. The consequences are real: hours-long deployment windows when every index on every table gets rebuilt, unexpected performance degradation when indexes are dropped that had not been captured in the repository yet, or accidental data loss when tables are dropped that still had dependencies.
+
+One company worked on index drift alignment for over two years only to find that nothing was really better in production because new drift kept happening. The tools that stopped the drift were deployed in controlled stages with careful planning and testing — and only after the repository was complete did they enable enforcement.
+
+### The phased pattern
+
+The practical approach works the same way across all alignment settings:
+
+1. **Extract and inventory.** Use SchemaTongs to capture your current schema. Review what comes out. You may find vast differences across environments — objects in production that do not exist in dev, duplicates, contradictions.
+
+2. **Build up the repository in stages.** Do not try to capture everything in one shot. Add objects to your schema package in controlled stages — maybe one schema area at a time. Deploy each stage, verify performance, confirm the deployment window is acceptable.
+
+3. **Keep enforcement off during alignment.** While building up the repository, you do not want to accidentally drop objects you have not captured yet. Leave enforcement settings (`DropUnknownIndexes`, `DropTablesRemovedFromProduct`) off until you are confident the repository represents the complete desired state.
+
+4. **Turn on enforcement to prevent drift from returning.** Once the schema definition is clear and you have verified alignment across environments, enable the enforcement settings. Now SchemaSmith prevents drift from coming back the moment you turn your back.
+
+### Settings that follow this pattern
+
+| Setting | What it enforces | What goes wrong if you enable too early |
+|---------|-----------------|----------------------------------------|
+| `DropUnknownIndexes` | Index alignment | Indexes dropped that you have not captured yet. Deployment may take much longer than expected, and query performance may degrade. |
+| `DropTablesRemovedFromProduct` | Table cleanup | Tables dropped, data gone, rollback requires restore from backup. |
+| `UpdateFillFactor` | Fill factor alignment | Every index on every table rebuilt to match declared fill factors — potentially hours of deployment time on large databases. |
+
+### Bite-sized is the only size
+
+You will not get every table or scripted object into the repository in one pass. You will find alignment problems and environmental dependencies across multiple environments that need to be resolved before those objects can be safely managed by state-based deployment. This is a long-term cure, not a miracle pill that solves everything on day one.
+
+Add what is safe, deploy, verify, repeat. Each iteration brings more of your schema under management and stops more drift from recurring. If you get stumped on how to bring a particular object or pattern into alignment, reach out — [ForgeBarrett@SchemaSmith.com](mailto:ForgeBarrett@SchemaSmith.com). With more than 20 years of doing this with and without proper tooling, we have likely solved a similar problem already.
 
 ---
 
