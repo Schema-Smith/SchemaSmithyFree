@@ -22,8 +22,20 @@ The `Product.json` file sits at the root of the schema package and is the top-le
 | `BaselineValidationScript` | string | | No | T-SQL expression evaluated after server validation but before template processing. |
 | `VersionStampScript` | string | | No | T-SQL executed once after all templates complete successfully. Typically records the release version on the server. |
 | `DropUnknownIndexes` | bool | `false` | No | When `true`, the table quench drops indexes on managed tables that are not defined in the table JSON. |
-| `MinimumVersion` | string | | No | Minimum SQL Server version required. Valid values: `"Sql2016"`, `"Sql2017"`, `"Sql2019"`, `"Sql2022"`, `"Sql2025"`. When set, enables version-gated features. |
+| `MinimumVersion` | string | | No | Minimum SQL Server version this product targets. Valid values: `"Sql2016"`, `"Sql2017"`, `"Sql2019"`, `"Sql2022"`, `"Sql2025"`. Currently metadata only — displayed in SchemaHammer and available for future version-adaptive tooling. Does not gate deployment; use `ValidationScript` with a `SERVERPROPERTY` check for runtime version enforcement. |
 | `CheckConstraintStyle` | string | `"ColumnLevel"` | No | Controls how SchemaTongs writes check constraints during extraction: `"ColumnLevel"` (inline `CheckExpression` on the column) or `"TableLevel"` (named constraints in the `CheckConstraints` array). Has no effect on existing products. |
+
+### Settings Intent
+
+**ValidationScript** — Answers "am I deploying to the correct server?" This is a safety gate that prevents deploying to the wrong target, not a package validation check. Common patterns include verifying a database exists, checking for expected infrastructure, or confirming the SQL Server version.
+
+**BaselineValidationScript** — Answers "is this environment at the expected state for this deployment?" Prevents accidental rollback — if production is at v2.5 and someone runs the v2.3 package, the baseline check aborts before touching anything. Pair with `VersionStampScript`: the stamp records the version after deployment, the baseline checks for it before the next one.
+
+**VersionStampScript** — Executes after deployment completes. The script can be anything that fits in a single batch — an UPDATE, a stored procedure call, complex logic. Script tokens are resolved first, so you can pass in values like `{{ReleaseVersion}}`. Does not support `GO` separators (single batch only). Product-level runs against `master` once; template-level runs per database. Does not return success/failure — use `RAISERROR` or `THROW` to fail the deployment from a stamp.
+
+**DropUnknownIndexes** — Enforces index alignment, but only when you are ready. Default `false` for good reason: most teams adopting SchemaSmith inherit environments with years of index drift. Turning this on before capturing every needed index in your repository is a big-bang change that could cause serious deployment time problems and unexpected performance impacts. See [the adoption approach](../guide/10-edge-cases.md#the-adoption-approach) in the guide for the phased rollout pattern.
+
+**CheckConstraintStyle** — Controls how SchemaTongs writes check constraints during extraction. `ColumnLevel` (default) is simpler — constraint names are not preserved. `TableLevel` preserves the original constraint names from the database, useful if constraint naming matters for your team. Choose the style before first extraction and stick with it — the two styles produce different JSON structures.
 
 ### Example (Northwind demo)
 
@@ -97,6 +109,12 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
   "ScriptTokens": {}
 }
 ```
+
+### Template Settings Intent
+
+**UpdateFillFactor** — Controls whether index fill factors are updated to match JSON definitions. Three levels (template, table, index) are OR'd together — if ANY level is true for a given index, its fill factor gets updated. Template defaults to `true` (enforce from the start for new products). For teams managing existing drift, set template-level to `false` and enable per-index or per-table as you verify alignment. See the [adoption approach](../guide/10-edge-cases.md#the-adoption-approach) for the staged rollout pattern.
+
+**IndexOnlyTableQuenches** — Lets you manage indexes on tables you do not own. Two primary use cases: different indexing on replicated databases (tuned for the consumer's workload, not the producer's), and adding indexes to third-party products where you cannot modify table structure. Scripted objects (procedures, views, functions) still deploy when this flag is on — so you can deploy custom views and procedures alongside supplementary indexes.
 
 ### Index-only templates
 

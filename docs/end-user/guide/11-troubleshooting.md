@@ -64,20 +64,13 @@ For the full exit code reference, see [Configuration Reference -- Exit Codes](..
 
 **Symptom:** Scripts fail with errors like "Invalid object name" or "Cannot find the object" even though the referenced object is in your package. The progress log shows the same scripts failing on every retry pass.
 
-**Cause:** SchemaQuench retries object scripts in a loop -- each pass attempts all unquenched scripts, and the loop continues as long as at least one new script succeeds per pass. If scripts have circular dependencies, or depend on objects that genuinely do not exist, the retry loop cannot make progress.
+**Cause:** SchemaQuench retries object scripts in a dependency retry loop -- each pass attempts all unquenched scripts, and the loop continues as long as at least one new script succeeds per pass. Objects-slot scripts get four opportunities to resolve across the deployment sequence (see [SchemaQuench Reference -- Dependency Retry Loop](../reference/schemaquench.md#dependency-retry-loop)). If scripts have circular dependencies, or depend on objects that genuinely do not exist, the retry loop cannot make progress.
 
 **Fix:**
 1. Check the progress log for the specific scripts that failed and the SQL errors they produced.
-2. Look for circular dependencies between views, functions, or procedures.
-3. If the dependency order is simply deep, try enabling `RunScriptsTwice`:
-
-```json
-{
-  "RunScriptsTwice": true
-}
-```
-
-This gives object scripts an additional full pass before tables are created, which can resolve ordering issues when objects depend on each other across the table-creation boundary. For more on this feature, see [Edge Cases -- RunScriptsTwice](10-edge-cases.md#runscriptstwice).
+2. Look for circular dependencies between views, functions, or procedures. True circular dependencies cannot be resolved by retries -- you need to break the cycle (e.g., use a stub object that the second pass updates).
+3. Verify the referenced object actually exists in your schema package. A typo in a schema or object name will fail on every pass.
+4. If the failure is in the table-creation boundary (object references a table column that doesn't exist yet), the retry loop should resolve it automatically across passes. If not, check whether the table JSON is valid.
 
 ### Foreign key errors during deployment
 

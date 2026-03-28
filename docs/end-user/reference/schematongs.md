@@ -244,6 +244,14 @@ SchemaTongs builds a file index for each extraction folder before extraction beg
 
 Orphan detection only runs for object types that were fully extracted (ShouldCast flag enabled and no `ObjectList` filter active).
 
+### Choosing a Mode
+
+The core tension: an "orphan" might be a script for an object that was genuinely removed from the database, OR it might be a new object you added to the package that has not been deployed yet. Deleting it automatically would destroy your pending work. The default (`Detect`) is conservative because it never destroys anything -- it just tells you.
+
+- **Most teams, most of the time** -- `Detect`. Review the notifications, manually handle cleanup.
+- **Planned cleanup sessions** -- `DetectWithCleanupScripts` when you know you have removed objects and want the DROP scripts generated for review.
+- **Automated pipelines with high confidence** -- `DetectDeleteAndCleanup` when the extraction source is authoritative and you want the package to exactly mirror the database. Be aware this removes files for objects you have added to the package but have not deployed yet.
+
 ---
 
 ## Script Validation
@@ -284,6 +292,10 @@ To override a false positive, rename the file from `.sqlerror` to `.sql`. Schema
 ### Invalid Object Cleanup Script
 
 When any scripts fail validation, SchemaTongs generates an `_InvalidObjectCleanup.sql` file in the log directory. This script contains diagnostic information for all invalid objects detected during the extraction run.
+
+### Re-Extract Behavior
+
+When you re-extract without validation enabled, objects are written as normal `.sql` files, and any existing `.sqlerror` for the same object is cleaned up. This means a re-extract without validation "promotes" previously-bad scripts to `.sql` -- because without validation, SchemaTongs does not know they are bad. If you want to keep identifying bad scripts, keep `ValidateScripts` enabled. If you have fixed the underlying problems and want clean `.sql` files, re-extract normally.
 
 ---
 
@@ -388,6 +400,14 @@ The preamble is inserted as a separate batch (between `GO` statements) before th
 SQL Server prevents altering a function when other objects depend on it (computed columns, check constraints, etc.). Without this flag, deploying an updated function requires manually dropping dependents first. Enable this flag when your database has computed columns or constraints that reference user-defined functions.
 
 This flag defaults to `false` because the generated preamble adds complexity to the script and is unnecessary for databases without function dependencies.
+
+### Surgical Use Only
+
+This is a surgical fix, not a default. Enable it on specific functions where the function is referenced by computed columns or filtered indexes AND changes regularly enough that manual dependency management is impractical AND the dependency drop-and-rebuild is acceptably fast.
+
+**The risk that makes this opt-in:** What if the computed column is persisted or indexed on a table with 500 million rows? Dropping that dependency means rebuilding the persisted column or index after the function is updated -- which could take a very long time and impact production availability. The generated preamble does this automatically, every deployment, whether the function actually changed or not.
+
+For functions that rarely change, the right approach is to leave this flag off and write a migration script that carefully handles the dependencies when the function truly needs to change -- with full awareness of the time and performance implications.
 
 ---
 
