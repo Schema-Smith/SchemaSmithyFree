@@ -1,6 +1,6 @@
 # Power Workflows
 
-You are comfortable with the [daily rhythm](04-day-to-day-workflows.md). Now here is where the forge really opens up. These features turn SchemaSmith from a convenient deployment tool into serious infrastructure — handling multi-environment deployments, multi-database products, reference data pipelines, and CI/CD integration. Each one solves a real problem that would otherwise require manual intervention or fragile scripting.
+You are comfortable with the [daily rhythm](04-defining-your-schema.md). Now here is where the forge really opens up. These features turn SchemaSmith from a convenient deployment tool into serious infrastructure — handling multi-environment deployments, multi-database products, reference data pipelines, and CI/CD integration. Each one solves a real problem that would otherwise require manual intervention or fragile scripting.
 
 ## Script tokens
 

@@ -303,4 +303,4 @@ For the complete field reference covering every column, index, and constraint pr
 
 ---
 
-Now that you understand the model, let's look at how this plays out in daily development. [Day-to-Day Workflows](04-day-to-day-workflows.md)
+Now that you understand the model, let's look at how this plays out in daily development. [Defining Your Schema](04-defining-your-schema.md)
