@@ -10,7 +10,7 @@ Most database deployment tools are migration-based. You write ordered scripts th
 
 SchemaSmith is state-based. You declare *what the database should look like*, and the tool computes the delta. You describe the destination. The forge figures out the route.
 
-Here is what the difference looks like in practice. Suppose the Products table needs a new `DiscountPercent` column.
+Here's what the difference looks like in practice. Suppose the Products table needs a new `DiscountPercent` column.
 
 **Migration approach** — you write the change steps:
 
@@ -35,18 +35,18 @@ This script must run exactly once, in the right order, after every prior migrati
 }
 ```
 
-SchemaQuench reads this declaration, queries the target database, sees that `DiscountPercent` does not exist, and generates the ALTER statement itself. Run the same package against dev, staging, and production — each environment gets exactly the changes it needs, regardless of what state it was in before. Same package, correct results everywhere.
+SchemaQuench reads this declaration, queries the target database, sees that `DiscountPercent` doesn't exist, and generates the ALTER statement itself. Run the same package against dev, staging, and production — each environment gets exactly the changes it needs, regardless of what state it was in before. Same package, correct results everywhere.
 
 The benefits compound over time:
 
-- **No ordering bugs.** There is no migration chain to break.
+- **No ordering bugs.** There's no migration chain to break.
 - **No drift.** Every deployment converges to the same declared state.
 - **Readable reviews.** Pull requests show the table as it will be, not a sequence of mutations to decipher.
 - **Repeatable deploys.** Same package, any environment. SchemaQuench computes the right delta for each.
 
 ## Products and Templates
 
-A **product** is a deployable unit — the top-level container for everything SchemaSmith manages. Think of it as the complete blueprint for a deployment. It is defined by a `Product.json` file at the root of your schema package:
+A **product** is a deployable unit — the top-level container for everything SchemaSmith manages. Think of it as the complete blueprint for a deployment. It's defined by a `Product.json` file at the root of your schema package:
 
 ```json
 {
@@ -95,7 +95,7 @@ Northwind/                        <-- Product root
       ...
 ```
 
-The Northwind demo uses two templates: Initialize (which creates the database if it does not exist) and Northwind (which manages all the schema objects). Most real projects follow a similar pattern. Multi-template products come into play when a single deployment needs to touch multiple databases — for example, a shared reference database alongside the application database.
+The Northwind demo uses two templates: Initialize (which creates the database if it doesn't exist) and Northwind (which manages all the schema objects). Most real projects follow a similar pattern. Multi-template products come into play when a single deployment needs to touch multiple databases — for example, a shared reference database alongside the application database.
 
 For the full list of Product.json and Template.json fields, see the [Schema Packages reference](../reference/schema-packages.md).
 
@@ -105,11 +105,11 @@ A schema package is the folder structure that holds your entire database definit
 
 **Structural objects** — tables and indexed views — are defined as JSON files. JSON is diffable, mergeable, and machine-readable. SchemaQuench parses these definitions, compares them against the live database, and computes precise ALTER statements. You never write ALTERs by hand.
 
-**Behavioral objects** — stored procedures, functions, views, triggers — are plain `.sql` files containing CREATE OR ALTER statements. These are code: they get deployed as-is, replacing whatever currently exists. There is no diff to compute; the file *is* the definition.
+**Behavioral objects** — stored procedures, functions, views, triggers — are plain `.sql` files containing CREATE OR ALTER statements. They're code: they get deployed as-is, replacing whatever currently exists. There's no diff to compute; the file *is* the definition.
 
 The distinction matters for your workflow. Structural changes — adding a column, modifying an index — SchemaSmith hammers into shape for you, computing exactly the right ALTERs. Behavioral changes — rewriting a stored procedure — you author directly in SQL, and SchemaQuench deploys them wholesale.
 
-Here is what a typical template folder contains:
+Here's what a typical template folder contains:
 
 ```
 Templates/Northwind/
@@ -134,7 +134,7 @@ Templates/Northwind/
     After/                         <-- SQL: run after everything else
 ```
 
-You do not need all these folders. Most projects use Tables, Procedures, Views, and Functions. The rest exist when you need them. SchemaTongs creates the full structure automatically when it casts a database.
+You don't need all these folders. Most projects use Tables, Procedures, Views, and Functions. The rest exist when you need them. SchemaTongs creates the full structure automatically when it casts a database.
 
 For the complete folder reference and file naming conventions, see [Schema Packages](../reference/schema-packages.md).
 
@@ -166,7 +166,7 @@ The four SchemaSmith tools form a cycle that covers the full schema management w
 
 **DataTongs** grips reference data from a live database and extracts it as MERGE scripts. Lookup tables, configuration rows, seed data — anything that should travel with the schema. The output goes into the `Table Data/` folder and deploys alongside structural changes. For the full DataTongs configuration and type handling details, see the [DataTongs Reference](../reference/datatongs.md).
 
-The tools do not impose a rigid sequence. A typical flow looks like:
+The tools don't impose a rigid sequence. A typical flow looks like:
 
 1. Cast with SchemaTongs (onboarding or re-baselining)
 2. Edit the schema package files directly (day-to-day development)
@@ -174,7 +174,7 @@ The tools do not impose a rigid sequence. A typical flow looks like:
 4. Review in SchemaHammer or via git diff
 5. Quench to production with SchemaQuench
 
-Once your schema is in files, most daily work is editing JSON and SQL directly — you do not re-cast every time. The files are yours to shape.
+Once your schema's in files, most daily work is editing JSON and SQL directly — you don't re-cast every time. The files are yours to shape.
 
 ## The deployment model
 
@@ -200,13 +200,13 @@ The execution slots give you precise control over ordering when it matters. With
 11. Indexed views
 12. After migration scripts
 
-Most of the time you do not think about slots — tables and objects just deploy correctly. That's by design. The migration script slots exist for cases where you need to run something at a specific point in the sequence, like populating data before a NOT NULL constraint takes effect. The tool handles the complexity so you can focus on the design.
+Most of the time you don't think about slots — tables and objects just deploy correctly. That's by design. The migration script slots exist for cases where you need to run something at a specific point in the sequence, like populating data before a NOT NULL constraint takes effect. The tool handles the complexity so you can focus on the design.
 
 For the full deployment flow, execution slot details, and configuration options, see [SchemaQuench](../reference/schemaquench.md).
 
 ## JSON table definitions
 
-Table definitions are where you will spend most of your editing time. They're the heart of the craft — where you shape every column, index, and constraint. Here is an actual table from the Northwind demo — `dbo.Products`:
+Table definitions are where you'll spend most of your editing time. They're the heart of the craft — where you shape every column, index, and constraint. Here's an actual table from the Northwind demo — `dbo.Products`:
 
 ```json
 {
@@ -295,7 +295,7 @@ If you have used SSMS to view a table's properties, this is the same information
 
 Why JSON instead of SQL DDL? Three reasons:
 
-1. **Diffable.** Adding a column is a clean diff — one new object in the Columns array. In DDL, you would see an entirely rewritten CREATE TABLE or an ALTER statement that does not show context.
+1. **Diffable.** Adding a column is a clean diff — one new object in the Columns array. In DDL, you would see an entirely rewritten CREATE TABLE or an ALTER statement that doesn't show context.
 2. **Mergeable.** Two developers adding different columns to the same table produce a clean git merge in JSON. In SQL, they produce a conflict.
 3. **Machine-readable.** SchemaQuench parses the JSON to compute precise deltas. Parsing arbitrary DDL reliably is much harder.
 

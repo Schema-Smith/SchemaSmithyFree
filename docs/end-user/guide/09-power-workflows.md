@@ -1,6 +1,6 @@
 # Power Workflows
 
-You have built your schema, validated it, and set up your deployment pipeline. Now it is time to handle the real-world complexity that every production system eventually demands. Script tokens let a single codebase span dev, staging, and production without manual edits. Multi-database products keep related databases in lockstep with a single deployment. DataTongs turns reference data into version-controlled, repeatable scripts. And execution slots give you precise control over exactly when each script runs in the deployment lifecycle. These are the features that let you deploy with confidence at scale — solving problems that would otherwise require manual intervention or fragile scripting.
+You've built your schema, validated it, and set up your deployment pipeline. Now it's time to handle the real-world complexity that every production system eventually demands. Script tokens let a single codebase span dev, staging, and production without manual edits. Multi-database products keep related databases in lockstep with a single deployment. DataTongs turns reference data into version-controlled, repeatable scripts. And execution slots give you precise control over exactly when each script runs in the deployment lifecycle. These are the features that let you deploy with confidence at scale — solving problems that would otherwise require manual intervention or fragile scripting.
 
 ## Script tokens
 
@@ -178,7 +178,7 @@ SchemaQuench quenches scripts in a precise order. Understanding the execution sl
 
 **Why BetweenTablesAndKeys exists:** When you split a table or restructure foreign keys, you need a window after the new tables are created but before SchemaSmith tries to create the foreign keys. This slot gives you that window to move data into the new structure so the FK constraints succeed.
 
-**Why AfterTablesScripts exists:** Sometimes you need to run scripts after indexes and constraints are in place but before triggers are enabled. Data backfills that must satisfy constraints but should not fire triggers go here.
+**Why AfterTablesScripts exists:** Sometimes you need to run scripts after indexes and constraints are in place but before triggers are enabled. Data backfills that must satisfy constraints but shouldn't fire triggers go here.
 
 **When to use Product Before/After:** These run outside any template context — they execute against the server, not a specific database. Use them for cross-database operations, linked server setup, or anything that spans multiple templates.
 
@@ -186,4 +186,4 @@ For the complete deployment flow including table and indexed view processing wit
 
 ---
 
-These are the tools for 95% of what you will encounter. For the remaining 5% — the edge cases and special situations — the next chapter has the escape hatches. [Edge Cases & Escape Hatches](10-edge-cases.md)
+Tokens, multi-database, reference data, execution slots. That's the toolkit for 95% of what you'll encounter. For the remaining 5% — the escape hatches — the next chapter has you covered. [Edge Cases & Escape Hatches](10-edge-cases.md)

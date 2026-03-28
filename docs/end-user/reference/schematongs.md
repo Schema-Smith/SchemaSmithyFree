@@ -200,7 +200,7 @@ All other object types are extracted as SQL scripts. SchemaTongs reads the objec
 - **SET ANSI_NULLS** and **SET QUOTED_IDENTIFIER** -- Preserved from the original object's settings.
 - **CREATE OR ALTER** -- SchemaTongs rewrites `CREATE` statements to `CREATE OR ALTER` for stored procedures, functions, views, and triggers.
 - **Schema-qualified names** -- Object references are bracket-quoted as `[schema].[name]`.
-- **IF NOT EXISTS guards** -- Used for schemas, data types, table types, full-text catalogs, full-text stop lists, and XML schema collections where `CREATE OR ALTER` is not available.
+- **IF NOT EXISTS guards** -- Used for schemas, data types, table types, full-text catalogs, full-text stop lists, and XML schema collections where `CREATE OR ALTER` isn't available.
 
 ---
 
@@ -216,7 +216,7 @@ The `ObjectList` setting restricts extraction to a specific set of objects. Prov
 
 Names can be specified with or without a schema prefix. Matching is case-insensitive. When `ObjectList` is empty (the default), all objects matching the enabled ShouldCast flags are extracted.
 
-When `ObjectList` is active, orphan detection is automatically disabled -- SchemaTongs cannot determine which files are genuinely orphaned when only a subset of objects is being extracted.
+When `ObjectList` is active, orphan detection is automatically disabled -- SchemaTongs can't determine which files are genuinely orphaned when only a subset of objects is being extracted.
 
 ---
 
@@ -240,7 +240,7 @@ Configure orphan behavior with `OrphanHandling:Mode`:
 
 ### How It Works
 
-SchemaTongs builds a file index for each extraction folder before extraction begins. As objects are extracted and written to disk, each file is marked as "written." After extraction completes, any indexed file that was not written is an orphan. Cleanup scripts from previous runs are archived into numbered `SchemaTongs.NNNN` backup directories before new ones are generated.
+SchemaTongs builds a file index for each extraction folder before extraction begins. As objects are extracted and written to disk, each file is marked as "written." After extraction completes, any indexed file that wasn't written is an orphan. Cleanup scripts from previous runs are archived into numbered `SchemaTongs.NNNN` backup directories before new ones are generated.
 
 Orphan detection only runs for object types that were fully extracted (ShouldCast flag enabled and no `ObjectList` filter active).
 
@@ -250,7 +250,7 @@ The core tension: an "orphan" might be a script for an object that was genuinely
 
 - **Most teams, most of the time** -- `Detect`. Review the notifications, manually handle cleanup.
 - **Planned cleanup sessions** -- `DetectWithCleanupScripts` when you know you have removed objects and want the DROP scripts generated for review.
-- **Automated pipelines with high confidence** -- `DetectDeleteAndCleanup` when the extraction source is authoritative and you want the package to exactly mirror the database. Be aware this removes files for objects you have added to the package but have not deployed yet.
+- **Automated pipelines with high confidence** -- `DetectDeleteAndCleanup` when the extraction source is authoritative and you want the package to exactly mirror the database. Be aware this removes files for objects you have added to the package but haven't deployed yet.
 
 ---
 
@@ -268,7 +268,7 @@ Scripts that fail validation are handled according to `ShouldCast:SaveInvalidScr
 | SaveInvalidScripts | Behavior |
 |---|---|
 | `true` (default) | The script is saved with a `.sqlerror` extension instead of `.sql`. The original `.sql` file (if any) is removed. |
-| `false` | The script is not written to disk at all. |
+| `false` | The script isn't written to disk at all. |
 
 ### .sqlerror Files
 
@@ -278,13 +278,13 @@ Scripts that fail validation are handled according to `ShouldCast:SaveInvalidScr
 |---|---|
 | **SchemaQuench** | Skips `.sqlerror` files -- only `.sql` files are loaded and executed. |
 | **SchemaHammer** | Displays `.sqlerror` files in the script tree with an error indicator. |
-| **SchemaTongs** | On re-extraction, overwrites `.sqlerror` files with the latest content. If the script still fails validation, it stays as `.sqlerror`. If it now passes, it is written as `.sql` and the `.sqlerror` is removed. |
+| **SchemaTongs** | On re-extraction, overwrites `.sqlerror` files with the latest content. If the script still fails validation, it stays as `.sqlerror`. If it now passes, it's written as `.sql` and the `.sqlerror` is removed. |
 
 ### False Positives
 
-Validation failures are not always genuine errors. Common false positives include:
+Validation failures aren't always genuine errors. Common false positives include:
 
-- **Cross-database references** -- Scripts referencing objects in another database (e.g., `OtherDB.dbo.MyTable`) may fail when the parser cannot resolve the cross-database context.
+- **Cross-database references** -- Scripts referencing objects in another database (e.g., `OtherDB.dbo.MyTable`) may fail when the parser can't resolve the cross-database context.
 - **Temporary objects** -- References to temp tables or variables created elsewhere in the same batch.
 
 To override a false positive, rename the file from `.sqlerror` to `.sql`. SchemaQuench will then include it in the next deployment.
@@ -295,7 +295,7 @@ When any scripts fail validation, SchemaTongs generates an `_InvalidObjectCleanu
 
 ### Re-Extract Behavior
 
-When you re-extract without validation enabled, objects are written as normal `.sql` files, and any existing `.sqlerror` for the same object is cleaned up. This means a re-extract without validation "promotes" previously-bad scripts to `.sql` -- because without validation, SchemaTongs does not know they are bad. If you want to keep identifying bad scripts, keep `ValidateScripts` enabled. If you have fixed the underlying problems and want clean `.sql` files, re-extract normally.
+When you re-extract without validation enabled, objects are written as normal `.sql` files, and any existing `.sqlerror` for the same object is cleaned up. This means a re-extract without validation "promotes" previously-bad scripts to `.sql` -- because without validation, SchemaTongs doesn't know they're bad. If you want to keep identifying bad scripts, keep `ValidateScripts` enabled. If you have fixed the underlying problems and want clean `.sql` files, re-extract normally.
 
 ---
 
@@ -314,9 +314,9 @@ Procedures/
 
 SchemaTongs preserves these subfolders across re-extraction. Before extraction begins, it builds a file index (`ExtractionFileIndex`) that maps every `.sql`, `.sqlerror`, and `.json` file to its full path, including any subfolder. When writing an extracted object, SchemaTongs checks the index:
 
-- If the file already exists in a subfolder, it is written back to that same subfolder.
+- If the file already exists in a subfolder, it's written back to that same subfolder.
 - If the file exists in multiple subfolders, a warning is logged and the file is written to the folder root.
-- If the file is new (not in the index), it is written to the folder root.
+- If the file is new (not in the index), it's written to the folder root.
 
 New objects always appear in the root of their folder. Move them into subfolders as desired -- SchemaTongs will remember the location on the next run.
 
@@ -324,7 +324,7 @@ New objects always appear in the root of their folder. Move them into subfolders
 
 ## Package Initialization
 
-The first extraction is where your schema package is born. When SchemaTongs runs against a path that does not yet contain a schema package, it creates the full structure:
+The first extraction is where your schema package is born. When SchemaTongs runs against a path that doesn't yet contain a schema package, it creates the full structure:
 
 1. Creates the product directory at `Product:Path`.
 2. Generates `Product.json` with the configured product name and a `Platform` of `"SqlServer"`.
@@ -333,7 +333,7 @@ The first extraction is where your schema package is born. When SchemaTongs runs
 5. Creates all standard script folders: `Tables/`, `Schemas/`, `DataTypes/`, `Functions/`, `Views/`, `Procedures/`, `Triggers/`, `FullTextCatalogs/`, `FullTextStopLists/`, `DDLTriggers/`, `XMLSchemaCollections/`, `Indexed Views/`, `Table Data/`, and `MigrationScripts/` (with `Before/`, `After/`, `AfterTablesScripts/`, and `BetweenTablesAndKeys/` subdirectories).
 6. Creates a `.json-schemas/` directory with JSON schema validation files for Product, Template, Table, and Indexed View JSON formats.
 
-On subsequent runs against an existing package, SchemaTongs overwrites object scripts and table definitions with the current database state. It does not modify `Product.json` or `Template.json`.
+On subsequent runs against an existing package, SchemaTongs overwrites object scripts and table definitions with the current database state. It doesn't modify `Product.json` or `Template.json`.
 
 ### Helper Stored Procedures
 
@@ -342,7 +342,7 @@ On every run, SchemaTongs deploys (or updates) a stored procedure and a scalar f
 - `SchemaSmith.GenerateTableJSON` -- Generates the JSON representation of a table's full structure.
 - `SchemaSmith.GenerateIndexedViewJson` -- Generates the JSON representation of an indexed view.
 
-These procedures are lightweight, read-only metadata queries. They are installed in the `SchemaSmith` schema, which is excluded from extraction output.
+These procedures are lightweight, read-only metadata queries. They're installed in the `SchemaSmith` schema, which is excluded from extraction output.
 
 ---
 
@@ -417,9 +417,9 @@ When SchemaTongs encounters an encrypted object (a function, view, stored proced
 
 1. Logs a warning: `WARNING: schema.objectname is encrypted, skipping`
 2. Skips the object entirely -- no file is written.
-3. Excludes the object from orphan detection so the missing file is not flagged as an orphan.
+3. Excludes the object from orphan detection so the missing file isn't flagged as an orphan.
 
-Encrypted objects cannot be extracted because SQL Server does not expose their source text. If you need these objects in your schema package, script them manually and add the files to the appropriate folder.
+Encrypted objects can't be extracted because SQL Server doesn't expose their source text. If you need these objects in your schema package, script them manually and add the files to the appropriate folder.
 
 ---
 

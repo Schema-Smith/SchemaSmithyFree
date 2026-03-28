@@ -21,8 +21,8 @@ The `Product.json` file sits at the root of the schema package and is the top-le
 | `ScriptTokens` | object | `{}` | No | Key-value pairs for `{{TokenName}}` replacement in scripts and SQL properties. See the [Script Tokens Reference](script-tokens.md). |
 | `BaselineValidationScript` | string | | No | T-SQL expression evaluated after server validation but before template processing. |
 | `VersionStampScript` | string | | No | T-SQL executed once after all templates complete successfully. Typically records the release version on the server. |
-| `DropUnknownIndexes` | bool | `false` | No | When `true`, the table quench drops indexes on managed tables that are not defined in the table JSON. |
-| `MinimumVersion` | string | | No | Minimum SQL Server version this product targets. Valid values: `"Sql2016"`, `"Sql2017"`, `"Sql2019"`, `"Sql2022"`, `"Sql2025"`. Currently metadata only — displayed in SchemaHammer and available for future version-adaptive tooling. Does not gate deployment; use `ValidationScript` with a `SERVERPROPERTY` check for runtime version enforcement. |
+| `DropUnknownIndexes` | bool | `false` | No | When `true`, the table quench drops indexes on managed tables that aren't defined in the table JSON. |
+| `MinimumVersion` | string | | No | Minimum SQL Server version this product targets. Valid values: `"Sql2016"`, `"Sql2017"`, `"Sql2019"`, `"Sql2022"`, `"Sql2025"`. Currently metadata only — displayed in SchemaHammer and available for future version-adaptive tooling. Doesn't gate deployment; use `ValidationScript` with a `SERVERPROPERTY` check for runtime version enforcement. |
 | `CheckConstraintStyle` | string | `"ColumnLevel"` | No | Controls how SchemaTongs writes check constraints during extraction: `"ColumnLevel"` (inline `CheckExpression` on the column) or `"TableLevel"` (named constraints in the `CheckConstraints` array). Has no effect on existing products. |
 
 ### Settings Intent
@@ -31,11 +31,11 @@ The `Product.json` file sits at the root of the schema package and is the top-le
 
 **BaselineValidationScript** — Answers "is this environment at the expected state for this deployment?" Prevents accidental rollback — if production is at v2.5 and someone runs the v2.3 package, the baseline check aborts before touching anything. Pair with `VersionStampScript`: the stamp records the version after deployment, the baseline checks for it before the next one.
 
-**VersionStampScript** — Executes after deployment completes. The script can be anything that fits in a single batch — an UPDATE, a stored procedure call, complex logic. Script tokens are resolved first, so you can pass in values like `{{ReleaseVersion}}`. Does not support `GO` separators (single batch only). Product-level runs against `master` once; template-level runs per database. Does not return success/failure — use `RAISERROR` or `THROW` to fail the deployment from a stamp.
+**VersionStampScript** — Executes after deployment completes. The script can be anything that fits in a single batch — an UPDATE, a stored procedure call, complex logic. Script tokens are resolved first, so you can pass in values like `{{ReleaseVersion}}`. Doesn't support `GO` separators (single batch only). Product-level runs against `master` once; template-level runs per database. Doesn't return success/failure — use `RAISERROR` or `THROW` to fail the deployment from a stamp.
 
-**DropUnknownIndexes** — Enforces index alignment, but only when you are ready. Default `false` for good reason: most teams adopting SchemaSmith inherit environments with years of index drift. Turning this on before capturing every needed index in your repository is a big-bang change that could cause serious deployment time problems and unexpected performance impacts. See [the adoption approach](../guide/10-edge-cases.md#the-adoption-approach) in the guide for the phased rollout pattern.
+**DropUnknownIndexes** — Enforces index alignment, but only when you're ready. Default `false` for good reason: most teams adopting SchemaSmith inherit environments with years of index drift. Turning this on before capturing every needed index in your repository is a big-bang change that could cause serious deployment time problems and unexpected performance impacts. See [the adoption approach](../guide/10-edge-cases.md#the-adoption-approach) in the guide for the phased rollout pattern.
 
-**CheckConstraintStyle** — Controls how SchemaTongs writes check constraints during extraction. `ColumnLevel` (default) is simpler — constraint names are not preserved. `TableLevel` preserves the original constraint names from the database, useful if constraint naming matters for your team. Choose the style before first extraction and stick with it — the two styles produce different JSON structures.
+**CheckConstraintStyle** — Controls how SchemaTongs writes check constraints during extraction. `ColumnLevel` (default) is simpler — constraint names aren't preserved. `TableLevel` preserves the original constraint names from the database, useful if constraint naming matters for your team. Choose the style before first extraction and stick with it — the two styles produce different JSON structures.
 
 ### Example (Northwind demo)
 
@@ -77,7 +77,7 @@ The `Product.json` file sits at the root of the schema package and is the top-le
 
 ### Notes
 
-- `ProductName` is added automatically to `ScriptTokens` -- you do not need to define it.
+- `ProductName` is added automatically to `ScriptTokens` -- you don't need to define it.
 - Script token values defined in Product.json can be overridden at runtime via `appsettings.json` or environment variables in the `ScriptTokens` section.
 - All script properties (`ValidationScript`, `BaselineValidationScript`, `VersionStampScript`) support `{{TokenName}}` replacement.
 
@@ -95,7 +95,7 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 | `DatabaseIdentificationScript` | string | | Yes | T-SQL query that returns a result set with a `Name` column. Each row identifies a database to quench with this template. Supports token replacement. |
 | `VersionStampScript` | string | | No | T-SQL executed per database after that database's quench completes successfully. |
 | `UpdateFillFactor` | bool | `true` | No | When `true`, the table quench updates index fill factors to match the JSON definitions. OR'd with table-level and index-level `UpdateFillFactor` settings. |
-| `IndexOnlyTableQuenches` | bool | `false` | No | When `true`, the table quench only manages indexes, statistics, XML indexes, and full-text indexes. Skips table creation, column changes, and foreign key management. Tables that do not exist are silently skipped. |
+| `IndexOnlyTableQuenches` | bool | `false` | No | When `true`, the table quench only manages indexes, statistics, XML indexes, and full-text indexes. Skips table creation, column changes, and foreign key management. Tables that don't exist are silently skipped. |
 | `BaselineValidationScript` | string | | No | T-SQL validation executed per database before quenching that database. |
 | `ScriptTokens` | object | `{}` | No | Key-value pairs that override matching product-level tokens for this template. Template tokens take precedence over product tokens with the same key. |
 
@@ -114,14 +114,14 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 
 **UpdateFillFactor** — Controls whether index fill factors are updated to match JSON definitions. Three levels (template, table, index) are OR'd together — if ANY level is true for a given index, its fill factor gets updated. Template defaults to `true` (enforce from the start for new products). For teams managing existing drift, set template-level to `false` and enable per-index or per-table as you verify alignment. See the [adoption approach](../guide/10-edge-cases.md#the-adoption-approach) for the staged rollout pattern.
 
-**IndexOnlyTableQuenches** — Lets you manage indexes on tables you do not own. Two primary use cases: different indexing on replicated databases (tuned for the consumer's workload, not the producer's), and adding indexes to third-party products where you cannot modify table structure. Scripted objects (procedures, views, functions) still deploy when this flag is on — so you can deploy custom views and procedures alongside supplementary indexes.
+**IndexOnlyTableQuenches** — Lets you manage indexes on tables you don't own. Two primary use cases: different indexing on replicated databases (tuned for the consumer's workload, not the producer's), and adding indexes to third-party products where you can't modify table structure. Scripted objects (procedures, views, functions) still deploy when this flag is on — so you can deploy custom views and procedures alongside supplementary indexes.
 
 ### Index-only templates
 
 Set `"IndexOnlyTableQuenches": true` to create a template that only manages indexes. Use cases:
 
-- Adding indexes to a replicated database where the source indexes do not fit the replica's query patterns
-- Managing indexes on a third-party database where you do not control the table schema
+- Adding indexes to a replicated database where the source indexes don't fit the replica's query patterns
+- Managing indexes on a third-party database where you don't control the table schema
 
 ---
 
@@ -203,7 +203,7 @@ Steps 2–15 execute per template (in `TemplateOrder`), per database (as identif
 
 ### Execution behaviors
 
-**Sequential, tracked** -- Scripts run in alphabetical order. Each script's completion is recorded in the `CompletedMigrationScripts` table and will not run again on subsequent quenches. Scripts with `[ALWAYS]` in the filename run every time regardless of tracking.
+**Sequential, tracked** -- Scripts run in alphabetical order. Each script's completion is recorded in the `CompletedMigrationScripts` table and won't run again on subsequent quenches. Scripts with `[ALWAYS]` in the filename run every time regardless of tracking.
 
 **Dependency retry loop** -- All scripts in the slot are attempted. Scripts that fail due to unresolved dependencies are retried on the next iteration. The loop continues until all scripts succeed or no progress is made on an iteration.
 
@@ -668,7 +668,7 @@ The folder contains four schema files:
 | `tables.schema` | Table JSON files (`Tables/*.json`) |
 | `indexedviews.schema` | Indexed view JSON files (`Indexed Views/*.json`) |
 
-These files are regenerated each time SchemaTongs initializes or updates a schema package. You do not need to edit them manually. If your editor does not pick up the schemas automatically, configure your IDE's JSON Schema mapping to point `Product.json` at `.json-schemas/products.schema`, and so on.
+These files are regenerated each time SchemaTongs initializes or updates a schema package. You don't need to edit them manually. If your editor doesn't pick up the schemas automatically, configure your IDE's JSON Schema mapping to point `Product.json` at `.json-schemas/products.schema`, and so on.
 
 ---
 
@@ -715,12 +715,12 @@ Table names, view names, and other database object names can contain characters 
 
 | Object Name | Encoded Filename |
 |---|---|
-| `dbo.Order Details` | `dbo.Order Details.json` (interior spaces are not encoded) |
+| `dbo.Order Details` | `dbo.Order Details.json` (interior spaces aren't encoded) |
 | `dbo..hidden` | `dbo.%2Ehidden.json` (leading dot after the schema prefix) |
 | `dbo.CON` | `dbo.%43ON.json` (reserved name, first char encoded) |
 | `dbo.file:name` | `dbo.file%3Aname.json` (colon encoded) |
 
-SchemaQuench decodes these filenames transparently when reading table definitions. You generally do not need to worry about encoding unless you are creating table JSON files by hand for tables with unusual names.
+SchemaQuench decodes these filenames transparently when reading table definitions. You generally don't need to worry about encoding unless you're creating table JSON files by hand for tables with unusual names.
 
 ---
 

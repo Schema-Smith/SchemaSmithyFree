@@ -31,7 +31,7 @@ For the full mapping rules, precedence chain, and every available setting, see t
 
 ## Pipeline examples
 
-The examples below show complete, working pipelines for four major CI/CD platforms. Each one checks out the schema package, injects credentials from the platform's secret store, and runs SchemaQuench. That is the entire deployment.
+The examples below show complete, working pipelines for four major CI/CD platforms. Each one checks out the schema package, injects credentials from the platform's secret store, and runs SchemaQuench. That's the entire deployment.
 
 ### GitHub Actions
 
@@ -84,7 +84,7 @@ pipeline {
 }
 ```
 
-Jenkins injects credentials through the Credentials Plugin. Notice the package path points to a zip file — SchemaQuench reads directly from zip archives, so there is no extraction step. Build a zip artifact upstream, pass the path, and deploy.
+Jenkins injects credentials through the Credentials Plugin. Notice the package path points to a zip file — SchemaQuench reads directly from zip archives, so there's no extraction step. Build a zip artifact upstream, pass the path, and deploy.
 
 ### GitLab CI
 
@@ -195,7 +195,7 @@ jobs:
           schemaquench
 ```
 
-If WhatIf fails, the PR check fails. The author sees exactly which SQL statement would have broken, which token was missing, which dependency could not be resolved. Fix it in the PR, not in production.
+If WhatIf fails, the PR check fails. The author sees exactly which SQL statement would have broken, which token was missing, which dependency couldn't be resolved. Fix it in the PR, not in production.
 
 ### Merge pipeline: deploy through environments
 
@@ -231,10 +231,10 @@ The pattern is the same regardless of platform: store the credential in the plat
 
 **WhatIf before production.** Non-negotiable. Run WhatIf against a disposable database on every PR that touches schema files. It costs minutes in CI and saves hours of incident response.
 
-**Build once, deploy the same artifact.** Zip your schema package, version it, store it. Deploy that same zip to dev, staging, and production. If you rebuild per environment, you are not testing what you are deploying.
+**Build once, deploy the same artifact.** Zip your schema package, version it, store it. Deploy that same zip to dev, staging, and production. If you rebuild per environment, you're not testing what you're deploying.
 
 **Keep SchemaQuench on the runner, not in the pipeline.** Pre-install the binary on your self-hosted runners or agents. This keeps pipeline definitions clean and avoids downloading tools on every run.
 
 ---
 
-Your pipeline is set — schema changes deploy automatically, validated at every stage. But what happens when you need to go backwards? The next chapter covers rollback and recovery. [Rollback and Recovery](08-rollback-and-recovery.md)
+Your pipeline's set — schema changes deploy automatically, validated at every stage. One artifact. Every environment. No manual steps. But what happens when you need to go backwards? The next chapter covers rollback and recovery. [Rollback and Recovery](08-rollback-and-recovery.md)

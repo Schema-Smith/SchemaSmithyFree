@@ -1,10 +1,10 @@
 # Defining Your Schema
 
-You understand the [core concepts](03-core-concepts.md). Now it is time to give your database form. This chapter covers the workflows you will reach for every day — adding tables, shaping columns, writing stored procedures, casting changes from live databases, and bootstrapping new environments from scratch. Each one replaces a manual, error-prone process with something you can trust. And they build on each other naturally.
+You understand the [core concepts](03-core-concepts.md). Now it's time to give your database form. This chapter covers the workflows you'll reach for every day — adding tables, shaping columns, writing stored procedures, casting changes from live databases, and bootstrapping new environments from scratch. Each one replaces a manual, error-prone process with something you can trust. And they build on each other naturally.
 
 ## Adding a table
 
-Your team needs a `Promotions` table to track discount campaigns. Here is what you do.
+Your team needs a `Promotions` table to track discount campaigns. Here's what you do.
 
 **1. Create the JSON file.** Add `dbo.Promotions.json` to your package's `Tables/` folder:
 
@@ -64,7 +64,7 @@ Your team needs a `Promotions` table to track discount campaigns. Here is what y
 }
 ```
 
-That is the entire table definition. Every column, every constraint, every index — all in one readable file. For every property available in a table JSON file, see the [Schema Packages Reference](../reference/schema-packages.md#json-table-format).
+That's the entire table definition. Every column, every constraint, every index — all in one readable file. For every property available in a table JSON file, see the [Schema Packages Reference](../reference/schema-packages.md#json-table-format).
 
 **2. Quench it.** Run SchemaQuench against your development database:
 
@@ -72,9 +72,9 @@ That is the entire table definition. Every column, every constraint, every index
 SchemaQuench
 ```
 
-SchemaQuench reads the JSON, sees that `dbo.Promotions` does not exist in the target database, and generates a `CREATE TABLE` statement. Done.
+SchemaQuench reads the JSON, sees that `dbo.Promotions` doesn't exist in the target database, and generates a `CREATE TABLE` statement. One file. One command. Done.
 
-**Compare this to the traditional approach:** write a `CREATE TABLE` script, write a migration file with a sequence number, make sure the sequence number does not collide with anyone else's, add an `IF NOT EXISTS` guard, add a corresponding rollback script, update a migrations tracking table. With SchemaSmith, you created one file and ran one command. No migration scripts. No dependency ordering. No collision worries.
+**Compare this to the traditional approach:** write a `CREATE TABLE` script, write a migration file with a sequence number, make sure the sequence number doesn't collide with anyone else's, add an `IF NOT EXISTS` guard, add a corresponding rollback script, update a migrations tracking table. With SchemaSmith, you created one file and ran one command. No migration scripts. No dependency ordering. No collision worries.
 
 ## Modifying a table
 
@@ -114,11 +114,11 @@ SmithySettings_WhatIfONLY=true SchemaQuench
 
 SchemaQuench generates the SQL it *would* execute — an `ALTER TABLE ... ADD` for the new column, an `ALTER TABLE ... ALTER COLUMN` for the data type change, and a `CREATE INDEX` for the new filtered index — and logs it all without applying anything. Read the generated SQL, confirm it looks right, then run SchemaQuench normally to quench the changes into your database.
 
-Three changes to one file. One preview. One deployment command. No migration scripts to write, number, or maintain.
+Three changes to one file. One preview. One command. No scripts to write, number, or maintain.
 
 ## Adding and updating programmable objects
 
-Stored procedures, functions, views, and triggers work differently from tables. Instead of JSON, they are plain `.sql` files. Each object gets its own file in the matching folder:
+Stored procedures, functions, views, and triggers work differently from tables. Instead of JSON, they're plain `.sql` files. Each object gets its own file in the matching folder:
 
 | Object type | Folder |
 |---|---|
@@ -127,7 +127,7 @@ Stored procedures, functions, views, and triggers work differently from tables. 
 | Views | `Views/` |
 | Triggers | `Triggers/` |
 
-Here is a stored procedure that returns the order history for a customer. Create `dbo.CustOrderHist.sql` in the `Procedures/` folder:
+Here's a stored procedure that returns the order history for a customer. Create `dbo.CustOrderHist.sql` in the `Procedures/` folder:
 
 ```sql
 SET ANSI_NULLS ON
@@ -148,7 +148,7 @@ GO
 
 The key detail: `CREATE OR ALTER`. This is idempotent. It works whether the procedure exists or not. No `IF EXISTS ... DROP` guard. No separate create-vs-alter logic. SchemaQuench runs the script as-is, and SQL Server handles the rest. For the full list of object types and their folder locations, see the [Schema Packages Reference](../reference/schema-packages.md#complete-folder-structure).
 
-Views work the same way. Here is `dbo.Products Above Average Price.sql` in the `Views/` folder:
+Views work the same way. Here's `dbo.Products Above Average Price.sql` in the `Views/` folder:
 
 ```sql
 SET ANSI_NULLS ON
@@ -164,7 +164,7 @@ WHERE Products.UnitPrice > (SELECT AVG(UnitPrice) FROM Products)
 GO
 ```
 
-Need to update an existing procedure? Edit the `.sql` file and quench. The `CREATE OR ALTER` takes care of whether it is new or changed. There is no separate "alter" workflow — you always declare the full object definition, and SchemaQuench applies it.
+Need to update an existing procedure? Edit the `.sql` file and quench. The `CREATE OR ALTER` takes care of whether it's new or changed. There's no separate "alter" workflow — you always declare the full object definition, and SchemaQuench applies it.
 
 ## Extracting changes from a live database
 
@@ -200,7 +200,7 @@ The diff reads like a sentence: "someone added a BackorderThreshold column to th
 
 SchemaTongs does more than dump scripts to flat folders. When you cast your database schema, the tool brings real intelligence to the extraction.
 
-**Subfolder preservation.** You can organize scripts by domain — `Tables/Sales/`, `Tables/HR/`, `Procedures/Reporting/`. When SchemaTongs casts, it preserves existing subfolder locations. If `dbo.Orders.json` already lives in `Tables/Sales/`, the next extraction updates it in place rather than creating a duplicate in the root `Tables/` folder. New objects that have not been organized yet go to the root folder. Your organization stays intact.
+**Subfolder preservation.** You can organize scripts by domain — `Tables/Sales/`, `Tables/HR/`, `Procedures/Reporting/`. When SchemaTongs casts, it preserves existing subfolder locations. If `dbo.Orders.json` already lives in `Tables/Sales/`, the next extraction updates it in place rather than creating a duplicate in the root `Tables/` folder. New objects that haven't been organized yet go to the root folder. Your organization stays intact.
 
 **Orphan detection.** When a database object is dropped, its script file becomes an orphan. SchemaTongs offers three modes for handling this:
 
@@ -220,7 +220,7 @@ For the full set of extraction options, filtering, and configuration, see [Schem
 
 Some products need to create their target database from scratch. CI pipelines spin up fresh containers. Docker Compose environments start from nothing. New developers clone the repo and need a working database in one command. The Initialize template pattern handles all of these.
 
-Three pieces work together. Here is how the Northwind demo product sets it up.
+Three pieces work together. Here's how the Northwind demo product sets it up.
 
 **1. The Initialize template identifies itself out of the deployment.** In `Templates/Initialize/Template.json`:
 
@@ -231,7 +231,7 @@ Three pieces work together. Here is how the Northwind demo product sets it up.
 }
 ```
 
-The `DatabaseIdentificationScript` is the key. It returns a result only when the target database does not yet exist — it matches `TestMain` (a database that always exists on the server) but only when `NorthwindDb` is missing. On the first run, this template activates and creates the database. On every subsequent run, the script returns no rows, SchemaQuench skips the template entirely, and deployment proceeds straight to the main template.
+The `DatabaseIdentificationScript` is the key. It returns a result only when the target database doesn't yet exist — it matches `TestMain` (a database that always exists on the server) but only when `NorthwindDb` is missing. On the first run, this template activates and creates the database. On every subsequent run, the script returns no rows, SchemaQuench skips the template entirely, and deployment proceeds straight to the main template.
 
 **2. A migration script creates the database idempotently.** In `Templates/Initialize/MigrationScripts/Before/Create Northwind [ALWAYS].sql`:
 
@@ -261,10 +261,10 @@ The `[ALWAYS]` marker tells SchemaQuench to run this script every time the Initi
 }
 ```
 
-`TemplateOrder` ensures Initialize runs first. If the database does not exist, Initialize creates it, then the Northwind template deploys the full schema. If the database already exists, Initialize is skipped and Northwind deploys any pending changes.
+`TemplateOrder` ensures Initialize runs first. If the database doesn't exist, Initialize creates it, then the Northwind template deploys the full schema. If the database already exists, Initialize is skipped and Northwind deploys any pending changes.
 
 Both demo products — Northwind and AdventureWorks — use this exact pattern. One `docker compose up` bootstraps everything from an empty SQL Server. Subsequent runs skip Initialize automatically and apply only schema changes. Fresh environment or existing environment, same command, same result.
 
 ---
 
-These workflows cover how you shape your schema — adding tables, modifying columns, writing procedures, casting from live databases, and bootstrapping new environments. When you are ready to bring your team into the process, the next chapter shows how schema-as-files transforms collaboration. [Working with Your Team](05-working-with-your-team.md)
+That's how you shape your schema — adding tables, modifying columns, writing procedures, casting changes, and bootstrapping new environments. Clean, repeatable, no surprises. When you're ready to bring your team into the process, the next chapter shows how schema-as-files transforms collaboration. [Working with Your Team](05-working-with-your-team.md)

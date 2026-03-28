@@ -8,7 +8,7 @@ Hand-written migration scripts are the status quo, and the status quo is fragile
 
 Deployment fear slows the whole team down. Developers wait for DBA approval. DBAs wait for confidence that the script matches reality. Everyone waits because the cost of getting it wrong is a production outage.
 
-There is a better model, and you already use it for everything else.
+There's a better model, and you already use it for everything else.
 
 ## Declare the state, not the steps
 

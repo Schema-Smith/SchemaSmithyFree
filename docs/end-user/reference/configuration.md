@@ -34,7 +34,7 @@ Flags that take no value (like `--version` or `--help`) are specified without a 
 
 ## Common Switches
 
-Every SchemaSmith CLI tool recognizes these switches. They are processed before any configuration is loaded.
+Every SchemaSmith CLI tool recognizes these switches. They're processed before any configuration is loaded.
 
 | Switch | Aliases | Description |
 |---|---|---|
@@ -160,7 +160,7 @@ export SmithySettings_Source__Server=myserver
 export SmithySettings_Source__Password=s3cret
 ```
 
-Environment variables are especially useful in CI/CD pipelines and containers where you do not want secrets in files on disk.
+Environment variables are especially useful in CI/CD pipelines and containers where you don't want secrets in files on disk.
 
 ---
 
@@ -233,7 +233,7 @@ Good logs are the difference between a quick diagnosis and a long night. SchemaS
 
 ### Framework
 
-All CLI tools use [Apache Log4Net](https://logging.apache.org/log4net/). Each tool ships with an embedded Log4Net configuration that is loaded automatically at startup -- there is nothing to configure.
+All CLI tools use [Apache Log4Net](https://logging.apache.org/log4net/). Each tool ships with an embedded Log4Net configuration that is loaded automatically at startup -- there's nothing to configure.
 
 ### Log files
 
@@ -294,8 +294,8 @@ C:\Tools\
 |---|---|---|
 | `0` | Normal completion | None -- the operation succeeded. |
 | `2` | One or more database quenches failed (SchemaQuench only) | Check the progress and error logs for details on which databases failed and why. Fix the failing scripts and re-run. |
-| `3` | Unhandled exception | An unexpected error occurred. The exception is logged to both the progress and error logs before exit. Report the error with the log contents if the cause is not obvious. |
-| `4` | Log backup failure | The tool completed its main work but could not back up the log files. Check directory permissions and disk space in the log directory. The base log files may still be readable even though the backup failed. |
+| `3` | Unhandled exception | An unexpected error occurred. The exception is logged to both the progress and error logs before exit. Report the error with the log contents if the cause isn't obvious. |
+| `4` | Log backup failure | The tool completed its main work but couldn't back up the log files. Check directory permissions and disk space in the log directory. The base log files may still be readable even though the backup failed. |
 
 ---
 
