@@ -1,12 +1,14 @@
 # Core Concepts
 
-The [Quick Start](02-quick-start.md) walked you through the full cycle: extract, browse, deploy, change, redeploy. This chapter explains the mental model behind what you just did, so the patterns make sense as your schema packages grow more complex.
+The [Quick Start](02-quick-start.md) walked you through the full cycle: cast, browse, quench, change, redeploy. This chapter explains the mental model behind what you just did, so the patterns make sense as your schema packages grow more complex.
+
+Think of this as the "why it works" behind the "how it works."
 
 ## State-based vs migration-based
 
 Most database deployment tools are migration-based. You write ordered scripts that describe *how to change* the database: "add this column, rename that index, drop this constraint." Each migration builds on the one before it, creating a chain. Break one link and everything downstream fails.
 
-SchemaSmith is state-based. You declare *what the database should look like*, and the tool computes the delta.
+SchemaSmith is state-based. You declare *what the database should look like*, and the tool computes the delta. You describe the destination. The forge figures out the route.
 
 Here is what the difference looks like in practice. Suppose the Products table needs a new `DiscountPercent` column.
 
@@ -33,18 +35,18 @@ This script must run exactly once, in the right order, after every prior migrati
 }
 ```
 
-SchemaQuench reads this declaration, queries the target database, sees that `DiscountPercent` does not exist, and generates the ALTER statement itself. Run the same package against dev, staging, and production — each gets exactly the changes it needs, regardless of what state it was in before.
+SchemaQuench reads this declaration, queries the target database, sees that `DiscountPercent` does not exist, and generates the ALTER statement itself. Run the same package against dev, staging, and production — each environment gets exactly the changes it needs, regardless of what state it was in before. Same package, correct results everywhere.
 
 The benefits compound over time:
 
 - **No ordering bugs.** There is no migration chain to break.
 - **No drift.** Every deployment converges to the same declared state.
 - **Readable reviews.** Pull requests show the table as it will be, not a sequence of mutations to decipher.
-- **Repeatable deploys.** Deploy the same package to any environment. SchemaQuench computes the right delta for each.
+- **Repeatable deploys.** Same package, any environment. SchemaQuench computes the right delta for each.
 
 ## Products and Templates
 
-A **product** is a deployable unit — the top-level container for everything SchemaSmith manages. It is defined by a `Product.json` file at the root of your schema package:
+A **product** is a deployable unit — the top-level container for everything SchemaSmith manages. Think of it as the complete blueprint for a deployment. It is defined by a `Product.json` file at the root of your schema package:
 
 ```json
 {
@@ -74,7 +76,7 @@ A **template** targets a specific database (or set of databases). It lives in a 
 }
 ```
 
-The `DatabaseIdentificationScript` is the key mechanism — it returns the names of databases this template should be applied to. In the simple case above, it targets a single database. But the script can return multiple rows, which means one template can deploy the same schema to many databases at once (useful for multi-tenant systems where each tenant has a separate database).
+The `DatabaseIdentificationScript` is the key mechanism — it returns the names of databases this template should be applied to. In the simple case above, it targets a single database. But the script can return multiple rows, which means one template can deploy the same schema to many databases at once. That's a powerful pattern for multi-tenant systems where each tenant has a separate database — one template, one declaration, every tenant converges to the same state.
 
 **The hierarchy:**
 
@@ -101,9 +103,11 @@ For the full list of Product.json and Template.json fields, see the [Schema Pack
 
 A schema package is the folder structure that holds your entire database definition. The organizing principle is straightforward: **structure is data, behavior is code.**
 
-**Structural objects** — tables and indexed views — are defined as JSON files. JSON is diffable, mergeable, and machine-readable. SchemaSmith parses these definitions, compares them against the live database, and computes precise ALTER statements. You never write ALTERs by hand.
+**Structural objects** — tables and indexed views — are defined as JSON files. JSON is diffable, mergeable, and machine-readable. SchemaQuench parses these definitions, compares them against the live database, and computes precise ALTER statements. You never write ALTERs by hand.
 
 **Behavioral objects** — stored procedures, functions, views, triggers — are plain `.sql` files containing CREATE OR ALTER statements. These are code: they get deployed as-is, replacing whatever currently exists. There is no diff to compute; the file *is* the definition.
+
+The distinction matters for your workflow. Structural changes — adding a column, modifying an index — SchemaSmith hammers into shape for you, computing exactly the right ALTERs. Behavioral changes — rewriting a stored procedure — you author directly in SQL, and SchemaQuench deploys them wholesale.
 
 Here is what a typical template folder contains:
 
@@ -130,7 +134,7 @@ Templates/Northwind/
     After/                         <-- SQL: run after everything else
 ```
 
-You do not need all these folders. Most projects use Tables, Procedures, Views, and Functions. The rest exist when you need them. SchemaTongs creates the full structure automatically when it extracts a database.
+You do not need all these folders. Most projects use Tables, Procedures, Views, and Functions. The rest exist when you need them. SchemaTongs creates the full structure automatically when it casts a database.
 
 For the complete folder reference and file naming conventions, see [Schema Packages](../reference/schema-packages.md).
 
@@ -141,7 +145,7 @@ The four SchemaSmith tools form a cycle that covers the full schema management w
 ```
                     Live Database
                    /             \
-          Extract /               \ Deploy
+            Cast  /               \ Quench
                  /                 \
         SchemaTongs          SchemaQuench
                  \                 /
@@ -154,27 +158,27 @@ The four SchemaSmith tools form a cycle that covers the full schema management w
         DataTongs: Live Database --> MERGE Scripts
 ```
 
-**SchemaTongs** extracts a live database into a schema package. Tables become JSON files, procedures become SQL files, everything organized into the folder structure described above. This is how you onboard an existing database — run SchemaTongs once, commit the output, and you have a versioned baseline.
+**SchemaTongs** grips a live database and casts it into a schema package. Tables become JSON files, procedures become SQL files, everything organized into the folder structure described above. This is how you onboard an existing database — run SchemaTongs once, commit the output, and you have a versioned baseline. Your database's entire definition, captured in files you own.
 
-**SchemaHammer** is a desktop viewer for browsing schema packages. Open a package, navigate the tree view, inspect table definitions with syntax highlighting. It turns a folder of JSON and SQL files into something a DBA can review visually without needing to understand the file format.
+**SchemaHammer** is a desktop viewer for browsing and inspecting schema packages. Open a package, navigate the tree view, inspect table definitions with syntax highlighting. It turns a folder of JSON and SQL files into something a DBA can review visually — no need to understand the file format, no server connection required.
 
-**SchemaQuench** deploys a schema package to a database. It reads your declared state, queries the target, computes the delta, and applies the changes. This is the deployment engine — the tool that makes state-based management work.
+**SchemaQuench** deploys — quenches — a schema package to a database. It reads your declared state, queries the target, computes the delta, and applies the changes. This is the deployment engine — the tool that makes state-based management work. Same package in, correct database out, every time.
 
-**DataTongs** captures reference data from a live database as MERGE scripts. Lookup tables, configuration rows, seed data — anything that should travel with the schema. The output goes into the `Table Data/` folder and deploys alongside structural changes. For the full DataTongs configuration and type handling details, see the [DataTongs Reference](../reference/datatongs.md).
+**DataTongs** grips reference data from a live database and extracts it as MERGE scripts. Lookup tables, configuration rows, seed data — anything that should travel with the schema. The output goes into the `Table Data/` folder and deploys alongside structural changes. For the full DataTongs configuration and type handling details, see the [DataTongs Reference](../reference/datatongs.md).
 
 The tools do not impose a rigid sequence. A typical flow looks like:
 
-1. Extract with SchemaTongs (onboarding or re-baselining)
+1. Cast with SchemaTongs (onboarding or re-baselining)
 2. Edit the schema package files directly (day-to-day development)
-3. Deploy to a test database with SchemaQuench
+3. Quench to a test database with SchemaQuench
 4. Review in SchemaHammer or via git diff
-5. Deploy to production with SchemaQuench
+5. Quench to production with SchemaQuench
 
-Once your schema is in files, most daily work is editing JSON and SQL directly — you do not re-extract every time.
+Once your schema is in files, most daily work is editing JSON and SQL directly — you do not re-cast every time. The files are yours to shape.
 
 ## The deployment model
 
-SchemaQuench follows a clear sequence when deploying a schema package:
+SchemaQuench follows a clear sequence when quenching a schema package to a database:
 
 1. **Read the declared state** — parse every JSON table definition and SQL file in the schema package.
 2. **Query the current state** — inspect the target database's actual tables, columns, indexes, keys, and objects.
@@ -196,13 +200,13 @@ The execution slots give you precise control over ordering when it matters. With
 11. Indexed views
 12. After migration scripts
 
-Most of the time you do not think about slots — tables and objects just deploy correctly. The migration script slots exist for cases where you need to run something at a specific point in the sequence, like populating data before a NOT NULL constraint takes effect.
+Most of the time you do not think about slots — tables and objects just deploy correctly. That's by design. The migration script slots exist for cases where you need to run something at a specific point in the sequence, like populating data before a NOT NULL constraint takes effect. The tool handles the complexity so you can focus on the design.
 
 For the full deployment flow, execution slot details, and configuration options, see [SchemaQuench](../reference/schemaquench.md).
 
 ## JSON table definitions
 
-Table definitions are where you will spend most of your editing time. Here is an actual table from the Northwind demo — `dbo.Products`:
+Table definitions are where you will spend most of your editing time. They're the heart of the craft — where you shape every column, index, and constraint. Here is an actual table from the Northwind demo — `dbo.Products`:
 
 ```json
 {
@@ -280,14 +284,14 @@ Table definitions are where you will spend most of your editing time. Here is an
 
 *(Some columns and default properties trimmed for readability. SchemaTongs extracts the full definition including every property.)*
 
-Reading this top to bottom:
+Reading this top to bottom, the whole table is right here:
 
 - **Schema and Name** identify the table. Names use SQL Server bracket notation.
 - **Columns** list every column with its data type, nullability, defaults, and check constraints. `"DataType": "INT IDENTITY(1, 1)"` means an auto-incrementing integer. `"Default": "0"` means the column gets a default constraint. `"CheckExpression"` adds a CHECK constraint inline with the column.
 - **Indexes** define the primary key and any secondary indexes. The primary key is a clustered unique index named `PK_Products` on `ProductID`. Additional indexes cover the foreign key columns.
 - **ForeignKeys** define relationships to other tables. Each entry names the constraint, the local column(s), the related table, and the referential actions.
 
-If you have used SSMS to view a table's properties, this is the same information — columns tab, indexes, foreign keys — expressed as a single file you can diff, review in a pull request, and merge without conflicts.
+If you have used SSMS to view a table's properties, this is the same information — columns tab, indexes, foreign keys — expressed as a single file you can diff, review in a pull request, and merge without conflicts. One file, one table, complete truth.
 
 Why JSON instead of SQL DDL? Three reasons:
 
