@@ -179,6 +179,41 @@ public class SqlScriptEditorViewModelTests
     }
 
     [Test]
+    public void ExpandTokens_WithMismatchedCase_ReplacesTripleBraces()
+    {
+        var templateDir = Path.Combine(ValidProductPath, "Templates", "Main");
+        var scriptPath = Path.Combine(templateDir, "Functions", "dbo.MyFunction.sql");
+
+        var productNode = new TreeNodeModel
+        {
+            Text = "ValidProduct",
+            Tag = "Product",
+            NodePath = ValidProductPath
+        };
+        var templateNode = new TreeNodeModel
+        {
+            Text = "Main",
+            Tag = "Template",
+            NodePath = templateDir,
+            Parent = productNode
+        };
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "dbo.MyFunction.sql",
+            Tag = "Sql Script",
+            NodePath = scriptPath,
+            Parent = templateNode
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        var result = vm.ExpandTokens("USE {{{maindb}}}");
+
+        Assert.That(result, Is.EqualTo("USE TestMain"));
+    }
+
+    [Test]
     public void EditorTitle_ReturnsNodeText()
     {
         var node = new TreeNodeModel { Text = "deploy.sql", Tag = "Sql Script" };

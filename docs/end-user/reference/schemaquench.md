@@ -48,6 +48,8 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
 | `UpdateTables` | bool | `true` | Apply table structure changes (columns, indexes, constraints, foreign keys) from the schema package. |
 | `DropTablesRemovedFromProduct` | bool | `true` | Drop tables that exist in the database but are not defined in the schema package. |
 | `RunScriptsTwice` | bool | `false` | Run object scripts twice to verify idempotency. A CI/testing tool, not for production. |
+| `TrackRunOnceMigrations` | bool | `true` | Track run-once migration scripts in `CompletedMigrationScripts`. When `false`, all scripts run on every deployment (like `[ALWAYS]`). Designed for datafix and patch pipelines. |
+| `PruneObsoleteMigrationTracking` | bool | `true` | Remove tracking entries for scripts no longer in the package. When `false`, existing entries are preserved. Ignored when `TrackRunOnceMigrations` is `false`. |
 | `ScriptTokens` | object | `{}` | Config-level overrides for product script tokens. Keys are token names, values are replacement strings. |
 
 ### Full Settings File Example
@@ -69,6 +71,8 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
     "UpdateTables": true,
     "DropTablesRemovedFromProduct": true,
     "RunScriptsTwice": false,
+    "TrackRunOnceMigrations": true,
+    "PruneObsoleteMigrationTracking": true,
     "ScriptTokens": {}
 }
 ```
@@ -90,6 +94,8 @@ All configuration keys can be overridden via environment variables using the `Sm
 | `UpdateTables` | `SmithySettings_UpdateTables` |
 | `DropTablesRemovedFromProduct` | `SmithySettings_DropTablesRemovedFromProduct` |
 | `RunScriptsTwice` | `SmithySettings_RunScriptsTwice` |
+| `TrackRunOnceMigrations` | `SmithySettings_TrackRunOnceMigrations` |
+| `PruneObsoleteMigrationTracking` | `SmithySettings_PruneObsoleteMigrationTracking` |
 | `ScriptTokens:<name>` | `SmithySettings_ScriptTokens__<name>` |
 
 ---
@@ -382,6 +388,37 @@ This is an **idempotency testing** tool, not a dependency resolution mechanism. 
 - **Production deployments** -- It doubles the execution time for the object script phase with no production benefit. This is a testing tool.
 
 This setting defaults to `false` because idempotency testing is a CI/development concern, not a production deployment concern.
+
+---
+
+## TrackRunOnceMigrations
+
+When `TrackRunOnceMigrations` is `false`, SchemaQuench treats all migration scripts as if they have the `[ALWAYS]` suffix -- no script is recorded in `CompletedMigrationScripts`, no script is skipped based on prior runs. Every migration script in every slot runs on every deployment.
+
+This is designed for **datafix and patch pipelines** where the package is deliberately partial -- it contains only the scripts needed for this specific fix, not the full release set. Tracking would prevent re-running a fix script if needed, and the partial package would cause the pruning logic to delete tracking records from prior full releases.
+
+When tracking is off, `PruneObsoleteMigrationTracking` is forced off regardless of its configured value.
+
+**The datafix profile:**
+
+```json
+{
+    "KindleTheForge": false,
+    "UpdateTables": false,
+    "DropTablesRemovedFromProduct": false,
+    "TrackRunOnceMigrations": false
+}
+```
+
+---
+
+## PruneObsoleteMigrationTracking
+
+When `PruneObsoleteMigrationTracking` is `true` (the default), SchemaQuench removes entries from `CompletedMigrationScripts` for scripts that no longer exist in the current package. This is correct for full release deployments where the package represents the complete truth.
+
+When `false`, existing tracking entries are left alone regardless of what scripts are in the current package. This is correct for datafix and patch deployments where the package is deliberately partial -- without this setting, a datafix package that contains only two scripts would cause SchemaQuench to delete the tracking records for every other migration script from prior releases.
+
+This setting is ignored when `TrackRunOnceMigrations` is `false` (no tracking means no pruning).
 
 ---
 
