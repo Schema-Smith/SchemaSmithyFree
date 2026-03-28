@@ -1,6 +1,6 @@
 # SchemaHammer Reference
 
-SchemaHammer is a read-only, cross-platform desktop viewer for browsing SchemaSmith schema packages. It gives you a visual, hierarchical view of everything in a product -- templates, tables, indexed views, migration scripts, and script tokens -- without connecting to a server or modifying any files. Use SchemaHammer whenever you need to understand what a schema package contains, inspect object definitions, trace token values, or review migration scripts.
+See your entire database design at a glance. SchemaHammer opens a schema package and lays out every table, view, procedure, and migration script in a navigable tree -- no server connection required, no files modified. It's the fastest way to review a schema change, trace a token value, or answer "what does this product actually define?" Open it, hammer through the structure, and know exactly what you're deploying.
 
 ---
 
@@ -205,7 +205,7 @@ Expand an indexed view node in the tree to browse its child objects -- columns, 
 
 ## SQL Script Viewer
 
-Selecting a script file opens the SQL viewer with T-SQL syntax highlighting. The viewer is read-only.
+Every script in the package is readable right here. Selecting a script file opens the SQL viewer with T-SQL syntax highlighting. The viewer is read-only.
 
 ### Token Preview
 
@@ -232,7 +232,7 @@ This makes it fast to trace where a value comes from when reading migration scri
 
 ## Tree Search
 
-Tree search filters the product tree by object name.
+When a product has hundreds of tables, scrolling through the tree gets old fast. Tree search filters the product tree by object name.
 
 **Open:** Press **Ctrl+F** (when the SQL editor is not focused) or go to **Search > Search Tree**.
 
@@ -250,7 +250,7 @@ Tree search filters the product tree by object name.
 
 ## Code Search
 
-Code search looks inside the content of your schema package rather than just object names.
+Need to find every reference to a column, token, or table name across the entire product? Code search looks inside the content of your schema package rather than just object names.
 
 **Open:** Press **Ctrl+Shift+F** or go to **Search > Search Code**.
 

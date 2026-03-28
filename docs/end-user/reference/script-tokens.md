@@ -4,6 +4,8 @@ Applies to: SchemaQuench, SchemaTongs, DataTongs, SchemaHammer (SQL Server, Comm
 
 ---
 
+Script tokens let you write one schema package and deploy it to any environment -- dev, staging, production -- with different database names, connection targets, or version stamps. Define a token once, reference it everywhere, and override it per environment without touching a single script file.
+
 ## Token Syntax
 
 Script tokens use double curly braces:
@@ -130,7 +132,7 @@ IF NOT EXISTS(SELECT * FROM dbo.ProductVersion WHERE Product = '{{ProductName}}'
 
 ## Config-Level Overrides
 
-Override product token values in a settings file without modifying the schema package. This lets you deploy the same package to different environments with different token values.
+This is where tokens earn their keep. Override product token values in a settings file without modifying the schema package. This lets you deploy the same package to different environments with different token values.
 
 Add a `ScriptTokens` section to your tool's settings file (e.g., `SchemaQuench.settings.json`):
 
@@ -182,7 +184,7 @@ Like config-level overrides, environment variable overrides only apply to tokens
 
 ## Token Resolution Order
 
-Tokens resolve in layers, from lowest to highest priority:
+When the same token name appears in multiple places, the most specific definition wins. Tokens resolve in layers, from lowest to highest priority:
 
 | Priority | Source | Scope |
 |---|---|---|

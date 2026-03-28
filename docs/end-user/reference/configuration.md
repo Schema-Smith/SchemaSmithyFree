@@ -4,13 +4,13 @@ Applies to: SchemaQuench, SchemaTongs, DataTongs (SQL Server, Community)
 
 ---
 
-This reference covers the configuration system shared by all three SchemaSmith CLI tools: how to pass options on the command line, how settings files and environment variables work, and how they combine. Tool-specific settings are documented in each tool's own reference page.
+Every SchemaSmith CLI tool shares the same configuration spine -- one consistent system for settings files, environment variables, and command-line switches. Learn it once and it works the same way whether you're casting schemas, quenching databases, or extracting data. Tool-specific settings live on each tool's own reference page; this page covers the shared foundation.
 
 ---
 
 ## CLI Switch Format
 
-All switches accept either a double-dash (`--`) or forward-slash (`/`) prefix. Separate the switch name from its value with `:` or `=`. A single leading dash (`-`) also works.
+SchemaSmith is flexible about how you pass switches -- pick whichever style feels natural. All switches accept either a double-dash (`--`) or forward-slash (`/`) prefix. Separate the switch name from its value with `:` or `=`. A single leading dash (`-`) also works.
 
 ```
 --switch:value
@@ -67,7 +67,7 @@ SchemaTongs --help
 
 ## Configuration Hierarchy
 
-SchemaSmith builds configuration by layering sources. Later sources override earlier ones. The full chain, from lowest to highest priority:
+SchemaSmith layers configuration so you can set sensible defaults in a file and override just the pieces that change per environment. Later sources override earlier ones. The full chain, from lowest to highest priority:
 
 1. **Settings file** -- `<ToolName>.settings.json`
 2. **User secrets** -- .NET user secrets (debug builds only, not present in release builds)
@@ -134,7 +134,7 @@ The path can be absolute or relative to the current working directory.
 
 ## Environment Variables
 
-All three tools read environment variables prefixed with `SmithySettings_`. The prefix is stripped, and double underscores (`__`) map to hierarchy separators in the configuration structure.
+Environment variables give you a clean way to inject configuration without touching files on disk -- exactly what you need in CI/CD pipelines and containers. All three tools read environment variables prefixed with `SmithySettings_`. The prefix is stripped, and double underscores (`__`) map to hierarchy separators in the configuration structure.
 
 ### Mapping rules
 
@@ -166,7 +166,7 @@ Environment variables are especially useful in CI/CD pipelines and containers wh
 
 ## Connection Configuration
 
-All three tools connect to SQL Server. SchemaQuench uses a `Target` section (it writes to the server). SchemaTongs and DataTongs use a `Source` section (they read from the server). The structure is the same either way.
+All three tools connect to SQL Server. The naming reflects the direction of data flow: SchemaQuench uses a `Target` section (it writes to the server), while SchemaTongs and DataTongs use a `Source` section (they read from the server). The structure is the same either way.
 
 ### Individual connection settings
 
@@ -209,7 +209,7 @@ When `--ConnectionString` is provided, all individual connection settings (`Serv
 
 ## Password Masking
 
-When a tool logs its active configuration at startup, it masks any value whose key contains `Password` or `Pwd` (case-insensitive). The masked value appears as `**********` in both the progress log and console output.
+Your credentials stay out of the logs. When a tool logs its active configuration at startup, it masks any value whose key contains `Password` or `Pwd` (case-insensitive). The masked value appears as `**********` in both the progress log and console output.
 
 All other configuration values are logged as-is. This lets you audit the active configuration from the log without exposing credentials.
 
@@ -228,6 +228,8 @@ Configuration:
 ---
 
 ## Logging
+
+Good logs are the difference between a quick diagnosis and a long night. SchemaSmith gives you detailed, automatic logging out of the box.
 
 ### Framework
 

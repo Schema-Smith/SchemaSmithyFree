@@ -1,6 +1,6 @@
 # Schema Packages Reference
 
-A schema package is the complete, deployable definition of one or more database schemas. It is the unit of work for every SchemaSmith tool: SchemaTongs creates packages by extracting from live databases, SchemaQuench deploys packages to target databases, and DataTongs generates data scripts that live inside packages.
+A schema package is your database's source of truth -- the complete, version-controlled definition of what your databases should look like. Every tool in the SchemaSmith toolset revolves around this one structure: SchemaTongs casts packages from live databases, SchemaQuench quenches them onto target servers, SchemaHammer lets you hammer through them visually, and DataTongs adds reference data alongside your schema.
 
 This document is the authoritative reference for every file, folder, property, and format in a schema package.
 
@@ -8,7 +8,7 @@ This document is the authoritative reference for every file, folder, property, a
 
 ## Product.json
 
-The `Product.json` file sits at the root of the schema package and is the top-level configuration. Every package must have exactly one.
+The `Product.json` file sits at the root of the schema package and is the top-level configuration -- the starting point for every deployment. Every package must have exactly one.
 
 ### Properties
 
@@ -158,7 +158,7 @@ SQL script files can be organized into subdirectories within any script folder. 
 
 ## Script Folder Execution Order
 
-During deployment, SchemaQuench processes folders in a fixed sequence. The sequence below shows the complete execution order including both product-level and template-level folders. The template-level sequence repeats for each template in `TemplateOrder`, and within each template it repeats for each database identified by `DatabaseIdentificationScript`.
+Understanding the execution order is key to writing migration scripts that land in the right slot. During deployment, SchemaQuench processes folders in a fixed sequence. The sequence below shows the complete execution order including both product-level and template-level folders. The template-level sequence repeats for each template in `TemplateOrder`, and within each template it repeats for each database identified by `DatabaseIdentificationScript`.
 
 ### Full deployment sequence
 
@@ -210,7 +210,7 @@ Steps 2–15 execute per template (in `TemplateOrder`), per database (as identif
 
 ## JSON Table Format
 
-Table definitions live in the `Tables/` directory of each template as individual JSON files. Each file defines exactly one table.
+This is where the state-based model really shines. Table definitions live in the `Tables/` directory of each template as individual JSON files. Each file declares exactly one table -- columns, indexes, keys, constraints, and all. SchemaQuench reads these definitions and figures out what changes to make.
 
 ### Table-level properties
 
@@ -639,7 +639,7 @@ Indexed view files follow the same naming convention as tables: `schema.viewname
 
 ## .json-schemas Folder
 
-The `.json-schemas/` directory at the package root contains JSON Schema definition files generated automatically by SchemaTongs during extraction. These files enable editor validation and autocomplete in IDEs that support JSON Schema (such as VS Code, JetBrains Rider, and Visual Studio).
+Your IDE can help you write correct table JSON if you point it at the right schemas. The `.json-schemas/` directory at the package root contains JSON Schema definition files generated automatically by SchemaTongs during extraction. These files enable editor validation and autocomplete in IDEs that support JSON Schema (such as VS Code, JetBrains Rider, and Visual Studio).
 
 The folder contains four schema files:
 

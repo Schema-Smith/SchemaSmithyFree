@@ -1,6 +1,6 @@
 # SchemaTongs Reference
 
-SchemaTongs extracts the schema of a live SQL Server database and writes it into a schema package -- the version-controlled, deployable format that SchemaQuench and SchemaHammer consume. Point it at any SQL Server database and it produces a clean set of JSON table definitions and SQL scripts, ready to commit to source control. One command takes you from a live database to a fully structured, reviewable package.
+Cast your live database into version-controlled code with a single command. SchemaTongs grips every object in your SQL Server database -- all 13 types -- and extracts them into a clean schema package: tables as JSON, programmable objects as SQL scripts, everything organized and ready to commit to source control. Point it at a database, run it, and you have a deployable package that SchemaQuench and SchemaHammer can work with immediately.
 
 ---
 
@@ -136,7 +136,7 @@ The `--ConnectionString` switch bypasses all `Source` settings entirely. When pr
 
 ### ShouldCast Flags
 
-Each object type can be individually enabled or disabled. All extraction flags default to `true` except `ScriptDynamicDependencyRemovalForFunctions`, `ValidateScripts`, and `ObjectList`.
+Control exactly what gets cast from the database. Each object type can be individually enabled or disabled. All extraction flags default to `true` except `ScriptDynamicDependencyRemovalForFunctions`, `ValidateScripts`, and `ObjectList`.
 
 | Flag | Type | Default | What It Extracts |
 |---|---|---|---|
@@ -222,7 +222,7 @@ When `ObjectList` is active, orphan detection is automatically disabled -- Schem
 
 ## Orphan Detection
 
-When a database object is dropped or renamed, its corresponding script file in the schema package becomes an orphan -- it no longer matches any object in the source database. SchemaTongs detects orphans by comparing the set of files written during extraction against the set of files that existed before extraction.
+Databases change, and when objects get dropped or renamed, the old script files linger in your package. SchemaTongs catches these orphans automatically by comparing the set of files written during extraction against the set of files that existed before extraction.
 
 Configure orphan behavior with `OrphanHandling:Mode`:
 
@@ -248,7 +248,7 @@ Orphan detection only runs for object types that were fully extracted (ShouldCas
 
 ## Script Validation
 
-When `ShouldCast:ValidateScripts` is `true`, SchemaTongs tests each extracted SQL script for syntax errors immediately after writing it. The validation strategy depends on the object type:
+Catch problems at extraction time instead of discovering them during deployment. When `ShouldCast:ValidateScripts` is `true`, SchemaTongs tests each extracted SQL script for syntax errors immediately after writing it. The validation strategy depends on the object type:
 
 - **Views, functions, and stored procedures** -- SchemaTongs creates the object under a temporary GUID-based name inside a transaction, then rolls back. If creation fails, the script is invalid.
 - **Triggers** -- SchemaTongs wraps the script with `SET PARSEONLY ON` / `SET PARSEONLY OFF` and executes it, which validates syntax without actually creating the trigger.
@@ -289,7 +289,7 @@ When any scripts fail validation, SchemaTongs generates an `_InvalidObjectCleanu
 
 ## Subfolder Preservation
 
-Script folders (`Procedures/`, `Functions/`, `Views/`, `Triggers/`, and all others) support user-created subfolders for organizing scripts. For example, you might organize stored procedures by domain:
+Organize your scripts however makes sense for your team -- SchemaTongs will respect that structure across re-extractions. Script folders (`Procedures/`, `Functions/`, `Views/`, `Triggers/`, and all others) support user-created subfolders for organizing scripts. For example, you might organize stored procedures by domain:
 
 ```
 Procedures/
@@ -312,7 +312,7 @@ New objects always appear in the root of their folder. Move them into subfolders
 
 ## Package Initialization
 
-When SchemaTongs runs against a path that does not yet contain a schema package, it creates the full structure:
+The first extraction is where your schema package is born. When SchemaTongs runs against a path that does not yet contain a schema package, it creates the full structure:
 
 1. Creates the product directory at `Product:Path`.
 2. Generates `Product.json` with the configured product name and a `Platform` of `"SqlServer"`.

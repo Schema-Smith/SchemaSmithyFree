@@ -1,6 +1,6 @@
 # SchemaQuench Reference
 
-SchemaQuench is the deployment engine for SchemaSmith. It reads a schema package, connects to the target SQL Server, identifies which databases to update, and transforms each database to match the desired state defined in the package. SchemaQuench is designed to be run repeatedly -- it compares current state against desired state, makes only the changes necessary, and tracks migration scripts so they execute only once.
+Take your declared schema and harden it onto a live SQL Server -- that's what SchemaQuench does. It reads a schema package, connects to the target server, and transforms each database to match the desired state. No hand-written ALTER scripts, no guessing what changed. Run it against dev, staging, and production with confidence: SchemaQuench compares current state against desired state, makes only the changes necessary, and tracks migration scripts so they execute only once.
 
 ---
 
@@ -177,7 +177,7 @@ Product scripts run against the `master` database connection, outside the per-da
 
 ## WhatIf Mode
 
-Set `WhatIfONLY` to `true` to perform a dry run. In WhatIf mode:
+See exactly what SchemaQuench would do before it touches a single table. Set `WhatIfONLY` to `true` to perform a dry run. In WhatIf mode:
 
 - **Validation scripts** execute normally (server validation, baseline validation).
 - **Table quench procedures** run with `@WhatIf = 1`, generating the SQL that would be executed and logging it without applying changes.
@@ -217,7 +217,7 @@ SmithySettings_WhatIfONLY=true SchemaQuench
 
 ## KindleTheForge
 
-KindleTheForge deploys the SchemaSmith infrastructure to each target database. This infrastructure includes:
+Before SchemaQuench can shape your database, it needs its tools in place. KindleTheForge deploys the SchemaSmith infrastructure to each target database. This infrastructure includes:
 
 - **SchemaSmith schema** -- All helper objects are created in the `SchemaSmith` schema.
 - **Helper functions** -- `fn_SafeBracketWrap`, `fn_StripBracketWrapping`, `fn_StripParenWrapping`, `fn_FormatJson`.
@@ -267,7 +267,7 @@ Deploys indexed views with diff-based change detection. Creates missing indexed 
 
 ## Migration Script Tracking
 
-Migration scripts (scripts in the Before, BetweenTablesAndKeys, AfterTablesScripts, and After slots) are tracked in the `SchemaSmith.CompletedMigrationScripts` table. This table records:
+SchemaQuench remembers what it has already run, so you never have to worry about a migration script executing twice. Migration scripts (scripts in the Before, BetweenTablesAndKeys, AfterTablesScripts, and After slots) are tracked in the `SchemaSmith.CompletedMigrationScripts` table. This table records:
 
 | Column | Description |
 |--------|-------------|
@@ -317,7 +317,7 @@ To force a tracked script to run again, either:
 
 ## Dependency Retry Loop
 
-Scripts in the Objects, AfterTablesObjects, and TableData slots execute using a dependency retry loop rather than simple sequential execution:
+You shouldn't have to name your files in dependency order just so they deploy correctly. Scripts in the Objects, AfterTablesObjects, and TableData slots execute using a dependency retry loop rather than simple sequential execution:
 
 1. Execute all pending (not yet quenched) scripts in the slot.
 2. For each script, attempt to execute all its batches. If any batch fails, record the error and move on.
