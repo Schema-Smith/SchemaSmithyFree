@@ -349,6 +349,8 @@ These map to `Target:Server`, `Target:User`, and `Target:Password` in the config
 
 If your issue is not covered here, check the [reference documentation](../README.md#reference) for detailed behavior descriptions, or open an issue on [GitHub](https://github.com/Schema-Smith/SchemaSmithyFree/issues).
 
+If you're still stuck and want to talk it through, reach out to Forge directly — [ForgeBarrett@SchemaSmith.com](mailto:ForgeBarrett@SchemaSmith.com). That's real developers on the other end, and we're happy to help.
+
 ---
 
 This is the final chapter of the guide. For a refresher on the basics, head back to [Why SchemaSmith](01-why-schemasmith.md) or jump straight to the [Quick Start](02-quick-start.md).

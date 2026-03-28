@@ -48,6 +48,8 @@ Production-tested against real-world schemas. The demo includes AdventureWorks (
 
 This is an enterprise-class schema management ecosystem — completely free, built by people who've spent decades solving exactly the problems you're facing. The tools are ready. Your databases are waiting.
 
+Have questions about whether SchemaSmith fits your workflow? Wondering how to approach your specific database situation? Forge is here to help — [ForgeBarrett@SchemaSmith.com](mailto:ForgeBarrett@SchemaSmith.com). Real developers, real answers.
+
 ---
 
 Ready to see it in action? [Get started with your first database →](02-quick-start.md)
