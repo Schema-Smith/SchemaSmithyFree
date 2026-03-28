@@ -1,6 +1,6 @@
 # Quick Start
 
-In the next 15 minutes, you will extract a real database into version-controlled files, browse those files visually, deploy them to a fresh empty database, make a schema change, and watch SchemaSmith compute the exact ALTER script to bring the target in line. By the end, you will have completed the full SchemaSmith cycle and seen what state-based schema management feels like in practice.
+In the next 15 minutes, you will extract a real database into version-controlled files, browse those files visually, deploy them to a fresh empty database, make a schema change, and watch SchemaSmith compute the exact ALTER script to bring the target in line. By the end, you will have completed the full SchemaSmith cycle — and you'll understand why teams stop writing migration scripts once they've seen this.
 
 ## Prerequisites
 
@@ -43,9 +43,9 @@ This starts a SQL Server instance on port 1450, then deploys the Northwind and A
 
 Wait for the setup to finish -- you can watch progress with `docker compose -f demo/docker-compose.yml logs -f`. When you see the `completed` service exit, both databases are ready.
 
-## Step 2: Extract with SchemaTongs
+## Step 2: Cast with SchemaTongs
 
-Now let's go the other direction. Pretend you have a database and want to bring it under SchemaSmith management. Create a SchemaTongs configuration file called `tongs-extract.json`:
+Now let's go the other direction. Pretend you have a database and want to bring it under SchemaSmith management. SchemaTongs grips your live schema and casts it into structured files. Create a SchemaTongs configuration file called `tongs-extract.json`:
 
 ```json
 {
@@ -115,7 +115,9 @@ my-northwind/
       Schemas/
 ```
 
-Every table is a JSON file describing its columns, indexes, and constraints. Every stored procedure and view is a plain SQL file. This is your database, materialized as readable, diffable, reviewable source files. Commit this to Git and you have a complete history of every schema change from this point forward. For the full set of extraction options, see the [SchemaTongs Reference](../reference/schematongs.md).
+Every table is a JSON file describing its columns, indexes, and constraints. Every stored procedure and view is a plain SQL file. This is your entire database — materialized as readable, diffable, reviewable source files. Commit this to Git and you have a complete history of every schema change from this point forward. For the full set of extraction options, see the [SchemaTongs Reference](../reference/schematongs.md).
+
+That's the cast — a live database, captured in files you can read, review, and version.
 
 ## Step 3: Explore with SchemaHammer
 
@@ -129,11 +131,11 @@ Or launch SchemaHammer without arguments and use **File > Choose Product** to se
 
 The left panel shows the product tree: templates, tables, views, procedures, and scripts organized exactly as they appear on disk. Click on `dbo.Categories` under Tables -- the right panel shows the table's columns (CategoryID, CategoryName, Description, Picture) and its indexes. Click on a stored procedure like `dbo.CustOrderHist` and you see the full SQL definition with syntax highlighting.
 
-This is your schema browser. No server connection needed -- SchemaHammer reads the files directly. Take a minute to click around. Every object in the Northwind database is here, structured and browsable. For everything SchemaHammer can do, see the [SchemaHammer Reference](../reference/schemahammer.md).
+No server connection needed -- SchemaHammer reads the files directly. Take a minute to click around. Every table, every view, every procedure in the Northwind database is here, structured and browsable. This is what schema review looks like when the files are designed for it. For everything SchemaHammer can do, see the [SchemaHammer Reference](../reference/schemahammer.md).
 
-## Step 4: Deploy with SchemaQuench
+## Step 4: Quench with SchemaQuench
 
-Here is where it gets powerful. Let's deploy the Northwind schema to a completely empty database on the same server. Create a SchemaQuench configuration file called `quench-deploy.json`:
+Here is where it gets powerful. Let's deploy — quench — the Northwind schema to a completely empty database on the same server. Your declared state is about to harden into a live database. Create a SchemaQuench configuration file called `quench-deploy.json`:
 
 ```json
 {
@@ -160,11 +162,11 @@ SchemaQuench --ConfigFile:quench-deploy.json
 
 SchemaQuench reads the schema package, connects to the target server, and builds the entire database from scratch: creates `NorthwindClone`, runs migration scripts, creates all 13 tables with their columns and indexes, deploys all views and stored procedures. A complete, reproducible database from source files. Connect to `localhost,1450` with any SQL client and you will find `NorthwindClone` with the full Northwind schema.
 
-This is the core promise: your schema package is a single source of truth, and SchemaQuench can make any target match it.
+One package. One command. A complete database — built exactly as declared, every time. That's what quenching looks like.
 
 ## Step 5: Make a Change
 
-Now for the real magic. Let's modify the schema and watch SchemaSmith figure out exactly what needs to change.
+Now for the real satisfaction. Let's modify the schema and watch SchemaSmith figure out exactly what needs to change.
 
 Open `demo/Northwind/Templates/Northwind/Tables/dbo.Shippers.json`. Here is what it looks like right now:
 
@@ -237,7 +239,7 @@ Add a new column for tracking email addresses. Insert this after the `[Phone]` c
     },
 ```
 
-You just declared the desired state: "the Shippers table should have an Email column." You did not write an ALTER TABLE script. You did not figure out whether the column already exists. You described what the table should look like.
+You just declared the desired state: "the Shippers table should have an Email column." You didn't write an ALTER TABLE script. You didn't check whether the column already exists. You described what the table should look like. You decide the shape. The forge handles the rest.
 
 Now let's see what SchemaSmith will do -- without actually touching the database. Run SchemaQuench in WhatIf mode:
 
@@ -262,7 +264,7 @@ Save this as `quench-whatif.json` and run:
 SchemaQuench --ConfigFile:quench-whatif.json
 ```
 
-In the output, you will see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live database (which has no Email column) and determined that an ALTER TABLE ADD is needed. No changes were applied -- WhatIf mode is read-only.
+In the output, you will see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live database (which has no Email column) and determined that an ALTER TABLE ADD is needed. No changes were applied -- WhatIf mode is read-only. Preview before you commit. Confidence before you deploy.
 
 Now apply it for real. Change `"WhatIfONLY": true` to `"WhatIfONLY": false` (or use the `quench-deploy.json` from Step 4 with `"NorthwindDb": "Northwind"`) and run again:
 
@@ -270,7 +272,7 @@ Now apply it for real. Change `"WhatIfONLY": true` to `"WhatIfONLY": false` (or 
 SchemaQuench --ConfigFile:quench-deploy.json
 ```
 
-SchemaQuench connects to the Northwind database, sees that `dbo.Shippers` is missing the `[Email]` column, and adds it. Every other table, view, and procedure is already in sync, so nothing else changes. Exactly the right delta, computed automatically.
+SchemaQuench connects to the Northwind database, sees that `dbo.Shippers` is missing the `[Email]` column, and adds it. Every other table, view, and procedure is already in sync, so nothing else changes. Exactly the right delta, computed automatically. No more, no less.
 
 ## Step 6: See It in SchemaHammer
 
@@ -286,14 +288,14 @@ Navigate to `dbo.Shippers` under Tables. There it is: the `[Email]` column, righ
 
 You just completed the full SchemaSmith workflow:
 
-1. **Extract** -- SchemaTongs pulled a live database into structured, version-controlled files
-2. **Browse** -- SchemaHammer let you visually explore every object without a server connection
-3. **Deploy** -- SchemaQuench built a complete database from those files, reproducibly
+1. **Cast** -- SchemaTongs gripped a live database and cast it into structured, version-controlled files
+2. **Browse** -- SchemaHammer let you visually inspect every object without a server connection
+3. **Quench** -- SchemaQuench built a complete database from those files, reproducibly
 4. **Change** -- You edited a JSON file to declare a new column
 5. **Preview** -- WhatIf mode showed you the computed ALTER without touching the database
 6. **Apply** -- SchemaQuench made the target match the declared state, changing only what needed to change
 
-No migration scripts. No ordered chains of ALTERs. No guessing what the target looks like. You declare the state you want, and SchemaSmith gets you there.
+No migration scripts. No ordered chains of ALTERs. No guessing what the target looks like. You declare the state you want, and SchemaSmith gets you there. Every time.
 
 ## What's Next
 
