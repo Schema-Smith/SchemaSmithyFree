@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using SchemaHammer.Services;
 using SchemaHammer.ViewModels;
 
 namespace SchemaHammer.Views;
@@ -110,18 +111,22 @@ public partial class MainWindow : Window
 
         if (DataContext is MainWindowViewModel vm)
         {
-            // Don't save minimized state — keep previous normal bounds
-            if (WindowState == WindowState.Minimized) return;
+            var saveState = WindowStateService.CalculateSaveState(
+                WindowState == WindowState.Minimized,
+                WindowState == WindowState.Maximized,
+                Position.X, Position.Y, Width, Height);
+
+            if (saveState == null) return;
 
             if (vm.TreeViewModel.SelectedNode != null)
                 vm.Settings.LastSelectedNodePath = vm.TreeViewModel.SelectedNode.FullTreePath;
 
             vm.SaveWindowState(
-                WindowState == WindowState.Maximized,
-                Position.X,
-                Position.Y,
-                Width,
-                Height);
+                saveState.IsMaximized,
+                (int)saveState.X,
+                (int)saveState.Y,
+                saveState.Width,
+                saveState.Height);
         }
     }
 
@@ -157,31 +162,29 @@ public partial class MainWindow : Window
     private void RestoreWindowState(MainWindowViewModel vm)
     {
         var settings = vm.Settings;
+        var screen = Screens.Primary;
+        var screenBounds = screen != null
+            ? new WindowStateService.ScreenBounds(screen.WorkingArea.Width, screen.WorkingArea.Height)
+            : null;
 
-        if (settings.WindowWidth > 0 && settings.WindowHeight > 0)
+        var position = WindowStateService.CalculateRestoredPosition(
+            settings.WindowX, settings.WindowY,
+            settings.WindowWidth, settings.WindowHeight,
+            settings.IsMaximized, MinWidth, MinHeight,
+            screenBounds);
+
+        if (position == null) return;
+
+        Width = position.Width;
+        Height = position.Height;
+
+        if (position.IsMaximized)
         {
-            Width = Math.Max(settings.WindowWidth, MinWidth);
-            Height = Math.Max(settings.WindowHeight, MinHeight);
-
-            if (settings.IsMaximized)
-            {
-                WindowState = WindowState.Maximized;
-            }
-            else
-            {
-                var screen = Screens.Primary;
-                if (screen != null)
-                {
-                    var bounds = screen.WorkingArea;
-                    var x = Math.Max(0, Math.Min(settings.WindowX, bounds.Width - Width));
-                    var y = Math.Max(0, Math.Min(settings.WindowY, bounds.Height - Height));
-                    Position = new PixelPoint((int)x, (int)y);
-                }
-                else
-                {
-                    Position = new PixelPoint((int)settings.WindowX, (int)settings.WindowY);
-                }
-            }
+            WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            Position = new PixelPoint((int)position.X, (int)position.Y);
         }
     }
 }

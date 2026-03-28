@@ -1,6 +1,8 @@
 {
     "Name": "ValidProduct",
     "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}') THEN 1 ELSE 0 END AS BIT)",
+    "BaselineValidationScript": "SELECT CAST(1 AS BIT)",
+    "VersionStampScript": "EXEC sp_ExecuteSQL @statement = N'DECLARE @i INT = 1'",
     "TemplateOrder": [
         "Main",
         "Secondary",

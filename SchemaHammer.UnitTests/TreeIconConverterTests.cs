@@ -121,4 +121,81 @@ public class TreeIconConverterTests
             CultureInfo.InvariantCulture);
         Assert.That(result, Is.Null);
     }
+
+    [Test]
+    public void Convert_WithErrorFileImageKey_ReturnsNull()
+    {
+        var converter = TreeIconConverter.Instance;
+        var result = converter.Convert(
+            new List<object?> { "error-file", "" },
+            typeof(object),
+            null,
+            CultureInfo.InvariantCulture);
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Convert_WithSqlErrorScriptTag_ReturnsNull()
+    {
+        var converter = TreeIconConverter.Instance;
+        var result = converter.Convert(
+            new List<object?> { "error-file", "Sql Error Script" },
+            typeof(object),
+            null,
+            CultureInfo.InvariantCulture);
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Convert_WithUnknownTag_UsesImageKeyFallback()
+    {
+        var converter = TreeIconConverter.Instance;
+        var result = converter.Convert(
+            new List<object?> { "folder", "UnknownTag" },
+            typeof(object),
+            null,
+            CultureInfo.InvariantCulture);
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Convert_WithTwoNullValues_FallsToDefaults()
+    {
+        var converter = TreeIconConverter.Instance;
+        var result = converter.Convert(
+            new List<object?> { null, null },
+            typeof(object),
+            null,
+            CultureInfo.InvariantCulture);
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Convert_WithMoreThanTwoValues_UsesFirstTwo()
+    {
+        var converter = TreeIconConverter.Instance;
+        var result = converter.Convert(
+            new List<object?> { "folder", "Table", "extra" },
+            typeof(object),
+            null,
+            CultureInfo.InvariantCulture);
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Convert_WithAllKnownImageKeys_ReturnsNull()
+    {
+        var converter = TreeIconConverter.Instance;
+        var imageKeys = new[] { "product", "template", "file", "error-file", "folder", "unknown" };
+
+        foreach (var key in imageKeys)
+        {
+            var result = converter.Convert(
+                new List<object?> { key, "" },
+                typeof(object),
+                null,
+                CultureInfo.InvariantCulture);
+            Assert.That(result, Is.Null, $"Expected null for imageKey '{key}' with no Application.Current");
+        }
+    }
 }

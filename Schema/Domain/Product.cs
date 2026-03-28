@@ -105,8 +105,8 @@ public class Product
     {
         return
         [
-            new ProductFolder { FolderPath = "ProductScripts/Before", QuenchSlot = ProductQuenchSlot.Before },
-            new ProductFolder { FolderPath = "ProductScripts/After", QuenchSlot = ProductQuenchSlot.After },
+            new ProductFolder { FolderPath = "Before Product", QuenchSlot = ProductQuenchSlot.Before },
+            new ProductFolder { FolderPath = "After Product", QuenchSlot = ProductQuenchSlot.After },
         ];
     }
 }

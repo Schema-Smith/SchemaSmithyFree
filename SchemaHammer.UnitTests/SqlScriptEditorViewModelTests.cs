@@ -374,6 +374,66 @@ public class SqlScriptEditorViewModelTests
         Assert.That(vm.IsErrorScript, Is.False);
     }
 
+    [Test]
+    public void ShowFindBar_SetsIsVisibleTrue()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.FindBar.IsVisible, Is.False);
+
+        vm.ShowFindBar();
+
+        Assert.That(vm.FindBar.IsVisible, Is.True);
+        Assert.That(vm.IsFindBarVisible, Is.True);
+    }
+
+    [Test]
+    public void ShowFindBar_SetsEditorText()
+    {
+        var scriptPath = Path.Combine(ValidProductPath,
+            "Templates", "Main", "Functions", "dbo.MyFunction.sql");
+        var node = new TreeNodeModel
+        {
+            Text = "dbo.MyFunction.sql",
+            Tag = "Sql Script",
+            NodePath = scriptPath
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(node);
+
+        // Set a search term so we can verify editor text was passed to FindBar
+        vm.FindBar.SearchTerm = "INSERT";
+        vm.ShowFindBar();
+
+        // If editor text was set, the match count should be > 0
+        Assert.That(vm.FindBar.MatchCount, Is.GreaterThan(0));
+    }
+
+    [Test]
+    public void HideFindBar_SetsIsVisibleFalse()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        vm.ShowFindBar();
+        Assert.That(vm.IsFindBarVisible, Is.True);
+
+        vm.HideFindBar();
+
+        Assert.That(vm.FindBar.IsVisible, Is.False);
+        Assert.That(vm.IsFindBarVisible, Is.False);
+    }
+
+    [Test]
+    public void ShowFindBar_WhenAlreadyVisible_StaysVisible()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        vm.ShowFindBar();
+        Assert.That(vm.IsFindBarVisible, Is.True);
+
+        vm.ShowFindBar();
+
+        Assert.That(vm.IsFindBarVisible, Is.True);
+    }
+
     [TearDown]
     public void Cleanup()
     {
@@ -536,5 +596,442 @@ public class SqlScriptEditorViewModelTests
 
         // No template or product to navigate to
         Assert.That(navigatedTo, Is.Null);
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_TemplateWithToken_NavigatesToTemplate()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "NavTokenTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var templateDir = Path.Combine(tempDir, "Templates", "TestTpl");
+        Directory.CreateDirectory(templateDir);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(tempDir, "Product.json"),
+                "{\"Name\":\"Test\",\"ScriptTokens\":{\"ProdKey\":\"ProdVal\"}}");
+            File.WriteAllText(
+                Path.Combine(templateDir, "Template.json"),
+                "{\"Name\":\"TestTpl\",\"ScriptTokens\":{\"TplKey\":\"TplVal\"}}");
+
+            var productNode = new TreeNodeModel { Text = "Test", Tag = "Product", NodePath = tempDir };
+            var templateNode = new TreeNodeModel { Text = "TestTpl", Tag = "Template", NodePath = templateDir, Parent = productNode };
+            var scriptNode = new TreeNodeModel { Text = "test.sql", Tag = "Sql Script", Parent = templateNode };
+
+            var vm = new SqlScriptEditorViewModel();
+            vm.ChangeNode(scriptNode);
+
+            TreeNodeModel? navigatedTo = null;
+            vm.NavigateToNode = node => navigatedTo = node;
+
+            vm.NavigateToTokenDefinition("TplKey");
+
+            Assert.That(navigatedTo, Is.SameAs(templateNode));
+            Assert.That(EditorBaseViewModel.PendingTokenName, Is.EqualTo("TplKey"));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_ProductOnlyNode_NavigatesToProduct()
+    {
+        var productNode = new TreeNodeModel
+        {
+            Text = "ValidProduct",
+            Tag = "Product",
+            NodePath = ValidProductPath
+        };
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "test.sql",
+            Tag = "Sql Script",
+            Parent = productNode
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        TreeNodeModel? navigatedTo = null;
+        vm.NavigateToNode = node => navigatedTo = node;
+
+        vm.NavigateToTokenDefinition("MainDB");
+
+        Assert.That(navigatedTo, Is.SameAs(productNode));
+        Assert.That(EditorBaseViewModel.PendingTokenName, Is.EqualTo("MainDB"));
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_UnknownToken_FallsToProductWhenNoTemplate()
+    {
+        var productNode = new TreeNodeModel
+        {
+            Text = "ValidProduct",
+            Tag = "Product",
+            NodePath = ValidProductPath
+        };
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "test.sql",
+            Tag = "Sql Script",
+            Parent = productNode
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        TreeNodeModel? navigatedTo = null;
+        vm.NavigateToNode = node => navigatedTo = node;
+
+        vm.NavigateToTokenDefinition("NoSuchToken");
+
+        Assert.That(navigatedTo, Is.SameAs(productNode));
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_TemplateWithEmptyNodePath_SkipsTemplate()
+    {
+        var productNode = new TreeNodeModel
+        {
+            Text = "ValidProduct",
+            Tag = "Product",
+            NodePath = ValidProductPath
+        };
+        var templateNode = new TreeNodeModel
+        {
+            Text = "Main",
+            Tag = "Template",
+            NodePath = "",
+            Parent = productNode
+        };
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "test.sql",
+            Tag = "Sql Script",
+            Parent = templateNode
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        TreeNodeModel? navigatedTo = null;
+        vm.NavigateToNode = node => navigatedTo = node;
+
+        vm.NavigateToTokenDefinition("MainDB");
+
+        Assert.That(navigatedTo, Is.SameAs(productNode));
+    }
+
+    [Test]
+    public void CollectScriptTokens_TemplateOverridesProductTokens()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "TokenOverride_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var templateDir = Path.Combine(tempDir, "Templates", "Main");
+        Directory.CreateDirectory(templateDir);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(tempDir, "Product.json"),
+                "{\"Name\":\"Test\",\"ScriptTokens\":{\"SharedKey\":\"ProductVal\",\"ProdOnly\":\"P\"}}");
+            File.WriteAllText(
+                Path.Combine(templateDir, "Template.json"),
+                "{\"Name\":\"Main\",\"ScriptTokens\":{\"SharedKey\":\"TemplateVal\",\"TplOnly\":\"T\"}}");
+
+            var productNode = new TreeNodeModel { Text = "Test", Tag = "Product", NodePath = tempDir };
+            var templateNode = new TreeNodeModel { Text = "Main", Tag = "Template", NodePath = templateDir, Parent = productNode };
+            var scriptNode = new TreeNodeModel { Text = "test.sql", Tag = "Sql Script", Parent = templateNode, NodePath = "" };
+
+            var vm = new SqlScriptEditorViewModel();
+            vm.ChangeNode(scriptNode);
+
+            var tokens = vm.CollectScriptTokens();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(tokens["SharedKey"], Is.EqualTo("TemplateVal"));
+                Assert.That(tokens["ProdOnly"], Is.EqualTo("P"));
+                Assert.That(tokens["TplOnly"], Is.EqualTo("T"));
+            });
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public void CollectScriptTokens_ProductWithEmptyNodePath_ReturnsEmptyTokens()
+    {
+        var productNode = new TreeNodeModel { Text = "Test", Tag = "Product", NodePath = "" };
+        var scriptNode = new TreeNodeModel { Text = "test.sql", Tag = "Sql Script", Parent = productNode };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        var tokens = vm.CollectScriptTokens();
+        Assert.That(tokens, Is.Empty);
+    }
+
+    [Test]
+    public void CollectScriptTokens_TemplateWithEmptyNodePath_SkipsTemplateTokens()
+    {
+        var productNode = new TreeNodeModel
+        {
+            Text = "ValidProduct",
+            Tag = "Product",
+            NodePath = ValidProductPath
+        };
+        var templateNode = new TreeNodeModel
+        {
+            Text = "Main",
+            Tag = "Template",
+            NodePath = "",
+            Parent = productNode
+        };
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "test.sql",
+            Tag = "Sql Script",
+            Parent = templateNode
+        };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        var tokens = vm.CollectScriptTokens();
+        Assert.That(tokens.ContainsKey("MainDB"), Is.True);
+    }
+
+    [Test]
+    public void CollectScriptTokens_NonProductNonTemplateAncestor_IsIgnored()
+    {
+        var productNode = new TreeNodeModel
+        {
+            Text = "ValidProduct",
+            Tag = "Product",
+            NodePath = ValidProductPath
+        };
+        var container = new TreeNodeModel { Text = "Functions", Tag = "Functions Container", Parent = productNode };
+        var scriptNode = new TreeNodeModel { Text = "test.sql", Tag = "Sql Script", Parent = container };
+
+        var vm = new SqlScriptEditorViewModel();
+        vm.ChangeNode(scriptNode);
+
+        var tokens = vm.CollectScriptTokens();
+        Assert.That(tokens.ContainsKey("MainDB"), Is.True);
+    }
+
+    [Test]
+    public void ExtractTokenAtPosition_NegativePosition_ReturnsNull()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.ExtractTokenAtPosition("SELECT {{{MainDB}}}", -1), Is.Null);
+    }
+
+    [Test]
+    public void ExtractTokenAtPosition_PositionBeyondLength_ReturnsNull()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.ExtractTokenAtPosition("SELECT {{{MainDB}}}", 100), Is.Null);
+    }
+
+    [Test]
+    public void ExtractTokenAtPosition_NullText_ReturnsNull()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.ExtractTokenAtPosition(null!, 0), Is.Null);
+    }
+
+    [Test]
+    public void ExtractTokenAtPosition_EmptyTokenName_ReturnsNull()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.ExtractTokenAtPosition("{{{}}}", 3), Is.Null);
+    }
+
+    [Test]
+    public void ExtractTokenAtPosition_UnclosedToken_ReturnsNull()
+    {
+        var vm = new SqlScriptEditorViewModel();
+        Assert.That(vm.ExtractTokenAtPosition("{{{MainDB", 5), Is.Null);
+    }
+
+    [Test]
+    public void CollectScriptTokens_MalformedProductJson_ReturnsEmptyAndDoesNotThrow()
+    {
+        // Exercises the catch block in the product-load section of CollectScriptTokens
+        var tempDir = Path.Combine(Path.GetTempPath(), "MalformedProduct_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(tempDir, "Product.json"), "THIS IS NOT JSON{{{{");
+
+            var productNode = new TreeNodeModel { Text = "Bad", Tag = "Product", NodePath = tempDir };
+            var scriptNode = new TreeNodeModel { Text = "test.sql", Tag = "Sql Script", Parent = productNode };
+
+            var vm = new SqlScriptEditorViewModel();
+            vm.ChangeNode(scriptNode);
+
+            var tokens = vm.CollectScriptTokens();
+            Assert.That(tokens, Is.Empty);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public void CollectScriptTokens_MalformedTemplateJson_UsesProductTokensOnly()
+    {
+        // Exercises the catch block in the template-load section of CollectScriptTokens
+        var tempDir = Path.Combine(Path.GetTempPath(), "MalformedTemplate_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var templateDir = Path.Combine(tempDir, "Templates", "Main");
+        Directory.CreateDirectory(templateDir);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(tempDir, "Product.json"),
+                "{\"Name\":\"Test\",\"ScriptTokens\":{\"ProdKey\":\"ProdVal\"}}");
+            File.WriteAllText(Path.Combine(templateDir, "Template.json"), "INVALID_JSON");
+
+            var productNode = new TreeNodeModel { Text = "Test", Tag = "Product", NodePath = tempDir };
+            var templateNode = new TreeNodeModel { Text = "Main", Tag = "Template", NodePath = templateDir, Parent = productNode };
+            var scriptNode = new TreeNodeModel { Text = "test.sql", Tag = "Sql Script", Parent = templateNode };
+
+            var vm = new SqlScriptEditorViewModel();
+            vm.ChangeNode(scriptNode);
+
+            var tokens = vm.CollectScriptTokens();
+            // Product tokens loaded; template tokens skipped due to malformed JSON (catch fires)
+            Assert.That(tokens["ProdKey"], Is.EqualTo("ProdVal"));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_MalformedTemplateJson_FallsBackToProduct()
+    {
+        // Exercises the catch block in NavigateToTokenDefinition's template-check section
+        var tempDir = Path.Combine(Path.GetTempPath(), "NavMalformed_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var templateDir = Path.Combine(tempDir, "Templates", "Main");
+        Directory.CreateDirectory(templateDir);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(tempDir, "Product.json"),
+                "{\"Name\":\"Test\",\"ScriptTokens\":{\"ProdKey\":\"ProdVal\"}}");
+            File.WriteAllText(Path.Combine(templateDir, "Template.json"), "INVALID_JSON");
+
+            var productNode = new TreeNodeModel { Text = "Test", Tag = "Product", NodePath = tempDir };
+            var templateNode = new TreeNodeModel { Text = "Main", Tag = "Template", NodePath = templateDir, Parent = productNode };
+            var scriptNode = new TreeNodeModel { Text = "test.sql", Tag = "Sql Script", Parent = templateNode };
+
+            var vm = new SqlScriptEditorViewModel();
+            vm.ChangeNode(scriptNode);
+
+            TreeNodeModel? navigatedTo = null;
+            vm.NavigateToNode = node => navigatedTo = node;
+
+            // Template JSON is malformed — catch fires, falls through to product lookup
+            vm.NavigateToTokenDefinition("ProdKey");
+
+            Assert.That(navigatedTo, Is.SameAs(productNode));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_TokenNotInProductOrTemplate_NavigatesToTemplate()
+    {
+        // Both template and product don't have the token — exercises the final fallback branch
+        // where token is not found in either and templateNode is not null
+        var tempDir = Path.Combine(Path.GetTempPath(), "NavFallback_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var templateDir = Path.Combine(tempDir, "Templates", "Main");
+        Directory.CreateDirectory(templateDir);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(tempDir, "Product.json"),
+                "{\"Name\":\"Test\",\"ScriptTokens\":{\"ProdKey\":\"ProdVal\"}}");
+            File.WriteAllText(
+                Path.Combine(templateDir, "Template.json"),
+                "{\"Name\":\"Main\",\"ScriptTokens\":{\"TplKey\":\"TplVal\"}}");
+
+            var productNode = new TreeNodeModel { Text = "Test", Tag = "Product", NodePath = tempDir };
+            var templateNode = new TreeNodeModel { Text = "Main", Tag = "Template", NodePath = templateDir, Parent = productNode };
+            var scriptNode = new TreeNodeModel { Text = "test.sql", Tag = "Sql Script", Parent = templateNode };
+
+            var vm = new SqlScriptEditorViewModel();
+            vm.ChangeNode(scriptNode);
+
+            TreeNodeModel? navigatedTo = null;
+            vm.NavigateToNode = node => navigatedTo = node;
+
+            // "NoSuchToken" not in template or product → final fallback → navigate to templateNode
+            vm.NavigateToTokenDefinition("NoSuchToken");
+
+            Assert.That(navigatedTo, Is.SameAs(templateNode));
+            Assert.That(EditorBaseViewModel.PendingTokenName, Is.EqualTo("NoSuchToken"));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_MalformedProductJson_NavigatesToFallback()
+    {
+        // Exercises the catch block in the product-load section of NavigateToTokenDefinition
+        var tempDir = Path.Combine(Path.GetTempPath(), "NavMalformedProd_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var templateDir = Path.Combine(tempDir, "Templates", "Main");
+        Directory.CreateDirectory(templateDir);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(tempDir, "Product.json"), "INVALID_JSON");
+            File.WriteAllText(
+                Path.Combine(templateDir, "Template.json"),
+                "{\"Name\":\"Main\",\"ScriptTokens\":{}}");
+
+            var productNode = new TreeNodeModel { Text = "Test", Tag = "Product", NodePath = tempDir };
+            var templateNode = new TreeNodeModel { Text = "Main", Tag = "Template", NodePath = templateDir, Parent = productNode };
+            var scriptNode = new TreeNodeModel { Text = "test.sql", Tag = "Sql Script", Parent = templateNode };
+
+            var vm = new SqlScriptEditorViewModel();
+            vm.ChangeNode(scriptNode);
+
+            TreeNodeModel? navigatedTo = null;
+            vm.NavigateToNode = node => navigatedTo = node;
+
+            // Template has no matching token; product load throws → final fallback to templateNode
+            vm.NavigateToTokenDefinition("AnyToken");
+
+            Assert.That(navigatedTo, Is.Not.Null);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
     }
 }

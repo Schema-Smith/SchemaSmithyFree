@@ -50,4 +50,57 @@ public class ThemeApplierTests
     {
         Assert.That(ThemeApplier.GetIcon(false), Is.Null);
     }
+
+    [Test]
+    public void Apply_WithLightTheme_DoesNotThrow()
+    {
+        var theme = new ThemeDefinition { Name = "Light", BasedOn = "Light", Colors = [] };
+        Assert.DoesNotThrow(() => ThemeApplier.Apply(theme));
+    }
+
+    [Test]
+    public void Apply_WithInvalidHexColor_DoesNotThrow()
+    {
+        var theme = new ThemeDefinition
+        {
+            Name = "Bad",
+            BasedOn = "Dark",
+            Colors = new Dictionary<string, string>
+            {
+                ["SH.Background"] = "not-a-color",
+                ["SH.Foreground"] = "#GGGGGG"
+            }
+        };
+        Assert.DoesNotThrow(() => ThemeApplier.Apply(theme));
+    }
+
+    [Test]
+    public void Apply_WithMixedValidInvalidColors_DoesNotThrow()
+    {
+        var theme = new ThemeDefinition
+        {
+            Name = "Mixed",
+            BasedOn = "Light",
+            Colors = new Dictionary<string, string>
+            {
+                ["SH.Valid"] = "#FF0000",
+                ["SH.Invalid"] = "xyz",
+                ["SH.AlsoValid"] = "#00FF00"
+            }
+        };
+        Assert.DoesNotThrow(() => ThemeApplier.Apply(theme));
+    }
+
+    [Test]
+    public void ThemeDefinition_DefaultsWork()
+    {
+        var theme = new ThemeDefinition();
+        Assert.Multiple(() =>
+        {
+            Assert.That(theme.Name, Is.EqualTo("Light"));
+            Assert.That(theme.BasedOn, Is.EqualTo("Light"));
+            Assert.That(theme.Colors, Is.Not.Null);
+            Assert.That(theme.Colors, Is.Empty);
+        });
+    }
 }

@@ -4,15 +4,12 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using SchemaHammer.Controls;
-using SchemaHammer.Services;
-using SchemaHammer.ViewModels;
+using SchemaHammer.ViewModels.Editors;
 
 namespace SchemaHammer.Views.Editors;
 
 public partial class SqlScriptEditorView : UserControl
 {
-    private FindBarViewModel? _findBarViewModel;
-
     public SqlScriptEditorView()
     {
         InitializeComponent();
@@ -21,53 +18,46 @@ public partial class SqlScriptEditorView : UserControl
     protected override void OnLoaded(RoutedEventArgs e)
     {
         base.OnLoaded(e);
-        _findBarViewModel = new FindBarViewModel(new SearchService());
-        var findBar = this.FindControl<FindBarControl>("FindBar");
-        if (findBar != null)
-            findBar.DataContext = _findBarViewModel;
+        if (DataContext is SqlScriptEditorViewModel vm)
+        {
+            var findBar = this.FindControl<FindBarControl>("FindBar");
+            if (findBar != null)
+                findBar.DataContext = vm.FindBar;
+        }
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
 
+        if (DataContext is not SqlScriptEditorViewModel vm) return;
+
         if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.F)
         {
-            ShowFindBar();
+            vm.ShowFindBar();
+            this.FindControl<FindBarControl>("FindBar")?.FocusSearchBox();
             e.Handled = true;
             return;
         }
 
-        if (_findBarViewModel is { IsVisible: true })
+        if (vm.IsFindBarVisible)
         {
             if (e.Key == Key.Escape)
             {
-                _findBarViewModel.IsVisible = false;
+                vm.HideFindBar();
                 this.FindControl<SqlEditorControl>("SqlEditor")?.Focus();
                 e.Handled = true;
             }
             else if (e.Key == Key.F3 && e.KeyModifiers == KeyModifiers.Shift)
             {
-                _findBarViewModel.FindPreviousCommand.Execute(null);
+                vm.FindBar.FindPreviousCommand.Execute(null);
                 e.Handled = true;
             }
             else if (e.Key == Key.F3)
             {
-                _findBarViewModel.FindNextCommand.Execute(null);
+                vm.FindBar.FindNextCommand.Execute(null);
                 e.Handled = true;
             }
         }
-    }
-
-    private void ShowFindBar()
-    {
-        if (_findBarViewModel == null) return;
-
-        var editorText = (DataContext as SchemaHammer.ViewModels.Editors.SqlScriptEditorViewModel)?.DisplayContent ?? "";
-        _findBarViewModel.SetEditorText(editorText);
-        _findBarViewModel.IsVisible = true;
-
-        var findBar = this.FindControl<FindBarControl>("FindBar");
-        findBar?.FocusSearchBox();
     }
 }
