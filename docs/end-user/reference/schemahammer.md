@@ -321,4 +321,4 @@ SchemaHammer ships with light and dark themes. Toggle between them via **Tools >
 - [Schema Packages Reference](schema-packages.md) -- The file format SchemaHammer reads
 - [Script Tokens Reference](script-tokens.md) -- How tokens resolve in the preview
 - [Quick Start -- Explore with SchemaHammer](../guide/02-quick-start.md#step-3-explore-with-schemahammer) -- Hands-on first look
-- [Day-to-Day Workflows -- Using SchemaHammer for Review](../guide/04-day-to-day-workflows.md#using-schemahammer-for-review) -- SchemaHammer in the code review workflow
+- [Working with Your Team -- Using SchemaHammer for Review](../guide/05-working-with-your-team.md#using-schemahammer-for-review) -- SchemaHammer in the code review workflow

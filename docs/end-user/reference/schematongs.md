@@ -477,5 +477,5 @@ export SmithySettings_Source__ConnectionProperties__TrustServerCertificate="True
 - [Schema Packages Reference](schema-packages.md) -- Package structure, Product.json, Template.json, folder layout
 - [Script Tokens Reference](script-tokens.md) -- Token replacement in SQL scripts
 - [Quick Start -- Extract with SchemaTongs](../guide/02-quick-start.md#step-2-extract-with-schematongs) -- Hands-on first extraction
-- [Day-to-Day Workflows -- Extracting Changes](../guide/04-day-to-day-workflows.md#extracting-changes-from-a-live-database) -- Re-extracting after database drift
-- [Power Workflows -- Extraction Intelligence](../guide/05-power-workflows.md#extraction-intelligence) -- Subfolder preservation, orphan detection, script validation
+- [Defining Your Schema -- Extracting Changes](../guide/04-defining-your-schema.md#extracting-changes-from-a-live-database) -- Re-extracting after database drift
+- [Defining Your Schema -- Extraction Intelligence](../guide/04-defining-your-schema.md#extraction-intelligence) -- Subfolder preservation, orphan detection, script validation
