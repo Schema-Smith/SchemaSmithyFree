@@ -318,3 +318,13 @@ SchemaQuench
 # Override connection via CLI
 SchemaQuench --ConnectionString:"Data Source=prod-db;Initial Catalog=mydb;User ID=deploy;Password=s3cret;TrustServerCertificate=True;"
 ```
+
+---
+
+## Related Documentation
+
+- [SchemaQuench Reference](schemaquench.md) -- Deployment engine settings and behavior
+- [SchemaTongs Reference](schematongs.md) -- Schema extraction settings
+- [DataTongs Reference](datatongs.md) -- Data extraction settings
+- [Script Tokens Reference](script-tokens.md) -- Token replacement via ScriptTokens config
+- [Power Workflows -- CI/CD Integration](../guide/05-power-workflows.md#cicd-integration) -- Practical guide to environment variable configuration in pipelines

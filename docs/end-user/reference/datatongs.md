@@ -25,7 +25,7 @@ DataTongs reads configuration from multiple sources, merged in this precedence o
 3. **Environment variables** with the `SmithySettings_` prefix
 4. **Command-line switches** (highest precedence)
 
-For the full list of CLI switches shared by all SchemaSmith tools, see [CLI Options](../cli-options.md).
+For the full list of CLI switches shared by all SchemaSmith tools, see the [Configuration Reference](configuration.md#cli-switch-format).
 
 ---
 
@@ -451,7 +451,7 @@ This approach means running DataTongs twice against unchanged data produces a sc
 
 ## Related Documentation
 
-- [DataTongs Configuration](../datatongs/configuration.md) -- Full configuration key reference with environment variable mapping
-- [CLI Options](../cli-options.md) -- Command-line switches shared by all SchemaSmith tools
-- [Schema Packages](schema-packages.md) -- How Table Data scripts fit into a schema package
+- [Configuration Reference](configuration.md) -- Shared configuration system, CLI switches, environment variables
+- [Schema Packages Reference](schema-packages.md) -- How Table Data scripts fit into a schema package
 - [SchemaQuench Reference](schemaquench.md) -- The tool that executes MERGE scripts against target databases
+- [Power Workflows -- Reference Data Management](../guide/05-power-workflows.md#reference-data-management-with-datatongs) -- Practical walkthrough of the DataTongs workflow

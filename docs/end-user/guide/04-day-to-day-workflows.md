@@ -1,6 +1,6 @@
 # Day-to-Day Workflows
 
-You understand the concepts. Now let's look at how your Tuesday actually goes with SchemaSmith. These are the patterns you will use over and over — adding tables, modifying columns, writing stored procedures, syncing with live databases, and reviewing changes in pull requests. Each one is simpler than the traditional alternative, and they build on each other naturally.
+You understand the [core concepts](03-core-concepts.md). Now let's look at how your Tuesday actually goes with SchemaSmith. These are the patterns you will use over and over — adding tables, modifying columns, writing stored procedures, syncing with live databases, and reviewing changes in pull requests. Each one is simpler than the traditional alternative, and they build on each other naturally.
 
 ## Adding a table
 
@@ -64,7 +64,7 @@ Your team needs a `Promotions` table to track discount campaigns. Here is what y
 }
 ```
 
-That is the entire table definition. Every column, every constraint, every index — all in one readable file.
+That is the entire table definition. Every column, every constraint, every index — all in one readable file. For every property available in a table JSON file, see the [Schema Packages Reference](../reference/schema-packages.md#json-table-format).
 
 **2. Deploy it.** Run SchemaQuench against your development database:
 
@@ -146,7 +146,7 @@ GROUP BY ProductName
 GO
 ```
 
-The key detail: `CREATE OR ALTER`. This is idempotent. It works whether the procedure exists or not. No `IF EXISTS ... DROP` guard. No separate create-vs-alter logic. SchemaQuench runs the script as-is, and SQL Server handles the rest.
+The key detail: `CREATE OR ALTER`. This is idempotent. It works whether the procedure exists or not. No `IF EXISTS ... DROP` guard. No separate create-vs-alter logic. SchemaQuench runs the script as-is, and SQL Server handles the rest. For the full list of object types and their folder locations, see the [Schema Packages Reference](../reference/schema-packages.md#complete-folder-structure).
 
 Views work the same way. Here is `dbo.Products Above Average Price.sql` in the `Views/` folder:
 
@@ -176,7 +176,7 @@ Run SchemaTongs to pull the current state back into your package:
 SchemaTongs
 ```
 
-SchemaTongs connects to the database, reads every table, procedure, view, function, and trigger, and writes the current definitions to the package files. Changed objects update in place. New objects get new files.
+SchemaTongs connects to the database, reads every table, procedure, view, function, and trigger, and writes the current definitions to the package files. Changed objects update in place. New objects get new files. For the full extraction configuration, including filtering by object type and partial extraction, see the [SchemaTongs Reference](../reference/schematongs.md).
 
 Now the power of files shows up. Run `git diff`:
 

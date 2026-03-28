@@ -115,7 +115,7 @@ my-northwind/
       Schemas/
 ```
 
-Every table is a JSON file describing its columns, indexes, and constraints. Every stored procedure and view is a plain SQL file. This is your database, materialized as readable, diffable, reviewable source files. Commit this to Git and you have a complete history of every schema change from this point forward.
+Every table is a JSON file describing its columns, indexes, and constraints. Every stored procedure and view is a plain SQL file. This is your database, materialized as readable, diffable, reviewable source files. Commit this to Git and you have a complete history of every schema change from this point forward. For the full set of extraction options, see the [SchemaTongs Reference](../reference/schematongs.md).
 
 ## Step 3: Explore with SchemaHammer
 
@@ -129,7 +129,7 @@ Or launch SchemaHammer without arguments and use **File > Choose Product** to se
 
 The left panel shows the product tree: templates, tables, views, procedures, and scripts organized exactly as they appear on disk. Click on `dbo.Categories` under Tables -- the right panel shows the table's columns (CategoryID, CategoryName, Description, Picture) and its indexes. Click on a stored procedure like `dbo.CustOrderHist` and you see the full SQL definition with syntax highlighting.
 
-This is your schema browser. No server connection needed -- SchemaHammer reads the files directly. Take a minute to click around. Every object in the Northwind database is here, structured and browsable.
+This is your schema browser. No server connection needed -- SchemaHammer reads the files directly. Take a minute to click around. Every object in the Northwind database is here, structured and browsable. For everything SchemaHammer can do, see the [SchemaHammer Reference](../reference/schemahammer.md).
 
 ## Step 4: Deploy with SchemaQuench
 
@@ -150,7 +150,7 @@ Here is where it gets powerful. Let's deploy the Northwind schema to a completel
 }
 ```
 
-Notice the `ScriptTokens` section: we are telling SchemaQuench to use `NorthwindClone` as the database name instead of `Northwind`. The `{{NorthwindDb}}` token in the template's scripts will resolve to this value, creating a brand-new database.
+Notice the `ScriptTokens` section: we are telling SchemaQuench to use `NorthwindClone` as the database name instead of `Northwind`. The `{{NorthwindDb}}` token in the template's scripts will resolve to this value, creating a brand-new database. You will learn more about tokens in [Core Concepts](03-core-concepts.md), and the full token system is documented in the [Script Tokens Reference](../reference/script-tokens.md).
 
 Run the deployment:
 

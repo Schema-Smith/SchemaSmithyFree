@@ -2,7 +2,7 @@
 
 When something goes wrong, this chapter helps you find the answer fast. Issues are organized by symptom so you can jump directly to what you are seeing.
 
-For background on how the tools work, see the [reference documentation](../reference/).
+For background on how the tools work, see the individual reference pages: [SchemaTongs](../reference/schematongs.md), [SchemaQuench](../reference/schemaquench.md), [SchemaHammer](../reference/schemahammer.md), [DataTongs](../reference/datatongs.md), and [Configuration](../reference/configuration.md).
 
 ---
 
@@ -77,7 +77,7 @@ For the full exit code reference, see [Configuration Reference -- Exit Codes](..
 }
 ```
 
-This gives object scripts an additional full pass before tables are created, which can resolve ordering issues when objects depend on each other across the table-creation boundary.
+This gives object scripts an additional full pass before tables are created, which can resolve ordering issues when objects depend on each other across the table-creation boundary. For more on this feature, see [Edge Cases -- RunScriptsTwice](06-edge-cases.md#runscriptstwice).
 
 ### Foreign key errors during deployment
 
@@ -85,7 +85,7 @@ This gives object scripts an additional full pass before tables are created, whi
 
 **Cause:** Foreign keys are applied after table modifications. If you need to run data migration scripts between table changes and foreign key creation, use the `BetweenTablesAndKeys` migration slot.
 
-**Fix:** Place your data fixup or migration scripts in the `MigrationScripts/BetweenTablesAndKeys/` folder of your template. These run after tables and columns are updated but before foreign keys and constraints are applied. See [SchemaQuench Reference](../reference/schemaquench.md) for the full deployment order.
+**Fix:** Place your data fixup or migration scripts in the `MigrationScripts/BetweenTablesAndKeys/` folder of your template. These run after tables and columns are updated but before foreign keys and constraints are applied. See [Edge Cases -- Migration Scripts](06-edge-cases.md#migration-scripts) for practical guidance, and the [SchemaQuench Reference](../reference/schemaquench.md#execution-slots) for the full deployment order.
 
 ### Validation script returns false
 
@@ -133,7 +133,7 @@ If using Windows authentication, omit `User` and `Password` entirely.
 
 **Fix:** This is not an error -- it is WhatIf working correctly. If the changes look wrong:
 1. Compare your schema package against the live database to identify what drifted.
-2. If someone made manual changes to the database, decide whether to update your package (extract with SchemaTongs) or let SchemaQuench bring the database back in line.
+2. If someone made manual changes to the database, decide whether to update your package (extract with SchemaTongs, as described in [Day-to-Day Workflows -- Extracting Changes](04-day-to-day-workflows.md#extracting-changes-from-a-live-database)) or let SchemaQuench bring the database back in line.
 3. If your package has unexpected definitions, check for uncommitted changes or the wrong package version.
 
 ---
@@ -264,7 +264,7 @@ See [DataTongs Reference](../reference/datatongs.md) for details.
 **Fix:**
 - Check `ScriptTokens` in your `Product.json` -- product-level tokens apply to all templates.
 - Check `ScriptTokens` in the relevant `Template.json` -- template-level tokens apply to that template only.
-- Token names are case-sensitive. Verify the exact spelling matches between the script and the token definition.
+- Token names are case-insensitive. Verify the spelling matches between the script and the token definition. See the [Script Tokens Reference](../reference/script-tokens.md) for the full resolution order.
 - `{{DatabaseName}}` is a built-in token that resolves at deployment time, not in the editor preview. This is expected for runtime tokens.
 
 ### Tree nodes missing or empty
@@ -347,4 +347,8 @@ These map to `Target:Server`, `Target:User`, and `Target:Password` in the config
 
 ## Still Stuck?
 
-If your issue is not covered here, check the [reference documentation](../reference/) for detailed behavior descriptions, or open an issue on [GitHub](https://github.com/SchemaSmith/SchemaSmithyFree/issues).
+If your issue is not covered here, check the [reference documentation](../README.md#reference) for detailed behavior descriptions, or open an issue on [GitHub](https://github.com/Schema-Smith/SchemaSmithyFree/issues).
+
+---
+
+This is the final chapter of the guide. For a refresher on the basics, head back to [Why SchemaSmith](01-why-schemasmith.md) or jump straight to the [Quick Start](02-quick-start.md).

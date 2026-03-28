@@ -18,13 +18,13 @@ SchemaSmith brings that same model to SQL Server databases. You declare what eac
 
 SchemaSmith is a toolset of four components that cover the full schema lifecycle:
 
-**SchemaTongs** extracts your existing database into a clean, organized package — tables as JSON, programmable objects as SQL files, everything structured for humans to read and source control to track.
+**[SchemaTongs](../reference/schematongs.md)** extracts your existing database into a clean, organized package — tables as JSON, programmable objects as SQL files, everything structured for humans to read and source control to track.
 
-**SchemaHammer** is a desktop viewer that lets you browse and review schema packages visually. Open a package, navigate the tree, inspect table definitions with syntax highlighting. It turns a folder of files into something a DBA can review in minutes.
+**[SchemaHammer](../reference/schemahammer.md)** is a desktop viewer that lets you browse and review schema packages visually. Open a package, navigate the tree, inspect table definitions with syntax highlighting. It turns a folder of files into something a DBA can review in minutes.
 
-**SchemaQuench** deploys a schema package to any SQL Server. It reads your declared state, compares it to the target database, and applies only the changes needed. No migration ordering. No manual diffing. Run it against dev, staging, and production — same package, correct results everywhere.
+**[SchemaQuench](../reference/schemaquench.md)** deploys a schema package to any SQL Server. It reads your declared state, compares it to the target database, and applies only the changes needed. No migration ordering. No manual diffing. Run it against dev, staging, and production — same package, correct results everywhere.
 
-**DataTongs** captures reference data — lookup tables, configuration rows, seed data — as deployable MERGE scripts. Extract once, deploy alongside your schema.
+**[DataTongs](../reference/datatongs.md)** captures reference data — lookup tables, configuration rows, seed data — as deployable MERGE scripts. Extract once, deploy alongside your schema.
 
 ## How teams actually use this
 

@@ -1,6 +1,6 @@
 # Power Workflows
 
-You are comfortable with the daily rhythm. Now here is where it gets really interesting. These features turn SchemaSmith from a convenient deployment tool into serious infrastructure — handling multi-environment deployments, multi-database products, reference data pipelines, and CI/CD integration. Each one solves a real problem that would otherwise require manual intervention or fragile scripting.
+You are comfortable with the [daily rhythm](04-day-to-day-workflows.md). Now here is where it gets really interesting. These features turn SchemaSmith from a convenient deployment tool into serious infrastructure — handling multi-environment deployments, multi-database products, reference data pipelines, and CI/CD integration. Each one solves a real problem that would otherwise require manual intervention or fragile scripting.
 
 ## Script tokens
 
@@ -177,7 +177,7 @@ Merge-to-Main Pipeline:
 
 The WhatIf mode is particularly valuable in PR pipelines. It runs the full deployment logic — token replacement, validation scripts, object creation — against a real database, but rolls back instead of committing. You catch deployment failures before the code merges.
 
-For the complete environment variable mapping and configuration precedence, see [Configuration Reference](../reference/configuration.md#environment-variables).
+For the complete environment variable mapping and configuration precedence, see the [Configuration Reference](../reference/configuration.md#environment-variables). For SchemaQuench-specific deployment settings, see the [SchemaQuench Reference](../reference/schemaquench.md#configuration-reference).
 
 ## Validation scripts
 

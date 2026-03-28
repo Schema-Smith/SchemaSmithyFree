@@ -1,6 +1,6 @@
 # Edge Cases and Escape Hatches
 
-Most of the time, SchemaSmith's state-based approach handles everything. You declare the desired state, deploy, and the tooling figures out the diff. But some situations are inherently imperative — data transforms, rename operations, dependency tangles, version constraints. For those, SchemaSmith provides deliberate escape hatches. You will not need these every day, but when you do, they are ready.
+Most of the time, SchemaSmith's [state-based approach](03-core-concepts.md#state-based-vs-migration-based) handles everything. You declare the desired state, deploy, and the tooling figures out the diff. But some situations are inherently imperative — data transforms, rename operations, dependency tangles, version constraints. For those, SchemaSmith provides deliberate escape hatches. You will not need these every day, but when you do, they are ready.
 
 ## Migration scripts
 
@@ -149,7 +149,7 @@ When `MinimumVersion` is set, SchemaQuench checks the target server's version be
 
 When `MinimumVersion` is omitted (the default), no version check is performed.
 
-> See [Configuration Reference](../reference/configuration.md) for the full Product.json specification.
+> See the [Schema Packages Reference](../reference/schema-packages.md) for the full Product.json specification.
 
 ## Orphan handling strategies
 

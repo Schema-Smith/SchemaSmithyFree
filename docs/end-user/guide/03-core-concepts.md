@@ -1,6 +1,6 @@
 # Core Concepts
 
-The Quick Start walked you through the full cycle: extract, browse, deploy, change, redeploy. This chapter explains the mental model behind what you just did, so the patterns make sense as your schema packages grow more complex.
+The [Quick Start](02-quick-start.md) walked you through the full cycle: extract, browse, deploy, change, redeploy. This chapter explains the mental model behind what you just did, so the patterns make sense as your schema packages grow more complex.
 
 ## State-based vs migration-based
 
@@ -160,7 +160,7 @@ The four SchemaSmith tools form a cycle that covers the full schema management w
 
 **SchemaQuench** deploys a schema package to a database. It reads your declared state, queries the target, computes the delta, and applies the changes. This is the deployment engine — the tool that makes state-based management work.
 
-**DataTongs** captures reference data from a live database as MERGE scripts. Lookup tables, configuration rows, seed data — anything that should travel with the schema. The output goes into the `Table Data/` folder and deploys alongside structural changes.
+**DataTongs** captures reference data from a live database as MERGE scripts. Lookup tables, configuration rows, seed data — anything that should travel with the schema. The output goes into the `Table Data/` folder and deploys alongside structural changes. For the full DataTongs configuration and type handling details, see the [DataTongs Reference](../reference/datatongs.md).
 
 The tools do not impose a rigid sequence. A typical flow looks like:
 

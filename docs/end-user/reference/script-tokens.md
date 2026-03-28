@@ -205,7 +205,7 @@ Config and environment overrides apply at the product level only. They do not di
 
 ## Token Preview in SchemaHammer
 
-SchemaHammer provides a **Preview** toggle on SQL scripts that expands `{{Token}}` placeholders to their resolved values. This lets you verify token replacement before running SchemaQuench. See the [SchemaHammer reference](../schemahammer/viewing-schemas.md) for details.
+SchemaHammer provides a **Preview** toggle on SQL scripts that expands `{{Token}}` placeholders to their resolved values. This lets you verify token replacement before running SchemaQuench. See the [SchemaHammer Reference](schemahammer.md#token-preview) for details. For a practical walkthrough of using tokens across environments, see [Power Workflows -- Script Tokens](../guide/05-power-workflows.md#script-tokens).
 
 ---
 
@@ -331,4 +331,4 @@ Changing `OrdersDb` or `CatalogDb` in one place updates every script that refere
 
 - [Schema Packages Reference](schema-packages.md) -- product and template structure
 - [Configuration Reference](configuration.md) -- settings files and environment variables
-- [SchemaHammer: Viewing Schemas](../schemahammer/viewing-schemas.md) -- token preview toggle
+- [SchemaHammer Reference](schemahammer.md) -- token preview toggle and token navigation
