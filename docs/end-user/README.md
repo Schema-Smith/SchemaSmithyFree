@@ -14,17 +14,43 @@ New to SchemaSmith? The guide takes you from "what is this?" to confidently mana
 
 ## The Guide
 
-A hands-on journey from first contact to power usage.
+A hands-on journey from first contact to confident production deployment, organized around three pillars: **Shape** your schema, **Strengthen** your process, **Succeed** in production.
+
+### Prologue
 
 | Chapter | What you'll learn |
 |---------|-------------------|
 | [1. Why SchemaSmith](guide/01-why-schemasmith.md) | The problem, the vision, and why state-based changes everything |
 | [2. Quick Start](guide/02-quick-start.md) | Extract, view, deploy, and change a database in under 15 minutes |
+
+### Shape -- Give your database form
+
+| Chapter | What you'll learn |
+|---------|-------------------|
 | [3. Core Concepts](guide/03-core-concepts.md) | Products, templates, schema packages, and the deployment model |
-| [4. Day-to-Day Workflows](guide/04-day-to-day-workflows.md) | Adding tables, modifying schemas, team collaboration, source control |
-| [5. Power Workflows](guide/05-power-workflows.md) | Tokens, multi-database products, CI/CD, reference data, extraction intelligence |
-| [6. Edge Cases & Escape Hatches](guide/06-edge-cases.md) | Migration scripts, renames, cross-dependencies, special types |
-| [7. Troubleshooting](guide/07-troubleshooting.md) | Common issues, log reading, diagnostics |
+| [4. Defining Your Schema](guide/04-defining-your-schema.md) | Adding tables, modifying schemas, extraction, the Initialize pattern |
+
+### Strengthen -- Fortify your process
+
+| Chapter | What you'll learn |
+|---------|-------------------|
+| [5. Working with Your Team](guide/05-working-with-your-team.md) | Source control patterns, code review, team collaboration |
+| [6. Testing and Validation](guide/06-testing-and-validation.md) | Docker testing, CI validation, WhatIf as safety net |
+| [7. CI/CD Integration](guide/07-cicd-integration.md) | Pipeline examples, env var config, secrets, build/deploy model |
+| [8. Rollback and Recovery](guide/08-rollback-and-recovery.md) | What rolls back automatically, procedures, best practices |
+
+### Succeed -- Deploy with confidence
+
+| Chapter | What you'll learn |
+|---------|-------------------|
+| [9. Power Workflows](guide/09-power-workflows.md) | Script tokens, multi-database products, DataTongs, execution slots |
+| [10. Edge Cases & Escape Hatches](guide/10-edge-cases.md) | Migration scripts, renames, cross-dependencies, special types |
+
+### Appendix
+
+| Chapter | What you'll learn |
+|---------|-------------------|
+| [11. Troubleshooting](guide/11-troubleshooting.md) | Common issues, log reading, diagnostics |
 
 ---
 
