@@ -6,12 +6,12 @@ Cast your live database into version-controlled code with a single command. Sche
 
 ## Installation
 
-**GitHub Releases** -- Download the latest release from the [SchemaSmith releases page](https://github.com/schema-smith/SchemaSmithCommunity/releases). Unzip and place the executable on your PATH.
+**GitHub Releases** -- Download the latest release from the [SchemaSmith releases page](https://github.com/Schema-Smith/SchemaSmithyFree/releases). Unzip and place the executable on your PATH.
 
 **Chocolatey** -- Install with a single command:
 
 ```
-choco install schematongs
+choco install schematongs-dotnetcore10
 ```
 
 ---
