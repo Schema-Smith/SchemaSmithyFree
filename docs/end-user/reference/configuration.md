@@ -329,4 +329,4 @@ SchemaQuench --ConnectionString:"Data Source=prod-db;Initial Catalog=mydb;User I
 - [SchemaTongs Reference](schematongs.md) -- Schema extraction settings
 - [DataTongs Reference](datatongs.md) -- Data extraction settings
 - [Script Tokens Reference](script-tokens.md) -- Token replacement via ScriptTokens config
-- [Power Workflows -- CI/CD Integration](../guide/05-power-workflows.md#cicd-integration) -- Practical guide to environment variable configuration in pipelines
+- [CI/CD Integration](../guide/07-cicd-integration.md#configuration-via-environment-variables) -- Practical guide to environment variable configuration in pipelines

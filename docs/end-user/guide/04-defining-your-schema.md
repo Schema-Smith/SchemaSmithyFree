@@ -1,6 +1,6 @@
-# Day-to-Day Workflows
+# Defining Your Schema
 
-You understand the [core concepts](03-core-concepts.md). Now let's look at how your Tuesday actually goes with SchemaSmith. These are the patterns you will reach for every day — adding tables, shaping columns, writing stored procedures, pulling changes from live databases, and reviewing schema in pull requests. Each one replaces a manual, error-prone process with something you can trust. And they build on each other naturally.
+You understand the [core concepts](03-core-concepts.md). Now it is time to give your database form. This chapter covers the workflows you will reach for every day — adding tables, shaping columns, writing stored procedures, casting changes from live databases, and bootstrapping new environments from scratch. Each one replaces a manual, error-prone process with something you can trust. And they build on each other naturally.
 
 ## Adding a table
 
@@ -196,93 +196,75 @@ $ git diff
 
 The diff reads like a sentence: "someone added a BackorderThreshold column to the Products table with a default of 10." Compare that to trying to figure out what changed by comparing two database snapshots or reading through audit logs. The drift is captured. The mystery is over.
 
-**Orphan detection** catches the other direction — objects that were dropped from the database but still have files in the package. SchemaTongs logs orphaned files so you can decide whether to remove them or restore the missing objects. For details on orphan handling modes, see [SchemaTongs Reference — Orphan Detection](../reference/schematongs.md#orphan-detection).
+## Extraction intelligence
 
-## Working with source control
+SchemaTongs does more than dump scripts to flat folders. When you cast your database schema, the tool brings real intelligence to the extraction.
 
-Schema packages are files. That means they work with git exactly the way your application code does — branching, merging, pull requests, full history.
+**Subfolder preservation.** You can organize scripts by domain — `Tables/Sales/`, `Tables/HR/`, `Procedures/Reporting/`. When SchemaTongs casts, it preserves existing subfolder locations. If `dbo.Orders.json` already lives in `Tables/Sales/`, the next extraction updates it in place rather than creating a duplicate in the root `Tables/` folder. New objects that have not been organized yet go to the root folder. Your organization stays intact.
 
-**Branching works naturally.** Create a feature branch, add your table, modify your procedures, commit, push. Another developer does the same on their branch. Git handles the merge.
+**Orphan detection.** When a database object is dropped, its script file becomes an orphan. SchemaTongs offers three modes for handling this:
 
-**Pull requests become readable.** Here is what a PR diff looks like when someone adds a column to a table:
+| Mode | Behavior |
+|---|---|
+| `Detect` | Logs orphaned files but takes no action. This is the default. |
+| `DetectWithCleanupScripts` | Logs orphans and generates cleanup scripts you can review and apply. |
+| `DetectDeleteAndCleanup` | Deletes orphaned files and generates cleanup scripts automatically. |
 
-```diff
-  "Columns": [
-    ...
-+   {
-+     "Name": "[LoyaltyTier]",
-+     "DataType": "NVARCHAR(20)",
-+     "Nullable": true,
-+     "Default": "'Standard'"
-+   },
-    ...
-  ]
+**Script validation.** With `ValidateScripts` enabled, SchemaTongs checks each extracted script against the database to verify it parses correctly. Invalid scripts are saved with a `.sqlerror` extension instead of `.sql`, making them visible but excluded from deployment until you fix them.
+
+**CheckConstraintStyle.** Controls whether check constraints are extracted as column-level properties (inside the table JSON) or as table-level constraints. The default is `ColumnLevel`. If you prefer `TableLevel`, set it in Product.json or the SchemaTongs config — but be consistent, because the style is locked to whatever Product.json specifies once the product exists.
+
+For the full set of extraction options, filtering, and configuration, see [SchemaTongs Reference](../reference/schematongs.md).
+
+## The Initialize template pattern
+
+Some products need to create their target database from scratch. CI pipelines spin up fresh containers. Docker Compose environments start from nothing. New developers clone the repo and need a working database in one command. The Initialize template pattern handles all of these.
+
+Three pieces work together. Here is how the Northwind demo product sets it up.
+
+**1. The Initialize template identifies itself out of the deployment.** In `Templates/Initialize/Template.json`:
+
+```json
+{
+  "Name": "Initialize",
+  "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] = 'TestMain' AND NOT EXISTS (SELECT 1 FROM master.sys.databases WHERE [Name] = '{{NorthwindDb}}')"
+}
 ```
 
-A reviewer sees immediately: "This adds a nullable LoyaltyTier column with a default of 'Standard'." No need to mentally execute an ALTER script to figure out the end state. The intent is right there.
+The `DatabaseIdentificationScript` is the key. It returns a result only when the target database does not yet exist — it matches `TestMain` (a database that always exists on the server) but only when `NorthwindDb` is missing. On the first run, this template activates and creates the database. On every subsequent run, the script returns no rows, SchemaQuench skips the template entirely, and deployment proceeds straight to the main template.
 
-Compare that to reviewing a migration script:
+**2. A migration script creates the database idempotently.** In `Templates/Initialize/MigrationScripts/Before/Create Northwind [ALWAYS].sql`:
 
 ```sql
-ALTER TABLE [dbo].[Customers] ADD [LoyaltyTier] NVARCHAR(20) NULL
-    CONSTRAINT [DF_Customers_LoyaltyTier] DEFAULT ('Standard');
+IF NOT EXISTS (SELECT 1 FROM master.sys.databases WHERE [Name] = '{{NorthwindDb}}')
+BEGIN
+    CREATE DATABASE [{{NorthwindDb}}]
+END
 ```
 
-The migration is less context. You see the change but not the table it lives in. Is this column next to related columns? Are there indexes that should cover it? You have to open the full table definition separately to know. With the JSON diff, the whole table is right there.
+The `[ALWAYS]` marker tells SchemaQuench to run this script every time the Initialize template is active — no version tracking needed. The `IF NOT EXISTS` guard makes the script safe to re-run, though in practice it only executes once because the template self-selects out after the database exists.
 
-**Merge conflicts are simpler.** Two developers adding different columns to the same table? In JSON, they are adding entries to the `Columns` array — git auto-merges cleanly in most cases, and when it does conflict, the resolution is obvious (keep both entries). In migration scripts, two developers touching the same table means two separate ALTER scripts with sequence numbers that may collide, and the reviewer has to verify both scripts compose correctly.
+**3. Product.json defines the template order.** In `Product.json`:
 
-This is where schema-as-files really shines. Your schema evolves in pull requests, with reviews, approvals, and a full history — exactly like your application code already does.
-
-## Team collaboration patterns
-
-Here is a typical workflow for a team using SchemaSmith. Notice how each person focuses on their part, and the tooling handles the rest:
-
-1. **Developer** creates a feature branch and adds a `[LoyaltyPoints]` column to the Customers table JSON.
-2. **Developer** adds a stored procedure `dbo.CalculateLoyaltyPoints.sql` in the `Procedures/` folder.
-3. **Developer** runs SchemaQuench against their local database to verify the changes quench cleanly.
-4. **Developer** opens a pull request. The diff shows exactly one new column and one new procedure.
-5. **DBA** reviews the table structure in the PR diff — or opens the package in SchemaHammer to hammer on the full table with its indexes and foreign keys side by side.
-6. **Reviewer** approves. The branch merges.
-7. **CI/CD** quenches the package to staging using SchemaQuench. Same package, same command.
-8. **Release manager** quenches to production using SchemaQuench in WhatIf mode first, reviews the generated SQL, then runs the real deployment.
-
-Nobody wrote a deployment script. Nobody maintained a migration chain. Nobody worried about whether staging and production are at the same migration version. The same package deploys everywhere, and SchemaQuench computes the right delta for each target. You decide what the schema looks like; the forge makes it happen.
-
-## WhatIf mode as safety net
-
-WhatIf mode is the preview button for your database. Run it before every deployment — especially production. Boring deployments are the goal, and WhatIf is how you keep them boring.
-
-```bash
-SmithySettings_WhatIfONLY=true SchemaQuench
+```json
+{
+  "Name": "Northwind",
+  "ValidationScript": "SELECT CAST(1 AS BIT)",
+  "TemplateOrder": [
+    "Initialize",
+    "Northwind"
+  ],
+  "ScriptTokens": {
+    "NorthwindDb": "Northwind"
+  },
+  "Platform": "SqlServer"
+}
 ```
 
-SchemaQuench does everything it normally does — connects to the target database, computes the delta between the declared state and the current state, generates the SQL — but stops short of executing. The generated SQL is written to log files in the working directory so you can review every statement.
+`TemplateOrder` ensures Initialize runs first. If the database does not exist, Initialize creates it, then the Northwind template deploys the full schema. If the database already exists, Initialize is skipped and Northwind deploys any pending changes.
 
-Build this into your workflow:
-
-- **Development:** Optional. Quench directly if you are comfortable.
-- **Staging:** Recommended. Review the WhatIf output to catch surprises before they hit production-like data.
-- **Production:** Non-negotiable. Always WhatIf first. Read every line of generated SQL. Then quench.
-
-The cost is one extra command. The benefit is never being surprised by what a deployment does to your production database.
-
-For the full details on WhatIf behavior and output files, see [SchemaQuench Reference — WhatIf Mode](../reference/schemaquench.md#whatif-mode).
-
-## Using SchemaHammer for review
-
-SchemaHammer is the visual side of SchemaSmith. Open a product to browse its full structure — tables, columns, indexes, procedures, views — in a navigable tree. It is your workbench for inspecting and understanding the shape of your schema.
-
-During code review, SchemaHammer adds context that a raw diff cannot provide:
-
-- **Browse the full table.** A PR diff shows the column you added. SchemaHammer shows the column in context with every other column, index, and foreign key on the table.
-- **Code search across scripts.** Wondering which stored procedures reference the column you are about to rename? Use code search to find every reference across all procedures, functions, views, and triggers in the package.
-- **Token preview.** Script tokens let you parameterize environment-specific values. SchemaHammer shows you what the resolved script looks like, so you can verify token substitution before deployment.
-
-SchemaHammer is not required for any workflow — everything works from the command line. But when you want to understand the big picture or investigate cross-cutting changes, it is the fastest path to answers.
-
-For the full feature set, see [SchemaHammer Reference](../reference/schemahammer.md).
+Both demo products — Northwind and AdventureWorks — use this exact pattern. One `docker compose up` bootstraps everything from an empty SQL Server. Subsequent runs skip Initialize automatically and apply only schema changes. Fresh environment or existing environment, same command, same result.
 
 ---
 
-These workflows cover most of what you will do day to day. When you are ready to tap into the more advanced capabilities, the next chapter has you covered. [Power Workflows](05-power-workflows.md)
+These workflows cover how you shape your schema — adding tables, modifying columns, writing procedures, casting from live databases, and bootstrapping new environments. When you are ready to bring your team into the process, the next chapter shows how schema-as-files transforms collaboration. [Working with Your Team](05-working-with-your-team.md)

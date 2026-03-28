@@ -714,4 +714,4 @@ SchemaQuench decodes these filenames transparently when reading table definition
 - [SchemaQuench Reference](schemaquench.md) -- deployment tool that applies schema packages
 - [Core Concepts -- Schema Packages](../guide/03-core-concepts.md#schema-packages) -- Conceptual overview of the package structure
 - [Core Concepts -- JSON Table Definitions](../guide/03-core-concepts.md#json-table-definitions) -- Guided introduction to the table JSON format
-- [Day-to-Day Workflows -- Adding a Table](../guide/04-day-to-day-workflows.md#adding-a-table) -- Practical walkthrough of creating table JSON
+- [Defining Your Schema -- Adding a Table](../guide/04-defining-your-schema.md#adding-a-table) -- Practical walkthrough of creating table JSON

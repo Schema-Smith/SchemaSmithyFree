@@ -372,5 +372,5 @@ This setting defaults to `false` because most schemas resolve within a single pa
 - [Script Tokens Reference](script-tokens.md) -- Token replacement in SQL scripts
 - [SchemaTongs Reference](schematongs.md) -- Extraction tool that creates schema packages
 - [Quick Start -- Deploy with SchemaQuench](../guide/02-quick-start.md#step-4-deploy-with-schemaquench) -- Hands-on first deployment
-- [Day-to-Day Workflows -- WhatIf Mode](../guide/04-day-to-day-workflows.md#whatif-mode-as-safety-net) -- Using WhatIf in practice
-- [Edge Cases -- Migration Scripts](../guide/06-edge-cases.md#migration-scripts) -- When and how to use migration slots
+- [Working with Your Team -- WhatIf Mode](../guide/05-working-with-your-team.md#whatif-mode-as-your-safety-net) -- Using WhatIf in practice
+- [Edge Cases -- Migration Scripts](../guide/10-edge-cases.md#migration-scripts) -- When and how to use migration slots

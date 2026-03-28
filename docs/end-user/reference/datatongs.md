@@ -454,4 +454,4 @@ This approach means running DataTongs twice against unchanged data produces a sc
 - [Configuration Reference](configuration.md) -- Shared configuration system, CLI switches, environment variables
 - [Schema Packages Reference](schema-packages.md) -- How Table Data scripts fit into a schema package
 - [SchemaQuench Reference](schemaquench.md) -- The tool that executes MERGE scripts against target databases
-- [Power Workflows -- Reference Data Management](../guide/05-power-workflows.md#reference-data-management-with-datatongs) -- Practical walkthrough of the DataTongs workflow
+- [Power Workflows -- Reference Data Management](../guide/09-power-workflows.md#reference-data-management-with-datatongs) -- Practical walkthrough of the DataTongs workflow

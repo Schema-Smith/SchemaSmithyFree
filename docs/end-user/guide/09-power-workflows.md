@@ -1,6 +1,6 @@
 # Power Workflows
 
-You are comfortable with the [daily rhythm](04-day-to-day-workflows.md). Now here is where the forge really opens up. These features turn SchemaSmith from a convenient deployment tool into serious infrastructure — handling multi-environment deployments, multi-database products, reference data pipelines, and CI/CD integration. Each one solves a real problem that would otherwise require manual intervention or fragile scripting.
+You have built your schema, validated it, and set up your deployment pipeline. Now it is time to handle the real-world complexity that every production system eventually demands. Script tokens let a single codebase span dev, staging, and production without manual edits. Multi-database products keep related databases in lockstep with a single deployment. DataTongs turns reference data into version-controlled, repeatable scripts. And execution slots give you precise control over exactly when each script runs in the deployment lifecycle. These are the features that let you deploy with confidence at scale — solving problems that would otherwise require manual intervention or fragile scripting.
 
 ## Script tokens
 
@@ -148,70 +148,6 @@ The generated MERGE scripts handle inserts, updates, and deletes. They use JSON-
 
 For configuration details including key column detection, nullable key handling, and filter options, see [DataTongs Reference](../reference/datatongs.md).
 
-## CI/CD integration
-
-SchemaSmith tools are self-contained executables. No SDK to install. No runtime to configure. Download and run — your pipeline stays clean.
-
-**Configuration via environment variables** means no secrets in config files. Every setting from a `.settings.json` file can be overridden with an environment variable using the `SmithySettings_` prefix. Nested properties use double underscores:
-
-| Setting file path | Environment variable |
-|---|---|
-| `Target:Server` | `SmithySettings_Target__Server` |
-| `Target:Password` | `SmithySettings_Target__Password` |
-| `ScriptTokens:ReportingDB` | `SmithySettings_ScriptTokens__ReportingDB` |
-| `SchemaPackagePath` | `SmithySettings_SchemaPackagePath` |
-
-**Conceptual pipeline stages:**
-
-```
-Pull Request Pipeline:
-  1. Build/test application code
-  2. SchemaQuench with WhatIfONLY=true against a disposable database
-     → Catches SQL errors, missing tokens, broken references
-     → Fails the PR check if deployment would fail
-
-Merge-to-Main Pipeline:
-  1. Build/test application code
-  2. SchemaQuench deploy to staging
-  3. Run integration tests against staging
-  4. SchemaQuench deploy to production (manual approval gate)
-```
-
-The WhatIf mode is particularly valuable in PR pipelines. It runs the full deployment logic — token replacement, validation scripts, object creation — against a real database, but rolls back instead of committing. You catch deployment failures before the code merges. Problems surface in the pull request, not at 2 AM during a release.
-
-For the complete environment variable mapping and configuration precedence, see the [Configuration Reference](../reference/configuration.md#environment-variables). For SchemaQuench-specific deployment settings, see the [SchemaQuench Reference](../reference/schemaquench.md#configuration-reference).
-
-## Validation scripts
-
-The `ValidationScript` in Product.json runs before SchemaQuench deploys anything. It is your safety gate: if the script returns 0 or false, deployment stops. This prevents accidentally quenching to the wrong server or an unprepared environment.
-
-**Common use cases:**
-
-Verify the target database exists:
-```sql
-SELECT CAST(CASE WHEN EXISTS(
-    SELECT * FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}')
-) THEN 1 ELSE 0 END AS BIT)
-```
-
-Verify a minimum SQL Server version:
-```sql
-SELECT CAST(CASE WHEN SERVERPROPERTY('ProductMajorVersion') >= 15
-    THEN 1 ELSE 0 END AS BIT)
-```
-
-Confirm expected state before a migration:
-```sql
-SELECT CAST(CASE WHEN EXISTS(
-    SELECT * FROM INFORMATION_SCHEMA.TABLES
-    WHERE TABLE_NAME = 'AppConfig' AND TABLE_SCHEMA = 'dbo'
-) THEN 1 ELSE 0 END AS BIT)
-```
-
-The validation script supports token replacement, so you can use `{{ProductName}}`, `{{MainDB}}`, or any custom token. If validation fails, SchemaQuench logs the failure and exits without modifying anything. Nothing touched. Nothing broken. Exactly how a safety gate should work.
-
-Products also support `BaselineValidationScript`, which runs only during initial baseline deployments to verify the target is in the expected starting state.
-
 ## Script folder execution order
 
 SchemaQuench quenches scripts in a precise order. Understanding the execution slots lets you place scripts exactly where they need to run in the deployment lifecycle. You decide where each script belongs; SchemaQuench handles the sequencing.
@@ -248,26 +184,6 @@ SchemaQuench quenches scripts in a precise order. Understanding the execution sl
 
 For the complete deployment flow including table and indexed view processing within each slot, see [SchemaQuench Reference](../reference/schemaquench.md#execution-slots).
 
-## Extraction intelligence
-
-SchemaTongs does more than dump scripts to flat folders. When you cast your database schema, the tool brings real intelligence to the extraction.
-
-**Subfolder preservation.** You can organize scripts by domain — `Tables/Sales/`, `Tables/HR/`, `Procedures/Reporting/`. When SchemaTongs casts, it preserves existing subfolder locations. If `dbo.Orders.json` already lives in `Tables/Sales/`, the next extraction updates it in place rather than creating a duplicate in the root `Tables/` folder. New objects that have not been organized yet go to the root folder. Your organization stays intact.
-
-**Orphan detection.** When a database object is dropped, its script file becomes an orphan. SchemaTongs offers three modes for handling this:
-
-| Mode | Behavior |
-|---|---|
-| `Detect` | Logs orphaned files but takes no action. This is the default. |
-| `DetectWithCleanupScripts` | Logs orphans and generates cleanup scripts you can review and apply. |
-| `DetectDeleteAndCleanup` | Deletes orphaned files and generates cleanup scripts automatically. |
-
-**Script validation.** With `ValidateScripts` enabled, SchemaTongs checks each extracted script against the database to verify it parses correctly. Invalid scripts are saved with a `.sqlerror` extension instead of `.sql`, making them visible but excluded from deployment until you fix them.
-
-**CheckConstraintStyle.** Controls whether check constraints are extracted as column-level properties (inside the table JSON) or as table-level constraints. The default is `ColumnLevel`. If you prefer `TableLevel`, set it in Product.json or the SchemaTongs config — but be consistent, because the style is locked to whatever Product.json specifies once the product exists.
-
-For the full set of extraction options, filtering, and configuration, see [SchemaTongs Reference](../reference/schematongs.md).
-
 ---
 
-These are the tools for 95% of what you will encounter. For the remaining 5% — the edge cases and special situations — the next chapter has the escape hatches. [Edge Cases & Escape Hatches](06-edge-cases.md)
+These are the tools for 95% of what you will encounter. For the remaining 5% — the edge cases and special situations — the next chapter has the escape hatches. [Edge Cases & Escape Hatches](10-edge-cases.md)

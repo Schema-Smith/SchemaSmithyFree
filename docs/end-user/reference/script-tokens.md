@@ -207,7 +207,7 @@ Config and environment overrides apply at the product level only. They do not di
 
 ## Token Preview in SchemaHammer
 
-SchemaHammer provides a **Preview** toggle on SQL scripts that expands `{{Token}}` placeholders to their resolved values. This lets you verify token replacement before running SchemaQuench. See the [SchemaHammer Reference](schemahammer.md#token-preview) for details. For a practical walkthrough of using tokens across environments, see [Power Workflows -- Script Tokens](../guide/05-power-workflows.md#script-tokens).
+SchemaHammer provides a **Preview** toggle on SQL scripts that expands `{{Token}}` placeholders to their resolved values. This lets you verify token replacement before running SchemaQuench. See the [SchemaHammer Reference](schemahammer.md#token-preview) for details. For a practical walkthrough of using tokens across environments, see [Power Workflows -- Script Tokens](../guide/09-power-workflows.md#script-tokens).
 
 ---
 
