@@ -1,6 +1,6 @@
 # Day-to-Day Workflows
 
-You understand the [core concepts](03-core-concepts.md). Now let's look at how your Tuesday actually goes with SchemaSmith. These are the patterns you will use over and over — adding tables, modifying columns, writing stored procedures, syncing with live databases, and reviewing changes in pull requests. Each one is simpler than the traditional alternative, and they build on each other naturally.
+You understand the [core concepts](03-core-concepts.md). Now let's look at how your Tuesday actually goes with SchemaSmith. These are the patterns you will reach for every day — adding tables, shaping columns, writing stored procedures, pulling changes from live databases, and reviewing schema in pull requests. Each one replaces a manual, error-prone process with something you can trust. And they build on each other naturally.
 
 ## Adding a table
 
@@ -66,7 +66,7 @@ Your team needs a `Promotions` table to track discount campaigns. Here is what y
 
 That is the entire table definition. Every column, every constraint, every index — all in one readable file. For every property available in a table JSON file, see the [Schema Packages Reference](../reference/schema-packages.md#json-table-format).
 
-**2. Deploy it.** Run SchemaQuench against your development database:
+**2. Quench it.** Run SchemaQuench against your development database:
 
 ```bash
 SchemaQuench
@@ -74,11 +74,11 @@ SchemaQuench
 
 SchemaQuench reads the JSON, sees that `dbo.Promotions` does not exist in the target database, and generates a `CREATE TABLE` statement. Done.
 
-**Compare this to the traditional approach:** write a `CREATE TABLE` script, write a migration file with a sequence number, make sure the sequence number does not collide with anyone else's, add an `IF NOT EXISTS` guard, add a corresponding rollback script, update a migrations tracking table. With SchemaSmith, you created one file and ran one command.
+**Compare this to the traditional approach:** write a `CREATE TABLE` script, write a migration file with a sequence number, make sure the sequence number does not collide with anyone else's, add an `IF NOT EXISTS` guard, add a corresponding rollback script, update a migrations tracking table. With SchemaSmith, you created one file and ran one command. No migration scripts. No dependency ordering. No collision worries.
 
 ## Modifying a table
 
-The `Promotions` table needs changes. Marketing wants a description field, the discount column needs more precision, and you need an index on the active flag for a dashboard query. All three edits happen in the same JSON file.
+The `Promotions` table needs changes. Marketing wants a description field, the discount column needs more precision, and you need an index on the active flag for a dashboard query. All three edits happen in the same JSON file — you shape the table right where it lives.
 
 **Add a column.** Insert a new entry in the `Columns` array:
 
@@ -112,7 +112,7 @@ Now preview the changes before touching the database. Run SchemaQuench in WhatIf
 SmithySettings_WhatIfONLY=true SchemaQuench
 ```
 
-SchemaQuench generates the SQL it *would* execute — an `ALTER TABLE ... ADD` for the new column, an `ALTER TABLE ... ALTER COLUMN` for the data type change, and a `CREATE INDEX` for the new filtered index — and logs it all without applying anything. Read the generated SQL, confirm it looks right, then run SchemaQuench normally to apply.
+SchemaQuench generates the SQL it *would* execute — an `ALTER TABLE ... ADD` for the new column, an `ALTER TABLE ... ALTER COLUMN` for the data type change, and a `CREATE INDEX` for the new filtered index — and logs it all without applying anything. Read the generated SQL, confirm it looks right, then run SchemaQuench normally to quench the changes into your database.
 
 Three changes to one file. One preview. One deployment command. No migration scripts to write, number, or maintain.
 
@@ -164,13 +164,13 @@ WHERE Products.UnitPrice > (SELECT AVG(UnitPrice) FROM Products)
 GO
 ```
 
-Need to update an existing procedure? Edit the `.sql` file and deploy. The `CREATE OR ALTER` takes care of whether it is new or changed. There is no separate "alter" workflow — you always declare the full object definition, and SchemaQuench applies it.
+Need to update an existing procedure? Edit the `.sql` file and quench. The `CREATE OR ALTER` takes care of whether it is new or changed. There is no separate "alter" workflow — you always declare the full object definition, and SchemaQuench applies it.
 
 ## Extracting changes from a live database
 
 Someone changed the database directly. Maybe a DBA added a column in production during an incident. Maybe a developer used SSMS to tweak an index on staging. The database has drifted from the package.
 
-Run SchemaTongs to pull the current state back into your package:
+Cast the current state back into your package with SchemaTongs:
 
 ```bash
 SchemaTongs
@@ -194,13 +194,13 @@ $ git diff
 +    },
 ```
 
-The diff reads like a sentence: "someone added a BackorderThreshold column to the Products table with a default of 10." Compare that to trying to figure out what changed by comparing two database snapshots or reading through audit logs.
+The diff reads like a sentence: "someone added a BackorderThreshold column to the Products table with a default of 10." Compare that to trying to figure out what changed by comparing two database snapshots or reading through audit logs. The drift is captured. The mystery is over.
 
 **Orphan detection** catches the other direction — objects that were dropped from the database but still have files in the package. SchemaTongs logs orphaned files so you can decide whether to remove them or restore the missing objects. For details on orphan handling modes, see [SchemaTongs Reference — Orphan Detection](../reference/schematongs.md#orphan-detection).
 
 ## Working with source control
 
-Schema packages are files. That means they work with git exactly the way your application code does.
+Schema packages are files. That means they work with git exactly the way your application code does — branching, merging, pull requests, full history.
 
 **Branching works naturally.** Create a feature branch, add your table, modify your procedures, commit, push. Another developer does the same on their branch. Git handles the merge.
 
@@ -219,7 +219,7 @@ Schema packages are files. That means they work with git exactly the way your ap
   ]
 ```
 
-A reviewer sees immediately: "This adds a nullable LoyaltyTier column with a default of 'Standard'." No need to mentally execute an ALTER script to figure out the end state.
+A reviewer sees immediately: "This adds a nullable LoyaltyTier column with a default of 'Standard'." No need to mentally execute an ALTER script to figure out the end state. The intent is right there.
 
 Compare that to reviewing a migration script:
 
@@ -232,26 +232,26 @@ The migration is less context. You see the change but not the table it lives in.
 
 **Merge conflicts are simpler.** Two developers adding different columns to the same table? In JSON, they are adding entries to the `Columns` array — git auto-merges cleanly in most cases, and when it does conflict, the resolution is obvious (keep both entries). In migration scripts, two developers touching the same table means two separate ALTER scripts with sequence numbers that may collide, and the reviewer has to verify both scripts compose correctly.
 
-This is where "just like source code" really shines. Your schema evolves in pull requests, with reviews, approvals, and a full history — exactly like your application code already does.
+This is where schema-as-files really shines. Your schema evolves in pull requests, with reviews, approvals, and a full history — exactly like your application code already does.
 
 ## Team collaboration patterns
 
-Here is a typical workflow for a team using SchemaSmith:
+Here is a typical workflow for a team using SchemaSmith. Notice how each person focuses on their part, and the tooling handles the rest:
 
 1. **Developer** creates a feature branch and adds a `[LoyaltyPoints]` column to the Customers table JSON.
 2. **Developer** adds a stored procedure `dbo.CalculateLoyaltyPoints.sql` in the `Procedures/` folder.
-3. **Developer** runs SchemaQuench against their local database to verify the changes deploy cleanly.
+3. **Developer** runs SchemaQuench against their local database to verify the changes quench cleanly.
 4. **Developer** opens a pull request. The diff shows exactly one new column and one new procedure.
-5. **DBA** reviews the table structure in the PR diff — or opens the package in SchemaHammer to browse the full table with its indexes and foreign keys side by side.
+5. **DBA** reviews the table structure in the PR diff — or opens the package in SchemaHammer to hammer on the full table with its indexes and foreign keys side by side.
 6. **Reviewer** approves. The branch merges.
-7. **CI/CD** deploys the package to staging using SchemaQuench. Same package, same command.
-8. **Release manager** deploys to production using SchemaQuench in WhatIf mode first, reviews the generated SQL, then runs the real deployment.
+7. **CI/CD** quenches the package to staging using SchemaQuench. Same package, same command.
+8. **Release manager** quenches to production using SchemaQuench in WhatIf mode first, reviews the generated SQL, then runs the real deployment.
 
-Nobody wrote a deployment script. Nobody maintained a migration chain. Nobody worried about whether staging and production are at the same migration version. The same package deploys everywhere, and SchemaQuench computes the right delta for each target.
+Nobody wrote a deployment script. Nobody maintained a migration chain. Nobody worried about whether staging and production are at the same migration version. The same package deploys everywhere, and SchemaQuench computes the right delta for each target. You decide what the schema looks like; the forge makes it happen.
 
 ## WhatIf mode as safety net
 
-WhatIf mode is the preview button for your database. Run it before every deployment — especially production.
+WhatIf mode is the preview button for your database. Run it before every deployment — especially production. Boring deployments are the goal, and WhatIf is how you keep them boring.
 
 ```bash
 SmithySettings_WhatIfONLY=true SchemaQuench
@@ -261,9 +261,9 @@ SchemaQuench does everything it normally does — connects to the target databas
 
 Build this into your workflow:
 
-- **Development:** Optional. Deploy directly if you are comfortable.
+- **Development:** Optional. Quench directly if you are comfortable.
 - **Staging:** Recommended. Review the WhatIf output to catch surprises before they hit production-like data.
-- **Production:** Non-negotiable. Always WhatIf first. Read every line of generated SQL. Then deploy.
+- **Production:** Non-negotiable. Always WhatIf first. Read every line of generated SQL. Then quench.
 
 The cost is one extra command. The benefit is never being surprised by what a deployment does to your production database.
 
@@ -271,7 +271,7 @@ For the full details on WhatIf behavior and output files, see [SchemaQuench Refe
 
 ## Using SchemaHammer for review
 
-SchemaHammer is the visual side of SchemaSmith. Open a product to browse its full structure — tables, columns, indexes, procedures, views — in a navigable tree.
+SchemaHammer is the visual side of SchemaSmith. Open a product to browse its full structure — tables, columns, indexes, procedures, views — in a navigable tree. It is your workbench for inspecting and understanding the shape of your schema.
 
 During code review, SchemaHammer adds context that a raw diff cannot provide:
 
