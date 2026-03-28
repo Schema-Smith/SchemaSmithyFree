@@ -47,7 +47,7 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
 | `KindleTheForge` | bool | `true` | Deploy SchemaSmith helper procedures and the migration tracking table to each target database before quenching. |
 | `UpdateTables` | bool | `true` | Apply table structure changes (columns, indexes, constraints, foreign keys) from the schema package. |
 | `DropTablesRemovedFromProduct` | bool | `true` | Drop tables that exist in the database but are not defined in the schema package. |
-| `RunScriptsTwice` | bool | `false` | Run object scripts twice to resolve cross-dependencies between objects. |
+| `RunScriptsTwice` | bool | `false` | Run object scripts twice to verify idempotency. A CI/testing tool, not for production. |
 | `ScriptTokens` | object | `{}` | Config-level overrides for product script tokens. Keys are token names, values are replacement strings. |
 
 ### Full Settings File Example
@@ -123,7 +123,7 @@ For each database identified by a template's `DatabaseIdentificationScript`, `Da
 
 1. **Kindle the Forge** -- Deploys SchemaSmith helper procedures, functions, and the migration tracking table. Skipped if `KindleTheForge` is `false`.
 2. **Validate baseline** -- Executes `Template.BaselineValidationScript` if configured. Aborts if falsy.
-3. **Object scripts (first pass)** -- Executes scripts from all Objects-slot folders (Schemas, DataTypes, FullTextCatalogs, FullTextStopLists, XMLSchemaCollections, Functions, Views, Procedures) using the dependency retry loop. If `RunScriptsTwice` is enabled, resets and runs a second pass.
+3. **Object scripts (first pass)** -- Executes scripts from all Objects-slot folders (Schemas, DataTypes, FullTextCatalogs, FullTextStopLists, XMLSchemaCollections, Functions, Views, Procedures) using the dependency retry loop. If `RunScriptsTwice` is enabled, resets all scripts and runs a complete second pass to verify idempotency.
 4. **Parse table JSON** -- Serializes all `Tables/*.json` definitions into temp tables for the modular procedures to consume.
 5. **MissingTableAndColumnQuench** -- Creates missing tables and adds missing columns.
 6. **Object scripts (second opportunity)** -- Re-attempts any Objects-slot scripts that failed in step 3, now that missing tables exist.
@@ -186,6 +186,9 @@ See exactly what SchemaQuench would do before it touches a single table. Set `Wh
   - `Would SKIP (previously quenched): {script}` for scripts already recorded in `CompletedMigrationScripts`.
 - **Object scripts** (Objects, AfterTablesObjects, Table Data) are logged but not executed.
 - **Product Before/After scripts** are logged but not executed.
+
+**Important limitation:** WhatIf shows the top level of changes, not the full cascade. Because nothing actually executes, WhatIf cannot show ripple effects that depend on earlier changes having been applied. For example, if an object script drops an index, that script does not run in WhatIf mode, so the index still exists when WhatIf analyzes table changes — meaning the table diff will not show the index as needing to be recreated. WhatIf is a confidence check, not a guarantee. It catches the majority of issues but the full deployment may produce additional changes that WhatIf could not predict.
+
 - **Version stamp scripts** are not executed; a log message indicates the stamp would occur.
 
 ### Debug SQL Output
@@ -213,6 +216,14 @@ SchemaQuench
 SmithySettings_WhatIfONLY=true SchemaQuench
 ```
 
+### When to Use WhatIf
+
+| Environment | Guidance |
+|-------------|----------|
+| Development | Optional — quench directly if you are comfortable with the changes. |
+| Staging | Recommended — review WhatIf output to catch surprises before production-like data. |
+| Production | Non-negotiable — always WhatIf first, read the generated SQL, then deploy in a separate run. |
+
 ---
 
 ## KindleTheForge
@@ -227,7 +238,9 @@ Before SchemaQuench can shape your database, it needs its tools in place. Kindle
 - **Reverse-engineering procedures** -- `GenerateTableJson`, `GenerateIndexedViewJson` (used by SchemaTongs).
 - **CompletedMigrationScripts table** -- Tracks which migration scripts have been executed for each product and quench slot.
 
-KindleTheForge runs on every quench to ensure the helper procedures match the version of SchemaQuench being used. Set `KindleTheForge` to `false` only when you are certain the infrastructure is already current and want to skip the deployment for performance.
+KindleTheForge runs on every quench to ensure the helper procedures match the version of SchemaQuench being used. In a normal release pipeline, always leave this `true`.
+
+**When to set false — the datafix pipeline:** When the deployment user has read/write access but no DDL modification ability, and you are running only migration scripts to fix data. Turning off KindleTheForge (along with `UpdateTables: false` and `DropTablesRemovedFromProduct: false`) reduces the scope of what executes and the permissions required. This is a deliberate permission boundary — data fixes should not make structural changes that the next full release would overwrite or conflict with.
 
 ---
 
@@ -340,17 +353,35 @@ When `DropTablesRemovedFromProduct` is `true` (the default), the `ModifiedTableQ
 - Are not defined in any table JSON file in the schema package.
 - Were previously managed by this product.
 
-This keeps the database clean as tables are removed from the schema package over time. Set to `false` if you want SchemaQuench to leave unmanaged tables in place -- for example, when the database contains tables managed by other applications.
+This keeps the database clean as tables are removed from the schema package over time.
+
+**Environment guidance:**
+- **CI and local dev** — `true`. Catch product areas that reference tables you plan to remove. Fail fast in disposable environments where data loss does not matter.
+- **Test/staging** — `true`. Same rationale, but verify the drop is intentional before promoting to production.
+- **Production** — Often `false`. Dropping a table is a hard drop with no built-in recovery. Teams that need rollback-friendly deployments should leave this off in production. Instead, craft specialized migration scripts to rename or archive the table for a retention period before the actual drop.
+
+**The pattern for rollback-friendly table removal:**
+1. Remove the table from your product definition.
+2. Keep `DropTablesRemovedFromProduct: false` in the production config.
+3. Write a migration script that renames or archives the table (or verifies no dependencies remain).
+4. After the retention period, either enable the setting for one deployment or add an explicit DROP in a migration script.
 
 ---
 
 ## RunScriptsTwice
 
-When `RunScriptsTwice` is `true`, the Objects-slot scripts are executed twice in succession during step 3 of the database quench sequence. On the second pass, all scripts are reset to unquenched and processed through the dependency retry loop again.
+When `RunScriptsTwice` is `true`, the Objects-slot scripts are executed twice in succession during step 3 of the database quench sequence. On the second pass, all scripts are reset to unquenched and processed through the dependency retry loop again. Both runs must succeed -- if either fails, the deployment fails.
 
-Use this when your schema has complex cross-dependencies between objects that cannot be fully resolved in a single dependency retry cycle. A common scenario is when functions reference views that reference other functions -- the first pass creates all objects, and the second pass updates them with their final definitions now that all dependencies exist.
+This is an **idempotency testing** tool, not a dependency resolution mechanism. Dependency resolution is already handled by the [retry loop](#dependency-retry-loop), which retries failed scripts as long as progress is being made. RunScriptsTwice answers a different question: "Can my `[ALWAYS]` scripts and object scripts run again safely?"
 
-This setting defaults to `false` because most schemas resolve within a single pass.
+**When to use:**
+- **CI pipelines** -- Verify that `[ALWAYS]` scripts are truly idempotent. If a script fails on the second run, you have caught an idempotency bug before it reaches production.
+- **Local development** -- Verify idempotency as you author `[ALWAYS]` scripts.
+
+**When not to use:**
+- **Production deployments** -- It doubles the execution time for the object script phase with no production benefit. This is a testing tool.
+
+This setting defaults to `false` because idempotency testing is a CI/development concern, not a production deployment concern.
 
 ---
 
