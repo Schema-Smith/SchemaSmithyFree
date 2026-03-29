@@ -92,7 +92,7 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 | Property | Type | Default | Required | Description |
 |---|---|---|---|---|
 | `Name` | string | | Yes | Template name. Must match the containing directory name. Automatically added as a `{{TemplateName}}` script token. |
-| `DatabaseIdentificationScript` | string | | Yes | T-SQL query that returns a result set with a `Name` column. Each row identifies a database to quench with this template. Supports token replacement. |
+| `DatabaseIdentificationScript` | string | | Yes | T-SQL query that returns one or more database names. SchemaQuench reads the first column of each row as the database name — the column name doesn't matter. Supports token replacement. |
 | `VersionStampScript` | string | | No | T-SQL executed per database after that database's quench completes successfully. |
 | `UpdateFillFactor` | bool | `true` | No | When `true`, the table quench updates index fill factors to match the JSON definitions. OR'd with table-level and index-level `UpdateFillFactor` settings. |
 | `IndexOnlyTableQuenches` | bool | `false` | No | When `true`, the table quench only manages indexes, statistics, XML indexes, and full-text indexes. Skips table creation, column changes, and foreign key management. Tables that don't exist are silently skipped. |
@@ -182,7 +182,7 @@ Understanding the execution order is key to writing migration scripts that land 
 
 | Step | Folder / Action | Quench Slot | Execution Behavior |
 |------|-----------------|-------------|-------------------|
-| 1 | `Before Product` | Product Before | Sequential, tracked (run once unless `[ALWAYS]` in filename) |
+| 1 | `Before Product` | Product Before | Sequential, untracked (runs every deployment) |
 | 2 | `Schemas`, `DataTypes`, `FullTextCatalogs`, `FullTextStopLists`, `XMLSchemaCollections`, `Functions`, `Views`, `Procedures` | Objects | Dependency retry loop (first pass) |
 | 3 | _(MissingTableAndColumnQuench)_ | _(internal)_ | Creates new tables and adds new columns from table JSON |
 | 4 | Objects retry | Objects | Dependency retry loop (second pass — resolves scripts that needed tables) |
@@ -197,13 +197,15 @@ Understanding the execution order is key to writing migration scripts that land 
 | 13 | _(ForeignKeyQuench)_ | _(internal)_ | Applies foreign key constraints after all data is in place |
 | 14 | _(IndexedViewQuench)_ | _(internal)_ | Creates or updates indexed views |
 | 15 | `MigrationScripts/After` | After | Sequential, tracked |
-| 16 | `After Product` | Product After | Sequential, tracked |
+| 16 | `After Product` | Product After | Sequential, untracked (runs every deployment) |
 
 Steps 2–15 execute per template (in `TemplateOrder`), per database (as identified by `DatabaseIdentificationScript`). Steps 1 and 16 execute once per quench run against the server connection.
 
 ### Execution behaviors
 
-**Sequential, tracked** -- Scripts run in alphabetical order. Each script's completion is recorded in the `CompletedMigrationScripts` table and won't run again on subsequent quenches. Scripts with `[ALWAYS]` in the filename run every time regardless of tracking.
+**Sequential, untracked** -- Product-level scripts (`Before Product`, `After Product`) run in alphabetical order on every deployment. They aren't recorded in any tracking table. Write these scripts to be idempotent — they'll execute every time SchemaQuench runs.
+
+**Sequential, tracked** -- Template-level migration scripts run in alphabetical order. Each script's completion is recorded in the `CompletedMigrationScripts` table and won't run again on subsequent quenches. Scripts with `[ALWAYS]` in the filename run every time regardless of tracking.
 
 **Dependency retry loop** -- All scripts in the slot are attempted. Scripts that fail due to unresolved dependencies are retried on the next iteration. The loop continues until all scripts succeed or no progress is made on an iteration.
 
@@ -221,8 +223,8 @@ Steps 2–15 execute per template (in `TemplateOrder`), per database (as identif
 
 | ProductQuenchSlot | Purpose |
 |---|---|
-| `Before` | Product-level scripts that run once before any template processing begins. Run on the server connection, not scoped to a database. |
-| `After` | Product-level scripts that run once after all templates complete. Run on the server connection. |
+| `Before` | Product-level scripts that run every deployment before any template processing begins. Run on the server connection, not scoped to a database. |
+| `After` | Product-level scripts that run every deployment after all templates complete. Run on the server connection. |
 
 ---
 
