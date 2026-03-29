@@ -167,7 +167,7 @@ public class ProductTreeService : IProductTreeService
         foreach (var folderPath in folderPaths)
         {
             var folderDir = Path.Combine(templateDirPath, folderPath);
-            var node = BuildScriptFolderNode(folderPath, folderDir);
+            var node = BuildScriptFolderNode(folderPath, folderDir, templateName);
             if (node != null)
             {
                 node.TemplateName = templateName;
@@ -176,7 +176,8 @@ public class ProductTreeService : IProductTreeService
         }
     }
 
-    private TreeNodeModel? BuildScriptFolderNode(string displayName, string folderDir)
+    private TreeNodeModel? BuildScriptFolderNode(string displayName, string folderDir,
+        string templateName = "")
     {
         var dir = ProductDirectoryWrapper.GetFromFactory();
         if (!dir.Exists(folderDir))
@@ -201,6 +202,7 @@ public class ProductTreeService : IProductTreeService
                 var imageKey = f.IsError ? "error-file" : "file";
                 var scriptNode = MakeNode(Path.GetFileName(f.Path), tag, imageKey);
                 scriptNode.NodePath = f.Path;
+                scriptNode.TemplateName = templateName;
                 return scriptNode;
             })
             .ToList();

@@ -39,6 +39,12 @@ public partial class SearchViewModel : ObservableObject
         _ = DebouncedTreeSearch();
     }
 
+    partial void OnSelectedSearchTypeChanged(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(TreeSearchTerm))
+            SearchTree();
+    }
+
     private async Task DebouncedTreeSearch()
     {
         _debounceTokenSource?.Cancel();

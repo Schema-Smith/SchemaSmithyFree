@@ -311,6 +311,25 @@ public class ProductTreeServiceTests
     }
 
     [Test]
+    public void LoadProduct_TemplateScriptNodes_HaveTemplateName()
+    {
+        var service = new ProductTreeService();
+        service.LoadProduct(ValidProductPath);
+
+        var scriptNodes = service.SearchList
+            .Where(n => n.Tag == "Sql Script" && n.NodePath != null
+                && n.NodePath.Contains(Path.Combine("Templates", "Main"), StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        Assert.That(scriptNodes, Is.Not.Empty, "Should find script nodes under the Main template");
+        foreach (var node in scriptNodes)
+        {
+            Assert.That(node.TemplateName, Is.EqualTo("Main"),
+                $"Script node '{node.Text}' under Main template should have TemplateName='Main', got '{node.TemplateName}'");
+        }
+    }
+
+    [Test]
     public void LoadProduct_SqlErrorFolderNode_IncludesBothSqlAndSqlErrorFiles()
     {
         // Functions folder has both .sql and .sqlerror files

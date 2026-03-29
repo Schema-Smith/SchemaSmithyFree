@@ -51,5 +51,10 @@ public partial class SearchWindow : Window
             Close();
             e.Handled = true;
         }
+        else if (e.Key == Key.Enter && DataContext is SearchViewModel vm && vm.SelectedTabIndex == 1)
+        {
+            vm.SearchCodeCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 }

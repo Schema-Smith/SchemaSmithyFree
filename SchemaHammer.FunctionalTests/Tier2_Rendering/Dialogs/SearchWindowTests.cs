@@ -3,7 +3,9 @@
 // ItemTypeFilter_Populates (all Enterprise-only features).
 
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.NUnit;
+using Avalonia.Input;
 using SchemaHammer.FunctionalTests.Fixtures;
 using SchemaHammer.Services;
 using SchemaHammer.ViewModels;
@@ -123,6 +125,54 @@ public class SearchWindowTests : DialogTestBase
 
         var grid = FindControl<DataGrid>(dialog, "CodeResultsGrid");
         Assert.That(grid, Is.Not.Null, "CodeResultsGrid not found");
+
+        dialog.Close();
+    }
+
+    [AvaloniaTest]
+    public void SearchWindow_EnterKey_TriggersCodeSearch()
+    {
+        var vm = new SearchViewModel(_treeService, "Code");
+        vm.CodeSearchTerm = "Users";
+        var dialog = new SearchWindow { DataContext = vm };
+        HostDialog(dialog);
+
+        dialog.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        dialog.KeyReleaseQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        Assert.That(vm.CodeSearchResults, Is.Not.Empty,
+            "Enter key on code search tab should trigger search");
+
+        dialog.Close();
+    }
+
+    [AvaloniaTest]
+    public void SearchWindow_EscapeKey_ClosesWindow()
+    {
+        var vm = new SearchViewModel(_treeService);
+        var dialog = new SearchWindow { DataContext = vm };
+        HostDialog(dialog);
+        Assert.That(dialog.IsVisible, Is.True);
+
+        dialog.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+
+        Assert.That(dialog.IsVisible, Is.False,
+            "Escape key should close the search window");
+    }
+
+    [AvaloniaTest]
+    public void SearchWindow_EnterKey_OnTreeTab_DoesNotTriggerCodeSearch()
+    {
+        var vm = new SearchViewModel(_treeService);
+        vm.CodeSearchTerm = "Users";
+        var dialog = new SearchWindow { DataContext = vm };
+        HostDialog(dialog);
+
+        dialog.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        dialog.KeyReleaseQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        Assert.That(vm.CodeSearchResults, Is.Empty,
+            "Enter key on tree tab should not trigger code search");
 
         dialog.Close();
     }

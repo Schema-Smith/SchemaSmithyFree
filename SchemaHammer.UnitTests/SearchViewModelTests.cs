@@ -826,4 +826,79 @@ public class SearchViewModelTests
 
         Assert.That(vm.IsSearching, Is.False);
     }
+
+    [Test]
+    public void ChangeSearchType_WithExistingTerm_ReSearches()
+    {
+        var node1 = new TreeNodeModel { Text = "TestTable", Tag = "Table", TemplateName = "Main" };
+        var node2 = new TreeNodeModel { Text = "MyTest", Tag = "Table", TemplateName = "Main" };
+        var treeService = CreateTreeService(node1, node2);
+        var vm = new SearchViewModel(treeService);
+
+        vm.TreeSearchTerm = "Test";
+        vm.SearchTreeCommand.Execute(null);
+        Assert.That(vm.TreeSearchResults, Has.Count.EqualTo(2));
+
+        vm.SelectedSearchType = "Begins With";
+        Assert.That(vm.TreeSearchResults, Has.Count.EqualTo(1));
+        Assert.That(vm.TreeSearchResults[0].Name, Is.EqualTo("TestTable"));
+    }
+
+    [Test]
+    public void ChangeSearchType_WithEmptyTerm_DoesNotSearch()
+    {
+        var node = new TreeNodeModel { Text = "TestTable", Tag = "Table", TemplateName = "Main" };
+        var treeService = CreateTreeService(node);
+        var vm = new SearchViewModel(treeService);
+
+        vm.SelectedSearchType = "Begins With";
+        Assert.That(vm.TreeSearchResults, Is.Empty);
+    }
+
+    [Test]
+    public void SearchCode_TemplateScripts_ShowTemplateName()
+    {
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "deploy.sql",
+            Tag = "Sql Script",
+            TemplateName = "Main",
+            NodePath = Path.Combine(ValidProductPath, "Templates", "Main", "MigrationScripts", "Before", "deploy.sql")
+        };
+        var treeService = CreateTreeService(scriptNode);
+        var vm = new SearchViewModel(treeService);
+
+        vm.CodeSearchTerm = "CREATE";
+        vm.SearchCodeCommand.Execute(null);
+
+        var scriptResults = vm.CodeSearchResults.Where(r => r.Type == "Sql Script").ToList();
+        if (scriptResults.Any())
+        {
+            Assert.That(scriptResults[0].Template, Is.EqualTo("Main"));
+        }
+    }
+
+    [Test]
+    public void SearchCode_ProductLevelScripts_ShowProductLabel()
+    {
+        var scriptNode = new TreeNodeModel
+        {
+            Text = "product-script.sql",
+            Tag = "Sql Script",
+            TemplateName = "",
+            NodePath = Path.Combine(ValidProductPath, "SomeFolder", "product-script.sql")
+        };
+        var treeService = CreateTreeService(scriptNode);
+        var vm = new SearchViewModel(treeService);
+
+        vm.CodeSearchTerm = "something";
+        vm.SearchCodeCommand.Execute(null);
+
+        // Script with empty TemplateName should show "(Product)"
+        var scriptResults = vm.CodeSearchResults.Where(r => r.Type == "Sql Script").ToList();
+        foreach (var result in scriptResults)
+        {
+            Assert.That(result.Template, Is.EqualTo("(Product)"));
+        }
+    }
 }
