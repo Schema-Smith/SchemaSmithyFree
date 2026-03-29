@@ -209,9 +209,9 @@ Every script in the package is readable right here. Selecting a script file open
 
 ### Token Preview
 
-Scripts often contain `{{{TokenName}}}` placeholders. Click the **Preview** button in the toolbar to toggle between two modes:
+Scripts often contain `{{TokenName}}` placeholders. Click the **Preview** button in the toolbar to toggle between two modes:
 
-- **Raw mode** (default) -- Shows the script text exactly as stored on disk, with `{{{...}}}` placeholders visible.
+- **Raw mode** (default) -- Shows the script text exactly as stored on disk, with `{{...}}` placeholders visible.
 - **Preview mode** -- Expands every placeholder to its resolved value. Product-level tokens are applied first, then template-level tokens override any matching keys.
 
 The button label switches between "Preview" and "Raw" to indicate the current state.

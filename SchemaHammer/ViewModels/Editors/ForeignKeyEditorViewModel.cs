@@ -24,10 +24,10 @@ public class ForeignKeyEditorViewModel : EditorBaseViewModel
         if (fk != null)
         {
             Name = StripBrackets(fk.Name);
-            Columns = fk.Columns ?? "";
-            RelatedTableSchema = fk.RelatedTableSchema ?? "dbo";
-            RelatedTable = fk.RelatedTable ?? "";
-            RelatedColumns = fk.RelatedColumns ?? "";
+            Columns = StripBrackets(fk.Columns);
+            RelatedTableSchema = StripBrackets(fk.RelatedTableSchema ?? "dbo");
+            RelatedTable = StripBrackets(fk.RelatedTable);
+            RelatedColumns = StripBrackets(fk.RelatedColumns);
             DeleteAction = fk.DeleteAction ?? "";
             UpdateAction = fk.UpdateAction ?? "";
         }

@@ -37,13 +37,13 @@ SchemaHammer is a new read-only desktop application for browsing SchemaSmith sch
 **Schema Viewing:**
 - Dedicated read-only editors for every node type: Product, Template, Table, Column, Index, Foreign Key, Check Constraint, Statistic, XML Index, Full-Text Index, Indexed View
 - SQL script viewing with T-SQL syntax highlighting
-- Script token preview — toggle to expand `{{{Token}}}` placeholders to their actual values
+- Script token preview — toggle to expand `{{Token}}` placeholders to their actual values
 
 **Search:**
 - Tree search with Contains, Begins With, Ends With matching (auto-search as you type)
 - Code search across SQL script files, table metadata, and script tokens
 - In-editor find bar with next/previous, match count, and case toggle
-- Token navigation — double-click `{{{Token}}}` to jump to its definition
+- Token navigation — double-click `{{Token}}` to jump to its definition
 
 **Tools and Polish:**
 - Update Schema Files — regenerates `.json-schemas/` validation files

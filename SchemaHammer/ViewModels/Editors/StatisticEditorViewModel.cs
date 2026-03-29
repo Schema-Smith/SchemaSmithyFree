@@ -20,7 +20,7 @@ public class StatisticEditorViewModel : EditorBaseViewModel
         if (stat != null)
         {
             Name = StripBrackets(stat.Name);
-            Columns = stat.Columns ?? "";
+            Columns = StripBrackets(stat.Columns);
             SampleSize = stat.SampleSize;
             FilterExpression = stat.FilterExpression ?? "";
         }

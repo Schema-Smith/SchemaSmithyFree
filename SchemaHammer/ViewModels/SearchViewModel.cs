@@ -118,7 +118,7 @@ public partial class SearchViewModel : ObservableObject
 
         if (item.Type == "Script Token")
         {
-            var tokenName = item.Name.Replace("{{{", "").Replace("}}}", "").Trim();
+            var tokenName = item.Name.Replace("{{", "").Replace("}}", "").Trim();
             EditorBaseViewModel.PendingTokenName = tokenName;
         }
 
@@ -215,7 +215,7 @@ public partial class SearchViewModel : ObservableObject
                     var colNode = i < tableNode.ColumnNodes.Length ? tableNode.ColumnNodes[i] : tableNode;
                     CodeSearchResults.Add(new SearchResultItem
                     {
-                        Name = col.Name ?? "",
+                        Name = EditorBaseViewModel.StripBrackets(col.Name),
                         Template = template,
                         Type = "Column",
                         Node = colNode
@@ -232,7 +232,7 @@ public partial class SearchViewModel : ObservableObject
                     var idxNode = i < tableNode.IndexNodes.Length ? tableNode.IndexNodes[i] : tableNode;
                     CodeSearchResults.Add(new SearchResultItem
                     {
-                        Name = idx.Name ?? "",
+                        Name = EditorBaseViewModel.StripBrackets(idx.Name),
                         Template = template,
                         Type = "Index",
                         Node = idxNode
@@ -249,7 +249,7 @@ public partial class SearchViewModel : ObservableObject
                     var fkNode = i < tableNode.ForeignKeyNodes.Length ? tableNode.ForeignKeyNodes[i] : tableNode;
                     CodeSearchResults.Add(new SearchResultItem
                     {
-                        Name = fk.Name ?? "",
+                        Name = EditorBaseViewModel.StripBrackets(fk.Name),
                         Template = template,
                         Type = "Foreign Key",
                         Node = fkNode
@@ -266,7 +266,7 @@ public partial class SearchViewModel : ObservableObject
                     var ccNode = i < tableNode.CheckConstraintNodes.Length ? tableNode.CheckConstraintNodes[i] : tableNode;
                     CodeSearchResults.Add(new SearchResultItem
                     {
-                        Name = cc.Name ?? "",
+                        Name = EditorBaseViewModel.StripBrackets(cc.Name),
                         Template = template,
                         Type = "Check Constraint",
                         Node = ccNode
@@ -283,7 +283,7 @@ public partial class SearchViewModel : ObservableObject
                     var statNode = i < tableNode.StatisticNodes.Length ? tableNode.StatisticNodes[i] : tableNode;
                     CodeSearchResults.Add(new SearchResultItem
                     {
-                        Name = stat.Name ?? "",
+                        Name = EditorBaseViewModel.StripBrackets(stat.Name),
                         Template = template,
                         Type = "Statistic",
                         Node = statNode
@@ -307,7 +307,7 @@ public partial class SearchViewModel : ObservableObject
                 {
                     CodeSearchResults.Add(new SearchResultItem
                     {
-                        Name = "{{{" + token.Key + "}}}",
+                        Name = "{{" + token.Key + "}}",
                         Template = "(Product)",
                         Type = "Script Token",
                         Node = productNode
@@ -328,7 +328,7 @@ public partial class SearchViewModel : ObservableObject
                 {
                     CodeSearchResults.Add(new SearchResultItem
                     {
-                        Name = "{{{" + token.Key + "}}}",
+                        Name = "{{" + token.Key + "}}",
                         Template = templateName,
                         Type = "Script Token",
                         Node = templateNode

@@ -53,7 +53,7 @@ public class IndexedViewEditorViewModelTests
         vm.ChangeNode(node);
 
         Assert.That(vm.IndexSummary, Has.Count.EqualTo(2));
-        Assert.That(vm.IndexSummary[0], Is.EqualTo("[IX_vwTest]"));
+        Assert.That(vm.IndexSummary[0], Is.EqualTo("IX_vwTest"));
     }
 
     [Test]

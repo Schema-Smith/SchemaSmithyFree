@@ -22,12 +22,12 @@ public class IndexedViewEditorViewModel : EditorBaseViewModel
         var iv = ivNode?.IndexedViewData;
         if (iv == null) return;
 
-        Schema = iv.Schema ?? "dbo";
-        Name = iv.Name ?? "";
+        Schema = StripBrackets(iv.Schema ?? "dbo");
+        Name = StripBrackets(iv.Name);
         Definition = iv.Definition ?? "";
 
         IndexSummary.Clear();
-        foreach (var idx in iv.Indexes) IndexSummary.Add(idx.Name);
+        foreach (var idx in iv.Indexes) IndexSummary.Add(StripBrackets(idx.Name));
 
         OnPropertyChanged(nameof(Schema));
         OnPropertyChanged(nameof(Name));

@@ -40,10 +40,10 @@ public class ForeignKeyEditorViewModelTests
         Assert.Multiple(() =>
         {
             Assert.That(vm.Name, Is.EqualTo("FK_Orders_Customers"));
-            Assert.That(vm.Columns, Is.EqualTo("[CustomerId]"));
+            Assert.That(vm.Columns, Is.EqualTo("CustomerId"));
             Assert.That(vm.RelatedTableSchema, Is.EqualTo("dbo"));
-            Assert.That(vm.RelatedTable, Is.EqualTo("[Customers]"));
-            Assert.That(vm.RelatedColumns, Is.EqualTo("[Id]"));
+            Assert.That(vm.RelatedTable, Is.EqualTo("Customers"));
+            Assert.That(vm.RelatedColumns, Is.EqualTo("Id"));
             Assert.That(vm.DeleteAction, Is.EqualTo("CASCADE"));
             Assert.That(vm.UpdateAction, Is.EqualTo("NO ACTION"));
         });

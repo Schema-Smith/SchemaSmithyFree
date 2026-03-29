@@ -2,8 +2,11 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using AvaloniaEdit;
 using SchemaHammer.Highlighting;
+using SchemaHammer.ViewModels.Editors;
 
 namespace SchemaHammer.Controls;
 
@@ -33,6 +36,36 @@ public partial class SqlEditorControl : UserControl
 
         var editor = this.FindControl<TextEditor>("Editor")!;
         editor.SyntaxHighlighting = SqlEditorSetup.GetTSqlHighlighting();
+        editor.TextArea.TextView.BackgroundRenderers.Add(new TokenHighlightRenderer(editor));
+        editor.TextArea.TextView.LineTransformers.Add(new TokenTextTransformer());
+        editor.DoubleTapped += OnEditorDoubleTapped;
+    }
+
+    private void OnEditorDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is not TextEditor editor) return;
+
+        var vm = FindEditorViewModel();
+        if (vm == null) return;
+
+        var position = editor.CaretOffset;
+        var text = editor.Text;
+        var tokenName = EditorBaseViewModel.ExtractTokenAtPosition(text, position);
+        if (tokenName != null)
+            vm.NavigateToTokenDefinition(tokenName);
+    }
+
+    private EditorBaseViewModel? FindEditorViewModel()
+    {
+        // Walk up the visual tree to find the nearest DataContext that is an EditorBaseViewModel
+        var current = this as Visual;
+        while (current != null)
+        {
+            if (current is Control { DataContext: EditorBaseViewModel vm })
+                return vm;
+            current = current.GetVisualParent();
+        }
+        return null;
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

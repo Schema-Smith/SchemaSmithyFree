@@ -46,7 +46,7 @@ public class ColumnEditorViewModel : EditorBaseViewModel
         Sparse = column.Sparse;
         Collation = column.Collation ?? "";
         DataMaskFunction = column.DataMaskFunction ?? "";
-        OldName = column.OldName ?? "";
+        OldName = StripBrackets(column.OldName);
     }
 
     internal static Table? FindParentTable(TreeNodeModel node)

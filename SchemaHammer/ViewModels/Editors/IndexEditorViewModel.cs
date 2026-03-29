@@ -42,8 +42,8 @@ public class IndexEditorViewModel : EditorBaseViewModel
         Clustered = index.Clustered;
         ColumnStore = index.ColumnStore;
         FillFactor = index.FillFactor;
-        IndexColumns = index.IndexColumns ?? "";
-        IncludeColumns = index.IncludeColumns ?? "";
+        IndexColumns = StripBrackets(index.IndexColumns);
+        IncludeColumns = StripBrackets(index.IncludeColumns);
         FilterExpression = index.FilterExpression ?? "";
         UpdateFillFactor = index.UpdateFillFactor;
     }

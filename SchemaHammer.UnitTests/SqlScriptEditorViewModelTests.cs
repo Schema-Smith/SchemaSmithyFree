@@ -34,8 +34,8 @@ public class SqlScriptEditorViewModelTests
     {
         var vm = new SqlScriptEditorViewModel();
         // Without tree context, no tokens found, so string unchanged
-        var result = vm.ExpandTokens("SELECT {{{MyToken}}} FROM dbo.T");
-        Assert.That(result, Is.EqualTo("SELECT {{{MyToken}}} FROM dbo.T"));
+        var result = vm.ExpandTokens("SELECT {{MyToken}} FROM dbo.T");
+        Assert.That(result, Is.EqualTo("SELECT {{MyToken}} FROM dbo.T"));
     }
 
     [Test]
@@ -173,7 +173,7 @@ public class SqlScriptEditorViewModelTests
         var vm = new SqlScriptEditorViewModel();
         vm.ChangeNode(scriptNode);
 
-        var result = vm.ExpandTokens("USE {{{MainDB}}}");
+        var result = vm.ExpandTokens("USE {{MainDB}}");
 
         Assert.That(result, Is.EqualTo("USE TestMain"));
     }
@@ -208,7 +208,7 @@ public class SqlScriptEditorViewModelTests
         var vm = new SqlScriptEditorViewModel();
         vm.ChangeNode(scriptNode);
 
-        var result = vm.ExpandTokens("USE {{{maindb}}}");
+        var result = vm.ExpandTokens("USE {{maindb}}");
 
         Assert.That(result, Is.EqualTo("USE TestMain"));
     }
@@ -295,8 +295,8 @@ public class SqlScriptEditorViewModelTests
     public void ExtractTokenAtPosition_InsideToken_ReturnsTokenName()
     {
         var vm = new SqlScriptEditorViewModel();
-        var text = "SELECT {{{MainDB}}}.dbo.Table1";
-        var result = vm.ExtractTokenAtPosition(text, 10); // inside "MainDB"
+        var text = "SELECT {{MainDB}}.dbo.Table1";
+        var result = EditorBaseViewModel.ExtractTokenAtPosition(text, 10); // inside "MainDB"
 
         Assert.That(result, Is.EqualTo("MainDB"));
     }
@@ -305,8 +305,8 @@ public class SqlScriptEditorViewModelTests
     public void ExtractTokenAtPosition_OutsideToken_ReturnsNull()
     {
         var vm = new SqlScriptEditorViewModel();
-        var text = "SELECT {{{MainDB}}}.dbo.Table1";
-        var result = vm.ExtractTokenAtPosition(text, 2); // inside "SELECT"
+        var text = "SELECT {{MainDB}}.dbo.Table1";
+        var result = EditorBaseViewModel.ExtractTokenAtPosition(text, 2); // inside "SELECT"
 
         Assert.That(result, Is.Null);
     }
@@ -315,8 +315,8 @@ public class SqlScriptEditorViewModelTests
     public void ExtractTokenAtPosition_OnOpeningBraces_ReturnsTokenName()
     {
         var vm = new SqlScriptEditorViewModel();
-        var text = "SELECT {{{MainDB}}}.dbo.Table1";
-        var result = vm.ExtractTokenAtPosition(text, 7); // on first {
+        var text = "SELECT {{MainDB}}.dbo.Table1";
+        var result = EditorBaseViewModel.ExtractTokenAtPosition(text, 7); // on first {
 
         Assert.That(result, Is.EqualTo("MainDB"));
     }
@@ -325,8 +325,8 @@ public class SqlScriptEditorViewModelTests
     public void ExtractTokenAtPosition_OnClosingBraces_ReturnsTokenName()
     {
         var vm = new SqlScriptEditorViewModel();
-        var text = "SELECT {{{MainDB}}}.dbo.Table1";
-        var result = vm.ExtractTokenAtPosition(text, 17); // on last }
+        var text = "SELECT {{MainDB}}.dbo.Table1";
+        var result = EditorBaseViewModel.ExtractTokenAtPosition(text, 16); // on last }
 
         Assert.That(result, Is.EqualTo("MainDB"));
     }
@@ -335,15 +335,15 @@ public class SqlScriptEditorViewModelTests
     public void ExtractTokenAtPosition_EmptyText_ReturnsNull()
     {
         var vm = new SqlScriptEditorViewModel();
-        Assert.That(vm.ExtractTokenAtPosition("", 0), Is.Null);
+        Assert.That(EditorBaseViewModel.ExtractTokenAtPosition("", 0), Is.Null);
     }
 
     [Test]
-    public void ExtractTokenAtPosition_NoTripleBraces_ReturnsNull()
+    public void ExtractTokenAtPosition_SingleBraces_ReturnsNull()
     {
         var vm = new SqlScriptEditorViewModel();
-        var text = "SELECT {{MainDB}}.dbo.Table1"; // double braces, not triple
-        Assert.That(vm.ExtractTokenAtPosition(text, 10), Is.Null);
+        var text = "SELECT {MainDB}.dbo.Table1"; // single braces, not double
+        Assert.That(EditorBaseViewModel.ExtractTokenAtPosition(text, 10), Is.Null);
     }
 
     [Test]
@@ -613,7 +613,7 @@ public class SqlScriptEditorViewModelTests
     }
 
     [Test]
-    public void NavigateToTokenDefinition_NoParentNodes_DoesNotNavigate()
+    public void NavigateToTokenDefinition_NoParentNodes_NavigatesToSelfAsFallback()
     {
         var scriptNode = new TreeNodeModel
         {
@@ -629,8 +629,8 @@ public class SqlScriptEditorViewModelTests
 
         vm.NavigateToTokenDefinition("MainDB");
 
-        // No template or product to navigate to
-        Assert.That(navigatedTo, Is.Null);
+        // Orphan node is the top of its chain — navigates to it as fallback
+        Assert.That(navigatedTo, Is.SameAs(scriptNode));
     }
 
     [Test]
@@ -865,35 +865,35 @@ public class SqlScriptEditorViewModelTests
     public void ExtractTokenAtPosition_NegativePosition_ReturnsNull()
     {
         var vm = new SqlScriptEditorViewModel();
-        Assert.That(vm.ExtractTokenAtPosition("SELECT {{{MainDB}}}", -1), Is.Null);
+        Assert.That(EditorBaseViewModel.ExtractTokenAtPosition("SELECT {{MainDB}}", -1), Is.Null);
     }
 
     [Test]
     public void ExtractTokenAtPosition_PositionBeyondLength_ReturnsNull()
     {
         var vm = new SqlScriptEditorViewModel();
-        Assert.That(vm.ExtractTokenAtPosition("SELECT {{{MainDB}}}", 100), Is.Null);
+        Assert.That(EditorBaseViewModel.ExtractTokenAtPosition("SELECT {{MainDB}}", 100), Is.Null);
     }
 
     [Test]
     public void ExtractTokenAtPosition_NullText_ReturnsNull()
     {
         var vm = new SqlScriptEditorViewModel();
-        Assert.That(vm.ExtractTokenAtPosition(null!, 0), Is.Null);
+        Assert.That(EditorBaseViewModel.ExtractTokenAtPosition(null!, 0), Is.Null);
     }
 
     [Test]
     public void ExtractTokenAtPosition_EmptyTokenName_ReturnsNull()
     {
         var vm = new SqlScriptEditorViewModel();
-        Assert.That(vm.ExtractTokenAtPosition("{{{}}}", 3), Is.Null);
+        Assert.That(EditorBaseViewModel.ExtractTokenAtPosition("{{}}", 3), Is.Null);
     }
 
     [Test]
     public void ExtractTokenAtPosition_UnclosedToken_ReturnsNull()
     {
         var vm = new SqlScriptEditorViewModel();
-        Assert.That(vm.ExtractTokenAtPosition("{{{MainDB", 5), Is.Null);
+        Assert.That(EditorBaseViewModel.ExtractTokenAtPosition("{{MainDB", 5), Is.Null);
     }
 
     [Test]
@@ -1063,6 +1063,84 @@ public class SqlScriptEditorViewModelTests
             vm.NavigateToTokenDefinition("AnyToken");
 
             Assert.That(navigatedTo, Is.Not.Null);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_NodeIsTemplateNode_FindsOwnTokens()
+    {
+        // Template editor sets Node to the template node itself
+        var tempDir = Path.Combine(Path.GetTempPath(), "NavTokenTplSelf_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var templateDir = Path.Combine(tempDir, "Templates", "Main");
+        Directory.CreateDirectory(templateDir);
+
+        try
+        {
+            var templateJsonPath = Path.Combine(templateDir, "Template.json");
+            File.WriteAllText(templateJsonPath,
+                "{\"Name\":\"Main\",\"ScriptTokens\":{\"MainDB\":\"AdventureWorks\"}}");
+
+            var productNode = new TreeNodeModel { Text = "Test", Tag = "Product", NodePath = tempDir };
+            var templateNode = new TreeNodeModel
+            {
+                Text = "Main", Tag = "Template",
+                NodePath = templateJsonPath,
+                Parent = productNode
+            };
+
+            var vm = new SqlScriptEditorViewModel();
+            vm.ChangeNode(templateNode);
+
+            TreeNodeModel? navigatedTo = null;
+            vm.NavigateToNode = node => navigatedTo = node;
+
+            vm.NavigateToTokenDefinition("MainDB");
+
+            Assert.That(navigatedTo, Is.SameAs(templateNode));
+            Assert.That(EditorBaseViewModel.PendingTokenName, Is.EqualTo("MainDB"));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public void NavigateToTokenDefinition_NodeIsTemplateNode_NodePathIsTemplateJson()
+    {
+        // When NodePath already ends in Template.json, the path construction should not double it
+        var tempDir = Path.Combine(Path.GetTempPath(), "NavTokenPath_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var templateDir = Path.Combine(tempDir, "Templates", "Main");
+        Directory.CreateDirectory(templateDir);
+
+        try
+        {
+            var templateJsonPath = Path.Combine(templateDir, "Template.json");
+            File.WriteAllText(templateJsonPath,
+                "{\"Name\":\"Main\",\"ScriptTokens\":{\"DB\":\"TestDB\"}}");
+
+            var templateNode = new TreeNodeModel
+            {
+                Text = "Main", Tag = "Template",
+                NodePath = templateJsonPath
+            };
+
+            var vm = new SqlScriptEditorViewModel();
+            vm.ChangeNode(templateNode);
+
+            TreeNodeModel? navigatedTo = null;
+            vm.NavigateToNode = node => navigatedTo = node;
+
+            // Should not throw — path should resolve correctly
+            vm.NavigateToTokenDefinition("DB");
+
+            Assert.That(navigatedTo, Is.SameAs(templateNode));
         }
         finally
         {

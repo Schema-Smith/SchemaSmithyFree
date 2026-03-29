@@ -281,7 +281,7 @@ public class SearchViewModelTests
         var node = new TreeNodeModel { Text = "Main", Tag = "Template" };
         var result = new SearchResultItem
         {
-            Name = "{{{MainDB}}}",
+            Name = "{{MainDB}}",
             Type = "Script Token",
             Node = node
         };
@@ -483,6 +483,47 @@ public class SearchViewModelTests
     }
 
     [Test]
+    public void SearchCode_ResultNames_HaveBracketsStripped()
+    {
+        var table = new Schema.Domain.Table
+        {
+            Schema = "dbo",
+            Name = "TestTable",
+            Columns = [new Schema.Domain.Column { Name = "[BracketedCol]", DataType = "INT" }],
+            Indexes = [new Schema.Domain.Index { Name = "[IX_Bracketed]", IndexColumns = "[BracketedCol]" }],
+            ForeignKeys = [new Schema.Domain.ForeignKey { Name = "[FK_Bracketed]", Columns = "[Col1]", RelatedTable = "[Other]", RelatedColumns = "[Id]" }],
+            CheckConstraints = [new Schema.Domain.CheckConstraint { Name = "[CK_Bracketed]", Expression = "1=1" }],
+            Statistics = [new Schema.Domain.Statistic { Name = "[ST_Bracketed]", Columns = "[Col1]" }]
+        };
+        var tableNode = new TableNodeModel
+        {
+            Text = "dbo.TestTable",
+            Tag = "Table",
+            TemplateName = "Main",
+            TableData = table,
+            ColumnNodes = [],
+            IndexNodes = [],
+            ForeignKeyNodes = [],
+            CheckConstraintNodes = [],
+            StatisticNodes = []
+        };
+        var treeService = CreateTreeService(tableNode);
+        var vm = new SearchViewModel(treeService);
+
+        vm.CodeSearchTerm = "Bracketed";
+        vm.SearchCodeCommand.Execute(null);
+
+        Assert.That(vm.CodeSearchResults, Is.Not.Empty);
+        foreach (var result in vm.CodeSearchResults)
+        {
+            Assert.That(result.Name, Does.Not.Contain("["),
+                $"Result name '{result.Name}' (type: {result.Type}) should have brackets stripped");
+            Assert.That(result.Name, Does.Not.Contain("]"),
+                $"Result name '{result.Name}' (type: {result.Type}) should have brackets stripped");
+        }
+    }
+
+    [Test]
     public void SearchCode_TableNodeWithNullTableData_IsSkipped()
     {
         var tableNode = new TableNodeModel
@@ -660,7 +701,7 @@ public class SearchViewModelTests
 
         var tokenResults = vm.CodeSearchResults.Where(r => r.Type == "Script Token").ToList();
         Assert.That(tokenResults, Has.Count.EqualTo(1));
-        Assert.That(tokenResults[0].Name, Is.EqualTo("{{{TestKey}}}"));
+        Assert.That(tokenResults[0].Name, Is.EqualTo("{{TestKey}}"));
         Assert.That(tokenResults[0].Template, Is.EqualTo("(Product)"));
     }
 
@@ -686,7 +727,7 @@ public class SearchViewModelTests
 
         var tokenResults = vm.CodeSearchResults.Where(r => r.Type == "Script Token").ToList();
         Assert.That(tokenResults, Has.Count.EqualTo(1));
-        Assert.That(tokenResults[0].Name, Is.EqualTo("{{{TplKey}}}"));
+        Assert.That(tokenResults[0].Name, Is.EqualTo("{{TplKey}}"));
         Assert.That(tokenResults[0].Template, Is.EqualTo("Main"));
     }
 
