@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Schema.Utility;
 
 namespace Schema.Domain;
@@ -21,4 +22,6 @@ public class IndexedView
 
     [JsonProperty(Order = 4)]
     public List<Index> Indexes { get; set; } = [];
+    [JsonProperty(Order = 5)]
+    public JToken Extensions { get; set; }
 }

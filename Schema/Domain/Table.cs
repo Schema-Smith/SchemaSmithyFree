@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Schema.Utility;
 
 namespace Schema.Domain;
@@ -37,6 +38,8 @@ public class Table
     public string OldName { get; set; } = "";
     [JsonProperty(Order = 13)]
     public bool UpdateFillFactor { get; set; }
+    [JsonProperty(Order = 14)]
+    public JToken Extensions { get; set; }
 
     public static Table Load(string filePath)
     {

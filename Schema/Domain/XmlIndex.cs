@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Schema.Domain;
 
@@ -18,4 +19,6 @@ public class XmlIndex
     [JsonProperty(Order = 5)]
     [SchemaProperty(Pattern = "VALUE|PATH|PROPERTY")]
     public string SecondaryIndexType { get; set; } // only when not IsPrimary
+    [JsonProperty(Order = 6)]
+    public JToken Extensions { get; set; }
 }
