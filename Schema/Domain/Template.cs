@@ -77,6 +77,11 @@ public class Template
         }
     }
 
+    public static string GenerateTableMetadataToken(List<Table> tables)
+    {
+        return JsonConvert.SerializeObject(tables, Formatting.Indented).Replace("'", "''");
+    }
+
     private void Load(Dictionary<string, string> productScriptTokens)
     {
         LoadTables();
@@ -87,7 +92,10 @@ public class Template
         // Merge tokens: template overrides product, then add auto-tokens
         var mergedTokens = ScriptTokens
             .Concat(productScriptTokens.Where(pt => !ScriptTokens.ContainsKey(pt.Key)))
-            .Concat([new("TemplateName", Name ?? "UNSPECIFIED")])
+            .Concat([
+                new("TemplateName", Name ?? "UNSPECIFIED"),
+                new("TableMetadata", GenerateTableMetadataToken(Tables))
+            ])
             .ToList();
 
         foreach (var folder in _scriptFolders)
