@@ -286,6 +286,23 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 PromoteCheckConstraintsToTableLevel(commandJson, table, $"{reader["TABLE_SCHEMA"]}", $"{reader["TABLE_NAME"]}");
                 json = JsonConvert.SerializeObject(table, Formatting.Indented);
             }
+
+            // Preserve Extensions from existing file on re-extraction
+            var existingTablePath = _folderIndexes.ContainsKey("Tables")
+                ? _folderIndexes["Tables"].ResolvePath(SchemaTongsEncoder.EncodeFileName((string)reader["TABLE_SCHEMA"], (string)reader["TABLE_NAME"], ".json"), Path.Combine(_templatePath, "Tables"))
+                : null;
+            if (existingTablePath != null && FileWrapper.GetFromFactory().Exists(existingTablePath) && table != null)
+            {
+                var existing = JsonConvert.DeserializeObject<Table>(FileWrapper.GetFromFactory().ReadAllText(existingTablePath));
+                if (existing != null)
+                    ExtensionsPreserver.PreserveTableExtensions(existing, table);
+            }
+
+            if (table != null)
+            {
+                var settings = new JsonSerializerSettings { DefaultValueHandling = DefaultValueHandling.Ignore, NullValueHandling = NullValueHandling.Ignore, Formatting = Formatting.Indented };
+                json = JsonConvert.SerializeObject(table, settings);
+            }
             var outputPath = ResolveAndWrite("Tables", SchemaTongsEncoder.EncodeFileName((string)reader["TABLE_SCHEMA"], (string)reader["TABLE_NAME"], ".json"), json);
             _progressLog.Info($"    Casting {outputPath}");
         }
@@ -1011,6 +1028,21 @@ SELECT s.name AS SchemaName, xsc.name AS CollectionName
             {
                 _progressLog.Info($"  Skipping {schema}.{name} (no JSON returned)");
                 continue;
+            }
+
+            var existingIvPath = _folderIndexes.ContainsKey("Indexed Views")
+                ? _folderIndexes["Indexed Views"].ResolvePath(SchemaTongsEncoder.EncodeFileName(schema, name, ".json"), Path.Combine(_templatePath, "Indexed Views"))
+                : null;
+            if (existingIvPath != null && FileWrapper.GetFromFactory().Exists(existingIvPath))
+            {
+                var existingIv = JsonConvert.DeserializeObject<IndexedView>(FileWrapper.GetFromFactory().ReadAllText(existingIvPath));
+                var extractedIv = JsonConvert.DeserializeObject<IndexedView>(json);
+                if (existingIv != null && extractedIv != null)
+                {
+                    ExtensionsPreserver.PreserveIndexedViewExtensions(existingIv, extractedIv);
+                    var settings = new JsonSerializerSettings { DefaultValueHandling = DefaultValueHandling.Ignore, NullValueHandling = NullValueHandling.Ignore, Formatting = Formatting.Indented };
+                    json = JsonConvert.SerializeObject(extractedIv, settings);
+                }
             }
 
             ResolveAndWrite("Indexed Views", SchemaTongsEncoder.EncodeFileName(schema, name, ".json"), json);
