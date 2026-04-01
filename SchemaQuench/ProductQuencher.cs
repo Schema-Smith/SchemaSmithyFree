@@ -196,11 +196,33 @@ public class ProductQuencher
 
         _progressLog.Info("Locate Databases To Quench");
         command.CommandText = template.DatabaseIdentificationScript;
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
+        var dbNames = new List<string>();
+        using (var reader = command.ExecuteReader())
         {
+            while (reader.Read())
+                dbNames.Add($"{reader[0]}");
+        }
+
+        if (dbNames.Count == 0 && template.Required)
+            throw new Exception($"Template '{templateName}' is marked as Required but the DatabaseIdentificationScript returned no databases.");
+
+        if (dbNames.Count == 0) return;
+
+        foreach (var dbName in dbNames)
+        {
+            if (template.SkipIfReadOnly)
+            {
+                command.CommandText = $"SELECT DATABASEPROPERTYEX('{dbName.Replace("'", "''")}', 'Updateability')";
+                var updateability = command.ExecuteScalar()?.ToString();
+                if (updateability == "READ_ONLY")
+                {
+                    _progressLog.Info($"  Skipping {dbName} (read-only)");
+                    continue;
+                }
+            }
+
             var quencher = new DatabaseQuencher(
-                _product.Name, template, $"{reader[0]}",
+                _product.Name, template, dbName,
                 suppressKindligForgeForTesting || !_kindleTheForge,
                 product.DropUnknownIndexes ? "1" : "0",
                 _whatIfOnly, _updateTables, _dropTablesRemovedFromProduct, _runScriptsTwice,

@@ -20,6 +20,8 @@ public class Template
     public bool UpdateFillFactor { get; set; } = true;
     public bool IndexOnlyTableQuenches { get; set; }
     public string BaselineValidationScript { get; set; }
+    public bool Required { get; set; } = true;
+    public bool SkipIfReadOnly { get; set; }
     public Dictionary<string, string> ScriptTokens { get; set; } = [];
 
     private readonly List<TemplateFolder> _scriptFolders = GetTemplateFolders();
