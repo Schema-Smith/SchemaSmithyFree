@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Schema.Domain;
 
@@ -26,4 +27,6 @@ public class ForeignKey
     [JsonProperty(Order = 7)]
     [SchemaProperty(Pattern = "NO ACTION|CASCADE|SET NULL|SET DEFAULT")]
     public string UpdateAction { get; set; }
+    [JsonProperty(Order = 8)]
+    public JToken Extensions { get; set; }
 }

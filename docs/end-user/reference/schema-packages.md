@@ -97,6 +97,8 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 | `UpdateFillFactor` | bool | `true` | No | When `true`, the table quench updates index fill factors to match the JSON definitions. OR'd with table-level and index-level `UpdateFillFactor` settings. |
 | `IndexOnlyTableQuenches` | bool | `false` | No | When `true`, the table quench only manages indexes, statistics, XML indexes, and full-text indexes. Skips table creation, column changes, and foreign key management. Tables that don't exist are silently skipped. |
 | `BaselineValidationScript` | string | | No | T-SQL validation executed per database before quenching that database. |
+| `Required` | bool | `true` | No | When `true`, deployment fails if `DatabaseIdentificationScript` returns no databases. Catches misconfigured identification scripts that silently skip an entire template. Set to `false` for templates that legitimately target zero databases in some environments. |
+| `SkipIfReadOnly` | bool | `false` | No | When `true`, databases that are read-only are silently skipped instead of failing the quench. Enables Availability Group secondary handling — secondaries are read-only, so templates targeting AG databases can skip them without error. |
 | `ScriptTokens` | object | `{}` | No | Key-value pairs that override matching product-level tokens for this template. Template tokens take precedence over product tokens with the same key. |
 
 ### Example (Northwind demo)
@@ -113,6 +115,10 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 ### Template Settings Intent
 
 **UpdateFillFactor** — Controls whether index fill factors are updated to match JSON definitions. Three levels (template, table, index) are OR'd together — if ANY level is true for a given index, its fill factor gets updated. Template defaults to `true` (enforce from the start for new products). For teams managing existing drift, set template-level to `false` and enable per-index or per-table as you verify alignment. See the [adoption approach](../guide/10-edge-cases.md#the-adoption-approach) for the staged rollout pattern.
+
+**Required** — A safety net for misconfigured `DatabaseIdentificationScript` queries. When the script returns zero databases and `Required` is `true` (the default), SchemaQuench aborts immediately rather than silently deploying nothing. This catches typos, missing tokens, and script logic errors that would otherwise result in a "successful" deployment that didn't touch a single database. Set to `false` only for templates that legitimately target zero databases in some environments (e.g., a template that only applies when a specific database exists).
+
+**SkipIfReadOnly** — Enables graceful handling of Availability Group secondaries. When a `DatabaseIdentificationScript` returns databases that include AG replicas, the secondary databases are read-only. Without this flag, SchemaQuench would fail trying to write to them. With `SkipIfReadOnly: true`, read-only databases are silently skipped and the deployment continues with the writable primaries. This is independent of `Required` — a template can be required (must find at least one database) while still skipping individual read-only databases within the result set.
 
 **IndexOnlyTableQuenches** — Lets you manage indexes on tables you don't own. Two primary use cases: different indexing on replicated databases (tuned for the consumer's workload, not the producer's), and adding indexes to third-party products where you can't modify table structure. Scripted objects (procedures, views, functions) still deploy when this flag is on — so you can deploy custom views and procedures alongside supplementary indexes.
 
@@ -249,6 +255,7 @@ This is where the state-based model really shines. Table definitions live in the
 | `FullTextIndex` | object | `null` | No | 11 | Full-text index configuration. See [Full-Text Index](#full-text-index). |
 | `OldName` | string | `""` | No | 12 | Previous table name. When set, the table is renamed from `OldName` to `Name` during quench. Clear after the rename has been deployed to all environments. |
 | `UpdateFillFactor` | bool | `false` | No | 13 | When `true`, index fill factors on this table are updated to match JSON definitions during quench. OR'd with template-level and index-level settings. |
+| `Extensions` | any | `null` | No | 14 | User-defined metadata. Accepts any valid JSON value (object, array, string, number, etc.). Ignored by SchemaQuench during deployment — purely for attaching custom metadata that can be consumed via the `{{TableMetadata}}` token in scripts. Preserved through SchemaTongs extraction. |
 
 ### Minimal example (Northwind Region)
 
@@ -384,6 +391,7 @@ Each entry in the `Columns` array defines one column on the table.
 | `Collation` | string | | No | 9 | Column-level collation override (e.g., `"SQL_Latin1_General_CP1_CI_AS"`). |
 | `DataMaskFunction` | string | | No | 10 | Dynamic data masking function (e.g., `"default()"`, `"email()"`, `"partial(0,\"XXX\",0)"`). |
 | `OldName` | string | `""` | No | 11 | Previous column name for rename detection. Clear after the rename has been deployed to all environments. |
+| `Extensions` | any | `null` | No | 12 | User-defined metadata for this column. Same behavior as table-level `Extensions`. |
 
 ### Identity columns
 
@@ -441,6 +449,7 @@ Each entry in the `Indexes` array defines an index or constraint on the table.
 | `IncludeColumns` | string | | No | 10 | Comma-separated INCLUDE columns. |
 | `FilterExpression` | string | | No | 11 | Filtered index WHERE clause (e.g., `"[IsActive] = 1"`). |
 | `UpdateFillFactor` | bool | `false` | No | 12 | When `true`, this index's fill factor is updated during quench. OR'd with template-level and table-level settings. |
+| `Extensions` | any | `null` | No | 13 | User-defined metadata for this index. Same behavior as table-level `Extensions`. |
 
 ### Primary key
 
@@ -490,6 +499,7 @@ Each entry in the `ForeignKeys` array defines a foreign key constraint.
 | `RelatedColumns` | string | | Yes | 5 | Comma-separated referenced column names. |
 | `DeleteAction` | string | | No | 6 | Cascade action on delete. Values: `"NO ACTION"`, `"CASCADE"`, `"SET NULL"`, `"SET DEFAULT"`. |
 | `UpdateAction` | string | | No | 7 | Cascade action on update. Values: `"NO ACTION"`, `"CASCADE"`, `"SET NULL"`, `"SET DEFAULT"`. |
+| `Extensions` | any | `null` | No | 8 | User-defined metadata for this foreign key. Same behavior as table-level `Extensions`. |
 
 ### Example
 
@@ -528,6 +538,7 @@ Table-level check constraints in the `CheckConstraints` array. These are used wh
 |---|---|---|---|---|---|
 | `Name` | string | | Yes | 1 | Constraint name. |
 | `Expression` | string | | Yes | 2 | Boolean SQL expression. |
+| `Extensions` | any | `null` | No | 3 | User-defined metadata for this check constraint. Same behavior as table-level `Extensions`. |
 
 ### Example
 
@@ -552,6 +563,7 @@ Custom statistics definitions in the `Statistics` array.
 | `Columns` | string | | Yes | 2 | Comma-separated column names. |
 | `SampleSize` | byte (0--100) | `0` | No | 3 | Sampling percentage. `0` means default sampling. |
 | `FilterExpression` | string | | No | 4 | Filtered statistics WHERE clause. |
+| `Extensions` | any | `null` | No | 5 | User-defined metadata for this statistic. Same behavior as table-level `Extensions`. |
 
 ### Example
 
@@ -577,6 +589,7 @@ XML index definitions in the `XmlIndexes` array. A primary XML index must be cre
 | `Column` | string | | Yes | 3 | Name of the XML column being indexed. |
 | `PrimaryIndex` | string | | No | 4 | Name of the primary XML index. Required for secondary indexes. |
 | `SecondaryIndexType` | string | | No | 5 | Type of secondary index. Values: `"VALUE"`, `"PATH"`, `"PROPERTY"`. Required for secondary indexes. |
+| `Extensions` | any | `null` | No | 6 | User-defined metadata for this XML index. Same behavior as table-level `Extensions`. |
 
 ### Example: primary and secondary XML indexes
 
@@ -610,6 +623,7 @@ A single `FullTextIndex` object (not an array) on the table. Only one full-text 
 | `ChangeTracking` | string | | No | 3 | Change tracking mode. Values: `"OFF"`, `"MANUAL"`, `"AUTO"`. |
 | `StopList` | string | | No | 4 | Name of a full-text stop list. |
 | `Columns` | string | | Yes | 5 | Column specification for the full-text index. |
+| `Extensions` | any | `null` | No | 6 | User-defined metadata for this full-text index. Same behavior as table-level `Extensions`. |
 
 ### Example
 
@@ -633,6 +647,7 @@ Indexed views are defined as JSON files in the `Indexed Views/` directory of eac
 | `Name` | string | `""` | Yes | 1 | View name. |
 | `Schema` | string | `"dbo"` | No | 2 | Schema name. |
 | `Definition` | string | `""` | Yes | 3 | The complete view definition SQL (the SELECT statement). |
+| `Extensions` | any | `null` | No | — | User-defined metadata for this indexed view. Same behavior as table-level `Extensions`. |
 | `Indexes` | array | `[]` | No | 4 | Indexes on the view. Uses the same [Index](#indexes) format as table indexes. An indexed view must have a unique clustered index. |
 
 ### Example

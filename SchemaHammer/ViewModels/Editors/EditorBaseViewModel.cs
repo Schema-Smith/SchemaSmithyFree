@@ -35,10 +35,7 @@ public abstract partial class EditorBaseViewModel : ObservableObject
     }
 
     /// <summary>Strips SQL Server bracket quoting from an identifier name: [dbo].[Users] → dbo.Users</summary>
-    internal static string StripBrackets(string? name)
-    {
-        return name?.Replace("[", "").Replace("]", "") ?? "";
-    }
+    internal static string StripBrackets(string? name) => StringHelper.StripBrackets(name);
 
     /// <summary>Checks whether a domain object name (possibly bracketed) matches tree node text (unbracketed).</summary>
     internal static bool NameMatchesNodeText(string domainName, string nodeText)

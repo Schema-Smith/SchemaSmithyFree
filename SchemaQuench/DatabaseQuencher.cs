@@ -14,7 +14,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace SchemaQuench;
 
-public class DatabaseQuencher(string productName, Template template, string dbName, bool suppressKindlingForgeForTesting, string dropUnknownIndexes, string whatIfOnly, bool updateTables = true, bool dropTablesRemovedFromProduct = true, bool runScriptsTwice = false, bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true)
+public class DatabaseQuencher(string productName, Template template, string dbName, bool suppressKindlingForgeForTesting, string dropUnknownIndexes, string whatIfOnly, bool updateTables = true, bool dropTablesRemovedFromProduct = true, bool runScriptsTwice = false, bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true, bool verboseLogging = false)
 {
     public bool QuenchSuccessful { get; private set; }
 
@@ -501,6 +501,11 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
         _errorLog.Error($"[{dbName}] {msg}");
     }
 
+    public static bool ShouldLogInfoMessage(int state, bool verboseLogging)
+    {
+        return verboseLogging || state == 100;
+    }
+
     private void OnInfoMessage(object sender, SqlInfoMessageEventArgs e)
     {
         foreach (SqlError err in e.Errors)
@@ -520,7 +525,7 @@ public class DatabaseQuencher(string productName, Template template, string dbNa
                 ErrorLogError("");
                 _infoMessageException = new Exception(err.Message);
             }
-            else
+            else if (ShouldLogInfoMessage(err.State, verboseLogging))
                 ProgressLog($"      {err.Message}");
         }
     }

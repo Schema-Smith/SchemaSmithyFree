@@ -28,6 +28,7 @@ public class ProductQuencher
     private readonly bool _runScriptsTwice;
     private readonly bool _trackRunOnceMigrations;
     private readonly bool _pruneObsoleteMigrationTracking;
+    private readonly bool _verboseLogging;
 
     public ProductQuencher()
     {
@@ -39,6 +40,7 @@ public class ProductQuencher
         _runScriptsTwice = _config["RunScriptsTwice"]?.ToLower() == "true";
         _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
         _pruneObsoleteMigrationTracking = _config["PruneObsoleteMigrationTracking"]?.ToLower() != "false";
+        _verboseLogging = _config["VerboseLogging"]?.ToLower() == "true";
     }
 
     private IDbConnection GetConnection(string dbName)
@@ -196,19 +198,45 @@ public class ProductQuencher
 
         _progressLog.Info("Locate Databases To Quench");
         command.CommandText = template.DatabaseIdentificationScript;
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
+        var dbNames = new List<string>();
+        using (var reader = command.ExecuteReader())
         {
+            while (reader.Read())
+                dbNames.Add($"{reader[0]}");
+        }
+
+        if (dbNames.Count == 0 && template.Required)
+            throw new Exception($"Template '{templateName}' is marked as Required but the DatabaseIdentificationScript returned no databases.");
+
+        if (dbNames.Count == 0) return;
+
+        foreach (var dbName in dbNames)
+        {
+            if (template.SkipIfReadOnly)
+            {
+                command.CommandText = $"SELECT DATABASEPROPERTYEX('{dbName.Replace("'", "''")}', 'Updateability')";
+                var updateability = command.ExecuteScalar()?.ToString();
+                if (updateability == "READ_ONLY")
+                {
+                    _progressLog.Info($"  Skipping {dbName} (read-only)");
+                    continue;
+                }
+            }
+
             var quencher = new DatabaseQuencher(
-                _product.Name, template, $"{reader[0]}",
+                _product.Name, template, dbName,
                 suppressKindligForgeForTesting || !_kindleTheForge,
                 product.DropUnknownIndexes ? "1" : "0",
                 _whatIfOnly, _updateTables, _dropTablesRemovedFromProduct, _runScriptsTwice,
-                _trackRunOnceMigrations, _pruneObsoleteMigrationTracking);
+                _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _verboseLogging);
             dbList.Add(quencher);
         }
 
-        dbList.ForEach(d => d.Quench());
+        if (!int.TryParse(_config["MaxThreads"], out var maxThreads) || maxThreads < 1 || maxThreads > 20)
+            maxThreads = 10;
+        using var dbQueue = new TaskQueueManager<DatabaseQuencher>(maxThreads);
+        dbList.ForEach(d => dbQueue.AddToQueue(d, q => q.Quench()));
+        dbQueue.WaitForAll();
         if (!dbList.All(d => d.QuenchSuccessful))
         {
             _progressLog.Error("One or more database quenches FAILED");

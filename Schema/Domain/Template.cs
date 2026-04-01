@@ -20,6 +20,8 @@ public class Template
     public bool UpdateFillFactor { get; set; } = true;
     public bool IndexOnlyTableQuenches { get; set; }
     public string BaselineValidationScript { get; set; }
+    public bool Required { get; set; } = true;
+    public bool SkipIfReadOnly { get; set; }
     public Dictionary<string, string> ScriptTokens { get; set; } = [];
 
     private readonly List<TemplateFolder> _scriptFolders = GetTemplateFolders();
@@ -77,6 +79,16 @@ public class Template
         }
     }
 
+    public static string GenerateTableMetadataToken(List<Table> tables)
+    {
+        return JsonConvert.SerializeObject(tables, Formatting.Indented).Replace("'", "''");
+    }
+
+    public static string GenerateIndexedViewMetadataToken(List<IndexedView> indexedViews)
+    {
+        return JsonConvert.SerializeObject(indexedViews, Formatting.Indented).Replace("'", "''");
+    }
+
     private void Load(Dictionary<string, string> productScriptTokens)
     {
         LoadTables();
@@ -87,11 +99,17 @@ public class Template
         // Merge tokens: template overrides product, then add auto-tokens
         var mergedTokens = ScriptTokens
             .Concat(productScriptTokens.Where(pt => !ScriptTokens.ContainsKey(pt.Key)))
-            .Concat([new("TemplateName", Name ?? "UNSPECIFIED")])
+            .Concat([
+                new("TemplateName", Name ?? "UNSPECIFIED"),
+                new("TableMetadata", GenerateTableMetadataToken(Tables)),
+                new("IndexedViewMetadata", GenerateIndexedViewMetadataToken(IndexedViews))
+            ])
             .ToList();
 
-        foreach (var folder in _scriptFolders)
-            folder.LoadSqlFiles(Path.GetDirectoryName(FilePath), mergedTokens);
+        var templateDir = Path.GetDirectoryName(FilePath);
+        using var folderQueue = new TaskQueueManager<TemplateFolder>(Environment.ProcessorCount * 2);
+        _scriptFolders.ForEach(folder => folderQueue.AddToQueue(folder, f => f.LoadSqlFiles(templateDir, mergedTokens)));
+        folderQueue.WaitForAll();
 
         DatabaseIdentificationScript = Product.TokenReplace(DatabaseIdentificationScript, mergedTokens);
         VersionStampScript = Product.TokenReplace(VersionStampScript, mergedTokens);

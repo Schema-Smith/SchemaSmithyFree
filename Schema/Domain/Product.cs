@@ -90,8 +90,9 @@ public class Product
         VersionStampScript = TokenReplace(VersionStampScript, scriptTokens);
 
         var productDir = Path.GetDirectoryName(FilePath) ?? "";
-        foreach (var folder in _scriptFolders)
-            folder.LoadSqlFiles(productDir, scriptTokens);
+        using var folderQueue = new TaskQueueManager<ProductFolder>(Environment.ProcessorCount * 2);
+        _scriptFolders.ForEach(folder => folderQueue.AddToQueue(folder, f => f.LoadSqlFiles(productDir, scriptTokens)));
+        folderQueue.WaitForAll();
     }
 
     public static string TokenReplace(string script, List<KeyValuePair<string, string>> scriptTokens)

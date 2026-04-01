@@ -68,6 +68,7 @@ public static class SchemaGenerator
             return new JObject { ["type"] = "array", ["items"] = items };
         }
         if (IsDictionaryType(type)) return new JObject { ["type"] = "object" };
+        if (typeof(JToken).IsAssignableFrom(type)) return new JObject();
 
         return BuildObjectSchema(type);
     }

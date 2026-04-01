@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Schema.Domain;
 
@@ -33,4 +34,6 @@ public class Index
     public string FilterExpression { get; set; }
     [JsonProperty(Order = 12)]
     public bool UpdateFillFactor { get; set; }
+    [JsonProperty(Order = 13)]
+    public JToken Extensions { get; set; }
 }

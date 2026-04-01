@@ -17,6 +17,8 @@ public partial class TemplateEditorViewModel : EditorBaseViewModel
     public string VersionStampScript { get; private set; } = "";
     public string BaselineValidationScript { get; private set; } = "";
     public bool UpdateFillFactor { get; private set; }
+    public bool Required { get; private set; }
+    public bool SkipIfReadOnly { get; private set; }
     public ObservableCollection<KeyValuePair<string, string>> ScriptTokens { get; } = [];
 
     [ObservableProperty] private int _selectedTabIndex;
@@ -36,6 +38,8 @@ public partial class TemplateEditorViewModel : EditorBaseViewModel
         VersionStampScript = template.VersionStampScript ?? "";
         BaselineValidationScript = template.BaselineValidationScript ?? "";
         UpdateFillFactor = template.UpdateFillFactor;
+        Required = template.Required;
+        SkipIfReadOnly = template.SkipIfReadOnly;
 
         ScriptTokens.Clear();
         foreach (var kvp in template.ScriptTokens) ScriptTokens.Add(kvp);
@@ -63,5 +67,7 @@ public partial class TemplateEditorViewModel : EditorBaseViewModel
         OnPropertyChanged(nameof(VersionStampScript));
         OnPropertyChanged(nameof(BaselineValidationScript));
         OnPropertyChanged(nameof(UpdateFillFactor));
+        OnPropertyChanged(nameof(Required));
+        OnPropertyChanged(nameof(SkipIfReadOnly));
     }
 }

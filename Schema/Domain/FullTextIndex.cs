@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Schema.Domain;
 
@@ -18,4 +19,6 @@ public class FullTextIndex
     [JsonProperty(Order = 5)]
     [SchemaProperty(Required = true)]
     public string Columns { get; set; }
+    [JsonProperty(Order = 6)]
+    public JToken Extensions { get; set; }
 }

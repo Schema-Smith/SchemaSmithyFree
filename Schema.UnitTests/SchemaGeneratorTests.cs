@@ -235,6 +235,15 @@ public class SchemaGeneratorTests
     }
 
     [Test]
+    public void ShouldMapJTokenExtensionsWithoutRecursion()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Table));
+        var ext = schema["properties"]?["Extensions"];
+        Assert.That(ext, Is.Not.Null, "Extensions should appear in schema");
+        Assert.That(ext["type"], Is.Null, "JToken Extensions should have no type constraint (accepts anything)");
+    }
+
+    [Test]
     public void ShouldIncludeIndexedViewPropertiesInSchema()
     {
         var schema = SchemaGenerator.GenerateSchema(typeof(IndexedView));

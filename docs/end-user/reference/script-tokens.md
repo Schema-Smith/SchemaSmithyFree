@@ -109,16 +109,19 @@ Within the Reporting template, `{{MainDB}}` resolves to `ReportingAlias` instead
 
 ## Automatic Tokens
 
-SchemaSmith adds two tokens automatically. You don't need to define them.
+SchemaSmith adds three tokens automatically. You don't need to define them.
 
 | Token | Value | Available in |
 |---|---|---|
 | `{{ProductName}}` | The `Name` from `Product.json` | All product and template scripts |
 | `{{TemplateName}}` | The `Name` from `Template.json` | Template scripts only |
+| `{{TableMetadata}}` | Full serialized table schema JSON for all tables in the template, SQL-escaped (single quotes doubled) | Template scripts only |
 
 `ProductName` is added after config/environment overrides are applied, so it always reflects the product name from the package (it can't be overridden via config).
 
 `TemplateName` is added after template tokens are merged, so it always reflects the current template's name.
+
+`TableMetadata` contains the complete JSON representation of every table in the template, including all columns, indexes, constraints, foreign keys, and any `Extensions` metadata. Single quotes are escaped for safe embedding in SQL strings. This token enables migration scripts and stored procedures to consume table schema programmatically — for example, generating dynamic SQL based on column definitions or reading user-defined metadata from the `Extensions` property.
 
 **Example using automatic tokens:**
 
