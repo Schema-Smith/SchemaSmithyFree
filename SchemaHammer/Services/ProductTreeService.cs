@@ -231,29 +231,42 @@ public class ProductTreeService : IProductTreeService
         if (!dir.Exists(tablesDir))
             return;
 
-        var jsonFiles = dir.GetFiles(tablesDir, "*.json", SearchOption.AllDirectories).OrderBy(f => f);
+        var jsonFiles = dir.GetFiles(tablesDir, "*.json", SearchOption.AllDirectories).OrderBy(f => f).ToList();
+        var lockObject = new object();
+        var loadedNodes = new List<(string FilePath, TableNodeModel Node)>();
 
-        foreach (var filePath in jsonFiles)
+        // Parallel: load and deserialize table JSON files (I/O-bound)
+        using var tableQueue = new TaskQueueManager<string>(Environment.ProcessorCount * 2);
+        jsonFiles.ForEach(filePath => tableQueue.AddToQueue(filePath, fp =>
         {
-            var table = Table.Load(filePath);
-            var nodeText = FileNameEncoder.Decode(Path.GetFileNameWithoutExtension(filePath));
+            var table = Table.Load(fp);
+            var nodeText = FileNameEncoder.Decode(Path.GetFileNameWithoutExtension(fp));
 
             var tableNode = new TableNodeModel
             {
                 Text = nodeText,
                 Tag = "Table",
-                NodePath = filePath,
+                NodePath = fp,
                 ImageKey = "file",
                 TableData = table,
                 TemplateName = templateName
             };
-            SearchList.Add(tableNode);
-
-            PopulateTableChildArrays(tableNode, templateName);
 
             tableNode.ExpandAction = () => tableNode.ExpandTable();
             tableNode.Children.Add(new TreeNodeModel { Text = "", Tag = "Placeholder" });
 
+            lock (lockObject)
+            {
+                loadedNodes.Add((fp, tableNode));
+            }
+        }));
+        tableQueue.WaitForAll();
+
+        // Sequential: add to shared collections in deterministic file order
+        foreach (var (_, tableNode) in loadedNodes.OrderBy(n => n.FilePath))
+        {
+            SearchList.Add(tableNode);
+            PopulateTableChildArrays(tableNode, templateName);
             tableNode.Parent = container;
             container.Children.Add(tableNode);
         }

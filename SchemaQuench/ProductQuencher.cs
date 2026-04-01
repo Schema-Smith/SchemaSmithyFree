@@ -232,7 +232,11 @@ public class ProductQuencher
             dbList.Add(quencher);
         }
 
-        dbList.ForEach(d => d.Quench());
+        if (!int.TryParse(_config["MaxThreads"], out var maxThreads) || maxThreads < 1 || maxThreads > 20)
+            maxThreads = 10;
+        using var dbQueue = new TaskQueueManager<DatabaseQuencher>(maxThreads);
+        dbList.ForEach(d => dbQueue.AddToQueue(d, q => q.Quench()));
+        dbQueue.WaitForAll();
         if (!dbList.All(d => d.QuenchSuccessful))
         {
             _progressLog.Error("One or more database quenches FAILED");

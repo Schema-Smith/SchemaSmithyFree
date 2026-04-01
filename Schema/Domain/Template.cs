@@ -100,8 +100,10 @@ public class Template
             ])
             .ToList();
 
-        foreach (var folder in _scriptFolders)
-            folder.LoadSqlFiles(Path.GetDirectoryName(FilePath), mergedTokens);
+        var templateDir = Path.GetDirectoryName(FilePath);
+        using var folderQueue = new TaskQueueManager<TemplateFolder>(Environment.ProcessorCount * 2);
+        _scriptFolders.ForEach(folder => folderQueue.AddToQueue(folder, f => f.LoadSqlFiles(templateDir, mergedTokens)));
+        folderQueue.WaitForAll();
 
         DatabaseIdentificationScript = Product.TokenReplace(DatabaseIdentificationScript, mergedTokens);
         VersionStampScript = Product.TokenReplace(VersionStampScript, mergedTokens);
