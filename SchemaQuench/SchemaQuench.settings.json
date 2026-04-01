@@ -14,5 +14,9 @@
     "DropTablesRemovedFromProduct": true, // Drop tables not defined in the product
     "UpdateTables": true, // Apply table structure changes (columns, indexes, constraints)
     "KindleTheForge": true, // Install SchemaSmith helper functions/procedures in target database
-    "ScriptTokens": {}
+    "ScriptTokens": {},
+    "TrackRunOnceMigrations": true,
+    "PruneObsoleteMigrationTracking": true,
+    "MaxThreads": 10,
+    "VerboseLogging": false
 }

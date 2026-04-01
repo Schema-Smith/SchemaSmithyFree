@@ -28,6 +28,7 @@ public class ProductQuencher
     private readonly bool _runScriptsTwice;
     private readonly bool _trackRunOnceMigrations;
     private readonly bool _pruneObsoleteMigrationTracking;
+    private readonly bool _verboseLogging;
 
     public ProductQuencher()
     {
@@ -39,6 +40,7 @@ public class ProductQuencher
         _runScriptsTwice = _config["RunScriptsTwice"]?.ToLower() == "true";
         _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
         _pruneObsoleteMigrationTracking = _config["PruneObsoleteMigrationTracking"]?.ToLower() != "false";
+        _verboseLogging = _config["VerboseLogging"]?.ToLower() == "true";
     }
 
     private IDbConnection GetConnection(string dbName)
@@ -226,7 +228,7 @@ public class ProductQuencher
                 suppressKindligForgeForTesting || !_kindleTheForge,
                 product.DropUnknownIndexes ? "1" : "0",
                 _whatIfOnly, _updateTables, _dropTablesRemovedFromProduct, _runScriptsTwice,
-                _trackRunOnceMigrations, _pruneObsoleteMigrationTracking);
+                _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _verboseLogging);
             dbList.Add(quencher);
         }
 
