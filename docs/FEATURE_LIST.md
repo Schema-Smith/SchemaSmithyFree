@@ -131,7 +131,7 @@ Applies schema packages to target SQL Server databases using state-based compari
 - Aborts on validation failure
 
 **Additional SchemaQuench Settings:**
-- `RunScriptsTwice` — Re-executes object scripts to resolve cross-dependencies (e.g., views referencing other views)
+- `RunScriptsTwice` — Re-executes object scripts to verify idempotency; a CI/testing tool for catching `[ALWAYS]` script bugs before production
 - `MinimumVersion` — Product-level SqlServerVersion enum (Sql2016–Sql2025) for version-gated features
 - `VerboseLogging` — Control whether SQL PRINT messages and informational output from user scripts appear in logs (SchemaSmith's own messages always display)
 

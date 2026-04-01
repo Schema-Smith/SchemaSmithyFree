@@ -22,12 +22,27 @@ For full release details and download links, see [GitHub Releases](https://githu
 - **DataTongs: Geometry and HierarchyID support** — Added handling for GEOMETRY, HIERARCHYID data types; sql_variant/rowversion/timestamp excluded
 - **PrintWithNoWait** — Stored procedure for real-time progress logging using RAISERROR WITH NOWAIT
 - **WhatIf improvements** — Detailed per-script logging across all phases ("Would APPLY"/"Would SKIP (previously quenched)")
-- **RunScriptsTwice** — SchemaQuench setting for resolving cross-dependencies between objects (e.g., views referencing other views)
+- **RunScriptsTwice** — SchemaQuench setting that runs object scripts twice to verify idempotency; a CI/testing tool for catching `[ALWAYS]` script bugs before production
 - **SchemaTongs: Subfolder preservation** — ExtractionFileIndex per-folder tracking; scripts written back to same subfolder on re-extraction
 - **SchemaTongs: Orphan detection** — 3 modes: Detect, DetectWithCleanupScripts, DetectDeleteAndCleanup
 - **SchemaTongs: Script validation** — Post-extraction syntax validation with `.sqlerror` files for invalid SQL
 - **SchemaTongs: CheckConstraintStyle** — Product-level switch for ColumnLevel or TableLevel constraint extraction
 - **SchemaHammer: .sqlerror display** — Error indicator and warning banner for invalid scripts
+- **SchemaHammer: About dialog** — Version info and GitHub link
+- **SchemaHammer: Update Schema Files** — Menu command to regenerate schema files from the viewer
+- **Extensions property** — User-extensible `Extensions` (JToken) on all table-level domain classes (Table, Column, Index, ForeignKey, etc.); preserved during SchemaTongs re-extraction
+- **{{TableMetadata}} auto-token** — Automatically exposes table schema JSON to scripts at deployment time
+- **{{IndexedViewMetadata}} auto-token** — Same auto-token for indexed views
+- **Simple token support** — `{{TokenName}}` resolution in ALL script folders; tokens defined in Product.json and Template.json with environment variable overrides
+- **Parallel execution** — TaskQueueManager ported from Enterprise; parallel template processing across all usage sites
+- **VerboseLogging setting** — Controls whether SQL informational messages appear in deployment logs; when disabled (default), noisy SQL info messages are suppressed
+- **Template Required property** — Marks templates as required so misconfigured deploys fail fast instead of silently skipping
+- **Template SkipIfReadOnly property** — Skips templates targeting Availability Group read-only replicas
+- **TrackRunOnceMigrations setting** — Tracks run-once migration scripts for datafix pipeline scenarios
+- **PruneObsoleteMigrationTracking setting** — Cleans up tracking records for migration scripts that no longer exist in the package
+- **KindleTheForge / UpdateTables / DropTablesRemovedFromProduct toggles** — SchemaQuench config switches for datafix pipeline scenarios
+- **Filesystem-illegal character handling** — FileNameEncoder percent-encodes `\ / : * ? " < > |` in output filenames; SchemaHammer decodes for display; original names preserved in content
+- **SchemaTongs: .community sentinel** — Written for new products to identify Community-extracted packages
 - **Demo products** — AdventureWorks (71 tables) and Northwind (13 tables) with MERGE data scripts and PROVENANCE documentation
 - **Self-contained executables** — Single-file builds for all tools across 6 RIDs (win/linux/osx × x64/arm64)
 - **Runtime JSON schema generator** — SchemaGenerator replaces static schema files; schemas regenerated on every product init
@@ -63,6 +78,15 @@ For full release details and download links, see [GitHub Releases](https://githu
 - **GenerateTableJSON check constraint lookup** — Replaced `COLUMNPROPERTY()` with direct `sys.columns` join
 - **fn_StripParenWrapping** — Trailing whitespace edge case in parenthesis stripping
 - **ZipDirectoryWrapper.Exists** — Boundary check prevented correct path matching for zip archive directory entries
+- **SchemaHammer token preview case-insensitive** — Token preview now matches deployment behavior (case-insensitive)
+- **SchemaHammer SearchWindow** — Fixed template label, dropdown re-search, and Enter key behavior
+- **SchemaHammer token highlighting** — Fixed token highlighting, double-click navigation, bracket stripping, and `{{}}` syntax in search/editors
+- **DataTongs empty tables** — Skip empty tables instead of generating invalid MERGE scripts
+- **Identity removal** — Data-preserving column swap now supports removing identity from a column
+- **MustSwapColumn** — Aligned with Enterprise bug fixes for column swap detection
+- **SchemaGenerator StackOverflow** — Fixed stack overflow when mapping JToken Extensions property
+- **CommandLineParser null safety** — Added null-conditional in `ValueOfSwitch` to prevent NullReferenceException
+- **Product script folder names** — Aligned folder naming with Enterprise convention
 
 ## [v1.1.8](https://github.com/Schema-Smith/SchemaSmithyFree/releases/tag/v1.1.8) — 2026-02-08
 

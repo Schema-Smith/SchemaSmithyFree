@@ -10,7 +10,7 @@
     },
     "WhatIfONLY": false, // Log all changes without executing them
     "SchemaPackagePath": "",
-    "RunScriptsTwice": false, // Run object scripts twice to resolve cross-dependencies
+    "RunScriptsTwice": false, // Run object scripts twice to verify idempotency (CI/testing tool)
     "DropTablesRemovedFromProduct": true, // Drop tables not defined in the product
     "UpdateTables": true, // Apply table structure changes (columns, indexes, constraints)
     "KindleTheForge": true, // Install SchemaSmith helper functions/procedures in target database
