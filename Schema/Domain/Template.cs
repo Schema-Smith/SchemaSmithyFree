@@ -84,6 +84,11 @@ public class Template
         return JsonConvert.SerializeObject(tables, Formatting.Indented).Replace("'", "''");
     }
 
+    public static string GenerateIndexedViewMetadataToken(List<IndexedView> indexedViews)
+    {
+        return JsonConvert.SerializeObject(indexedViews, Formatting.Indented).Replace("'", "''");
+    }
+
     private void Load(Dictionary<string, string> productScriptTokens)
     {
         LoadTables();
@@ -96,7 +101,8 @@ public class Template
             .Concat(productScriptTokens.Where(pt => !ScriptTokens.ContainsKey(pt.Key)))
             .Concat([
                 new("TemplateName", Name ?? "UNSPECIFIED"),
-                new("TableMetadata", GenerateTableMetadataToken(Tables))
+                new("TableMetadata", GenerateTableMetadataToken(Tables)),
+                new("IndexedViewMetadata", GenerateIndexedViewMetadataToken(IndexedViews))
             ])
             .ToList();
 

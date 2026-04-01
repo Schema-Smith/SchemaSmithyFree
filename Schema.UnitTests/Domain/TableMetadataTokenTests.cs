@@ -75,4 +75,41 @@ public class TableMetadataTokenTests
         var token = Template.GenerateTableMetadataToken(new List<Table>());
         Assert.That(token, Is.EqualTo("[]"));
     }
+
+    [Test]
+    public void GenerateIndexedViewMetadataToken_ContainsViewData()
+    {
+        var views = new List<IndexedView>
+        {
+            new() { Name = "vw_Summary", Schema = "dbo", Definition = "SELECT 1" }
+        };
+
+        var token = Template.GenerateIndexedViewMetadataToken(views);
+        Assert.That(token, Does.Contain("vw_Summary"));
+        Assert.That(token, Does.Contain("dbo"));
+    }
+
+    [Test]
+    public void GenerateIndexedViewMetadataToken_IncludesExtensions()
+    {
+        var views = new List<IndexedView>
+        {
+            new()
+            {
+                Name = "vw_Summary", Schema = "dbo", Definition = "SELECT 1",
+                Extensions = JToken.Parse("""{ "Refresh": "daily" }""")
+            }
+        };
+
+        var token = Template.GenerateIndexedViewMetadataToken(views);
+        Assert.That(token, Does.Contain("Refresh"));
+        Assert.That(token, Does.Contain("daily"));
+    }
+
+    [Test]
+    public void GenerateIndexedViewMetadataToken_EmptyViews_ReturnsEmptyArray()
+    {
+        var token = Template.GenerateIndexedViewMetadataToken(new List<IndexedView>());
+        Assert.That(token, Is.EqualTo("[]"));
+    }
 }
