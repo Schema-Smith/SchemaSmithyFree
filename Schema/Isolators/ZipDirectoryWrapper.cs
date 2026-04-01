@@ -1,8 +1,8 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text.RegularExpressions;
 
@@ -10,7 +10,7 @@ namespace Schema.Isolators;
 
 public class ZipDirectoryWrapper : IDirectory
 {
-    private List<ZipArchiveEntry> _zipEntries;
+    private List<IZipEntry> _zipEntries;
 
     public bool Exists(string path)
     {
@@ -18,8 +18,7 @@ public class ZipDirectoryWrapper : IDirectory
 
         var normalizedPath = NormalizePath(path);
         return _zipEntries.Any(e =>
-            e.FullName.StartsWith(normalizedPath, StringComparison.OrdinalIgnoreCase) &&
-            (NormalizePath(e.FullName).Length == normalizedPath.Length || e.FullName[normalizedPath.Length] == '/'));
+            e.FullName.Replace('\\', '/').StartsWith(normalizedPath, StringComparison.OrdinalIgnoreCase));
     }
 
     public string[] GetFiles(string path, string searchPattern, SearchOption searchOption)
@@ -44,7 +43,7 @@ public class ZipDirectoryWrapper : IDirectory
         return string.IsNullOrEmpty(normalized) ? "" : normalized + "/";
     }
 
-    public static IDirectory GetFromFactory(List<ZipArchiveEntry> zipEntries)
+    public static IDirectory GetFromFactory(List<IZipEntry> zipEntries)
     {
         var zipDir = FactoryContainer.ResolveOrCreate<ZipDirectoryWrapper>(true);
         zipDir._zipEntries = zipEntries;

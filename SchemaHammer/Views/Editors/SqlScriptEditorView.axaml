@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             xmlns:controls="using:SchemaHammer.Controls"
+             x:Class="SchemaHammer.Views.Editors.SqlScriptEditorView"
+             x:DataType="vm:SqlScriptEditorViewModel">
+    <DockPanel>
+        <!-- Minimal toolbar: Preview toggle only -->
+        <Border DockPanel.Dock="Top" Padding="8,4"
+                Background="{DynamicResource SH.Toolbar.Background}">
+            <DockPanel>
+                <TextBlock Text="{Binding EditorLabel}"
+                           Foreground="{DynamicResource SH.Toolbar.Foreground}"
+                           VerticalAlignment="Center" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
+                    <Button Command="{Binding TogglePreviewCommand}"
+                            Content="{Binding PreviewButtonText}"
+                            MinWidth="80"
+                            Foreground="{DynamicResource SH.Toolbar.Foreground}"
+                            Background="{DynamicResource SH.Accent.Ember}"
+                            Padding="8,4" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Error Script Warning Banner -->
+        <Border DockPanel.Dock="Top"
+                Background="#C53030"
+                Padding="12,6"
+                IsVisible="{Binding IsErrorScript}">
+            <TextBlock Text="⚠ This file contains a script extraction error. The content is the raw error output from SchemaTongs and is not a valid SQL script."
+                       Foreground="White"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <!-- Find Bar -->
+        <controls:FindBarControl DockPanel.Dock="Top" Name="FindBar" />
+
+        <!-- SQL Editor fills remaining space -->
+        <controls:SqlEditorControl Text="{Binding DisplayContent}" Name="SqlEditor" />
+    </DockPanel>
+</UserControl>

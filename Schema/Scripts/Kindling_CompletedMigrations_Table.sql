@@ -1,4 +1,5 @@
 -- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 EXEC SchemaSmith.TableQuench @ProductName = 'SchemaQuench', @TableDefinitions = '{
   "Schema": "[SchemaSmith]",
   "Name": "[CompletedMigrationScripts]",

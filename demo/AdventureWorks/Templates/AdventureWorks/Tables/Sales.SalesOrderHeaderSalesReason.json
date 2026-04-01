@@ -1,0 +1,72 @@
+{
+  "Schema": "[Sales]",
+  "Name": "[SalesOrderHeaderSalesReason]",
+  "CompressionType": "NONE",
+  "OldName": "",
+  "Columns": [
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[SalesOrderID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[SalesReasonID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_SalesOrderHeaderSalesReason_SalesOrderID_SalesReasonID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[SalesOrderID],[SalesReasonID]"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_SalesOrderHeaderSalesReason_SalesOrderHeader_SalesOrderID]",
+      "Columns": "[SalesOrderID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SalesOrderHeader]",
+      "RelatedColumns": "[SalesOrderID]",
+      "DeleteAction": "CASCADE",
+      "UpdateAction": "NO ACTION"
+    },
+    {
+      "Name": "[FK_SalesOrderHeaderSalesReason_SalesReason_SalesReasonID]",
+      "Columns": "[SalesReasonID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SalesReason]",
+      "RelatedColumns": "[SalesReasonID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    }
+  ]
+}

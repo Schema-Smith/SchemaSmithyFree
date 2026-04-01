@@ -1,7 +1,9 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Schema.Utility;
 
 namespace Schema.Domain;
@@ -11,12 +13,14 @@ public class Table
     [JsonProperty(Order = 1)]
     public string Schema { get; set; } = "dbo";
     [JsonProperty(Order = 2)]
+    [SchemaProperty(Required = true)]
     public string Name { get; set; }
     [JsonProperty(Order = 3)]
     public string CompressionType { get; set; } = "NONE";
     [JsonProperty(Order = 4)]
     public bool IsTemporal { get; set; }
     [JsonProperty(Order = 5)]
+    [SchemaProperty(Required = true)]
     public List<Column> Columns { get; set; } = [];
     [JsonProperty(Order = 6)]
     public List<Index> Indexes { get; set; } = [];
@@ -32,6 +36,10 @@ public class Table
     public FullTextIndex FullTextIndex { get; set; }
     [JsonProperty(Order = 12)]
     public string OldName { get; set; } = "";
+    [JsonProperty(Order = 13)]
+    public bool UpdateFillFactor { get; set; }
+    [JsonProperty(Order = 14)]
+    public JToken Extensions { get; set; }
 
     public static Table Load(string filePath)
     {

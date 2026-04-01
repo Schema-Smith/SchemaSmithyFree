@@ -1,0 +1,61 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[EmployeeTerritories]",
+  "CompressionType": "NONE",
+  "OldName": "",
+  "Columns": [
+    {
+      "Name": "[EmployeeID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[TerritoryID]",
+      "DataType": "NVARCHAR(20)",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_EmployeeTerritories]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[EmployeeID],[TerritoryID]"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_EmployeeTerritories_Employees]",
+      "Columns": "[EmployeeID]",
+      "RelatedTableSchema": "[dbo]",
+      "RelatedTable": "[Employees]",
+      "RelatedColumns": "[EmployeeID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    },
+    {
+      "Name": "[FK_EmployeeTerritories_Territories]",
+      "Columns": "[TerritoryID]",
+      "RelatedTableSchema": "[dbo]",
+      "RelatedTable": "[Territories]",
+      "RelatedColumns": "[TerritoryID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    }
+  ]
+}

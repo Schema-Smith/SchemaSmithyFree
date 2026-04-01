@@ -1,0 +1,105 @@
+{
+  "Schema": "[Sales]",
+  "Name": "[SpecialOfferProduct]",
+  "CompressionType": "NONE",
+  "OldName": "",
+  "Columns": [
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[SpecialOfferID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_SpecialOfferProduct_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]"
+    },
+    {
+      "Name": "[IX_SpecialOfferProduct_ProductID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID]"
+    },
+    {
+      "Name": "[PK_SpecialOfferProduct_SpecialOfferID_ProductID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[SpecialOfferID],[ProductID]"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_SpecialOfferProduct_Product_ProductID]",
+      "Columns": "[ProductID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    },
+    {
+      "Name": "[FK_SpecialOfferProduct_SpecialOffer_SpecialOfferID]",
+      "Columns": "[SpecialOfferID]",
+      "RelatedTableSchema": "[Sales]",
+      "RelatedTable": "[SpecialOffer]",
+      "RelatedColumns": "[SpecialOfferID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    }
+  ]
+}

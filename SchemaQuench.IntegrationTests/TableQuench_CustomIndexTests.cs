@@ -27,7 +27,7 @@ public class TableQuench_CustomIndexTests : BaseTableQuenchTests
         Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
 
         Assert.That(GetColumnDataType(cmd, "AlterColumnInCustomIndex", "Column2"), Is.EqualTo("BIGINT"));
-        
+
         conn.Close();
     }
 

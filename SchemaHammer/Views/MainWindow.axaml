@@ -1,0 +1,204 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SchemaHammer.ViewModels"
+        xmlns:vmEditors="using:SchemaHammer.ViewModels.Editors"
+        xmlns:editors="using:SchemaHammer.Views.Editors"
+        xmlns:views="using:SchemaHammer.Views"
+        xmlns:models="using:SchemaHammer.Models"
+        x:Class="SchemaHammer.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding Title}"
+        Width="984" Height="561"
+        MinWidth="800" MinHeight="550"
+        WindowStartupLocation="CenterScreen">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel />
+    </Design.DataContext>
+
+    <Window.DataTemplates>
+        <DataTemplate DataType="vmEditors:WelcomeViewModel">
+            <editors:WelcomeView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:ContainerEditorViewModel">
+            <editors:ContainerEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:ProductEditorViewModel">
+            <editors:ProductEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:TemplateEditorViewModel">
+            <editors:TemplateEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:TableEditorViewModel">
+            <editors:TableEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:ColumnEditorViewModel">
+            <editors:ColumnEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:IndexEditorViewModel">
+            <editors:IndexEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:ForeignKeyEditorViewModel">
+            <editors:ForeignKeyEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:CheckConstraintEditorViewModel">
+            <editors:CheckConstraintEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:StatisticEditorViewModel">
+            <editors:StatisticEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:XmlIndexEditorViewModel">
+            <editors:XmlIndexEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:FullTextIndexEditorViewModel">
+            <editors:FullTextIndexEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:IndexedViewEditorViewModel">
+            <editors:IndexedViewEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vmEditors:SqlScriptEditorViewModel">
+            <editors:SqlScriptEditorView />
+        </DataTemplate>
+    </Window.DataTemplates>
+
+    <Panel>
+        <DockPanel IsVisible="{Binding !IsLoading}">
+            <!-- Ember Heat Line -->
+            <Border DockPanel.Dock="Top" Height="3" IsHitTestVisible="False">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                        <GradientStop Color="{DynamicResource SH.Accent.Ember.Color}" Offset="0" />
+                        <GradientStop Color="{DynamicResource SH.Accent.EmberLight.Color}" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <!-- Menu Bar -->
+            <DockPanel DockPanel.Dock="Top"
+                       Background="{DynamicResource SH.Toolbar.Background}">
+                <SplitButton DockPanel.Dock="Left"
+                             Command="{Binding NavigateBackCommand}"
+                             IsEnabled="{Binding CanNavigateBack}"
+                             ToolTip.Tip="Navigate Back"
+                             Padding="8,0" VerticalAlignment="Stretch"
+                             BorderThickness="0"
+                             Foreground="{DynamicResource SH.Toolbar.Foreground}"
+                             Background="Transparent">
+                    <TextBlock Text="&#x2190;" FontSize="16" />
+                    <SplitButton.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedLeft">
+                            <ListBox ItemsSource="{Binding NavigationHistory}"
+                                     MaxHeight="300" MinWidth="200"
+                                     Name="HistoryListBox"
+                                     SelectionChanged="HistoryListBox_SelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:TreeNodeModel">
+                                        <TextBlock Text="{Binding Text}" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Flyout>
+                    </SplitButton.Flyout>
+                </SplitButton>
+                <Menu Foreground="{DynamicResource SH.Toolbar.Foreground}">
+                    <!-- File Menu -->
+                    <MenuItem Header="_File">
+                        <MenuItem Header="Choose Product"
+                                  Command="{Binding ChooseProductCommand}">
+                            <MenuItem.Icon>
+                                <PathIcon Data="{StaticResource BrowseIcon}" Width="14" Height="14" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Reload Tree"
+                                  Command="{Binding ReloadTreeCommand}"
+                                  InputGesture="F5">
+                            <MenuItem.Icon>
+                                <PathIcon Data="{StaticResource RefreshIcon}" Width="14" Height="14" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Recent Products"
+                                  ItemsSource="{Binding Settings.RecentProducts}">
+                            <MenuItem.Styles>
+                                <Style Selector="MenuItem">
+                                    <Setter Property="Header" Value="{Binding}" />
+                                    <Setter Property="Command" Value="{ReflectionBinding DataContext.LoadRecentProductCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}" />
+                                    <Setter Property="CommandParameter" Value="{Binding}" />
+                                </Style>
+                            </MenuItem.Styles>
+                        </MenuItem>
+                        <Separator />
+                        <MenuItem Header="E_xit" Command="{Binding ExitCommand}" />
+                    </MenuItem>
+
+                    <!-- Search Menu -->
+                    <MenuItem Header="_Search">
+                        <MenuItem Header="Search Tree"
+                                  Command="{Binding SearchTreeCommand}"
+                                  InputGesture="Ctrl+F">
+                            <MenuItem.Icon>
+                                <PathIcon Data="{StaticResource SearchIcon}" Width="14" Height="14" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Search Code"
+                                  Command="{Binding SearchCodeCommand}"
+                                  InputGesture="Ctrl+Shift+F">
+                            <MenuItem.Icon>
+                                <PathIcon Data="{StaticResource SearchIcon}" Width="14" Height="14" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                    </MenuItem>
+
+                    <!-- Tools Menu -->
+                    <MenuItem Header="_Tools">
+                        <MenuItem Header="Update Schema Files"
+                                  Command="{Binding UpdateSchemaFilesCommand}" />
+                        <Separator />
+                        <MenuItem Header="Toggle Theme"
+                                  Command="{Binding OpenThemeSettingsCommand}" />
+                    </MenuItem>
+
+                    <!-- Help Menu -->
+                    <MenuItem Header="_Help">
+                        <MenuItem Header="About SchemaHammer"
+                                  Command="{Binding ShowAboutCommand}" />
+                    </MenuItem>
+                </Menu>
+            </DockPanel>
+
+            <!-- Status Bar -->
+            <Border DockPanel.Dock="Bottom" Classes="status-bar"
+                    BorderBrush="{DynamicResource SH.Accent.Ember}" BorderThickness="0,1,0,0"
+                    Background="{DynamicResource SH.General.StatusBarBackground}"
+                    Height="24">
+                <DockPanel LastChildFill="True" Margin="6,0">
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="{Binding ProductStatus}"
+                               ToolTip.Tip="{Binding ProductStatusTooltip}"
+                               Foreground="{DynamicResource SH.General.StatusBarForeground}"
+                               VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+
+            <!-- Main Content: Tree (left) + Editor (right) with splitter -->
+            <Grid ColumnDefinitions="327,Auto,*">
+                <!-- Left Panel: Product Tree -->
+                <Border Grid.Column="0" Background="{DynamicResource SH.TreePanel.Background}">
+                    <views:ProductTreeView DataContext="{Binding TreeViewModel}" />
+                </Border>
+
+                <!-- Splitter -->
+                <GridSplitter Grid.Column="1" Width="4"
+                              ResizeDirection="Columns"
+                              Background="{DynamicResource SH.General.GridSplitter}" />
+
+                <!-- Right Panel: Editor Area -->
+                <ContentControl Grid.Column="2"
+                                x:Name="EditorContentControl"
+                                Content="{Binding CurrentEditor}"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                Margin="0" />
+            </Grid>
+        </DockPanel>
+    </Panel>
+</Window>

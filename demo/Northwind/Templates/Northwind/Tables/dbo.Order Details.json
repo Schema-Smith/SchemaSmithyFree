@@ -1,0 +1,141 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[Order Details]",
+  "CompressionType": "NONE",
+  "OldName": "",
+  "Columns": [
+    {
+      "Name": "[Discount]",
+      "DataType": "REAL",
+      "Nullable": false,
+      "Default": "0",
+      "CheckExpression": "[Discount]>=(0) AND [Discount]<=(1)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[OrderID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[Quantity]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "Default": "1",
+      "CheckExpression": "[Quantity]>(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[UnitPrice]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "Default": "0",
+      "CheckExpression": "[UnitPrice]>=(0)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[OrderID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[OrderID]"
+    },
+    {
+      "Name": "[OrdersOrder_Details]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[OrderID]"
+    },
+    {
+      "Name": "[PK_Order_Details]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[OrderID],[ProductID]"
+    },
+    {
+      "Name": "[ProductID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID]"
+    },
+    {
+      "Name": "[ProductsOrder_Details]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID]"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Order_Details_Orders]",
+      "Columns": "[OrderID]",
+      "RelatedTableSchema": "[dbo]",
+      "RelatedTable": "[Orders]",
+      "RelatedColumns": "[OrderID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    },
+    {
+      "Name": "[FK_Order_Details_Products]",
+      "Columns": "[ProductID]",
+      "RelatedTableSchema": "[dbo]",
+      "RelatedTable": "[Products]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    }
+  ]
+}

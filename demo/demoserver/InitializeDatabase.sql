@@ -1,0 +1,53 @@
+USE master
+GO
+
+PRINT 'Alter the sa login'
+GO
+
+ALTER LOGIN [sa] WITH NAME = [$(MSSQL_SA_USERNAME)]
+GO
+
+PRINT 'Alter the sa login (done)'
+GO
+
+DROP DATABASE IF EXISTS Registry
+GO
+CREATE DATABASE Registry
+GO
+
+DROP DATABASE IF EXISTS Client1
+GO
+CREATE DATABASE Client1
+GO
+
+DROP DATABASE IF EXISTS Client2
+GO
+CREATE DATABASE Client2
+GO
+
+PRINT 'Initialize databases done'
+GO
+-- Integration test databases
+USE master
+GO
+DROP DATABASE IF EXISTS TestMain
+GO
+CREATE DATABASE TestMain
+GO
+USE TestMain
+GO
+CREATE SCHEMA SchemaSmith
+CREATE TABLE SchemaSmith.TestLog (Id INT IDENTITY(1,1) NOT NULL, Msg VARCHAR(2000) NOT NULL)
+GO
+
+USE master
+GO
+DROP DATABASE IF EXISTS TestSecondary
+GO
+CREATE DATABASE TestSecondary
+GO
+USE TestSecondary
+GO
+CREATE SCHEMA SchemaSmith
+CREATE TABLE SchemaSmith.TestLog (Id INT IDENTITY(1,1) NOT NULL, Msg VARCHAR(2000) NOT NULL)
+GO

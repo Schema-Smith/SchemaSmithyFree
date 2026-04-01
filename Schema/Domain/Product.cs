@@ -1,4 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,12 +9,15 @@ using Schema.Isolators;
 using Schema.Utility;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace Schema.Domain;
 
 public class Product
 {
+    [SchemaProperty(Required = true)]
     public string Name { get; set; }
+    [SchemaProperty(Required = true)]
     public string ValidationScript { get; set; }
     public bool DropUnknownIndexes { get; set; } = false;
     public List<string> TemplateOrder { get; set; } = [];
@@ -21,9 +25,19 @@ public class Product
     public string BaselineValidationScript { get; set; }
     public string VersionStampScript { get; set; }
     public string Platform { get; set; } = ConfigHelper.Platform;
+    public SqlServerVersion? MinimumVersion { get; set; }
+    [JsonConverter(typeof(StringEnumConverter))]
+    public CheckConstraintStyle CheckConstraintStyle { get; set; }
 
     [JsonIgnore]
     public string FilePath { get; set; }
+
+    private readonly List<ProductFolder> _scriptFolders = GetProductFolders();
+
+    [JsonIgnore]
+    public List<ProductFolder> BeforeFolders => _scriptFolders.Where(f => f.QuenchSlot == ProductQuenchSlot.Before).ToList();
+    [JsonIgnore]
+    public List<ProductFolder> AfterFolders => _scriptFolders.Where(f => f.QuenchSlot == ProductQuenchSlot.After).ToList();
 
     public static Product Load()
     {
@@ -43,8 +57,8 @@ public class Product
 
         var productFilePath = Path.Combine(schemaPackagePath, "Product.json");
         var product = JsonHelper.ProductLoad<Product>(productFilePath);
-        if (!product.Platform.EqualsIgnoringCase(ConfigHelper.Platform))
-            throw new Exception($"Product platform '{product.Platform}' does not match application platform '{ConfigHelper.Platform}'");
+        if (!ConfigHelper.IsValidPlatform(product.Platform))
+            throw new Exception($"Product platform '{product.Platform}' is not supported. Valid platforms: SqlServer, MSSQL (legacy).");
         product.FilePath = productFilePath;
         OverrideProductScriptTokens(config, product);
         product.ScriptTokens.Add("ProductName", product.Name);
@@ -74,6 +88,11 @@ public class Product
         ValidationScript = TokenReplace(ValidationScript, scriptTokens);
         BaselineValidationScript = TokenReplace(BaselineValidationScript, scriptTokens);
         VersionStampScript = TokenReplace(VersionStampScript, scriptTokens);
+
+        var productDir = Path.GetDirectoryName(FilePath) ?? "";
+        using var folderQueue = new TaskQueueManager<ProductFolder>(Environment.ProcessorCount * 2);
+        _scriptFolders.ForEach(folder => folderQueue.AddToQueue(folder, f => f.LoadSqlFiles(productDir, scriptTokens)));
+        folderQueue.WaitForAll();
     }
 
     public static string TokenReplace(string script, List<KeyValuePair<string, string>> scriptTokens)
@@ -81,5 +100,14 @@ public class Product
         if (!string.IsNullOrEmpty(script))
             scriptTokens.ForEach(token => { script = Regex.Replace(script, $@"\{{\{{{token.Key}\}}\}}", token.Value, RegexOptions.IgnoreCase); });
         return script;
+    }
+
+    private static List<ProductFolder> GetProductFolders()
+    {
+        return
+        [
+            new ProductFolder { FolderPath = "Before Product", QuenchSlot = ProductQuenchSlot.Before },
+            new ProductFolder { FolderPath = "After Product", QuenchSlot = ProductQuenchSlot.After },
+        ];
     }
 }

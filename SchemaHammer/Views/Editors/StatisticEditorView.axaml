@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             xmlns:controls="using:SchemaHammer.Controls"
+             x:Class="SchemaHammer.Views.Editors.StatisticEditorView"
+             x:DataType="vm:StatisticEditorViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="8" Margin="8">
+            <TextBlock Text="{Binding EditorLabel}" Classes="editor-title" />
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Configuration" />
+            </Border>
+            <StackPanel Margin="4,0,0,0" Spacing="8">
+                <StackPanel>
+                    <TextBlock Text="Columns" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding Columns}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Sample Size" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding SampleSize}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Filter Expression" Margin="0,0,0,2" />
+                    <controls:SqlEditorControl Text="{Binding FilterExpression}" EditorHeight="100" />
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

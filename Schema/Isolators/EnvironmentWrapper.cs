@@ -10,6 +10,8 @@ public class EnvironmentWrapper : IEnvironment
         Environment.Exit(exitCode);
     }
 
+    public string CommandLine { get; } = Environment.CommandLine;
+
     public static IEnvironment GetFromFactory()
     {
         return FactoryContainer.ResolveOrCreate<IEnvironment, EnvironmentWrapper>();

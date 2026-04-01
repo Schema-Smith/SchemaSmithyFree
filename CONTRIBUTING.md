@@ -7,23 +7,23 @@ Contributions are what make community-driven projects thrive, and we welcome pul
 * **Report bugs** — Open an issue with detailed steps to reproduce.
 * **Suggest enhancements** — Share your ideas for improving SchemaSmithyFree in an issue.
 * **Submit code** — Add features, fix bugs, or improve documentation.
-* **Improve docs** — Our [documentation site](https://schemasmith.com/documentation/mssql/community/getting-started.html) and README are always evolving. Contributions are welcome.
+* **Improve docs** — Our [documentation site](https://schemasmith.com/documentation/mssql/community/getting-started.html), in-repo `docs/` directory, and README are always evolving. Contributions are welcome.
 
 # Development Setup
 The tools in SchemaSmithyFree target:
-* **.NET**: `net9.0`, `net481`
-* **IDEs**: Visual Studio 2022 or JetBrains Rider
-* **Database**: Tested against SQL Server `2019-CU27-ubuntu-20.04`. Should work with any database set to compatibility level 130 or higher.
-
+* **.NET**: `net10.0`
+* **IDEs**: Visual Studio 2026 or JetBrains Rider
+* **Database**: Tested against SQL Server `2022-latest`. Should work with any database set to compatibility level 130 or higher.
 ### Running Locally with Docker
-From the project root:
+From the `demo/` directory:
 ```
+cd demo
 docker compose build
 docker compose up
 ```
-This spins up a SQL Server 2019 container and applies the **Test Product** schema. You may also want to pull the [SchemaSmithDemos](https://github.com/Schema-Smith/SchemaSmithDemos) repository and run docker from there instead to apply several demo products for more test data and examples.
+This spins up a SQL Server 2022 container on port **1450** and applies demo schema packages. You may also want to pull the [SchemaSmithDemos](https://github.com/Schema-Smith/SchemaSmithDemos) repository for additional demo products and examples.
 
-Connection details are defined in `.env`. Connect at `localhost`.
+Connection details are defined in `demo/.env`. Connect at `localhost:1450`.
 
 # Coding Standards
 * **Language**: C#

@@ -1,0 +1,288 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ae="using:AvaloniaEdit">
+
+    <!-- Editor button bar: consistent spacing and size -->
+    <Style Selector="StackPanel.editor-buttons > Button">
+        <Setter Property="MinWidth" Value="60" />
+        <Setter Property="Padding" Value="8,4" />
+    </Style>
+
+    <!-- Editor toolbar: bottom separator line -->
+    <Style Selector="DockPanel.editor-toolbar">
+        <Setter Property="Margin" Value="0" />
+    </Style>
+    <Style Selector="Border.toolbar-separator">
+        <Setter Property="BorderBrush" Value="{DynamicResource SH.General.GridSplitter}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+
+    <!-- Button icons: inherit foreground from parent button so they match the text color -->
+    <Style Selector="Button PathIcon">
+        <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+    </Style>
+
+    <!-- Smooth hover transitions for interactive elements -->
+    <Style Selector="Button">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.15" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- Section header accent: ember left-border -->
+    <Style Selector="Border.section-header-border">
+        <Setter Property="BorderBrush" Value="{DynamicResource SH.Accent.SectionHeader}" />
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+        <Setter Property="Padding" Value="8,0,0,0" />
+        <Setter Property="Margin" Value="0,8,0,4" />
+    </Style>
+
+    <!-- Bold label style for editor section headers -->
+    <Style Selector="TextBlock.section-header">
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource BrandMono}" />
+    </Style>
+
+    <!-- Editor node name label -->
+    <Style Selector="TextBlock.editor-title">
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Margin" Value="0,0,0,4" />
+        <Setter Property="FontFamily" Value="{StaticResource BrandMono}" />
+        <Setter Property="Foreground" Value="{DynamicResource SH.Accent.EditorTitle}" />
+    </Style>
+
+    <!-- Status bar text items -->
+    <Style Selector="Border.status-bar TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="FontFamily" Value="{StaticResource BrandMono}" />
+    </Style>
+
+    <!-- DataGrid alternating row colors -->
+    <Style Selector="DataGrid DataGridRow:nth-child(2n)">
+        <Setter Property="Background" Value="{DynamicResource SH.General.AlternatingRow}" />
+    </Style>
+
+    <!-- GridSplitter consistent appearance -->
+    <Style Selector="GridSplitter">
+        <Setter Property="Background" Value="{DynamicResource SH.General.GridSplitter}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="GridSplitter:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SH.Accent.Ember}" />
+    </Style>
+
+    <!-- Tree view item padding for better readability -->
+    <Style Selector="TreeViewItem">
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="FontFamily" Value="{StaticResource BrandSans}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.1" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- Tree view indent guides: ember-tinted -->
+    <Style Selector="TreeViewItem TreeViewItem">
+        <Setter Property="BorderBrush" Value="#66E85D04" />
+        <Setter Property="BorderThickness" Value="1,0,0,0" />
+    </Style>
+
+    <!-- AvaloniaEdit TextEditor: visible border matching Fluent TextBox style -->
+    <Style Selector="ae|TextEditor">
+        <Setter Property="BorderBrush" Value="{DynamicResource TextControlBorderBrush}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource TextControlBorderThemeThickness}" />
+        <Setter Property="Padding" Value="4,2" />
+        <Setter Property="Background" Value="{DynamicResource TextControlBackground}" />
+    </Style>
+    <Style Selector="ae|TextEditor /template/ Border">
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}" />
+    </Style>
+
+    <!-- Compact ListBox: reduce default Fluent ListBoxItem padding/height -->
+    <Style Selector="ListBox ListBoxItem">
+        <Setter Property="Padding" Value="4,1" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <!-- Theme category selector: tree-like selected state -->
+    <Style Selector="ListBox.theme-category ListBoxItem">
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="Foreground" Value="{DynamicResource SH.TreePanel.Foreground}" />
+    </Style>
+    <Style Selector="ListBox.theme-category ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SH.Accent.Ember}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="ListBox.theme-category ListBoxItem:selected">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="ListBox.theme-category ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SH.TreePanel.HoverBackground}" />
+    </Style>
+
+    <!-- Compact DataGrid rows -->
+    <Style Selector="DataGrid DataGridRow">
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="DataGrid DataGridCell">
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <!-- Checklist controls: visible border matching Fluent TextBox style -->
+    <Style Selector="ListBox.checklist">
+        <Setter Property="BorderBrush" Value="{DynamicResource TextControlBorderBrush}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource TextControlBorderThemeThickness}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}" />
+        <Setter Property="Background" Value="{DynamicResource TextControlBackground}" />
+    </Style>
+    <Style Selector="ListBox.checklist ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ListBox.checklist CheckBox">
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="4,2" />
+        <Setter Property="Margin" Value="0" />
+    </Style>
+    <!-- The Fluent CheckBox template has an unnamed inner Grid with Height=32
+         wrapping the checkbox visual. Override it and RootGrid to compact the rows. -->
+    <Style Selector="ListBox.checklist CheckBox /template/ Grid#RootGrid">
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ListBox.checklist CheckBox /template/ Grid#RootGrid > Grid">
+        <Setter Property="Height" Value="20" />
+    </Style>
+
+    <!-- Menu item icons: inherit toolbar foreground so they're visible on dark dropdown -->
+    <Style Selector="MenuItem PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource SH.Toolbar.Foreground}" />
+    </Style>
+    <Style Selector="MenuItem:pointerover PathIcon">
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- Brand typography: menus use sans-serif brand font -->
+    <Style Selector="Menu">
+        <Setter Property="FontFamily" Value="{StaticResource BrandSans}" />
+        <Setter Property="Foreground" Value="{DynamicResource SH.Toolbar.Foreground}" />
+    </Style>
+    <Style Selector="Menu > MenuItem">
+        <Setter Property="FontFamily" Value="{StaticResource BrandSans}" />
+        <Setter Property="Foreground" Value="{DynamicResource SH.Toolbar.Foreground}" />
+    </Style>
+    <Style Selector="MenuItem">
+        <Setter Property="FontFamily" Value="{StaticResource BrandSans}" />
+    </Style>
+
+    <!-- Window and panel backgrounds: use our theme background -->
+    <Style Selector="Window">
+        <Setter Property="Background" Value="{DynamicResource SH.General.AppBackground}" />
+    </Style>
+
+    <!-- Dialog heat line: 3px ember gradient at top of dialog windows -->
+    <Style Selector="Border.dialog-heat-line">
+        <Setter Property="Height" Value="3" />
+        <Setter Property="DockPanel.Dock" Value="Top" />
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                    <GradientStop Color="{DynamicResource SH.Accent.Ember.Color}" Offset="0" />
+                    <GradientStop Color="{DynamicResource SH.Accent.EmberLight.Color}" Offset="1" />
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Dialog title: ember-colored, branded font -->
+    <Style Selector="TextBlock.dialog-title">
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontFamily" Value="{StaticResource BrandMono}" />
+        <Setter Property="Foreground" Value="{DynamicResource SH.Accent.EditorTitle}" />
+        <Setter Property="Margin" Value="16,8,16,4" />
+        <Setter Property="DockPanel.Dock" Value="Top" />
+    </Style>
+
+    <!-- SplitButton on dark toolbar: transparent chrome, light text, muted when disabled -->
+    <Style Selector="SplitButton">
+        <Setter Property="Foreground" Value="{DynamicResource SH.Toolbar.Foreground}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="SplitButton /template/ Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource SH.Toolbar.Foreground}" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="SplitButton /template/ Button /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource SH.Toolbar.Foreground}" />
+    </Style>
+    <Style Selector="SplitButton /template/ Button:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SH.Accent.Ember}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="SplitButton /template/ Button:disabled /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="#5A6577" />
+    </Style>
+    <Style Selector="SplitButton:disabled /template/ Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="#5A6577" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="SplitButton:disabled">
+        <Setter Property="Foreground" Value="#5A6577" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <!-- Dropdown chevron: force toolbar foreground and bolder size -->
+    <Style Selector="SplitButton /template/ PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource SH.Toolbar.Foreground}" />
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+    </Style>
+    <Style Selector="SplitButton:disabled /template/ PathIcon">
+        <Setter Property="Foreground" Value="#5A6577" />
+    </Style>
+
+    <!-- Breadcrumb: transparent buttons with toolbar foreground, ember underline on hover -->
+    <Style Selector="Button.breadcrumb-segment">
+        <Setter Property="Foreground" Value="{DynamicResource SH.General.AppForeground}" />
+        <Setter Property="BorderThickness" Value="0,0,0,2" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.breadcrumb-segment /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.breadcrumb-segment:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource SH.Accent.Ember}" />
+    </Style>
+    <Style Selector="Button.breadcrumb-segment:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource SH.Accent.Ember}" />
+    </Style>
+
+    <!-- Menu items on dark toolbar: strong ember highlight on hover -->
+    <Style Selector="Menu > MenuItem:pointerover > Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="#E85D04" />
+    </Style>
+    <Style Selector="Menu > MenuItem:pointerover">
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+</Styles>

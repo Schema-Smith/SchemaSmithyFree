@@ -1,0 +1,223 @@
+{
+  "Schema": "[Person]",
+  "Name": "[Person]",
+  "CompressionType": "NONE",
+  "OldName": "",
+  "Columns": [
+    {
+      "Name": "[AdditionalContactInfo]",
+      "DataType": "XML([Person].[AdditionalContactInfoSchemaCollection])",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[Demographics]",
+      "DataType": "XML([Person].[IndividualSurveySchemaCollection])",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[EmailPromotion]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Default": "0",
+      "CheckExpression": "[EmailPromotion]>=(0) AND [EmailPromotion]<=(2)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[FirstName]",
+      "DataType": "NAME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[LastName]",
+      "DataType": "NAME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[MiddleName]",
+      "DataType": "NAME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[NameStyle]",
+      "DataType": "NAMESTYLE",
+      "Nullable": false,
+      "Default": "0",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[PersonType]",
+      "DataType": "NCHAR(2)",
+      "Nullable": false,
+      "CheckExpression": "[PersonType] IS NULL OR (upper([PersonType])='GC' OR upper([PersonType])='SP' OR upper([PersonType])='EM' OR upper([PersonType])='IN' OR upper([PersonType])='VC' OR upper([PersonType])='SC')",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Nullable": false,
+      "Default": "newid()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[Suffix]",
+      "DataType": "NVARCHAR(10)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[Title]",
+      "DataType": "NVARCHAR(8)",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_Person_rowguid]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[rowguid]"
+    },
+    {
+      "Name": "[IX_Person_LastName_FirstName_MiddleName]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[LastName],[FirstName],[MiddleName]"
+    },
+    {
+      "Name": "[PK_Person_BusinessEntityID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[BusinessEntityID]"
+    }
+  ],
+  "XmlIndexes": [
+    {
+      "Name": "[PXML_Person_AddContact]",
+      "Column": "[AdditionalContactInfo]",
+      "IsPrimary": true
+    },
+    {
+      "Name": "[PXML_Person_Demographics]",
+      "Column": "[Demographics]",
+      "IsPrimary": true
+    },
+    {
+      "Name": "[XMLPATH_Person_Demographics]",
+      "Column": "[Demographics]",
+      "IsPrimary": false,
+      "PrimaryIndex": "[PXML_Person_Demographics]",
+      "SecondaryIndexType": "PATH"
+    },
+    {
+      "Name": "[XMLPROPERTY_Person_Demographics]",
+      "Column": "[Demographics]",
+      "IsPrimary": false,
+      "PrimaryIndex": "[PXML_Person_Demographics]",
+      "SecondaryIndexType": "PROPERTY"
+    },
+    {
+      "Name": "[XMLVALUE_Person_Demographics]",
+      "Column": "[Demographics]",
+      "IsPrimary": false,
+      "PrimaryIndex": "[PXML_Person_Demographics]",
+      "SecondaryIndexType": "VALUE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Person_BusinessEntity_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTableSchema": "[Person]",
+      "RelatedTable": "[BusinessEntity]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    }
+  ]
+}

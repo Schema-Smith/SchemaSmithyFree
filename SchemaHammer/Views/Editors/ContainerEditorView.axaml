@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             x:Class="SchemaHammer.Views.Editors.ContainerEditorView"
+             x:DataType="vm:ContainerEditorViewModel">
+    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
+        <TextBlock Text="{Binding ContainerName}"
+                   FontSize="20" FontWeight="Bold"
+                   Foreground="{DynamicResource SH.Accent.Ember}"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding ParentContext}"
+                   FontSize="14" Opacity="0.5"
+                   HorizontalAlignment="Center" />
+    </StackPanel>
+</UserControl>

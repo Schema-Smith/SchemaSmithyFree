@@ -8,6 +8,7 @@ using Schema.Isolators;
 using Schema.Utility;
 using log4net;
 using NSubstitute;
+using Schema.Domain;
 
 namespace SchemaTongs.IntegrationTests;
 
@@ -20,7 +21,8 @@ public class SchemaTongsTests
     public void OneTimeSetup()
     {
         var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", null);
-        _connectionString = ConnectionString.Build(config["Source:Server"], "master", config["Source:User"], config["Source:Password"]);
+        var connectionProperties = ConnectionString.ReadProperties(config, "Source:ConnectionProperties");
+        _connectionString = ConnectionString.Build(config["Source:Server"], "master", config["Source:User"], config["Source:Password"], config["Source:Port"], connectionProperties);
         _integrationDb = GenerateUniqueDBName(config["Source:database"] ?? "TongsTest");
 
         CreateTestDatabases();
@@ -47,11 +49,12 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(9).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Tables", "Test.TestTable.json"))), Arg.Any<string>());
+            file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Tables", "Test.CheckConstraintTest.json"))), Arg.Any<string>());
 
             config["ShouldCast:Tables"] = "false";
             FactoryContainer.Clear();
@@ -80,11 +83,12 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(9).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Views", "Test.TestView.sql"))), Arg.Any<string>());
+            file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Views", "Test.TestIndexedView.sql"))), Arg.Any<string>());
 
             config["ShouldCast:Views"] = "false";
             FactoryContainer.Clear();
@@ -114,8 +118,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(8).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Procedures", "Test.TestProcedure.sql"))), Arg.Any<string>());
@@ -147,8 +151,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(8).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Functions", "Test.TestFunction.sql"))), Arg.Any<string>());
@@ -180,8 +184,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(10).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Types", "Test.Flag.sql"))), Arg.Any<string>());
@@ -213,8 +217,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(8).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Schemas", "Test.sql"))), Arg.Any<string>());
@@ -246,8 +250,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(8).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Triggers", "Test.TestTable.TestTrigger.sql"))), Arg.Any<string>());
@@ -279,8 +283,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(8).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("FullTextCatalogs", "FT_Catalog.sql"))), Arg.Any<string>());
@@ -312,8 +316,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(8).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("FullTextStopLists", "SL_Test.sql"))), Arg.Any<string>());
@@ -345,8 +349,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(8).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("DDLTriggers", "safety.sql"))), Arg.Any<string>());
@@ -378,8 +382,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs();
             tongs.CastTemplate();
 
-            file.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(3).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(8).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(4).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("XMLSchemaCollections", "dbo.ManuInstructionsSchemaCollection.sql"))), Arg.Any<string>());
@@ -388,6 +392,244 @@ public class SchemaTongsTests
             FactoryContainer.Clear();
             LogFactory.Clear();
         }
+    }
+
+    [Test]
+    public void ShouldCastIndexedViews()
+    {
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+        lock (FactoryContainer.SharedLockObject)
+        {
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+            var config = SetupConfig();
+            config["ShouldCast:IndexedViews"] = "true";
+
+            var tongs = new SchemaTongs();
+            tongs.CastTemplate();
+
+            file.Received(1).WriteAllText(
+                Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Indexed Views", "Test.TestIndexedView.json"))),
+                Arg.Any<string>());
+
+            config["ShouldCast:IndexedViews"] = "false";
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldNotCastIndexedViewsWhenDisabled()
+    {
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+        lock (FactoryContainer.SharedLockObject)
+        {
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+            var config = SetupConfig();
+            config["ShouldCast:IndexedViews"] = "false";
+
+            var tongs = new SchemaTongs();
+            tongs.CastTemplate();
+
+            file.DidNotReceive().WriteAllText(
+                Arg.Is<string>(s => s.Contains("Indexed Views")),
+                Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldCastUserDefinedTableTypes()
+    {
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+
+        string orderItemContent = null;
+        string statusEntryContent = null;
+
+        file.When(f => f.WriteAllText(
+            Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("DataTypes", "Test.OrderItem.sql"))),
+            Arg.Any<string>()))
+            .Do(ci => orderItemContent = ci.ArgAt<string>(1));
+
+        file.When(f => f.WriteAllText(
+            Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("DataTypes", "Test.StatusEntry.sql"))),
+            Arg.Any<string>()))
+            .Do(ci => statusEntryContent = ci.ArgAt<string>(1));
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+            var config = SetupConfig();
+            config["ShouldCast:UserDefinedTypes"] = "true";
+
+            var tongs = new SchemaTongs();
+            tongs.CastTemplate();
+
+            Assert.That(orderItemContent, Is.Not.Null, "OrderItem table type should be cast");
+            Assert.Multiple(() =>
+            {
+                Assert.That(orderItemContent, Does.Contain("CREATE TYPE [Test].[OrderItem] AS TABLE("));
+                Assert.That(orderItemContent, Does.Contain("[ItemId]"));
+                Assert.That(orderItemContent, Does.Contain("[ProductName]"));
+                Assert.That(orderItemContent, Does.Contain("[Quantity]"));
+                Assert.That(orderItemContent, Does.Contain("[UnitPrice]"));
+                Assert.That(orderItemContent, Does.Contain("NOT NULL"));
+                Assert.That(orderItemContent, Does.Contain("PRIMARY KEY CLUSTERED"));
+            });
+
+            Assert.That(statusEntryContent, Is.Not.Null, "StatusEntry table type should be cast");
+            Assert.Multiple(() =>
+            {
+                Assert.That(statusEntryContent, Does.Contain("CREATE TYPE [Test].[StatusEntry] AS TABLE("));
+                Assert.That(statusEntryContent, Does.Contain("[Test].[Flag]"), "Should reference user-defined sub-type");
+                Assert.That(statusEntryContent, Does.Contain("NULL"), "Should have nullable column");
+                Assert.That(statusEntryContent, Does.Contain("CHECK"), "Should have check constraint");
+            });
+
+            config["ShouldCast:UserDefinedTypes"] = "false";
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldFilterIndexedViewsByObjectsToCast()
+    {
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+        lock (FactoryContainer.SharedLockObject)
+        {
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+            var config = SetupConfig();
+            config["ShouldCast:IndexedViews"] = "true";
+            config["ShouldCast:ObjectList"] = "NonExistentView";
+
+            var tongs = new SchemaTongs();
+            tongs.CastTemplate();
+
+            file.DidNotReceive().WriteAllText(
+                Arg.Is<string>(s => s.Contains("Indexed Views")),
+                Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldFilterFunctionsByObjectsToCast()
+    {
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+        lock (FactoryContainer.SharedLockObject)
+        {
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+            var config = SetupConfig();
+            config["ShouldCast:UserDefinedFunctions"] = "true";
+            config["ShouldCast:ObjectList"] = "NonExistentFunction";
+
+            var tongs = new SchemaTongs();
+            tongs.CastTemplate();
+
+            file.DidNotReceive().WriteAllText(
+                Arg.Is<string>(s => s.Contains("Functions") && s.EndsWithIgnoringCase(".sql")),
+                Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void PromoteCheckConstraintsToTableLevel_TableWithConstraints_PopulatesTableLevelList()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_integrationDb);
+        using var cmd = conn.CreateCommand();
+
+        var table = new Table
+        {
+            Columns = new System.Collections.Generic.List<Column>
+            {
+                new() { Name = "Age", CheckExpression = "some existing value" },
+                new() { Name = "Status", CheckExpression = "another value" }
+            }
+        };
+
+        global::SchemaTongs.SchemaTongs.PromoteCheckConstraintsToTableLevel(cmd, table, "Test", "CheckConstraintTest");
+
+        Assert.That(table.CheckConstraints, Has.Count.EqualTo(2));
+        Assert.That(table.CheckConstraints[0].Name, Is.EqualTo("[CK_Age]"));
+        Assert.That(table.CheckConstraints[0].Expression, Does.Contain("Age"));
+        Assert.That(table.CheckConstraints[1].Name, Is.EqualTo("[CK_Status]"));
+        Assert.That(table.CheckConstraints[1].Expression, Does.Contain("Status"));
+
+        // Column-level checks should be cleared
+        foreach (var col in table.Columns)
+            Assert.That(col.CheckExpression, Is.Null);
+    }
+
+    [Test]
+    public void PromoteCheckConstraintsToTableLevel_TableWithNoConstraints_ReturnsEmptyList()
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_integrationDb);
+        using var cmd = conn.CreateCommand();
+
+        var table = new Table
+        {
+            Columns = new System.Collections.Generic.List<Column>
+            {
+                new() { Name = "Column1", CheckExpression = "old check" }
+            }
+        };
+
+        // TestTable has no check constraints
+        global::SchemaTongs.SchemaTongs.PromoteCheckConstraintsToTableLevel(cmd, table, "Test", "TestTable");
+
+        Assert.That(table.CheckConstraints, Is.Empty);
+        Assert.That(table.Columns[0].CheckExpression, Is.Null);
     }
 
     [OneTimeTearDown]
@@ -412,6 +654,7 @@ public class SchemaTongsTests
         config["ShouldCast:StopLists"] = "false";
         config["ShouldCast:DDLTriggers"] = "false";
         config["ShouldCast:XMLSchemaCollections"] = "false";
+        config["ShouldCast:IndexedViews"] = "false";
         return config;
     }
 
@@ -429,13 +672,32 @@ CREATE DATABASE [{_integrationDb}];
         ForgeKindler.KindleTheForge(cmd);
 
         cmd.CommandText = @"
-CREATE FULLTEXT CATALOG [FT_Catalog] 
+CREATE FULLTEXT CATALOG [FT_Catalog]
 CREATE FULLTEXT STOPLIST [SL_Test];
 ALTER FULLTEXT STOPLIST [SL_Test] ADD '$' LANGUAGE 'Neutral';
 
 EXEC('CREATE SCHEMA [Test]')
 CREATE TYPE [Test].[Flag] FROM BIT NOT NULL
 ";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = @"
+CREATE TYPE [Test].[OrderItem] AS TABLE (
+    [ItemId] INT NOT NULL,
+    [ProductName] NVARCHAR(100) NOT NULL,
+    [Quantity] INT NOT NULL,
+    [UnitPrice] DECIMAL(10,2) NOT NULL,
+    PRIMARY KEY CLUSTERED ([ItemId] ASC)
+)";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = @"
+CREATE TYPE [Test].[StatusEntry] AS TABLE (
+    [EntryId] INT NOT NULL,
+    [StatusFlag] [Test].[Flag] NOT NULL,
+    [Notes] NVARCHAR(500) NULL,
+    CHECK ([EntryId] > 0)
+)";
         cmd.ExecuteNonQuery();
 
         cmd.CommandText = @"
@@ -528,6 +790,30 @@ BEGIN
     SELECT @param;
 END;
 ";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = @"
+CREATE VIEW Test.TestIndexedView WITH SCHEMABINDING
+AS
+SELECT Column1, Column2, COUNT_BIG(*) AS Cnt
+FROM Test.TestTable
+GROUP BY Column1, Column2;
+";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = @"
+CREATE UNIQUE CLUSTERED INDEX CIX_TestIndexedView ON Test.TestIndexedView (Column1);
+";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = @"
+CREATE TABLE Test.CheckConstraintTest (
+    Id INT NOT NULL,
+    Age INT NOT NULL,
+    Status NVARCHAR(10) NOT NULL,
+    CONSTRAINT CK_Age CHECK (Age >= 0 AND Age <= 150),
+    CONSTRAINT CK_Status CHECK (Status IN ('Active', 'Inactive'))
+)";
         cmd.ExecuteNonQuery();
 
         conn.Close();

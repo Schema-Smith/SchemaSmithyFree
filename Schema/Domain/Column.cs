@@ -1,13 +1,17 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Schema.Domain;
 
 public class Column
 {
     [JsonProperty(Order = 1)]
+    [SchemaProperty(Required = true)]
     public string Name { get; set; }
     [JsonProperty(Order = 2)]
+    [SchemaProperty(Required = true)]
     public string DataType { get; set; }
     [JsonProperty(Order = 3)]
     public bool Nullable { get; set; }
@@ -27,4 +31,6 @@ public class Column
     public string DataMaskFunction { get; set; }
     [JsonProperty(Order = 11)]
     public string OldName { get; set; } = "";
+    [JsonProperty(Order = 12)]
+    public JToken Extensions { get; set; }
 }

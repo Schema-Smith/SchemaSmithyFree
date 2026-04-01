@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ae="using:AvaloniaEdit"
+             x:Class="SchemaHammer.Controls.SqlEditorControl">
+    <ae:TextEditor Name="Editor"
+                   IsReadOnly="True"
+                   ShowLineNumbers="True"
+                   WordWrap="False"
+                   FontFamily="Cascadia Mono, Consolas, Courier New, monospace"
+                   FontSize="13"
+                   HorizontalScrollBarVisibility="Auto"
+                   VerticalScrollBarVisibility="Auto" />
+</UserControl>

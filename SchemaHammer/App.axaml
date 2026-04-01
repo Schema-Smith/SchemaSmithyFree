@@ -1,0 +1,20 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SchemaHammer.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://SchemaHammer/Assets/Icons.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <!-- Brand Fonts (system fallbacks; Community does not bundle custom fonts) -->
+            <FontFamily x:Key="BrandMono">Cascadia Mono, Consolas, monospace</FontFamily>
+            <FontFamily x:Key="BrandSans">Segoe UI, sans-serif</FontFamily>
+        </ResourceDictionary>
+    </Application.Resources>
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+        <StyleInclude Source="avares://SchemaHammer/Styles/SchemaHammerTheme.axaml" />
+    </Application.Styles>
+</Application>

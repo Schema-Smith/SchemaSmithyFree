@@ -1,0 +1,12 @@
+{
+  "Name": "AdventureWorks",
+  "ValidationScript": "SELECT CAST(1 AS BIT)",
+  "TemplateOrder": [
+    "Initialize",
+    "AdventureWorks"
+  ],
+  "ScriptTokens": {
+    "AdventureWorksDb": "AdventureWorks"
+  },
+  "Platform": "SqlServer"
+}

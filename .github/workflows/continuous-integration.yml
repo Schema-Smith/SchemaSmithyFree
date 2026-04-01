@@ -4,20 +4,36 @@ on:
   pull_request:
     branches:
       - main
+      - dev/v2
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'demo/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.gitattributes'
   push:
     branches:
       - main
+      - dev/v2
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'demo/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.gitattributes'
 jobs:
   build:
     runs-on: ubuntu-latest
     services:
       mssql:
-        image: mcr.microsoft.com/mssql/server:2019-CU27-ubuntu-20.04
+        image: mcr.microsoft.com/mssql/server:2022-latest
         env:
           SA_PASSWORD: aCa2d805-41E5@40c4!98e7#92F93zzxo176
           ACCEPT_EULA: 'Y'
         ports:
-          - 1440:1433
+          - 1450:1433
         options: --name mssql
     steps:
       - name: Update1 on mssql
@@ -25,7 +41,7 @@ jobs:
       - name: Install Curl on mssql
         run: docker exec -u 0 mssql apt-get install -yq curl systemctl
       - name: Configure sql server packages on mssql
-        run: docker exec -u 0 mssql curl https://packages.microsoft.com/config/ubuntu/20.04/mssql-server-2019.list -o /etc/apt/sources.list.d/mssql-server-2019.list
+        run: docker exec -u 0 mssql curl https://packages.microsoft.com/config/ubuntu/22.04/mssql-server-2022.list -o /etc/apt/sources.list.d/mssql-server-2022.list
       - name: Update2 on mssql
         run: docker exec -u 0 mssql apt-get update
       - name: Install Full Text on mssql
@@ -37,18 +53,17 @@ jobs:
       - name: Setup dotnet
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
+          dotnet-version: '10.0.x'
       - name: Install dependencies
         run: dotnet restore SchemaSmithyFree.sln
       - name: Test with dotnet
-        run: dotnet test SchemaSmithyFree.sln --framework net9.0 --logger trx --results-directory "TestResults"
+        run: dotnet test SchemaSmithyFree.sln --logger trx --results-directory "TestResults"
       - name: Upload dotnet test results
         uses: actions/upload-artifact@v4
         with:
           name: dotnet-results
           path: TestResults
+          retention-days: 7
         # Use always() to always run this step to publish test results when there are test failures
         if: ${{ always() }}
       - name: Test Summary

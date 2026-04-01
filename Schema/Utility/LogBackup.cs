@@ -1,7 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System;
 using System.IO;
-using System.Reflection;
 using Schema.Isolators;
 
 namespace Schema.Utility;
@@ -16,9 +15,8 @@ public static class LogBackup
             var directory = DirectoryWrapper.GetFromFactory();
             var file = FileWrapper.GetFromFactory();
             var ext = 0;
-            var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
-
-            var cwd = CommandLineParser.ValueOfSwitch("LogPath", null) ?? Path.GetDirectoryName(assembly.Location) ?? @".\";
+            var cwd = CommandLineParser.ValueOfSwitch("LogPath", null)
+                ?? AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             backupDir = Path.Combine(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");
             while (directory.Exists(backupDir))
                 backupDir = Path.Combine(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");

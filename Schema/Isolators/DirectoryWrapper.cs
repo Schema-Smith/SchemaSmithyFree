@@ -23,7 +23,7 @@ public class DirectoryWrapper : IDirectory
 
     public string[] GetDirectories(string path, string searchPattern, SearchOption searchOption)
     {
-        return Directory.GetDirectories(path, searchPattern, searchOption); 
+        return Directory.GetDirectories(path, searchPattern, searchOption);
     }
 
     public void Delete(string path, bool recursive = false)

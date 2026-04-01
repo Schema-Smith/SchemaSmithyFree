@@ -1,4 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -10,30 +12,44 @@ namespace Schema.Domain;
 
 public class Template
 {
+    [SchemaProperty(Required = true)]
     public string Name { get; set; }
+    [SchemaProperty(Required = true)]
     public string DatabaseIdentificationScript { get; set; }
     public string VersionStampScript { get; set; }
     public bool UpdateFillFactor { get; set; } = true;
+    public bool IndexOnlyTableQuenches { get; set; }
     public string BaselineValidationScript { get; set; }
+    public bool Required { get; set; } = true;
+    public bool SkipIfReadOnly { get; set; }
+    public Dictionary<string, string> ScriptTokens { get; set; } = [];
+
+    private readonly List<TemplateFolder> _scriptFolders = GetTemplateFolders();
 
     [JsonIgnore]
-    public List<ScriptFolder> ScriptFolders { get; } = GetTemplateFolders();
+    public List<SqlScript> BeforeScripts => _scriptFolders.Where(f => f.QuenchSlot == TemplateQuenchSlot.Before).SelectMany(f => f.Scripts).ToList();
     [JsonIgnore]
-    public List<SqlScript> BeforeScripts => ScriptFolders.Where(f => f.QuenchSlot == QuenchSlot.Before).SelectMany(f => f.Scripts).ToList();
+    public List<SqlScript> ObjectScripts => _scriptFolders.Where(f => f.QuenchSlot == TemplateQuenchSlot.Objects).SelectMany(f => f.Scripts).ToList();
     [JsonIgnore]
-    public List<SqlScript> ObjectScripts => ScriptFolders.Where(f => f.QuenchSlot == QuenchSlot.Objects).SelectMany(f => f.Scripts).ToList();
+    public List<SqlScript> BetweenTablesAndKeysScripts => _scriptFolders.Where(f => f.QuenchSlot == TemplateQuenchSlot.BetweenTablesAndKeys).SelectMany(f => f.Scripts).ToList();
+    [JsonIgnore]
+    public List<SqlScript> AfterTablesScripts => _scriptFolders.Where(f => f.QuenchSlot == TemplateQuenchSlot.AfterTablesScripts).SelectMany(f => f.Scripts).ToList();
     [JsonIgnore]
     // Includes the objects scripts so that we can retry ALL remaining unapplied objects scripts
-    public List<SqlScript> AfterTablesObjectScripts => ScriptFolders.Where(f => f.QuenchSlot is QuenchSlot.Objects or QuenchSlot.AfterTablesObjects).SelectMany(f => f.Scripts).ToList();
+    public List<SqlScript> AfterTablesObjectScripts => _scriptFolders.Where(f => f.QuenchSlot is TemplateQuenchSlot.Objects or TemplateQuenchSlot.AfterTablesObjects).SelectMany(f => f.Scripts).ToList();
     [JsonIgnore]
-    public List<SqlScript> TableDataScripts => ScriptFolders.Where(f => f.QuenchSlot == QuenchSlot.TableData).SelectMany(f => f.Scripts).ToList();
+    public List<SqlScript> TableDataScripts => _scriptFolders.Where(f => f.QuenchSlot == TemplateQuenchSlot.TableData).SelectMany(f => f.Scripts).ToList();
     [JsonIgnore]
-    public List<SqlScript> AfterScripts => ScriptFolders.Where(f => f.QuenchSlot == QuenchSlot.After).SelectMany(f => f.Scripts).ToList();
+    public List<SqlScript> AfterScripts => _scriptFolders.Where(f => f.QuenchSlot == TemplateQuenchSlot.After).SelectMany(f => f.Scripts).ToList();
 
     [JsonIgnore]
     public List<Table> Tables { get; } = [];
     [JsonIgnore]
     public string TableSchema { get; set; }
+    [JsonIgnore]
+    public List<IndexedView> IndexedViews { get; } = [];
+    [JsonIgnore]
+    public string IndexedViewSchema { get; set; } = "[]";
 
     [JsonIgnore]
     public string FilePath { get; set; }
@@ -56,25 +72,48 @@ public class Template
 
     public void ResetScripts()
     {
-        foreach (var script in ScriptFolders.SelectMany(f => f.Scripts).ToList())
+        foreach (var script in _scriptFolders.SelectMany(f => f.Scripts).ToList())
         {
             script.Error = null;
             script.HasBeenQuenched = false;
         }
     }
 
-    private void Load(Dictionary<string, string> scriptTokens)
+    public static string GenerateTableMetadataToken(List<Table> tables)
+    {
+        return JsonConvert.SerializeObject(tables, Formatting.Indented).Replace("'", "''");
+    }
+
+    public static string GenerateIndexedViewMetadataToken(List<IndexedView> indexedViews)
+    {
+        return JsonConvert.SerializeObject(indexedViews, Formatting.Indented).Replace("'", "''");
+    }
+
+    private void Load(Dictionary<string, string> productScriptTokens)
     {
         LoadTables();
         TableSchema = JsonConvert.SerializeObject(Tables, Formatting.Indented);
+        LoadIndexedViews();
+        IndexedViewSchema = JsonConvert.SerializeObject(IndexedViews, Formatting.Indented);
 
-        var tokens = scriptTokens.Concat([new("TemplateName", Name ?? "UNSPECIFIED")]).ToList();
-        foreach (var folder in ScriptFolders)
-            folder.LoadSqlFiles(Path.GetDirectoryName(FilePath));
+        // Merge tokens: template overrides product, then add auto-tokens
+        var mergedTokens = ScriptTokens
+            .Concat(productScriptTokens.Where(pt => !ScriptTokens.ContainsKey(pt.Key)))
+            .Concat([
+                new("TemplateName", Name ?? "UNSPECIFIED"),
+                new("TableMetadata", GenerateTableMetadataToken(Tables)),
+                new("IndexedViewMetadata", GenerateIndexedViewMetadataToken(IndexedViews))
+            ])
+            .ToList();
 
-        DatabaseIdentificationScript = Product.TokenReplace(DatabaseIdentificationScript, tokens);
-        VersionStampScript = Product.TokenReplace(VersionStampScript, tokens);
-        BaselineValidationScript = Product.TokenReplace(BaselineValidationScript, tokens);
+        var templateDir = Path.GetDirectoryName(FilePath);
+        using var folderQueue = new TaskQueueManager<TemplateFolder>(Environment.ProcessorCount * 2);
+        _scriptFolders.ForEach(folder => folderQueue.AddToQueue(folder, f => f.LoadSqlFiles(templateDir, mergedTokens)));
+        folderQueue.WaitForAll();
+
+        DatabaseIdentificationScript = Product.TokenReplace(DatabaseIdentificationScript, mergedTokens);
+        VersionStampScript = Product.TokenReplace(VersionStampScript, mergedTokens);
+        BaselineValidationScript = Product.TokenReplace(BaselineValidationScript, mergedTokens);
     }
 
     private void LoadTables()
@@ -87,23 +126,45 @@ public class Template
         Tables.AddRange(files.Select(Table.Load));
     }
 
-    public static List<ScriptFolder> GetTemplateFolders()
+    private void LoadIndexedViews()
+    {
+        var filePath = Path.Combine(Path.GetDirectoryName(FilePath) ?? "", "Indexed Views");
+        if (!ProductDirectoryWrapper.GetFromFactory().Exists(filePath)) return;
+
+        var files = ProductDirectoryWrapper.GetFromFactory().GetFiles(filePath, "*.json", SearchOption.AllDirectories)
+            .OrderBy(x => x);
+        foreach (var file in files)
+        {
+            try
+            {
+                IndexedViews.Add(JsonHelper.ProductLoad<IndexedView>(file));
+            }
+            catch (Exception e)
+            {
+                throw new Exception($"Error loading indexed view from {LongPathSupport.StripLongPathPrefix(file)}\r\n{e.Message}", e);
+            }
+        }
+    }
+
+    internal static List<TemplateFolder> GetTemplateFolders()
     {
         return
-            [
-                new ScriptFolder { FolderPath = "MigrationScripts/Before", QuenchSlot = QuenchSlot.Before },
-                new ScriptFolder { FolderPath = "Schemas", QuenchSlot = QuenchSlot.Objects },
-                new ScriptFolder { FolderPath = "DataTypes", QuenchSlot = QuenchSlot.Objects },
-                new ScriptFolder { FolderPath = "FullTextCatalogs", QuenchSlot = QuenchSlot.Objects },
-                new ScriptFolder { FolderPath = "FullTextStopLists", QuenchSlot = QuenchSlot.Objects },
-                new ScriptFolder { FolderPath = "XMLSchemaCollections", QuenchSlot = QuenchSlot.Objects },
-                new ScriptFolder { FolderPath = "Functions", QuenchSlot = QuenchSlot.Objects },
-                new ScriptFolder { FolderPath = "Views", QuenchSlot = QuenchSlot.Objects },
-                new ScriptFolder { FolderPath = "Procedures", QuenchSlot = QuenchSlot.Objects },
-                new ScriptFolder { FolderPath = "Triggers", QuenchSlot = QuenchSlot.AfterTablesObjects },
-                new ScriptFolder { FolderPath = "DDLTriggers", QuenchSlot = QuenchSlot.AfterTablesObjects },
-                new ScriptFolder { FolderPath = "TableData", QuenchSlot = QuenchSlot.TableData },
-                new ScriptFolder { FolderPath = "MigrationScripts/After", QuenchSlot = QuenchSlot.After },
-            ];
+        [
+            new TemplateFolder { FolderPath = "MigrationScripts/Before", QuenchSlot = TemplateQuenchSlot.Before },
+            new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects },
+            new TemplateFolder { FolderPath = "DataTypes", QuenchSlot = TemplateQuenchSlot.Objects },
+            new TemplateFolder { FolderPath = "FullTextCatalogs", QuenchSlot = TemplateQuenchSlot.Objects },
+            new TemplateFolder { FolderPath = "FullTextStopLists", QuenchSlot = TemplateQuenchSlot.Objects },
+            new TemplateFolder { FolderPath = "XMLSchemaCollections", QuenchSlot = TemplateQuenchSlot.Objects },
+            new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects },
+            new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.Objects },
+            new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects },
+            new TemplateFolder { FolderPath = "MigrationScripts/BetweenTablesAndKeys", QuenchSlot = TemplateQuenchSlot.BetweenTablesAndKeys },
+            new TemplateFolder { FolderPath = "MigrationScripts/AfterTablesScripts", QuenchSlot = TemplateQuenchSlot.AfterTablesScripts },
+            new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects },
+            new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects },
+            new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
+            new TemplateFolder { FolderPath = "MigrationScripts/After", QuenchSlot = TemplateQuenchSlot.After },
+        ];
     }
 }

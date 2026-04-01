@@ -13,7 +13,7 @@ using System.Linq;
 
 namespace SchemaQuench.IntegrationTests;
 
-public class ProductQuencherTests 
+public class ProductQuencherTests
 {
     private readonly ILog _errorLog = Substitute.For<ILog>();
     private readonly ILog _progressLog = Substitute.For<ILog>();
@@ -25,7 +25,8 @@ public class ProductQuencherTests
     public ProductQuencherTests()
     {
         var config = FactoryContainer.Resolve<IConfigurationRoot>();
-        _connectionString = ConnectionString.Build(config["Target:Server"], "master", config["Target:User"], config["Target:Password"]);
+        var connectionProperties = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
+        _connectionString = ConnectionString.Build(config["Target:Server"], "master", config["Target:User"], config["Target:Password"], config["Target:Port"], connectionProperties);
         _secondaryDb = config["ScriptTokens:SecondaryDB"];
         _mainDb = config["ScriptTokens:MainDB"];
     }
@@ -70,6 +71,8 @@ INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [Quen
 
             AssertTableCreatedWithExtendedProperties(_mainDb, "dbo.TestTable");
             AssertTableCreatedWithExtendedProperties(_secondaryDb, "dbo.TestSecondaryTable");
+
+            AssertIndexedViewCreated(_mainDb, "dbo.vw_TestSummary");
 
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();
@@ -201,6 +204,8 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
         "dbo.MyFunction.sql",
         "dbo.MyView.sql",
         "dbo.MyProcedure.sql",
+        "BTK_Script.sql",
+        "ATS_Script.sql",
         "dbo.MyTrigger.sql",
         "dbo.FunctionThatNeedsView.sql", // this one will error on the first attempt and gets run again (only in Main)
         @"After\MigrationScript1.sql"
@@ -210,14 +215,17 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
     {
         var scriptLog = GetScriptLog(dbName, "TestLog", "Msg", "Id");
 
-        var expected = ExpectedScriptLog.Where(l => dbName.Contains("Main") || !l.Equals("dbo.FunctionThatNeedsView.sql")).ToList();
+        var mainOnlyEntries = new[] { "dbo.FunctionThatNeedsView.sql", "BTK_Script.sql", "ATS_Script.sql" };
+        var expected = ExpectedScriptLog.Where(l => dbName.Contains("Main") || !mainOnlyEntries.Contains(l)).ToList();
         Assert.That(expected, Is.EquivalentTo(scriptLog)); // Validate all expected scripts are quenched in the expected order
     }
 
     private static readonly List<string> ExpectedMainCompletedMigrations =
     [
         "MigrationScripts/After/MigrationScript1.sql",
-        "MigrationScripts/Before/MigrationScript0.sql"
+        "MigrationScripts/AfterTablesScripts/ATS_Script.sql",
+        "MigrationScripts/Before/MigrationScript0.sql",
+        "MigrationScripts/BetweenTablesAndKeys/BTK_Script.sql"
     ];
 
     private static readonly List<string> ExpectedSecondaryCompletedMigrations =
@@ -244,5 +252,86 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
         conn.Close();
 
         return scriptLog;
+    }
+
+    private void AssertIndexedViewCreated(string dbName, string viewName)
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(dbName);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT CAST(CASE WHEN OBJECT_ID('{viewName}', 'V') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True, $"Indexed view {viewName} should exist after product quench");
+
+        cmd.CommandText = $"SELECT OBJECTPROPERTY(OBJECT_ID('{viewName}'), 'IsIndexed')";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(1), $"{viewName} should have indexes");
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldWhatIfWithoutModifyingDatabase()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = "../../../../TestProducts/ValidProduct";
+            config["WhatIfONLY"] = "true";
+
+            try
+            {
+                TruncateTestLog(_mainDb);
+                TruncateTestLog(_secondaryDb);
+
+                Quench();
+
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+                _environment.DidNotReceive().Exit(2);
+
+                // WhatIf analysis complete messages for both databases
+                _progressLog.Received(1).Info(Arg.Is<string>(s => s.Contains(_mainDb) && s.Contains("What If Analysis Complete")));
+                _progressLog.Received(1).Info(Arg.Is<string>(s => s.Contains(_secondaryDb) && s.Contains("What If Analysis Complete")));
+
+                // "Would APPLY" messages should appear
+                _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Would APPLY")));
+
+                // "[WhatIf]" messages should appear
+                _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("[WhatIf]")));
+
+                // Verify NO actual script execution in either database
+                Assert.That(GetTestLogCount(_mainDb), Is.EqualTo(0), "No scripts should execute in WhatIf mode (main)");
+                Assert.That(GetTestLogCount(_secondaryDb), Is.EqualTo(0), "No scripts should execute in WhatIf mode (secondary)");
+            }
+            finally
+            {
+                config["WhatIfONLY"] = "false";
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    private void TruncateTestLog(string dbName)
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(dbName);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "IF OBJECT_ID('SchemaSmith.TestLog') IS NOT NULL TRUNCATE TABLE SchemaSmith.TestLog";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    private int GetTestLogCount(string dbName)
+    {
+        using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(dbName);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "IF OBJECT_ID('SchemaSmith.TestLog') IS NOT NULL SELECT COUNT(*) FROM SchemaSmith.TestLog ELSE SELECT 0";
+        var count = (int)cmd.ExecuteScalar()!;
+        conn.Close();
+        return count;
     }
 }

@@ -1,0 +1,186 @@
+{
+  "Schema": "[Production]",
+  "Name": "[WorkOrderRouting]",
+  "CompressionType": "NONE",
+  "OldName": "",
+  "Columns": [
+    {
+      "Name": "[ActualCost]",
+      "DataType": "MONEY",
+      "Nullable": true,
+      "CheckExpression": "[ActualCost]>(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ActualEndDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ActualResourceHrs]",
+      "DataType": "DECIMAL(9, 4)",
+      "Nullable": true,
+      "CheckExpression": "[ActualResourceHrs]>=(0.0000)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ActualStartDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[LocationID]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[OperationSequence]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[PlannedCost]",
+      "DataType": "MONEY",
+      "Nullable": false,
+      "CheckExpression": "[PlannedCost]>(0.00)",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ScheduledEndDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ScheduledStartDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[WorkOrderID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_WorkOrderRouting_ProductID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ProductID]"
+    },
+    {
+      "Name": "[PK_WorkOrderRouting_WorkOrderID_ProductID_OperationSequence]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[WorkOrderID],[ProductID],[OperationSequence]"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_WorkOrderRouting_Location_LocationID]",
+      "Columns": "[LocationID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[Location]",
+      "RelatedColumns": "[LocationID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    },
+    {
+      "Name": "[FK_WorkOrderRouting_WorkOrder_WorkOrderID]",
+      "Columns": "[WorkOrderID]",
+      "RelatedTableSchema": "[Production]",
+      "RelatedTable": "[WorkOrder]",
+      "RelatedColumns": "[WorkOrderID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_WorkOrderRouting_ActualEndDate]",
+      "Expression": "[ActualEndDate]>=[ActualStartDate] OR [ActualEndDate] IS NULL OR [ActualStartDate] IS NULL"
+    },
+    {
+      "Name": "[CK_WorkOrderRouting_ScheduledEndDate]",
+      "Expression": "[ScheduledEndDate]>=[ScheduledStartDate]"
+    }
+  ]
+}

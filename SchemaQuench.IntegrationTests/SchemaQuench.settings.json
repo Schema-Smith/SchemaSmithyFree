@@ -1,0 +1,12 @@
+{
+    "Target": {
+        "Server": "localhost",
+        "Port": "1450",
+        "User": "sa",
+        "Password": "aCa2d805-41E5@40c4!98e7#92F93zzxo176",
+        "ConnectionProperties": {
+            "TrustServerCertificate": "True"
+        }
+    },
+    "SchemaPackagePath": ""
+}

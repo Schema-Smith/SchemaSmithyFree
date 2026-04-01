@@ -18,11 +18,21 @@ public class DataTongs
     private IDbConnection GetConnection(string targetDb)
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
+        var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
+        if (!string.IsNullOrEmpty(connectionStringOverride))
+        {
+            var overrideConnection = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connectionStringOverride);
+            overrideConnection.Open();
+            return overrideConnection;
+        }
 
-        var connectionString = ConnectionString.Build(config["Source:Server"], targetDb, config["Source:User"], config["Source:Password"]);
+        var connectionProperties = ConnectionString.ReadProperties(config, "Source:ConnectionProperties");
+        if (connectionProperties.Count == 0)
+            connectionProperties = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
+
+        var connectionString = ConnectionString.Build(config["Source:Server"], targetDb, config["Source:User"], config["Source:Password"], config["Source:Port"], connectionProperties);
 
         var connection = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connectionString);
-
         connection.Open();
         return connection;
     }
@@ -62,15 +72,34 @@ public class DataTongs
                 continue;
             }
 
-            var matchColumns = string.Join(" AND ", table.KeyColumns.Split(',').Select(c => $"Source.[{c.Trim().Trim(']', '[')}] = Target.[{c.Trim().Trim(']', '[')}]"));
-            var orderColumns = string.Join(",", table.KeyColumns.Split(',').Select(c => $"[{c.Trim().Trim(']', '[')}]"));
+            var keyColumns = string.IsNullOrWhiteSpace(table.KeyColumns)
+                ? GetKeyColumns(cmd, tableSchema, tableName)
+                : table.KeyColumns;
+
+            if (string.IsNullOrWhiteSpace(keyColumns))
+            {
+                _progressLog.Error($"  Table {table.TableName} has no primary key or unique index and no KeyColumns configured. Skipping table.");
+                continue;
+            }
+
+            var matchColumns = string.Join(" AND ", keyColumns.Split(',')
+                .Select(c => c.Trim().StartsWith("*")
+                    ? $"(Source.[{c.Trim()[1..].Trim(']', '[')}] = Target.[{c.Trim()[1..].Trim(']', '[')}] OR (Source.[{c.Trim()[1..].Trim(']', '[')}] IS NULL AND Target.[{c.Trim()[1..].Trim(']', '[')}] IS NULL))"
+                    : $"Source.[{c.Trim().Trim(']', '[')}] = Target.[{c.Trim().Trim(']', '[')}]"));
+            var orderColumns = string.Join(",", keyColumns.Split(',').Select(c => $"[{c.Trim().TrimStart('*').Trim(']', '[')}]"));
 
             var selectColumns = GetSelectColumns(cmd, tableSchema, tableName);
             var tableData = GetTableData(cmd, selectColumns, tableSchema, tableName, orderColumns, table.Filter);
 
+            if (string.IsNullOrWhiteSpace(tableData))
+            {
+                _progressLog.Info($"    No data found — skipping script generation.");
+                continue;
+            }
+
             var mergeSQL = BuildMergeSql(cmd, tableSchema, tableName, tableData, matchColumns, disableTriggers, mergeUpdate, mergeDelete, table.Filter);
 
-            FileWrapper.GetFromFactory().WriteAllText(Path.Combine(outputPath, $"Populate {tableSchema}.{tableName}.sql"), mergeSQL);
+            FileWrapper.GetFromFactory().WriteAllText(Path.Combine(outputPath, $"Populate {FileNameEncoder.Encode(tableSchema)}.{FileNameEncoder.Encode(tableName)}.sql"), mergeSQL);
         }
         sourceConnection.Close();
         _progressLog.Info("DataTongs completed successfully.");
@@ -147,8 +176,8 @@ WHEN NOT MATCHED THEN
     {
         cmd.CommandText = $@"
 SELECT CAST((
-SELECT {selectColumns} 
-  FROM [{tableSchema}].[{tableName}] WITH (NOLOCK) 
+SELECT {selectColumns}
+  FROM [{tableSchema}].[{tableName}] WITH (NOLOCK)
   {(string.IsNullOrWhiteSpace(filter) ? "" : $"WHERE {filter}")}
   ORDER BY {orderColumns}
   FOR JSON AUTO) AS NVARCHAR(MAX))
@@ -257,8 +286,10 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY'
     private static string? GetSelectColumns(IDbCommand cmd, string tableSchema, string tableName)
     {
         cmd.CommandText = $@"
-SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' 
+SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
                        THEN '[' + c.COLUMN_NAME + '].ToString() AS [' + c.COLUMN_NAME + '], [' + c.COLUMN_NAME + '].STSrid AS [' + c.COLUMN_NAME + '.STSrid]'
+                       WHEN c.DATA_TYPE = 'HIERARCHYID'
+                       THEN '[' + c.COLUMN_NAME + '].ToString() AS [' + c.COLUMN_NAME + ']'
                        ELSE '[' + c.COLUMN_NAME + ']' END, ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
   FROM INFORMATION_SCHEMA.COLUMNS c
   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
@@ -266,9 +297,37 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE = 'GEOGRAPHY'
                                                  AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
   WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
     AND cc.[name] IS NULL
-	AND sc.is_rowguidcol = 0
+    AND sc.is_rowguidcol = 0
+    AND c.DATA_TYPE NOT IN ('sql_variant', 'rowversion', 'timestamp')
 ";
         return cmd.ExecuteScalar()?.ToString();
+    }
+
+    private static string GetKeyColumns(IDbCommand cmd, string tableSchema, string tableName)
+    {
+        tableSchema = tableSchema.Trim().Trim('[', ']');
+        tableName = tableName.Trim().Trim('[', ']');
+
+        cmd.CommandText = $@"
+SELECT STRING_AGG(CASE WHEN sc.is_nullable = 1 THEN '*' ELSE '' END + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',')
+  FROM sys.indexes si WITH (NOLOCK)
+  JOIN sys.index_columns ic WITH (NOLOCK) ON ic.[object_id] = si.[object_id]
+                                         AND ic.index_id = si.index_id
+  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = ic.[object_id]
+                                   AND sc.column_id = ic.column_id
+  WHERE si.[object_id] = OBJECT_ID('{tableSchema}.{tableName}')
+    AND si.index_id = (SELECT TOP 1 si2.index_id
+                         FROM sys.indexes si2 WITH (NOLOCK)
+                         WHERE si2.[object_id] = si.[object_id]
+                           AND si2.is_unique = 1
+                         ORDER BY CASE WHEN is_primary_key = 1 THEN 0 ELSE 1 END,
+                                  (SELECT COUNT(*)
+                                    FROM sys.index_columns ic2 WITH (NOLOCK)
+                                    JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = ic2.[object_id] AND sc.column_id = ic2.column_id
+                                    WHERE ic2.[object_id] = si2.[object_id]
+                                      AND sc.is_nullable = 0))
+";
+        return cmd.ExecuteScalar()?.ToString() ?? "";
     }
 
     private class TableConfig

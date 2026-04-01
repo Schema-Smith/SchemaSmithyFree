@@ -22,4 +22,26 @@ public class ResourceLoaderTests
     {
         Assert.Throws<FileLoadException>(() => ResourceLoader.Load("MissingResource.txt"));
     }
+
+    [Test]
+    public void ShouldLoadKnownEmbeddedResource()
+    {
+        var content = ResourceLoader.Load("TableQuench.sql");
+        Assert.That(content, Is.Not.Null.And.Not.Empty);
+        Assert.That(content, Does.Contain("SchemaSmith"));
+    }
+
+    [Test]
+    public void ShouldMatchCaseInsensitively()
+    {
+        var content = ResourceLoader.Load("tablequench.sql");
+        Assert.That(content, Is.Not.Null.And.Not.Empty);
+    }
+
+    [Test]
+    public void ShouldLoadResourceFromOtherAssembly()
+    {
+        var content = ResourceLoader.Load("ParseTableJsonIntoTempTables.sql");
+        Assert.That(content, Is.Not.Null.And.Not.Empty);
+    }
 }

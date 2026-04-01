@@ -1,4 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using Schema.Domain;
 using Schema.Isolators;
 using Microsoft.Extensions.Configuration;
@@ -34,7 +35,7 @@ public class TemplateTests
             Assert.Multiple(() =>
             {
                 Assert.That(template.FilePath, Is.EqualTo(templateJsonFile));
-                Assert.That(template.ScriptFolders, Has.Count.EqualTo(13));
+                Assert.That(template.ObjectScripts, Is.Not.Null);
                 Assert.That(template.DatabaseIdentificationScript, Contains.Substring("Database Identification Script"));
                 Assert.That(template.VersionStampScript, Contains.Substring("Version Stamp Script"));
             });
@@ -171,13 +172,25 @@ public class TemplateTests
     [Test]
     public void ShouldLoadBeforeMigrationScripts()
     {
-        SqlFileLoadTest(QuenchSlot.Before, "MigrationScripts/Before");
+        SqlFileLoadTest(TemplateQuenchSlot.Before, "MigrationScripts/Before");
     }
 
     [Test]
     public void ShouldLoadAfterMigrationScripts()
     {
-        SqlFileLoadTest(QuenchSlot.After, "MigrationScripts/After");
+        SqlFileLoadTest(TemplateQuenchSlot.After, "MigrationScripts/After");
+    }
+
+    [Test]
+    public void ShouldLoadBetweenTablesAndKeysScripts()
+    {
+        SqlFileLoadTest(TemplateQuenchSlot.BetweenTablesAndKeys, "MigrationScripts/BetweenTablesAndKeys");
+    }
+
+    [Test]
+    public void ShouldLoadAfterTablesScripts()
+    {
+        SqlFileLoadTest(TemplateQuenchSlot.AfterTablesScripts, "MigrationScripts/AfterTablesScripts");
     }
 
     [Test]
@@ -228,24 +241,160 @@ public class TemplateTests
         AfterTablesObjectLoadTest("Triggers");
     }
 
+    [Test]
+    public void GetTemplateFolders_TableDataFolder_HasSpaceInName()
+    {
+        var folders = Template.GetTemplateFolders();
+        var tableDataFolder = folders.Single(f => f.QuenchSlot == TemplateQuenchSlot.TableData);
+        Assert.That(tableDataFolder.FolderPath, Is.EqualTo("Table Data"));
+    }
+
+    [Test]
+    public void ShouldLoadTableDataScripts_FromLegacyTableDataFolder_WhenTableDataWithSpaceAbsent()
+    {
+        // Simulates a legacy package that has "TableData" (no space) but not "Table Data" (with space).
+        // ScriptFolder should fall back to the legacy path so old packages still work.
+        var templateJsonFile = Path.Combine("SchemaPackagePath", "Templates", "Test", "Template.json");
+        var legacyFolderPath = Path.Combine("SchemaPackagePath", "Templates", "Test", "TableData");
+        var newFolderPath = Path.Combine("SchemaPackagePath", "Templates", "Test", "Table Data");
+        var sqlFile = Path.Combine(legacyFolderPath, "SeedData.sql");
+
+        var config = SetupConfig();
+        var mockDirectoryWrapper = Substitute.For<IDirectory>();
+        // All folders exist except "Table Data" (new) — "TableData" (legacy) does exist
+        mockDirectoryWrapper.Exists(Arg.Is<string>(p => p != newFolderPath)).Returns(true);
+        mockDirectoryWrapper.Exists(newFolderPath).Returns(false);
+        mockDirectoryWrapper.GetFiles(legacyFolderPath, "*.sql", SearchOption.AllDirectories).Returns([sqlFile]);
+
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockFileWrapper.ReadAllText(templateJsonFile).Returns(templateJson);
+        mockFileWrapper.ReadAllText(sqlFile).Returns($"INSERT INTO dbo.Ref{Environment.NewLine}GO{Environment.NewLine}");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(config);
+            FactoryContainer.Register(mockDirectoryWrapper);
+            FactoryContainer.Register(mockFileWrapper);
+
+            var template = Template.Load("Test", GetTestProduct());
+            Assert.That(template.TableDataScripts, Has.Count.EqualTo(1));
+            Assert.That(template.TableDataScripts.First().Name, Is.EqualTo("SeedData.sql"));
+
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void IndexOnlyTableQuenches_DefaultsFalse()
+    {
+        var template = new Template();
+        Assert.That(template.IndexOnlyTableQuenches, Is.False);
+    }
+
+    [Test]
+    public void IndexOnlyTableQuenches_SerializesRoundTrip()
+    {
+        var template = new Template { IndexOnlyTableQuenches = true };
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(template);
+        var deserialized = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(json);
+        Assert.That(deserialized!.IndexOnlyTableQuenches, Is.True);
+    }
+
+    [Test]
+    public void ShouldMergeTemplateTokensOverProductTokens()
+    {
+        var templateJsonWithTokens = """
+        {
+          "DatabaseIdentificationScript": "SELECT '{{MainDB}}'",
+          "ScriptTokens": { "MainDB": "TemplateDB" }
+        }
+        """;
+
+        var templateJsonFile = Path.Combine("SchemaPackagePath", "Templates", "Test", "Template.json");
+        var config = SetupConfig();
+        var mockDirectoryWrapper = Substitute.For<IDirectory>();
+        mockDirectoryWrapper.Exists(Arg.Any<string>()).Returns(true);
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockFileWrapper.ReadAllText(templateJsonFile).Returns(templateJsonWithTokens);
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(config);
+            FactoryContainer.Register(mockDirectoryWrapper);
+            FactoryContainer.Register(mockFileWrapper);
+            var product = GetTestProduct();
+            product.ScriptTokens.Add("MainDB", "ProductDB");
+            var template = Template.Load("Test", product);
+            Assert.That(template.DatabaseIdentificationScript, Is.EqualTo("SELECT 'TemplateDB'"));
+
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldLoadIndexedViews()
+    {
+        var templateJsonFile = Path.Combine("SchemaPackagePath", "Templates", "Test", "Template.json");
+        var indexedViewsPath = Path.Combine("SchemaPackagePath", "Templates", "Test", "Indexed Views");
+        var viewFile = Path.Combine(indexedViewsPath, "dbo.vw_ActiveOrders.json");
+
+        var config = SetupConfig();
+        var mockDirectoryWrapper = Substitute.For<IDirectory>();
+        mockDirectoryWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockDirectoryWrapper.GetFiles(indexedViewsPath, "*.json", SearchOption.AllDirectories).Returns([viewFile]);
+
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(Arg.Any<string>()).Returns(true);
+        mockFileWrapper.ReadAllText(templateJsonFile).Returns(templateJson);
+        mockFileWrapper.ReadAllText(viewFile).Returns("""
+        {
+            "Name": "vw_ActiveOrders",
+            "Schema": "dbo",
+            "Definition": "SELECT OrderId FROM dbo.Orders WHERE Status = 'Active'",
+            "Indexes": [
+                { "Name": "CIX_vw_ActiveOrders", "Clustered": true, "Unique": true, "IndexColumns": "OrderId" }
+            ]
+        }
+        """);
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(config);
+            FactoryContainer.Register(mockDirectoryWrapper);
+            FactoryContainer.Register(mockFileWrapper);
+
+            var template = Template.Load("Test", GetTestProduct());
+            Assert.Multiple(() =>
+            {
+                Assert.That(template.IndexedViews, Has.Count.EqualTo(1));
+                Assert.That(template.IndexedViews[0].Name, Is.EqualTo("vw_ActiveOrders"));
+                Assert.That(template.IndexedViews[0].Indexes, Has.Count.EqualTo(1));
+                Assert.That(template.IndexedViewSchema, Does.Contain("vw_ActiveOrders"));
+            });
+
+            FactoryContainer.Clear();
+        }
+    }
+
     private const string templateJson = """
-{ 
-  "DatabaseIdentificationScript": "Database Identification Script {{TestDB}}", 
+{
+  "DatabaseIdentificationScript": "Database Identification Script {{TestDB}}",
   "VersionStampScript": "Version Stamp Script {{MyVersion}}"
 }
 """;
 
     private static void ObjectLoadTest(string routinePath)
     {
-        SqlFileLoadTest(QuenchSlot.Objects, routinePath);
+        SqlFileLoadTest(TemplateQuenchSlot.Objects, routinePath);
     }
 
     private static void AfterTablesObjectLoadTest(string routinePath)
     {
-        SqlFileLoadTest(QuenchSlot.AfterTablesObjects, routinePath);
+        SqlFileLoadTest(TemplateQuenchSlot.AfterTablesObjects, routinePath);
     }
 
-    private static void SqlFileLoadTest(QuenchSlot slot, string filePath)
+    private static void SqlFileLoadTest(TemplateQuenchSlot slot, string filePath)
     {
         var templateJsonFile = Path.Combine("SchemaPackagePath", "Templates", "Test", "Template.json");
         var sqlFilePath = Path.Combine("SchemaPackagePath", "Templates", "Test", filePath);
@@ -269,7 +418,17 @@ public class TemplateTests
             var template = Template.Load("Test", TemplateTests.GetTestProduct());
             mockDirectoryWrapper.Received(1).Exists(sqlFilePath);
             mockFileWrapper.Received(1).ReadAllText(sqlFile);
-            var sqlFiles = template.ScriptFolders?.Where(s => s.QuenchSlot == slot).SelectMany(f => f.Scripts).ToList();
+            var sqlFiles = slot switch
+            {
+                TemplateQuenchSlot.Before => template.BeforeScripts,
+                TemplateQuenchSlot.Objects => template.ObjectScripts,
+                TemplateQuenchSlot.BetweenTablesAndKeys => template.BetweenTablesAndKeysScripts,
+                TemplateQuenchSlot.AfterTablesScripts => template.AfterTablesScripts,
+                TemplateQuenchSlot.AfterTablesObjects => template.AfterTablesObjectScripts,
+                TemplateQuenchSlot.TableData => template.TableDataScripts,
+                TemplateQuenchSlot.After => template.AfterScripts,
+                _ => throw new ArgumentException($"Unexpected slot: {slot}")
+            };
             Assert.Multiple(() =>
             {
                 Assert.That(sqlFiles, Is.Not.Null);

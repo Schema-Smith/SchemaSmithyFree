@@ -16,6 +16,11 @@ public class FileWrapper : IFile
         return File.Exists(path);
     }
 
+    public Stream OpenRead(string path)
+    {
+        return File.OpenRead(path);
+    }
+
     public string ReadAllText(string path)
     {
         return File.ReadAllText(path);

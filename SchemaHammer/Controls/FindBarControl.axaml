@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels"
+             x:Class="SchemaHammer.Controls.FindBarControl"
+             x:DataType="vm:FindBarViewModel"
+             IsVisible="{Binding IsVisible}">
+    <Border Background="{DynamicResource SH.Toolbar.Background}"
+            Padding="8,4" BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource SH.Accent.Ember}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBox Text="{Binding SearchTerm}"
+                     Watermark="Find..."
+                     Width="250"
+                     Name="FindTextBox" />
+            <Button Content="&#x25B2;" ToolTip.Tip="Previous (Shift+F3)"
+                    Command="{Binding FindPreviousCommand}"
+                    MinWidth="30" Padding="4,2" />
+            <Button Content="&#x25BC;" ToolTip.Tip="Next (F3)"
+                    Command="{Binding FindNextCommand}"
+                    MinWidth="30" Padding="4,2" />
+            <CheckBox Content="Match Case" IsChecked="{Binding MatchCase}" VerticalAlignment="Center" />
+            <TextBlock VerticalAlignment="Center"
+                       Foreground="{DynamicResource SH.Toolbar.Foreground}">
+                <TextBlock.Text>
+                    <MultiBinding StringFormat="{}{0} of {1}">
+                        <Binding Path="CurrentMatchIndex" />
+                        <Binding Path="MatchCount" />
+                    </MultiBinding>
+                </TextBlock.Text>
+            </TextBlock>
+            <Button Content="&#x2715;" ToolTip.Tip="Close (Escape)"
+                    Command="{Binding CloseCommand}"
+                    MinWidth="30" Padding="4,2" />
+        </StackPanel>
+    </Border>
+</UserControl>

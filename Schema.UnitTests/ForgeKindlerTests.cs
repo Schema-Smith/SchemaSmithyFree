@@ -1,0 +1,120 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+using NSubstitute;
+using Schema.Utility;
+using System.Data;
+using System.Linq;
+
+namespace Schema.UnitTests;
+
+public class ForgeKindlerTests
+{
+    [Test]
+    public void ShouldReplaceParseJsonTokenInTableQuench()
+    {
+        var command = Substitute.For<IDbCommand>();
+        var executedScripts = new System.Collections.Generic.List<string>();
+        command.When(c => c.ExecuteNonQuery()).Do(_ => executedScripts.Add(command.CommandText));
+
+        ForgeKindler.KindleTheForge(command);
+
+        var tableQuenchScript = executedScripts.FirstOrDefault(s => s.Contains("SchemaSmith.TableQuench"));
+        Assert.That(tableQuenchScript, Is.Not.Null, "TableQuench script should be deployed");
+        Assert.That(tableQuenchScript, Does.Not.Contain("{{ParseJson}}"), "ParseJson token should be replaced");
+        Assert.That(tableQuenchScript, Does.Contain("Parse Tables from Json"), "Should contain injected ParseJson content");
+    }
+
+    [Test]
+    public void ShouldDeployPrintWithNoWaitBeforeModularProcs()
+    {
+        var command = Substitute.For<IDbCommand>();
+        var executedScripts = new System.Collections.Generic.List<string>();
+        command.When(c => c.ExecuteNonQuery()).Do(_ => executedScripts.Add(command.CommandText));
+
+        ForgeKindler.KindleTheForge(command);
+
+        var printIndex = executedScripts.FindIndex(s => s.Contains("PrintWithNoWait"));
+        var missingTableIndex = executedScripts.FindIndex(s => s.Contains("MissingTableAndColumnQuench"));
+        Assert.That(printIndex, Is.GreaterThan(-1), "PrintWithNoWait should be deployed");
+        Assert.That(missingTableIndex, Is.GreaterThan(-1), "MissingTableAndColumnQuench should be deployed");
+        Assert.That(printIndex, Is.LessThan(missingTableIndex), "PrintWithNoWait must be deployed before modular procs");
+    }
+
+    [Test]
+    public void ShouldDeployModularProcsBeforeTableQuenchWrapper()
+    {
+        var command = Substitute.For<IDbCommand>();
+        var executedScripts = new System.Collections.Generic.List<string>();
+        command.When(c => c.ExecuteNonQuery()).Do(_ => executedScripts.Add(command.CommandText));
+
+        ForgeKindler.KindleTheForge(command);
+
+        var foreignKeyIndex = executedScripts.FindIndex(s => s.Contains("ForeignKeyQuench"));
+        var tableQuenchIndex = executedScripts.FindIndex(s => s.Contains("SchemaSmith.TableQuench") && s.Contains("MissingTableAndColumnQuench"));
+        Assert.That(foreignKeyIndex, Is.GreaterThan(-1), "ForeignKeyQuench should be deployed");
+        Assert.That(tableQuenchIndex, Is.GreaterThan(-1), "TableQuench wrapper should be deployed");
+        Assert.That(foreignKeyIndex, Is.LessThan(tableQuenchIndex), "Modular procs must be deployed before wrapper");
+    }
+
+    [Test]
+    public void ShouldDeployIndexedViewScripts()
+    {
+        var command = Substitute.For<IDbCommand>();
+        var executedScripts = new System.Collections.Generic.List<string>();
+        command.When(c => c.ExecuteNonQuery()).Do(_ => executedScripts.Add(command.CommandText));
+
+        ForgeKindler.KindleTheForge(command);
+
+        var indexedViewQuench = executedScripts.FindIndex(s => s.Contains("IndexedViewQuench"));
+        var generateIndexedViewJson = executedScripts.FindIndex(s => s.Contains("GenerateIndexedViewJson"));
+        Assert.That(indexedViewQuench, Is.GreaterThan(-1), "IndexedViewQuench should be deployed");
+        Assert.That(generateIndexedViewJson, Is.GreaterThan(-1), "GenerateIndexedViewJson should be deployed");
+        Assert.That(indexedViewQuench, Is.GreaterThan(executedScripts.FindIndex(s => s.Contains("ForeignKeyQuench"))), "IndexedViewQuench should deploy after ForeignKeyQuench");
+    }
+
+    [Test]
+    public void ShouldReturnParseTableJsonScript()
+    {
+        var script = ForgeKindler.GetParseTableJsonScript();
+        Assert.That(script, Is.Not.Null.And.Not.Empty);
+        Assert.That(script, Does.Contain("Parse Tables from Json"));
+        Assert.That(script, Does.Contain("#Tables"));
+        Assert.That(script, Does.Contain("#Columns"));
+        Assert.That(script, Does.Contain("#Indexes"));
+    }
+
+    [Test]
+    public void ShouldDeployExpectedNumberOfScripts()
+    {
+        var command = Substitute.For<IDbCommand>();
+        var executedScripts = new System.Collections.Generic.List<string>();
+        command.When(c => c.ExecuteNonQuery()).Do(_ => executedScripts.Add(command.CommandText));
+
+        ForgeKindler.KindleTheForge(command);
+
+        Assert.That(executedScripts.Count, Is.GreaterThanOrEqualTo(10), "Expected at least 10 kindling scripts");
+    }
+
+    [Test]
+    public void ShouldDeployAllExpectedProcedures()
+    {
+        var command = Substitute.For<IDbCommand>();
+        var executedScripts = new System.Collections.Generic.List<string>();
+        command.When(c => c.ExecuteNonQuery()).Do(_ => executedScripts.Add(command.CommandText));
+
+        ForgeKindler.KindleTheForge(command);
+
+        var allScriptText = string.Join("\n", executedScripts);
+        Assert.Multiple(() =>
+        {
+            Assert.That(allScriptText, Does.Contain("MissingTableAndColumnQuench"), "MissingTableAndColumnQuench should be deployed");
+            Assert.That(allScriptText, Does.Contain("ModifiedTableQuench"), "ModifiedTableQuench should be deployed");
+            Assert.That(allScriptText, Does.Contain("MissingIndexesAndConstraintsQuench"), "MissingIndexesAndConstraintsQuench should be deployed");
+            Assert.That(allScriptText, Does.Contain("ForeignKeyQuench"), "ForeignKeyQuench should be deployed");
+            Assert.That(allScriptText, Does.Contain("IndexedViewQuench"), "IndexedViewQuench should be deployed");
+            Assert.That(allScriptText, Does.Contain("GenerateIndexedViewJson"), "GenerateIndexedViewJson should be deployed");
+            Assert.That(allScriptText, Does.Contain("PrintWithNoWait"), "PrintWithNoWait should be deployed");
+            Assert.That(allScriptText, Does.Contain("TableQuench"), "TableQuench should be deployed");
+        });
+    }
+}

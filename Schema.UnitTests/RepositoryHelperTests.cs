@@ -33,10 +33,12 @@ public class RepositoryHelperTests
             mockDirectoryWrapper.Received(2).CreateDirectory(Arg.Any<string>());
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, "Templates"));
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, ".json-schemas"));
-            mockFileWrapper.Received(4).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            mockFileWrapper.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith(".community")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("products.schema")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("templates.schema")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("tables.schema")), Arg.Any<string>());
+            mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("indexedviews.schema")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("Product.json")), Arg.Any<string>());
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("Product.json")), Arg.Is<string>(s => s.ContainsIgnoringCase("\"Name\": \"MyProduct\"")));
 
@@ -100,7 +102,12 @@ public class RepositoryHelperTests
             mockDirectoryWrapper.Received(2).CreateDirectory(Arg.Any<string>());
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, "Templates"));
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, ".json-schemas"));
-            mockFileWrapper.Received(1).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            mockFileWrapper.Received(6).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith(".community")), Arg.Any<string>());
+            mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("products.schema")), Arg.Any<string>());
+            mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("templates.schema")), Arg.Any<string>());
+            mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("tables.schema")), Arg.Any<string>());
+            mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWith("indexedviews.schema")), Arg.Any<string>());
             mockFileWrapper.Received(1).ReadAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("Product.json")));
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("Product.json")), Arg.Is<string>(s => s.ContainsIgnoringCase("\"Name\": \"ExistingProduct\"")));
             FactoryContainer.Clear();
@@ -126,11 +133,14 @@ public class RepositoryHelperTests
             var result = RepositoryHelper.UpdateOrInitTemplate(productPath, templateName, dbName);
 
             Assert.That(result, Is.EqualTo(Path.Combine(productPath, "Templates", templateName)));
-            mockDirectoryWrapper.Received(14).CreateDirectory(Arg.Any<string>());
+            mockDirectoryWrapper.Received(17).CreateDirectory(Arg.Any<string>());
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, "Templates", templateName));
             mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("Schemas")));
             mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("Functions")));
             mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("DataTypes")));
+            mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("BetweenTablesAndKeys")));
+            mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("AfterTablesScripts")));
+            mockDirectoryWrapper.Received(1).CreateDirectory(Arg.Is<string>(s => s.Contains("Indexed Views")));
             mockFileWrapper.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("Template.json")), Arg.Is<string>(s => s.ContainsIgnoringCase("\"Name\": \"MyTemplate\"")));
 
             FactoryContainer.Clear();
@@ -162,7 +172,7 @@ public class RepositoryHelperTests
             var result = RepositoryHelper.UpdateOrInitTemplate(productPath, templateName, dbName);
 
             Assert.That(result, Is.EqualTo(Path.Combine(productPath, "Templates", templateName)));
-            mockDirectoryWrapper.Received(14).CreateDirectory(Arg.Any<string>());
+            mockDirectoryWrapper.Received(17).CreateDirectory(Arg.Any<string>());
             mockDirectoryWrapper.Received(1).CreateDirectory(Path.Combine(productPath, "Templates", templateName));
             mockFileWrapper.Received(0).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("Template.json")), Arg.Any<string>());
 

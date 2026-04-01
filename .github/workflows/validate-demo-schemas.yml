@@ -1,0 +1,84 @@
+name: validate-demo-schemas
+on:
+  pull_request:
+    paths:
+      - 'demo/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-adventureworks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: validate-adventureworks-product
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          json_schema: "./demo/AdventureWorks/.json-schemas/products.schema"
+          files: "./demo/AdventureWorks/Product.json"
+
+      - name: validate-adventureworks-template
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          json_schema: "./demo/AdventureWorks/.json-schemas/templates.schema"
+          files: "./demo/AdventureWorks/Templates/AdventureWorks/Template.json"
+
+      - name: validate-adventureworks-initialize-template
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          json_schema: "./demo/AdventureWorks/.json-schemas/templates.schema"
+          files: "./demo/AdventureWorks/Templates/Initialize/Template.json"
+
+      - name: validate-adventureworks-tables
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          json_schema: "./demo/AdventureWorks/.json-schemas/tables.schema"
+          base_dir: "./demo/AdventureWorks/Templates/AdventureWorks/Tables"
+
+  validate-northwind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: validate-northwind-product
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          json_schema: "./demo/Northwind/.json-schemas/products.schema"
+          files: "./demo/Northwind/Product.json"
+
+      - name: validate-northwind-template
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          json_schema: "./demo/Northwind/.json-schemas/templates.schema"
+          files: "./demo/Northwind/Templates/Northwind/Template.json"
+
+      - name: validate-northwind-initialize-template
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          json_schema: "./demo/Northwind/.json-schemas/templates.schema"
+          files: "./demo/Northwind/Templates/Initialize/Template.json"
+
+      - name: validate-northwind-tables
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          json_schema: "./demo/Northwind/.json-schemas/tables.schema"
+          base_dir: "./demo/Northwind/Templates/Northwind/Tables"

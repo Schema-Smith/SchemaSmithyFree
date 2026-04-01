@@ -1,4 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using System;
 using System.IO;
 using System.Linq;
@@ -35,7 +36,7 @@ public static class ResourceLoader
             fullyQualifiedFileName = (from a in resourceNames where a.Trim().ToUpper().EndsWith("." + fileName.Trim().ToUpper()) select a).FirstOrDefault();
             if (!string.IsNullOrEmpty(fullyQualifiedFileName)) return assembly.GetManifestResourceStream(fullyQualifiedFileName);
         }
-        
+
         throw new FileLoadException($"File {fileName} not found in assembly {fromAssembly.FullName}.");
     }
 }

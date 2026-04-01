@@ -1,0 +1,30 @@
+{
+    "Source": {
+        "Server": ".,1450",
+        "User": "sa",
+        "Password": "aCa2d805-41E5@40c4!98e7#92F93zzxo176",
+        "Database": "TongsTest",
+        "ConnectionProperties": {
+            "TrustServerCertificate": "True"
+        }
+    },
+    "Product": {
+        "Path": "C:/Temp/Tongs/TongsTest",
+        "Name": ""
+    },
+    "Template": {
+        "Name": "TongsTest"
+    },
+    "ShouldCast": {
+        "Tables": false,
+        "Schemas": false,
+        "UserDefinedTypes": false,
+        "UserDefinedFunction": false,
+        "Views": false,
+        "StoredProcedures": false,
+        "TableTriggers": false,
+        "Catalogs": false,
+        "FullTextStopLists": false,
+        "DatabaseDDLTriggers": false
+    }
+}

@@ -1,7 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using Schema.Isolators;
@@ -10,26 +9,25 @@ namespace Schema.Utility;
 
 public static class CommandLineParser
 {
-    public static string CommandLine { get; } = ForceLeadingSpace(Environment.CommandLine);
-
     public static List<string> Arguments
     {
         get
         {
+            var commandLine = ForceLeadingSpace(EnvironmentWrapper.GetFromFactory().CommandLine);
             var result = new List<string>();
             var pos = 0;
-            while (pos < CommandLine.Length - 1)
+            while (pos < commandLine.Length - 1)
             {
-                var nextPos = FindNextUnquotedSpace(CommandLine, pos);
+                var nextPos = FindNextUnquotedSpace(commandLine, pos);
                 if (nextPos == -1)
                 {
-                    result.Add(CommandLine.Substring(pos).Trim().Unquote());
+                    result.Add(commandLine.Substring(pos).Trim().Unquote());
                     break;
                 }
-                var arg = CommandLine.Substring(pos, nextPos - pos).Trim().Unquote();
+                var arg = commandLine.Substring(pos, nextPos - pos).Trim().Unquote();
                 if (arg != string.Empty)
                     result.Add(arg);
-                pos = FindNextNonSpace(CommandLine, nextPos);
+                pos = FindNextNonSpace(commandLine, nextPos);
             }
 
             return result;
@@ -63,7 +61,7 @@ public static class CommandLineParser
 
     public static string ValueOfSwitch(string switchName, string defval = "")
     {
-        return ContainsSwitch(switchName) ? SwitchesAndValues[switchName].Trim('"', ' ') : defval;
+        return ContainsSwitch(switchName) ? SwitchesAndValues[switchName]?.Trim('"', ' ') : defval;
     }
 
     public static int IntValueOfSwitch(string switchName, int defval = -1)
@@ -114,7 +112,10 @@ public static class CommandLineParser
     private static void ShowVersionAndExit(string app)
     {
         var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
-        Console.WriteLine($"{app} MSSQL Community - Version: {FileVersionInfo.GetVersionInfo(assembly.Location).FileVersion}");
+        var version = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version
+                      ?? assembly.GetName().Version?.ToString()
+                      ?? "unknown";
+        Console.WriteLine($"{app} MSSQL Community - Version: {version}");
         EnvironmentWrapper.GetFromFactory().Exit(0);
     }
 
@@ -123,7 +124,8 @@ public static class CommandLineParser
         Console.WriteLine($"{app}.exe [<command>]");
         Console.WriteLine("  --version                Show the program version");
         Console.WriteLine("  --LogPath:<logpath>      Path to write logs and create backup directories. The default is current path.");
-        Console.WriteLine("  --ConfigFile:<filepath>  Path and file name of the config file. The default is appsettings.json in the current path.");
+        Console.WriteLine($"  --ConfigFile:<filepath>  Path and file name of the config file. The default is {app}.settings.json in the current path.");
+        Console.WriteLine("  --ConnectionString:<connstr>     Override the connection string. Bypasses all connection settings in the config file.");
         Console.WriteLine("  --help                   Show the command line options");
         EnvironmentWrapper.GetFromFactory().Exit(0);
     }

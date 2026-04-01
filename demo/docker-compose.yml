@@ -1,0 +1,64 @@
+name: schemasmith-community-demo
+
+services:
+  quench-northwind:
+    build:
+      context: ..
+      dockerfile: SchemaQuench/Dockerfile
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MSSQL_SA_USERNAME}
+      - SmithySettings_Target__Password=${MSSQL_SA_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+      - SmithySettings_ScriptTokens__ProductDb=Northwind
+    volumes:
+      - ./Northwind:/metadata
+    depends_on:
+      demoserver:
+        condition: service_healthy
+
+  quench-adventureworks:
+    build:
+      context: ..
+      dockerfile: SchemaQuench/Dockerfile
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MSSQL_SA_USERNAME}
+      - SmithySettings_Target__Password=${MSSQL_SA_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+      - SmithySettings_ScriptTokens__ProductDb=AdventureWorks
+    volumes:
+      - ./AdventureWorks:/metadata
+    depends_on:
+      quench-northwind:
+        condition: service_completed_successfully
+
+  demoserver:
+    build:
+      context: ./demoserver
+      dockerfile: demoserver.Dockerfile
+    restart: always
+    ports:
+      - "${MSSQL_PORT:-1450}:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_USERNAME=${MSSQL_SA_USERNAME}
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
+    healthcheck:
+      test: /tmp/devdatabase/is-ready.sh
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  completed:
+    image: alpine
+    entrypoint: ["echo"]
+    command: ["completed"]
+    depends_on:
+      demoserver:
+        condition: service_healthy
+      quench-northwind:
+        condition: service_completed_successfully
+      quench-adventureworks:
+        condition: service_completed_successfully

@@ -1,0 +1,139 @@
+{
+  "Schema": "[HumanResources]",
+  "Name": "[EmployeeDepartmentHistory]",
+  "CompressionType": "NONE",
+  "OldName": "",
+  "Columns": [
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[DepartmentID]",
+      "DataType": "SMALLINT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[EndDate]",
+      "DataType": "DATE",
+      "Nullable": true,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()",
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[ShiftID]",
+      "DataType": "TINYINT",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    },
+    {
+      "Name": "[StartDate]",
+      "DataType": "DATE",
+      "Nullable": false,
+      "Persisted": false,
+      "Sparse": false,
+      "Collation": "",
+      "DataMaskFunction": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_EmployeeDepartmentHistory_DepartmentID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[DepartmentID]"
+    },
+    {
+      "Name": "[IX_EmployeeDepartmentHistory_ShiftID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": false,
+      "Unique": false,
+      "UniqueConstraint": false,
+      "Clustered": false,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[ShiftID]"
+    },
+    {
+      "Name": "[PK_EmployeeDepartmentHistory_BusinessEntityID_StartDate_DepartmentID]",
+      "CompressionType": "NONE",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": false,
+      "Clustered": true,
+      "ColumnStore": false,
+      "FillFactor": 0,
+      "IndexColumns": "[BusinessEntityID],[StartDate],[DepartmentID],[ShiftID]"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_EmployeeDepartmentHistory_Department_DepartmentID]",
+      "Columns": "[DepartmentID]",
+      "RelatedTableSchema": "[HumanResources]",
+      "RelatedTable": "[Department]",
+      "RelatedColumns": "[DepartmentID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    },
+    {
+      "Name": "[FK_EmployeeDepartmentHistory_Employee_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTableSchema": "[HumanResources]",
+      "RelatedTable": "[Employee]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    },
+    {
+      "Name": "[FK_EmployeeDepartmentHistory_Shift_ShiftID]",
+      "Columns": "[ShiftID]",
+      "RelatedTableSchema": "[HumanResources]",
+      "RelatedTable": "[Shift]",
+      "RelatedColumns": "[ShiftID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_EmployeeDepartmentHistory_EndDate]",
+      "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL"
+    }
+  ]
+}

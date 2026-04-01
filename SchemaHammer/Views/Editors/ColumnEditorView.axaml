@@ -1,0 +1,61 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SchemaHammer.ViewModels.Editors"
+             xmlns:controls="using:SchemaHammer.Controls"
+             x:Class="SchemaHammer.Views.Editors.ColumnEditorView"
+             x:DataType="vm:ColumnEditorViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="8" Margin="8">
+            <TextBlock Text="{Binding EditorLabel}" Classes="editor-title" />
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Definition" />
+            </Border>
+            <Grid ColumnDefinitions="*,Auto,Auto" Margin="4,0,0,0">
+                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                    <TextBlock Text="Data Type" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding DataType}" IsReadOnly="True" />
+                </StackPanel>
+                <CheckBox Grid.Column="1" Content="Allow Nulls" IsChecked="{Binding Nullable}" IsEnabled="False" VerticalAlignment="Bottom" Margin="0,0,8,0" />
+                <CheckBox Grid.Column="2" Content="Sparse" IsChecked="{Binding Sparse}" IsEnabled="False" VerticalAlignment="Bottom" />
+            </Grid>
+            <StackPanel Margin="4,0,0,0">
+                <TextBlock Text="Old Name" Margin="0,0,0,2" />
+                <TextBox Text="{Binding OldName}" IsReadOnly="True" />
+            </StackPanel>
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Expressions" />
+            </Border>
+            <StackPanel Margin="4,0,0,0" Spacing="8">
+                <StackPanel>
+                    <TextBlock Text="Default" Margin="0,0,0,2" />
+                    <controls:SqlEditorControl Text="{Binding Default}" EditorHeight="100" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Check Expression" Margin="0,0,0,2" />
+                    <controls:SqlEditorControl Text="{Binding CheckExpression}" EditorHeight="100" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Computed Expression" Margin="0,0,0,2" />
+                    <controls:SqlEditorControl Text="{Binding ComputedExpression}" EditorHeight="100" />
+                </StackPanel>
+                <CheckBox Content="Persisted" IsChecked="{Binding Persisted}" IsEnabled="False" />
+            </StackPanel>
+
+            <Border Classes="section-header-border">
+                <TextBlock Classes="section-header" Text="Advanced" />
+            </Border>
+            <StackPanel Margin="4,0,0,0" Spacing="8">
+                <StackPanel>
+                    <TextBlock Text="Collation" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding Collation}" IsReadOnly="True" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Data Mask Function" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding DataMaskFunction}" IsReadOnly="True" />
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

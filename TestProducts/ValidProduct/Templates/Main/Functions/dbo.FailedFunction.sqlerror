@@ -1,0 +1,3 @@
+Script extraction failed for [dbo].[FailedFunction].
+Error: The object was not accessible or could not be scripted.
+Microsoft.SqlServer.Management.Smo.FailedOperationException: Script failed for UserDefinedFunction 'dbo.FailedFunction'.

@@ -22,16 +22,34 @@ public class ProductQuencher
 
     private readonly string _whatIfOnly;
     private readonly string _primaryServer;
+    private readonly bool _kindleTheForge;
+    private readonly bool _updateTables;
+    private readonly bool _dropTablesRemovedFromProduct;
+    private readonly bool _runScriptsTwice;
+    private readonly bool _trackRunOnceMigrations;
+    private readonly bool _pruneObsoleteMigrationTracking;
+    private readonly bool _verboseLogging;
 
     public ProductQuencher()
     {
         _whatIfOnly = _config["WhatIfONLY"]?.ToLower() == "true" ? "1" : "0";
         _primaryServer = _config["Target:Server"] ?? "localhost";
+        _kindleTheForge = _config["KindleTheForge"]?.ToLower() != "false";
+        _updateTables = _config["UpdateTables"]?.ToLower() != "false";
+        _dropTablesRemovedFromProduct = _config["DropTablesRemovedFromProduct"]?.ToLower() != "false";
+        _runScriptsTwice = _config["RunScriptsTwice"]?.ToLower() == "true";
+        _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
+        _pruneObsoleteMigrationTracking = _config["PruneObsoleteMigrationTracking"]?.ToLower() != "false";
+        _verboseLogging = _config["VerboseLogging"]?.ToLower() == "true";
     }
 
     private IDbConnection GetConnection(string dbName)
     {
-        var connectionString = ConnectionString.Build(_primaryServer, dbName, _config["Target:User"], _config["Target:Password"]);
+        var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
+        var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        var connectionString = string.IsNullOrEmpty(connectionStringOverride)
+            ? ConnectionString.Build(_primaryServer, dbName, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties)
+            : connectionStringOverride;
         var connection = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connectionString);
 
         try
@@ -75,7 +93,21 @@ public class ProductQuencher
                     throw new Exception("Invalid baseline for this release");
             }
 
+            // Product Before scripts
+            if (_product.BeforeFolders.SelectMany(f => f.Scripts).Any())
+            {
+                _progressLog.Info("Quenching Product Before scripts");
+                QuenchProductScripts(command, _product.BeforeFolders.SelectMany(f => f.Scripts).ToList());
+            }
+
             _product.TemplateOrder.ForEach(templateName => QuenchTemplate(command, templateName, _product, suppressKindlingForgeForTesting));
+
+            // Product After scripts
+            if (_product.AfterFolders.SelectMany(f => f.Scripts).Any())
+            {
+                _progressLog.Info("Quenching Product After scripts");
+                QuenchProductScripts(command, _product.AfterFolders.SelectMany(f => f.Scripts).ToList());
+            }
 
             if (!string.IsNullOrWhiteSpace(_product.VersionStampScript))
             {
@@ -108,7 +140,8 @@ public class ProductQuencher
         _progressLog.Info("Testing connection to configured server");
         try
         {
-            var connStr = ConnectionString.Build(_primaryServer, "master", _config["Target:User"], _config["Target:Password"]);
+            var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+            var connStr = ConnectionString.Build(_primaryServer, "master", _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
             using var conn = SqlConnectionFactory.GetFromFactory().GetSqlConnection(connStr);
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -137,6 +170,25 @@ public class ProductQuencher
             file.Delete();
     }
 
+    private void QuenchProductScripts(IDbCommand command, List<SqlScript> scripts)
+    {
+        foreach (var script in scripts)
+        {
+            if (_whatIfOnly == "1")
+            {
+                _progressLog.Info($"  Would APPLY: {script.LogPath}");
+                continue;
+            }
+
+            _progressLog.Info($"  Quenching {script.LogPath}");
+            foreach (var batch in script.Batches)
+            {
+                command.CommandText = batch;
+                command.ExecuteNonQuery();
+            }
+        }
+    }
+
     private void QuenchTemplate(IDbCommand command, string templateName, Product product, bool suppressKindligForgeForTesting)
     {
         var dbList = new List<DatabaseQuencher>();
@@ -146,14 +198,45 @@ public class ProductQuencher
 
         _progressLog.Info("Locate Databases To Quench");
         command.CommandText = template.DatabaseIdentificationScript;
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
+        var dbNames = new List<string>();
+        using (var reader = command.ExecuteReader())
         {
-            var quencher = new DatabaseQuencher(_product.Name, template, $"{reader[0]}", suppressKindligForgeForTesting, product.DropUnknownIndexes ? "1" : "0", _whatIfOnly);
+            while (reader.Read())
+                dbNames.Add($"{reader[0]}");
+        }
+
+        if (dbNames.Count == 0 && template.Required)
+            throw new Exception($"Template '{templateName}' is marked as Required but the DatabaseIdentificationScript returned no databases.");
+
+        if (dbNames.Count == 0) return;
+
+        foreach (var dbName in dbNames)
+        {
+            if (template.SkipIfReadOnly)
+            {
+                command.CommandText = $"SELECT DATABASEPROPERTYEX('{dbName.Replace("'", "''")}', 'Updateability')";
+                var updateability = command.ExecuteScalar()?.ToString();
+                if (updateability == "READ_ONLY")
+                {
+                    _progressLog.Info($"  Skipping {dbName} (read-only)");
+                    continue;
+                }
+            }
+
+            var quencher = new DatabaseQuencher(
+                _product.Name, template, dbName,
+                suppressKindligForgeForTesting || !_kindleTheForge,
+                product.DropUnknownIndexes ? "1" : "0",
+                _whatIfOnly, _updateTables, _dropTablesRemovedFromProduct, _runScriptsTwice,
+                _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _verboseLogging);
             dbList.Add(quencher);
         }
 
-        dbList.ForEach(d => d.Quench());
+        if (!int.TryParse(_config["MaxThreads"], out var maxThreads) || maxThreads < 1 || maxThreads > 20)
+            maxThreads = 10;
+        using var dbQueue = new TaskQueueManager<DatabaseQuencher>(maxThreads);
+        dbList.ForEach(d => dbQueue.AddToQueue(d, q => q.Quench()));
+        dbQueue.WaitForAll();
         if (!dbList.All(d => d.QuenchSuccessful))
         {
             _progressLog.Error("One or more database quenches FAILED");

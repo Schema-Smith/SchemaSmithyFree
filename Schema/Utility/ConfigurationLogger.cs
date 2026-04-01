@@ -1,7 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
@@ -14,7 +13,10 @@ public static class ConfigurationLogger
     public static void LogConfiguration(IConfigurationRoot config, Action<string> logLine)
     {
         var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
-        logLine?.Invoke($"Version: {FileVersionInfo.GetVersionInfo(assembly.Location).FileVersion}");
+        var version = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version
+                      ?? assembly.GetName().Version?.ToString()
+                      ?? "unknown";
+        logLine?.Invoke($"Version: {version}");
 
         var entries = config
             .GetChildren().Where(s => !s.Key.EqualsIgnoringCase("Description"))
@@ -33,7 +35,7 @@ public static class ConfigurationLogger
                 indents++;
                 key = TryIndexToItemName(key.Substring(key.IndexOf(":", StringComparison.Ordinal) + 1), entries, entry, arrayNameKeys);
             }
-            var value = key.ContainsIgnoringCase("Password") || key.ContainsIgnoringCase("Pwd") 
+            var value = key.ContainsIgnoringCase("Password") || key.ContainsIgnoringCase("Pwd")
                 ? "**********" // Mask sensitive information
                 : entry.Value ?? "";
             logLine?.Invoke($"{new string(' ', indents * 2)}{key}: {value}");

@@ -1,12 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>net9.0;net481</TargetFrameworks>
 	  <ImplicitUsings>disable</ImplicitUsings>
 	  <Nullable>disable</Nullable>
 	  <LangVersion>default</LangVersion>
-	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-	  <PublishAot>false</PublishAot>
 
 	  <Version>$(Version)</Version>
 	  <FileVersion>$(Version)</FileVersion>
@@ -22,11 +19,17 @@
     <None Remove="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
     <None Remove="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />
     <None Remove="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
+    <None Remove="Scripts\SchemaSmith.PrintWithNoWait.sql" />
     <None Remove="Scripts\SchemaSmith.GenerateTableJson.sql" />
     <None Remove="Scripts\SchemaSmith.TableQuench.sql" />
-    <None Remove="Utility\products.schema" />
-    <None Remove="Utility\tables.schema" />
-    <None Remove="Utility\templates.schema" />
+    <None Remove="Scripts\ParseTableJsonIntoTempTables.sql" />
+    <None Remove="Scripts\SchemaSmith.MissingTableAndColumnQuench.sql" />
+    <None Remove="Scripts\SchemaSmith.ModifiedTableQuench.sql" />
+    <None Remove="Scripts\SchemaSmith.MissingIndexesAndConstraintsQuench.sql" />
+    <None Remove="Scripts\SchemaSmith.ForeignKeyQuench.sql" />
+    <None Remove="Scripts\SchemaSmith.IndexedViewQuench.sql" />
+    <None Remove="Scripts\SchemaSmith.GenerateIndexedViewJson.sql" />
+    <None Remove="Scripts\SchemaSmith.IndexOnlyQuench.sql" />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,29 +39,31 @@
     <EmbeddedResource Include="Scripts\SchemaSmith.fn_SafeBracketWrap.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripBracketWrapping.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.fn_StripParenWrapping.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.PrintWithNoWait.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.GenerateTableJson.sql" />
     <EmbeddedResource Include="Scripts\SchemaSmith.TableQuench.sql" />
-    <EmbeddedResource Include="Utility\products.schema" />
-    <EmbeddedResource Include="Utility\tables.schema" />
-    <EmbeddedResource Include="Utility\templates.schema" />
+    <EmbeddedResource Include="Scripts\ParseTableJsonIntoTempTables.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.MissingTableAndColumnQuench.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.ModifiedTableQuench.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.MissingIndexesAndConstraintsQuench.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.ForeignKeyQuench.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.IndexedViewQuench.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.GenerateIndexedViewJson.sql" />
+    <EmbeddedResource Include="Scripts\SchemaSmith.IndexOnlyQuench.sql" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="log4net" Version="3.2.0" />
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.3" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.1" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="System.IO.Compression" Version="4.3.0" />
+    <InternalsVisibleTo Include="Schema.UnitTests" />
   </ItemGroup>
 
-	<Target Name="CleanZips" BeforeTargets="DispatchToInnerBuilds" Condition="'$(TargetFramework)' == '' And '$(Configuration)' != 'DEBUG'">
-		<RemoveDir Directories="$(MSBuildProjectDirectory)\..\Release\Zips\$(Configuration)" Condition="Exists('$(MSBuildProjectDirectory)\..\Release\Zips\$(Configuration)')" />
-	</Target>
-  <Target Name="CleanZips" BeforeTargets="Clean;PrepareForBuild;Build">
-    <RemoveDir Directories="$(OutputPath)\..\..\..\..\Release\Zips" Condition="Exists('$(OutputPath)\..\..\..\..\Release\Zips')" />
-  </Target>
+  <ItemGroup>
+    <PackageReference Include="log4net" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
+    <PackageReference Include="Newtonsoft.Json" />
+  </ItemGroup>
 
 </Project>
