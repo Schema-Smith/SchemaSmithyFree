@@ -50,6 +50,8 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
 | `RunScriptsTwice` | bool | `false` | Run object scripts twice to verify idempotency. A CI/testing tool, not for production. |
 | `TrackRunOnceMigrations` | bool | `true` | Track run-once migration scripts in `CompletedMigrationScripts`. When `false`, all scripts run on every deployment (like `[ALWAYS]`). Designed for datafix and patch pipelines. |
 | `PruneObsoleteMigrationTracking` | bool | `true` | Remove tracking entries for scripts no longer in the package. When `false`, existing entries are preserved. Ignored when `TrackRunOnceMigrations` is `false`. |
+| `MaxThreads` | int | `10` | Number of parallel database operations when quenching multi-database templates. Range: 1–20. Values outside this range are clamped to the nearest bound. |
+| `VerboseLogging` | bool | `false` | Include SQL PRINT messages and other informational output from user scripts in logs. SchemaSmith's own status messages always display regardless of this setting. Useful for suppressing noise from DDL triggers or chatty PRINT statements in target databases. |
 | `ScriptTokens` | object | `{}` | Config-level overrides for product script tokens. Keys are token names, values are replacement strings. |
 
 ### Full Settings File Example
@@ -73,6 +75,8 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
     "RunScriptsTwice": false,
     "TrackRunOnceMigrations": true,
     "PruneObsoleteMigrationTracking": true,
+    "MaxThreads": 10,
+    "VerboseLogging": false,
     "ScriptTokens": {}
 }
 ```
@@ -96,6 +100,8 @@ All configuration keys can be overridden via environment variables using the `Sm
 | `RunScriptsTwice` | `SmithySettings_RunScriptsTwice` |
 | `TrackRunOnceMigrations` | `SmithySettings_TrackRunOnceMigrations` |
 | `PruneObsoleteMigrationTracking` | `SmithySettings_PruneObsoleteMigrationTracking` |
+| `MaxThreads` | `SmithySettings_MaxThreads` |
+| `VerboseLogging` | `SmithySettings_VerboseLogging` |
 | `ScriptTokens:<name>` | `SmithySettings_ScriptTokens__<name>` |
 
 ---
@@ -113,7 +119,7 @@ When SchemaQuench runs, `ProductQuencher.Quench()` executes these steps in order
 7. **Quench each template** -- For each template name in `Product.TemplateOrder`:
    - Loads `Template.json` and merges template-level `ScriptTokens` over the product token set.
    - Executes `DatabaseIdentificationScript` against `master` to discover target databases.
-   - Creates a `DatabaseQuencher` for each discovered database and runs them sequentially.
+   - Creates a `DatabaseQuencher` for each discovered database and runs them in parallel (up to `MaxThreads` concurrent operations).
    - If any database quench fails, logs the failure and exits with code 2.
 8. **Product After scripts** -- Executes scripts from the `After Product` folder.
 9. **Stamp product version** -- If `Product.VersionStampScript` is configured, executes it.

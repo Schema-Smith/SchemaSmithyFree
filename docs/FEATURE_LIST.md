@@ -105,6 +105,9 @@ Applies schema packages to target SQL Server databases using state-based compari
 - Single run can update multiple databases on the same server
 - `DatabaseIdentificationScript` dynamically discovers target databases
 - Ordered template processing for multi-template products
+- Parallel database quenching (up to `MaxThreads` concurrent operations, default 10, max 20)
+- `Required` template property (default `true`) — fail if identification script returns no databases
+- `SkipIfReadOnly` template property — skip read-only databases for AG secondary handling
 
 **WhatIf Dry-Run Mode:**
 - Set `WhatIfONLY: true` to generate SQL preview without executing
@@ -130,6 +133,7 @@ Applies schema packages to target SQL Server databases using state-based compari
 **Additional SchemaQuench Settings:**
 - `RunScriptsTwice` — Re-executes object scripts to resolve cross-dependencies (e.g., views referencing other views)
 - `MinimumVersion` — Product-level SqlServerVersion enum (Sql2016–Sql2025) for version-gated features
+- `VerboseLogging` — Control whether SQL PRINT messages and informational output from user scripts appear in logs (SchemaSmith's own messages always display)
 
 **Auto-Deployed Infrastructure ("Kindling the Forge"):**
 - `SchemaSmith` schema created automatically
@@ -216,6 +220,7 @@ A read-only desktop application for browsing SchemaSmith schema packages visuall
 - Temporal tables (system-versioned)
 - Table rename tracking via `OldName`
 - `UpdateFillFactor` — per-table fill factor override (OR'd with template and index settings)
+- `Extensions` — user-defined metadata (JToken, any valid JSON) on all table-level domain objects (Table, Column, Index, ForeignKey, CheckConstraint, Statistic, XmlIndex, FullTextIndex, IndexedView). Ignored by SchemaQuench, consumed via `{{TableMetadata}}` token in scripts.
 
 **Column-Level:**
 - All SQL Server data types with precision/scale/length
@@ -300,7 +305,7 @@ Packages can be deployed from **folders** or **ZIP archives**.
 
 - Placeholder format: `{{TokenName}}`
 - Case-insensitive replacement
-- Automatic tokens: `{{ProductName}}`, `{{TemplateName}}`
+- Automatic tokens: `{{ProductName}}`, `{{TemplateName}}`, `{{TableMetadata}}`
 - Applied to all SQL scripts and JSON config files
 - Override hierarchy: Product.json → `{ToolName}.settings.json` → environment variables → CLI switches
 
