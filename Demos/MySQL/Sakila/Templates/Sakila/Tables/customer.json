@@ -1,0 +1,134 @@
+{
+  "Name": "`customer`",
+  "Columns": [
+    {
+      "Name": "`customer_id`",
+      "DataType": "int unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`store_id`",
+      "DataType": "int unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`first_name`",
+      "DataType": "varchar(45)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`last_name`",
+      "DataType": "varchar(45)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`email`",
+      "DataType": "varchar(50)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`address_id`",
+      "DataType": "int unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`active`",
+      "DataType": "tinyint(1)",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`create_date`",
+      "DataType": "datetime",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`last_update`",
+      "DataType": "timestamp",
+      "Nullable": true,
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "idx_fk_address_id",
+      "IndexColumns": "`address_id`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "idx_fk_store_id",
+      "IndexColumns": "`store_id`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "idx_last_name",
+      "IndexColumns": "`last_name`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`customer_id`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_customer_address",
+      "Columns": "`address_id`",
+      "RelatedTable": "`address`",
+      "RelatedColumns": "`address_id`",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "fk_customer_store",
+      "Columns": "`store_id`",
+      "RelatedTable": "`store`",
+      "RelatedColumns": "`store_id`",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb3_general_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb3",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 600
+}

@@ -1,0 +1,164 @@
+{
+  "Name": "`Production_WorkOrderRouting`",
+  "Columns": [
+    {
+      "Name": "`ActualCost`",
+      "DataType": "decimal(19,4)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ActualEndDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ActualResourceHrs`",
+      "DataType": "decimal(9,4)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ActualStartDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`LocationID`",
+      "DataType": "smallint",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`OperationSequence`",
+      "DataType": "smallint",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`PlannedCost`",
+      "DataType": "decimal(19,4)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ScheduledEndDate`",
+      "DataType": "datetime",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ScheduledStartDate`",
+      "DataType": "datetime",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`WorkOrderID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_Production_WorkOrderRouting_LocationID",
+      "IndexColumns": "`LocationID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_WorkOrderRouting_ProductID",
+      "IndexColumns": "`ProductID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`WorkOrderID`,`ProductID`,`OperationSequence`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Production_WorkOrderRouting_LocationID",
+      "Columns": "`LocationID`",
+      "RelatedTable": "`Production_Location`",
+      "RelatedColumns": "`LocationID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_WorkOrderRouting_WorkOrderID",
+      "Columns": "`WorkOrderID`",
+      "RelatedTable": "`Production_WorkOrder`",
+      "RelatedColumns": "`WorkOrderID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Production_WorkOrderRouting_ActualCost",
+      "Expression": "(`ActualCost` > 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_WorkOrderRouting_ActualResourceHrs",
+      "Expression": "(`ActualResourceHrs` >= 0.0000)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_WorkOrderRouting_PlannedCost",
+      "Expression": "(`PlannedCost` > 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_WorkOrderRouting_ActualEndDate",
+      "Expression": "((`ActualEndDate` >= `ActualStartDate`) or (`ActualEndDate` is null) or (`ActualStartDate` is null))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_WorkOrderRouting_ScheduledEndDate",
+      "Expression": "(`ScheduledEndDate` >= `ScheduledStartDate`)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": []
+}

@@ -1,0 +1,124 @@
+{
+  "Name": "`Order Details`",
+  "Columns": [
+    {
+      "Name": "`Discount`",
+      "DataType": "float",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`OrderID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Quantity`",
+      "DataType": "smallint",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`UnitPrice`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "OrderID",
+      "IndexColumns": "`OrderID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "OrdersOrder_Details",
+      "IndexColumns": "`OrderID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`OrderID`,`ProductID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "ProductID",
+      "IndexColumns": "`ProductID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "ProductsOrder_Details",
+      "IndexColumns": "`ProductID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Order_Details_Orders",
+      "Columns": "`OrderID`",
+      "RelatedTable": "`Orders`",
+      "RelatedColumns": "`OrderID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Order_Details_Products",
+      "Columns": "`ProductID`",
+      "RelatedTable": "`Products`",
+      "RelatedColumns": "`ProductID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Discount",
+      "Expression": "((`Discount` >= 0) and (`Discount` <= 1))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Quantity",
+      "Expression": "(`Quantity` > 0)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_UnitPrice",
+      "Expression": "(`UnitPrice` >= 0)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": []
+}

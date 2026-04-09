@@ -1,0 +1,174 @@
+{
+  "Name": "`Purchasing_ProductVendor`",
+  "Columns": [
+    {
+      "Name": "`AverageLeadTime`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`BusinessEntityID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`LastReceiptCost`",
+      "DataType": "decimal(19,4)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`LastReceiptDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`MaxOrderQty`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`MinOrderQty`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`OnOrderQty`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`StandardPrice`",
+      "DataType": "decimal(19,4)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`UnitMeasureCode`",
+      "DataType": "char(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "IX_ProductVendor_BusinessEntityID",
+      "IndexColumns": "`BusinessEntityID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_ProductVendor_UnitMeasureCode",
+      "IndexColumns": "`UnitMeasureCode`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductID`,`BusinessEntityID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Purchasing_ProductVendor_BusinessEntityID",
+      "Columns": "`BusinessEntityID`",
+      "RelatedTable": "`Purchasing_Vendor`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Purchasing_ProductVendor_ProductID",
+      "Columns": "`ProductID`",
+      "RelatedTable": "`Production_Product`",
+      "RelatedColumns": "`ProductID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Purchasing_ProductVendor_UnitMeasureCode",
+      "Columns": "`UnitMeasureCode`",
+      "RelatedTable": "`Production_UnitMeasure`",
+      "RelatedColumns": "`UnitMeasureCode`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Purchasing_ProductVendor_AverageLeadTime",
+      "Expression": "(`AverageLeadTime` >= 1)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_ProductVendor_LastReceiptCost",
+      "Expression": "(`LastReceiptCost` > 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_ProductVendor_MaxOrderQty",
+      "Expression": "(`MaxOrderQty` >= 1)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_ProductVendor_MinOrderQty",
+      "Expression": "(`MinOrderQty` >= 1)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_ProductVendor_OnOrderQty",
+      "Expression": "(`OnOrderQty` >= 0)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_ProductVendor_StandardPrice",
+      "Expression": "(`StandardPrice` > 0.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": []
+}

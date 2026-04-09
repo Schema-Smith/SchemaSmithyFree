@@ -1,0 +1,55 @@
+{
+  "Name": "`film_text`",
+  "Columns": [
+    {
+      "Name": "`film_id`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`title`",
+      "DataType": "varchar(255)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`description`",
+      "DataType": "text",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`film_id`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "MyISAM",
+  "Collation": "utf8mb3_general_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb3",
+  "FullTextIndexes": [
+    {
+      "Name": "idx_title_description",
+      "Columns": "`title`,`description`"
+    }
+  ],
+  "AutoIncrementValue": 1
+}

@@ -1,0 +1,73 @@
+{
+  "Name": "`Sales_SalesOrderHeaderSalesReason`",
+  "Columns": [
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SalesOrderID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SalesReasonID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_Sales_SalesOrderHeaderSalesReason_SalesReasonID",
+      "IndexColumns": "`SalesReasonID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`SalesOrderID`,`SalesReasonID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Sales_SalesOrderHeaderSalesReason_SalesOrderID",
+      "Columns": "`SalesOrderID`",
+      "RelatedTable": "`Sales_SalesOrderHeader`",
+      "RelatedColumns": "`SalesOrderID`",
+      "DeleteAction": "CASCADE",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeaderSalesReason_SalesReasonID",
+      "Columns": "`SalesReasonID`",
+      "RelatedTable": "`Sales_SalesReason`",
+      "RelatedColumns": "`SalesReasonID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": []
+}
