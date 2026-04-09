@@ -1,0 +1,30 @@
+{
+    "SqlServer": {
+        "Server": "127.0.0.1",
+        "Port": "1440",
+        "User": "TestUser",
+        "Password": "aCa2d805-41E5@40c4!98e7#92F93zzxo176",
+        "ConnectionProperties": {
+            "TrustServerCertificate": "True"
+        }
+    },
+    "PostgreSQL": {
+        "Server": "127.0.0.1",
+        "Port": "5432",
+        "User": "TestUser",
+        "Password": "aCa2d805-41E5@40c4!98e7#92F93zzxo176",
+        "ConnectionProperties": {
+            "Trust Server Certificate": "True"
+        }
+    },
+    "MySQL": {
+        "Server": "127.0.0.1",
+        "Port": "3306",
+        "User": "TestUser",
+        "Password": "aCa2d805-41E5@40c4!98e7#92F93zzxo176"
+    },
+    "ScriptTokens": {
+        "MainDB": "TestMain",
+        "SecondaryDB": "TestSecondary"
+    }
+}
