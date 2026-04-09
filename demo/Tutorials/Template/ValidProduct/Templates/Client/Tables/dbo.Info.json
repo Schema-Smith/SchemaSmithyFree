@@ -1,0 +1,22 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[Info]",
+  "Columns": [
+    {
+      "Name": "[ClientName]",
+      "DataType": "VARCHAR(50)",
+      "Nullable": false
+    },
+    {
+      "Name": "[Url]",
+      "DataType": "VARCHAR(50)",
+      "Nullable": false
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "getdate()"
+    }
+  ]
+}

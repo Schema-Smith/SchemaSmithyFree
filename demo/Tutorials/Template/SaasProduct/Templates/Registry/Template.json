@@ -1,0 +1,5 @@
+{
+  "Name": "Registry",
+  "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] = '{{RegistryDb}}'",
+  "VersionStampScript": ""
+}

@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "properties": {
+    "BaselineValidationScript": {
+      "type": "string"
+    },
+    "DatabaseIdentificationScript": {
+      "type": "string"
+    },
+    "IndexOnlyTableQuenches": {
+      "type": "boolean"
+    },
+    "Name": {
+      "type": "string"
+    },
+    "ScriptTokens": {
+      "type": "object"
+    },
+    "UpdateFillFactor": {
+      "type": "boolean"
+    },
+    "VersionStampScript": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "DatabaseIdentificationScript",
+    "Name"
+  ]
+}

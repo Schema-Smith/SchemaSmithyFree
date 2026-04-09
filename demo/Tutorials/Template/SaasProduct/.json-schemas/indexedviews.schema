@@ -1,0 +1,70 @@
+{
+  "type": "object",
+  "properties": {
+    "Name": {
+      "type": "string"
+    },
+    "Schema": {
+      "type": "string"
+    },
+    "Definition": {
+      "type": "string"
+    },
+    "Indexes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "CompressionType": {
+            "type": "string"
+          },
+          "PrimaryKey": {
+            "type": "boolean"
+          },
+          "Unique": {
+            "type": "boolean"
+          },
+          "UniqueConstraint": {
+            "type": "boolean"
+          },
+          "Clustered": {
+            "type": "boolean"
+          },
+          "ColumnStore": {
+            "type": "boolean"
+          },
+          "FillFactor": {
+            "type": "integer",
+            "minimum": 0.0,
+            "maximum": 100.0
+          },
+          "IndexColumns": {
+            "type": "string"
+          },
+          "IncludeColumns": {
+            "type": "string"
+          },
+          "FilterExpression": {
+            "type": "string"
+          },
+          "UpdateFillFactor": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "IndexColumns"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "Name",
+    "Definition"
+  ]
+}

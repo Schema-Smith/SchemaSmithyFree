@@ -1,0 +1,31 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[ClientDBs]",
+  "Columns": [
+    {
+      "Name": "[ClientName]",
+      "DataType": "VARCHAR(50)",
+      "Nullable": false
+    },
+    {
+      "Name": "[DatabaseName]",
+      "DataType": "sysname",
+      "Nullable": false
+    },
+    {
+      "Name": "[IsEnabled]",
+      "DataType": "BIT",
+      "Nullable": false,
+      "Default": "1"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_ClientDBs]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "Clustered": true,
+      "IndexColumns": "[DatabaseName]"
+    }
+  ]
+}
