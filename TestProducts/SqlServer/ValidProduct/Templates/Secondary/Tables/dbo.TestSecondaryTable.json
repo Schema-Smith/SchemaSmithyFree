@@ -1,0 +1,35 @@
+{
+	"Schema": "dbo",
+	"Name": "TestSecondaryTable",
+	"CompressionType": "NONE",
+	"Columns": [
+		{
+			"Name": "TestSecondaryID",
+			"DataType": "UNIQUEIDENTIFIER"
+		},
+		{
+			"Name": "DateCreated",
+			"DataType": "DATETIME"
+		},
+		{
+			"Name": "Status",
+			"DataType": "TINYINT",
+			"Nullable": true
+		}
+	],
+	"Indexes": [
+		{
+			"Name": "PK_TestSecondaryTable",
+			"PrimaryKey": true,
+			"IndexColumns": "TestSecondaryID"
+		},
+		{
+			"Name": "CIX_DateCreated",
+			"Clustered": true,
+			"IndexColumns": "DateCreated"
+		}
+	],
+	"ForeignKeys": [],
+	"CheckConstraints": [],
+	"Statistics": []
+}

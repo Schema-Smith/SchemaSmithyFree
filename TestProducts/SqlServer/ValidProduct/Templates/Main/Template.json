@@ -1,0 +1,23 @@
+{
+    "Name": "Main",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "VersionStampScript": "PRINT '{{ReleaseVersion}}'",
+    "ScriptTokens": {
+	  "TestTableData": "<*File*>Tables/dbo.TestTable - MoreChildren.data",
+	  "TestTableInitialData": "<*File*>Tables/dbo.TestTable.tabledata",
+      "TemplateQueryToken": "<*Query*>SELECT 'true'"
+	},
+    "ScriptFolders": [
+        { "FolderPath" : "MigrationScripts/Before", "QuenchSlot" : "Before" },
+        { "FolderPath" : "Schemas", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "DataTypes", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "FullTextCatalogs", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "FullTextStopLists", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Functions", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Views", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Procedures", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Triggers", "QuenchSlot" : "AfterTablesObjects" },
+        { "FolderPath" : "Table Data", "QuenchSlot" : "TableData" },
+        { "FolderPath" : "MigrationScripts/After", "QuenchSlot" : "After" }
+    ]
+}

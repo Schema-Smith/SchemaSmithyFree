@@ -1,0 +1,13 @@
+{
+  "Name": "[vTestSummary]",
+  "Schema": "[dbo]",
+  "Definition": "SELECT [Status], COUNT_BIG(*) AS StatusCount FROM [dbo].[TestTable] GROUP BY [Status]",
+  "Indexes": [
+    {
+      "Name": "[CIX_vTestSummary]",
+      "Unique": true,
+      "Clustered": true,
+      "IndexColumns": "Status"
+    }
+  ]
+}
