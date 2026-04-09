@@ -1,0 +1,337 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+using System.Collections.Generic;
+using NUnit.Framework;
+using Schema.Domain;
+using Schema.Domain.SqlServer;
+
+namespace SchemaTongs.UnitTests;
+
+[TestFixture]
+public class HelperMethodTests
+{
+    #region EscapeSql Tests
+
+    [Test]
+    public void EscapeSql_NoQuotes_ReturnsUnchanged()
+    {
+        Assert.That(SchemaTongs.EscapeSql("hello"), Is.EqualTo("hello"));
+    }
+
+    [Test]
+    public void EscapeSql_WithSingleQuote_DoublesIt()
+    {
+        Assert.That(SchemaTongs.EscapeSql("it's"), Is.EqualTo("it''s"));
+    }
+
+    [Test]
+    public void EscapeSql_MultipleSingleQuotes_DoublesAll()
+    {
+        Assert.That(SchemaTongs.EscapeSql("it's a 'test'"), Is.EqualTo("it''s a ''test''"));
+    }
+
+    [Test]
+    public void EscapeSql_EmptyString_ReturnsEmpty()
+    {
+        Assert.That(SchemaTongs.EscapeSql(""), Is.EqualTo(""));
+    }
+
+    #endregion
+
+    #region FormatBaseType Tests
+
+    [Test]
+    public void FormatBaseType_Nvarchar_WithMaxLength_FormatsCorrectly()
+    {
+        // nvarchar stores 2 bytes per char, so max_length 100 = 50 chars
+        Assert.That(SchemaTongs.FormatBaseType("nvarchar", 100, 0, 0), Is.EqualTo("[nvarchar](50)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Nvarchar_Max_FormatsCorrectly()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("nvarchar", -1, 0, 0), Is.EqualTo("[nvarchar](max)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Varchar_WithLength_FormatsCorrectly()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("varchar", 50, 0, 0), Is.EqualTo("[varchar](50)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Varchar_Max_FormatsCorrectly()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("varchar", -1, 0, 0), Is.EqualTo("[varchar](max)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Varbinary_Max_FormatsCorrectly()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("varbinary", -1, 0, 0), Is.EqualTo("[varbinary](max)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Decimal_FormatsWithPrecisionAndScale()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("decimal", 0, 18, 4), Is.EqualTo("[decimal](18, 4)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Numeric_FormatsWithPrecisionAndScale()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("numeric", 0, 10, 2), Is.EqualTo("[numeric](10, 2)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Datetime2_DefaultScale_NoParens()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("datetime2", 0, 0, 7), Is.EqualTo("[datetime2]"));
+    }
+
+    [Test]
+    public void FormatBaseType_Datetime2_CustomScale_WithParens()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("datetime2", 0, 0, 3), Is.EqualTo("[datetime2](3)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Int_FormatsSimply()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("int", 4, 10, 0), Is.EqualTo("[int]"));
+    }
+
+    [Test]
+    public void FormatBaseType_Bit_FormatsSimply()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("bit", 1, 1, 0), Is.EqualTo("[bit]"));
+    }
+
+    [Test]
+    public void FormatBaseType_Nchar_WithLength_FormatsCorrectly()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("nchar", 20, 0, 0), Is.EqualTo("[nchar](10)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Char_WithLength_FormatsCorrectly()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("char", 10, 0, 0), Is.EqualTo("[char](10)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Binary_WithLength_FormatsCorrectly()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("binary", 16, 0, 0), Is.EqualTo("[binary](16)"));
+    }
+
+    [Test]
+    public void FormatBaseType_Time_DefaultScale_NoParens()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("time", 0, 0, 7), Is.EqualTo("[time]"));
+    }
+
+    [Test]
+    public void FormatBaseType_Time_CustomScale_WithParens()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("time", 0, 0, 0), Is.EqualTo("[time](0)"));
+    }
+
+    [Test]
+    public void FormatBaseType_DatetimeOffset_DefaultScale_NoParens()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("datetimeoffset", 0, 0, 7), Is.EqualTo("[datetimeoffset]"));
+    }
+
+    [Test]
+    public void FormatBaseType_DatetimeOffset_CustomScale_WithParens()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("datetimeoffset", 0, 0, 2), Is.EqualTo("[datetimeoffset](2)"));
+    }
+
+    #endregion
+
+    #region ConvertToCreateOrAlter Tests
+
+    [Test]
+    public void ConvertToCreateOrAlter_SimpleProcedure_ConvertsCorrectly()
+    {
+        var input = "CREATE PROCEDURE dbo.MyProc AS BEGIN END";
+        var result = SchemaTongs.ConvertToCreateOrAlter(input, "dbo", "MyProc");
+        Assert.That(result, Does.Contain("CREATE OR ALTER PROCEDURE"));
+        Assert.That(result, Does.Contain("[dbo].[MyProc]"));
+    }
+
+    [Test]
+    public void ConvertToCreateOrAlter_SimpleFunction_ConvertsCorrectly()
+    {
+        var input = "CREATE FUNCTION dbo.MyFunc() RETURNS INT AS BEGIN RETURN 1 END";
+        var result = SchemaTongs.ConvertToCreateOrAlter(input, "dbo", "MyFunc");
+        Assert.That(result, Does.Contain("CREATE OR ALTER FUNCTION"));
+        Assert.That(result, Does.Contain("[dbo].[MyFunc]"));
+    }
+
+    [Test]
+    public void ConvertToCreateOrAlter_View_ConvertsCorrectly()
+    {
+        var input = "CREATE VIEW dbo.MyView AS SELECT 1 AS Col";
+        var result = SchemaTongs.ConvertToCreateOrAlter(input, "dbo", "MyView");
+        Assert.That(result, Does.Contain("CREATE OR ALTER VIEW"));
+        Assert.That(result, Does.Contain("[dbo].[MyView]"));
+    }
+
+    [Test]
+    public void ConvertToCreateOrAlter_AlreadyBracketed_StillBracketed()
+    {
+        var input = "CREATE PROCEDURE [dbo].[MyProc] AS BEGIN END";
+        var result = SchemaTongs.ConvertToCreateOrAlter(input, "dbo", "MyProc");
+        Assert.That(result, Does.Contain("CREATE OR ALTER PROCEDURE"));
+        Assert.That(result, Does.Contain("[dbo].[MyProc]"));
+    }
+
+    [Test]
+    public void ConvertToCreateOrAlter_WithLeadingComment_PreservesComment()
+    {
+        var input = "-- This is a comment\r\nCREATE PROCEDURE dbo.MyProc AS BEGIN END";
+        var result = SchemaTongs.ConvertToCreateOrAlter(input, "dbo", "MyProc");
+        Assert.That(result, Does.StartWith("-- This is a comment"));
+        Assert.That(result, Does.Contain("CREATE OR ALTER PROCEDURE"));
+    }
+
+    [Test]
+    public void ConvertToCreateOrAlter_CaseInsensitive_Converts()
+    {
+        var input = "create procedure dbo.MyProc AS BEGIN END";
+        var result = SchemaTongs.ConvertToCreateOrAlter(input, "dbo", "MyProc");
+        Assert.That(result, Does.Contain("CREATE OR ALTER"));
+    }
+
+    #endregion
+
+    #region FormatXmlInScript Tests
+
+    [Test]
+    public void FormatXmlInScript_NoXmlContent_ReturnsUnchanged()
+    {
+        var input = "SELECT 1";
+        Assert.That(SchemaTongs.FormatXmlInScript(input), Is.EqualTo("SELECT 1"));
+    }
+
+    [Test]
+    public void FormatXmlInScript_WithAsNPrefix_AttemptsParse()
+    {
+        // This just verifies the method doesn't throw for XML content
+        var input = "CREATE XML SCHEMA COLLECTION [dbo].[TestSchema] AS N'<xsd:schema xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"></xsd:schema>'";
+        var result = SchemaTongs.FormatXmlInScript(input);
+        Assert.That(result, Does.Contain("xsd:schema"));
+    }
+
+    #endregion
+
+    #region PromoteCheckConstraintsToTableLevel Tests
+
+    [Test]
+    public void PromoteCheckConstraintsToTableLevel_ClearsColumnCheckExpressions()
+    {
+        var table = new SqlServerTable
+        {
+            Name = "Orders",
+            Columns =
+            [
+                new SqlServerColumn { Name = "Quantity", CheckExpression = "[Quantity] > 0" },
+                new SqlServerColumn { Name = "Price", CheckExpression = "[Price] >= 0" },
+                new SqlServerColumn { Name = "Name" }
+            ]
+        };
+
+        var allConstraints = new List<CheckConstraint>
+        {
+            new() { Name = "CK_Orders_Quantity", Expression = "[Quantity] > 0" },
+            new() { Name = "CK_Orders_Price", Expression = "[Price] >= 0" }
+        };
+
+        SchemaTongs.PromoteCheckConstraintsToTableLevel(table, allConstraints);
+
+        foreach (var col in table.Columns)
+        {
+            var sqlCol = (SqlServerColumn)col;
+            Assert.That(sqlCol.CheckExpression, Is.Null, $"Column {col.Name} should have null CheckExpression");
+        }
+    }
+
+    [Test]
+    public void PromoteCheckConstraintsToTableLevel_ReplacesCheckConstraintsWithFullSet()
+    {
+        var table = new SqlServerTable
+        {
+            Name = "Orders",
+            Columns =
+            [
+                new SqlServerColumn { Name = "Quantity", CheckExpression = "[Quantity] > 0" }
+            ],
+            CheckConstraints =
+            [
+                new CheckConstraint { Name = "CK_Orders_Status", Expression = "[Status] IN ('A','B')" }
+            ]
+        };
+
+        var allConstraints = new List<CheckConstraint>
+        {
+            new() { Name = "CK_Orders_Quantity", Expression = "[Quantity] > 0" },
+            new() { Name = "CK_Orders_Status", Expression = "[Status] IN ('A','B')" }
+        };
+
+        SchemaTongs.PromoteCheckConstraintsToTableLevel(table, allConstraints);
+
+        Assert.That(table.CheckConstraints, Has.Count.EqualTo(2));
+        Assert.That(table.CheckConstraints[0].Name, Is.EqualTo("CK_Orders_Quantity"));
+        Assert.That(table.CheckConstraints[0].Expression, Is.EqualTo("[Quantity] > 0"));
+        Assert.That(table.CheckConstraints[1].Name, Is.EqualTo("CK_Orders_Status"));
+        Assert.That(table.CheckConstraints[1].Expression, Is.EqualTo("[Status] IN ('A','B')"));
+    }
+
+    [Test]
+    public void PromoteCheckConstraintsToTableLevel_NoColumnChecks_StillReplacesTableConstraints()
+    {
+        var table = new SqlServerTable
+        {
+            Name = "Orders",
+            Columns = [new SqlServerColumn { Name = "Id" }],
+            CheckConstraints =
+            [
+                new CheckConstraint { Name = "CK_Old", Expression = "1=1" }
+            ]
+        };
+
+        var allConstraints = new List<CheckConstraint>
+        {
+            new() { Name = "CK_TableLevel", Expression = "[Status] <> 'X'" }
+        };
+
+        SchemaTongs.PromoteCheckConstraintsToTableLevel(table, allConstraints);
+
+        Assert.That(table.CheckConstraints, Has.Count.EqualTo(1));
+        Assert.That(table.CheckConstraints[0].Name, Is.EqualTo("CK_TableLevel"));
+    }
+
+    [Test]
+    public void PromoteCheckConstraintsToTableLevel_EmptyConstraintList_ClearsAll()
+    {
+        var table = new SqlServerTable
+        {
+            Name = "Orders",
+            Columns = [new SqlServerColumn { Name = "Qty", CheckExpression = "[Qty] > 0" }],
+            CheckConstraints =
+            [
+                new CheckConstraint { Name = "CK_Old", Expression = "1=1" }
+            ]
+        };
+
+        SchemaTongs.PromoteCheckConstraintsToTableLevel(table, []);
+
+        Assert.That(((SqlServerColumn)table.Columns[0]).CheckExpression, Is.Null);
+        Assert.That(table.CheckConstraints, Is.Empty);
+    }
+
+    #endregion
+}
