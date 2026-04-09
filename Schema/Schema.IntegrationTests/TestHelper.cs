@@ -21,9 +21,9 @@ public static class TestHelper
     private static string FindSolutionRoot()
     {
         var dir = AppContext.BaseDirectory;
-        while (dir != null && !File.Exists(Path.Combine(dir, "SchemaSmithyFree.sln")))
+        while (dir != null && !File.Exists(Path.Combine(dir, "SchemaSmith.sln")))
             dir = Directory.GetParent(dir)?.FullName;
         return dir ?? throw new InvalidOperationException(
-            "Could not find solution root (looked for SchemaSmithyFree.sln walking up from " + AppContext.BaseDirectory + ")");
+            "Could not find solution root (looked for SchemaSmith.sln walking up from " + AppContext.BaseDirectory + ")");
     }
 }
