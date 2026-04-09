@@ -1,0 +1,218 @@
+{
+  "type": "object",
+  "properties": {
+    "Name": {
+      "type": "string"
+    },
+    "Columns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "DataType": {
+            "type": "string"
+          },
+          "Nullable": {
+            "type": "boolean"
+          },
+          "Default": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "OldName": {
+            "type": "string"
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "DataType"
+        ]
+      }
+    },
+    "Indexes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "PrimaryKey": {
+            "type": "boolean"
+          },
+          "Unique": {
+            "type": "boolean"
+          },
+          "UniqueConstraint": {
+            "type": "boolean"
+          },
+          "IndexColumns": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "IndexColumns"
+        ]
+      }
+    },
+    "ForeignKeys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Columns": {
+            "type": "string"
+          },
+          "RelatedTable": {
+            "type": "string"
+          },
+          "RelatedColumns": {
+            "type": "string"
+          },
+          "DeleteAction": {
+            "type": "string",
+            "pattern": "NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT"
+          },
+          "UpdateAction": {
+            "type": "string",
+            "pattern": "NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "Columns",
+          "RelatedTable",
+          "RelatedColumns"
+        ]
+      }
+    },
+    "CheckConstraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Expression": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "Expression"
+        ]
+      }
+    },
+    "ShouldApplyExpression": {
+      "type": "string"
+    },
+    "DataDelivery": {
+      "type": "object",
+      "properties": {
+        "ContentFile": {
+          "type": "string"
+        },
+        "MergeType": {
+          "type": "string",
+          "pattern": "None|Insert|Insert/Update|Insert/Update/Delete"
+        },
+        "MatchColumns": {
+          "type": "string"
+        },
+        "MergeFilter": {
+          "type": "string"
+        },
+        "MergeDisableTriggers": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "OldName": {
+      "type": "string"
+    },
+    "Engine": {
+      "type": "string"
+    },
+    "RowFormat": {
+      "type": "string",
+      "pattern": "DYNAMIC|COMPACT|COMPRESSED|REDUNDANT"
+    },
+    "CharacterSet": {
+      "type": "string"
+    },
+    "Collation": {
+      "type": "string"
+    },
+    "Comment": {
+      "type": "string"
+    },
+    "AutoIncrementValue": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "minimum": 1.0
+    },
+    "FullTextIndexes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Columns": {
+            "type": "string"
+          },
+          "Parser": {
+            "type": "string"
+          },
+          "Comment": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "Columns"
+        ]
+      }
+    },
+    "Extensions": {}
+  },
+  "additionalProperties": false,
+  "required": [
+    "Name"
+  ]
+}

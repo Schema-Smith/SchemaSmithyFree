@@ -1,0 +1,19 @@
+{
+    "Name": "ValidProduct",
+    "ValidationScript": "SELECT EXISTS(SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{{MainDB}}')",
+    "TemplateOrder": [
+        "Main",
+        "Secondary",
+        "Bogus"
+    ],
+    "ScriptFolders": [
+        { "FolderPath": "Jobs", "QuenchSlot": "After" }
+    ],
+    "ScriptTokens": {
+        "SecondaryDB": "TestSecondary",
+        "MainDB": "TestMain",
+        "ReleaseVersion": "1.0.1.14",
+        "TestQueryToken": "<*Query*>SELECT GROUP_CONCAT(SCHEMA_NAME) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{{MainDB}}'"
+    },
+    "Platform": "MySQL"
+}

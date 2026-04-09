@@ -1,0 +1,59 @@
+{
+    "Name": "`TestTable`",
+    "Engine": "InnoDB",
+    "Columns": [
+        {
+            "Name": "`TestID`",
+            "DataType": "INT",
+            "Nullable": false,
+            "AutoIncrement": true
+        },
+        {
+            "Name": "`ParentID`",
+            "DataType": "INT",
+            "Nullable": true
+        },
+        {
+            "Name": "`DateCreated`",
+            "DataType": "TIMESTAMP",
+            "Nullable": true,
+            "Default": "CURRENT_TIMESTAMP"
+        },
+        {
+            "Name": "`Status`",
+            "DataType": "SMALLINT",
+            "Nullable": false,
+            "Default": "0"
+        },
+        {
+            "Name": "`SomeText`",
+            "DataType": "VARCHAR(2000)",
+            "Nullable": true
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "PRIMARY",
+            "PrimaryKey": true,
+            "IndexColumns": "`TestID`"
+        },
+        {
+            "Name": "idx_TestTable_DateCreated",
+            "IndexColumns": "`DateCreated`"
+        }
+    ],
+    "ForeignKeys": [
+        {
+            "Name": "FK_SelfReference",
+            "Columns": "`ParentID`",
+            "RelatedTable": "`TestTable`",
+            "RelatedColumns": "`TestID`"
+        }
+    ],
+    "CheckConstraints": [
+        {
+            "Name": "CK_Test",
+            "Expression": "`Status` < 20"
+        }
+    ],
+}

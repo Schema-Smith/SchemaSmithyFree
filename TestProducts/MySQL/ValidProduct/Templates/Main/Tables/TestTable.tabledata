@@ -1,0 +1,4 @@
+[
+    {"TestID": 1, "ParentID": null, "Status": 1, "SomeText": "Root item"},
+    {"TestID": 2, "ParentID": 1, "Status": 2, "SomeText": "Child of root"}
+]
