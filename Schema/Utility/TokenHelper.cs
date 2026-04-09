@@ -1,0 +1,323 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using Newtonsoft.Json.Linq;
+using Schema.Domain;
+using Schema.Domain.PostgreSQL;
+using Schema.Domain.SqlServer;
+using Schema.Isolators;
+using SchemaSmith.Pro;
+
+namespace Schema.Utility;
+
+public static class TokenHelper
+{
+    public const string QueryTag = "<*Query*>";
+    public const string QueryFileTag = "<*QueryFile*>";
+    public const string FileTag = "<*File*>";
+    public const string BinaryFileTag = "<*BinaryFile*>";
+    public const string SpecificTableTag = "<*SpecificTable*>";
+    public const string SpecificMaterializedViewTag = "<*SpecificMaterializedView*>";
+    public const string SpecificIndexedViewTag = "<*SpecificIndexedView*>";
+
+    public static void ResolveFileTokens(Dictionary<string, string> tokens, string basePath)
+    {
+        var tokenErrors = new List<string>();
+        ResolveFileTokensByTag(tokens, basePath, tokenErrors, FileTag, "", fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
+        ResolveFileTokensByTag(tokens, basePath, tokenErrors, BinaryFileTag, "0x", fileName => BitConverter.ToString(ProductFileWrapper.GetFromFactory().ReadAllBytes(fileName)).Replace("-", ""));
+        ResolveFileTokensByTag(tokens, basePath, tokenErrors, QueryFileTag, QueryTag, fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
+        if (tokenErrors.Count == 0) return;
+        throw new Exception(string.Join("\r\n", tokenErrors));
+    }
+
+    public static void ResolveSpecificTableTokens(Dictionary<string, string> tokens, IList<Table> tables, Platform platform)
+    {
+        var tokenErrors = new List<string>();
+        foreach (var token in tokens.Where(t => t.Value.StartsWithIgnoringCase(SpecificTableTag)).ToList())
+        {
+            var table = token.Value.Substring(SpecificTableTag.Length).Trim();
+            if (string.IsNullOrEmpty(table))
+            {
+                tokenErrors.Add($"Unable to resolve specific table token '{token.Key}'. No table name was provided");
+                continue;
+            }
+            var foundTable = FindTable(tables, table, platform);
+            if (foundTable == null)
+            {
+                tokenErrors.Add($"Unable to resolve specific table token '{token.Key}' missing table: '{table}'");
+                continue;
+            }
+            try
+            {
+                tokens[token.Key] = JToken.FromObject(foundTable).ToString();
+            }
+            catch (Exception e)
+            {
+                tokenErrors.Add($"Unable to resolve specific table token '{token.Key}' error:\r\n{e}");
+            }
+        }
+        if (tokenErrors.Count == 0) return;
+        throw new Exception(string.Join("\r\n", tokenErrors));
+    }
+
+    public static void ResolveSpecificMaterializedViewTokens(
+        Dictionary<string, string> tokens,
+        IList<PostgreSqlMaterializedView> materializedViews)
+    {
+        var tokenErrors = new List<string>();
+        foreach (var token in tokens.Where(t => t.Value.StartsWithIgnoringCase(SpecificMaterializedViewTag)).ToList())
+        {
+            var viewRef = token.Value.Substring(SpecificMaterializedViewTag.Length).Trim();
+            if (string.IsNullOrEmpty(viewRef))
+            {
+                tokenErrors.Add($"Unable to resolve specific materialized view token '{token.Key}'. No view name was provided");
+                continue;
+            }
+            var foundView = FindMaterializedView(materializedViews, viewRef);
+            if (foundView == null)
+            {
+                tokenErrors.Add($"Unable to resolve specific materialized view token '{token.Key}' missing view: '{viewRef}'");
+                continue;
+            }
+            try
+            {
+                tokens[token.Key] = JToken.FromObject(foundView).ToString();
+            }
+            catch (Exception e)
+            {
+                tokenErrors.Add($"Unable to resolve specific materialized view token '{token.Key}' error:\r\n{e}");
+            }
+        }
+        if (tokenErrors.Count == 0) return;
+        throw new Exception(string.Join("\r\n", tokenErrors));
+    }
+
+    public static void ResolveSpecificIndexedViewTokens(
+        Dictionary<string, string> tokens,
+        IList<SqlServerIndexedView> indexedViews)
+    {
+        var tokenErrors = new List<string>();
+        foreach (var token in tokens.Where(t => t.Value.StartsWithIgnoringCase(SpecificIndexedViewTag)).ToList())
+        {
+            var viewRef = token.Value.Substring(SpecificIndexedViewTag.Length).Trim();
+            if (string.IsNullOrEmpty(viewRef))
+            {
+                tokenErrors.Add($"Unable to resolve specific indexed view token '{token.Key}'. No view name was provided");
+                continue;
+            }
+            var foundView = FindIndexedView(indexedViews, viewRef);
+            if (foundView == null)
+            {
+                tokenErrors.Add($"Unable to resolve specific indexed view token '{token.Key}' missing view: '{viewRef}'");
+                continue;
+            }
+            try
+            {
+                tokens[token.Key] = JToken.FromObject(foundView).ToString();
+            }
+            catch (Exception e)
+            {
+                tokenErrors.Add($"Unable to resolve specific indexed view token '{token.Key}' error:\r\n{e}");
+            }
+        }
+        if (tokenErrors.Count == 0) return;
+        throw new Exception(string.Join("\r\n", tokenErrors));
+    }
+
+    private static SqlServerIndexedView FindIndexedView(
+        IList<SqlServerIndexedView> views, string viewRef)
+    {
+        var parts = viewRef.Replace("[", "").Replace("]", "").Split('.');
+        if (parts.Length == 2)
+        {
+            return views.FirstOrDefault(v =>
+                v.Schema.Replace("[", "").Replace("]", "").Equals(parts[0], StringComparison.OrdinalIgnoreCase) &&
+                v.Name.Replace("[", "").Replace("]", "").Equals(parts[1], StringComparison.OrdinalIgnoreCase));
+        }
+        return views.FirstOrDefault(v =>
+            v.Schema.Replace("[", "").Replace("]", "").Equals("dbo", StringComparison.OrdinalIgnoreCase) &&
+            v.Name.Replace("[", "").Replace("]", "").Equals(viewRef.Replace("[", "").Replace("]", ""), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static PostgreSqlMaterializedView FindMaterializedView(
+        IList<PostgreSqlMaterializedView> views, string viewRef)
+    {
+        var parts = viewRef.Replace("\"", "").Split('.');
+        if (parts.Length == 2)
+        {
+            return views.FirstOrDefault(v =>
+                v.Schema.Equals(parts[0], StringComparison.OrdinalIgnoreCase) &&
+                v.Name.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
+        }
+        return views.FirstOrDefault(v =>
+            v.Schema.Equals("public", StringComparison.OrdinalIgnoreCase) &&
+            v.Name.Equals(viewRef, StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal static Table FindTable(IList<Table> tables, string tableRef, Platform platform)
+    {
+        return platform switch
+        {
+            Platform.SqlServer => FindTableSqlServer(tables, tableRef),
+            Platform.PostgreSQL => FindTablePostgreSQL(tables, tableRef),
+            Platform.MySQL => FindTableMySQL(tables, tableRef),
+            _ => FindTableSqlServer(tables, tableRef)
+        };
+    }
+
+    private static string GetTableSchema(Table table)
+    {
+        var prop = table.GetType().GetProperty("Schema");
+        return prop?.GetValue(table) as string ?? (table.Extensions as JObject)?["Schema"]?.ToString() ?? "";
+    }
+
+    private static Table FindTableSqlServer(IList<Table> tables, string tableRef)
+    {
+        return tables.FirstOrDefault(t => $"{GetTableSchema(t)}.{t.Name}".Replace("[", "").Replace("]", "").EqualsIgnoringCase(tableRef.Replace("[", "").Replace("]", "")))
+            ?? tables.FirstOrDefault(t => $"{GetTableSchema(t)}.{t.Name}".Replace("[", "").Replace("]", "").EqualsIgnoringCase($"dbo.{tableRef}".Replace("[", "").Replace("]", "")));
+    }
+
+    private static Table FindTablePostgreSQL(IList<Table> tables, string tableRef)
+    {
+        return tables.FirstOrDefault(t => $"{GetTableSchema(t)}.{t.Name}".Replace("\"", "").EqualsIgnoringCase(tableRef.Replace("\"", "")))
+            ?? tables.FirstOrDefault(t => $"{GetTableSchema(t)}.{t.Name}".Replace("\"", "").EqualsIgnoringCase($"public.{tableRef}".Replace("\"", "")));
+    }
+
+    private static Table FindTableMySQL(IList<Table> tables, string tableRef)
+    {
+        return tables.FirstOrDefault(t => $"{t.Name}".Replace("\"", "").Replace("`", "").EqualsIgnoringCase(tableRef.Replace("\"", "").Replace("`", "")));
+    }
+
+    private static void ResolveFileTokensByTag(Dictionary<string, string> tokens, string basePath, List<string> tokenErrors, string tag, string contentPrefix, Func<string, string> readFile)
+    {
+        var fileTokens = tokens.Where(t => t.Value.StartsWithIgnoringCase(tag)).ToList();
+        if (fileTokens.Count == 0) return;
+
+        var results = new ConcurrentDictionary<string, string>();
+        var errors = new ConcurrentBag<string>();
+
+        var queue = new TaskQueueManager<KeyValuePair<string, string>>(Environment.ProcessorCount * 2);
+        foreach (var token in fileTokens)
+        {
+            queue.AddToQueue(token, t =>
+            {
+                var fileName = Path.Combine(basePath, t.Value.Substring(tag.Length).Trim());
+                if (ProductFileWrapper.GetFromFactory().Exists(fileName))
+                    try
+                    {
+                        results[t.Key] = $"{contentPrefix}{readFile.Invoke(fileName)}";
+                    }
+                    catch (Exception e)
+                    {
+                        errors.Add($"Unable to resolve file token '{t.Key}' error:\r\n{e}");
+                    }
+                else
+                    errors.Add($"Unable to resolve file token '{t.Key}' missing file: '{fileName}'");
+            });
+        }
+        queue.WaitForAll();
+
+        foreach (var result in results)
+            tokens[result.Key] = result.Value;
+        tokenErrors.AddRange(errors);
+    }
+
+    public static Dictionary<string, string> SplitOutQueryTokens(Dictionary<string, string> tokens)
+    {
+        var queryTokens = new Dictionary<string, string>();
+        foreach (var token in tokens.Where(t => t.Value.StartsWithIgnoringCase(QueryTag) || t.Value.StartsWithIgnoringCase(QueryFileTag)).ToList())
+        {
+            queryTokens.Add(token.Key, token.Value);
+            tokens.Remove(token.Key);
+        }
+        return queryTokens;
+    }
+
+    internal static string GetDropTempTablesScript(Platform platform)
+    {
+        return platform switch
+        {
+            Platform.SqlServer => DropTempTablesSqlServer,
+            Platform.PostgreSQL => DropTempTablesPostgreSQL,
+            Platform.MySQL => DropTempTablesMySQL,
+            _ => DropTempTablesSqlServer
+        };
+    }
+
+    private const string DropTempTablesSqlServer = """
+DECLARE @v_sql NVARCHAR(MAX) = ''
+SELECT @v_sql = STRING_AGG('DROP TABLE IF EXISTS ' + QUOTENAME([name]) + ';', CHAR(13) + CHAR(10))
+  FROM tempdb..sysobjects WITH (NOLOCK)
+  WHERE [name] LIKE '#[^#]%'
+    AND OBJECT_ID('tempdb..' + QUOTENAME([name])) IS NOT NULL
+EXEC(@v_sql)
+""";
+
+    private const string DropTempTablesPostgreSQL = """
+DO $$
+DECLARE
+  v_sql TEXT = '';
+BEGIN
+  SELECT STRING_AGG('DROP TABLE IF EXISTS "' || tablename || '";', CHR(10))
+    INTO v_sql
+    FROM pg_catalog.pg_tables
+    WHERE ('"' || schemaname || '"')::regnamespace = pg_catalog.PG_MY_TEMP_SCHEMA();
+  IF v_sql IS NOT NULL THEN
+    EXECUTE v_sql;
+  END IF;
+END $$;
+""";
+
+    // MySQL temporary tables are session-scoped and automatically dropped when the session ends.
+    // Unlike SQL Server (tempdb..sysobjects) or PostgreSQL (pg_catalog.pg_tables), MySQL doesn't provide
+    // a way to enumerate temporary tables. Using SELECT 1 as a no-op since temp table cleanup isn't
+    // needed between query token resolutions within the same session.
+    private const string DropTempTablesMySQL = "SELECT 1";
+
+    public static void ResolveQueryTokens(Dictionary<string, string> queryTokens, List<KeyValuePair<string, string>> nonQueryTokens, System.Data.IDbCommand cmd, string basePath, Platform platform)
+    {
+        var dropTempTablesScript = GetDropTempTablesScript(platform);
+        foreach (var token in queryTokens.ToList())
+        {
+            try
+            {
+                var query = token.Value.Substring(QueryTag.Length);
+
+                cmd.CommandText = dropTempTablesScript;
+                cmd.ExecuteNonQuery(); // Clear any existing temp tables before running the query
+                cmd.CommandText = SqlScript.TokenReplace(query, nonQueryTokens);
+                using var reader = cmd.ExecuteReader();
+                var content = new StringBuilder();
+                while (reader.Read())
+                    content.AppendLine(reader[0] == DBNull.Value ? "" : reader[0].ToString());
+                queryTokens[token.Key] = content.ToString().TrimEnd('\r', '\n');
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error resolving {token.Key}\r\n{token.Value}\r\n{ex.Message}\r\n{cmd.CommandText}");
+            }
+        }
+    }
+
+    public static List<string> GetTokensFromString(string script)
+    {
+        if (string.IsNullOrEmpty(script) || !script.Contains("{{") || !script.Contains("}}")) return [];
+        var e = 0;
+        var tokensToReplace = new List<string>();
+        while (true)
+        {
+            var s = script.IndexOf("{{", e, StringComparison.Ordinal);
+            if (s < 0) break; // No more tokens found
+            e = script.IndexOf("}}", s + 2, StringComparison.Ordinal);
+            if (e < 0) break; // No closing token found
+            var token = script.Substring(s + 2, e - s - 2);
+            if (token.Length < 100 && !token.Contains("\n")) tokensToReplace.Add(token);
+        }
+        return tokensToReplace;
+    }
+}

@@ -1,0 +1,37 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+using System.Text.RegularExpressions;
+using System;
+using System.IO;
+
+namespace Schema.Utility;
+
+public static class StringExtensions
+{
+    public static bool ContainsIgnoringCase(this string source, string s) => source.IndexOf(s, StringComparison.InvariantCultureIgnoreCase) >= 0;
+
+    public static bool EndsWithIgnoringCase(this string source, string s) => source.EndsWith(s, StringComparison.InvariantCultureIgnoreCase);
+
+    public static bool EqualsIgnoringCase(this string source, string s) => source.Equals(s, StringComparison.InvariantCultureIgnoreCase);
+
+    public static int IndexOfIgnoringCase(this string source, string s) => source.IndexOf(s, StringComparison.InvariantCultureIgnoreCase);
+
+    public static int IndexOfIgnoringCase(this string source, string s, int startIndex) => source.IndexOf(s, startIndex, StringComparison.InvariantCultureIgnoreCase);
+
+    public static bool StartsWithIgnoringCase(this string source, string s) => source.StartsWith(s, StringComparison.InvariantCultureIgnoreCase);
+
+    public static string ReplaceIgnoringCase(this string source, string find, string replace) => Regex.Replace(source, Regex.Escape(find), replace, RegexOptions.IgnoreCase);
+
+    public static string Unquote(this string value)
+    {
+        var result = value.Trim();
+        if (result.StartsWith("\"") && result.EndsWith("\""))
+            return result.Trim('"');
+        return value;
+    }
+
+    public static Stream ToStream(this string str)
+    {
+        return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(str));
+    }
+}
