@@ -1,0 +1,84 @@
+name: Bug Report
+description: Report a bug in SchemaSmith Community tools
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the details below so we can reproduce and fix it.
+
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Tool
+      description: Which SchemaSmith tool is affected?
+      options:
+        - SchemaQuench (deploy)
+        - SchemaTongs (extract)
+        - DataTongs (data sync)
+        - SchemaHammer (desktop viewer)
+        - Other / Multiple
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: What platform are you running on?
+      options:
+        - Windows (.NET 10)
+        - Linux (.NET 10)
+        - macOS (.NET 10)
+        - Docker
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Tool version (run with `--version` to check)"
+      placeholder: "e.g., 1.1.8"
+    validations:
+      required: true
+
+  - type: input
+    id: sql-server-version
+    attributes:
+      label: SQL Server Version
+      description: "Target SQL Server version and compatibility level if known"
+      placeholder: "e.g., SQL Server 2019, compat level 150"
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal steps to reproduce the issue
+      placeholder: |
+        1. Configure product with ...
+        2. Run SchemaQuench with ...
+        3. Observe error ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Log Output
+      description: Paste any relevant log output (passwords are redacted automatically by the tools)
+      render: text
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other context — table JSON snippets, product config, screenshots, etc.
