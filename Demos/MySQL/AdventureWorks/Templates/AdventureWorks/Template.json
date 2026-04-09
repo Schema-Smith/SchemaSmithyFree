@@ -1,0 +1,116 @@
+{
+  "Name": "AdventureWorks",
+  "DatabaseIdentificationScript": "SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME = '{{AdventureWorksDb}}'",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Before Scripts",
+      "QuenchSlot": "Before"
+    },
+    {
+      "FolderPath": "Functions",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Functions"
+    },
+    {
+      "FolderPath": "Procedures",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Procedures"
+    },
+    {
+      "FolderPath": "Events",
+      "QuenchSlot": "AfterTablesObjects",
+      "ObjectType": "Events"
+    },
+    {
+      "FolderPath": "Triggers",
+      "QuenchSlot": "AfterTablesObjects",
+      "ObjectType": "Triggers"
+    },
+    {
+      "FolderPath": "Views",
+      "QuenchSlot": "AfterTablesObjects",
+      "ObjectType": "Views"
+    },
+    {
+      "FolderPath": "Table Data",
+      "QuenchSlot": "TableData"
+    },
+    {
+      "FolderPath": "After Scripts",
+      "QuenchSlot": "After"
+    }
+  ],
+  "ScriptTokens": {
+    "AWBuildVersion.tabledata": "<*File*>data/AWBuildVersion.tabledata",
+    "DatabaseLog.tabledata": "<*File*>data/DatabaseLog.tabledata",
+    "ErrorLog.tabledata": "<*File*>data/ErrorLog.tabledata",
+    "HumanResources_Department.tabledata": "<*File*>data/HumanResources_Department.tabledata",
+    "HumanResources_Employee.tabledata": "<*File*>data/HumanResources_Employee.tabledata",
+    "HumanResources_EmployeeDepartmentHistory.tabledata": "<*File*>data/HumanResources_EmployeeDepartmentHistory.tabledata",
+    "HumanResources_EmployeePayHistory.tabledata": "<*File*>data/HumanResources_EmployeePayHistory.tabledata",
+    "HumanResources_JobCandidate.tabledata": "<*File*>data/HumanResources_JobCandidate.tabledata",
+    "HumanResources_Shift.tabledata": "<*File*>data/HumanResources_Shift.tabledata",
+    "Person_Address.tabledata": "<*File*>data/Person_Address.tabledata",
+    "Person_AddressType.tabledata": "<*File*>data/Person_AddressType.tabledata",
+    "Person_BusinessEntity.tabledata": "<*File*>data/Person_BusinessEntity.tabledata",
+    "Person_BusinessEntityAddress.tabledata": "<*File*>data/Person_BusinessEntityAddress.tabledata",
+    "Person_BusinessEntityContact.tabledata": "<*File*>data/Person_BusinessEntityContact.tabledata",
+    "Person_ContactType.tabledata": "<*File*>data/Person_ContactType.tabledata",
+    "Person_CountryRegion.tabledata": "<*File*>data/Person_CountryRegion.tabledata",
+    "Person_EmailAddress.tabledata": "<*File*>data/Person_EmailAddress.tabledata",
+    "Person_Password.tabledata": "<*File*>data/Person_Password.tabledata",
+    "Person_Person.tabledata": "<*File*>data/Person_Person.tabledata",
+    "Person_PersonPhone.tabledata": "<*File*>data/Person_PersonPhone.tabledata",
+    "Person_PhoneNumberType.tabledata": "<*File*>data/Person_PhoneNumberType.tabledata",
+    "Person_StateProvince.tabledata": "<*File*>data/Person_StateProvince.tabledata",
+    "Production_BillOfMaterials.tabledata": "<*File*>data/Production_BillOfMaterials.tabledata",
+    "Production_Culture.tabledata": "<*File*>data/Production_Culture.tabledata",
+    "Production_Document.tabledata": "<*File*>data/Production_Document.tabledata",
+    "Production_Illustration.tabledata": "<*File*>data/Production_Illustration.tabledata",
+    "Production_Location.tabledata": "<*File*>data/Production_Location.tabledata",
+    "Production_Product.tabledata": "<*File*>data/Production_Product.tabledata",
+    "Production_ProductCategory.tabledata": "<*File*>data/Production_ProductCategory.tabledata",
+    "Production_ProductCostHistory.tabledata": "<*File*>data/Production_ProductCostHistory.tabledata",
+    "Production_ProductDescription.tabledata": "<*File*>data/Production_ProductDescription.tabledata",
+    "Production_ProductDocument.tabledata": "<*File*>data/Production_ProductDocument.tabledata",
+    "Production_ProductInventory.tabledata": "<*File*>data/Production_ProductInventory.tabledata",
+    "Production_ProductListPriceHistory.tabledata": "<*File*>data/Production_ProductListPriceHistory.tabledata",
+    "Production_ProductModel.tabledata": "<*File*>data/Production_ProductModel.tabledata",
+    "Production_ProductModelIllustration.tabledata": "<*File*>data/Production_ProductModelIllustration.tabledata",
+    "Production_ProductModelProductDescriptionCulture.tabledata": "<*File*>data/Production_ProductModelProductDescriptionCulture.tabledata",
+    "Production_ProductPhoto.tabledata": "<*File*>data/Production_ProductPhoto.tabledata",
+    "Production_ProductProductPhoto.tabledata": "<*File*>data/Production_ProductProductPhoto.tabledata",
+    "Production_ProductReview.tabledata": "<*File*>data/Production_ProductReview.tabledata",
+    "Production_ProductSubcategory.tabledata": "<*File*>data/Production_ProductSubcategory.tabledata",
+    "Production_ScrapReason.tabledata": "<*File*>data/Production_ScrapReason.tabledata",
+    "Production_TransactionHistory.tabledata": "<*File*>data/Production_TransactionHistory.tabledata",
+    "Production_TransactionHistoryArchive.tabledata": "<*File*>data/Production_TransactionHistoryArchive.tabledata",
+    "Production_UnitMeasure.tabledata": "<*File*>data/Production_UnitMeasure.tabledata",
+    "Production_WorkOrder.tabledata": "<*File*>data/Production_WorkOrder.tabledata",
+    "Production_WorkOrderRouting.tabledata": "<*File*>data/Production_WorkOrderRouting.tabledata",
+    "Purchasing_ProductVendor.tabledata": "<*File*>data/Purchasing_ProductVendor.tabledata",
+    "Purchasing_PurchaseOrderDetail.tabledata": "<*File*>data/Purchasing_PurchaseOrderDetail.tabledata",
+    "Purchasing_PurchaseOrderHeader.tabledata": "<*File*>data/Purchasing_PurchaseOrderHeader.tabledata",
+    "Purchasing_ShipMethod.tabledata": "<*File*>data/Purchasing_ShipMethod.tabledata",
+    "Purchasing_Vendor.tabledata": "<*File*>data/Purchasing_Vendor.tabledata",
+    "Sales_CountryRegionCurrency.tabledata": "<*File*>data/Sales_CountryRegionCurrency.tabledata",
+    "Sales_CreditCard.tabledata": "<*File*>data/Sales_CreditCard.tabledata",
+    "Sales_Currency.tabledata": "<*File*>data/Sales_Currency.tabledata",
+    "Sales_CurrencyRate.tabledata": "<*File*>data/Sales_CurrencyRate.tabledata",
+    "Sales_Customer.tabledata": "<*File*>data/Sales_Customer.tabledata",
+    "Sales_PersonCreditCard.tabledata": "<*File*>data/Sales_PersonCreditCard.tabledata",
+    "Sales_SalesOrderDetail.tabledata": "<*File*>data/Sales_SalesOrderDetail.tabledata",
+    "Sales_SalesOrderHeader.tabledata": "<*File*>data/Sales_SalesOrderHeader.tabledata",
+    "Sales_SalesOrderHeaderSalesReason.tabledata": "<*File*>data/Sales_SalesOrderHeaderSalesReason.tabledata",
+    "Sales_SalesPerson.tabledata": "<*File*>data/Sales_SalesPerson.tabledata",
+    "Sales_SalesPersonQuotaHistory.tabledata": "<*File*>data/Sales_SalesPersonQuotaHistory.tabledata",
+    "Sales_SalesReason.tabledata": "<*File*>data/Sales_SalesReason.tabledata",
+    "Sales_SalesTaxRate.tabledata": "<*File*>data/Sales_SalesTaxRate.tabledata",
+    "Sales_SalesTerritory.tabledata": "<*File*>data/Sales_SalesTerritory.tabledata",
+    "Sales_SalesTerritoryHistory.tabledata": "<*File*>data/Sales_SalesTerritoryHistory.tabledata",
+    "Sales_ShoppingCartItem.tabledata": "<*File*>data/Sales_ShoppingCartItem.tabledata",
+    "Sales_SpecialOffer.tabledata": "<*File*>data/Sales_SpecialOffer.tabledata",
+    "Sales_SpecialOfferProduct.tabledata": "<*File*>data/Sales_SpecialOfferProduct.tabledata",
+    "Sales_Store.tabledata": "<*File*>data/Sales_Store.tabledata"
+  }
+}

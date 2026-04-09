@@ -1,0 +1,43 @@
+{
+  "Name": "Northwind",
+  "DatabaseIdentificationScript": "SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME = '{{NorthwindDb}}'",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Before Scripts",
+      "QuenchSlot": "Before"
+    },
+    {
+      "FolderPath": "Procedures",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Procedures"
+    },
+    {
+      "FolderPath": "Views",
+      "QuenchSlot": "AfterTablesObjects",
+      "ObjectType": "Views"
+    },
+    {
+      "FolderPath": "Table Data",
+      "QuenchSlot": "TableData"
+    },
+    {
+      "FolderPath": "After Scripts",
+      "QuenchSlot": "After"
+    }
+  ],
+  "ScriptTokens": {
+    "Categories.tabledata": "<*File*>data/Categories.tabledata",
+    "CustomerCustomerDemo.tabledata": "<*File*>data/CustomerCustomerDemo.tabledata",
+    "CustomerDemographics.tabledata": "<*File*>data/CustomerDemographics.tabledata",
+    "Customers.tabledata": "<*File*>data/Customers.tabledata",
+    "EmployeeTerritories.tabledata": "<*File*>data/EmployeeTerritories.tabledata",
+    "Employees.tabledata": "<*File*>data/Employees.tabledata",
+    "Order Details.tabledata": "<*File*>data/Order Details.tabledata",
+    "Orders.tabledata": "<*File*>data/Orders.tabledata",
+    "Products.tabledata": "<*File*>data/Products.tabledata",
+    "Region.tabledata": "<*File*>data/Region.tabledata",
+    "Shippers.tabledata": "<*File*>data/Shippers.tabledata",
+    "Suppliers.tabledata": "<*File*>data/Suppliers.tabledata",
+    "Territories.tabledata": "<*File*>data/Territories.tabledata"
+  }
+}

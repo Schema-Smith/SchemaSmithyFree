@@ -1,0 +1,97 @@
+name: schemasmith-mysql-demo
+
+services:
+  quench-adventureworks:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MYSQL_USER}
+      - SmithySettings_Target__Password=${MYSQL_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./AdventureWorks:/metadata
+    depends_on:
+      demoserver:
+        condition: service_healthy
+
+  quench-chinook:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MYSQL_USER}
+      - SmithySettings_Target__Password=${MYSQL_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Chinook:/metadata
+    depends_on:
+      quench-adventureworks: # Serialize to avoid kindling race on shared TestMain database
+        condition: service_completed_successfully
+
+  quench-northwind:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MYSQL_USER}
+      - SmithySettings_Target__Password=${MYSQL_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Northwind:/metadata
+    depends_on:
+      quench-chinook: # Serialize to avoid kindling race on shared TestMain database
+        condition: service_completed_successfully
+
+  quench-sakila:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MYSQL_USER}
+      - SmithySettings_Target__Password=${MYSQL_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Sakila:/metadata
+    depends_on:
+      quench-northwind: # Serialize to avoid kindling race on shared TestMain database
+        condition: service_completed_successfully
+
+  demoserver:
+    image: mysql:8.0
+    command: --log-bin-trust-function-creators=1 --max-connections=500
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      MYSQL_DATABASE: TestMain
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -u ${MYSQL_USER} -p${MYSQL_PASSWORD} -e \"SELECT 1 FROM TestMain._init_complete LIMIT 1\" 2>/dev/null | grep -q 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    volumes:
+      - ./docker/init:/docker-entrypoint-initdb.d
+
+  completed:
+    image: alpine
+    entrypoint: ["echo"]
+    command: ["completed"]
+    depends_on:
+      demoserver:
+        condition: service_healthy
+      quench-adventureworks:
+        condition: service_completed_successfully
+      quench-chinook:
+        condition: service_completed_successfully
+      quench-northwind:
+        condition: service_completed_successfully
+      quench-sakila:
+        condition: service_completed_successfully

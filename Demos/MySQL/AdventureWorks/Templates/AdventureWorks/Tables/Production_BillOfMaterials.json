@@ -1,0 +1,164 @@
+{
+  "Name": "`Production_BillOfMaterials`",
+  "Columns": [
+    {
+      "Name": "`BillOfMaterialsID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`BOMLevel`",
+      "DataType": "smallint",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ComponentID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`EndDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`PerAssemblyQty`",
+      "DataType": "decimal(8,2)",
+      "Default": "1.00",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductAssemblyID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`StartDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`UnitMeasureCode`",
+      "DataType": "char(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_BillOfMaterials_ProductAssemblyID_ComponentID_StartDate",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductAssemblyID`,`ComponentID`,`StartDate`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Production_BillOfMaterials_ComponentID",
+      "IndexColumns": "`ComponentID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_BillOfMaterials_UnitMeasureCode",
+      "IndexColumns": "`UnitMeasureCode`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`BillOfMaterialsID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Production_BillOfMaterials_ComponentID",
+      "Columns": "`ComponentID`",
+      "RelatedTable": "`Production_Product`",
+      "RelatedColumns": "`ProductID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_BillOfMaterials_ProductAssemblyID",
+      "Columns": "`ProductAssemblyID`",
+      "RelatedTable": "`Production_Product`",
+      "RelatedColumns": "`ProductID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_BillOfMaterials_UnitMeasureCode",
+      "Columns": "`UnitMeasureCode`",
+      "RelatedTable": "`Production_UnitMeasure`",
+      "RelatedColumns": "`UnitMeasureCode`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_BillOfMaterials_BOMLevel",
+      "Expression": "(((`ProductAssemblyID` is null) and (`BOMLevel` = 0) and (`PerAssemblyQty` = 1.00)) or ((`ProductAssemblyID` is not null) and (`BOMLevel` >= 1)))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_BillOfMaterials_EndDate",
+      "Expression": "((`EndDate` > `StartDate`) or (`EndDate` is null))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_BillOfMaterials_ProductAssemblyID",
+      "Expression": "(`ProductAssemblyID` <> `ComponentID`)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_BillOfMaterials_PerAssemblyQty",
+      "Expression": "(`PerAssemblyQty` >= 1.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 3483
+}
