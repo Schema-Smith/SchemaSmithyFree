@@ -1,0 +1,14 @@
+{
+    "Name": "Secondary",
+    "SchemaIdentificationScript": "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{{SecondaryDB}}'",
+    "VersionStampScript": "SELECT '{{ReleaseVersion}}' AS Version",
+    "ScriptTokens": {},
+    "ScriptFolders": [
+        { "FolderPath": "MigrationScripts/Before", "QuenchSlot": "Before" },
+        { "FolderPath": "Functions", "QuenchSlot": "Objects" },
+        { "FolderPath": "Views", "QuenchSlot": "Objects" },
+        { "FolderPath": "Procedures", "QuenchSlot": "Objects" },
+        { "FolderPath": "Triggers", "QuenchSlot": "AfterTablesObjects" },
+        { "FolderPath": "MigrationScripts/After", "QuenchSlot": "After" }
+    ]
+}

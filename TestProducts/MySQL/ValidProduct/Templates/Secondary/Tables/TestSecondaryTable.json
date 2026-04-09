@@ -1,0 +1,24 @@
+{
+    "Name": "`TestSecondaryTable`",
+    "Engine": "InnoDB",
+    "Columns": [
+        {
+            "Name": "`ID`",
+            "DataType": "INT",
+            "Nullable": false,
+            "AutoIncrement": true
+        },
+        {
+            "Name": "`Name`",
+            "DataType": "VARCHAR(100)",
+            "Nullable": false
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "PRIMARY",
+            "PrimaryKey": true,
+            "IndexColumns": "`ID`"
+        }
+    ]
+}

@@ -1,0 +1,13 @@
+{
+    "Name": "BeforeTemplateScriptError",
+    "ValidationScript": "SELECT EXISTS(SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{{MainDB}}')",
+    "TemplateOrder": [
+        "Main"
+    ],
+    "ScriptFolders": [],
+    "ScriptTokens": {
+        "MainDB": "TestMain",
+        "ReleaseVersion": ""
+    },
+    "Platform": "MySQL"
+}
