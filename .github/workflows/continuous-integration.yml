@@ -33,6 +33,9 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Authenticate GitHub Packages
+        run: dotnet nuget update source github --username USERNAME --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --configfile nuget.config
+
       - name: Restore
         run: dotnet restore SchemaSmith.sln
 
@@ -117,6 +120,9 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Authenticate GitHub Packages
+        run: dotnet nuget update source github --username USERNAME --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --configfile nuget.config
+
       - name: Restore & Build
         run: dotnet build SchemaSmith.sln -c Debug
 
@@ -187,6 +193,9 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Authenticate GitHub Packages
+        run: dotnet nuget update source github --username USERNAME --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --configfile nuget.config
+
       - name: Restore & Build
         run: dotnet build SchemaSmith.sln -c Debug
 
@@ -255,6 +264,9 @@ jobs:
             FLUSH PRIVILEGES;
             SET GLOBAL max_connections = 500;
           "
+
+      - name: Authenticate GitHub Packages
+        run: dotnet nuget update source github --username USERNAME --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --configfile nuget.config
 
       - name: Restore & Build
         run: dotnet build SchemaSmith.sln -c Debug
