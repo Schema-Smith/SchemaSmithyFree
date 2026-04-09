@@ -1,0 +1,48 @@
+name: Feature Request
+description: Suggest an enhancement or new feature
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We'd love to hear your ideas for improving SchemaSmith Community!
+
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Tool
+      description: Which tool does this relate to?
+      options:
+        - SchemaQuench (deploy)
+        - SchemaTongs (extract)
+        - DataTongs (data sync)
+        - SchemaHammer (desktop viewer)
+        - General / Cross-tool
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Use Case
+      description: What problem does this solve? What are you trying to do today that's difficult or impossible?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How do you envision this working? Include config examples, CLI flags, or JSON snippets if helpful.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any workarounds you're currently using or other approaches you've considered?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Screenshots, links to related issues, or anything else that helps explain the request.
