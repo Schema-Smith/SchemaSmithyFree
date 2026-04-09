@@ -1,0 +1,72 @@
+{
+  "Name": "Sakila",
+  "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datname = '{{SakilaDb}}'",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Domain Types",
+      "QuenchSlot": "Objects",
+      "ObjectType": "DomainTypes"
+    },
+    {
+      "FolderPath": "Enum Types",
+      "QuenchSlot": "Objects",
+      "ObjectType": "EnumTypes"
+    },
+    {
+      "FolderPath": "Functions",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Functions"
+    },
+    {
+      "FolderPath": "Trigger Functions",
+      "QuenchSlot": "Objects",
+      "ObjectType": "TriggerFunctions"
+    },
+    {
+      "FolderPath": "Aggregates",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Aggregates"
+    },
+    {
+      "FolderPath": "Sequences",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Sequences"
+    },
+    {
+      "FolderPath": "Rules",
+      "QuenchSlot": "AfterTablesObjects",
+      "ObjectType": "Rules"
+    },
+    {
+      "FolderPath": "Triggers",
+      "QuenchSlot": "AfterTablesObjects",
+      "ObjectType": "Triggers"
+    },
+    {
+      "FolderPath": "Views",
+      "QuenchSlot": "AfterTablesObjects",
+      "ObjectType": "Views"
+    },
+    {
+      "FolderPath": "Table Data",
+      "QuenchSlot": "TableData"
+    }
+  ],
+  "ScriptTokens": {
+    "public.actor.tabledata": "<*File*>data/public.actor.tabledata",
+    "public.address.tabledata": "<*File*>data/public.address.tabledata",
+    "public.category.tabledata": "<*File*>data/public.category.tabledata",
+    "public.city.tabledata": "<*File*>data/public.city.tabledata",
+    "public.country.tabledata": "<*File*>data/public.country.tabledata",
+    "public.customer.tabledata": "<*File*>data/public.customer.tabledata",
+    "public.film.tabledata": "<*File*>data/public.film.tabledata",
+    "public.film_actor.tabledata": "<*File*>data/public.film_actor.tabledata",
+    "public.film_category.tabledata": "<*File*>data/public.film_category.tabledata",
+    "public.inventory.tabledata": "<*File*>data/public.inventory.tabledata",
+    "public.language.tabledata": "<*File*>data/public.language.tabledata",
+    "public.payment.tabledata": "<*File*>data/public.payment.tabledata",
+    "public.rental.tabledata": "<*File*>data/public.rental.tabledata",
+    "public.staff.tabledata": "<*File*>data/public.staff.tabledata",
+    "public.store.tabledata": "<*File*>data/public.store.tabledata"
+  }
+}

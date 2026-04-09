@@ -1,0 +1,393 @@
+{
+  "Name": "salesorderheader",
+  "Columns": [
+    {
+      "Name": "accountnumber",
+      "DataType": "\"public\".\"AccountNumber\"",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "billtoaddressid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "comment",
+      "DataType": "varchar(128)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "creditcardapprovalcode",
+      "DataType": "varchar(15)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "creditcardid",
+      "DataType": "int4",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "currencyrateid",
+      "DataType": "int4",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "customerid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "duedate",
+      "DataType": "timestamp",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "freight",
+      "DataType": "numeric",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "onlineorderflag",
+      "DataType": "\"public\".\"Flag\"",
+      "Default": "true",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "orderdate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "purchaseordernumber",
+      "DataType": "\"public\".\"OrderNumber\"",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "revisionnumber",
+      "DataType": "int2",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "rowguid",
+      "DataType": "uuid",
+      "Default": "uuid_generate_v1()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "salesorderid",
+      "DataType": "int4",
+      "Default": "nextval('sales.salesorderheader_salesorderid_seq'::regclass)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "salespersonid",
+      "DataType": "int4",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "shipdate",
+      "DataType": "timestamp",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "shipmethodid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "shiptoaddressid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "status",
+      "DataType": "int2",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "subtotal",
+      "DataType": "numeric",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "taxamt",
+      "DataType": "numeric",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "territoryid",
+      "DataType": "int4",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "totaldue",
+      "DataType": "numeric",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_SalesOrderHeader_SalesOrderID",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "salesorderid",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_SalesOrderHeader_Address_BillToAddressID",
+      "Columns": "billtoaddressid",
+      "RelatedTable": "address",
+      "RelatedColumns": "addressid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "person",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_SalesOrderHeader_Address_ShipToAddressID",
+      "Columns": "shiptoaddressid",
+      "RelatedTable": "address",
+      "RelatedColumns": "addressid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "person",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_SalesOrderHeader_CreditCard_CreditCardID",
+      "Columns": "creditcardid",
+      "RelatedTable": "creditcard",
+      "RelatedColumns": "creditcardid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "sales",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_SalesOrderHeader_CurrencyRate_CurrencyRateID",
+      "Columns": "currencyrateid",
+      "RelatedTable": "currencyrate",
+      "RelatedColumns": "currencyrateid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "sales",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_SalesOrderHeader_Customer_CustomerID",
+      "Columns": "customerid",
+      "RelatedTable": "customer",
+      "RelatedColumns": "customerid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "sales",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_SalesOrderHeader_SalesPerson_SalesPersonID",
+      "Columns": "salespersonid",
+      "RelatedTable": "salesperson",
+      "RelatedColumns": "businessentityid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "sales",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_SalesOrderHeader_SalesTerritory_TerritoryID",
+      "Columns": "territoryid",
+      "RelatedTable": "salesterritory",
+      "RelatedColumns": "territoryid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "sales",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_SalesOrderHeader_ShipMethod_ShipMethodID",
+      "Columns": "shipmethodid",
+      "RelatedTable": "shipmethod",
+      "RelatedColumns": "shipmethodid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "purchasing",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_SalesOrderHeader_DueDate",
+      "Expression": "duedate >= orderdate",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_SalesOrderHeader_Freight",
+      "Expression": "freight >= 0.00",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_SalesOrderHeader_ShipDate",
+      "Expression": "(shipdate >= orderdate) OR (shipdate IS NULL)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_SalesOrderHeader_Status",
+      "Expression": "(status >= 0) AND (status <= 8)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_SalesOrderHeader_SubTotal",
+      "Expression": "subtotal >= 0.00",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_SalesOrderHeader_TaxAmt",
+      "Expression": "taxamt >= 0.00",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "sales",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": []
+}

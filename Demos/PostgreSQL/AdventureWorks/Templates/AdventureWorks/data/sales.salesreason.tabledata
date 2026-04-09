@@ -1,0 +1,12 @@
+[
+{"modifieddate":"2019-04-30T00:00:00","name":"Price","reasontype":"Other","salesreasonid":1},
+{"modifieddate":"2019-04-30T00:00:00","name":"On Promotion","reasontype":"Promotion","salesreasonid":2},
+{"modifieddate":"2019-04-30T00:00:00","name":"Magazine Advertisement","reasontype":"Marketing","salesreasonid":3},
+{"modifieddate":"2019-04-30T00:00:00","name":"Television  Advertisement","reasontype":"Marketing","salesreasonid":4},
+{"modifieddate":"2019-04-30T00:00:00","name":"Manufacturer","reasontype":"Other","salesreasonid":5},
+{"modifieddate":"2019-04-30T00:00:00","name":"Review","reasontype":"Other","salesreasonid":6},
+{"modifieddate":"2019-04-30T00:00:00","name":"Demo Event","reasontype":"Marketing","salesreasonid":7},
+{"modifieddate":"2019-04-30T00:00:00","name":"Sponsorship","reasontype":"Marketing","salesreasonid":8},
+{"modifieddate":"2019-04-30T00:00:00","name":"Quality","reasontype":"Other","salesreasonid":9},
+{"modifieddate":"2019-04-30T00:00:00","name":"Other","reasontype":"Other","salesreasonid":10}
+]

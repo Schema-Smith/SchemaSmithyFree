@@ -1,0 +1,7 @@
+[
+{"modifieddate":"2019-04-30T00:00:00","name":"XRQ - TRUCK GROUND","rowguid":"6be756d9-d7be-4463-8f2c-ae60c710d606","shipbase":3.9500,"shipmethodid":1,"shiprate":0.9900},
+{"modifieddate":"2019-04-30T00:00:00","name":"ZY - EXPRESS","rowguid":"3455079b-f773-4dc6-8f1e-2a58649c4ab8","shipbase":9.9500,"shipmethodid":2,"shiprate":1.9900},
+{"modifieddate":"2019-04-30T00:00:00","name":"OVERSEAS - DELUXE","rowguid":"22f4e461-28cf-4ace-a980-f686cf112ec8","shipbase":29.9500,"shipmethodid":3,"shiprate":2.9900},
+{"modifieddate":"2019-04-30T00:00:00","name":"OVERNIGHT J-FAST","rowguid":"107e8356-e7a8-463d-b60c-079fff467f3f","shipbase":21.9500,"shipmethodid":4,"shiprate":1.2900},
+{"modifieddate":"2019-04-30T00:00:00","name":"CARGO TRANSPORT 5","rowguid":"b166019a-b134-4e76-b957-2b0490c610ed","shipbase":8.9900,"shipmethodid":5,"shiprate":1.4900}
+]

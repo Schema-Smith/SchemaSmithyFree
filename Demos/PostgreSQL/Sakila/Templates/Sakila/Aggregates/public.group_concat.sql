@@ -1,0 +1,1 @@
+CREATE OR REPLACE AGGREGATE public.group_concat(text) (sfunc = _group_concat, stype = text)

@@ -1,0 +1,5 @@
+[
+{"endtime":"15:00:00","modifieddate":"2008-04-30T00:00:00","name":"Day","shiftid":1,"starttime":"07:00:00"},
+{"endtime":"23:00:00","modifieddate":"2008-04-30T00:00:00","name":"Evening","shiftid":2,"starttime":"15:00:00"},
+{"endtime":"07:00:00","modifieddate":"2008-04-30T00:00:00","name":"Night","shiftid":3,"starttime":"23:00:00"}
+]

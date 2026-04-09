@@ -1,0 +1,1 @@
+CREATE OR REPLACE TRIGGER last_updated BEFORE UPDATE ON public.staff FOR EACH ROW EXECUTE FUNCTION last_updated()

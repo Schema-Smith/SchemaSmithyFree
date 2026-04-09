@@ -1,0 +1,1 @@
+CREATE OR REPLACE TRIGGER last_updated BEFORE UPDATE ON public.customer FOR EACH ROW EXECUTE FUNCTION last_updated()

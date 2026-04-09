@@ -1,0 +1,1 @@
+CREATE OR REPLACE TRIGGER last_updated BEFORE UPDATE ON public.city FOR EACH ROW EXECUTE FUNCTION last_updated()
