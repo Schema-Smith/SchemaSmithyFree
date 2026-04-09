@@ -1,0 +1,12 @@
+[
+{"CostLastYear":0.0000,"CostYTD":0.0000,"CountryRegionCode":"US","Group":"North America","ModifiedDate":"2008-04-30T00:00:00","Name":"Northwest","SalesLastYear":3298694.4938,"SalesYTD":7887186.7882,"TerritoryID":1},
+{"CostLastYear":0.0000,"CostYTD":0.0000,"CountryRegionCode":"US","Group":"North America","ModifiedDate":"2008-04-30T00:00:00","Name":"Northeast","SalesLastYear":3607148.9371,"SalesYTD":2402176.8476,"TerritoryID":2},
+{"CostLastYear":0.0000,"CostYTD":0.0000,"CountryRegionCode":"US","Group":"North America","ModifiedDate":"2008-04-30T00:00:00","Name":"Central","SalesLastYear":3205014.0767,"SalesYTD":3072175.1180,"TerritoryID":3},
+{"CostLastYear":0.0000,"CostYTD":0.0000,"CountryRegionCode":"US","Group":"North America","ModifiedDate":"2008-04-30T00:00:00","Name":"Southwest","SalesLastYear":5366575.7098,"SalesYTD":10510853.8739,"TerritoryID":4},
+{"CostLastYear":0.0000,"CostYTD":0.0000,"CountryRegionCode":"US","Group":"North America","ModifiedDate":"2008-04-30T00:00:00","Name":"Southeast","SalesLastYear":3925071.4318,"SalesYTD":2538667.2515,"TerritoryID":5},
+{"CostLastYear":0.0000,"CostYTD":0.0000,"CountryRegionCode":"CA","Group":"North America","ModifiedDate":"2008-04-30T00:00:00","Name":"Canada","SalesLastYear":5693988.8600,"SalesYTD":6771829.1376,"TerritoryID":6},
+{"CostLastYear":0.0000,"CostYTD":0.0000,"CountryRegionCode":"FR","Group":"Europe","ModifiedDate":"2008-04-30T00:00:00","Name":"France","SalesLastYear":2396539.7601,"SalesYTD":4772398.3078,"TerritoryID":7},
+{"CostLastYear":0.0000,"CostYTD":0.0000,"CountryRegionCode":"DE","Group":"Europe","ModifiedDate":"2008-04-30T00:00:00","Name":"Germany","SalesLastYear":1307949.7917,"SalesYTD":3805202.3478,"TerritoryID":8},
+{"CostLastYear":0.0000,"CostYTD":0.0000,"CountryRegionCode":"AU","Group":"Pacific","ModifiedDate":"2008-04-30T00:00:00","Name":"Australia","SalesLastYear":2278548.9776,"SalesYTD":5977814.9154,"TerritoryID":9},
+{"CostLastYear":0.0000,"CostYTD":0.0000,"CountryRegionCode":"GB","Group":"Europe","ModifiedDate":"2008-04-30T00:00:00","Name":"United Kingdom","SalesLastYear":1635823.3967,"SalesYTD":5012905.3656,"TerritoryID":10}
+]

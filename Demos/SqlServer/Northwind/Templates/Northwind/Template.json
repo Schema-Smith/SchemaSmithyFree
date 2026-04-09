@@ -1,0 +1,40 @@
+{
+  "Name": "Northwind",
+  "DatabaseIdentificationScript": "SELECT name FROM master.sys.databases WHERE name = '{{NorthwindDb}}'",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Schemas",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Schemas"
+    },
+    {
+      "FolderPath": "Views",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Views"
+    },
+    {
+      "FolderPath": "Procedures",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Procedures"
+    },
+    {
+      "FolderPath": "Table Data",
+      "QuenchSlot": "TableData"
+    }
+  ],
+  "ScriptTokens": {
+    "dbo.Categories.tabledata": "<*File*>data/dbo.Categories.tabledata",
+    "dbo.CustomerCustomerDemo.tabledata": "<*File*>data/dbo.CustomerCustomerDemo.tabledata",
+    "dbo.CustomerDemographics.tabledata": "<*File*>data/dbo.CustomerDemographics.tabledata",
+    "dbo.Customers.tabledata": "<*File*>data/dbo.Customers.tabledata",
+    "dbo.EmployeeTerritories.tabledata": "<*File*>data/dbo.EmployeeTerritories.tabledata",
+    "dbo.Employees.tabledata": "<*File*>data/dbo.Employees.tabledata",
+    "dbo.Order Details.tabledata": "<*File*>data/dbo.Order Details.tabledata",
+    "dbo.Orders.tabledata": "<*File*>data/dbo.Orders.tabledata",
+    "dbo.Products.tabledata": "<*File*>data/dbo.Products.tabledata",
+    "dbo.Region.tabledata": "<*File*>data/dbo.Region.tabledata",
+    "dbo.Shippers.tabledata": "<*File*>data/dbo.Shippers.tabledata",
+    "dbo.Suppliers.tabledata": "<*File*>data/dbo.Suppliers.tabledata",
+    "dbo.Territories.tabledata": "<*File*>data/dbo.Territories.tabledata"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "Name": "Initialize",
+  "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] = 'TestMain' AND NOT EXISTS (SELECT 1 FROM master.sys.databases WHERE [Name] = '{{AdventureWorksDb}}')",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Before Scripts",
+      "QuenchSlot": "Before"
+    }
+  ],
+  "Required": false
+}

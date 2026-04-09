@@ -1,0 +1,201 @@
+{
+  "Name": "[Products]",
+  "Columns": [
+    {
+      "Name": "[CategoryID]",
+      "DataType": "INT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Discontinued]",
+      "DataType": "BIT",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[ProductName]",
+      "DataType": "NVARCHAR(40)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[QuantityPerUnit]",
+      "DataType": "NVARCHAR(20)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[ReorderLevel]",
+      "DataType": "SMALLINT",
+      "Nullable": true,
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[ReorderLevel]>=(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[SupplierID]",
+      "DataType": "INT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[UnitPrice]",
+      "DataType": "MONEY",
+      "Nullable": true,
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[UnitPrice]>=(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[UnitsInStock]",
+      "DataType": "SMALLINT",
+      "Nullable": true,
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[UnitsInStock]>=(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[UnitsOnOrder]",
+      "DataType": "SMALLINT",
+      "Nullable": true,
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[UnitsOnOrder]>=(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[CategoriesProducts]",
+      "IndexColumns": "[CategoryID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[CategoryID]",
+      "IndexColumns": "[CategoryID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[PK_Products]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[ProductID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true
+    },
+    {
+      "Name": "[ProductName]",
+      "IndexColumns": "[ProductName]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[SupplierID]",
+      "IndexColumns": "[SupplierID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[SuppliersProducts]",
+      "IndexColumns": "[SupplierID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Products_Categories]",
+      "Columns": "[CategoryID]",
+      "RelatedTable": "[Categories]",
+      "RelatedColumns": "[CategoryID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[FK_Products_Suppliers]",
+      "Columns": "[SupplierID]",
+      "RelatedTable": "[Suppliers]",
+      "RelatedColumns": "[SupplierID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": []
+}

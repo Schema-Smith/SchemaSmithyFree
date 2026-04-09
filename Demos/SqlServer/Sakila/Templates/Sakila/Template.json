@@ -1,0 +1,47 @@
+{
+  "Name": "Sakila",
+  "DatabaseIdentificationScript": "SELECT name FROM master.sys.databases WHERE name = '{{SakilaDb}}'",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Functions",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Functions"
+    },
+    {
+      "FolderPath": "Procedures",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Procedures"
+    },
+    {
+      "FolderPath": "Views",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Views"
+    },
+    {
+      "FolderPath": "Triggers",
+      "QuenchSlot": "AfterTablesObjects",
+      "ObjectType": "Triggers"
+    },
+    {
+      "FolderPath": "Table Data",
+      "QuenchSlot": "TableData"
+    }
+  ],
+  "ScriptTokens": {
+    "dbo.actor.tabledata": "<*File*>data/dbo.actor.tabledata",
+    "dbo.address.tabledata": "<*File*>data/dbo.address.tabledata",
+    "dbo.category.tabledata": "<*File*>data/dbo.category.tabledata",
+    "dbo.city.tabledata": "<*File*>data/dbo.city.tabledata",
+    "dbo.country.tabledata": "<*File*>data/dbo.country.tabledata",
+    "dbo.customer.tabledata": "<*File*>data/dbo.customer.tabledata",
+    "dbo.film.tabledata": "<*File*>data/dbo.film.tabledata",
+    "dbo.film_actor.tabledata": "<*File*>data/dbo.film_actor.tabledata",
+    "dbo.film_category.tabledata": "<*File*>data/dbo.film_category.tabledata",
+    "dbo.inventory.tabledata": "<*File*>data/dbo.inventory.tabledata",
+    "dbo.language.tabledata": "<*File*>data/dbo.language.tabledata",
+    "dbo.payment.tabledata": "<*File*>data/dbo.payment.tabledata",
+    "dbo.rental.tabledata": "<*File*>data/dbo.rental.tabledata",
+    "dbo.staff.tabledata": "<*File*>data/dbo.staff.tabledata",
+    "dbo.store.tabledata": "<*File*>data/dbo.store.tabledata"
+  }
+}

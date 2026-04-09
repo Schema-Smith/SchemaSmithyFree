@@ -1,0 +1,331 @@
+{
+  "Name": "[Employee]",
+  "Columns": [
+    {
+      "Name": "[BirthDate]",
+      "DataType": "DATE",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[BirthDate]>='1930-01-01' AND [BirthDate]<=dateadd(year,(-18),getdate())",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date of birth."
+      }
+    },
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for Employee records.  Foreign key to BusinessEntity.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[CurrentFlag]",
+      "DataType": "FLAG",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = Inactive, 1 = Active"
+      }
+    },
+    {
+      "Name": "[Gender]",
+      "DataType": "NCHAR(1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "upper([Gender])='F' OR upper([Gender])='M'",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "M = Male, F = Female"
+      }
+    },
+    {
+      "Name": "[HireDate]",
+      "DataType": "DATE",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[HireDate]>='1996-07-01' AND [HireDate]<=dateadd(day,(1),getdate())",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Employee hired on this date."
+      }
+    },
+    {
+      "Name": "[JobTitle]",
+      "DataType": "NVARCHAR(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Work title such as Buyer or Sales Representative."
+      }
+    },
+    {
+      "Name": "[LoginID]",
+      "DataType": "NVARCHAR(256)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Network login."
+      }
+    },
+    {
+      "Name": "[MaritalStatus]",
+      "DataType": "NCHAR(1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "upper([MaritalStatus])='S' OR upper([MaritalStatus])='M'",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "M = Married, S = Single"
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[NationalIDNumber]",
+      "DataType": "NVARCHAR(15)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Unique national identification number such as a social security number."
+      }
+    },
+    {
+      "Name": "[OrganizationLevel]",
+      "DataType": "SMALLINT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "ComputedExpression": "[OrganizationNode].[GetLevel]()",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "The depth of the employee in the corporate hierarchy."
+      }
+    },
+    {
+      "Name": "[OrganizationNode]",
+      "DataType": "HIERARCHYID",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Where the employee is located in corporate hierarchy."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Default": "newid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[SalariedFlag]",
+      "DataType": "FLAG",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Job classification. 0 = Hourly, not exempt from collective bargaining. 1 = Salaried, exempt from collective bargaining."
+      }
+    },
+    {
+      "Name": "[SickLeaveHours]",
+      "DataType": "SMALLINT",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[SickLeaveHours]>=(0) AND [SickLeaveHours]<=(120)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Number of available sick leave hours."
+      }
+    },
+    {
+      "Name": "[VacationHours]",
+      "DataType": "SMALLINT",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[VacationHours]>=(-40) AND [VacationHours]<=(240)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Number of available vacation hours."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_Employee_LoginID]",
+      "Unique": true,
+      "IndexColumns": "[LoginID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[AK_Employee_NationalIDNumber]",
+      "Unique": true,
+      "IndexColumns": "[NationalIDNumber]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[AK_Employee_rowguid]",
+      "Unique": true,
+      "IndexColumns": "[rowguid]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[IX_Employee_OrganizationLevel_OrganizationNode]",
+      "IndexColumns": "[OrganizationLevel],[OrganizationNode]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[IX_Employee_OrganizationNode]",
+      "IndexColumns": "[OrganizationNode]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_Employee_BusinessEntityID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[BusinessEntityID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Employee_Person_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTable": "[Person]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Person]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Person.BusinessEntityID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[HumanResources]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Employee information such as salary, department, and title."
+  }
+}
