@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<DefaultItemExcludes>$(DefaultItemExcludes);DataTongs.UnitTests\**;DataTongs.IntegrationTests\**</DefaultItemExcludes>
+		<OutputType>Exe</OutputType>
+		<PublishTrimmed>false</PublishTrimmed>
+		<PublishSingleFile>true</PublishSingleFile>
+		<PublishAot>false</PublishAot>
+
+		<Product>DataTongs Community</Product>
+		<Description>Extracts table data and generates merge scripts for data synchronization</Description>
+		<ApplicationIcon>images\SchemaTongs.ico</ApplicationIcon>
+		<UserSecretsId>c3d4e5f6-a7b8-9012-cdef-123456789012</UserSecretsId>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="Log4Net.config" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Log4Net.config" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="DataTongs.UnitTests" />
+		<InternalsVisibleTo Include="DataTongs.IntegrationTests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Schema\Schema.csproj" />
+	</ItemGroup>
+
+
+<ItemGroup>
+	  <None Update="DataTongs.settings.json">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
+</Project>
