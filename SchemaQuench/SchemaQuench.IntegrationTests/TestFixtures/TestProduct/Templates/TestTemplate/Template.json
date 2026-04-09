@@ -1,0 +1,10 @@
+{
+    "Name": "TestTemplate",
+    "SchemaIdentificationScript": "SELECT 'sakila' AS DatabaseName",
+    "VersionStampScript": null,
+    "IndexOnlyTableQuenches": false,
+    "ScriptFolders": [],
+    "ScriptTokens": {},
+    "UpdateFillFactor": true,
+    "Required": true
+}

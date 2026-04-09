@@ -1,0 +1,9 @@
+{
+    "Name": "TestProduct",
+    "ValidationScript": null,
+    "TemplateOrder": ["TestTemplate"],
+    "ScriptTokens": {},
+    "ScriptFolders": [],
+    "DropUnknownIndexes": false,
+    "Platform": "MySQL"
+}
