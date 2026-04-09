@@ -1,4 +1,0 @@
-{
-  "Name": "Client",
-  "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] = 'Client1'"
-}
