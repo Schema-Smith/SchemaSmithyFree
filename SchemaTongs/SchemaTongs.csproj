@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<DefaultItemExcludes>$(DefaultItemExcludes);SchemaTongs.UnitTests\**;SchemaTongs.IntegrationTests\**</DefaultItemExcludes>
+		<OutputType>Exe</OutputType>
+		<PublishTrimmed>false</PublishTrimmed>
+		<PublishSingleFile>true</PublishSingleFile>
+		<PublishAot>false</PublishAot>
+
+		<Product>SchemaTongs</Product>
+		<Description>Extracts database schemas into SchemaSmith package format</Description>
+		<ApplicationIcon>images\SchemaTongs.ico</ApplicationIcon>
+		<UserSecretsId>b2c3d4e5-f6a7-8901-bcde-f12345678901</UserSecretsId>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="Log4Net.config" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Log4Net.config" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="SchemaTongs.UnitTests" />
+		<InternalsVisibleTo Include="SchemaTongs.IntegrationTests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Schema\Schema.csproj" />
+	</ItemGroup>
+
+
+<ItemGroup>
+	  <None Update="SchemaTongs.settings.json">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
+</Project>
