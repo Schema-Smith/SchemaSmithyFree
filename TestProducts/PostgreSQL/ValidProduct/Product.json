@@ -1,0 +1,19 @@
+{
+    "Name": "ValidProduct",
+    "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM pg_database WHERE datistemplate = false AND datname = '{{MainDB}}') THEN 1 ELSE 0 END AS BIT)",
+    "TemplateOrder": [
+        "Main",
+        "Secondary",
+        "Bogus"
+    ],
+    "ScriptFolders": [
+        { "FolderPath" : "Jobs", "QuenchSlot" : "After", "ServerToQuench" : "Both" }
+    ],
+    "ScriptTokens": {
+        "SecondaryDB": "TestSecondary",
+        "MainDB": "TestMain",
+        "ReleaseVersion": "1.0.1.14",
+        "TestQueryToken": "<*Query*>SELECT STRING_AGG(datname, ',') FROM pg_database WHERE datistemplate = false AND datname = '{{MainDB}}'"
+    },
+    "Platform": "PostgreSQL"
+}
