@@ -1,1 +1,0 @@
-/opt/mssql-tools/bin/sqlcmd -U $MSSQL_SA_USERNAME -P "$MSSQL_SA_PASSWORD" -Q "use TestSecondary" -b

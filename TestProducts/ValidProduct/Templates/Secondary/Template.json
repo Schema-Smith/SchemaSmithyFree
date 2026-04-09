@@ -1,5 +1,0 @@
-{
-    "Name": "Secondary",
-    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{SecondaryDB}}'",
-    "VersionStampScript": "PRINT '{{ReleaseVersion}}'"
-}
