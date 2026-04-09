@@ -1,0 +1,78 @@
+{
+  "Schema": "public",
+  "Name": "TestTable",
+  "Columns": [
+    {
+      "Name": "TestID",
+      "DataType": "UUID"
+    },
+    {
+      "Name": "ParentID",
+      "DataType": "UUID",
+      "Nullable": true,
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    },
+    {
+      "Name": "DateCreated",
+      "DataType": "TIMESTAMP",
+      "Nullable": true,
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    },
+    {
+      "Name": "Status",
+      "DataType": "SMALLINT",
+      "Default": "0",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    },
+    {
+      "Name": "SomeText",
+      "DataType": "VARCHAR(2000)",
+      "Nullable": true,
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "CIX_TestTable_DateCreated",
+      "Clustered": true,
+      "FillFactor": 100,
+      "IndexColumns": "DateCreated",
+      "IncludeColumns": "",
+      "FilterExpression": ""
+    },
+    {
+      "Name": "PK_TestTable",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "TestID"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_SelfReference",
+      "Columns": "ParentID",
+      "RelatedTableSchema": "public",
+      "RelatedTable": "TestTable",
+      "RelatedColumns": "TestID"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Test",
+      "Expression": "\"Status\" < 20"
+    }
+  ],
+  "Statistics": [
+    {
+      "Name": "ST_Test",
+      "StatisticsColumns": "Status,DateCreated"
+    }
+  ],
+}

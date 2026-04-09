@@ -1,0 +1,5 @@
+{
+    "Name": "Bogus", 
+    "DatabaseIdentificationScript": "",
+    "VersionStampScript": "RAISE EXCEPTION 'BAD TEMPLATE'"
+}
