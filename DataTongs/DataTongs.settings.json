@@ -1,0 +1,32 @@
+{
+    "Source": {
+        "Server": "",
+        "User": "", // SQL Server: leave User and Password blank for Windows authentication
+        "Password": "",
+        "Database": "",
+        "Port": "", // Optional for all platforms — overrides default port
+        "Platform": "", // SqlServer, PostgreSQL, or MySQL
+        "ConnectionProperties": {
+            "TrustServerCertificate": "True" // Trust self-signed certificates (recommended for development)
+        }
+    },
+    "ScriptPath": "", // Output path for generated merge scripts
+    "ContentPath": "", // Output path for raw data content files
+    "Tables": [
+        // { "Name": "", "KeyColumns": "", "SelectColumns": "", "Filter": "", "MergeType": "" }
+    ],
+    "ShouldCast": {
+        "OutputContentFiles": false, // Write raw data to content files
+        "OutputScripts": true, // Generate merge scripts
+        "TokenizeScripts": false, // SQL Server only — replace database name with script tokens in output
+        "DisableTriggers": false, // Wrap data delivery in trigger disable/enable
+        "MergeUpdate": true, // Include UPDATE clause in merge scripts
+        "MergeDelete": false, // Include DELETE clause in merge scripts
+        "ConfigureDataDelivery": false, // Auto-configure data delivery settings on Table JSON files after extraction
+        "MergeType": "Insert/Update", // Default merge type: None, Insert, Insert/Update, Insert/Update/Delete
+
+        // PostgreSQL only
+        "DisableRules": false, // Disable rules during data delivery
+        "UpdateDescendents": true // Update child/dependent tables
+    }
+}
