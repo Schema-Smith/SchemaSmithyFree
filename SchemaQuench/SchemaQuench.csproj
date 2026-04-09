@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<DefaultItemExcludes>$(DefaultItemExcludes);SchemaQuench.UnitTests\**;SchemaQuench.IntegrationTests\**</DefaultItemExcludes>
+		<OutputType>Exe</OutputType>
+		<PublishTrimmed>false</PublishTrimmed>
+		<PublishSingleFile>true</PublishSingleFile>
+		<PublishAot>false</PublishAot>
+
+		<Product>SchemaQuench</Product>
+		<Description>Applies SchemaSmith schema packages to target databases, detecting differences and generating change scripts</Description>
+		<ApplicationIcon>images\SchemaQuench.ico</ApplicationIcon>
+		<UserSecretsId>a1b2c3d4-e5f6-7890-abcd-ef1234567890</UserSecretsId>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="Log4Net.config" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Log4Net.config" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Schema\Schema.csproj" />
+	</ItemGroup>
+
+
+<ItemGroup>
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+			<_Parameter1>SchemaQuench.UnitTests</_Parameter1>
+		</AssemblyAttribute>
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+			<_Parameter1>SchemaQuench.IntegrationTests</_Parameter1>
+		</AssemblyAttribute>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="SchemaQuench.settings.json">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
+</Project>

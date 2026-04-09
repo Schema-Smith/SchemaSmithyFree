@@ -1,0 +1,21 @@
+{
+    "Target": {
+        "Server": "",
+        "User": "", // SQL Server: leave User and Password blank for Windows authentication
+        "Password": "",
+        "Port": "", // Optional for all platforms — overrides default port
+        "SecondaryServers": "", // SQL Server only — comma-separated list of secondary servers for Availability Groups
+        "ConnectionProperties": {}
+    },
+    "MaxThreads": 10,
+    "WhatIfONLY": false, // Log all changes without executing them
+    "SchemaPackagePath": "",
+    "RunScriptsTwice": false, // Run object scripts twice to resolve cross-dependencies
+    "DropTablesRemovedFromProduct": true, // Drop tables not defined in the product
+    "UpdateTables": true, // Apply table structure changes (columns, indexes, constraints)
+    "KindleTheForge": true, // Install SchemaSmith helper functions/procedures in target database
+    "CheckpointDirectory": "", // Directory for checkpoint files to enable resuming interrupted quenches
+    "DeliverData": true, // Execute data delivery (Table Data scripts and merge scripts)
+    "VerboseLogging": false, // Include PRINT messages and other informational messages in the logged output from the table updates and other scripts
+    "ScriptTokens": {}
+}
