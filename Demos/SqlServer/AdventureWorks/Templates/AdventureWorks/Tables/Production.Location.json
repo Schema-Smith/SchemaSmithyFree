@@ -1,0 +1,115 @@
+{
+  "Name": "[Location]",
+  "Columns": [
+    {
+      "Name": "[Availability]",
+      "DataType": "DECIMAL(8, 2)",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[Availability]>=(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Work capacity (in hours) of the manufacturing location."
+      }
+    },
+    {
+      "Name": "[CostRate]",
+      "DataType": "SMALLMONEY",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[CostRate]>=(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Standard hourly cost of the manufacturing location."
+      }
+    },
+    {
+      "Name": "[LocationID]",
+      "DataType": "SMALLINT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for Location records."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Name]",
+      "DataType": "NAME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Location description."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_Location_Name]",
+      "Unique": true,
+      "IndexColumns": "[Name]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_Location_LocationID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[LocationID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Production]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Product inventory and manufacturing locations."
+  }
+}

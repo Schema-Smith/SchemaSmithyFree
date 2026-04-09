@@ -1,0 +1,230 @@
+{
+  "Name": "[WorkOrder]",
+  "Columns": [
+    {
+      "Name": "[DueDate]",
+      "DataType": "DATETIME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Work order due date."
+      }
+    },
+    {
+      "Name": "[EndDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Work order end date."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[OrderQty]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[OrderQty]>(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product quantity to build."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[ScrappedQty]",
+      "DataType": "SMALLINT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[ScrappedQty]>=(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity that failed inspection."
+      }
+    },
+    {
+      "Name": "[ScrapReasonID]",
+      "DataType": "SMALLINT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Reason for inspection failure."
+      }
+    },
+    {
+      "Name": "[StartDate]",
+      "DataType": "DATETIME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Work order start date."
+      }
+    },
+    {
+      "Name": "[StockedQty]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "ComputedExpression": "isnull([OrderQty]-[ScrappedQty],(0))",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity built and put in inventory."
+      }
+    },
+    {
+      "Name": "[WorkOrderID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for WorkOrder records."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_WorkOrder_ProductID]",
+      "IndexColumns": "[ProductID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[IX_WorkOrder_ScrapReasonID]",
+      "IndexColumns": "[ScrapReasonID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_WorkOrder_WorkOrderID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[WorkOrderID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_WorkOrder_Product_ProductID]",
+      "Columns": "[ProductID]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Production]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      }
+    },
+    {
+      "Name": "[FK_WorkOrder_ScrapReason_ScrapReasonID]",
+      "Columns": "[ScrapReasonID]",
+      "RelatedTable": "[ScrapReason]",
+      "RelatedColumns": "[ScrapReasonID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Production]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing ScrapReason.ScrapReasonID."
+      }
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_WorkOrder_EndDate]",
+      "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL",
+      "ShouldApplyExpression": "",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NULL"
+      }
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Production]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Manufacturing work orders."
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "Name": "Chinook",
+  "DatabaseIdentificationScript": "SELECT name FROM master.sys.databases WHERE name = '{{ChinookDb}}'",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Table Data",
+      "QuenchSlot": "TableData"
+    }
+  ],
+  "ScriptTokens": {
+    "dbo.Album.tabledata": "<*File*>data/dbo.Album.tabledata",
+    "dbo.Artist.tabledata": "<*File*>data/dbo.Artist.tabledata",
+    "dbo.Customer.tabledata": "<*File*>data/dbo.Customer.tabledata",
+    "dbo.Employee.tabledata": "<*File*>data/dbo.Employee.tabledata",
+    "dbo.Genre.tabledata": "<*File*>data/dbo.Genre.tabledata",
+    "dbo.Invoice.tabledata": "<*File*>data/dbo.Invoice.tabledata",
+    "dbo.InvoiceLine.tabledata": "<*File*>data/dbo.InvoiceLine.tabledata",
+    "dbo.MediaType.tabledata": "<*File*>data/dbo.MediaType.tabledata",
+    "dbo.Playlist.tabledata": "<*File*>data/dbo.Playlist.tabledata",
+    "dbo.PlaylistTrack.tabledata": "<*File*>data/dbo.PlaylistTrack.tabledata",
+    "dbo.Track.tabledata": "<*File*>data/dbo.Track.tabledata"
+  }
+}

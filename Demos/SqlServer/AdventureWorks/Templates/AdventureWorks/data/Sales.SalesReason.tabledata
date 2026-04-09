@@ -1,0 +1,12 @@
+[
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"Price","ReasonType":"Other","SalesReasonID":1},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"On Promotion","ReasonType":"Promotion","SalesReasonID":2},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"Magazine Advertisement","ReasonType":"Marketing","SalesReasonID":3},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"Television  Advertisement","ReasonType":"Marketing","SalesReasonID":4},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"Manufacturer","ReasonType":"Other","SalesReasonID":5},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"Review","ReasonType":"Other","SalesReasonID":6},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"Demo Event","ReasonType":"Marketing","SalesReasonID":7},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"Sponsorship","ReasonType":"Marketing","SalesReasonID":8},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"Quality","ReasonType":"Other","SalesReasonID":9},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"Other","ReasonType":"Other","SalesReasonID":10}
+]

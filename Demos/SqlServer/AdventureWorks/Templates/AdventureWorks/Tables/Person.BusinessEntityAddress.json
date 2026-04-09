@@ -1,0 +1,170 @@
+{
+  "Name": "[BusinessEntityAddress]",
+  "Columns": [
+    {
+      "Name": "[AddressID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to Address.AddressID."
+      }
+    },
+    {
+      "Name": "[AddressTypeID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to AddressType.AddressTypeID."
+      }
+    },
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to BusinessEntity.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Default": "newid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_BusinessEntityAddress_rowguid]",
+      "Unique": true,
+      "IndexColumns": "[rowguid]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[IX_BusinessEntityAddress_AddressID]",
+      "IndexColumns": "[AddressID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[IX_BusinessEntityAddress_AddressTypeID]",
+      "IndexColumns": "[AddressTypeID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_BusinessEntityAddress_BusinessEntityID_AddressID_AddressTypeID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[BusinessEntityID],[AddressID],[AddressTypeID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_BusinessEntityAddress_Address_AddressID]",
+      "Columns": "[AddressID]",
+      "RelatedTable": "[Address]",
+      "RelatedColumns": "[AddressID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Person]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Address.AddressID."
+      }
+    },
+    {
+      "Name": "[FK_BusinessEntityAddress_AddressType_AddressTypeID]",
+      "Columns": "[AddressTypeID]",
+      "RelatedTable": "[AddressType]",
+      "RelatedColumns": "[AddressTypeID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Person]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing AddressType.AddressTypeID."
+      }
+    },
+    {
+      "Name": "[FK_BusinessEntityAddress_BusinessEntity_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTable": "[BusinessEntity]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Person]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Person]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Cross-reference table mapping customers, vendors, and employees to their addresses."
+  }
+}

@@ -1,0 +1,214 @@
+{
+  "Name": "[SalesTerritory]",
+  "Columns": [
+    {
+      "Name": "[CostLastYear]",
+      "DataType": "MONEY",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[CostLastYear]>=(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Business costs in the territory the previous year."
+      }
+    },
+    {
+      "Name": "[CostYTD]",
+      "DataType": "MONEY",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[CostYTD]>=(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Business costs in the territory year to date."
+      }
+    },
+    {
+      "Name": "[CountryRegionCode]",
+      "DataType": "NVARCHAR(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ISO standard country or region code. Foreign key to CountryRegion.CountryRegionCode. "
+      }
+    },
+    {
+      "Name": "[Group]",
+      "DataType": "NVARCHAR(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Geographic area to which the sales territory belong."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Name]",
+      "DataType": "NAME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Sales territory description"
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Default": "newid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[SalesLastYear]",
+      "DataType": "MONEY",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[SalesLastYear]>=(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Sales in the territory the previous year."
+      }
+    },
+    {
+      "Name": "[SalesYTD]",
+      "DataType": "MONEY",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[SalesYTD]>=(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Sales in the territory year to date."
+      }
+    },
+    {
+      "Name": "[TerritoryID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for SalesTerritory records."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_SalesTerritory_Name]",
+      "Unique": true,
+      "IndexColumns": "[Name]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[AK_SalesTerritory_rowguid]",
+      "Unique": true,
+      "IndexColumns": "[rowguid]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[PK_SalesTerritory_TerritoryID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[TerritoryID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_SalesTerritory_CountryRegion_CountryRegionCode]",
+      "Columns": "[CountryRegionCode]",
+      "RelatedTable": "[CountryRegion]",
+      "RelatedColumns": "[CountryRegionCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Person]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Sales]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Sales territory lookup table."
+  }
+}

@@ -1,0 +1,8 @@
+[
+{"AddressTypeID":1,"ModifiedDate":"2008-04-30T00:00:00","Name":"Billing"},
+{"AddressTypeID":2,"ModifiedDate":"2008-04-30T00:00:00","Name":"Home"},
+{"AddressTypeID":3,"ModifiedDate":"2008-04-30T00:00:00","Name":"Main Office"},
+{"AddressTypeID":4,"ModifiedDate":"2008-04-30T00:00:00","Name":"Primary"},
+{"AddressTypeID":5,"ModifiedDate":"2008-04-30T00:00:00","Name":"Shipping"},
+{"AddressTypeID":6,"ModifiedDate":"2008-04-30T00:00:00","Name":"Archive"}
+]

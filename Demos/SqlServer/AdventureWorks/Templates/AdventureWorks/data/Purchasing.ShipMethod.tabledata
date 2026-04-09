@@ -1,0 +1,7 @@
+[
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"XRQ - TRUCK GROUND","ShipBase":3.9500,"ShipMethodID":1,"ShipRate":0.9900},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"ZY - EXPRESS","ShipBase":9.9500,"ShipMethodID":2,"ShipRate":1.9900},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"OVERSEAS - DELUXE","ShipBase":29.9500,"ShipMethodID":3,"ShipRate":2.9900},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"OVERNIGHT J-FAST","ShipBase":21.9500,"ShipMethodID":4,"ShipRate":1.2900},
+{"ModifiedDate":"2008-04-30T00:00:00","Name":"CARGO TRANSPORT 5","ShipBase":8.9900,"ShipMethodID":5,"ShipRate":1.4900}
+]

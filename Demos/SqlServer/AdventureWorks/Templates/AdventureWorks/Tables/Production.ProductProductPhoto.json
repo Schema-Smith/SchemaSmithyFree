@@ -1,0 +1,114 @@
+{
+  "Name": "[ProductProductPhoto]",
+  "Columns": [
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Primary]",
+      "DataType": "FLAG",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = Photo is not the principal image. 1 = Photo is the principal image."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[ProductPhotoID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product photo identification number. Foreign key to ProductPhoto.ProductPhotoID."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_ProductProductPhoto_ProductID_ProductPhotoID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[ProductID],[ProductPhotoID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Nonclustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_ProductProductPhoto_Product_ProductID]",
+      "Columns": "[ProductID]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Production]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      }
+    },
+    {
+      "Name": "[FK_ProductProductPhoto_ProductPhoto_ProductPhotoID]",
+      "Columns": "[ProductPhotoID]",
+      "RelatedTable": "[ProductPhoto]",
+      "RelatedColumns": "[ProductPhotoID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Production]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing ProductPhoto.ProductPhotoID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Production]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Cross-reference table mapping products and product photos."
+  }
+}

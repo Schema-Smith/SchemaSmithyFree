@@ -1,0 +1,238 @@
+{
+  "Name": "[SalesOrderDetail]",
+  "Columns": [
+    {
+      "Name": "[CarrierTrackingNumber]",
+      "DataType": "NVARCHAR(25)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Shipment tracking number supplied by the shipper."
+      }
+    },
+    {
+      "Name": "[LineTotal]",
+      "DataType": "NUMERIC(38, 6)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "ComputedExpression": "isnull(([UnitPrice]*((1.0)-[UnitPriceDiscount]))*[OrderQty],(0.0))",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Per product subtotal. Computed as UnitPrice * (1 - UnitPriceDiscount) * OrderQty."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[OrderQty]",
+      "DataType": "SMALLINT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[OrderQty]>(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity ordered per product."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product sold to customer. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Default": "newid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[SalesOrderDetailID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. One incremental unique number per product sold."
+      }
+    },
+    {
+      "Name": "[SalesOrderID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to SalesOrderHeader.SalesOrderID."
+      }
+    },
+    {
+      "Name": "[SpecialOfferID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Promotional code. Foreign key to SpecialOffer.SpecialOfferID."
+      }
+    },
+    {
+      "Name": "[UnitPrice]",
+      "DataType": "MONEY",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[UnitPrice]>=(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Selling price of a single product."
+      }
+    },
+    {
+      "Name": "[UnitPriceDiscount]",
+      "DataType": "MONEY",
+      "Default": "0.0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[UnitPriceDiscount]>=(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount amount."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_SalesOrderDetail_rowguid]",
+      "Unique": true,
+      "IndexColumns": "[rowguid]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[IX_SalesOrderDetail_ProductID]",
+      "IndexColumns": "[ProductID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_SalesOrderDetail_SalesOrderID_SalesOrderDetailID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[SalesOrderID],[SalesOrderDetailID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_SalesOrderDetail_SalesOrderHeader_SalesOrderID]",
+      "Columns": "[SalesOrderID]",
+      "RelatedTable": "[SalesOrderHeader]",
+      "RelatedColumns": "[SalesOrderID]",
+      "DeleteAction": "CASCADE",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Sales]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SalesOrderHeader.PurchaseOrderID."
+      }
+    },
+    {
+      "Name": "[FK_SalesOrderDetail_SpecialOfferProduct_SpecialOfferIDProductID]",
+      "Columns": "[SpecialOfferID],[ProductID]",
+      "RelatedTable": "[SpecialOfferProduct]",
+      "RelatedColumns": "[SpecialOfferID],[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Sales]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SpecialOfferProduct.SpecialOfferIDProductID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Sales]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Individual products associated with a specific sales order. See SalesOrderHeader."
+  }
+}
