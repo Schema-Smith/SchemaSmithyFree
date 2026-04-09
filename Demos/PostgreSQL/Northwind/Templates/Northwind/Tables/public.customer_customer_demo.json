@@ -1,0 +1,66 @@
+{
+  "Name": "customer_customer_demo",
+  "Columns": [
+    {
+      "Name": "customer_id",
+      "DataType": "varchar(5)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "customer_type_id",
+      "DataType": "varchar(5)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_customer_customer_demo",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "customer_id,customer_type_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_customer_customer_demo_customer_demographics",
+      "Columns": "customer_type_id",
+      "RelatedTable": "customer_demographics",
+      "RelatedColumns": "customer_type_id",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "fk_customer_customer_demo_customers",
+      "Columns": "customer_id",
+      "RelatedTable": "customers",
+      "RelatedColumns": "customer_id",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "public",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100
+}

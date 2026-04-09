@@ -1,0 +1,8 @@
+[
+{"company_name":"Speedy Express","phone":"(503) 555-9831","shipper_id":1},
+{"company_name":"United Package","phone":"(503) 555-3199","shipper_id":2},
+{"company_name":"Federal Shipping","phone":"(503) 555-9931","shipper_id":3},
+{"company_name":"Alliance Shippers","phone":"1-800-222-0451","shipper_id":4},
+{"company_name":"UPS","phone":"1-800-782-7892","shipper_id":5},
+{"company_name":"DHL","phone":"1-800-225-5345","shipper_id":6}
+]

@@ -1,0 +1,10 @@
+[
+{"cultureid":"      ","modifieddate":"2019-04-30T00:00:00","name":"Invariant Language (Invariant Country)"},
+{"cultureid":"ar    ","modifieddate":"2019-04-30T00:00:00","name":"Arabic"},
+{"cultureid":"en    ","modifieddate":"2019-04-30T00:00:00","name":"English"},
+{"cultureid":"es    ","modifieddate":"2019-04-30T00:00:00","name":"Spanish"},
+{"cultureid":"fr    ","modifieddate":"2019-04-30T00:00:00","name":"French"},
+{"cultureid":"he    ","modifieddate":"2019-04-30T00:00:00","name":"Hebrew"},
+{"cultureid":"th    ","modifieddate":"2019-04-30T00:00:00","name":"Thai"},
+{"cultureid":"zh-cht","modifieddate":"2019-04-30T00:00:00","name":"Chinese"}
+]

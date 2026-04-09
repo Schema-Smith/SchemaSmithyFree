@@ -1,0 +1,202 @@
+{
+  "Name": "employee",
+  "Columns": [
+    {
+      "Name": "birthdate",
+      "DataType": "date",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "businessentityid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "currentflag",
+      "DataType": "\"public\".\"Flag\"",
+      "Default": "true",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "gender",
+      "DataType": "CHAR(1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "hiredate",
+      "DataType": "date",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "jobtitle",
+      "DataType": "varchar(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "loginid",
+      "DataType": "varchar(256)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "maritalstatus",
+      "DataType": "CHAR(1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "nationalidnumber",
+      "DataType": "varchar(15)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "organizationnode",
+      "DataType": "varchar",
+      "Nullable": true,
+      "Default": "'/'::character varying",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "rowguid",
+      "DataType": "uuid",
+      "Default": "uuid_generate_v1()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "salariedflag",
+      "DataType": "\"public\".\"Flag\"",
+      "Default": "true",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "sickleavehours",
+      "DataType": "int2",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "vacationhours",
+      "DataType": "int2",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_Employee_BusinessEntityID",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "businessentityid",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Employee_BirthDate",
+      "Expression": "(birthdate >= '1930-01-01'::date) AND (birthdate <= (now() - '18 years'::interval))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Employee_Gender",
+      "Expression": "upper((gender)::text) = ANY (ARRAY['M'::text, 'F'::text])",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Employee_HireDate",
+      "Expression": "(hiredate >= '1996-07-01'::date) AND (hiredate <= (now() + '1 day'::interval))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Employee_MaritalStatus",
+      "Expression": "upper((maritalstatus)::text) = ANY (ARRAY['M'::text, 'S'::text])",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Employee_SickLeaveHours",
+      "Expression": "(sickleavehours >= 0) AND (sickleavehours <= 120)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Employee_VacationHours",
+      "Expression": "(vacationhours >= '-40'::integer) AND (vacationhours <= 240)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "humanresources",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": []
+}

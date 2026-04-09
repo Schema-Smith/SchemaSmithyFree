@@ -1,0 +1,79 @@
+{
+  "Name": "countryregioncurrency",
+  "Columns": [
+    {
+      "Name": "countryregioncode",
+      "DataType": "varchar(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "currencycode",
+      "DataType": "CHAR(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_CountryRegionCurrency_CountryRegionCode_CurrencyCode",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "countryregioncode,currencycode",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_CountryRegionCurrency_CountryRegion_CountryRegionCode",
+      "Columns": "countryregioncode",
+      "RelatedTable": "countryregion",
+      "RelatedColumns": "countryregioncode",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "person",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_CountryRegionCurrency_Currency_CurrencyCode",
+      "Columns": "currencycode",
+      "RelatedTable": "currency",
+      "RelatedColumns": "currencycode",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "sales",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "sales",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": []
+}

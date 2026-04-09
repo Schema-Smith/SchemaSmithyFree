@@ -1,0 +1,22 @@
+[
+{"contacttypeid":1,"modifieddate":"2019-04-30T00:00:00","name":"Accounting Manager"},
+{"contacttypeid":2,"modifieddate":"2019-04-30T00:00:00","name":"Assistant Sales Agent"},
+{"contacttypeid":3,"modifieddate":"2019-04-30T00:00:00","name":"Assistant Sales Representative"},
+{"contacttypeid":4,"modifieddate":"2019-04-30T00:00:00","name":"Coordinator Foreign Markets"},
+{"contacttypeid":5,"modifieddate":"2019-04-30T00:00:00","name":"Export Administrator"},
+{"contacttypeid":6,"modifieddate":"2019-04-30T00:00:00","name":"International Marketing Manager"},
+{"contacttypeid":7,"modifieddate":"2019-04-30T00:00:00","name":"Marketing Assistant"},
+{"contacttypeid":8,"modifieddate":"2019-04-30T00:00:00","name":"Marketing Manager"},
+{"contacttypeid":9,"modifieddate":"2019-04-30T00:00:00","name":"Marketing Representative"},
+{"contacttypeid":10,"modifieddate":"2019-04-30T00:00:00","name":"Order Administrator"},
+{"contacttypeid":11,"modifieddate":"2019-04-30T00:00:00","name":"Owner"},
+{"contacttypeid":12,"modifieddate":"2019-04-30T00:00:00","name":"Owner/Marketing Assistant"},
+{"contacttypeid":13,"modifieddate":"2019-04-30T00:00:00","name":"Product Manager"},
+{"contacttypeid":14,"modifieddate":"2019-04-30T00:00:00","name":"Purchasing Agent"},
+{"contacttypeid":15,"modifieddate":"2019-04-30T00:00:00","name":"Purchasing Manager"},
+{"contacttypeid":16,"modifieddate":"2019-04-30T00:00:00","name":"Regional Account Representative"},
+{"contacttypeid":17,"modifieddate":"2019-04-30T00:00:00","name":"Sales Agent"},
+{"contacttypeid":18,"modifieddate":"2019-04-30T00:00:00","name":"Sales Associate"},
+{"contacttypeid":19,"modifieddate":"2019-04-30T00:00:00","name":"Sales Manager"},
+{"contacttypeid":20,"modifieddate":"2019-04-30T00:00:00","name":"Sales Representative"}
+]

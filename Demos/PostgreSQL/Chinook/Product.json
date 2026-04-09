@@ -1,0 +1,16 @@
+{
+  "Name": "Chinook",
+  "ValidationScript": "SELECT EXISTS(SELECT * FROM pg_database WHERE datname IN ('{{ChinookDb}}', 'TestMain'))",
+  "TemplateOrder": [
+    "Initialize",
+    "Chinook"
+  ],
+  "ScriptTokens": {
+    "ChinookDb": "chinook"
+  },
+  "ScriptFolders": [],
+  "BranchNameFile": "{{repo_path}}/.git/HEAD",
+  "BeforeBranchNameMask": "ref: refs/heads/",
+  "AfterBranchNameMask": "",
+  "Platform": "PostgreSQL"
+}
