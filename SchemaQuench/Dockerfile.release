@@ -1,0 +1,10 @@
+# Dockerfile.release — used by CI to package pre-built single-file binary
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS final
+WORKDIR /app
+COPY publish/ .
+
+RUN chown -R ubuntu:ubuntu /app
+
+USER ubuntu
+
+ENTRYPOINT ["./SchemaQuench"]
