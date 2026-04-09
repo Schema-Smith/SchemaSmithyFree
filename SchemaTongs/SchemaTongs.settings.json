@@ -1,0 +1,90 @@
+{
+    "Source": {
+        "Server": "",
+        "User": "", // SQL Server: leave User and Password blank for Windows authentication
+        "Password": "",
+        "Database": "",
+        "Port": "", // Optional for all platforms — overrides default port
+        "Platform": "", // SqlServer, PostgreSQL, or MySQL
+        "ConnectionProperties": {
+            "TrustServerCertificate": "True" // Trust self-signed certificates (recommended for development)
+        }
+    },
+    // Name will default to the last folder in the product path if not provided.
+    // Name is used for the new product if one is created and will not rename an existing one.
+    "Product": {
+        "Path": "",
+        "Name": "",
+        "CheckConstraintStyle": "" // ColumnLevel (default) or TableLevel — for new products only; existing products use Product.json value
+    },
+    // Name will default to Database if not provided.
+    // This becomes the folder name for the template that is exported as well as the template name.
+    "Template": {
+        "Name": ""
+    },
+    "ShouldCast": {
+        // All platforms
+        "Tables": true,
+        "Views": true,
+        "ObjectList": "", // Comma-separated list of specific objects to extract (blank = all)
+        "ValidateScripts": false, // Validate extracted scripts against the source database
+        "SaveInvalidScripts": true, // Save invalid scripts as .sqlerror files (if false, invalid scripts are discarded)
+        "ScriptDynamicDependencyRemovalForFunctions": false,
+
+        // SQL Server and PostgreSQL
+        "Schemas": true,
+
+        // SQL Server only
+        "UserDefinedTypes": true,
+        "Catalogs": true, // Full-Text Catalogs
+        "StopLists": true, // Full-Text Stop Lists
+        "DDLTriggers": true,
+        "XMLSchemaCollections": true,
+        "IndexedViews": true, // SQL Server only — indexed views
+
+        // PostgreSQL only
+        "DomainTypes": true,
+        "EnumTypes": true,
+        "CompositeTypes": true,
+        "Aggregates": true,
+        "Sequences": true,
+        "Rules": true,
+        "MaterializedViews": true,
+
+        // All platforms
+        "Functions": true,
+        "Procedures": true,
+        "TableTriggers": true,
+
+        // MySQL only
+        "Events": true
+    },
+    "OrphanHandling": {
+        "Mode": "Detect" // Detect, DetectWithCleanupScripts, or DetectDeleteAndCleanup
+    },
+    "FolderMapping": {
+        // Optional — rename the default folder for any extracted object type. Defaults shown below; omit or remove any entry to use the platform default.
+        // SQL Server defaults (active)
+        "Schemas": "Schemas",
+        "DataTypes": "DataTypes",
+        "FullTextCatalogs": "FullTextCatalogs",
+        "FullTextStopLists": "FullTextStopLists",
+        "XMLSchemaCollections": "XMLSchemaCollections",
+        "Functions": "Functions",
+        "Views": "Views",
+        "Procedures": "Procedures",
+        "Triggers": "Triggers",
+        "DDLTriggers": "DDLTriggers"
+        // PostgreSQL-specific defaults (uncomment and replace SQL Server entries as needed):
+        //   "DomainTypes": "Domain Types"
+        //   "EnumTypes": "Enum Types"
+        //   "CompositeTypes": "Composite Types"
+        //   "TriggerFunctions": "Trigger Functions"
+        //   "WindowFunctions": "Window Functions"
+        //   "Aggregates": "Aggregates"
+        //   "Sequences": "Sequences"
+        //   "Rules": "Rules"
+        // MySQL-specific defaults (uncomment and replace SQL Server entries as needed):
+        //   "Events": "Events"
+    }
+}
