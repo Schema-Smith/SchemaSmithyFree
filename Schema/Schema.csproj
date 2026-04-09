@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<DefaultItemExcludes>$(DefaultItemExcludes);Schema.UnitTests\**;Schema.IntegrationTests\**</DefaultItemExcludes>
+		<PublishAot>false</PublishAot>
+		<!-- Exclude Schema.dll from trimming. FactoryContainer uses Activator.CreateInstance<T>()
+		     to resolve isolator wrappers, and Newtonsoft.Json uses reflection for domain model
+		     serialization. Without this, parameterless constructors are trimmed and runtime fails. -->
+		<IsTrimmable>false</IsTrimmable>
+
+		<PackageId>SchemaSmith.Schema</PackageId>
+		<RepositoryUrl>https://github.com/Schema-Smith/SchemaSmithyFree</RepositoryUrl>
+		<Product>SchemaSmith Community</Product>
+		<Description>Domain models, data access, and utilities for SchemaSmith database schema management. Single source of truth referenced by SchemaSmith tools and add-ons.</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="Schema.UnitTests" />
+		<InternalsVisibleTo Include="Schema.IntegrationTests" />
+		<InternalsVisibleTo Include="SchemaQuench" />
+		<InternalsVisibleTo Include="SchemaQuench.UnitTests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Scripts\SqlServer\*.sql" />
+		<EmbeddedResource Include="Scripts\PostgreSQL\*.sql" />
+		<EmbeddedResource Include="Scripts\MySQL\*.sql" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="SchemaSmith.Pro" />
+		<PackageReference Include="log4net" />
+		<PackageReference Include="Microsoft.Data.SqlClient" />
+		<PackageReference Include="Microsoft.Extensions.Configuration" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
+		<PackageReference Include="MySqlConnector" />
+		<PackageReference Include="Newtonsoft.Json" />
+		<PackageReference Include="Npgsql" />
+	</ItemGroup>
+
+	<Target Name="CleanZips" BeforeTargets="DispatchToInnerBuilds" Condition="'$(TargetFramework)' == '' And '$(Configuration)' != 'DEBUG'">
+		<RemoveDir Directories="$(MSBuildProjectDirectory)\..\Release\Zips\$(Configuration)" Condition="Exists('$(MSBuildProjectDirectory)\..\Release\Zips\$(Configuration)')" />
+	</Target>
+</Project>

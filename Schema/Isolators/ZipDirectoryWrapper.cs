@@ -1,0 +1,60 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+
+using SchemaSmith.Pro;
+namespace Schema.Isolators;
+
+public class ZipDirectoryWrapper : IDirectory
+{
+    private List<IZipEntry> _zipEntries;
+
+    public bool Exists(string path)
+    {
+        if (_zipEntries == null || string.IsNullOrEmpty(path)) return false;
+
+        var normalizedPath = NormalizePath(path);
+        return _zipEntries.Any(e =>
+            e.FullName.Replace('\\', '/').StartsWith(normalizedPath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public string[] GetFiles(string path, string searchPattern, SearchOption searchOption)
+    {
+        if (_zipEntries == null || string.IsNullOrEmpty(path)) return [];
+
+        var normalizedPath = NormalizePath(path);
+        return _zipEntries
+            .Where(e =>
+                e.FullName.Replace('\\', '/').StartsWith(normalizedPath, StringComparison.OrdinalIgnoreCase) &&
+                !e.FullName.Replace('\\', '/').EndsWith("/") &&
+                !(searchOption == SearchOption.TopDirectoryOnly && e.FullName.Replace('\\', '/').Substring(normalizedPath.Length).TrimStart('/').Contains("/")) &&
+                ((searchPattern ?? "*") == "*" || Regex.IsMatch(Path.GetFileName(e.FullName), $"^{Regex.Escape(searchPattern!).Replace(@"\*", ".*").Replace(@"\?", ".")}$", RegexOptions.IgnoreCase))
+                )
+            .Select(e => e.FullName)
+            .ToArray();
+    }
+
+    private static string NormalizePath(string path)
+    {
+        var normalized = path.Replace('\\', '/').Trim('/');
+        return string.IsNullOrEmpty(normalized) ? "" : normalized + "/";
+    }
+
+    public static IDirectory GetFromFactory(List<IZipEntry> zipEntries)
+    {
+        var zipDir = FactoryContainer.ResolveOrCreate<ZipDirectoryWrapper>(true);
+        zipDir._zipEntries = zipEntries;
+        return zipDir;
+    }
+
+    // Other IDirectory methods not used for zip access
+    IDirectoryInfo IDirectory.CreateDirectory(string path) => throw new NotImplementedException();
+    public string[] GetDirectories(string path, string searchPattern, SearchOption searchOption) => throw new NotImplementedException();
+    public void Delete(string path, bool recursive = false) => throw new NotImplementedException();
+    public void Move(string sourceDirName, string destDirName) => throw new NotImplementedException();
+    public string GetCurrentDirectory() => throw new NotImplementedException();
+}
