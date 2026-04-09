@@ -41,6 +41,10 @@ Copyright (c) 2024-present SchemaSmith Contributors
         enable a licensed user to operate the software for their own
         use.
 
+      - Including the software's deployment components in your product's
+        installation or update process solely to apply database changes
+        required by your own product.
+
       However, operating the software on an ongoing basis on behalf of
       third parties — such as providing perpetual database management,
       maintenance, or migration services where SchemaSmith is the
@@ -120,9 +124,3 @@ Copyright (c) 2024-present SchemaSmith Contributors
    is distributed. Updated versions of the software may be released
    under updated license terms. Your use of any version of the
    software is governed by the license distributed with that version.
-
-9. Enterprise Edition
-
-   SchemaSmith Enterprise is a separately licensed product with
-   additional features. This license applies only to the Community
-   edition. For Enterprise licensing, contact Sales@SchemaSmith.com.

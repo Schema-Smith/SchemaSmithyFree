@@ -1,5 +1,0 @@
-{
-    "Name": "Bogus", 
-    "DatabaseIdentificationScript": "",
-    "VersionStampScript": "RAISERROR('BAD TEMPLATE', 16, 1)"
-}

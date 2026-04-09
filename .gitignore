@@ -1,16 +1,61 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Claude Code
+.claude/*
+!.claude/skills/
+.mcp.json
+
+## Visual Studio
+.vs/
+*.rsuser
+[Tt]est[Rr]esult*/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+
+## NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## Build results
+[Bb]uild[Ll]og.*
+*.dll
+*.exe
+*.pdb
+publish/
+
+## OS files
 .DS_Store
+Thumbs.db
 
-.idea
-*.DotSettings.user
+## KeyFiles (license signing keys - dev only)
+KeyFiles/
 
-**/bin
-**/obj
-**/release
-**/debug
-*.orig
+## Rider
+.idea/
 
-packages
-.vs
-**/TestResults
+## Release artifacts
+Release/
+*.msi
+*.zip
+Setup/staging/
+WorkingExtractions/
 
-packaging/chocolatey/**/*.zip
+## NuGet lock files (not used)
+packages.lock.json
+
+# Working directories
+Logs/
+tools/
+
+## Demo pre-build output
+SchemaQuench/publish/

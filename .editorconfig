@@ -15,7 +15,7 @@ insert_final_newline = true
 end_of_line = lf
 
 # XML project files — .csproj files use tabs in this repo
-[*.csproj]
+[*.{csproj,wixproj}]
 indent_style = tab
 
 [*.{props,targets}]
