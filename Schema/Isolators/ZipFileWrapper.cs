@@ -7,7 +7,6 @@ using System.IO.Compression;
 using System.Linq;
 using Schema.Utility;
 
-using SchemaSmith.Pro;
 namespace Schema.Isolators;
 
 public class ZipFileWrapper : IFile, IDisposable

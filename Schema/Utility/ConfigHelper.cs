@@ -59,7 +59,7 @@ public static class ConfigHelper
             logLine?.Invoke(app);
             // License display text may be multi-line; log each line as its own
             // progress entry so timestamps line up and Pro license blocks render cleanly.
-            var licenseText = ToolHelpFormatter.GetLicenseDisplayText();
+            var licenseText = ProServices.GetLicenseDisplayText();
             if (!string.IsNullOrEmpty(licenseText))
             {
                 foreach (var line in licenseText.Split('\n'))

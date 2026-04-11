@@ -23,7 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
       checks: write
     steps:
       - uses: actions/checkout@v6
@@ -32,9 +31,6 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Authenticate GitHub Packages
-        run: dotnet nuget update source github --username USERNAME --password ${{ secrets.PACKAGES_TOKEN }} --store-password-in-clear-text --configfile nuget.config
 
       - name: Restore
         run: dotnet restore SchemaSmith.sln

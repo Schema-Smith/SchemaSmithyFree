@@ -3,7 +3,6 @@
 using System;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 using Microsoft.Extensions.Configuration;
 
@@ -15,14 +14,11 @@ public static class Program
     {
         CommandLineParser.HandleCommonSwitches("DataTongs", ToolSpecificSwitches);
 
-        // Register Community defaults — Pro packages register replacements via module initializers.
-        FactoryContainer.Register<ISchemaLicense>(new NullSchemaLicense());
-
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", LogFactory.GetLogger("ProgressLog").Info);
 
-        Console.WriteLine(ToolHelpFormatter.GetLicenseDisplayText());
+        Console.WriteLine(ProLicenseWrapper.GetFromFactory().GetLicenseDisplayText());
 
         var platform = ResolvePlatform();
 
@@ -47,7 +43,7 @@ public static class Program
 
     private static void ToolSpecificSwitches()
     {
-        var proOptions = ToolHelpFormatter.FormatProOptions("DataTongs");
+        var proOptions = ProLicenseWrapper.GetFromFactory().FormatProOptions("DataTongs");
         if (!string.IsNullOrEmpty(proOptions))
         {
             Console.WriteLine();

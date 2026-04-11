@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-using SchemaSmith.Pro;
 namespace Schema.Isolators;
 
 public class ZipDirectoryWrapper : IDirectory

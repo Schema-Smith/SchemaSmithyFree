@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using Newtonsoft.Json.Linq;
 using Schema.Domain;
+using SchemaSmith.Pro;
 
 namespace Schema.Utility;
 
@@ -56,6 +57,286 @@ public static class MergeScriptHelper
         if (jsonKeys == null || jsonKeys.Count == 0) return "";
         return $" AND LOWER({columnExpression}) IN ({string.Join(",", jsonKeys.Select(k => $"'{k.ToLowerInvariant().Replace("'", "''")}'"))})";
     }
+
+    #region IMergeScriptHelper dispatch methods
+
+    public static string GetMatchColumns(Platform platform, string keyColumns) => platform switch
+    {
+        Platform.SqlServer => BuildSqlServerMatchColumns(keyColumns),
+        Platform.PostgreSQL => BuildPostgreSqlMatchColumns(keyColumns),
+        Platform.MySQL => "", // MySQL uses ON DUPLICATE KEY — no explicit match columns
+        _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
+    };
+
+    public static string GetJsonColumnDefinitions(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    {
+        Platform.SqlServer => GetJsonColumnDefinitionsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
+        Platform.PostgreSQL => GetJsonColumnDefinitionsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
+        Platform.MySQL => "", // MySQL uses JSON_TABLE inline — no separate definitions
+        _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
+    };
+
+    public static string GetJsonSelectColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    {
+        Platform.SqlServer => GetJsonSelectColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
+        Platform.PostgreSQL => "", // PostgreSQL uses json_populate_recordset — no separate select columns
+        Platform.MySQL => "", // MySQL uses JSON_TABLE inline
+        _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
+    };
+
+    public static string GetInsertColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    {
+        Platform.SqlServer => GetInsertColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
+        Platform.PostgreSQL => GetInsertColumnsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
+        Platform.MySQL => "", // MySQL handles inserts inline
+        _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
+    };
+
+    public static string GetUpdateColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    {
+        Platform.SqlServer => GetUpdateColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
+        Platform.PostgreSQL => GetUpdateColumnsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
+        Platform.MySQL => "", // MySQL handles updates inline
+        _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
+    };
+
+    public static bool NeedsIdentityInsert(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName) => platform switch
+    {
+        Platform.SqlServer => NeedsIdentityInsertSqlServer(cmd, schemaOrDb, tableName),
+        _ => false
+    };
+
+    public static string GetIdentitySequence(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName) => platform switch
+    {
+        Platform.PostgreSQL => GetIdentityColumnAndSequencePostgreSql(cmd, schemaOrDb, tableName),
+        _ => null
+    };
+
+    public static (string Disable, string Enable) GetRuleStatements(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, bool updateDescendents = false) => platform switch
+    {
+        Platform.PostgreSQL => GetRuleDisableEnableStatements(cmd, schemaOrDb, tableName, updateDescendents),
+        _ => (null, null)
+    };
+
+    /// <summary>
+    /// Returns structured column metadata for Pro's deferred merge assembly.
+    /// Excludes computed columns and unsupported types. Includes JSON parse type
+    /// information so Pro can build type-safe NULL casts.
+    /// </summary>
+    public static List<MergeColumnInfo> GetColumnMetadata(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null)
+    {
+        return platform switch
+        {
+            Platform.SqlServer => GetColumnMetadataSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
+            Platform.PostgreSQL => GetColumnMetadataPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
+            Platform.MySQL => GetColumnMetadataMySql(cmd, schemaOrDb, tableName, jsonKeys),
+            _ => new List<MergeColumnInfo>()
+        };
+    }
+
+    private static List<MergeColumnInfo> GetColumnMetadataSqlServer(IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys)
+    {
+        var schema = schemaOrDb.Trim().Trim('[', ']');
+        var table = tableName.Trim().Trim('[', ']');
+
+        cmd.CommandText = $@"
+SELECT c.COLUMN_NAME, c.DATA_TYPE,
+       CASE WHEN SCHEMA_NAME(st.[schema_id]) IN ('sys', 'dbo')
+            THEN '' ELSE SCHEMA_NAME(st.[schema_id]) + '.' END + st.[name] AS USER_TYPE,
+       c.CHARACTER_MAXIMUM_LENGTH, c.NUMERIC_PRECISION, c.NUMERIC_SCALE, c.DATETIME_PRECISION,
+       c.IS_NULLABLE, CAST(CASE WHEN ident.[Name] IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS IsIdentity,
+       CAST(CASE WHEN cc.[name] IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS IsComputed,
+       CAST(CASE WHEN c.DATA_TYPE IN ('geography','geometry') THEN 1 ELSE 0 END AS BIT) AS IsGeometry,
+       CAST(CASE WHEN c.DATA_TYPE IN ('binary','varbinary','image') THEN 1 ELSE 0 END AS BIT) AS IsBinary,
+       CAST(CASE WHEN c.DATA_TYPE = 'xml' THEN 1 ELSE 0 END AS BIT) AS IsXml
+  FROM INFORMATION_SCHEMA.COLUMNS c
+  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME) AND sc.[name] = c.COLUMN_NAME
+  JOIN (SELECT CASE WHEN SCHEMA_NAME(st2.[schema_id]) IN ('sys', 'dbo')
+                    THEN '' ELSE SCHEMA_NAME(st2.[schema_id]) + '.' END + st2.[name] AS [name], st2.user_type_id, st2.[schema_id]
+          FROM sys.types st2 WITH (NOLOCK)) st ON st.user_type_id = sc.user_type_id
+  LEFT JOIN sys.identity_columns ident WITH (NOLOCK) ON ident.[Name] = c.COLUMN_NAME
+                                                    AND ident.[object_id] = OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME)
+  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
+                                                 AND cc.[object_id] = OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME)
+  WHERE c.TABLE_SCHEMA = '{schema}' AND c.TABLE_NAME = '{table}'
+    AND cc.[name] IS NULL
+    AND sc.is_rowguidcol = 0
+    {SqlServerUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
+  ORDER BY c.COLUMN_NAME
+";
+        var results = new List<MergeColumnInfo>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var userType = reader.GetString(2).ToUpperInvariant();
+            var maxLen = reader.IsDBNull(3) ? 0 : Convert.ToInt32(reader.GetValue(3));
+            var precision = reader.IsDBNull(4) ? 0 : Convert.ToInt32(reader.GetValue(4));
+            var scale = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5));
+            var dtPrecision = reader.IsDBNull(6) ? 0 : Convert.ToInt32(reader.GetValue(6));
+
+            // Build JSON parse type with proper size/precision qualifiers
+            var parseType = userType
+                .Replace("HIERARCHYID", "NVARCHAR(4000)")
+                .Replace("GEOGRAPHY", "NVARCHAR(4000)")
+                .Replace("GEOMETRY", "NVARCHAR(4000)")
+                .Replace("DATETIMEOFFSET", "NVARCHAR(50)")
+                .Replace("NTEXT", "NVARCHAR(MAX)")
+                .Replace("TEXT", "VARCHAR(MAX)")
+                .Replace("IMAGE", "VARBINARY(MAX)");
+
+            if (userType.Contains("CHAR") || userType.Contains("BINARY"))
+                parseType += $"({(maxLen == -1 ? "MAX" : maxLen.ToString())})";
+            else if (userType is "NUMERIC" or "DECIMAL")
+                parseType += $"({precision}, {scale})";
+            else if (userType == "DATETIME2")
+                parseType += $"({dtPrecision})";
+
+            results.Add(new MergeColumnInfo
+            {
+                Name = reader.GetString(0),
+                DataType = reader.GetString(1),
+                JsonParseType = parseType,
+                MaxLength = maxLen,
+                Precision = precision,
+                Scale = scale,
+                IsNullable = reader.GetString(7) == "YES",
+                IsIdentity = (bool)reader.GetValue(8),
+                IsComputed = (bool)reader.GetValue(9),
+                IsGeometry = (bool)reader.GetValue(10),
+                IsBinary = (bool)reader.GetValue(11),
+                IsXml = (bool)reader.GetValue(12)
+            });
+        }
+        return results;
+    }
+
+    private static List<MergeColumnInfo> GetColumnMetadataPostgreSql(IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys)
+    {
+        var schema = schemaOrDb.Trim().Trim('"');
+        var table = tableName.Trim().Trim('"');
+
+        cmd.CommandText = $@"
+SELECT c.column_name, c.data_type, c.udt_name, c.udt_schema,
+       c.character_maximum_length, c.numeric_precision, c.numeric_scale, c.datetime_precision,
+       c.is_nullable,
+       CASE WHEN a.attidentity != '' OR a.attgenerated != '' THEN true ELSE false END AS is_identity,
+       CASE WHEN a.attgenerated != '' THEN true ELSE false END AS is_computed
+  FROM information_schema.columns c
+  JOIN pg_class cls ON cls.relname = c.table_name
+  JOIN pg_namespace ns ON ns.oid = cls.relnamespace AND ns.nspname = c.table_schema
+  JOIN pg_attribute a ON a.attrelid = cls.oid AND a.attname = c.column_name AND NOT a.attisdropped AND a.attgenerated = ''
+  WHERE c.table_schema = '{schema}' AND c.table_name = '{table}'{BuildJsonKeyFilter(jsonKeys, "c.column_name")}
+  ORDER BY c.column_name
+";
+        var results = new List<MergeColumnInfo>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var udtName = reader.GetString(2);
+            var udtSchema = reader.GetString(3);
+            var maxLen = reader.IsDBNull(4) ? 0 : Convert.ToInt32(reader.GetValue(4));
+            var precision = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5));
+            var scale = reader.IsDBNull(6) ? 0 : Convert.ToInt32(reader.GetValue(6));
+            var dtPrecision = reader.IsDBNull(7) ? 0 : Convert.ToInt32(reader.GetValue(7));
+
+            var fullType = udtSchema is not "pg_catalog" and not "information_schema"
+                ? $"{udtSchema}.{udtName}" : udtName;
+
+            var parseType = fullType;
+            var dataType = reader.GetString(1);
+            if (dataType.Contains("char", StringComparison.OrdinalIgnoreCase) || dataType.Contains("binary", StringComparison.OrdinalIgnoreCase))
+                parseType += maxLen > 0 ? $"({maxLen})" : "";
+            else if (dataType is "numeric" or "decimal")
+                parseType += $"({precision}, {scale})";
+            else if (dataType.StartsWith("timestamp") || dataType.StartsWith("time"))
+                parseType += dtPrecision > 0 ? $"({dtPrecision})" : "";
+
+            results.Add(new MergeColumnInfo
+            {
+                Name = reader.GetString(0),
+                DataType = udtName,
+                JsonParseType = parseType,
+                MaxLength = maxLen,
+                Precision = precision,
+                Scale = scale,
+                IsNullable = reader.GetString(8) == "YES",
+                IsIdentity = (bool)reader.GetValue(9),
+                IsComputed = (bool)reader.GetValue(10),
+                IsGeometry = IsGeometryTypePostgreSql(udtName),
+                IsBinary = IsByteaTypePostgreSql(udtName),
+                IsXml = IsXmlTypePostgreSql(udtName)
+            });
+        }
+        return results;
+    }
+
+    private static List<MergeColumnInfo> GetColumnMetadataMySql(IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys)
+    {
+        var db = schemaOrDb.Trim().Trim('`');
+        var table = tableName.Trim().Trim('`');
+
+        cmd.CommandText = $@"
+SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
+       c.CHARACTER_MAXIMUM_LENGTH, c.NUMERIC_PRECISION, c.NUMERIC_SCALE, c.DATETIME_PRECISION,
+       c.IS_NULLABLE,
+       CASE WHEN c.EXTRA LIKE '%auto_increment%' THEN 1 ELSE 0 END AS IsIdentity,
+       CASE WHEN c.GENERATION_EXPRESSION != '' THEN 1 ELSE 0 END AS IsComputed,
+       c.CHARACTER_SET_NAME
+  FROM INFORMATION_SCHEMA.COLUMNS c
+  WHERE BINARY c.TABLE_SCHEMA = BINARY '{db.Replace("'", "''")}'
+    AND BINARY c.TABLE_NAME = BINARY '{table.Replace("'", "''")}'
+    AND (c.GENERATION_EXPRESSION IS NULL OR c.GENERATION_EXPRESSION = ''){BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
+  ORDER BY c.ORDINAL_POSITION
+";
+        var results = new List<MergeColumnInfo>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var dataType = reader.GetString(1).ToLowerInvariant();
+            var columnType = reader.GetString(2);
+            var maxLen = reader.IsDBNull(3) ? 0 : Convert.ToInt64(reader.GetValue(3));
+            var precision = reader.IsDBNull(4) ? 0 : Convert.ToInt32(reader.GetValue(4));
+            var scale = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5));
+
+            // MySQL JSON_TABLE type mapping
+            var jsonType = dataType switch
+            {
+                "tinyint" or "smallint" or "mediumint" or "int" or "integer" => "SIGNED",
+                "bigint" => "SIGNED",
+                "float" or "double" or "real" => "DOUBLE",
+                "decimal" or "numeric" => $"DECIMAL({precision},{scale})",
+                "date" => "DATE",
+                "datetime" or "timestamp" => "DATETIME",
+                "time" => "TIME",
+                "year" => "SIGNED",
+                "json" => "JSON",
+                _ => maxLen > 0 ? $"CHAR({maxLen})" : "CHAR(65535)"
+            };
+
+            var isGeometry = dataType is "point" or "linestring" or "polygon" or "geometry"
+                or "multipoint" or "multilinestring" or "multipolygon" or "geometrycollection";
+            var isBinary = dataType is "binary" or "varbinary" or "tinyblob" or "blob" or "mediumblob" or "longblob";
+
+            results.Add(new MergeColumnInfo
+            {
+                Name = reader.GetString(0),
+                DataType = dataType,
+                JsonParseType = jsonType,
+                MaxLength = (int)Math.Min(maxLen, int.MaxValue),
+                Precision = precision,
+                Scale = scale,
+                IsNullable = reader.GetString(7) == "YES",
+                IsIdentity = Convert.ToInt32(reader.GetValue(8)) == 1,
+                IsComputed = Convert.ToInt32(reader.GetValue(9)) == 1,
+                IsGeometry = isGeometry,
+                IsBinary = isBinary,
+                IsXml = false
+            });
+        }
+        return results;
+    }
+
+    #endregion
 
     #region GetKeyColumns
 

@@ -120,7 +120,7 @@ public static class CommandLineParser
         Console.WriteLine($"{app} - Version: {version}");
         // License display text may be multi-line (Pro returns a details block);
         // Console.WriteLine renders embedded newlines correctly.
-        Console.WriteLine(ToolHelpFormatter.GetLicenseDisplayText());
+        Console.WriteLine(ProServices.GetLicenseDisplayText());
         EnvironmentWrapper.GetFromFactory().Exit(0);
     }
 

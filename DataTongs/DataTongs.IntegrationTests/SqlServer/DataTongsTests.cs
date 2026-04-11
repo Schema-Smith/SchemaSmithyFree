@@ -7,7 +7,6 @@ using NSubstitute;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace DataTongs.IntegrationTests.SqlServer;
@@ -65,7 +64,7 @@ INSERT INTO [dbo].[TestTable] ([Id], [Name], Description)
             FactoryContainer.Register(environment);
             FactoryContainer.Register(file);
             FactoryContainer.Register(directory);
-            FactoryContainer.Register<ISchemaLicense>(new NullSchemaLicense());
+
 
             var config = ConfigHelper.GetAppSettingsAndUserSecrets("test", null);
             config["Source:Server"] = config["SqlServer:Server"] ?? "127.0.0.1";
@@ -128,7 +127,7 @@ INSERT INTO [dbo].[TestTable] ([Id], [Name], Description)
             FactoryContainer.Register(environment);
             FactoryContainer.Register(file);
             FactoryContainer.Register(directory);
-            FactoryContainer.Register<ISchemaLicense>(new NullSchemaLicense());
+
 
             var config = ConfigHelper.GetAppSettingsAndUserSecrets("test", null);
             config["Source:Server"] = config["SqlServer:Server"] ?? "127.0.0.1";
@@ -189,7 +188,7 @@ INSERT INTO [dbo].[TestTable] ([Id], [Name], Description)
             FactoryContainer.Register(environment);
             FactoryContainer.Register(file);
             FactoryContainer.Register(directory);
-            FactoryContainer.Register<ISchemaLicense>(new NullSchemaLicense());
+
 
             var config = ConfigHelper.GetAppSettingsAndUserSecrets("test", null);
             config["Source:Server"] = config["SqlServer:Server"] ?? "127.0.0.1";

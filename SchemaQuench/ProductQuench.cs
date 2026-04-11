@@ -34,7 +34,7 @@ public class ProductQuench
     private readonly bool _deliverData;
     private readonly bool _trackRunOnceMigrations;
     private readonly bool _pruneObsoleteMigrationTracking;
-    private readonly ICheckpointing _checkpointing;
+    private readonly IProCheckpointing _checkpointing;
     private bool _updateFailed;
 
     public ProductQuench()
@@ -53,7 +53,7 @@ public class ProductQuench
         _deliverData = _config["DeliverData"]?.ToLower() != "false";
         _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
         _pruneObsoleteMigrationTracking = _config["PruneObsoleteMigrationTracking"]?.ToLower() != "false";
-        _checkpointing = FactoryContainer.ResolveOrCreate<ICheckpointing, NullCheckpointing>();
+        _checkpointing = ProCheckpointingWrapper.GetFromFactory();
 
         // Secondary servers are SqlServer-only (Availability Groups)
         if (_product.Platform == Platform.SqlServer)

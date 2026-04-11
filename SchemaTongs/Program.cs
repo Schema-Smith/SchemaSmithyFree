@@ -4,7 +4,6 @@ using System;
 using System.IO;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace SchemaTongs;
@@ -15,14 +14,11 @@ public static class Program
     {
         CommandLineParser.HandleCommonSwitches("SchemaTongs", ToolSpecificSwitches);
 
-        // Register Community defaults — Pro packages register replacements via module initializers.
-        FactoryContainer.Register<ISchemaLicense>(new NullSchemaLicense());
-
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", LogFactory.GetLogger("ProgressLog").Info);
 
-        Console.WriteLine(ToolHelpFormatter.GetLicenseDisplayText());
+        Console.WriteLine(ProLicenseWrapper.GetFromFactory().GetLicenseDisplayText());
 
         if (CommandLineParser.ContainsSwitch("WriteSchemasOnly"))
         {
@@ -74,7 +70,7 @@ public static class Program
     private static void ToolSpecificSwitches()
     {
         Console.WriteLine("  --WriteSchemasOnly               Regenerate .json-schemas for an existing product without connecting to a database.");
-        var proOptions = ToolHelpFormatter.FormatProOptions("SchemaTongs");
+        var proOptions = ProLicenseWrapper.GetFromFactory().FormatProOptions("SchemaTongs");
         if (!string.IsNullOrEmpty(proOptions))
         {
             Console.WriteLine();

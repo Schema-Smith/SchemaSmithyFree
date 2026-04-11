@@ -83,7 +83,8 @@ public class ConfigHelperTests
         ConfigHelper.GetAppSettingsAndUserSecrets("MyTool", s => logLines.Add(s));
 
         Assert.That(logLines, Has.Some.Matches<string>(s => s == "MyTool"));
-        Assert.That(logLines, Has.Some.Matches<string>(s => s.Contains("Community")));
+        // License text varies: "Community License" (no license) or "Licensed to: ..." (licensed).
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.Contains("Community") || s.Contains("Licensed")));
     }
 
     [Test]

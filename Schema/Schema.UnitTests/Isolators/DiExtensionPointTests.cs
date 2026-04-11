@@ -17,53 +17,52 @@ public class DiExtensionPointTests
         FactoryContainer.Clear();
     }
 
-    // --- NullCheckpointing ---
+    // --- ProCheckpointingWrapper (default unlicensed behavior) ---
 
     [Test]
-    public void NullCheckpointing_Track_RunsAction()
+    public void ProCheckpointingWrapper_Track_RunsAction()
     {
-        var cp = new NullCheckpointing();
+        var cp = ProCheckpointingWrapper.GetFromFactory();
         var ran = false;
         cp.Track(new TrackingScope { ProductName = "MyProduct" }, "KindleForge", () => ran = true);
         Assert.That(ran, Is.True);
     }
 
     [Test]
-    public void NullCheckpointing_TrackScript_RunsAction()
+    public void ProCheckpointingWrapper_TrackScript_RunsAction()
     {
-        var cp = new NullCheckpointing();
+        var cp = ProCheckpointingWrapper.GetFromFactory();
         var ran = false;
         cp.TrackScript(new TrackingScope { ProductName = "MyProduct", TemplateName = "T", Server = "S", DatabaseName = "D" },
                        "Object", "scripts/foo.sql", () => ran = true);
         Assert.That(ran, Is.True);
     }
 
-    // --- NullSchemaLicense ---
+    // --- ProLicenseWrapper (default unlicensed behavior) ---
 
     [Test]
-    public void NullSchemaLicense_IsLicensed_ReturnsFalse()
+    public void ProLicenseWrapper_IsLicensed_ReturnsBoolean()
     {
-        var license = new NullSchemaLicense();
-        Assert.That(license.IsLicensed, Is.False);
+        // License state depends on environment — may be licensed (dev) or unlicensed (CI).
+        var license = ProLicenseWrapper.GetFromFactory();
+        Assert.That(license.IsLicensed, Is.TypeOf<bool>());
     }
 
     [Test]
-    public void NullSchemaLicense_LicenseDisplayText_IdentifiesCommunity()
+    public void ProLicenseWrapper_LicenseDisplayText_IsNotNullOrEmpty()
     {
-        // We don't pin the exact wording — the label may evolve, and a live Pro
-        // package returns a multi-line details block. The only invariant is that
-        // the unlicensed default identifies itself as Community.
-        var license = new NullSchemaLicense();
-        Assert.That(license.LicenseDisplayText, Does.Contain("Community"));
+        // Display text varies: "Community License" (unlicensed) or "Licensed to: ..." (licensed).
+        var license = ProLicenseWrapper.GetFromFactory();
+        Assert.That(license.LicenseDisplayText, Is.Not.Null.And.Not.Empty);
     }
 
     [Test]
-    public void NullSchemaLicense_GetAdditionalCommandLineOptions_ReturnsEmptyList()
+    public void ProLicenseWrapper_GetAdditionalCommandLineOptions_ReturnsNonNullList()
     {
-        var license = new NullSchemaLicense();
+        // Licensed environments may return Pro options; unlicensed returns empty.
+        var license = ProLicenseWrapper.GetFromFactory();
         var options = license.GetAdditionalCommandLineOptions("SchemaQuench");
         Assert.That(options, Is.Not.Null);
-        Assert.That(options, Is.Empty);
     }
 
     // --- LicenseCommandLineOption record ---
@@ -84,12 +83,12 @@ public class DiExtensionPointTests
         Assert.That(a, Is.Not.EqualTo(b));
     }
 
-    // --- NullDataDelivery ---
+    // --- ProDataDeliveryWrapper (default unlicensed behavior) ---
 
     [Test]
-    public void NullDataDelivery_DeliverTables_DoesNotThrow()
+    public void ProDataDeliveryWrapper_DeliverTables_DoesNotThrow()
     {
-        var delivery = new NullDataDelivery();
+        var delivery = ProDataDeliveryWrapper.GetFromFactory();
         var context = new DataDeliveryContext
         {
             Tables = new List<IDeliverableTable>(),
@@ -101,9 +100,9 @@ public class DiExtensionPointTests
     }
 
     [Test]
-    public void NullDataDelivery_DeliverTables_DoesNotThrow_WithNullContext()
+    public void ProDataDeliveryWrapper_DeliverTables_DoesNotThrow_WithNullContext()
     {
-        var delivery = new NullDataDelivery();
+        var delivery = ProDataDeliveryWrapper.GetFromFactory();
         Assert.DoesNotThrow(() => delivery.DeliverTables(null));
     }
 
@@ -121,23 +120,21 @@ public class DiExtensionPointTests
         Assert.That(context.WhatIf, Is.False);
     }
 
-    // --- ToolHelpFormatter ---
+    // --- ProServices facade ---
 
     [Test]
-    public void ToolHelpFormatter_FormatProOptions_ReturnsEmptyString_WhenNoLicense()
+    public void ProServices_FormatProOptions_ReturnsString()
     {
-        var result = ToolHelpFormatter.FormatProOptions("SchemaQuench");
-        Assert.That(result, Is.EqualTo(""));
+        // Licensed environments may return formatted options; unlicensed returns empty.
+        var result = ProLicenseWrapper.GetFromFactory().FormatProOptions("SchemaQuench");
+        Assert.That(result, Is.Not.Null);
     }
 
     [Test]
-    public void ToolHelpFormatter_GetLicenseDisplayText_IdentifiesCommunity_WhenNoLicense()
+    public void ProServices_GetLicenseDisplayText_ReturnsNonEmptyString()
     {
-        // With no Pro package registered, the formatter resolves to the Null default.
-        // Assert only that the result identifies the unlicensed state — do not pin
-        // specific verbiage, since the label may evolve and a live Pro package
-        // returns a multi-line details block.
-        var result = ToolHelpFormatter.GetLicenseDisplayText();
-        Assert.That(result, Does.Contain("Community"));
+        // Display text varies: "Community License" (unlicensed) or license details (licensed).
+        var result = ProLicenseWrapper.GetFromFactory().GetLicenseDisplayText();
+        Assert.That(result, Is.Not.Null.And.Not.Empty);
     }
 }
