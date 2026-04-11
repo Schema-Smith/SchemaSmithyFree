@@ -2,7 +2,6 @@
 
 using System;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace SchemaQuench;
@@ -13,17 +12,12 @@ public static class Program
     {
         CommandLineParser.HandleCommonSwitches("SchemaQuench", ToolSpecificSwitches);
 
-        // Register Community defaults — Pro packages register replacements via module initializers.
-        FactoryContainer.Register<ICheckpointing>(new NullCheckpointing());
-        FactoryContainer.Register<ISchemaLicense>(new NullSchemaLicense());
-        FactoryContainer.Register<IDataDelivery>(new NullDataDelivery());
-
         var skipKindlingForge = args.Length > 0 && args[0] == "SkipKindlingForge";
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", LogFactory.GetLogger("ProgressLog").Info);
 
-        Console.WriteLine(ToolHelpFormatter.GetLicenseDisplayText());
+        Console.WriteLine(ProLicenseWrapper.GetFromFactory().GetLicenseDisplayText());
 
         new ProductQuench().QuenchProduct(skipKindlingForge);
         LogBackup.BackupLogsAndExit("SchemaQuench");
@@ -36,7 +30,7 @@ public static class Program
 
     private static void ToolSpecificSwitches()
     {
-        var proOptions = ToolHelpFormatter.FormatProOptions("SchemaQuench");
+        var proOptions = ProLicenseWrapper.GetFromFactory().FormatProOptions("SchemaQuench");
         if (!string.IsNullOrEmpty(proOptions))
         {
             Console.WriteLine();

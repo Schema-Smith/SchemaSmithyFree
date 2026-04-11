@@ -1,9 +1,8 @@
-// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+// Copyright (c) SchemaSmith, LLC. All rights reserved.
 
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.DataAccess;
 

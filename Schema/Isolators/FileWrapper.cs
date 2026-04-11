@@ -4,7 +4,6 @@ using System;
 using System.IO;
 using Schema.Utility;
 
-using SchemaSmith.Pro;
 namespace Schema.Isolators;
 
 public class FileWrapper : IFile

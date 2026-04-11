@@ -41,7 +41,7 @@ public class DatabaseQuench
     private readonly string _dropRemovedTables;
     private readonly bool _updateTables;
     private readonly bool _deliverData;
-    private readonly ICheckpointing _checkpointing;
+    private readonly IProCheckpointing _checkpointing;
     private readonly string _dropUnknownIndexes;
     private readonly bool _trackRunOnceMigrations;
     private readonly bool _pruneObsoleteMigrationTracking;
@@ -53,7 +53,7 @@ public class DatabaseQuench
 
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
-        bool dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
+        bool dropUnknownIndexes, bool updateTables, bool deliverData, IProCheckpointing checkpointing,
         bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true)
     {
         _server = server;
@@ -75,7 +75,7 @@ public class DatabaseQuench
     // Internal constructor for testing — allows direct injection of all parameters
     internal DatabaseQuench(string server, Product product, Template template, string databaseName,
         bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
-        string dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
+        string dropUnknownIndexes, bool updateTables, bool deliverData, IProCheckpointing checkpointing,
         bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true)
     {
         _server = server;
@@ -267,20 +267,23 @@ public class DatabaseQuench
 
                     if (_deliverData)
                     {
-                        // Data delivery extension point — Pro packages register an IDataDelivery
-                        // implementation that handles JSON-driven delivery (FK ordering, merge scripts).
-                        // Community uses NullDataDelivery, which does nothing — users author their own
-                        // data scripts in the Table Data/ template folder.
+                        // Data delivery — Pro determines behavior based on license.
                         _checkpointing.Track(DbScope, "TableDataDelivery", () =>
                         {
-                            var dataDelivery = FactoryContainer.ResolveOrCreate<IDataDelivery, NullDataDelivery>();
-                            dataDelivery.DeliverTables(new DataDeliveryContext
+                            // Register platform-specific script helper if not already registered
+                            if (FactoryContainer.Resolve<IMergeScriptHelper>() == null)
+                                FactoryContainer.Register<IMergeScriptHelper>(new MergeScriptHelperAdapter(_product.Platform));
+
+                            ProDataDeliveryWrapper.GetFromFactory().DeliverTables(new DataDeliveryContext
                             {
                                 Tables = _template.Tables.Cast<IDeliverableTable>().ToList(),
                                 Command = effectiveSilentCmd,
                                 Platform = _product.Platform.ToString(),
                                 DatabaseName = _databaseName,
                                 TemplateRootPath = Path.GetDirectoryName(_template.FilePath) ?? "",
+                                ScriptHelper = FactoryContainer.Resolve<IMergeScriptHelper>(),
+                                ReadFileContent = path => FileWrapper.GetFromFactory().ReadAllText(path),
+                                ExecuteScript = (name, script) => { effectiveSilentCmd.CommandText = script; effectiveSilentCmd.ExecuteNonQuery(); },
                                 ProgressLog = SafeProgressLog,
                                 ProgressLogError = SafeProgressLogError,
                                 WhatIf = IsWhatIf

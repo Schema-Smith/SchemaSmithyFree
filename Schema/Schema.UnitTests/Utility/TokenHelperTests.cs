@@ -1,4 +1,4 @@
-// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+// Copyright (c) SchemaSmith, LLC. All rights reserved.
 
 using System;
 using System.Collections.Generic;
@@ -8,11 +8,10 @@ using System.Linq;
 using Newtonsoft.Json.Linq;
 using NSubstitute;
 using Schema.Domain;
-using Schema.Domain.MySQL;
 using Schema.Domain.SqlServer;
 using Schema.Domain.PostgreSQL;
+using Schema.Domain.MySQL;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace Schema.UnitTests.Utility;
@@ -217,7 +216,7 @@ public class TokenHelperTests
         };
         var tables = new List<Table>
         {
-            CreateTable("dbo", "MyTable")
+            CreateSqlServerTable("dbo", "MyTable")
         };
 
         TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.SqlServer);
@@ -237,7 +236,7 @@ public class TokenHelperTests
         };
         var tables = new List<Table>
         {
-            CreateTable("dbo", "MyTable")
+            CreateSqlServerTable("dbo", "MyTable")
         };
 
         TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.SqlServer);
@@ -255,7 +254,7 @@ public class TokenHelperTests
         };
         var tables = new List<Table>
         {
-            CreateTable("[dbo]", "[MyTable]")
+            CreateSqlServerTable("[dbo]", "[MyTable]")
         };
 
         TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.SqlServer);
@@ -272,7 +271,7 @@ public class TokenHelperTests
         };
         var tables = new List<Table>
         {
-            CreateTable("public", "my_table", Platform.PostgreSQL)
+            CreatePostgreSqlTable("public", "my_table")
         };
 
         TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.PostgreSQL);
@@ -290,7 +289,7 @@ public class TokenHelperTests
         };
         var tables = new List<Table>
         {
-            CreateTable("public", "my_table", Platform.PostgreSQL)
+            CreatePostgreSqlTable("public", "my_table")
         };
 
         TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.PostgreSQL);
@@ -307,7 +306,7 @@ public class TokenHelperTests
         };
         var tables = new List<Table>
         {
-            CreateTable("", "my_table", Platform.MySQL)
+            new MySqlTable { Name = "my_table" }
         };
 
         TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.MySQL);
@@ -325,7 +324,7 @@ public class TokenHelperTests
         };
         var tables = new List<Table>
         {
-            CreateTable("", "my_table", Platform.MySQL)
+            new MySqlTable { Name = "my_table" }
         };
 
         TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.MySQL);
@@ -342,7 +341,7 @@ public class TokenHelperTests
         };
         var tables = new List<Table>
         {
-            CreateTable("dbo", "MyTable")
+            CreateSqlServerTable("dbo", "MyTable")
         };
 
         var ex = Assert.Throws<Exception>(() => TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.SqlServer));
@@ -358,7 +357,7 @@ public class TokenHelperTests
         };
         var tables = new List<Table>
         {
-            CreateTable("dbo", "MyTable")
+            CreateSqlServerTable("dbo", "MyTable")
         };
 
         var ex = Assert.Throws<Exception>(() => TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.SqlServer));
@@ -683,31 +682,13 @@ public class TokenHelperTests
         Assert.That(jObj["Name"]?.ToString(), Is.EqualTo("users"));
     }
 
-    [Test]
-    public void FindTable_PlainTableWithExtensionsSchema_UsesExtensionsFallback()
+    private static Table CreateSqlServerTable(string schema, string name)
     {
-        var tokens = new Dictionary<string, string>
-        {
-            { "TableInfo", "<*SpecificTable*>hr.Users" }
-        };
-        var table = new Table { Name = "Users" };
-        table.Extensions = new JObject { ["Schema"] = "hr" };
-        var tables = new List<Table> { table };
-
-        TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.SqlServer);
-
-        var jObj = JObject.Parse(tokens["TableInfo"]);
-        Assert.That(jObj["Name"]?.ToString(), Is.EqualTo("Users"));
+        return new SqlServerTable { Name = name, Schema = schema };
     }
 
-    private static Table CreateTable(string schema, string name) =>
-        CreateTable(schema, name, Platform.SqlServer);
-
-    private static Table CreateTable(string schema, string name, Platform platform) =>
-        platform switch
-        {
-            Platform.PostgreSQL => new PostgreSqlTable { Name = name, Schema = schema },
-            Platform.MySQL => new MySqlTable { Name = name },
-            _ => new SqlServerTable { Name = name, Schema = schema }
-        };
+    private static Table CreatePostgreSqlTable(string schema, string name)
+    {
+        return new PostgreSqlTable { Name = name, Schema = schema };
+    }
 }

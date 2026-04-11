@@ -2,7 +2,6 @@
 
 using System;
 
-using SchemaSmith.Pro;
 namespace Schema.Isolators;
 
 public class EnvironmentWrapper : IEnvironment
