@@ -75,7 +75,6 @@ jobs:
     needs: build-and-unit-tests
     permissions:
       contents: read
-      packages: read
       checks: write
     services:
       sqlserver:
@@ -116,9 +115,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Authenticate GitHub Packages
-        run: dotnet nuget update source github --username USERNAME --password ${{ secrets.PACKAGES_TOKEN }} --store-password-in-clear-text --configfile nuget.config
-
       - name: Restore & Build
         run: dotnet build SchemaSmith.sln -c Debug
 
@@ -154,7 +150,6 @@ jobs:
     needs: build-and-unit-tests
     permissions:
       contents: read
-      packages: read
       checks: write
     services:
       postgres:
@@ -188,9 +183,6 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Authenticate GitHub Packages
-        run: dotnet nuget update source github --username USERNAME --password ${{ secrets.PACKAGES_TOKEN }} --store-password-in-clear-text --configfile nuget.config
 
       - name: Restore & Build
         run: dotnet build SchemaSmith.sln -c Debug
@@ -227,7 +219,6 @@ jobs:
     needs: build-and-unit-tests
     permissions:
       contents: read
-      packages: read
       checks: write
     services:
       mysql:
@@ -260,9 +251,6 @@ jobs:
             FLUSH PRIVILEGES;
             SET GLOBAL max_connections = 500;
           "
-
-      - name: Authenticate GitHub Packages
-        run: dotnet nuget update source github --username USERNAME --password ${{ secrets.PACKAGES_TOKEN }} --store-password-in-clear-text --configfile nuget.config
 
       - name: Restore & Build
         run: dotnet build SchemaSmith.sln -c Debug
