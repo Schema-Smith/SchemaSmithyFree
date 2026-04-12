@@ -1561,4 +1561,47 @@ public class MergeScriptHelperTests
 
     #endregion
 
+    #region MySQL GetMatchColumns Tests
+
+    [Test]
+    public void GetMatchColumns_MySQL_SingleKey()
+    {
+        var result = MergeScriptHelper.GetMatchColumns(Platform.MySQL, "id");
+        Assert.That(result, Is.EqualTo("`Source`.`id` = `Target`.`id`"));
+    }
+
+    [Test]
+    public void GetMatchColumns_MySQL_CompositeKey()
+    {
+        var result = MergeScriptHelper.GetMatchColumns(Platform.MySQL, "id,code");
+        Assert.That(result, Does.Contain("`Source`.`id` = `Target`.`id`"));
+        Assert.That(result, Does.Contain("`Source`.`code` = `Target`.`code`"));
+        Assert.That(result, Does.Contain(" AND "));
+    }
+
+    [Test]
+    public void GetMatchColumns_MySQL_NullableKey()
+    {
+        var result = MergeScriptHelper.GetMatchColumns(Platform.MySQL, "*nullable_col");
+        Assert.That(result, Does.Contain("`Source`.`nullable_col` = `Target`.`nullable_col`"));
+        Assert.That(result, Does.Contain("`Source`.`nullable_col` IS NULL AND `Target`.`nullable_col` IS NULL"));
+    }
+
+    [Test]
+    public void GetMatchColumns_MySQL_TrimsBackticks()
+    {
+        var result = MergeScriptHelper.GetMatchColumns(Platform.MySQL, "`id`");
+        Assert.That(result, Is.EqualTo("`Source`.`id` = `Target`.`id`"));
+    }
+
+    [Test]
+    public void GetMatchColumns_MySQL_MixedKeys()
+    {
+        var result = MergeScriptHelper.GetMatchColumns(Platform.MySQL, "id,*nullable_col");
+        Assert.That(result, Does.Contain("`Source`.`id` = `Target`.`id`"));
+        Assert.That(result, Does.Contain("(`Source`.`nullable_col` = `Target`.`nullable_col` OR (`Source`.`nullable_col` IS NULL AND `Target`.`nullable_col` IS NULL))"));
+    }
+
+    #endregion
+
 }

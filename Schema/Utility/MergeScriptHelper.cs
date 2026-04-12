@@ -64,7 +64,7 @@ public static class MergeScriptHelper
     {
         Platform.SqlServer => BuildSqlServerMatchColumns(keyColumns),
         Platform.PostgreSQL => BuildPostgreSqlMatchColumns(keyColumns),
-        Platform.MySQL => "", // MySQL uses ON DUPLICATE KEY — no explicit match columns
+        Platform.MySQL => BuildMySqlMatchColumns(keyColumns),
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
@@ -991,6 +991,14 @@ SELECT c.column_name, c.udt_name
     #endregion
 
     #region MySQL Implementation
+
+    private static string BuildMySqlMatchColumns(string keyColumns)
+    {
+        return string.Join(" AND ", keyColumns.Split(',')
+            .Select(c => c.Trim().StartsWith("*")
+                ? $"(`Source`.`{c.Trim().Substring(1).Trim('`')}` = `Target`.`{c.Trim().Substring(1).Trim('`')}` OR (`Source`.`{c.Trim().Substring(1).Trim('`')}` IS NULL AND `Target`.`{c.Trim().Substring(1).Trim('`')}` IS NULL))"
+                : $"`Source`.`{c.Trim().Trim('`')}` = `Target`.`{c.Trim().Trim('`')}`"));
+    }
 
     private static string BuildMergeScriptMySql(IDbCommand cmd, string databaseName, string tableName,
         string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys)
