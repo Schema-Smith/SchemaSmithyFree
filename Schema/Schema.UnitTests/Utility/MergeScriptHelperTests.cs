@@ -1561,6 +1561,88 @@ public class MergeScriptHelperTests
 
     #endregion
 
+    #region MySQL Fragment Method Tests
+
+    [Test]
+    public void GetJsonColumnDefinitions_MySQL_ReturnsJsonTableColumns()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10, 0, null, "int", "", null),
+            new("name", "varchar", 100, null, null, null, "varchar(100)", "", null),
+            new("location", "geometry", null, null, null, null, "geometry", "", null),
+        });
+
+        var result = MergeScriptHelper.GetJsonColumnDefinitions(Platform.MySQL, cmd, "testdb", "test_table");
+
+        Assert.That(result, Does.Contain("`id` INT PATH '$.id'"));
+        Assert.That(result, Does.Contain("`name` VARCHAR(100) PATH '$.name'"));
+        Assert.That(result, Does.Contain("`location` TEXT PATH '$.location'"));
+    }
+
+    [Test]
+    public void GetJsonSelectColumns_MySQL_ReturnsSelectExpressions()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10, 0, null, "int", "", null),
+            new("location", "geometry", null, null, null, null, "geometry", "", null),
+            new("data", "blob", 65535, null, null, null, "blob", "", null),
+        });
+
+        var result = MergeScriptHelper.GetJsonSelectColumns(Platform.MySQL, cmd, "testdb", "test_table");
+
+        Assert.That(result, Does.Contain("`id`"));
+        Assert.That(result, Does.Contain("ST_GeomFromText(`location`)"));
+        Assert.That(result, Does.Contain("FROM_BASE64(`data`)"));
+    }
+
+    [Test]
+    public void GetInsertColumns_MySQL_ReturnsBacktickQuotedList()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10, 0, null, "int", "", null),
+            new("name", "varchar", 100, null, null, null, "varchar(100)", "", null),
+        });
+
+        var result = MergeScriptHelper.GetInsertColumns(Platform.MySQL, cmd, "testdb", "test_table");
+
+        Assert.That(result, Is.EqualTo("`id`, `name`"));
+    }
+
+    [Test]
+    public void GetUpdateColumns_MySQL_ReturnsColumnNames()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10, 0, null, "int", "", null),
+            new("name", "varchar", 100, null, null, null, "varchar(100)", "", null),
+        });
+
+        var result = MergeScriptHelper.GetUpdateColumns(Platform.MySQL, cmd, "testdb", "test_table");
+
+        Assert.That(result, Does.Contain("`id`"));
+        Assert.That(result, Does.Contain("`name`"));
+    }
+
+    [Test]
+    public void GetUpdateColumns_MySQL_MarksJsonColumnsWithPrefix()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10, 0, null, "int", "", null),
+            new("metadata", "json", null, null, null, null, "json", "", null),
+        });
+
+        var result = MergeScriptHelper.GetUpdateColumns(Platform.MySQL, cmd, "testdb", "test_table");
+
+        Assert.That(result, Does.Contain("`id`"));
+        Assert.That(result, Does.Contain("J[`metadata`]"));
+    }
+
+    #endregion
+
     #region MySQL GetMatchColumns Tests
 
     [Test]
