@@ -72,7 +72,7 @@ public static class MergeScriptHelper
     {
         Platform.SqlServer => GetJsonColumnDefinitionsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => GetJsonColumnDefinitionsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
-        Platform.MySQL => "", // MySQL uses JSON_TABLE inline — no separate definitions
+        Platform.MySQL => GetJsonColumnDefinitionsMySql(cmd, schemaOrDb, tableName, jsonKeys),
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
@@ -80,7 +80,7 @@ public static class MergeScriptHelper
     {
         Platform.SqlServer => GetJsonSelectColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => "", // PostgreSQL uses json_populate_recordset — no separate select columns
-        Platform.MySQL => "", // MySQL uses JSON_TABLE inline
+        Platform.MySQL => GetJsonSelectColumnsMySql(cmd, schemaOrDb, tableName, jsonKeys),
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
@@ -88,7 +88,7 @@ public static class MergeScriptHelper
     {
         Platform.SqlServer => GetInsertColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => GetInsertColumnsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
-        Platform.MySQL => "", // MySQL handles inserts inline
+        Platform.MySQL => GetInsertColumnsMySql(cmd, schemaOrDb, tableName, jsonKeys),
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
@@ -96,7 +96,7 @@ public static class MergeScriptHelper
     {
         Platform.SqlServer => GetUpdateColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => GetUpdateColumnsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
-        Platform.MySQL => "", // MySQL handles updates inline
+        Platform.MySQL => GetUpdateColumnsMySql(cmd, schemaOrDb, tableName, jsonKeys),
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
@@ -998,6 +998,39 @@ SELECT c.column_name, c.udt_name
             .Select(c => c.Trim().StartsWith("*")
                 ? $"(`Source`.`{c.Trim().Substring(1).Trim('`')}` = `Target`.`{c.Trim().Substring(1).Trim('`')}` OR (`Source`.`{c.Trim().Substring(1).Trim('`')}` IS NULL AND `Target`.`{c.Trim().Substring(1).Trim('`')}` IS NULL))"
                 : $"`Source`.`{c.Trim().Trim('`')}` = `Target`.`{c.Trim().Trim('`')}`"));
+    }
+
+    private static string GetJsonColumnDefinitionsMySql(IDbCommand cmd, string databaseName, string tableName, HashSet<string> jsonKeys)
+    {
+        databaseName = databaseName.Trim().Trim('`');
+        tableName = tableName.Trim().Trim('`');
+        var columns = GetColumnInfoMySql(cmd, databaseName, tableName, excludeAutoIncrement: false, jsonKeys: jsonKeys);
+        return BuildJsonTableColumnsMySql(columns);
+    }
+
+    private static string GetJsonSelectColumnsMySql(IDbCommand cmd, string databaseName, string tableName, HashSet<string> jsonKeys)
+    {
+        databaseName = databaseName.Trim().Trim('`');
+        tableName = tableName.Trim().Trim('`');
+        var columns = GetColumnInfoMySql(cmd, databaseName, tableName, excludeAutoIncrement: false, jsonKeys: jsonKeys);
+        return BuildSelectExpressionsMySql(columns);
+    }
+
+    private static string GetInsertColumnsMySql(IDbCommand cmd, string databaseName, string tableName, HashSet<string> jsonKeys)
+    {
+        databaseName = databaseName.Trim().Trim('`');
+        tableName = tableName.Trim().Trim('`');
+        var columns = GetColumnInfoMySql(cmd, databaseName, tableName, excludeAutoIncrement: false, jsonKeys: jsonKeys);
+        return string.Join(", ", columns.Select(c => $"`{c.Name}`"));
+    }
+
+    private static string GetUpdateColumnsMySql(IDbCommand cmd, string databaseName, string tableName, HashSet<string> jsonKeys)
+    {
+        databaseName = databaseName.Trim().Trim('`');
+        tableName = tableName.Trim().Trim('`');
+        var columns = GetColumnInfoMySql(cmd, databaseName, tableName, excludeAutoIncrement: false, jsonKeys: jsonKeys);
+        return string.Join(",", columns.Select(c =>
+            IsJsonTypeMySql(c.DataType) ? $"J[`{c.Name}`]" : $"`{c.Name}`"));
     }
 
     private static string BuildMergeScriptMySql(IDbCommand cmd, string databaseName, string tableName,
