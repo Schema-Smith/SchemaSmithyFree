@@ -1039,11 +1039,14 @@ SELECT c.column_name, c.udt_name
         databaseName = databaseName.Trim().Trim('`');
         tableName = tableName.Trim().Trim('`');
 
-        // Include auto-increment columns so explicit ID values from data files are preserved.
+        // Compose from fragment methods — same pattern as SQL Server and PostgreSQL.
         // MySQL allows explicit inserts into AUTO_INCREMENT columns without any special command
         // (unlike SQL Server's IDENTITY_INSERT or PostgreSQL's OVERRIDING VALUE).
-        var columns = GetColumnInfoMySql(cmd, databaseName, tableName, excludeAutoIncrement: false, jsonKeys: jsonKeys);
-        if (columns.Count == 0)
+        var insertColumns = GetInsertColumnsMySql(cmd, databaseName, tableName, jsonKeys);
+        var selectExpressions = GetJsonSelectColumnsMySql(cmd, databaseName, tableName, jsonKeys);
+        var jsonTableColumns = GetJsonColumnDefinitionsMySql(cmd, databaseName, tableName, jsonKeys);
+
+        if (string.IsNullOrEmpty(insertColumns))
             throw new InvalidOperationException($"No columns found for table `{databaseName}`.`{tableName}` (or all columns are auto-increment/generated).");
 
         // Map standardized MergeType flags to MySQL strategies:
@@ -1051,10 +1054,13 @@ SELECT c.column_name, c.udt_name
         // Insert/Update (update, no delete) -> INSERT ON DUPLICATE KEY UPDATE
         // Insert/Update/Delete (update and delete) -> REPLACE INTO
         if (mergeDelete)
-            return BuildReplaceStatementMySql(databaseName, tableName, columns, tableData, tokenizeScripts, mergeFilter);
+            return BuildReplaceStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, tableData, tokenizeScripts, mergeFilter);
         if (mergeUpdate)
-            return BuildUpsertStatementMySql(databaseName, tableName, columns, tableData, keyColumns, tokenizeScripts);
-        return BuildInsertStatementMySql(databaseName, tableName, columns, tableData, tokenizeScripts);
+        {
+            var updateColumns = GetUpdateColumnsMySql(cmd, databaseName, tableName, jsonKeys);
+            return BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, updateColumns, tableData, keyColumns, tokenizeScripts);
+        }
+        return BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, tableData, tokenizeScripts);
     }
 
     private static List<MySqlColumnInfo> GetColumnInfoMySql(IDbCommand cmd, string databaseName, string tableName, bool excludeAutoIncrement, HashSet<string> jsonKeys = null)
@@ -1117,14 +1123,11 @@ ORDER BY c.ORDINAL_POSITION;
     }
 
     private static string BuildReplaceStatementMySql(string databaseName, string tableName,
-        List<MySqlColumnInfo> columns, string tableData, bool tokenizeScripts, string mergeFilter)
+        string insertColumns, string selectExpressions, string jsonTableColumns,
+        string tableData, bool tokenizeScripts, string mergeFilter)
     {
         var sb = new StringBuilder();
-        var columnList = string.Join(", ", columns.Select(c => $"`{c.Name}`"));
-        var selectExpressions = BuildSelectExpressionsMySql(columns);
-        var jsonTableColumns = BuildJsonTableColumnsMySql(columns);
-
-        sb.AppendLine($"REPLACE INTO `{databaseName}`.`{tableName}` ({columnList})");
+        sb.AppendLine($"REPLACE INTO `{databaseName}`.`{tableName}` ({insertColumns})");
         sb.AppendLine($"SELECT {selectExpressions}");
         sb.AppendLine("FROM JSON_TABLE(");
         sb.AppendLine("  @json_data,");
@@ -1137,17 +1140,11 @@ ORDER BY c.ORDINAL_POSITION;
     }
 
     private static string BuildUpsertStatementMySql(string databaseName, string tableName,
-        List<MySqlColumnInfo> columns, string tableData, string keyColumns, bool tokenizeScripts)
+        string insertColumns, string selectExpressions, string jsonTableColumns, string updateColumns,
+        string tableData, string keyColumns, bool tokenizeScripts)
     {
         var sb = new StringBuilder();
-        var columnList = string.Join(", ", columns.Select(c => $"`{c.Name}`"));
-        var selectExpressions = BuildSelectExpressionsMySql(columns);
-        var jsonTableColumns = BuildJsonTableColumnsMySql(columns);
-
-        var keyColNames = ParseKeyColumnsMySql(keyColumns);
-        var updateColumns = columns.Where(c => !keyColNames.Contains(c.Name, StringComparer.OrdinalIgnoreCase)).ToList();
-
-        sb.AppendLine($"INSERT INTO `{databaseName}`.`{tableName}` ({columnList})");
+        sb.AppendLine($"INSERT INTO `{databaseName}`.`{tableName}` ({insertColumns})");
         sb.AppendLine($"SELECT {selectExpressions}");
         sb.AppendLine("FROM JSON_TABLE(");
         sb.AppendLine("  @json_data,");
@@ -1156,32 +1153,46 @@ ORDER BY c.ORDINAL_POSITION;
         sb.AppendLine("  )");
         sb.AppendLine(") AS jt");
 
-        if (updateColumns.Count > 0)
+        var keyColNames = ParseKeyColumnsMySql(keyColumns);
+        var nonKeyColumns = updateColumns.Split(',')
+            .Where(c =>
+            {
+                var colName = c.Trim().Trim('`');
+                if (colName.StartsWith("J[")) colName = colName.Substring(2).TrimEnd(']').Trim('`');
+                return !keyColNames.Contains(colName, StringComparer.OrdinalIgnoreCase);
+            })
+            .ToList();
+
+        if (nonKeyColumns.Count > 0)
         {
             sb.AppendLine("ON DUPLICATE KEY UPDATE");
-            var updateAssignments = updateColumns.Select(c =>
-                IsJsonTypeMySql(c.DataType)
-                    ? $"  `{c.Name}` = IF(CAST(VALUES(`{c.Name}`) AS JSON) = CAST(`{databaseName}`.`{tableName}`.`{c.Name}` AS JSON), `{databaseName}`.`{tableName}`.`{c.Name}`, VALUES(`{c.Name}`))"
-                    : $"  `{c.Name}` = VALUES(`{c.Name}`)");
+            var updateAssignments = nonKeyColumns.Select(c =>
+            {
+                var trimmed = c.Trim();
+                if (trimmed.StartsWith("J["))
+                {
+                    var colName = trimmed.Substring(2).TrimEnd(']');
+                    return $"  {colName} = IF(CAST(VALUES({colName}) AS JSON) = CAST(`{databaseName}`.`{tableName}`.{colName} AS JSON), `{databaseName}`.`{tableName}`.{colName}, VALUES({colName}))";
+                }
+                return $"  {trimmed} = VALUES({trimmed})";
+            });
             sb.AppendLine(string.Join(",\n", updateAssignments) + ";");
         }
         else
         {
-            sb.AppendLine($"ON DUPLICATE KEY UPDATE `{columns[0].Name}` = VALUES(`{columns[0].Name}`);");
+            var firstCol = insertColumns.Split(',')[0].Trim();
+            sb.AppendLine($"ON DUPLICATE KEY UPDATE {firstCol} = VALUES({firstCol});");
         }
 
         return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts);
     }
 
     private static string BuildInsertStatementMySql(string databaseName, string tableName,
-        List<MySqlColumnInfo> columns, string tableData, bool tokenizeScripts)
+        string insertColumns, string selectExpressions, string jsonTableColumns,
+        string tableData, bool tokenizeScripts)
     {
         var sb = new StringBuilder();
-        var columnList = string.Join(", ", columns.Select(c => $"`{c.Name}`"));
-        var selectExpressions = BuildSelectExpressionsMySql(columns);
-        var jsonTableColumns = BuildJsonTableColumnsMySql(columns);
-
-        sb.AppendLine($"INSERT IGNORE INTO `{databaseName}`.`{tableName}` ({columnList})");
+        sb.AppendLine($"INSERT IGNORE INTO `{databaseName}`.`{tableName}` ({insertColumns})");
         sb.AppendLine($"SELECT {selectExpressions}");
         sb.AppendLine("FROM JSON_TABLE(");
         sb.AppendLine("  @json_data,");

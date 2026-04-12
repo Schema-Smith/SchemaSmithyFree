@@ -1293,8 +1293,16 @@ public class MergeScriptHelperTests
     private static IDbCommand CreateMySqlMockCommand(MySqlColumnDef[] columns)
     {
         var cmd = Substitute.For<IDbCommand>();
-        var reader = Substitute.For<IDataReader>();
 
+        // Return a fresh reader on each ExecuteReader() call so fragment methods
+        // that each query independently all get the full column set.
+        cmd.ExecuteReader().Returns(ci => CreateMySqlMockReader(columns));
+        return cmd;
+    }
+
+    private static IDataReader CreateMySqlMockReader(MySqlColumnDef[] columns)
+    {
+        var reader = Substitute.For<IDataReader>();
         var currentIndex = -1;
         reader.Read().Returns(ci =>
         {
@@ -1327,8 +1335,7 @@ public class MergeScriptHelperTests
         reader.IsDBNull(8).Returns(ci => columns[currentIndex].GenExpr == null);
         reader.GetString(8).Returns(ci => columns[currentIndex].GenExpr ?? "");
 
-        cmd.ExecuteReader().Returns(reader);
-        return cmd;
+        return reader;
     }
 
     #endregion
