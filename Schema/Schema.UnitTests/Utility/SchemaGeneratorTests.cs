@@ -5,8 +5,10 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
+using NSubstitute;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
+using Schema.Isolators;
 using Schema.Utility;
 using SchemaSmith.Pro;
 
@@ -365,4 +367,58 @@ public class SchemaGeneratorTests
 
     private class StringEnumClass { public TestStringEnum Version { get; set; } }
     private class NullableEnumClass { public TestStringEnum? Version { get; set; } }
+
+    #region Pro Schema Definition Provider Integration
+
+    [Test]
+    public void GenerateSchema_DataDeliveryProperty_UsesProProviderWhenAvailable()
+    {
+        var mockProvider = Substitute.For<IProSchemaDefinitionProvider>();
+        mockProvider.GetSchemaDefinition(Arg.Any<string>()).Returns((string)null);
+        mockProvider.GetSchemaDefinition("DataDelivery").Returns("""
+            {
+              "type": "object",
+              "properties": {
+                "MergeType": { "type": "string", "enum": ["None", "Insert", "Insert/Update", "Insert/Update/Delete"] }
+              }
+            }
+            """);
+        FactoryContainer.Register<IProSchemaDefinitionProvider>(mockProvider);
+
+        try
+        {
+            var schema = SchemaGenerator.GenerateSchema(typeof(SqlServerTable));
+            var dataDelivery = schema["properties"]?["DataDelivery"];
+
+            Assert.That(dataDelivery, Is.Not.Null);
+            Assert.That(dataDelivery["properties"]?["MergeType"]?["enum"], Is.Not.Null);
+        }
+        finally
+        {
+            FactoryContainer.Unregister<IProSchemaDefinitionProvider>();
+        }
+    }
+
+    [Test]
+    public void GenerateSchema_DataDeliveryProperty_FallsBackToReflection_WhenProviderReturnsNull()
+    {
+        var mockProvider = Substitute.For<IProSchemaDefinitionProvider>();
+        mockProvider.GetSchemaDefinition(Arg.Any<string>()).Returns((string)null);
+        FactoryContainer.Register<IProSchemaDefinitionProvider>(mockProvider);
+
+        try
+        {
+            var schema = SchemaGenerator.GenerateSchema(typeof(SqlServerTable));
+            var dataDelivery = schema["properties"]?["DataDelivery"];
+
+            Assert.That(dataDelivery, Is.Not.Null);
+            Assert.That(dataDelivery["type"]?.ToString(), Is.EqualTo("object"));
+        }
+        finally
+        {
+            FactoryContainer.Unregister<IProSchemaDefinitionProvider>();
+        }
+    }
+
+    #endregion
 }

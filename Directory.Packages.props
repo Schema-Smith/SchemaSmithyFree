@@ -6,7 +6,7 @@
 
   <ItemGroup>
     <!-- Core dependencies -->
-    <PackageVersion Include="SchemaSmith.Pro" Version="0.3.0" />
+    <PackageVersion Include="SchemaSmith.Pro" Version="0.4.0" />
     <PackageVersion Include="log4net" Version="3.3.0" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.0.0" />
     <PackageVersion Include="MySqlConnector" Version="2.5.0" />
