@@ -262,6 +262,72 @@ The table quench is broken into modular stored procedures, each handling a speci
 
 The implementation lives in the deployed SQL on the target database -- which means a DBA can read it on the server with `sp_helptext` (SQL Server), `\sf` (PostgreSQL), or `SHOW CREATE PROCEDURE` (MySQL). No black boxes.
 
+### Calling Procedures Directly from Migration Scripts
+
+The quench procedures are deployed to the target database during the KindleTheForge step and remain there afterward. You can call them directly from Before Scripts, After Scripts, or any migration script to perform targeted operations outside the normal quench flow.
+
+**TableQuench** -- applies the full table quench sequence (missing tables, modified columns, indexes, constraints, foreign keys) for a set of table definitions you provide:
+
+> **SQL Server:**
+> ```sql
+> EXEC SchemaSmith.TableQuench
+>     @ProductName = 'MyProduct',
+>     @TableDefinitions = '{{TableSchema}}',
+>     @WhatIf = 0,
+>     @DropUnknownIndexes = 0,
+>     @DropTablesRemovedFromProduct = 0,
+>     @UpdateFillFactor = 1;
+> ```
+
+> **PostgreSQL:**
+> ```sql
+> CALL "SchemaSmith"."TableQuench"(
+>     'MyProduct',
+>     '{{TableSchema}}',
+>     FALSE,  -- p_WhatIf
+>     FALSE,  -- p_DropUnknownIndexes
+>     FALSE,  -- p_DropTablesRemovedFromProduct
+>     TRUE    -- p_UpdateFillFactor
+> );
+> ```
+
+> **MySQL:**
+> ```sql
+> CALL SchemaSmith_TableQuench(
+>     'MyProduct',
+>     '{{MainDB}}',
+>     '{{TableSchema}}',
+>     0,  -- p_WhatIf
+>     0,  -- p_DropUnknownIndexes
+>     0   -- p_DropTablesRemovedFromProduct
+> );
+> ```
+
+**IndexedViewQuench** (SQL Server) -- deploys indexed views with diff-based change detection:
+
+> ```sql
+> EXEC SchemaSmith.IndexedViewQuench
+>     @ProductName = 'MyProduct',
+>     @IndexedViewSchema = '{{IndexedViewSchema}}',
+>     @WhatIf = 0,
+>     @UpdateFillFactor = 0;
+> ```
+
+**MaterializedViewQuench** (PostgreSQL) -- deploys materialized views with diff-based change detection:
+
+> ```sql
+> CALL "SchemaSmith"."MaterializedViewQuench"(
+>     'MyProduct',
+>     '{{MaterializedViewSchema}}',
+>     FALSE,  -- p_WhatIf
+>     TRUE    -- p_UpdateFillFactor
+> );
+> ```
+
+The `{{TableSchema}}`, `{{IndexedViewSchema}}`, and `{{MaterializedViewSchema}}` tokens resolve to the full JSON array of definitions from the current template. You can also use `<*SpecificTable*>`, `<*SpecificIndexedView*>`, or `<*SpecificMaterializedView*>` tokens to target individual objects.
+
+**When to use direct calls:** When you need to apply schema changes in a specific order within a migration script, or when you want to quench a subset of objects as part of a data migration that depends on structural changes being in place first.
+
 ---
 
 ## Migration Script Tracking
@@ -291,6 +357,20 @@ Scripts with `[ALWAYS]` in the filename (before the `.sql` extension) run on eve
 ```
 
 `[ALWAYS]` scripts are never recorded in the tracking table.
+
+### Common [ALWAYS] Patterns
+
+**Refreshing PostgreSQL materialized views** -- SchemaQuench deploys materialized view *definitions* via the MaterializedViewQuench procedure, but it does not refresh their data on every deployment. If your materialized views need periodic refreshing, use an `[ALWAYS]` script in the `After Scripts` folder:
+
+```sql
+-- After Scripts/001_RefreshMaterializedViews [ALWAYS].sql
+REFRESH MATERIALIZED VIEW CONCURRENTLY "reporting"."active_orders";
+REFRESH MATERIALIZED VIEW CONCURRENTLY "reporting"."monthly_summary";
+```
+
+The `CONCURRENTLY` keyword allows the refresh to happen without locking out concurrent reads -- but it requires a unique index on the materialized view. If your view has no unique index, drop the `CONCURRENTLY` keyword (which will block reads during refresh).
+
+This runs on every deployment, keeping your materialized view data current with the underlying tables. For views that are expensive to refresh, consider gating the refresh with a condition or scheduling it outside of deployment.
 
 ### Ordering
 
