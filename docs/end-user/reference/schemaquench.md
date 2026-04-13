@@ -264,15 +264,28 @@ The implementation lives in the deployed SQL on the target database -- which mea
 
 ### Calling Procedures Directly from Migration Scripts
 
-The quench procedures are deployed to the target database during the KindleTheForge step and remain there afterward. You can call them directly from Before Scripts, After Scripts, or any migration script to perform targeted operations outside the normal quench flow.
+The quench procedures are deployed to the target database during the KindleTheForge step and remain there afterward. You can call them directly from Before Scripts, After Scripts, or any migration script to bootstrap specific tables or views as part of a data migration.
 
-**TableQuench** -- applies the full table quench sequence (missing tables, modified columns, indexes, constraints, foreign keys) for a set of table definitions you provide:
+The typical pattern uses specific-object tokens to quench individual objects that your migration script depends on, rather than passing the entire schema. First, define a token in your `Product.json` or `Template.json`:
+
+```json
+{
+  "ScriptTokens": {
+    "AuditLogTable": "<*SpecificTable*>dbo.AuditLog"
+  }
+}
+```
+
+Then call the procedure from your migration script using the token:
+
+**TableQuench** -- ensures a specific table exists with the right structure before your migration script runs:
 
 > **SQL Server:**
 > ```sql
+> -- Bootstrap the AuditLog table so we can insert into it during this migration
 > EXEC SchemaSmith.TableQuench
->     @ProductName = 'MyProduct',
->     @TableDefinitions = '{{TableSchema}}',
+>     @ProductName = '{{ProductName}}',
+>     @TableDefinitions = '[{{AuditLogTable}}]',
 >     @WhatIf = 0,
 >     @DropUnknownIndexes = 0,
 >     @DropTablesRemovedFromProduct = 0,
@@ -282,8 +295,8 @@ The quench procedures are deployed to the target database during the KindleTheFo
 > **PostgreSQL:**
 > ```sql
 > CALL "SchemaSmith"."TableQuench"(
->     'MyProduct',
->     '{{TableSchema}}',
+>     '{{ProductName}}',
+>     '[{{AuditLogTable}}]',
 >     FALSE,  -- p_WhatIf
 >     FALSE,  -- p_DropUnknownIndexes
 >     FALSE,  -- p_DropTablesRemovedFromProduct
@@ -294,39 +307,62 @@ The quench procedures are deployed to the target database during the KindleTheFo
 > **MySQL:**
 > ```sql
 > CALL SchemaSmith_TableQuench(
->     'MyProduct',
+>     '{{ProductName}}',
 >     '{{MainDB}}',
->     '{{TableSchema}}',
+>     '[{{AuditLogTable}}]',
 >     0,  -- p_WhatIf
 >     0,  -- p_DropUnknownIndexes
 >     0   -- p_DropTablesRemovedFromProduct
 > );
 > ```
 
-**IndexedViewQuench** (SQL Server) -- deploys indexed views with diff-based change detection:
+The same pattern works for views. Define the token, then pass it to the procedure:
+
+```json
+{
+  "ScriptTokens": {
+    "OrderSummaryView": "<*SpecificIndexedView*>dbo.vw_OrderSummary",
+    "ActiveOrdersView": "<*SpecificMaterializedView*>reporting.active_orders"
+  }
+}
+```
+
+**IndexedViewQuench** (SQL Server):
 
 > ```sql
 > EXEC SchemaSmith.IndexedViewQuench
->     @ProductName = 'MyProduct',
->     @IndexedViewSchema = '{{IndexedViewSchema}}',
+>     @ProductName = '{{ProductName}}',
+>     @IndexedViewSchema = '[{{OrderSummaryView}}]',
 >     @WhatIf = 0,
 >     @UpdateFillFactor = 0;
 > ```
 
-**MaterializedViewQuench** (PostgreSQL) -- deploys materialized views with diff-based change detection:
+**MaterializedViewQuench** (PostgreSQL):
 
 > ```sql
 > CALL "SchemaSmith"."MaterializedViewQuench"(
->     'MyProduct',
->     '{{MaterializedViewSchema}}',
+>     '{{ProductName}}',
+>     '[{{ActiveOrdersView}}]',
 >     FALSE,  -- p_WhatIf
 >     TRUE    -- p_UpdateFillFactor
 > );
 > ```
 
-The `{{TableSchema}}`, `{{IndexedViewSchema}}`, and `{{MaterializedViewSchema}}` tokens resolve to the full JSON array of definitions from the current template. You can also use `<*SpecificTable*>`, `<*SpecificIndexedView*>`, or `<*SpecificMaterializedView*>` tokens to target individual objects.
+You can also pass the full schema tokens (`{{TableSchema}}`, `{{IndexedViewSchema}}`, `{{MaterializedViewSchema}}`) to quench all objects of that type, but the specific-object pattern is more common in migration scripts where you need one table or view to exist before proceeding.
 
-**When to use direct calls:** When you need to apply schema changes in a specific order within a migration script, or when you want to quench a subset of objects as part of a data migration that depends on structural changes being in place first.
+**Parameter reference:**
+
+| Parameter | TableQuench | IndexedViewQuench | MaterializedViewQuench |
+|-----------|:-----------:|:-----------------:|:----------------------:|
+| ProductName | Required | Required | Required |
+| Definitions (JSON) | Required | Required | Required |
+| DatabaseName (MySQL only) | Required | -- | -- |
+| WhatIf | Default: off | Default: off | Default: off |
+| DropUnknownIndexes | Default: off | -- | -- |
+| DropTablesRemovedFromProduct | Default: on | -- | -- |
+| UpdateFillFactor | Default: on | Default: off | Default: on |
+
+**When to use direct calls:** When a migration script needs a table or view to exist before it can run -- for example, bootstrapping an audit table in a Before Script before inserting migration tracking data, or ensuring a materialized view is deployed before populating dependent tables.
 
 ---
 
