@@ -75,7 +75,7 @@ public class MergeScriptHelperIntegrationTests
     }
 
     [Test]
-    public void BuildMergeScript_ActorTable_GeneratesValidReplaceSQL()
+    public void BuildMergeScript_ActorTable_GeneratesUpsertPlusDeleteSQL()
     {
         // Arrange
         using var command = _connection.CreateCommand();
@@ -85,13 +85,16 @@ public class MergeScriptHelperIntegrationTests
         var script = MergeScriptHelper.BuildMergeScript(Platform.MySQL, command, _testDb, "actor",
             tableData, "`actor_id`", true, true, false, false, null!);
 
-        // Assert
-        Assert.That(script, Does.Contain($"REPLACE INTO `{_testDb}`.`actor`"));
+        // Assert — must not use REPLACE INTO (breaks ON DELETE RESTRICT FKs)
+        Assert.That(script, Does.Not.Contain("REPLACE INTO"));
+        Assert.That(script, Does.Contain($"INSERT INTO `{_testDb}`.`actor`"));
+        Assert.That(script, Does.Contain("ON DUPLICATE KEY UPDATE"));
+        Assert.That(script, Does.Contain($"DELETE t FROM `{_testDb}`.`actor` t"));
+        Assert.That(script, Does.Contain("NOT EXISTS"));
         Assert.That(script, Does.Contain("JSON_TABLE("));
         Assert.That(script, Does.Contain("`first_name` VARCHAR(45) PATH '$.first_name'"));
         Assert.That(script, Does.Contain("`last_name` VARCHAR(45) PATH '$.last_name'"));
         // AUTO_INCREMENT columns are included so explicit ID values from data files are preserved.
-        // MySQL allows explicit inserts into AUTO_INCREMENT columns without any special command.
         Assert.That(script, Does.Contain("`actor_id`"));
     }
 

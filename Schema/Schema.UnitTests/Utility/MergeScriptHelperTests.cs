@@ -456,7 +456,7 @@ public class MergeScriptHelperTests
     }
 
     [Test]
-    public void BuildMergeScript_MySQL_InsertUpdateDelete_GeneratesReplaceInto()
+    public void BuildMergeScript_MySQL_InsertUpdateDelete_UsesUpsertPlusDelete()
     {
         var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
         {
@@ -465,11 +465,75 @@ public class MergeScriptHelperTests
         });
 
         var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
-            "testdb", "testtable", "[{\"id\":1}]", "`id`",
+            "testdb", "testtable", "[{\"id\":1,\"name\":\"test\"}]", "`id`",
             mergeUpdate: true, mergeDelete: true, disableTriggers: false,
             tokenizeScripts: false, mergeFilter: null);
 
-        Assert.That(result, Does.Contain("REPLACE INTO `testdb`.`testtable`"));
+        // Must NOT use REPLACE INTO — it deletes+reinserts, breaking ON DELETE RESTRICT FKs
+        Assert.That(result, Does.Not.Contain("REPLACE INTO"));
+        // Should use upsert (INSERT ... ON DUPLICATE KEY UPDATE)
+        Assert.That(result, Does.Contain("INSERT INTO `testdb`.`testtable`"));
+        Assert.That(result, Does.Contain("ON DUPLICATE KEY UPDATE"));
+        // Should have a delete pass for rows not in source (MySQL multi-table delete syntax)
+        Assert.That(result, Does.Contain("DELETE t FROM `testdb`.`testtable` t"));
+        Assert.That(result, Does.Contain("NOT EXISTS"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySQL_InsertUpdateDelete_DeleteMatchesOnKeyColumns()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("code", "varchar", 10L, null, null, null, "varchar(10)", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+        });
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable", "[]", "`id`,`code`",
+            mergeUpdate: true, mergeDelete: true, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null);
+
+        // Delete pass should join on both key columns
+        Assert.That(result, Does.Contain("t.`id` = jt.`id`"));
+        Assert.That(result, Does.Contain("t.`code` = jt.`code`"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySQL_InsertUpdateDelete_DeleteRespectsMergeFilter()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+        });
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable", "[]", "`id`",
+            mergeUpdate: true, mergeDelete: true, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: "t.`category` = 'active'");
+
+        // Delete pass should include the merge filter
+        Assert.That(result, Does.Contain("t.`category` = 'active'"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySQL_DeleteOnly_UsesUpsertPlusDelete()
+    {
+        // mergeDelete=true, mergeUpdate=false — still must not use REPLACE INTO
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+        });
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable", "[]", "`id`",
+            mergeUpdate: false, mergeDelete: true, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null);
+
+        Assert.That(result, Does.Not.Contain("REPLACE INTO"));
+        Assert.That(result, Does.Contain("DELETE t FROM `testdb`.`testtable` t"));
     }
 
     [Test]

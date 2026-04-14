@@ -184,7 +184,7 @@ MySQL doesn't have a `MERGE` statement. DataTongs generates the appropriate idio
 
 - **Insert + Update (no delete)** -- `INSERT ... ON DUPLICATE KEY UPDATE`
 - **Insert only (seed)** -- `INSERT IGNORE`
-- **Replace semantics** -- `REPLACE INTO` (used when targeting full row replacement)
+- **Insert + Update + Delete** -- `INSERT ... ON DUPLICATE KEY UPDATE` followed by `DELETE WHERE NOT EXISTS` to remove rows not present in the source data
 
 ```sql
 INSERT INTO `northwind`.`shippers` (`company_name`, `phone`, `shipper_id`) VALUES
@@ -196,7 +196,7 @@ ON DUPLICATE KEY UPDATE
   `phone`        = VALUES(`phone`);
 ```
 
-The MySQL generator infers the right idiom from `MergeUpdate` and `MergeDelete`. Full delete sync (the equivalent of `WHEN NOT MATCHED BY SOURCE THEN DELETE`) is not directly expressible in `ON DUPLICATE KEY UPDATE`; for tables that need that semantic on MySQL, hand-author a migration script that performs the delete pass.
+The MySQL generator infers the right idiom from `MergeUpdate` and `MergeDelete`.
 
 ---
 

@@ -1052,9 +1052,18 @@ SELECT c.column_name, c.udt_name
         // Map standardized MergeType flags to MySQL strategies:
         // Insert only (no update, no delete) -> INSERT IGNORE
         // Insert/Update (update, no delete) -> INSERT ON DUPLICATE KEY UPDATE
-        // Insert/Update/Delete (update and delete) -> REPLACE INTO
+        // Insert/Update/Delete (update and/or delete) -> Upsert + DELETE WHERE NOT EXISTS
+        //   REPLACE INTO was used previously but it deletes+reinserts every matching row,
+        //   breaking ON DELETE RESTRICT foreign keys.
         if (mergeDelete)
-            return BuildReplaceStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, tableData, tokenizeScripts, mergeFilter);
+        {
+            var updateColumns = GetUpdateColumnsMySql(cmd, databaseName, tableName, jsonKeys);
+            var upsert = mergeUpdate
+                ? BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, updateColumns, tableData, keyColumns, tokenizeScripts)
+                : BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, tableData, tokenizeScripts);
+            var delete = BuildDeleteStatementMySql(databaseName, tableName, jsonTableColumns, keyColumns, mergeFilter);
+            return upsert + "\n" + delete;
+        }
         if (mergeUpdate)
         {
             var updateColumns = GetUpdateColumnsMySql(cmd, databaseName, tableName, jsonKeys);
@@ -1122,21 +1131,25 @@ ORDER BY c.ORDINAL_POSITION;
         return columns;
     }
 
-    private static string BuildReplaceStatementMySql(string databaseName, string tableName,
-        string insertColumns, string selectExpressions, string jsonTableColumns,
-        string tableData, bool tokenizeScripts, string mergeFilter)
+    private static string BuildDeleteStatementMySql(string databaseName, string tableName,
+        string jsonTableColumns, string keyColumns, string mergeFilter)
     {
+        var keyColNames = ParseKeyColumnsMySql(keyColumns);
         var sb = new StringBuilder();
-        sb.AppendLine($"REPLACE INTO `{databaseName}`.`{tableName}` ({insertColumns})");
-        sb.AppendLine($"SELECT {selectExpressions}");
-        sb.AppendLine("FROM JSON_TABLE(");
-        sb.AppendLine("  @json_data,");
-        sb.AppendLine("  '$[*]' COLUMNS (");
-        sb.AppendLine($"    {jsonTableColumns}");
-        sb.AppendLine("  )");
-        sb.AppendLine(") AS jt;");
-
-        return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts);
+        sb.AppendLine($"DELETE t FROM `{databaseName}`.`{tableName}` t");
+        sb.AppendLine("WHERE NOT EXISTS (");
+        sb.AppendLine("  SELECT 1 FROM JSON_TABLE(");
+        sb.AppendLine("    @json_data,");
+        sb.AppendLine("    '$[*]' COLUMNS (");
+        sb.AppendLine($"      {jsonTableColumns}");
+        sb.AppendLine("    )");
+        sb.AppendLine("  ) AS jt");
+        sb.AppendLine($"  WHERE {string.Join(" AND ", keyColNames.Select(k => $"t.`{k}` = jt.`{k}`"))}");
+        sb.Append(")");
+        if (!string.IsNullOrWhiteSpace(mergeFilter))
+            sb.Append($"\nAND ({mergeFilter})");
+        sb.AppendLine(";");
+        return sb.ToString();
     }
 
     private static string BuildUpsertStatementMySql(string databaseName, string tableName,
