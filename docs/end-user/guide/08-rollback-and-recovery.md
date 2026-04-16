@@ -31,7 +31,7 @@ SchemaSmith's rollback semantics are the same across platforms, but the individu
 - **SQL Server** supports transactional DDL for most statements, but some (like `ALTER DATABASE`) cannot participate in user transactions.
 - **MySQL** does **not** support transactional DDL. Each DDL statement is implicitly committed. A failed multi-statement deployment on MySQL cannot be rolled back by the engine itself -- recovery means re-quenching the prior package.
 
-Regardless of platform, rolling back with SchemaSmith means deploying the prior package. On MySQL especially, test rollbacks carefully because the engine won't unwind a half-applied deployment for you.
+> **Warning:** Regardless of platform, rolling back with SchemaSmith means deploying the prior package. On MySQL especially, test rollbacks carefully because the engine won't unwind a half-applied deployment for you.
 
 ## What needs migration scripts
 
@@ -72,17 +72,17 @@ Most rollbacks don't require migration scripts. Data preservation is only needed
 
 ## Best practices
 
-**Tag releases in source control.** Keep tagged releases of your product definition in Git. This makes it trivial to retrieve any prior version for rollback -- `git checkout v1.4.2` and you have everything you need.
+**Tag releases.** Keep tagged releases of your product definition in source control. This makes it trivial to retrieve any prior version for rollback -- `git checkout v1.4.2` (or your VCS equivalent) and you have everything you need.
 
-**Document data dependencies.** When adding columns or tables that will contain important data, document whether rollback requires data preservation scripts. Include this in your release notes.
+**Note data dependencies.** When adding columns or tables that will contain important data, document whether rollback requires data preservation scripts. Include this in your release notes.
 
 **Test rollbacks regularly.** Practice rollback procedures in dev or staging. When you need to roll back production, you'll already know the process works.
 
-**Back up before major rollbacks.** For significant rollbacks, take a database backup first. This gives you a safety net if you discover unexpected data dependencies after the rollback completes. Especially important on MySQL, where the engine can't unwind partial DDL on its own.
+**Back up major rollbacks.** For significant rollbacks, take a database backup first. This gives you a safety net if you discover unexpected data dependencies after the rollback completes. Especially important on MySQL, where the engine can't unwind partial DDL on its own.
 
 **WhatIf first, always.** Never roll back production without running WhatIf mode and reading every line of the generated SQL. The same discipline that applies to forward deployments applies to rollbacks.
 
-**Mind the `DropTablesRemovedFromProduct` setting.** If your production config has `DropTablesRemovedFromProduct: false` (the recommended production posture for rollback-friendly deployments), rolling back to a prior package won't drop tables that only exist in the newer release. That's usually what you want -- the tables stay around until you're sure the rollback is permanent, then you can clean them up explicitly. See [SchemaQuench -- DropTablesRemovedFromProduct](../reference/schemaquench.md#droptablesremovedfromproduct).
+**Keep auto-drops off.** If your production config has `DropTablesRemovedFromProduct: false` (the recommended production posture for rollback-friendly deployments), rolling back to a prior package won't drop tables that only exist in the newer release. That's usually what you want -- the tables stay around until you're sure the rollback is permanent, then you can clean them up explicitly. See [SchemaQuench -- DropTablesRemovedFromProduct](../reference/schemaquench.md#droptablesremovedfromproduct).
 
 ---
 
