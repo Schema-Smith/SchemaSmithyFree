@@ -108,7 +108,7 @@ my-northwind/
       Table Data/
 ```
 
-Every table is a JSON file describing its columns, indexes, and constraints. Every stored procedure and view is a plain SQL file. This is your entire database -- materialized as readable, diffable, reviewable source files. Commit this to Git and you have a complete history of every schema change from this point forward. For the full set of extraction options, see the [SchemaTongs Reference](../reference/schematongs.md).
+Every table is a JSON file describing its columns, indexes, and constraints. Every stored procedure and view is a plain SQL file. This is your entire database -- materialized as readable, diffable, reviewable source files. Commit this to source control and you have a complete history of every schema change from this point forward. For the full set of extraction options, see the [SchemaTongs Reference](../reference/schematongs.md).
 
 That's the cast. A live database, captured in files you can read, review, and version.
 
@@ -209,7 +209,7 @@ Connect to the database with whatever SQL client you prefer and look at the Ship
 SELECT TOP 1 [CompanyName], [Phone], [Email] FROM [dbo].[Shippers];
 ```
 
-The `Email` column is there, right where you declared it. The file is the truth, the database matches, and your next `git commit` records the change for posterity.
+The `Email` column is there, right where you declared it. The file is the truth, the database matches, and your next commit records the change for posterity.
 
 ## The Cycle Is Complete
 
