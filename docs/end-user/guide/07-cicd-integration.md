@@ -141,6 +141,8 @@ Credentials are stored in Variable Groups or Azure Key Vault and linked to the p
 
 All four examples assume SchemaQuench is pre-installed on the runner or agent. SchemaSmith tools are self-contained executables with no dependencies -- copy the binary to the runner, add it to the PATH, and every pipeline on that runner can use it. No package restore, no SDK installation, no version management in the pipeline itself.
 
+The same pattern works for any CLI-capable CI system — TeamCity, CircleCI, Bamboo, Buildkite, Concourse, Octopus Deploy, Harness, and others. Install SchemaQuench on the agent, set the credential environment variables from your CI's secret store, and invoke `schemaquench` from a script step. Nothing in the integration is platform-specific to the four examples above.
+
 ## The WhatIf-in-PR pattern
 
 This is the most powerful CI pattern you can build with SchemaSmith. It catches deployment failures before code reaches your main branch -- not after.
