@@ -41,5 +41,7 @@ public static class Program
 
     private static void ToolSpecificSwitches()
     {
+        Console.WriteLine("  --ConfigureDataDelivery          Write data delivery configuration into table JSON files after extraction.");
+        Console.WriteLine("  --TemplatePath:<path>            Template root (containing Tables/) used by --ConfigureDataDelivery.");
     }
 }

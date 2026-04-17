@@ -8,6 +8,7 @@ using System.Linq;
 using log4net;
 using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
+using Schema.Delivery;
 using Schema.Domain;
 using Schema.Isolators;
 using Schema.Utility;
@@ -85,6 +86,10 @@ public class DataTongs
         var outputScripts = config["ShouldCast:OutputScripts"]?.ToLower() != "false";
         var contentsPath = config["ContentPath"] ?? ".";
         var scriptPath = config["ScriptPath"] ?? ".";
+        var configureDataDelivery = CommandLineParser.ContainsSwitch("ConfigureDataDelivery")
+            || config["ShouldCast:ConfigureDataDelivery"]?.ToLower() == "true";
+        var templatePath = CommandLineParser.ValueOfSwitch("TemplatePath", null)
+            ?? config["TemplatePath"];
 
         if (outputContents) DirectoryWrapper.GetFromFactory().CreateDirectory(contentsPath);
         if (outputScripts) DirectoryWrapper.GetFromFactory().CreateDirectory(scriptPath);
@@ -205,6 +210,28 @@ public class DataTongs
                     contentFilePath = Path.Combine(contentsPath, $"{encodedDisplayName}.tabledata");
                     _progressLog.Info($"    Writing contents to : {contentFilePath}");
                     FileWrapper.GetFromFactory().WriteAllText(contentFilePath, tableData);
+                }
+
+                if (configureDataDelivery && !string.IsNullOrWhiteSpace(templatePath) && !string.IsNullOrEmpty(contentFilePath))
+                {
+                    DataDeliveryConfiguratorImpl.GetFromFactory().Configure(new DataDeliveryConfiguratorContext
+                    {
+                        TemplateRootPath = templatePath,
+                        Platform = _platform.ToString(),
+                        TableSchema = tableSchema,
+                        TableName = tableName,
+                        ContentFilePath = contentFilePath,
+                        KeyColumns = keyColumns,
+                        DefaultMergeType = mergeDelete ? "Insert/Update/Delete" : mergeUpdate ? "Insert/Update" : "Insert",
+                        DisableTriggers = disableTriggers,
+                        DisableRules = disableRules,
+                        UpdateDescendents = updateDescendents,
+                        MergeTypeOverride = table.MergeType,
+                        KeyColumnsOverride = table.KeyColumns,
+                        MergeFilterOverride = table.Filter,
+                        ProgressLog = _progressLog.Info,
+                        WarningLog = _progressLog.Warn
+                    });
                 }
 
                 if (!outputScripts) { tablesProcessed++; continue; }

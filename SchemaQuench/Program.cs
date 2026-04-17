@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
+using Schema.Checkpointing;
 using Schema.Isolators;
 using Schema.Utility;
 
@@ -17,7 +18,7 @@ public static class Program
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", LogFactory.GetLogger("ProgressLog").Info);
 
-        Console.WriteLine(ProLicenseWrapper.GetFromFactory().GetLicenseDisplayText());
+        RegisterCheckpointing();
 
         new ProductQuench().QuenchProduct(skipKindlingForge);
         LogBackup.BackupLogsAndExit("SchemaQuench");
@@ -28,14 +29,21 @@ public static class Program
         LogBackup.UnhandledExceptionLogger("SchemaQuench", e);
     }
 
+    /// <summary>
+    /// Registers an ICheckpointing implementation in FactoryContainer when
+    /// --CheckpointDirectory is specified. Without the switch, ProductQuench falls back
+    /// to FileCheckpointManager.GetFromFactory() which creates a default instance.
+    /// </summary>
+    private static void RegisterCheckpointing()
+    {
+        var dir = CommandLineParser.ValueOfSwitch("CheckpointDirectory");
+        if (!string.IsNullOrWhiteSpace(dir))
+            FactoryContainer.Register<ICheckpointing>(new FileCheckpointManager(dir));
+    }
+
     private static void ToolSpecificSwitches()
     {
-        var proOptions = ProLicenseWrapper.GetFromFactory().FormatProOptions("SchemaQuench");
-        if (!string.IsNullOrEmpty(proOptions))
-        {
-            Console.WriteLine();
-            Console.WriteLine("Pro options:");
-            Console.Write(proOptions);
-        }
+        Console.WriteLine("  --ResumeQuench                   Resume from an existing checkpoint if one is present.");
+        Console.WriteLine("  --CheckpointDirectory:<path>     Directory for checkpoint files (default: %TEMP%/schemaquench-checkpoints).");
     }
 }
