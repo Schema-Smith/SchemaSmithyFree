@@ -10,8 +10,8 @@ using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
+using Schema.Checkpointing;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace SchemaQuench;
@@ -34,7 +34,7 @@ public class ProductQuench
     private readonly bool _deliverData;
     private readonly bool _trackRunOnceMigrations;
     private readonly bool _pruneObsoleteMigrationTracking;
-    private readonly IProCheckpointing _checkpointing;
+    private readonly ICheckpointing _checkpointing;
     private bool _updateFailed;
 
     public ProductQuench()
@@ -53,7 +53,7 @@ public class ProductQuench
         _deliverData = _config["DeliverData"]?.ToLower() != "false";
         _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
         _pruneObsoleteMigrationTracking = _config["PruneObsoleteMigrationTracking"]?.ToLower() != "false";
-        _checkpointing = ProCheckpointingWrapper.GetFromFactory();
+        _checkpointing = FileCheckpointManager.GetFromFactory();
 
         // Secondary servers are SqlServer-only (Availability Groups)
         if (_product.Platform == Platform.SqlServer)

@@ -14,8 +14,9 @@ using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
+using Schema.Checkpointing;
+using Schema.Delivery;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace SchemaQuench;
@@ -41,7 +42,7 @@ public class DatabaseQuench
     private readonly string _dropRemovedTables;
     private readonly bool _updateTables;
     private readonly bool _deliverData;
-    private readonly IProCheckpointing _checkpointing;
+    private readonly ICheckpointing _checkpointing;
     private readonly string _dropUnknownIndexes;
     private readonly bool _trackRunOnceMigrations;
     private readonly bool _pruneObsoleteMigrationTracking;
@@ -53,7 +54,7 @@ public class DatabaseQuench
 
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
-        bool dropUnknownIndexes, bool updateTables, bool deliverData, IProCheckpointing checkpointing,
+        bool dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
         bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true)
     {
         _server = server;
@@ -75,7 +76,7 @@ public class DatabaseQuench
     // Internal constructor for testing — allows direct injection of all parameters
     internal DatabaseQuench(string server, Product product, Template template, string databaseName,
         bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
-        string dropUnknownIndexes, bool updateTables, bool deliverData, IProCheckpointing checkpointing,
+        string dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
         bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true)
     {
         _server = server;
@@ -274,7 +275,7 @@ public class DatabaseQuench
                             if (FactoryContainer.Resolve<IMergeScriptHelper>() == null)
                                 FactoryContainer.Register<IMergeScriptHelper>(new MergeScriptHelperAdapter(_product.Platform));
 
-                            ProDataDeliveryWrapper.GetFromFactory().DeliverTables(new DataDeliveryContext
+                            DataDeliveryProcessor.GetFromFactory().DeliverTables(new DataDeliveryContext
                             {
                                 Tables = _template.Tables.Cast<IDeliverableTable>().ToList(),
                                 Command = effectiveSilentCmd,
