@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using NSubstitute;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.UnitTests.Isolators;
 

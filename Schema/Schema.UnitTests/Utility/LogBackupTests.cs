@@ -5,7 +5,6 @@ using System.IO;
 using log4net;
 using NSubstitute;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace Schema.UnitTests.Utility;

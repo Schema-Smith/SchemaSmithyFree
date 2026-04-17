@@ -14,7 +14,6 @@ using Newtonsoft.Json;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using MySqlConnector;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;

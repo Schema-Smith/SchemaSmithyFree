@@ -9,7 +9,6 @@ using Schema.DataAccess;
 using Schema.Domain;
 using Schema.IntegrationTests.MySQL;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace SchemaTongs.IntegrationTests.MySQL;

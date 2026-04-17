@@ -2,7 +2,6 @@
 
 using System.Collections.Generic;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.UnitTests.Isolators;
 

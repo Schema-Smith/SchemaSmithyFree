@@ -6,7 +6,6 @@ using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 using log4net;
 using NSubstitute;

@@ -2,7 +2,6 @@
 
 using System.Data;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.DataAccess;
 

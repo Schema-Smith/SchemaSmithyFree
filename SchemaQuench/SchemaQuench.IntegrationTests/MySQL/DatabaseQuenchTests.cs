@@ -10,7 +10,6 @@ using NUnit.Framework;
 using Schema.IntegrationTests.MySQL;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace SchemaQuench.IntegrationTests.MySQL;

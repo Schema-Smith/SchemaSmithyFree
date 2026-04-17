@@ -2,7 +2,6 @@
 
 using NSubstitute;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace Schema.UnitTests.Utility;

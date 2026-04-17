@@ -7,7 +7,6 @@ using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 
-using SchemaSmith.Pro;
 namespace Schema.Utility;
 
 /// <summary>

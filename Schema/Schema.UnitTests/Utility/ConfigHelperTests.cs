@@ -8,7 +8,6 @@ using System.Reflection;
 using NSubstitute;
 using Microsoft.Extensions.Configuration;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace Schema.UnitTests.Utility;
@@ -73,18 +72,12 @@ public class ConfigHelperTests
     }
 
     [Test]
-    public void GetAppSettingsAndUserSecrets_LogsAppAndLicense()
+    public void GetAppSettingsAndUserSecrets_LogsAppName()
     {
-        // The app name is logged on its own line, followed by the license display text
-        // (potentially multi-line when a Pro package is loaded). We assert the app name
-        // appears and a Community identifier appears in the log stream, without pinning
-        // the exact format or verbiage.
         var logLines = new List<string>();
         ConfigHelper.GetAppSettingsAndUserSecrets("MyTool", s => logLines.Add(s));
 
         Assert.That(logLines, Has.Some.Matches<string>(s => s == "MyTool"));
-        // License text varies: "Community License" (no license) or "Licensed to: ..." (licensed).
-        Assert.That(logLines, Has.Some.Matches<string>(s => s.Contains("Community") || s.Contains("Licensed")));
     }
 
     [Test]

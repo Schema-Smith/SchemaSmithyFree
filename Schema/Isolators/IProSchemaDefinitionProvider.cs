@@ -1,8 +1,0 @@
-// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
-
-namespace Schema.Isolators;
-
-public interface IProSchemaDefinitionProvider
-{
-    string GetSchemaDefinition(string typeName);
-}

@@ -10,7 +10,6 @@ using Schema.Domain;
 using Schema.Domain.SqlServer;
 using Schema.Isolators;
 using Schema.Utility;
-using SchemaSmith.Pro;
 
 namespace Schema.UnitTests.Utility;
 

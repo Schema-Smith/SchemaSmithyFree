@@ -11,11 +11,11 @@ using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using NSubstitute;
 using Schema.DataAccess;
+using Schema.Delivery;
 using Schema.Domain;
 using Schema.IntegrationTests;
 using Schema.IntegrationTests.MySQL;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 using Index = Schema.Domain.Index;
 
