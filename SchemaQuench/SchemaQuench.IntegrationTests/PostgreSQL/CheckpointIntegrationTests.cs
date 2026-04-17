@@ -77,6 +77,7 @@ public class CheckpointIntegrationTests
 
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();
+            FactoryContainer.Unregister<Schema.Checkpointing.ICheckpointing>();
         }
     }
 
@@ -108,6 +109,7 @@ Template:Main
 
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();
+            FactoryContainer.Unregister<Schema.Checkpointing.ICheckpointing>();
         }
     }
 
@@ -156,6 +158,7 @@ KindleForge
 
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();
+            FactoryContainer.Unregister<Schema.Checkpointing.ICheckpointing>();
         }
     }
 
@@ -178,6 +181,7 @@ KindleForge
 
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();
+            FactoryContainer.Unregister<Schema.Checkpointing.ICheckpointing>();
         }
     }
 

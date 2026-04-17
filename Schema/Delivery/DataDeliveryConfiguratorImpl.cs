@@ -31,40 +31,49 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
             return;
         }
 
-        var json = File.ReadAllText(tableJsonFile);
+        var json = FileWrapper.GetFromFactory().ReadAllText(tableJsonFile);
         var table = JObject.Parse(json);
+
+        if (table["DataDelivery"] is not JObject delivery)
+        {
+            delivery = new JObject();
+            table["DataDelivery"] = delivery;
+        }
+
         var changed = false;
 
         var relativePath = Path.GetRelativePath(context.TemplateRootPath, Path.GetFullPath(context.ContentFilePath)).Replace('\\', '/');
-        changed |= SetIfDifferent(table, "ContentFile", relativePath, context.WarningLog,
-            () => $"    ContentFile for '{context.TableName}' changed from '{table["ContentFile"]}' to '{relativePath}'.");
+        changed |= SetIfDifferent(delivery, "ContentFile", relativePath, context.WarningLog,
+            () => $"    ContentFile for '{context.TableName}' changed from '{delivery["ContentFile"]}' to '{relativePath}'.");
 
         var mergeType = string.IsNullOrWhiteSpace(context.MergeTypeOverride) ? context.DefaultMergeType : context.MergeTypeOverride;
-        changed |= SetIfDifferent(table, "MergeType", mergeType);
+        changed |= SetIfDifferent(delivery, "MergeType", mergeType);
 
         var matchColumns = string.IsNullOrWhiteSpace(context.KeyColumnsOverride) ? null : context.KeyColumnsOverride;
-        changed |= SetIfDifferent(table, "MatchColumns", matchColumns);
+        changed |= SetIfDifferent(delivery, "MatchColumns", matchColumns);
 
         var mergeFilter = string.IsNullOrWhiteSpace(context.MergeFilterOverride) ? null : context.MergeFilterOverride;
-        changed |= SetIfDifferent(table, "MergeFilter", mergeFilter);
+        changed |= SetIfDifferent(delivery, "MergeFilter", mergeFilter);
 
-        changed |= SetBoolIfDifferent(table, "MergeDisableTriggers", context.DisableTriggers);
+        changed |= SetBoolIfDifferent(delivery, "MergeDisableTriggers", context.DisableTriggers);
 
         if (context.Platform?.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase) == true)
         {
-            changed |= SetBoolIfDifferent(table, "MergeDisableRules", context.DisableRules);
-            changed |= SetBoolIfDifferent(table, "MergeUpdateDescendents", context.UpdateDescendents);
+            changed |= SetBoolIfDifferent(delivery, "MergeDisableRules", context.DisableRules);
+            changed |= SetBoolIfDifferent(delivery, "MergeUpdateDescendents", context.UpdateDescendents);
         }
+
+        if (!delivery.HasValues)
+            table.Remove("DataDelivery");
 
         if (changed)
         {
-            var settings = new JsonSerializerSettings
-            {
-                Formatting = Formatting.Indented,
-                DefaultValueHandling = DefaultValueHandling.Ignore
-            };
-            File.WriteAllText(tableJsonFile, table.ToString(Formatting.Indented));
+            FileWrapper.GetFromFactory().WriteAllText(tableJsonFile, table.ToString(Formatting.Indented));
             context.ProgressLog?.Invoke($"    Updated data delivery config for {context.TableName}");
+        }
+        else
+        {
+            context.ProgressLog?.Invoke($"    Data delivery config for {context.TableName} is already up to date.");
         }
     }
 
@@ -73,8 +82,11 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
         if (string.IsNullOrEmpty(templateRootPath) || string.IsNullOrEmpty(tableName))
             return null;
 
+        var file = FileWrapper.GetFromFactory();
+        var directory = DirectoryWrapper.GetFromFactory();
+
         var tablesDir = Path.Combine(templateRootPath, "Tables");
-        if (!Directory.Exists(tablesDir))
+        if (!directory.Exists(tablesDir))
             return null;
 
         var candidates = new[]
@@ -84,9 +96,9 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
         };
 
         foreach (var candidate in candidates)
-            if (File.Exists(candidate)) return candidate;
+            if (file.Exists(candidate)) return candidate;
 
-        var files = Directory.GetFiles(tablesDir, "*.json");
+        var files = directory.GetFiles(tablesDir, "*.json", SearchOption.TopDirectoryOnly);
         var targetName = string.IsNullOrEmpty(tableSchema) ? tableName : $"{tableSchema}.{tableName}";
 
         return files.FirstOrDefault(f =>

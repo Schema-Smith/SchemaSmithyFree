@@ -91,6 +91,16 @@ public class DataTongs
         var templatePath = CommandLineParser.ValueOfSwitch("TemplatePath", null)
             ?? config["TemplatePath"];
 
+        if (configureDataDelivery && string.IsNullOrWhiteSpace(templatePath))
+        {
+            templatePath = FindTemplateRootPath(contentsPath);
+            if (string.IsNullOrWhiteSpace(templatePath))
+            {
+                _progressLog.Warn($"  ContentPath '{contentsPath}' is not within a template (no Template.json found walking up). Disabling ConfigureDataDelivery.");
+                configureDataDelivery = false;
+            }
+        }
+
         if (outputContents) DirectoryWrapper.GetFromFactory().CreateDirectory(contentsPath);
         if (outputScripts) DirectoryWrapper.GetFromFactory().CreateDirectory(scriptPath);
 
@@ -257,6 +267,31 @@ public class DataTongs
         _progressLog.Info($"  Tables processed: {tablesProcessed}");
         if (errors > 0) _progressLog.Info($"  Errors: {errors}");
         _progressLog.Info("DataTongs completed.");
+    }
+
+    /// <summary>
+    /// Walks up from <paramref name="contentPath"/> (a Tables-sibling directory such as
+    /// a template's Content/ folder) looking for the nearest ancestor containing a
+    /// Template.json file, and returns that ancestor. Returns null when no Template.json
+    /// is found — typically because the user is running DataTongs outside of a template.
+    /// </summary>
+    internal static string FindTemplateRootPath(string contentPath)
+    {
+        if (string.IsNullOrWhiteSpace(contentPath)) return null;
+
+        var dir = Path.GetFullPath(contentPath);
+        while (!string.IsNullOrEmpty(dir))
+        {
+            var candidate = Path.Combine(dir, "Template.json");
+            if (FileWrapper.GetFromFactory().Exists(candidate))
+                return dir;
+
+            var parent = Path.GetDirectoryName(dir);
+            if (parent == null || parent == dir) return null;
+            dir = parent;
+        }
+
+        return null;
     }
 
     #region Table Name Parsing
