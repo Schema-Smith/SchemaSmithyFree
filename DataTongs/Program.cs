@@ -18,8 +18,6 @@ public static class Program
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", LogFactory.GetLogger("ProgressLog").Info);
 
-        Console.WriteLine(ProLicenseWrapper.GetFromFactory().GetLicenseDisplayText());
-
         var platform = ResolvePlatform();
 
         new DataTongs(platform).CastData();
@@ -43,12 +41,5 @@ public static class Program
 
     private static void ToolSpecificSwitches()
     {
-        var proOptions = ProLicenseWrapper.GetFromFactory().FormatProOptions("DataTongs");
-        if (!string.IsNullOrEmpty(proOptions))
-        {
-            Console.WriteLine();
-            Console.WriteLine("Pro options:");
-            Console.Write(proOptions);
-        }
     }
 }
