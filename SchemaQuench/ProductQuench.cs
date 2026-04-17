@@ -36,6 +36,15 @@ public class ProductQuench
     private readonly bool _pruneObsoleteMigrationTracking;
     private readonly ICheckpointing _checkpointing;
     private bool _updateFailed;
+    private bool _anyFailure;
+
+    /// <summary>
+    /// True when any template or product-level step reported a fatal failure during
+    /// QuenchProduct. Callers can inspect this after QuenchProduct returns to decide
+    /// whether to preserve checkpoint files — a failed run must preserve checkpoints
+    /// so the next invocation can resume.
+    /// </summary>
+    public bool Failed => _anyFailure;
 
     public ProductQuench()
     {
@@ -310,7 +319,10 @@ public class ProductQuench
         }
 
         if (_updateFailed)
+        {
+            _anyFailure = true;
             throw new Exception("Product script quench FAILED");
+        }
     }
 
     private void LogProductInfo()
@@ -427,6 +439,7 @@ public class ProductQuench
             UpdateDatabasesForTemplate(template, suppressKindling, _primaryServer);
 
         if (!_updateFailed) return;
+        _anyFailure = true;
         _progressLog.Error("One or more database quenches FAILED");
         LogBackup.BackupLogsAndExit("SchemaQuench", 2);
     }
