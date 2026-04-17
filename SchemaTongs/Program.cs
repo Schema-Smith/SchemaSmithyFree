@@ -18,8 +18,6 @@ public static class Program
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", LogFactory.GetLogger("ProgressLog").Info);
 
-        Console.WriteLine(ProLicenseWrapper.GetFromFactory().GetLicenseDisplayText());
-
         if (CommandLineParser.ContainsSwitch("WriteSchemasOnly"))
         {
             WriteSchemasOnly();
@@ -70,12 +68,5 @@ public static class Program
     private static void ToolSpecificSwitches()
     {
         Console.WriteLine("  --WriteSchemasOnly               Regenerate .json-schemas for an existing product without connecting to a database.");
-        var proOptions = ProLicenseWrapper.GetFromFactory().FormatProOptions("SchemaTongs");
-        if (!string.IsNullOrEmpty(proOptions))
-        {
-            Console.WriteLine();
-            Console.WriteLine("Pro options:");
-            Console.Write(proOptions);
-        }
     }
 }
