@@ -23,4 +23,60 @@ public interface ICheckpointing
     /// for this script within the slot.
     /// </summary>
     void TrackScript(TrackingScope scope, string slot, string scriptPath, Action work);
+
+    /// <summary>
+    /// Whether a major step has been recorded as complete in a prior run for this scope.
+    /// Callers use this to emit user-visible "skipping" logs before (or instead of) calling Track.
+    /// </summary>
+    bool HasCompleted(TrackingScope scope, string stepName);
+
+    /// <summary>
+    /// Whether a specific script has been recorded as complete for this scope and slot.
+    /// Callers use this to emit user-visible "skipping" logs before (or instead of) calling TrackScript.
+    /// </summary>
+    bool HasCompletedScript(TrackingScope scope, string slot, string scriptPath);
+
+    /// <summary>
+    /// Summary of product-level completions for emitting "Resuming from checkpoint (...)" on start.
+    /// Returns an all-zero summary if no checkpoint exists.
+    /// </summary>
+    ProductCheckpointSummary GetProductCheckpointSummary(string productName);
+
+    /// <summary>
+    /// Summary of database-level completions for the given scope, for emitting
+    /// "Resuming from checkpoint (...)" at the database level. Returns an all-zero
+    /// summary if no database-level checkpoint exists for the scope.
+    /// </summary>
+    DatabaseCheckpointSummary GetDatabaseCheckpointSummary(TrackingScope scope);
+
+    /// <summary>
+    /// Clean up checkpoint files after a successful deployment.
+    /// </summary>
+    void DeleteCheckpoints(string productName);
+}
+
+/// <summary>
+/// Aggregate counts from a product-level checkpoint, used for resume banner text.
+/// </summary>
+public record ProductCheckpointSummary(
+    int TotalBeforeScripts,
+    int ServersWithBeforeScripts,
+    int CompletedTemplates,
+    int TotalAfterScripts,
+    int ServersWithAfterScripts)
+{
+    public bool HasAnyCompleted =>
+        TotalBeforeScripts > 0 || CompletedTemplates > 0 || TotalAfterScripts > 0;
+
+    public static ProductCheckpointSummary Empty => new(0, 0, 0, 0, 0);
+}
+
+/// <summary>
+/// Aggregate counts from a database-level checkpoint, used for resume banner text.
+/// </summary>
+public record DatabaseCheckpointSummary(int CompletedSteps, int TotalCompletedScripts)
+{
+    public bool HasAnyCompleted => CompletedSteps > 0 || TotalCompletedScripts > 0;
+
+    public static DatabaseCheckpointSummary Empty => new(0, 0);
 }

@@ -1,7 +1,9 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
+using Microsoft.Extensions.Configuration;
 using Schema.Checkpointing;
+using Schema.Domain;
 using Schema.Isolators;
 using Schema.Utility;
 
@@ -21,6 +23,10 @@ public static class Program
         RegisterCheckpointing();
 
         new ProductQuench().QuenchProduct(skipKindlingForge);
+
+        // Successful completion — clean up checkpoint files unless explicitly told to keep them.
+        CleanupCheckpoints();
+
         LogBackup.BackupLogsAndExit("SchemaQuench");
     }
 
@@ -30,15 +36,30 @@ public static class Program
     }
 
     /// <summary>
-    /// Registers an ICheckpointing implementation in FactoryContainer when
-    /// --CheckpointDirectory is specified. Without the switch, ProductQuench falls back
-    /// to FileCheckpointManager.GetFromFactory() which creates a default instance.
+    /// Registers an ICheckpointing implementation in FactoryContainer using
+    /// --CheckpointDirectory (or the CheckpointDirectory config key) when provided.
+    /// Without either, ProductQuench falls back to FileCheckpointManager.GetFromFactory()
+    /// which uses a default temp directory.
     /// </summary>
     private static void RegisterCheckpointing()
     {
         var dir = CommandLineParser.ValueOfSwitch("CheckpointDirectory");
+        if (string.IsNullOrWhiteSpace(dir))
+            dir = FactoryContainer.Resolve<IConfigurationRoot>()?["CheckpointDirectory"];
         if (!string.IsNullOrWhiteSpace(dir))
             FactoryContainer.Register<ICheckpointing>(new FileCheckpointManager(dir));
+    }
+
+    private static void CleanupCheckpoints()
+    {
+        try
+        {
+            FileCheckpointManager.GetFromFactory().DeleteCheckpoints(Product.Load().Name);
+        }
+        catch
+        {
+            // Product failed to load or no checkpointing registered — nothing to clean.
+        }
     }
 
     private static void ToolSpecificSwitches()

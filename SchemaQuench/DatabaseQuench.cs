@@ -110,6 +110,10 @@ public class DatabaseQuench
     {
         SafeProgressLog("Begin Quench");
 
+        var checkpointSummary = _checkpointing?.GetDatabaseCheckpointSummary(DbScope) ?? DatabaseCheckpointSummary.Empty;
+        if (checkpointSummary.HasAnyCompleted)
+            SafeProgressLog($"  [{_databaseName}] Resuming from checkpoint (Completed Steps: {checkpointSummary.CompletedSteps}, Completed Scripts: {checkpointSummary.TotalCompletedScripts})");
+
         try
         {
             using var connection = GetConnection();
@@ -832,6 +836,12 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
             lastQuenchCount = templateObjects.Count(s => !s.HasBeenQuenched);
             foreach (var script in templateObjects.Where(s => !s.HasBeenQuenched))
             {
+                if (_checkpointing.HasCompletedScript(DbScope, slot.ToString(), script.LogPath))
+                {
+                    if (showErrors) SafeProgressLog($"    Skipping (previously quenched per checkpoint) {script.LogPath}");
+                    script.HasBeenQuenched = true;
+                    continue;
+                }
                 _checkpointing.TrackScript(DbScope, slot.ToString(), script.LogPath, () => QuenchOneScript(destCmd, script, _runScriptsTwice, showErrors));
             }
         }
@@ -917,6 +927,13 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
         {
             if (ShouldAlwaysRun(script.Name) || !alreadyRan.Contains(GetRelativeScriptPath(script.LogPath)))
             {
+                if (_checkpointing.HasCompletedScript(DbScope, checkpointSlot.ToString(), script.LogPath))
+                {
+                    script.HasBeenQuenched = true;
+                    SafeProgressLog($"    Skipping (previously quenched per checkpoint) {script.LogPath}");
+                    continue;
+                }
+
                 _checkpointing.TrackScript(DbScope, checkpointSlot.ToString(), script.LogPath, () =>
                 {
                     QuenchOneScript(destCmd, script, _runScriptsTwice & ShouldAlwaysRun(script.Name));
