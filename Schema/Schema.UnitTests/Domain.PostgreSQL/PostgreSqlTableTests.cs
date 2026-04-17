@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 using Schema.Domain;
 using Schema.Domain.PostgreSQL;
 
-using SchemaSmith.Pro;
+using Schema.Delivery;
 namespace Schema.UnitTests.Domain.PostgreSQL
 {
     [TestFixture]

@@ -10,7 +10,7 @@ using Schema.Domain.SqlServer;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.MySQL;
 using Schema.Isolators;
-using SchemaSmith.Pro;
+using Schema.Delivery;
 using Schema.Utility;
 
 namespace Schema.UnitTests.Domain

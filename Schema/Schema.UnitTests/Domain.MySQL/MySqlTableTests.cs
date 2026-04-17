@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 using Schema.Domain;
 using Schema.Domain.MySQL;
 
-using SchemaSmith.Pro;
+using Schema.Delivery;
 namespace Schema.UnitTests.Domain.MySQL
 {
     [TestFixture]
@@ -57,7 +57,7 @@ namespace Schema.UnitTests.Domain.MySQL
                 Collation = "utf8mb4_unicode_ci",
                 Comment = "Main customer table",
                 AutoIncrementValue = 1000UL,
-                DataDelivery = new SchemaSmith.Pro.DataDelivery { MergeType = "Insert/Update" }
+                DataDelivery = new Schema.Delivery.DataDelivery { MergeType = "Insert/Update" }
             };
 
             table.FullTextIndexes.Add(new FullTextIndex
@@ -91,7 +91,7 @@ namespace Schema.UnitTests.Domain.MySQL
             var table = new MySqlTable
             {
                 Name = "test",
-                DataDelivery = new SchemaSmith.Pro.DataDelivery { MergeType = "Insert/Update/Delete" }
+                DataDelivery = new Schema.Delivery.DataDelivery { MergeType = "Insert/Update/Delete" }
             };
 
             var json = JsonConvert.SerializeObject(table);

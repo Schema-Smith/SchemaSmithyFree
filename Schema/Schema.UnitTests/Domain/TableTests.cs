@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Schema.Domain;
 
-using SchemaSmith.Pro;
+using Schema.Delivery;
 namespace Schema.UnitTests.Domain
 {
     [TestFixture]

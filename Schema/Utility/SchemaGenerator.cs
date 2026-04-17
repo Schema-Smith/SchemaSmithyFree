@@ -84,11 +84,6 @@ public static class SchemaGenerator
         if (IsDictionaryType(type)) return new JObject { ["type"] = "object" };
         if (typeof(JToken).IsAssignableFrom(type)) return new JObject();
 
-        // Check Pro schema definition provider for enriched type definitions
-        var proSchema = ProSchemaDefinitionProviderWrapper.GetFromFactory().GetSchemaDefinition(type.Name);
-        if (proSchema != null)
-            return JObject.Parse(proSchema);
-
         return BuildObjectSchema(type);
     }
 

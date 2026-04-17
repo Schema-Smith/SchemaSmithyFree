@@ -187,15 +187,11 @@ public class SchemaGeneratorTests
     public void ShouldApplyConstraintsOnDomainProperties()
     {
         var schema = SchemaGenerator.GenerateSchema(typeof(Table));
-        // DataDelivery's MergeType pattern was removed when DataDelivery moved to SchemaSmith.Pro
-        // (no SchemaPropertyAttribute). Pattern validation will come from ISchemaDefinitionProvider
-        // when a Pro license is active. Verify the property exists but has no pattern constraint.
         var dataDelivery = schema["properties"]?["DataDelivery"];
         var mergeType = dataDelivery?["properties"]?["MergeType"];
         Assert.That(mergeType?["type"]?.ToString(), Is.EqualTo("string"));
-        Assert.That(mergeType?["pattern"], Is.Null);
+        Assert.That(mergeType?["pattern"]?.ToString(), Is.EqualTo("Insert|Insert/Update|Insert/Update/Delete"));
 
-        // ForeignKey pattern constraints
         var fkItems = schema["properties"]?["ForeignKeys"]?["items"];
         Assert.That(fkItems?["properties"]?["DeleteAction"]?["pattern"]?.ToString(), Is.EqualTo("NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT"));
     }
@@ -368,57 +364,15 @@ public class SchemaGeneratorTests
     private class StringEnumClass { public TestStringEnum Version { get; set; } }
     private class NullableEnumClass { public TestStringEnum? Version { get; set; } }
 
-    #region Pro Schema Definition Provider Integration
-
     [Test]
-    public void GenerateSchema_DataDeliveryProperty_UsesProProviderWhenAvailable()
+    public void GenerateSchema_DataDeliveryProperty_IsGeneratedFromAttributes()
     {
-        var mockProvider = Substitute.For<IProSchemaDefinitionProvider>();
-        mockProvider.GetSchemaDefinition(Arg.Any<string>()).Returns((string)null);
-        mockProvider.GetSchemaDefinition("DataDelivery").Returns("""
-            {
-              "type": "object",
-              "properties": {
-                "MergeType": { "type": "string", "enum": ["None", "Insert", "Insert/Update", "Insert/Update/Delete"] }
-              }
-            }
-            """);
-        FactoryContainer.Register<IProSchemaDefinitionProvider>(mockProvider);
+        var schema = SchemaGenerator.GenerateSchema(typeof(SqlServerTable));
+        var dataDelivery = schema["properties"]?["DataDelivery"];
 
-        try
-        {
-            var schema = SchemaGenerator.GenerateSchema(typeof(SqlServerTable));
-            var dataDelivery = schema["properties"]?["DataDelivery"];
-
-            Assert.That(dataDelivery, Is.Not.Null);
-            Assert.That(dataDelivery["properties"]?["MergeType"]?["enum"], Is.Not.Null);
-        }
-        finally
-        {
-            FactoryContainer.Unregister<IProSchemaDefinitionProvider>();
-        }
+        Assert.That(dataDelivery, Is.Not.Null);
+        Assert.That(dataDelivery["type"]?.ToString(), Is.EqualTo("object"));
+        Assert.That(dataDelivery["properties"]?["MergeType"]?["pattern"]?.ToString(),
+            Is.EqualTo("Insert|Insert/Update|Insert/Update/Delete"));
     }
-
-    [Test]
-    public void GenerateSchema_DataDeliveryProperty_FallsBackToReflection_WhenProviderReturnsNull()
-    {
-        var mockProvider = Substitute.For<IProSchemaDefinitionProvider>();
-        mockProvider.GetSchemaDefinition(Arg.Any<string>()).Returns((string)null);
-        FactoryContainer.Register<IProSchemaDefinitionProvider>(mockProvider);
-
-        try
-        {
-            var schema = SchemaGenerator.GenerateSchema(typeof(SqlServerTable));
-            var dataDelivery = schema["properties"]?["DataDelivery"];
-
-            Assert.That(dataDelivery, Is.Not.Null);
-            Assert.That(dataDelivery["type"]?.ToString(), Is.EqualTo("object"));
-        }
-        finally
-        {
-            FactoryContainer.Unregister<IProSchemaDefinitionProvider>();
-        }
-    }
-
-    #endregion
 }

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using NSubstitute;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
+using Schema.Delivery;
 
 namespace Schema.UnitTests.Domain;
 
