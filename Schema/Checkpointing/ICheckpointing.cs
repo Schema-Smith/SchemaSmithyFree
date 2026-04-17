@@ -50,6 +50,19 @@ public interface ICheckpointing
     DatabaseCheckpointSummary GetDatabaseCheckpointSummary(TrackingScope scope);
 
     /// <summary>
+    /// Record a major step as complete without running any work. Use this when the caller
+    /// owns the orchestration (e.g., retry loops around exception-swallowing work) and
+    /// wants to record completion only after it has determined the work actually succeeded.
+    /// </summary>
+    void MarkStepCompleted(TrackingScope scope, string stepName);
+
+    /// <summary>
+    /// Record a script as complete without running any work. Use this when the caller
+    /// owns the orchestration and only wants to mark success-after-the-fact.
+    /// </summary>
+    void MarkScriptCompleted(TrackingScope scope, string slot, string scriptPath);
+
+    /// <summary>
     /// Clean up checkpoint files after a successful deployment.
     /// </summary>
     void DeleteCheckpoints(string productName);
