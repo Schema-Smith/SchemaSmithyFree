@@ -1,0 +1,70 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+namespace Schema.Delivery;
+
+/// <summary>
+/// Post-extraction hook for configuring data delivery settings on table JSON files.
+/// Called by DataTongs after extracting table data when ConfigureDataDelivery is enabled.
+/// Writes ContentFile, MergeType, MatchColumns, MergeFilter, and trigger/rule settings
+/// back into the table JSON.
+/// </summary>
+public interface IDataDeliveryConfigurator
+{
+    /// <summary>
+    /// Configure data delivery settings for a single table.
+    /// </summary>
+    /// <param name="context">All inputs needed to locate and update the table JSON.</param>
+    void Configure(DataDeliveryConfiguratorContext context);
+}
+
+/// <summary>
+/// Input context for a single table's data delivery configuration.
+/// All paths and values are pre-resolved by the caller (DataTongs).
+/// </summary>
+public class DataDeliveryConfiguratorContext
+{
+    /// <summary>Template root directory path.</summary>
+    public string TemplateRootPath { get; set; }
+
+    /// <summary>Platform identifier (SqlServer, PostgreSQL, MySQL).</summary>
+    public string Platform { get; set; }
+
+    /// <summary>Schema/database name for the table.</summary>
+    public string TableSchema { get; set; }
+
+    /// <summary>Table name.</summary>
+    public string TableName { get; set; }
+
+    /// <summary>Path to the extracted content file (absolute).</summary>
+    public string ContentFilePath { get; set; }
+
+    /// <summary>Comma-separated key column names from the database.</summary>
+    public string KeyColumns { get; set; }
+
+    /// <summary>Default merge type if the table config doesn't specify one.</summary>
+    public string DefaultMergeType { get; set; }
+
+    /// <summary>Whether to disable triggers during merge.</summary>
+    public bool DisableTriggers { get; set; }
+
+    /// <summary>PostgreSQL-specific: whether to disable rules during merge.</summary>
+    public bool DisableRules { get; set; }
+
+    /// <summary>PostgreSQL-specific: whether to update descendant tables.</summary>
+    public bool UpdateDescendents { get; set; }
+
+    /// <summary>Per-table config overrides (MergeType, KeyColumns, Filter).</summary>
+    public string MergeTypeOverride { get; set; }
+
+    /// <summary>Per-table key column override.</summary>
+    public string KeyColumnsOverride { get; set; }
+
+    /// <summary>Per-table merge filter override.</summary>
+    public string MergeFilterOverride { get; set; }
+
+    /// <summary>Callback for logging progress messages.</summary>
+    public System.Action<string> ProgressLog { get; set; }
+
+    /// <summary>Callback for logging warning messages.</summary>
+    public System.Action<string> WarningLog { get; set; }
+}
