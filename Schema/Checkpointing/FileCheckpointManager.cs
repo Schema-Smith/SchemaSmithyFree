@@ -115,6 +115,57 @@ public class FileCheckpointManager : ICheckpointing
             _dbCheckpoints.TryRemove(key, out _);
     }
 
+    public bool HasCompleted(TrackingScope scope, string stepName)
+    {
+        if (IsDatabaseScope(scope))
+            return GetOrLoadDatabaseCheckpoint(scope).HasCompletedStep(stepName);
+        return GetOrLoadProductCheckpoint(scope.ProductName).HasCompletedTemplate(stepName);
+    }
+
+    public bool HasCompletedScript(TrackingScope scope, string slot, string scriptPath)
+    {
+        if (IsDatabaseScope(scope))
+        {
+            if (!Enum.TryParse<DatabaseScriptSlot>(slot, true, out var scriptSlot)) return false;
+            return GetOrLoadDatabaseCheckpoint(scope).HasCompletedScript(scriptSlot, scriptPath);
+        }
+
+        var productCheckpoint = GetOrLoadProductCheckpoint(scope.ProductName);
+        var server = scope.Server ?? "default";
+        var normalizedPath = scriptPath.Replace('\\', '/');
+        return slot.Equals("Before", StringComparison.OrdinalIgnoreCase)
+            ? productCheckpoint.HasCompletedBeforeScript(server, normalizedPath)
+            : slot.Equals("After", StringComparison.OrdinalIgnoreCase)
+                && productCheckpoint.HasCompletedAfterScript(server, normalizedPath);
+    }
+
+    public ProductCheckpointSummary GetProductCheckpointSummary(string productName)
+    {
+        var filePath = GetProductCheckpointPath(productName);
+        if (!File.Exists(filePath)) return ProductCheckpointSummary.Empty;
+
+        var checkpoint = GetOrLoadProductCheckpoint(productName);
+        return new ProductCheckpointSummary(
+            TotalBeforeScripts: checkpoint.CompletedBeforeScripts.Values.Sum(s => s.Count),
+            ServersWithBeforeScripts: checkpoint.CompletedBeforeScripts.Count,
+            CompletedTemplates: checkpoint.CompletedTemplates.Count,
+            TotalAfterScripts: checkpoint.CompletedAfterScripts.Values.Sum(s => s.Count),
+            ServersWithAfterScripts: checkpoint.CompletedAfterScripts.Count);
+    }
+
+    public DatabaseCheckpointSummary GetDatabaseCheckpointSummary(TrackingScope scope)
+    {
+        if (!IsDatabaseScope(scope)) return DatabaseCheckpointSummary.Empty;
+
+        var filePath = GetDatabaseCheckpointPath(scope.ProductName, scope.TemplateName, scope.Server, scope.DatabaseName);
+        if (!File.Exists(filePath)) return DatabaseCheckpointSummary.Empty;
+
+        var checkpoint = GetOrLoadDatabaseCheckpoint(scope);
+        return new DatabaseCheckpointSummary(
+            CompletedSteps: checkpoint.CompletedSteps.Count,
+            TotalCompletedScripts: checkpoint.CompletedScripts.Values.Sum(s => s.Count));
+    }
+
     private static bool IsDatabaseScope(TrackingScope scope) =>
         !string.IsNullOrEmpty(scope.TemplateName) && !string.IsNullOrEmpty(scope.DatabaseName);
 

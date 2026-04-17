@@ -173,11 +173,17 @@ public class ProductQuench
 
     public void QuenchProduct(bool suppressKindlingForTesting = false)
     {
+        _progressLog.Info($"Begin Quench of {_product.Name}");
+
         LogProductInfo();
 
         TestServerConnections();
 
         RemoveOldTableQuenchScripts();
+
+        var summary = _checkpointing.GetProductCheckpointSummary(_product.Name);
+        if (summary.HasAnyCompleted)
+            _progressLog.Info($"Resuming from checkpoint (Before Scripts: {summary.TotalBeforeScripts} across {summary.ServersWithBeforeScripts} server(s), Templates: {summary.CompletedTemplates}, After Scripts: {summary.TotalAfterScripts} across {summary.ServersWithAfterScripts} server(s))");
 
         using var command = GetCommand(_primaryServer);
 
@@ -213,7 +219,13 @@ public class ProductQuench
             var suppressKindling = suppressKindlingForTesting || _skipKindling;
             foreach (var template in templates)
             {
-                _checkpointing.Track(ProductScope, $"Template:{template.Name}", () => QuenchTemplate(template, suppressKindling));
+                var stepName = $"Template:{template.Name}";
+                if (_checkpointing.HasCompleted(ProductScope, stepName))
+                {
+                    _progressLog.Info($"Skipping template '{template.Name}' (previously completed per checkpoint)");
+                    continue;
+                }
+                _checkpointing.Track(ProductScope, stepName, () => QuenchTemplate(template, suppressKindling));
             }
 
             QuenchProductScriptsWithCheckpoint(_product.AfterFolders, "After Product", false);
@@ -488,6 +500,13 @@ public class ProductQuench
 
         foreach (var script in scriptList)
         {
+            if (_checkpointing.HasCompletedScript(ProductScopeForServer(server), slot, script.LogPath))
+            {
+                _progressLog.Info($"{serverMsg}[{initDb}]    {(IsWhatIfOnly ? "Would SKIP" : "Skipping")} (previously quenched per checkpoint) {script.LogPath}");
+                script.HasBeenQuenched = true;
+                continue;
+            }
+
             if (IsWhatIfOnly)
             {
                 _progressLog.Info($"{serverMsg}[{initDb}]    Would Quench {script.LogPath}");

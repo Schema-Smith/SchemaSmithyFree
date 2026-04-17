@@ -343,4 +343,120 @@ public class FileCheckpointManagerTests
         Assert.That(checkpointing, Is.Not.Null);
         Assert.That(checkpointing, Is.InstanceOf<ICheckpointing>());
     }
+
+    [Test]
+    public void HasCompleted_DatabaseScope_MatchesTrack()
+    {
+        var mgr = new FileCheckpointManager(_tempDir);
+        Assert.That(mgr.HasCompleted(DbScope(), "KindleForge"), Is.False);
+
+        mgr.Track(DbScope(), "KindleForge", () => { });
+
+        Assert.That(mgr.HasCompleted(DbScope(), "KindleForge"), Is.True);
+        Assert.That(mgr.HasCompleted(DbScope(), "ValidateBaseline"), Is.False);
+    }
+
+    [Test]
+    public void HasCompleted_ProductScope_MatchesTrack()
+    {
+        var mgr = new FileCheckpointManager(_tempDir);
+        Assert.That(mgr.HasCompleted(ProductScope(), "Main"), Is.False);
+
+        mgr.Track(ProductScope(), "Main", () => { });
+
+        Assert.That(mgr.HasCompleted(ProductScope(), "Main"), Is.True);
+    }
+
+    [Test]
+    public void HasCompletedScript_DatabaseAndProductScopes_MatchTrackScript()
+    {
+        var mgr = new FileCheckpointManager(_tempDir);
+        var productScope = new TrackingScope { ProductName = "TestProduct", Server = "server1" };
+
+        Assert.That(mgr.HasCompletedScript(DbScope(), "Before", "s.sql"), Is.False);
+        Assert.That(mgr.HasCompletedScript(productScope, "Before", "p.sql"), Is.False);
+
+        mgr.TrackScript(DbScope(), "Before", "s.sql", () => { });
+        mgr.TrackScript(productScope, "Before", "p.sql", () => { });
+        mgr.TrackScript(productScope, "After", "a.sql", () => { });
+
+        Assert.That(mgr.HasCompletedScript(DbScope(), "Before", "s.sql"), Is.True);
+        Assert.That(mgr.HasCompletedScript(DbScope(), "Before", "other.sql"), Is.False);
+        Assert.That(mgr.HasCompletedScript(productScope, "Before", "p.sql"), Is.True);
+        Assert.That(mgr.HasCompletedScript(productScope, "After", "a.sql"), Is.True);
+    }
+
+    [Test]
+    public void GetProductCheckpointSummary_NoCheckpoint_ReturnsEmpty()
+    {
+        var mgr = new FileCheckpointManager(_tempDir);
+
+        var summary = mgr.GetProductCheckpointSummary("NeverTracked");
+
+        Assert.That(summary.HasAnyCompleted, Is.False);
+        Assert.That(summary, Is.EqualTo(ProductCheckpointSummary.Empty));
+    }
+
+    [Test]
+    public void GetProductCheckpointSummary_WithCompletions_CountsCorrectly()
+    {
+        var mgr = new FileCheckpointManager(_tempDir);
+        var scope1 = new TrackingScope { ProductName = "TestProduct", Server = "server1" };
+        var scope2 = new TrackingScope { ProductName = "TestProduct", Server = "server2" };
+
+        mgr.Track(ProductScope(), "Main", () => { });
+        mgr.Track(ProductScope(), "Reporting", () => { });
+        mgr.TrackScript(scope1, "Before", "b1.sql", () => { });
+        mgr.TrackScript(scope1, "Before", "b2.sql", () => { });
+        mgr.TrackScript(scope2, "Before", "b3.sql", () => { });
+        mgr.TrackScript(scope1, "After", "a1.sql", () => { });
+
+        var summary = mgr.GetProductCheckpointSummary("TestProduct");
+
+        Assert.That(summary.HasAnyCompleted, Is.True);
+        Assert.That(summary.CompletedTemplates, Is.EqualTo(2));
+        Assert.That(summary.TotalBeforeScripts, Is.EqualTo(3));
+        Assert.That(summary.ServersWithBeforeScripts, Is.EqualTo(2));
+        Assert.That(summary.TotalAfterScripts, Is.EqualTo(1));
+        Assert.That(summary.ServersWithAfterScripts, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void GetDatabaseCheckpointSummary_NoCheckpoint_ReturnsEmpty()
+    {
+        var mgr = new FileCheckpointManager(_tempDir);
+
+        var summary = mgr.GetDatabaseCheckpointSummary(DbScope());
+
+        Assert.That(summary.HasAnyCompleted, Is.False);
+        Assert.That(summary, Is.EqualTo(DatabaseCheckpointSummary.Empty));
+    }
+
+    [Test]
+    public void GetDatabaseCheckpointSummary_WithCompletions_CountsStepsAndScripts()
+    {
+        var mgr = new FileCheckpointManager(_tempDir);
+        mgr.Track(DbScope(), "KindleForge", () => { });
+        mgr.Track(DbScope(), "ValidateBaseline", () => { });
+        mgr.TrackScript(DbScope(), "Before", "init.sql", () => { });
+        mgr.TrackScript(DbScope(), "Object", "views/v1.sql", () => { });
+        mgr.TrackScript(DbScope(), "Object", "views/v2.sql", () => { });
+
+        var summary = mgr.GetDatabaseCheckpointSummary(DbScope());
+
+        Assert.That(summary.HasAnyCompleted, Is.True);
+        Assert.That(summary.CompletedSteps, Is.EqualTo(2));
+        Assert.That(summary.TotalCompletedScripts, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void GetDatabaseCheckpointSummary_ProductScope_ReturnsEmpty()
+    {
+        var mgr = new FileCheckpointManager(_tempDir);
+        mgr.Track(ProductScope(), "Main", () => { });
+
+        var summary = mgr.GetDatabaseCheckpointSummary(ProductScope());
+
+        Assert.That(summary, Is.EqualTo(DatabaseCheckpointSummary.Empty));
+    }
 }
