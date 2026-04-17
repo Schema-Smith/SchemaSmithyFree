@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 
-using SchemaSmith.Pro;
+using Schema.Delivery;
 
 namespace Schema.Domain.PostgreSQL
 {
