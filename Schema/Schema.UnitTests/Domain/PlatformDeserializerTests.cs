@@ -6,7 +6,7 @@ using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 
-using SchemaSmith.Pro;
+using Schema.Delivery;
 namespace Schema.UnitTests.Domain
 {
     [TestFixture]

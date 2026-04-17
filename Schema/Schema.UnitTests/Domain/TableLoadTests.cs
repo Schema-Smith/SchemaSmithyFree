@@ -8,7 +8,7 @@ using Schema.Domain.SqlServer;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.MySQL;
 using Schema.Isolators;
-using SchemaSmith.Pro;
+using Schema.Delivery;
 
 namespace Schema.UnitTests.Domain
 {

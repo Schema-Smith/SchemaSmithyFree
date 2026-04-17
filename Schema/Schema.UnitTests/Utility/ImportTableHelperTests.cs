@@ -6,7 +6,7 @@ using Schema.Domain.SqlServer;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.MySQL;
 using Schema.Utility;
-using SchemaSmith.Pro;
+using Schema.Delivery;
 
 namespace Schema.UnitTests.Utility;
 

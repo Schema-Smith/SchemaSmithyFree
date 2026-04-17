@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
 
-using SchemaSmith.Pro;
+using Schema.Delivery;
 namespace Schema.UnitTests.Domain.SqlServer
 {
     [TestFixture]
