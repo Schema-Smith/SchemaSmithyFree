@@ -842,7 +842,10 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
                     script.HasBeenQuenched = true;
                     continue;
                 }
-                _checkpointing.TrackScript(DbScope, slot.ToString(), script.LogPath, () => QuenchOneScript(destCmd, script, _runScriptsTwice, showErrors));
+
+                QuenchOneScript(destCmd, script, _runScriptsTwice, showErrors);
+                if (script.HasBeenQuenched)
+                    _checkpointing.MarkScriptCompleted(DbScope, slot.ToString(), script.LogPath);
             }
         }
 
@@ -934,12 +937,13 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
                     continue;
                 }
 
-                _checkpointing.TrackScript(DbScope, checkpointSlot.ToString(), script.LogPath, () =>
+                QuenchOneScript(destCmd, script, _runScriptsTwice & ShouldAlwaysRun(script.Name));
+                if (script.HasBeenQuenched)
                 {
-                    QuenchOneScript(destCmd, script, _runScriptsTwice & ShouldAlwaysRun(script.Name));
-                    if (script.HasBeenQuenched && _trackRunOnceMigrations && !ShouldAlwaysRun(script.Name))
+                    _checkpointing.MarkScriptCompleted(DbScope, checkpointSlot.ToString(), script.LogPath);
+                    if (_trackRunOnceMigrations && !ShouldAlwaysRun(script.Name))
                         MarkScriptCompleted(destCmd, script.LogPath, slot);
-                });
+                }
             }
             else
             {

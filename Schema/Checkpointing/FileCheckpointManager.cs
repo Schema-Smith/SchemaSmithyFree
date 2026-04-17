@@ -153,6 +153,44 @@ public class FileCheckpointManager : ICheckpointing
             ServersWithAfterScripts: checkpoint.CompletedAfterScripts.Count);
     }
 
+    public void MarkStepCompleted(TrackingScope scope, string stepName)
+    {
+        if (IsDatabaseScope(scope))
+        {
+            var checkpoint = GetOrLoadDatabaseCheckpoint(scope);
+            checkpoint.AddStep(stepName);
+            SaveDatabaseCheckpoint(checkpoint);
+        }
+        else
+        {
+            var checkpoint = GetOrLoadProductCheckpoint(scope.ProductName);
+            checkpoint.AddTemplate(stepName);
+            SaveProductCheckpoint(checkpoint);
+        }
+    }
+
+    public void MarkScriptCompleted(TrackingScope scope, string slot, string scriptPath)
+    {
+        if (IsDatabaseScope(scope))
+        {
+            if (!Enum.TryParse<DatabaseScriptSlot>(slot, true, out var scriptSlot)) return;
+            var checkpoint = GetOrLoadDatabaseCheckpoint(scope);
+            checkpoint.AddCompletedScript(scriptSlot, scriptPath);
+            SaveDatabaseCheckpoint(checkpoint);
+        }
+        else
+        {
+            var checkpoint = GetOrLoadProductCheckpoint(scope.ProductName);
+            var server = scope.Server ?? "default";
+            var normalizedPath = scriptPath.Replace('\\', '/');
+            if (slot.Equals("Before", StringComparison.OrdinalIgnoreCase))
+                checkpoint.AddBeforeScript(server, normalizedPath);
+            else if (slot.Equals("After", StringComparison.OrdinalIgnoreCase))
+                checkpoint.AddAfterScript(server, normalizedPath);
+            SaveProductCheckpoint(checkpoint);
+        }
+    }
+
     public DatabaseCheckpointSummary GetDatabaseCheckpointSummary(TrackingScope scope)
     {
         if (!IsDatabaseScope(scope)) return DatabaseCheckpointSummary.Empty;

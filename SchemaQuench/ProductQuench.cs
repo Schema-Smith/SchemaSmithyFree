@@ -514,35 +514,33 @@ public class ProductQuench
                 continue;
             }
 
-            _checkpointing.TrackScript(ProductScopeForServer(server), slot, script.LogPath, () =>
+            _progressLog.Info($"{serverMsg}[{initDb}]    Quenching {script.LogPath}");
+            var needDBReset = false;
+            try
             {
-                _progressLog.Info($"{serverMsg}[{initDb}]    Quenching {script.LogPath}");
-                var needDBReset = false;
-                try
+                script.CheckForUnresolvedTokens(initDb, serverMsg, _progressLog.Warn);
+                for (var i = 0; i < (_runScriptsTwice ? 2 : 1); i++)
                 {
-                    script.CheckForUnresolvedTokens(initDb, serverMsg, _progressLog.Warn);
-                    for (var i = 0; i < (_runScriptsTwice ? 2 : 1); i++)
+                    foreach (var batch in script.Batches)
                     {
-                        foreach (var batch in script.Batches)
-                        {
-                            needDBReset = needDBReset || batch.ContainsIgnoringCase("USE ");
-                            destCmd.CommandText = batch;
-                            destCmd.ExecuteNonQuery();
-                        }
+                        needDBReset = needDBReset || batch.ContainsIgnoringCase("USE ");
+                        destCmd.CommandText = batch;
+                        destCmd.ExecuteNonQuery();
                     }
+                }
 
-                    script.HasBeenQuenched = true;
-                    script.Error = null;
-                }
-                catch (Exception ex)
-                {
-                    script.Error = ex;
-                }
-                finally
-                {
-                    if (needDBReset) ResetDb(destCmd);
-                }
-            });
+                script.HasBeenQuenched = true;
+                script.Error = null;
+                _checkpointing.MarkScriptCompleted(ProductScopeForServer(server), slot, script.LogPath);
+            }
+            catch (Exception ex)
+            {
+                script.Error = ex;
+            }
+            finally
+            {
+                if (needDBReset) ResetDb(destCmd);
+            }
         }
 
         if (scriptList.Any(x => !x.HasBeenQuenched))
