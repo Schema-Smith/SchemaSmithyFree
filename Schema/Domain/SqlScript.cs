@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.DataAccess;
 using Schema.Utility;
 

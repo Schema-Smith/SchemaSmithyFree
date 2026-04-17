@@ -5,7 +5,6 @@ using System.Text;
 using System.IO.Compression;
 using NSubstitute;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.UnitTests.Isolators;
 

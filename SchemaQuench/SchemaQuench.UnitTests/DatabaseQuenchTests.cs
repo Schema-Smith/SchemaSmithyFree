@@ -11,7 +11,6 @@ using Schema.Domain;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace SchemaQuench.UnitTests;
 

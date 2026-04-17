@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.Utility;
 
@@ -118,9 +117,6 @@ public static class CommandLineParser
                       ?? assembly.GetName().Version?.ToString()
                       ?? "unknown";
         Console.WriteLine($"{app} - Version: {version}");
-        // License display text may be multi-line (Pro returns a details block);
-        // Console.WriteLine renders embedded newlines correctly.
-        Console.WriteLine(ProServices.GetLicenseDisplayText());
         EnvironmentWrapper.GetFromFactory().Exit(0);
     }
 

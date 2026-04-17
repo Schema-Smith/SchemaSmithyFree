@@ -4,7 +4,6 @@ using System;
 using Newtonsoft.Json;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.Utility;
 

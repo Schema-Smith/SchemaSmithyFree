@@ -3,7 +3,6 @@
 using System.Data;
 using Npgsql;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.DataAccess;
 

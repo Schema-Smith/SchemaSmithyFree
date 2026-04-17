@@ -7,7 +7,6 @@ using log4net;
 using log4net.Config;
 using Microsoft.Extensions.Configuration;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.Utility;
 
@@ -57,14 +56,6 @@ public static class ConfigHelper
             config = builder.Build();
             FactoryContainer.Register(config);
             logLine?.Invoke(app);
-            // License display text may be multi-line; log each line as its own
-            // progress entry so timestamps line up and Pro license blocks render cleanly.
-            var licenseText = ProServices.GetLicenseDisplayText();
-            if (!string.IsNullOrEmpty(licenseText))
-            {
-                foreach (var line in licenseText.Split('\n'))
-                    logLine?.Invoke(line.TrimEnd('\r'));
-            }
 
             ConfigurationLogger.LogConfiguration(config, logLine);
 

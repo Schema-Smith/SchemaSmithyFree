@@ -3,7 +3,6 @@
 using System;
 using System.IO;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.Utility;
 

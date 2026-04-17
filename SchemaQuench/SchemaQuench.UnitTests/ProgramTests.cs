@@ -5,7 +5,6 @@ using log4net;
 using NSubstitute;
 using NUnit.Framework;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace SchemaQuench.UnitTests;

@@ -9,7 +9,6 @@ using NSubstitute;
 using NUnit.Framework;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace SchemaTongs.UnitTests;

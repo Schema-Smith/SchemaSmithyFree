@@ -3,7 +3,6 @@
 using System.Data;
 using Schema.DataAccess;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 
 namespace Schema.UnitTests.DataAccess;
 

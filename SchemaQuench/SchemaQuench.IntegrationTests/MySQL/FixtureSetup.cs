@@ -1,7 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 using Microsoft.Extensions.Configuration;
 

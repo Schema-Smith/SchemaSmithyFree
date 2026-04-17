@@ -6,7 +6,6 @@ using Newtonsoft.Json.Linq;
 using NSubstitute;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 
 namespace Schema.UnitTests.Utility;

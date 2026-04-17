@@ -6,7 +6,6 @@ using System.Threading;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaSmith.Pro;
 using Schema.Utility;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
