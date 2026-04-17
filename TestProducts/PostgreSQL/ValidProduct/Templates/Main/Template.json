@@ -4,7 +4,6 @@
     "VersionStampScript": "DO $$\nBEGIN\nRAISE NOTICE '{{ReleaseVersion}}';\nEND;\n$$;",
     "ScriptTokens": {
 	  "TestTableData": "<*File*>Tables/public.TestTable - MoreChildren.data",
-	  "TestTableInitialData": "<*File*>Tables/public.TestTable.tabledata",
       "TemplateQueryToken": "<*Query*>SELECT 'true'"
 	},
     "ScriptFolders": [
@@ -15,7 +14,6 @@
         { "FolderPath" : "Procedures", "QuenchSlot" : "Objects" },
         { "FolderPath" : "Triggers", "QuenchSlot" : "AfterTablesObjects" },
         { "FolderPath" : "Views", "QuenchSlot" : "AfterTablesObjects" },
-        { "FolderPath" : "Table Data", "QuenchSlot" : "TableData" },
         { "FolderPath" : "After Scripts", "QuenchSlot" : "After" }
     ]
 }

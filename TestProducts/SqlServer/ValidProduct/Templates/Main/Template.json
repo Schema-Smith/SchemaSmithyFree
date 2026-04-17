@@ -4,7 +4,6 @@
     "VersionStampScript": "PRINT '{{ReleaseVersion}}'",
     "ScriptTokens": {
 	  "TestTableData": "<*File*>Tables/dbo.TestTable - MoreChildren.data",
-	  "TestTableInitialData": "<*File*>Tables/dbo.TestTable.tabledata",
       "TemplateQueryToken": "<*Query*>SELECT 'true'"
 	},
     "ScriptFolders": [
@@ -17,7 +16,6 @@
         { "FolderPath" : "Views", "QuenchSlot" : "Objects" },
         { "FolderPath" : "Procedures", "QuenchSlot" : "Objects" },
         { "FolderPath" : "Triggers", "QuenchSlot" : "AfterTablesObjects" },
-        { "FolderPath" : "Table Data", "QuenchSlot" : "TableData" },
         { "FolderPath" : "MigrationScripts/After", "QuenchSlot" : "After" }
     ]
 }

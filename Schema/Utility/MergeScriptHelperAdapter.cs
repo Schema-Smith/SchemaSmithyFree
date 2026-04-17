@@ -16,6 +16,8 @@ public class MergeScriptHelperAdapter : IMergeScriptHelper
 {
     private readonly Platform _platform;
 
+    public Platform Platform => _platform;
+
     public MergeScriptHelperAdapter(Platform platform)
     {
         _platform = platform;

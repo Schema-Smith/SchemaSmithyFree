@@ -87,4 +87,9 @@
     "StopList": "MyStopList",
     "Columns": "[SomeText]"
   },
+  "DataDelivery": {
+    "ContentFile": "Tables/dbo.TestTable.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[TestID]"
+  }
 }
