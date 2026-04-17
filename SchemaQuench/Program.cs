@@ -22,10 +22,13 @@ public static class Program
 
         RegisterCheckpointing();
 
-        new ProductQuench().QuenchProduct(skipKindlingForge);
+        var productQuench = new ProductQuench();
+        productQuench.QuenchProduct(skipKindlingForge);
 
-        // Successful completion — clean up checkpoint files unless explicitly told to keep them.
-        CleanupCheckpoints();
+        // Clean up checkpoint files only on a clean success — a failed run must preserve
+        // checkpoints so the next invocation can resume.
+        if (!productQuench.Failed)
+            CleanupCheckpoints();
 
         LogBackup.BackupLogsAndExit("SchemaQuench");
     }
