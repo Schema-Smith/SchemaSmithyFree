@@ -228,6 +228,7 @@ public class DataDeliveryProcessorTests
 
         Assert.That(_executedScripts, Is.Empty);
         Assert.That(_logs, Has.Some.Contains("Delivering"));
+        Assert.That(_logs, Has.Some.Contains("Would DELIVER:").And.Some.Contains("Users"));
     }
 
     [Test]

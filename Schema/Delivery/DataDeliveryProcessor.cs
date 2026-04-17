@@ -180,6 +180,13 @@ public class DataDeliveryProcessor : IDataDelivery
         var tableKey = DataDeliveryHelper.GetTableKey(table, platform);
         var schemaOrDb = GetSchemaOrDb(table, context.DatabaseName, platform);
 
+        if (context.WhatIf)
+        {
+            log($"    Would DELIVER: {tableKey}");
+            delivered.Add(tableKey);
+            return;
+        }
+
         var keyColumns = string.IsNullOrWhiteSpace(delivery.MatchColumns)
             ? helper.GetKeyColumns(context.Command, schemaOrDb, table.Name)
             : delivery.MatchColumns;

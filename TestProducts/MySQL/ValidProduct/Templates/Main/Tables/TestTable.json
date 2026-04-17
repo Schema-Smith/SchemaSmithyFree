@@ -56,4 +56,9 @@
             "Expression": "`Status` < 20"
         }
     ],
+    "DataDelivery": {
+        "ContentFile": "Tables/TestTable.tabledata",
+        "MergeType": "Insert/Update",
+        "MatchColumns": "`TestID`"
+    }
 }

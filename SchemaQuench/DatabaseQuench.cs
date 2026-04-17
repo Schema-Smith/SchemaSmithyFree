@@ -276,7 +276,7 @@ public class DatabaseQuench
                         _checkpointing.Track(DbScope, "TableDataDelivery", () =>
                         {
                             // Register platform-specific script helper if not already registered
-                            if (FactoryContainer.Resolve<IMergeScriptHelper>() == null)
+                            if (FactoryContainer.Resolve<IMergeScriptHelper>() is not MergeScriptHelperAdapter adapter || adapter.Platform != _product.Platform)
                                 FactoryContainer.Register<IMergeScriptHelper>(new MergeScriptHelperAdapter(_product.Platform));
 
                             DataDeliveryProcessor.GetFromFactory().DeliverTables(new DataDeliveryContext
@@ -350,6 +350,24 @@ public class DatabaseQuench
                     {
                         SafeProgressLog("  [WhatIf] Table data delivery:");
                         WhatIfLogTableDataScripts(_template.TableDataScripts.ToList());
+
+                        if (FactoryContainer.Resolve<IMergeScriptHelper>() is not MergeScriptHelperAdapter whatIfAdapter || whatIfAdapter.Platform != _product.Platform)
+                            FactoryContainer.Register<IMergeScriptHelper>(new MergeScriptHelperAdapter(_product.Platform));
+
+                        DataDeliveryProcessor.GetFromFactory().DeliverTables(new DataDeliveryContext
+                        {
+                            Tables = _template.Tables.Cast<IDeliverableTable>().ToList(),
+                            Command = command,
+                            Platform = _product.Platform.ToString(),
+                            DatabaseName = _databaseName,
+                            TemplateRootPath = Path.GetDirectoryName(_template.FilePath) ?? "",
+                            ScriptHelper = FactoryContainer.Resolve<IMergeScriptHelper>(),
+                            ReadFileContent = path => FileWrapper.GetFromFactory().ReadAllText(path),
+                            ExecuteScript = (_, _) => { },
+                            ProgressLog = SafeProgressLog,
+                            ProgressLogError = SafeProgressLogError,
+                            WhatIf = true
+                        });
                     }
 
                     // WhatIf: Materialized views (PostgreSQL only)
