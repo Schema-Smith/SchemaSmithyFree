@@ -4,10 +4,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$SCRIPT_DIR/../.."
 
-if [ ! -f "$REPO_ROOT/SchemaQuench/publish/SchemaQuench" ]; then
-    echo "SchemaQuench not built yet, building..."
-    "$REPO_ROOT/build-schemaquench.sh"
-fi
+echo "Publishing SchemaQuench..."
+"$REPO_ROOT/build-schemaquench.sh"
 
 echo "Starting MySQL demo..."
 cd "$SCRIPT_DIR"
