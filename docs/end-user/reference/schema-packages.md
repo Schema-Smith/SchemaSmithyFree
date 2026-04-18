@@ -356,7 +356,7 @@ Every table definition file declares exactly one table. The shared properties be
 | `CheckConstraints` | array | `[]` | No | Table-level check constraint definitions. See [Check Constraints](#check-constraints). |
 | `ShouldApplyExpression` | string | | No | SQL expression evaluated at quench time. If it returns false (or `0`), the entire table is skipped on this database. Tokens are resolved before evaluation. See [Conditional Application](#conditional-application). |
 | `OldName` | string | `""` | No | Previous table name. When set, the table is renamed during quench. Clear after the rename has been deployed everywhere. |
-| `DataDelivery` | object | `null` | No | Optional configuration for the Table Data slot. The Community offering uses this property as a passthrough -- you populate Table Data folder scripts directly. |
+| `DataDelivery` | object | `null` | No | Declarative data delivery configuration for this table. See [DataDelivery](#datadelivery). |
 | `Extensions` | object | `null` | No | Open metadata bag. See [Custom Properties](custom-properties.md). |
 
 The `ShouldApplyExpression` field appears on **tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views**, and several platform-specific components. Wherever it appears, it works the same way: the engine resolves tokens, runs the expression against the target database, and skips the component if the result is falsy.
@@ -552,6 +552,79 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 | `Extensions` | object | `null` | Custom metadata. |
 
 For composite foreign keys, list all columns in both `Columns` and `RelatedColumns` in matching order.
+
+---
+
+## DataDelivery
+
+Declare how a table's data gets merged into the target database and let SchemaQuench handle the rest. Add a `DataDelivery` block to the table JSON, point it at a `.tabledata` file, tell it what a "match" looks like, and SchemaQuench delivers the data in foreign-key order -- no hand-rolled merge scripts.
+
+Tables without a `DataDelivery` block are left alone. Tables that declare one are picked up automatically during the data delivery step -- see [SchemaQuench -- Table Data Delivery](schemaquench.md#table-data-delivery) for the runtime behavior.
+
+### Properties
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `ContentFile` | string | | Path to the row data, relative to the template root. Typically produced by DataTongs as a `.tabledata` file (raw JSON array). |
+| `MergeType` | string | | One of `Insert`, `Insert/Update`, `Insert/Update/Delete`. See [MergeType](#mergetype) below. |
+| `MatchColumns` | string | | Comma-separated column names that identify a row. Prefix a column with `*` for NULL-safe comparison on nullable keys. Matches the `KeyColumns` concept in DataTongs. |
+| `MergeFilter` | string | `""` | Optional SQL `WHERE` clause (without the `WHERE` keyword). Scopes both the rows considered for matching and, when delete is enabled, the rows eligible for deletion. |
+| `MergeDisableTriggers` | bool | `false` | Wrap the merge with platform-appropriate trigger disable/enable. |
+| `MergeDisableRules` | bool | `false` | **PostgreSQL.** Disable rewrite rules on the table during the merge. |
+| `MergeUpdateDescendents` | bool | `false` | **PostgreSQL.** When `true`, the merge targets descendant partitions as well as the specified table. When `false` (the default), the merge uses `ONLY` so descendant tables are left untouched. |
+
+### MergeType
+
+| Value | Behavior |
+|---|---|
+| `Insert` | Missing rows inserted. Existing rows and extra rows left alone. The seed-data pattern. |
+| `Insert/Update` | Missing rows inserted, changed rows updated. Extra rows left alone. Good for reference tables where environments can append local rows. |
+| `Insert/Update/Delete` | Full sync. Missing rows inserted, changed rows updated, and target rows that don't exist in the source data are deleted. The demo products use this. When `MergeFilter` is set, deletes are scoped by the filter so rows outside it are never removed. |
+
+The chosen idiom is platform-specific -- `MERGE` on SQL Server and PostgreSQL, `INSERT ... ON DUPLICATE KEY UPDATE` with a conditional delete step on MySQL -- but the declarative contract is the same on every platform.
+
+### FK-aware delivery
+
+When multiple tables declare `DataDelivery`, SchemaQuench orders them by their declared foreign keys:
+
+- **Pass 1** runs every table whose required (NOT NULL) FK parents are already loaded. Nullable FK columns that point to tables still awaiting delivery are deferred -- the pass-1 merge writes NULL into those columns and records the table for a second pass.
+- **Pass 2** revisits each deferred table and back-fills the deferred columns with their actual values, now that every parent row exists.
+
+This is automatic. You don't order the tables yourself; SchemaQuench computes the dependency graph from the `ForeignKeys` arrays in the table JSON. A cycle among NOT NULL foreign keys fails delivery with a clear log message -- break the cycle by making one side nullable, or separate the data load into explicit phases.
+
+### Example
+
+```json
+{
+  "Name": "[Employee]",
+  "Schema": "HumanResources",
+  "Columns": [
+    { "Name": "[EmployeeID]",   "DataType": "INT",          "Identity": true, "Nullable": false },
+    { "Name": "[ManagerID]",    "DataType": "INT",          "Nullable": true },
+    { "Name": "[DepartmentID]", "DataType": "INT",          "Nullable": false },
+    { "Name": "[FullName]",     "DataType": "NVARCHAR(100)","Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "[PK_Employee]", "PrimaryKey": true, "Unique": true, "IndexColumns": "[EmployeeID]" }
+  ],
+  "ForeignKeys": [
+    { "Name": "[FK_Employee_Manager]",    "Columns": "[ManagerID]",    "RelatedTable": "[Employee]",   "RelatedColumns": "[EmployeeID]" },
+    { "Name": "[FK_Employee_Department]", "Columns": "[DepartmentID]", "RelatedTable": "[Department]", "RelatedColumns": "[DepartmentID]" }
+  ],
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources.Employee.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[EmployeeID]",
+    "MergeDisableTriggers": true
+  }
+}
+```
+
+The self-referential `ManagerID` is nullable, so pass 1 loads every employee with `ManagerID = NULL`, and pass 2 back-fills the manager chain once every row exists. The mandatory `DepartmentID` forces `Department` to deliver first.
+
+### Generating DataDelivery blocks with DataTongs
+
+You don't have to write these blocks by hand. Point DataTongs at a source database with `--ConfigureDataDelivery` and it writes the `DataDelivery` section into each table JSON, including the match columns and merge type -- see [DataTongs -- --ConfigureDataDelivery](datatongs.md#--configuredatadelivery).
 
 ---
 
