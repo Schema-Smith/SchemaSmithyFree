@@ -1015,7 +1015,7 @@ public class MergeScriptHelperTests
             tokenizeScripts: false, mergeFilter: null);
 
         Assert.That(result, Does.Contain("WHEN MATCHED AND"));
-        Assert.That(result, Does.Contain("\"Target\".\"demographics\"::text = \"Source\".\"demographics\"::text"));
+        Assert.That(result, Does.Contain("\"Target\".\"demographics\"::text IS DISTINCT FROM \"Source\".\"demographics\"::text"));
         Assert.That(result, Does.Contain("\"demographics\" = \"Source\".\"demographics\""));
     }
 
@@ -1035,7 +1035,7 @@ public class MergeScriptHelperTests
             tokenizeScripts: false, mergeFilter: null);
 
         Assert.That(result, Does.Contain("WHEN MATCHED AND"));
-        Assert.That(result, Does.Contain("\"Target\".\"metadata\"::text = \"Source\".\"metadata\"::text"));
+        Assert.That(result, Does.Contain("\"Target\".\"metadata\"::text IS DISTINCT FROM \"Source\".\"metadata\"::text"));
         Assert.That(result, Does.Contain("\"metadata\" = \"Source\".\"metadata\""));
     }
 
@@ -1055,7 +1055,7 @@ public class MergeScriptHelperTests
             tokenizeScripts: false, mergeFilter: null);
 
         Assert.That(result, Does.Contain("WHEN MATCHED AND"));
-        Assert.That(result, Does.Contain("\"Target\".\"settings\"::jsonb = \"Source\".\"settings\"::jsonb"));
+        Assert.That(result, Does.Contain("\"Target\".\"settings\"::jsonb IS DISTINCT FROM \"Source\".\"settings\"::jsonb"));
         Assert.That(result, Does.Contain("\"settings\" = \"Source\".\"settings\""));
     }
 
@@ -1075,7 +1075,7 @@ public class MergeScriptHelperTests
             tokenizeScripts: false, mergeFilter: null);
 
         Assert.That(result, Does.Contain("WHEN MATCHED AND"));
-        Assert.That(result, Does.Contain("\"Target\".\"name\" = \"Source\".\"name\""));
+        Assert.That(result, Does.Contain("\"Target\".\"name\" IS DISTINCT FROM \"Source\".\"name\""));
         Assert.That(result, Does.Not.Contain("::jsonb"));
         Assert.That(result, Does.Not.Contain("::text"));
     }
@@ -1101,7 +1101,7 @@ public class MergeScriptHelperTests
             tokenizeScripts: false, mergeFilter: null);
 
         // G[ prefix triggers .ToString() comparison
-        Assert.That(result, Does.Contain("Target.[Shape].ToString() = Source.[Shape].ToString()"));
+        Assert.That(result, Does.Contain("Target.[Shape].ToString()) <> (Source.[Shape].ToString()"));
         // SET clause strips prefix
         Assert.That(result, Does.Contain("[Shape] = Source.[Shape]"));
     }
@@ -1213,7 +1213,7 @@ public class MergeScriptHelperTests
             tokenizeScripts: false, mergeFilter: null);
 
         // D[ prefix triggers CAST to NVARCHAR(50) comparison
-        Assert.That(result, Does.Contain("CAST(Target.[EventTime] AS NVARCHAR(50)) = CAST(Source.[EventTime] AS NVARCHAR(50))"));
+        Assert.That(result, Does.Contain("CAST(Target.[EventTime] AS NVARCHAR(50))) <> (CAST(Source.[EventTime] AS NVARCHAR(50))"));
         // SET clause strips prefix
         Assert.That(result, Does.Contain("[EventTime] = Source.[EventTime]"));
     }
@@ -1263,23 +1263,25 @@ public class MergeScriptHelperTests
     /// <summary>
     /// Creates a SQL Server mock command. Call order for BuildMergeScript:
     /// 1. GetUnsupportedColumnComments, 2. GetJsonSelectColumns, 3. NeedsIdentityInsert,
-    /// 4. GetJsonColumnDefinitions, 5. GetUpdateColumns (only if mergeUpdate=true), 6. GetInsertColumns
+    /// 4. IdentityColumnInJsonKeys (only if NeedsIdentityInsert=true), 5. GetJsonColumnDefinitions,
+    /// 6. GetUpdateColumns (only if mergeUpdate=true), 7. GetInsertColumns
     /// </summary>
     private static IDbCommand CreateSqlServerMockCommand(
         string jsonSelectCols, bool needsIdentity, string jsonColDefs,
         string insertCols, string updateCols, string unsupportedComments = null)
     {
         var cmd = Substitute.For<IDbCommand>();
-        // Build the sequence based on whether updateCols is provided
         var sequence = new List<object>
         {
             unsupportedComments,  // 1. GetUnsupportedColumnComments
             jsonSelectCols,       // 2. GetJsonSelectColumns
-            needsIdentity,        // 3. NeedsIdentityInsert
-            jsonColDefs           // 4. GetJsonColumnDefinitions
+            needsIdentity         // 3. NeedsIdentityInsert
         };
+        if (needsIdentity)
+            sequence.Add(true);   // 4. IdentityColumnInJsonKeysSqlServer (assume identity column is in jsonKeys for unit-test mocks)
+        sequence.Add(jsonColDefs);// GetJsonColumnDefinitions
         if (updateCols != null)
-            sequence.Add(updateCols); // 5. GetUpdateColumns (only if mergeUpdate)
+            sequence.Add(updateCols); // GetUpdateColumns (only if mergeUpdate)
         sequence.Add(insertCols);     // GetInsertColumns
 
         var callCount = 0;
