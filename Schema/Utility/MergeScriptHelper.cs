@@ -298,17 +298,17 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
             var precision = reader.IsDBNull(4) ? 0 : Convert.ToInt32(reader.GetValue(4));
             var scale = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5));
 
-            // MySQL JSON_TABLE type mapping
+            // MySQL JSON_TABLE COLUMNS clause requires real column types — not CAST aliases
+            // like SIGNED/UNSIGNED. Integer types must be spelled out (INT, BIGINT, etc.).
             var jsonType = dataType switch
             {
-                "tinyint" or "smallint" or "mediumint" or "int" or "integer" => "SIGNED",
-                "bigint" => "SIGNED",
+                "tinyint" or "smallint" or "mediumint" or "int" or "integer" or "bigint" => dataType.ToUpperInvariant(),
                 "float" or "double" or "real" => "DOUBLE",
                 "decimal" or "numeric" => $"DECIMAL({precision},{scale})",
                 "date" => "DATE",
                 "datetime" or "timestamp" => "DATETIME",
                 "time" => "TIME",
-                "year" => "SIGNED",
+                "year" => "YEAR",
                 "json" => "JSON",
                 _ => maxLen > 0 ? $"CHAR({maxLen})" : "CHAR(65535)"
             };
@@ -532,7 +532,10 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
         var unsupportedComments = GetUnsupportedColumnCommentsSqlServer(cmd, tableSchema, tableName);
         var matchColumns = BuildSqlServerMatchColumns(keyColumns);
         var fromJsonSelectColumns = GetJsonSelectColumnsSqlServer(cmd, tableSchema, tableName, jsonKeys);
-        var identityInsert = NeedsIdentityInsertSqlServer(cmd, tableSchema, tableName);
+        // IDENTITY_INSERT must be ON only when tabledata provides values for an identity column.
+        // NeedsIdentityInsertSqlServer returns true whenever ANY identity column exists; filter by jsonKeys.
+        var identityInsert = NeedsIdentityInsertSqlServer(cmd, tableSchema, tableName)
+                             && IdentityColumnInJsonKeysSqlServer(cmd, tableSchema, tableName, jsonKeys);
         var jsonColumns = GetJsonColumnDefinitionsSqlServer(cmd, tableSchema, tableName, jsonKeys);
 
         var jsonValue = tokenizeScripts
@@ -558,18 +561,22 @@ ON {matchColumns}
         if (mergeUpdate)
         {
             var updateColumns = GetUpdateColumnsSqlServer(cmd, tableSchema, tableName, jsonKeys);
+            // NULL-safe inequality: fires update when exactly one side is NULL, or when both are non-NULL but differ.
+            // The original "NOT (T = S OR (both NULL))" form falls into three-valued-logic NULL for the asymmetric cases.
+            static string NullSafeNotEqual(string tExpr, string sExpr) =>
+                $"((({tExpr}) IS NULL AND ({sExpr}) IS NOT NULL) OR (({tExpr}) IS NOT NULL AND ({sExpr}) IS NULL) OR ({tExpr}) <> ({sExpr}))";
             var updateCompare = string.Join(" OR ",
                 updateColumns!.Split(',').Select(c => c.StartsWith("G[")
-                    ? $"NOT (Target.{c.Substring(1)}.ToString() = Source.{c.Substring(1)}.ToString() OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
+                    ? NullSafeNotEqual($"Target.{c.Substring(1)}.ToString()", $"Source.{c.Substring(1)}.ToString()")
                     : c.StartsWith("X[") || c.StartsWith("N[")
-                        ? $"NOT (CAST(Target.{c.Substring(1)} AS NVARCHAR(MAX)) = CAST(Source.{c.Substring(1)} AS NVARCHAR(MAX)) OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
+                        ? NullSafeNotEqual($"CAST(Target.{c.Substring(1)} AS NVARCHAR(MAX))", $"CAST(Source.{c.Substring(1)} AS NVARCHAR(MAX))")
                         : c.StartsWith("T[")
-                            ? $"NOT (CAST(Target.{c.Substring(1)} AS VARCHAR(MAX)) = CAST(Source.{c.Substring(1)} AS VARCHAR(MAX)) OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
+                            ? NullSafeNotEqual($"CAST(Target.{c.Substring(1)} AS VARCHAR(MAX))", $"CAST(Source.{c.Substring(1)} AS VARCHAR(MAX))")
                             : c.StartsWith("I[")
-                                ? $"NOT (CAST(Target.{c.Substring(1)} AS VARBINARY(MAX)) = CAST(Source.{c.Substring(1)} AS VARBINARY(MAX)) OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
+                                ? NullSafeNotEqual($"CAST(Target.{c.Substring(1)} AS VARBINARY(MAX))", $"CAST(Source.{c.Substring(1)} AS VARBINARY(MAX))")
                                 : c.StartsWith("D[")
-                                    ? $"NOT (CAST(Target.{c.Substring(1)} AS NVARCHAR(50)) = CAST(Source.{c.Substring(1)} AS NVARCHAR(50)) OR (Target.{c.Substring(1)} IS NULL AND Source.{c.Substring(1)} IS NULL))"
-                                    : $"NOT (Target.{c} = Source.{c} OR (Target.{c} IS NULL AND Source.{c} IS NULL))"));
+                                    ? NullSafeNotEqual($"CAST(Target.{c.Substring(1)} AS NVARCHAR(50))", $"CAST(Source.{c.Substring(1)} AS NVARCHAR(50))")
+                                    : NullSafeNotEqual($"Target.{c}", $"Source.{c}")));
 
             mergeSQL += $"""
 
@@ -633,6 +640,19 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
     {
         cmd.CommandText = $@"
 SELECT CAST(CASE WHEN EXISTS (SELECT * FROM sys.identity_columns WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('{tableSchema}.{tableName}'))
+                 THEN 1 ELSE 0 END AS BIT)
+";
+        return cmd.ExecuteScalar() as bool? ?? false;
+    }
+
+    private static bool IdentityColumnInJsonKeysSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
+    {
+        if (jsonKeys == null || jsonKeys.Count == 0) return false;
+        var names = string.Join(",", jsonKeys.Select(k => $"'{k.Replace("'", "''")}'"));
+        cmd.CommandText = $@"
+SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM sys.identity_columns c WITH (NOLOCK)
+                              WHERE c.[object_id] = OBJECT_ID('{tableSchema}.{tableName}')
+                                AND c.[name] IN ({names}))
                  THEN 1 ELSE 0 END AS BIT)
 ";
         return cmd.ExecuteScalar() as bool? ?? false;
@@ -762,18 +782,19 @@ ON {matchColumns}
             var updateColumns = GetUpdateColumnsPostgreSql(cmd, tableSchema, tableName, jsonKeys);
             var xmlColumns = GetXmlColumnsPostgreSql(cmd, tableSchema, tableName);
             var jsonCols = GetJsonColumnsPostgreSql(cmd, tableSchema, tableName);
+            // IS DISTINCT FROM is NULL-safe — treats (NULL, X) and (X, NULL) as different without falling into three-valued-logic NULL results
             var updateCompare = string.Join(" OR ",
                 updateColumns!.Split(',').Select(c =>
                 {
                     var colName = c.Trim().Trim('"');
                     if (xmlColumns.Contains(colName))
-                        return $"NOT (\"Target\".{c}::text = \"Source\".{c}::text OR (\"Target\".{c} IS NULL AND \"Source\".{c} IS NULL))";
+                        return $"\"Target\".{c}::text IS DISTINCT FROM \"Source\".{c}::text";
                     if (jsonCols.TryGetValue(colName, out var jsonType))
                     {
                         var cast = jsonType == "jsonb" ? "::jsonb" : "::text";
-                        return $"NOT (\"Target\".{c}{cast} = \"Source\".{c}{cast} OR (\"Target\".{c} IS NULL AND \"Source\".{c} IS NULL))";
+                        return $"\"Target\".{c}{cast} IS DISTINCT FROM \"Source\".{c}{cast}";
                     }
-                    return $"NOT (\"Target\".{c} = \"Source\".{c} OR (\"Target\".{c} IS NULL AND \"Source\".{c} IS NULL))";
+                    return $"\"Target\".{c} IS DISTINCT FROM \"Source\".{c}";
                 }));
 
             mergeSQL += $"""
