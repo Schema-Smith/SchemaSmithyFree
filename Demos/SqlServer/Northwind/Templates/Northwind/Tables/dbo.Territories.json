@@ -63,5 +63,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Territories.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[TerritoryID]"
+  }
 }

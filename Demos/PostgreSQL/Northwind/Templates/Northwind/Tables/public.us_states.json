@@ -62,5 +62,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.us_states.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "state_id"
+  }
 }

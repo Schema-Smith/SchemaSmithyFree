@@ -91,5 +91,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.order_details.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "order_id,product_id"
+  }
 }

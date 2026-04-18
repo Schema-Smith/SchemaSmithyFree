@@ -54,5 +54,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Shippers.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ShipperID]"
+  }
 }

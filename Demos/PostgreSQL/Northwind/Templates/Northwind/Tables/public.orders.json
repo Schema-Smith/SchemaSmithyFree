@@ -196,5 +196,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.orders.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "order_id"
+  }
 }

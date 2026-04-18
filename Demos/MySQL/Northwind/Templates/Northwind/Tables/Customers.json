@@ -136,5 +136,10 @@
   "Collation": "utf8mb4_0900_ai_ci",
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
-  "FullTextIndexes": []
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Customers.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`CustomerID`"
+  }
 }

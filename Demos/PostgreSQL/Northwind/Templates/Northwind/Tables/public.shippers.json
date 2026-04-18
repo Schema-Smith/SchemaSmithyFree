@@ -51,5 +51,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.shippers.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "shipper_id"
+  }
 }
