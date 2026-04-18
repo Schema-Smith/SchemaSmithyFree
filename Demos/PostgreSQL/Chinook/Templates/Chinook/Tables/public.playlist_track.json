@@ -78,5 +78,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.playlist_track.tabledata",
+    "MergeType": "Insert",
+    "MatchColumns": "playlist_id,track_id"
+  }
 }

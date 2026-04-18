@@ -128,5 +128,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.invoice.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "invoice_id"
+  }
 }

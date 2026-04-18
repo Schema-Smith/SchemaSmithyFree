@@ -141,5 +141,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Invoice.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[InvoiceId]"
+  }
 }

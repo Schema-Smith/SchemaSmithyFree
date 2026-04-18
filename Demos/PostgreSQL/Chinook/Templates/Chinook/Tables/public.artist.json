@@ -42,5 +42,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.artist.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "artist_id"
+  }
 }

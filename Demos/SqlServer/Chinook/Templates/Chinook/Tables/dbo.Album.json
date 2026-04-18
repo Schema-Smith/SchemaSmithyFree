@@ -70,5 +70,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Album.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[AlbumId]"
+  }
 }

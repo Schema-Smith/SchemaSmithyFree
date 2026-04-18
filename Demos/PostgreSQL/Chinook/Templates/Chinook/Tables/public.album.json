@@ -69,5 +69,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.album.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "album_id"
+  }
 }

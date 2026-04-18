@@ -62,5 +62,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 348
+  "AutoIncrementValue": 348,
+  "DataDelivery": {
+    "ContentFile": "data/Album.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`AlbumId`"
+  }
 }

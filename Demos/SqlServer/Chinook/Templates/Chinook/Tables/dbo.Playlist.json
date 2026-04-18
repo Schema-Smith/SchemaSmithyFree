@@ -43,5 +43,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Playlist.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[PlaylistId]"
+  }
 }

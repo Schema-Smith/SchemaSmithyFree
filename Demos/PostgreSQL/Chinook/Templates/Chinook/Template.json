@@ -72,25 +72,8 @@
       "ObjectType": "Views"
     },
     {
-      "FolderPath": "Table Data",
-      "QuenchSlot": "TableData"
-    },
-    {
       "FolderPath": "After Scripts",
       "QuenchSlot": "After"
     }
-  ],
-  "ScriptTokens": {
-    "public.album.tabledata": "<*File*>data/public.album.tabledata",
-    "public.artist.tabledata": "<*File*>data/public.artist.tabledata",
-    "public.customer.tabledata": "<*File*>data/public.customer.tabledata",
-    "public.employee.tabledata": "<*File*>data/public.employee.tabledata",
-    "public.genre.tabledata": "<*File*>data/public.genre.tabledata",
-    "public.invoice.tabledata": "<*File*>data/public.invoice.tabledata",
-    "public.invoice_line.tabledata": "<*File*>data/public.invoice_line.tabledata",
-    "public.media_type.tabledata": "<*File*>data/public.media_type.tabledata",
-    "public.playlist.tabledata": "<*File*>data/public.playlist.tabledata",
-    "public.playlist_track.tabledata": "<*File*>data/public.playlist_track.tabledata",
-    "public.track.tabledata": "<*File*>data/public.track.tabledata"
-  }
+  ]
 }
