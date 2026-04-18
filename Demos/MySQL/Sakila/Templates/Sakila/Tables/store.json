@@ -86,5 +86,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb3",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 3
+  "AutoIncrementValue": 3,
+  "DataDelivery": {
+    "ContentFile": "data/store.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`store_id`"
+  }
 }

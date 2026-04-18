@@ -164,5 +164,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.customer.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "customer_id"
+  }
 }

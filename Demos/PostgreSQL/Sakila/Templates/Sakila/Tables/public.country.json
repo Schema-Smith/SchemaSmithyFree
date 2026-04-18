@@ -52,5 +52,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.country.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "country_id"
+  }
 }

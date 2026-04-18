@@ -92,5 +92,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.store.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "store_id"
+  }
 }

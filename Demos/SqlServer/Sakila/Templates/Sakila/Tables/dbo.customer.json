@@ -161,5 +161,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "[dbo]",
-  "CompressionType": "NONE"
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.customer.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[customer_id]"
+  }
 }

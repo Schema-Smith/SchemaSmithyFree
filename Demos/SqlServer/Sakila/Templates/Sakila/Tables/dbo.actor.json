@@ -70,5 +70,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "[dbo]",
-  "CompressionType": "NONE"
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.actor.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[actor_id]"
+  }
 }

@@ -60,5 +60,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb3",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 201
+  "AutoIncrementValue": 201,
+  "DataDelivery": {
+    "ContentFile": "data/actor.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`actor_id`"
+  }
 }

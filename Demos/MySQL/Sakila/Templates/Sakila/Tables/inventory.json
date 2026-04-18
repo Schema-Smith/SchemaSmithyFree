@@ -84,5 +84,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb3",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 4582
+  "AutoIncrementValue": 4582,
+  "DataDelivery": {
+    "ContentFile": "data/inventory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`inventory_id`"
+  }
 }

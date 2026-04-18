@@ -154,5 +154,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "[dbo]",
-  "CompressionType": "NONE"
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.rental.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[rental_id]"
+  }
 }

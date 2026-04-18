@@ -97,5 +97,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "[dbo]",
-  "CompressionType": "NONE"
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.inventory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[inventory_id]"
+  }
 }

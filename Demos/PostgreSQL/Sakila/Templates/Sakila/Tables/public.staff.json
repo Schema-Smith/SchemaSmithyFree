@@ -151,5 +151,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.staff.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "staff_id"
+  }
 }

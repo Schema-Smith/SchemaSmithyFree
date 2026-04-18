@@ -103,5 +103,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb3",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 606
+  "AutoIncrementValue": 606,
+  "DataDelivery": {
+    "ContentFile": "data/address.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`address_id`"
+  }
 }

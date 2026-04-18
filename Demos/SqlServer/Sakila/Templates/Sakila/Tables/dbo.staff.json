@@ -178,5 +178,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "[dbo]",
-  "CompressionType": "NONE"
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.staff.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[staff_id]"
+  }
 }

@@ -148,5 +148,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "[dbo]",
-  "CompressionType": "NONE"
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.payment.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[payment_id]"
+  }
 }

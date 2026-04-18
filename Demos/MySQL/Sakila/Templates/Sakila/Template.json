@@ -32,29 +32,8 @@
       "ObjectType": "Views"
     },
     {
-      "FolderPath": "Table Data",
-      "QuenchSlot": "TableData"
-    },
-    {
       "FolderPath": "After Scripts",
       "QuenchSlot": "After"
     }
-  ],
-  "ScriptTokens": {
-    "actor.tabledata": "<*File*>data/actor.tabledata",
-    "address.tabledata": "<*File*>data/address.tabledata",
-    "category.tabledata": "<*File*>data/category.tabledata",
-    "city.tabledata": "<*File*>data/city.tabledata",
-    "country.tabledata": "<*File*>data/country.tabledata",
-    "customer.tabledata": "<*File*>data/customer.tabledata",
-    "film.tabledata": "<*File*>data/film.tabledata",
-    "film_actor.tabledata": "<*File*>data/film_actor.tabledata",
-    "film_category.tabledata": "<*File*>data/film_category.tabledata",
-    "inventory.tabledata": "<*File*>data/inventory.tabledata",
-    "language.tabledata": "<*File*>data/language.tabledata",
-    "payment.tabledata": "<*File*>data/payment.tabledata",
-    "rental.tabledata": "<*File*>data/rental.tabledata",
-    "staff.tabledata": "<*File*>data/staff.tabledata",
-    "store.tabledata": "<*File*>data/store.tabledata"
-  }
+  ]
 }

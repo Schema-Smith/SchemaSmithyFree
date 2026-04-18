@@ -127,5 +127,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "[dbo]",
-  "CompressionType": "NONE"
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.address.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[address_id]"
+  }
 }
