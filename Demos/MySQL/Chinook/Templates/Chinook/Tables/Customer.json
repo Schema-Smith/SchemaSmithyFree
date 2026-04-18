@@ -151,5 +151,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 60
+  "AutoIncrementValue": 60,
+  "DataDelivery": {
+    "ContentFile": "data/Customer.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`CustomerId`"
+  }
 }

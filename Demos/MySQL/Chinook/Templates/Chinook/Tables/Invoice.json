@@ -111,5 +111,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 413
+  "AutoIncrementValue": 413,
+  "DataDelivery": {
+    "ContentFile": "data/Invoice.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`InvoiceId`"
+  }
 }

@@ -43,5 +43,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.MediaType.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[MediaTypeId]"
+  }
 }

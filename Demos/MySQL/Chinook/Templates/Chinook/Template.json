@@ -32,25 +32,8 @@
       "ObjectType": "Views"
     },
     {
-      "FolderPath": "Table Data",
-      "QuenchSlot": "TableData"
-    },
-    {
       "FolderPath": "After Scripts",
       "QuenchSlot": "After"
     }
-  ],
-  "ScriptTokens": {
-    "Album.tabledata": "<*File*>data/Album.tabledata",
-    "Artist.tabledata": "<*File*>data/Artist.tabledata",
-    "Customer.tabledata": "<*File*>data/Customer.tabledata",
-    "Employee.tabledata": "<*File*>data/Employee.tabledata",
-    "Genre.tabledata": "<*File*>data/Genre.tabledata",
-    "Invoice.tabledata": "<*File*>data/Invoice.tabledata",
-    "InvoiceLine.tabledata": "<*File*>data/InvoiceLine.tabledata",
-    "MediaType.tabledata": "<*File*>data/MediaType.tabledata",
-    "Playlist.tabledata": "<*File*>data/Playlist.tabledata",
-    "PlaylistTrack.tabledata": "<*File*>data/PlaylistTrack.tabledata",
-    "Track.tabledata": "<*File*>data/Track.tabledata"
-  }
+  ]
 }

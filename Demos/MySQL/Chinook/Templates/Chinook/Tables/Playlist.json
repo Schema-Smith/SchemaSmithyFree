@@ -39,5 +39,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 19
+  "AutoIncrementValue": 19,
+  "DataDelivery": {
+    "ContentFile": "data/Playlist.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`PlaylistId`"
+  }
 }

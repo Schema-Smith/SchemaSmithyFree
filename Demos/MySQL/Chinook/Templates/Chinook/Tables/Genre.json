@@ -39,5 +39,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 26
+  "AutoIncrementValue": 26,
+  "DataDelivery": {
+    "ContentFile": "data/Genre.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`GenreId`"
+  }
 }

@@ -42,5 +42,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.media_type.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "media_type_id"
+  }
 }

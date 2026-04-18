@@ -189,5 +189,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Customer.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[CustomerId]"
+  }
 }
