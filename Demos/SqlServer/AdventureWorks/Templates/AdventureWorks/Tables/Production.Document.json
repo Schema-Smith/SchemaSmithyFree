@@ -289,5 +289,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Product maintenance documents."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.Document.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[DocumentNode]"
   }
 }

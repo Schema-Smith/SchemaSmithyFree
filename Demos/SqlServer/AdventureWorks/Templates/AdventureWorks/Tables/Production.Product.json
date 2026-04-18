@@ -493,5 +493,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Products sold or used in the manfacturing of sold products."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.Product.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductID]"
   }
 }

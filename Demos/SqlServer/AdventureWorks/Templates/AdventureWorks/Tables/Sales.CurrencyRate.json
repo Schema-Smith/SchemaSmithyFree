@@ -162,5 +162,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Currency exchange rates."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.CurrencyRate.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[CurrencyRateID]"
   }
 }

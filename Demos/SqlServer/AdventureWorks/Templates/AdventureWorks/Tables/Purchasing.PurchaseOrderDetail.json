@@ -223,5 +223,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Individual products associated with a specific purchase order. See PurchaseOrderHeader."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Purchasing.PurchaseOrderDetail.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[PurchaseOrderID],[PurchaseOrderDetailID]"
   }
 }

@@ -96,5 +96,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Cross-reference table mapping people to their credit card information in the CreditCard table. "
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.PersonCreditCard.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID],[CreditCardID]"
   }
 }

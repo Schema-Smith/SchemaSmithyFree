@@ -93,5 +93,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/humanresources.employeepayhistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "businessentityid,ratechangedate"
+  }
 }

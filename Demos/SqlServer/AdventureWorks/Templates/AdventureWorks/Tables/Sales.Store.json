@@ -169,5 +169,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Customers (resellers) of Adventure Works products."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.Store.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID]"
   }
 }

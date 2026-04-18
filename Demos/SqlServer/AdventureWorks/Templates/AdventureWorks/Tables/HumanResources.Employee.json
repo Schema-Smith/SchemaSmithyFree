@@ -327,5 +327,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Employee information such as salary, department, and title."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources.Employee.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID]"
   }
 }

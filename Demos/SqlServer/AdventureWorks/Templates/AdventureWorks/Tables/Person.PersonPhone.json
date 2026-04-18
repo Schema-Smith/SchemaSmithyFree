@@ -119,5 +119,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Telephone number and type of a person."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Person.PersonPhone.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID],[PhoneNumber],[PhoneNumberTypeID]"
   }
 }

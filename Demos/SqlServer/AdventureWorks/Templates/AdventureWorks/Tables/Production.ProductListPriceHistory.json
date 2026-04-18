@@ -122,5 +122,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Changes in the list price of a product over time."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.ProductListPriceHistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductID],[StartDate]"
   }
 }

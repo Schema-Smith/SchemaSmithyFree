@@ -93,5 +93,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Lookup table containing the departments within the Adventure Works Cycles company."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources.Department.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[DepartmentID]"
   }
 }

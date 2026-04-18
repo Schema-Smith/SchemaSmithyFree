@@ -166,5 +166,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Cross-reference table mapping customers, vendors, and employees to their addresses."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Person.BusinessEntityAddress.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID],[AddressID],[AddressTypeID]"
   }
 }

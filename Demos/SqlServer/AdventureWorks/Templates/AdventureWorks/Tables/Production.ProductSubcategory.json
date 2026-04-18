@@ -132,5 +132,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Product subcategories. See ProductCategory table."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.ProductSubcategory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductSubcategoryID]"
   }
 }

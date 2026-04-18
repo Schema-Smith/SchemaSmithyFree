@@ -69,5 +69,10 @@
   "Collation": "utf8mb4_unicode_ci",
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
-  "FullTextIndexes": []
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Sales_SalesOrderHeaderSalesReason.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`SalesOrderID`,`SalesReasonID`"
+  }
 }

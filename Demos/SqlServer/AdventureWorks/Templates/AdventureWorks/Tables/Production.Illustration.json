@@ -70,5 +70,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Bicycle assembly diagrams."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.Illustration.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[IllustrationID]"
   }
 }

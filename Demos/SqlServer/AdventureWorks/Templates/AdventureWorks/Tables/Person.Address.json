@@ -199,5 +199,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Street address information for customers, employees, and vendors."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Person.Address.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[AddressID]"
   }
 }

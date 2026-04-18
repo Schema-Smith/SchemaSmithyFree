@@ -83,5 +83,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Current version number of the AdventureWorks 2016 sample database. "
+  },
+  "DataDelivery": {
+    "ContentFile": "data/dbo.AWBuildVersion.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[SystemInformationID]"
   }
 }

@@ -100,5 +100,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/sales.shoppingcartitem.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "shoppingcartitemid"
+  }
 }

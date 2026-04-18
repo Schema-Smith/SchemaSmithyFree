@@ -148,5 +148,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/production.workorder.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "workorderid"
+  }
 }

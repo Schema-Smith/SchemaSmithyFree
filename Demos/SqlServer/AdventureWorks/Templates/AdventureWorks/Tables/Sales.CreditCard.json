@@ -121,5 +121,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Customer credit card information."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.CreditCard.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[CreditCardID]"
   }
 }

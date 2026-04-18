@@ -173,5 +173,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Customer reviews of products they have purchased."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.ProductReview.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductReviewID]"
   }
 }

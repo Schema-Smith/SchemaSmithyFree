@@ -113,5 +113,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Employee pay history."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources.EmployeePayHistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID],[RateChangeDate]"
   }
 }

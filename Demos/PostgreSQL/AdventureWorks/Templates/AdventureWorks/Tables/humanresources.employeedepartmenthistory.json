@@ -120,5 +120,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/humanresources.employeedepartmenthistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "businessentityid,startdate,departmentid,shiftid"
+  }
 }

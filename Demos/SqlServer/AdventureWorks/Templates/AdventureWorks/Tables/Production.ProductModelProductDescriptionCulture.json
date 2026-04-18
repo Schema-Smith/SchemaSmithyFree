@@ -123,5 +123,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Cross-reference table mapping product descriptions and the language the description is written in."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.ProductModelProductDescriptionCulture.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductModelID],[ProductDescriptionID],[CultureID]"
   }
 }

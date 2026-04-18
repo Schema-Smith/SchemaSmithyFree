@@ -110,5 +110,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Cross-reference table mapping products and product photos."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.ProductProductPhoto.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductID],[ProductPhotoID]"
   }
 }

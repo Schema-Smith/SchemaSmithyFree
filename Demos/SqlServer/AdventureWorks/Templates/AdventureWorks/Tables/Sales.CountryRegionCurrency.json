@@ -105,5 +105,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Cross-reference table mapping ISO currency codes to a country or region."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.CountryRegionCurrency.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[CountryRegionCode],[CurrencyCode]"
   }
 }

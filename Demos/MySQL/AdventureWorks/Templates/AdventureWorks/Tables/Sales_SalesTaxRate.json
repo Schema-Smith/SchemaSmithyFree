@@ -108,5 +108,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 32
+  "AutoIncrementValue": 32,
+  "DataDelivery": {
+    "ContentFile": "data/Sales_SalesTaxRate.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`SalesTaxRateID`"
+  }
 }

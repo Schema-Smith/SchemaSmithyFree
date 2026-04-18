@@ -198,5 +198,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "State and province lookup table."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Person.StateProvince.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[StateProvinceID]"
   }
 }

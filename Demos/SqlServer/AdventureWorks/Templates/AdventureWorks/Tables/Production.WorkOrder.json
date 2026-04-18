@@ -226,5 +226,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Manufacturing work orders."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.WorkOrder.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[WorkOrderID]"
   }
 }

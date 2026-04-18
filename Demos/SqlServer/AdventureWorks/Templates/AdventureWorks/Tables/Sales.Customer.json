@@ -199,5 +199,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Current customer information. Also see the Person and Store tables."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.Customer.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[CustomerID]"
   }
 }

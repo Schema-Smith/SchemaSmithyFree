@@ -357,5 +357,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 1000
+  "AutoIncrementValue": 1000,
+  "DataDelivery": {
+    "ContentFile": "data/Production_Product.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ProductID`"
+  }
 }

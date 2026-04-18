@@ -63,5 +63,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/person.addresstype.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "addresstypeid"
+  }
 }
