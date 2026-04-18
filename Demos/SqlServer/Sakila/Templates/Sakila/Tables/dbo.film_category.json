@@ -79,5 +79,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "[dbo]",
-  "CompressionType": "NONE"
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.film_category.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[film_id],[category_id]"
+  }
 }

@@ -127,5 +127,11 @@
   "FillFactor": 100,
   "MergeDisableRules": true,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.payment.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "payment_id",
+    "MergeDisableRules": true
+  }
 }

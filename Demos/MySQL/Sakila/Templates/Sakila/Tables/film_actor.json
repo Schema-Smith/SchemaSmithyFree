@@ -69,5 +69,10 @@
   "Collation": "utf8mb3_general_ci",
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb3",
-  "FullTextIndexes": []
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/film_actor.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`actor_id`,`film_id`"
+  }
 }

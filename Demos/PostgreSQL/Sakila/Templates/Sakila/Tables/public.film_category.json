@@ -74,5 +74,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.film_category.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "film_id,category_id"
+  }
 }

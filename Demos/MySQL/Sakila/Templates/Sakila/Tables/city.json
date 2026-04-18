@@ -69,5 +69,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb3",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 601
+  "AutoIncrementValue": 601,
+  "DataDelivery": {
+    "ContentFile": "data/city.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`city_id`"
+  }
 }

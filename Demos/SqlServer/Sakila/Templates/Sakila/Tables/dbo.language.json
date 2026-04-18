@@ -53,5 +53,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "[dbo]",
-  "CompressionType": "NONE"
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.language.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[language_id]"
+  }
 }

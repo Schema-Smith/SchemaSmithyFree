@@ -81,5 +81,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "[dbo]",
-  "CompressionType": "NONE"
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.city.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[city_id]"
+  }
 }
