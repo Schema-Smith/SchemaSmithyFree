@@ -203,16 +203,15 @@ Then declare per-folder routing on your product-level folders:
 
 `ServerToQuench` accepts `Primary`, `Secondary`, or `Both`. SchemaQuench runs each folder's scripts against exactly the servers you specified, in parallel across the replica set. See [Schema Packages -- Secondary Servers](../reference/schema-packages.md#secondary-servers) for the full mechanics.
 
-## Reference data management with DataTongs
+## FK-aware data delivery with DataTongs
 
-Lookup tables -- countries, status codes, permission types -- need to be consistent across all environments. DataTongs grips your reference data at the source and extracts it into idempotent sync scripts that become part of your schema package. SQL Server uses `MERGE` with `OPENJSON`, PostgreSQL uses `MERGE` with `jsonb_to_recordset`, MySQL uses `INSERT ... ON DUPLICATE KEY UPDATE` -- same configuration file, per-platform output.
+Lookup tables, seed data, the whole library of reference rows every environment needs -- they're a schema-management problem as much as the tables themselves. SchemaSmith treats reference data the same way it treats structure: declare the state, let the tool do the rest. DataTongs extracts your data, writes it alongside the table JSON, and SchemaQuench delivers it in foreign-key order. You don't write merge scripts. You don't sort the load order. You declare.
 
-**The workflow:**
+**The declarative loop:**
 
-1. Configure DataTongs to point at your source database and list the tables to extract.
-2. Run DataTongs. It generates one sync script per table.
-3. Place the generated scripts in your template's `Table Data/` folder.
-4. SchemaQuench automatically deploys them during the Table Data execution slot -- after tables and keys are in place, before foreign keys are enforced.
+1. Run **DataTongs** with `--ConfigureDataDelivery` against your source database. For every table listed, DataTongs writes a `.tabledata` file (raw JSON rows) and updates the table's JSON with a `DataDelivery` block -- `ContentFile`, `MergeType`, `MatchColumns`.
+2. Commit the `.tabledata` files and the updated table JSONs.
+3. Run **SchemaQuench**. It discovers every `DataDelivery` block, orders the tables by foreign-key dependencies, and merges the data using the platform's preferred idiom.
 
 **Example DataTongs configuration:**
 
@@ -223,8 +222,10 @@ Lookup tables -- countries, status codes, permission types -- need to be consist
     "Server": "production-server",
     "Database": "AppMain"
   },
-  "OutputPath": "./Templates/Main/Table Data",
+  "ContentPath": "./Templates/Main/data",
+  "ScriptPath":  "./Templates/Main/Table Data",
   "ShouldCast": {
+    "ConfigureDataDelivery": true,
     "MergeUpdate": true,
     "MergeDelete": true,
     "DisableTriggers": false
@@ -237,11 +238,59 @@ Lookup tables -- countries, status codes, permission types -- need to be consist
 }
 ```
 
-The generated scripts handle inserts, updates, and deletes where the platform supports the idiom. They use JSON-based data embedding, so the scripts are self-contained SQL files with no external dependencies.
+After this runs, each configured table's JSON gains a block like:
 
-**The golden source pattern:** Extract from production (the source of truth), commit the generated scripts to your repository, and quench to all other environments via SchemaQuench. Every environment gets exactly the same reference data. Changes are tracked in version control like any other schema change. No more "staging has stale lookup data" surprises.
+```json
+"DataDelivery": {
+  "ContentFile": "data/dbo.PermissionTypes.tabledata",
+  "MergeType": "Insert/Update/Delete",
+  "MatchColumns": "[PermissionTypeID]",
+  "MergeFilter": "IsActive = 1"
+}
+```
 
-For configuration details including key column detection, nullable key handling, filter options, and the per-platform type handling, see [DataTongs Reference](../reference/datatongs.md).
+No hand-written merge script. Reference data is part of the table definition now.
+
+### Two-pass FK-aware delivery
+
+Foreign keys turn data loading into a graph problem. SchemaQuench solves it automatically. The pass sequence:
+
+- **Pass 1** -- Tables whose required (NOT NULL) foreign keys point to already-loaded tables are merged first. Rows with nullable FK columns pointing to tables still waiting their turn get inserted with those columns NULL. The merge doesn't block on a constraint that references a row that doesn't exist yet.
+- **Pass 2** -- Once every pass-1 table has delivered, each deferred table gets merged again with only the deferred FK columns in play, back-filling the real values.
+
+```
+  Delivering dbo.Employee (pass 1 - deferred columns as NULL)
+  Delivering dbo.Department (pass 1)
+  Delivering dbo.Employee (pass 2 - updating deferred FK columns)
+```
+
+Self-referential tables, cross-table cycles broken by nullable columns, complex relational graphs -- all handled declaratively.
+
+### Hand-written scripts still welcome
+
+Sometimes you need procedural control: conditional seeds, one-off data rebuilds, multi-step migrations. Those still work -- drop SQL files into a `TableData`-slot folder (the default `Table Data/` folder works, or declare your own) and they run right after the declarative delivery step. Use whichever style fits the problem.
+
+**The golden source pattern:** Extract from production (the source of truth), commit the generated artifacts to your repository, and quench to every other environment via SchemaQuench. Reference data changes travel through the same review flow as structural changes. No more "staging has stale lookup data" surprises.
+
+For the full DataTongs configuration reference -- key column detection, filter semantics, per-platform type handling, `--ConfigureDataDelivery` mechanics -- see [DataTongs Reference](../reference/datatongs.md). For the `DataDelivery` JSON schema, see [Schema Packages -- DataDelivery](../reference/schema-packages.md#datadelivery).
+
+## Resuming a failed deployment
+
+Long-running deployments fail. A 90-minute production quench hits a transient deadlock at minute 75, or the migration script at stage 12 of 18 trips on unexpected data. Without checkpointing, the recovery is brutal: start over from zero, re-run every step you already applied, hope the interrupted state is self-consistent.
+
+SchemaQuench writes checkpoints as it goes. Every completed step (helper procedure deployment, missing tables, modified tables, indexes, FK-aware data delivery, foreign keys, materialized or indexed view rebuilds) and every completed migration script gets recorded to disk. Re-run with `--ResumeQuench` and everything already recorded is skipped:
+
+```bash
+SchemaQuench --ResumeQuench
+```
+
+The next run picks up where the last one stopped -- minutes of work instead of hours. On a clean success the checkpoint files are deleted automatically; on a failure they're preserved for the next resume. Point the checkpoint directory somewhere durable if you need them to survive a container restart or agent rotation:
+
+```bash
+SchemaQuench --ResumeQuench --CheckpointDirectory:/var/schemasmith/checkpoints
+```
+
+For the checkpoint scopes, the full step list, and the practical guidance on when to opt in, see [SchemaQuench -- Checkpoint and Resume](../reference/schemaquench.md#checkpoint-and-resume).
 
 ## Custom script folders
 

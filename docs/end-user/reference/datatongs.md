@@ -348,6 +348,8 @@ For example:
 | `public.feature_flags` | `Populate public.feature_flags.sql` |
 | `northwind.shippers` | `Populate northwind.shippers.sql` |
 
+DataTongs also writes a sibling `.tabledata` file (the raw JSON row data) alongside each script, so the extracted content can be consumed by the declarative `DataDelivery` pipeline -- see [--ConfigureDataDelivery](#--configuredatadelivery). When `ShouldCast:OutputScripts` is `false`, the script files are skipped and only the `.tabledata` files are written.
+
 Table and schema names containing characters that are illegal in file names are percent-encoded (see [Schema Packages -- Filesystem-Illegal Character Encoding](schema-packages.md#filesystem-illegal-character-encoding)).
 
 ### Output directory
@@ -378,6 +380,89 @@ This NULL-safe comparison treats two NULLs as equal (no update needed) and a NUL
 For special types -- geography, XML, large text/binary types -- the comparison is wrapped with the appropriate cast or normalization function (e.g., `.ToString()` for geography on SQL Server, `CAST(... AS NVARCHAR(MAX))` for XML and NTEXT).
 
 This approach means running DataTongs twice against unchanged data produces a script that matches every row but updates none -- the script becomes a no-op for existing data. Diffs are clean. Reviews are honest.
+
+---
+
+## --ConfigureDataDelivery
+
+DataTongs can do more than write scripts -- it can wire the extracted data straight into your schema package's declarative delivery pipeline. Pass `--ConfigureDataDelivery` and DataTongs writes a `DataDelivery` block into each matching table's JSON file after extracting the data.
+
+```bash
+DataTongs --ConfigureDataDelivery
+DataTongs --ConfigureDataDelivery --TemplatePath:./Templates/Main
+```
+
+The switch can also be enabled via configuration:
+
+```json
+{
+  "ShouldCast": { "ConfigureDataDelivery": true }
+}
+```
+
+### What it does
+
+For every table that produces output, DataTongs opens `Tables/<schema>.<table>.json` inside the template and writes (or overwrites) a `DataDelivery` block with:
+
+| Property | Value |
+|---|---|
+| `ContentFile` | Path to the written `.tabledata` file, relative to the template root. |
+| `MergeType` | Either the per-table `MergeType` from config, or a default derived from `ShouldCast:MergeUpdate` + `ShouldCast:MergeDelete` (see below). |
+| `MatchColumns` | The key columns used during extraction -- either the per-table `KeyColumns`, or the primary key auto-detected from the source database (same logic that drives the generated script). |
+| `MergeFilter` | The per-table `Filter`, if one was specified. |
+| `MergeDisableTriggers` | Mirrors `ShouldCast:DisableTriggers`. |
+| `MergeDisableRules` | **PostgreSQL.** Mirrors `ShouldCast:DisableRules`. |
+| `MergeUpdateDescendents` | **PostgreSQL.** Mirrors `ShouldCast:UpdateDescendents` (default `true`). |
+
+Tables whose JSON file doesn't exist in the template are skipped with a warning. No file is created from scratch -- this tool configures existing tables, it doesn't scaffold new ones (use SchemaTongs for that).
+
+### Default MergeType derivation
+
+When a table's config doesn't set `MergeType` explicitly, the default is derived from the global `ShouldCast` flags:
+
+| `MergeUpdate` | `MergeDelete` | Default `MergeType` |
+|:---:|:---:|---|
+| `true` | `true` | `Insert/Update/Delete` |
+| `true` | `false` | `Insert/Update` |
+| `false` | any | `Insert` |
+
+A per-table `MergeType` on the `Tables[]` entry always wins over the derived default.
+
+### Template root discovery
+
+`--ConfigureDataDelivery` needs to know where your template lives. It uses this precedence:
+
+1. `--TemplatePath:<path>` CLI switch.
+2. `TemplatePath` config key.
+3. Auto-discovery: walk upward from `ContentPath` looking for the nearest directory containing a `Template.json`.
+
+If nothing is found, DataTongs logs a warning and skips the configuration step -- extraction still completes normally.
+
+### Typical workflow
+
+1. Use SchemaTongs to extract your schema package (tables, procedures, folder structure).
+2. Use DataTongs with `--ConfigureDataDelivery` to pull reference data and write the delivery blocks in one pass:
+
+   ```json
+   {
+     "Source": { "Platform": "SqlServer", "Server": "prod", "Database": "AppMain" },
+     "ContentPath": "./Templates/Main/data",
+     "ScriptPath":  "./Templates/Main/Table Data",
+     "ShouldCast": {
+       "MergeUpdate": true,
+       "MergeDelete": false,
+       "DisableTriggers": true
+     },
+     "Tables": [
+       { "Name": "dbo.Country" },
+       { "Name": "dbo.Currency", "MergeType": "Insert" }
+     ]
+   }
+   ```
+3. Commit the generated `.tabledata` files and the updated table JSONs.
+4. SchemaQuench deploys them in FK order via the [Table Data Delivery](schemaquench.md#table-data-delivery) step -- no hand-written merge scripts required.
+
+See [Schema Packages -- DataDelivery](schema-packages.md#datadelivery) for the full property reference and the schema validation that catches misconfigurations at authoring time.
 
 ---
 

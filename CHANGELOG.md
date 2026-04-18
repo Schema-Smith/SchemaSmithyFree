@@ -56,7 +56,9 @@ For full release details and download links, see [GitHub Releases](https://githu
 - **TreatWarningsAsErrors** — Enabled globally in Directory.Build.props
 - **Multi-platform CI** — Parallel SQL Server, PostgreSQL, and MySQL integration test jobs with service containers
 - **SchemaSmith.Schema NuGet package** — Domain models published as a NuGet package for extensibility
-- **Pro extension architecture** — DI-based extension points for optional add-on integration (license, checkpointing, data delivery)
+- **Checkpoint/resume for SchemaQuench** — `--ResumeQuench` and `--CheckpointDirectory` skip already-completed steps and migration scripts after a failed run; checkpoints cleaned up automatically on success
+- **FK-aware data delivery** — Declarative `DataDelivery` block on table JSON drives automatic foreign-key dependency ordering; two-pass delivery handles nullable FK columns without hand-authored merge scripts
+- **DataTongs `--ConfigureDataDelivery`** — Writes `DataDelivery` settings (ContentFile, MergeType, MatchColumns, MergeFilter, and trigger/rule flags) into table JSON files after extraction so the declarative pipeline can take over
 
 ### Changed
 

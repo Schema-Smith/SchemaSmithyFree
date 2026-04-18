@@ -155,7 +155,7 @@ For each database identified by a template's `DatabaseIdentificationScript`, the
 11. **MissingIndexesAndConstraintsQuench** -- Creates missing indexes, check constraints, default constraints, and (where supported) statistics.
 12. **AfterTablesScripts** -- Executes migration scripts from any folder in the `AfterTablesScripts` slot. Sequential and tracked.
 13. **AfterTablesObjects scripts** -- Executes scripts from `AfterTablesObjects`-slot folders (triggers, DDL triggers, rules, post-table views) using the dependency retry loop. Also retries any still-unresolved Objects-slot scripts.
-14. **Table Data scripts** -- Executes scripts from any folder in the `TableData` slot using the dependency retry loop.
+14. **Table data delivery** -- Merges table data described by per-table `DataDelivery` blocks, ordered by foreign key dependencies. See [Table Data Delivery](#table-data-delivery). Then executes any hand-written scripts in the `TableData` slot using the dependency retry loop.
 15. **ForeignKeyQuench** -- Creates, drops, and modifies foreign keys to match the schema package.
 16. **Indexed view / materialized view quench** -- If the template defines indexed views (SQL Server) or materialized views (PostgreSQL), deploys them via the platform's view quench procedure.
 17. **After scripts** -- Executes migration scripts from any folder in the `After` slot. Sequential and tracked.
@@ -533,6 +533,116 @@ See [Schema Packages -- Conditional Application](schema-packages.md#conditional-
 | 2 | One or more database quenches failed. |
 | 3 | Unhandled exception. An unexpected error occurred outside the normal quench flow. |
 | 4 | Unable to back up log files. |
+
+---
+
+## Table Data Delivery
+
+Reference data doesn't have to live in a pile of hand-rolled `MERGE` scripts. Declare what each table looks like -- where its rows come from, how the merge should behave, which columns identify a row -- and SchemaQuench delivers the data in foreign-key order, resolving the tricky cases automatically.
+
+Each table that participates in data delivery carries a `DataDelivery` block in its JSON. SchemaQuench walks every table JSON, keeps the ones that declare delivery, orders them by foreign key dependencies, and merges each one using the platform's preferred idiom. Tables without a `DataDelivery` block are left untouched.
+
+See [Schema Packages -- DataDelivery](schema-packages.md#datadelivery) for the full property reference and examples.
+
+### Two-pass FK-aware delivery
+
+Foreign keys turn "load the data" into a graph problem. SchemaQuench solves it automatically:
+
+1. **Pass 1** -- Tables whose required (NOT NULL) foreign keys all point to already-loaded tables are merged first. Nullable FK columns pointing to tables not yet delivered are **deferred** -- the initial merge inserts rows with those columns NULL so the load doesn't block on a constraint that references a row that doesn't exist yet.
+2. **Pass 2** -- After every pass-1 table has been delivered, each deferred table's nullable FK columns are back-filled by re-merging the same data with only the deferred columns in play.
+
+Log output tags pass 1 and pass 2 distinctly:
+
+```
+  Delivering dbo.Customer (pass 1 - deferred columns as NULL)
+  Delivering dbo.Customer (pass 2 - updating deferred FK columns)
+```
+
+A circular dependency among NOT NULL foreign keys fails the dependency sort -- SchemaQuench logs the cycle and the quench fails. Make one side of the cycle nullable (or reshape the data model) so delivery can break the loop.
+
+### MergeType options
+
+- `Insert` -- Missing rows inserted. Existing rows and extra rows left alone. The seed-data pattern.
+- `Insert/Update` -- Missing rows inserted, changed rows updated. Extra rows left alone. Good for reference tables that environments may append to.
+- `Insert/Update/Delete` -- Full sync. Missing rows inserted, changed rows updated, and target rows not present in the source are deleted. Default, and what the demo products use.
+
+The chosen idiom varies per platform -- `MERGE` on SQL Server and PostgreSQL, `INSERT ... ON DUPLICATE KEY UPDATE` plus conditional delete on MySQL -- but the `MergeType` you declare is the same contract everywhere.
+
+### DataDelivery vs hand-written Table Data scripts
+
+You can use both. For each target database, SchemaQuench first delivers every table with a `DataDelivery` block in FK order, then runs any `.sql` files you dropped into the template's `TableData`-slot folders through the dependency retry loop. Use declarative `DataDelivery` for bulk reference data and keep the script slot for special cases -- conditional seeds, one-off rebuilds, procedural loads.
+
+---
+
+## Checkpoint and Resume
+
+Long deployments fail. Network blips, transient lock timeouts, a migration script that tripped on bad data at step 14 of 20. Without checkpointing, a failure in the final stretch means the next run starts from zero -- re-running every step you've already successfully applied.
+
+SchemaQuench writes checkpoints as it goes. Every completed quench step and every completed migration script is recorded to disk. On the next run, already-completed work is skipped and execution resumes at the first incomplete step.
+
+### Enabling resume
+
+```bash
+SchemaQuench --ResumeQuench
+```
+
+With `--ResumeQuench`, SchemaQuench reads the existing checkpoint files (if any) and skips anything already recorded as complete. Without the switch, the resume logic is off -- every step executes regardless of prior state.
+
+### Where checkpoints live
+
+```bash
+SchemaQuench --CheckpointDirectory:/var/schemasmith/checkpoints
+```
+
+By default, checkpoints live in `%TEMP%/schemaquench-checkpoints` (or the platform equivalent). Override with `--CheckpointDirectory:<path>` when you need them on a specific volume -- for a CI runner with ephemeral temp storage, a shared build server, or a mounted volume that outlives the container. The directory is created if it doesn't exist.
+
+The same value can be set in `SchemaQuench.settings.json` via the `CheckpointDirectory` key. The CLI switch wins if both are present.
+
+### Checkpoint scopes
+
+SchemaQuench tracks two kinds of progress:
+
+**Product-scoped** -- Cross-database work shared by all templates:
+- `Before` and `After` product-level scripts (per server, for SQL Server Availability Group deployments).
+- Completed templates (a template with every database finished is itself recorded as complete).
+
+**Database-scoped** -- One checkpoint file per `{product, template, server, database}` combination:
+
+| Step name | What it covers |
+|---|---|
+| `KindleForge` | Helper procedure deployment for this database. |
+| `ValidateBaseline` | Baseline validation script. |
+| `MissingTablesAndColumns` | Adding missing tables and missing columns. |
+| `ModifiedTables` | Altering existing columns, computed / generated columns, dropping tables. |
+| `IndexesAndConstraints` | Creating missing indexes, check constraints, defaults, statistics. |
+| `TableDataDelivery` | Both passes of FK-aware data delivery for tables with `DataDelivery` blocks. |
+| `ForeignKeys` | Creating, modifying, and dropping foreign keys. |
+| `MaterializedViewQuench` | PostgreSQL materialized view deployment. |
+| `IndexedViewQuench` | SQL Server indexed view deployment. |
+| `VersionStamp` | Version stamp script. |
+
+In addition, each template slot (`Before`, `Objects`, `AfterTablesObjects`, `BetweenTablesAndKeys`, `AfterTable`, `TableData`, `After`) records the exact scripts that ran, so resumed runs skip each individual script that already succeeded.
+
+### Automatic cleanup after success
+
+Checkpoints exist to protect against failures. When the quench completes without error, SchemaQuench deletes every checkpoint file associated with the product. A clean run leaves no residue to mislead the next deployment. A failed run leaves the checkpoint files in place, ready for the next `--ResumeQuench` invocation.
+
+### Practical resume workflow
+
+A 90-minute deployment to a large production database fails at minute 75 because a migration script hit a transient deadlock. You fix the data, re-run the deployment:
+
+```bash
+SchemaQuench --ResumeQuench
+```
+
+SchemaQuench reads the checkpoints, sees that KindleTheForge, ValidateBaseline, missing tables, modifications, indexes, constraints, and every `Objects`-slot script already succeeded, logs what it's skipping, and picks up at the first incomplete step. Minutes of work instead of starting from the top.
+
+### When to leave resume off
+
+- **Normal, clean deployments** -- The resume flag is opt-in. Without it, every step executes, and at the end the checkpoint files get cleaned up regardless. There's no cost to leaving it off for fast, green runs.
+- **CI pipelines that rebuild databases from scratch** -- Each run is a fresh slate, so resume has nothing to do.
+
+Use `--ResumeQuench` when you specifically expect that a prior run may have left partial state -- typically when re-running after a real failure in a non-trivial deployment.
 
 ---
 
