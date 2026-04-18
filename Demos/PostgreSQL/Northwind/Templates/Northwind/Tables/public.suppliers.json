@@ -141,5 +141,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.suppliers.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "supplier_id"
+  }
 }

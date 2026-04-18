@@ -197,5 +197,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Products.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductID]"
+  }
 }

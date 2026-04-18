@@ -72,5 +72,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Categories.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[CategoryID]"
+  }
 }

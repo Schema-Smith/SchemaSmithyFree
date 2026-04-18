@@ -174,5 +174,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Suppliers.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[SupplierID]"
+  }
 }

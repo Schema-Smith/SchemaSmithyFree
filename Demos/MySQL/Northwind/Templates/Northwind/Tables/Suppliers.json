@@ -131,5 +131,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 30
+  "AutoIncrementValue": 30,
+  "DataDelivery": {
+    "ContentFile": "data/Suppliers.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`SupplierID`"
+  }
 }

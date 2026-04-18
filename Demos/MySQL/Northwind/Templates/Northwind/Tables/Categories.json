@@ -59,5 +59,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 9
+  "AutoIncrementValue": 9,
+  "DataDelivery": {
+    "ContentFile": "data/Categories.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`CategoryID`"
+  }
 }

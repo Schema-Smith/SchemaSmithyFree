@@ -41,5 +41,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Region.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[RegionID]"
+  }
 }

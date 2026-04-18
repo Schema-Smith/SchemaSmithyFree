@@ -143,5 +143,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.products.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "product_id"
+  }
 }

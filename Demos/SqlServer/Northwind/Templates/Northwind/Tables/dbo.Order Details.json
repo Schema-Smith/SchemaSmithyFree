@@ -126,5 +126,10 @@
   "Schema": "[dbo]",
   "CompressionType": "NONE",
   "XmlIndexes": [],
-  "Statistics": []
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Order Details.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[OrderID],[ProductID]"
+  }
 }

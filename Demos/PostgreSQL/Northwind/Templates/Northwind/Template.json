@@ -72,28 +72,8 @@
       "ObjectType": "Views"
     },
     {
-      "FolderPath": "Table Data",
-      "QuenchSlot": "TableData"
-    },
-    {
       "FolderPath": "After Scripts",
       "QuenchSlot": "After"
     }
-  ],
-  "ScriptTokens": {
-    "public.categories.tabledata": "<*File*>data/public.categories.tabledata",
-    "public.customer_customer_demo.tabledata": "<*File*>data/public.customer_customer_demo.tabledata",
-    "public.customer_demographics.tabledata": "<*File*>data/public.customer_demographics.tabledata",
-    "public.customers.tabledata": "<*File*>data/public.customers.tabledata",
-    "public.employee_territories.tabledata": "<*File*>data/public.employee_territories.tabledata",
-    "public.employees.tabledata": "<*File*>data/public.employees.tabledata",
-    "public.order_details.tabledata": "<*File*>data/public.order_details.tabledata",
-    "public.orders.tabledata": "<*File*>data/public.orders.tabledata",
-    "public.products.tabledata": "<*File*>data/public.products.tabledata",
-    "public.region.tabledata": "<*File*>data/public.region.tabledata",
-    "public.shippers.tabledata": "<*File*>data/public.shippers.tabledata",
-    "public.suppliers.tabledata": "<*File*>data/public.suppliers.tabledata",
-    "public.territories.tabledata": "<*File*>data/public.territories.tabledata",
-    "public.us_states.tabledata": "<*File*>data/public.us_states.tabledata"
-  }
+  ]
 }
