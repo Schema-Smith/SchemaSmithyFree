@@ -46,17 +46,17 @@ public class DataDeliveryProcessor : IDataDelivery
             throw new InvalidOperationException("Data delivery aborted: Invalid MergeType values detected.");
         }
 
-        if (platform.Equals("MySQL", StringComparison.OrdinalIgnoreCase))
+        var cascadeErrors = ValidateDeleteCascade(context.Command, platform, context.DatabaseName,
+            tablesToDeliver.Where(t => (t.DataDelivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0)
+                .Select(t => (
+                    Schema: GetSchemaOrDb(t, context.DatabaseName, platform),
+                    TableName: DataDeliveryHelper.TrimIdentifierQuotes(t.Name, platform)
+                )).ToList());
+        if (cascadeErrors.Count > 0)
         {
-            var cascadeErrors = ValidateDeleteCascade(context.Command, context.DatabaseName,
-                tablesToDeliver.Where(t => (t.DataDelivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0)
-                    .Select(t => DataDeliveryHelper.TrimIdentifierQuotes(t.Name, platform)).ToList());
-            if (cascadeErrors.Count > 0)
-            {
-                foreach (var error in cascadeErrors)
-                    logError($"    {error}");
-                throw new InvalidOperationException("Data delivery aborted: Delete merge type with CASCADE delete detected.");
-            }
+            foreach (var error in cascadeErrors)
+                logError($"    {error}");
+            throw new InvalidOperationException("Data delivery aborted: Delete merge type with CASCADE delete detected.");
         }
 
         var deliverySet = DataDeliveryHelper.BuildDeliveryTableSet(tablesToDeliver, platform);
@@ -229,37 +229,74 @@ public class DataDeliveryProcessor : IDataDelivery
     }
 
     /// <summary>
-    /// MySQL-only: validates that tables using Delete merge type don't have referencing
-    /// FKs with CASCADE delete. Deletes would cascade to child tables, which is almost
-    /// never intended during data delivery.
+    /// Validates that tables using Delete merge type don't have referencing FKs with
+    /// CASCADE delete. Deletes would cascade to child tables, which is almost never
+    /// intended during data delivery. Cross-platform (MySQL, PostgreSQL, SQL Server).
     /// </summary>
-    internal static List<string> ValidateDeleteCascade(System.Data.IDbCommand cmd, string databaseName, List<string> deleteTableNames)
+    internal static List<string> ValidateDeleteCascade(System.Data.IDbCommand cmd, string platform, string databaseName,
+        IList<(string Schema, string TableName)> deleteTables)
     {
         var errors = new List<string>();
-        databaseName = databaseName.Trim().Trim('`');
+        if (deleteTables == null || deleteTables.Count == 0) return errors;
 
-        if (deleteTableNames.Count == 0) return errors;
+        var isMySql = platform.Equals("MySQL", StringComparison.OrdinalIgnoreCase);
+        var dbName = (databaseName ?? string.Empty).Trim().Trim('`');
 
-        foreach (var tableName in deleteTableNames)
+        foreach (var (schema, tableName) in deleteTables)
         {
-            cmd.CommandText = $@"
+            var schemaKey = (schema ?? string.Empty).Trim().Trim('`', '"', '[', ']');
+            var tableKey = (tableName ?? string.Empty).Trim().Trim('`', '"', '[', ']');
+
+            cmd.CommandText = isMySql
+                ? BuildMySqlCascadeQuery(dbName, tableKey)
+                : BuildStandardCascadeQuery(schemaKey, tableKey);
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var fkName = reader.GetString(0);
+                var childTable = reader.GetString(1);
+                errors.Add(FormatCascadeError(platform, schemaKey, tableKey, fkName, childTable));
+            }
+        }
+
+        return errors;
+    }
+
+    private static string BuildMySqlCascadeQuery(string databaseName, string tableName) => $@"
 SELECT rc.CONSTRAINT_NAME, rc.TABLE_NAME, rc.DELETE_RULE
 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
 WHERE BINARY rc.UNIQUE_CONSTRAINT_SCHEMA = BINARY '{databaseName.Replace("'", "''")}'
   AND BINARY rc.REFERENCED_TABLE_NAME = BINARY '{tableName.Replace("'", "''")}'
   AND rc.DELETE_RULE = 'CASCADE';
 ";
-            using var reader = cmd.ExecuteReader();
-            while (reader.Read())
-            {
-                var fkName = reader.GetString(0);
-                var childTable = reader.GetString(1);
-                errors.Add($"Table `{tableName}` uses MergeType=Insert/Update/Delete but is referenced by FK `{fkName}` on `{childTable}` with ON DELETE CASCADE. " +
-                           $"Deletes would cascade to `{childTable}`. Change MergeType to Insert/Update or remove the CASCADE rule.");
-            }
-        }
 
-        return errors;
+    private static string BuildStandardCascadeQuery(string schema, string tableName) => $@"
+SELECT rc.CONSTRAINT_NAME, tc_c.TABLE_NAME, rc.DELETE_RULE
+FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc_p
+    ON tc_p.CONSTRAINT_NAME = rc.UNIQUE_CONSTRAINT_NAME
+   AND tc_p.CONSTRAINT_SCHEMA = rc.UNIQUE_CONSTRAINT_SCHEMA
+INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc_c
+    ON tc_c.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+   AND tc_c.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA
+WHERE tc_p.TABLE_SCHEMA = '{schema.Replace("'", "''")}'
+  AND tc_p.TABLE_NAME = '{tableName.Replace("'", "''")}'
+  AND rc.DELETE_RULE = 'CASCADE';
+";
+
+    private static string FormatCascadeError(string platform, string schema, string tableName, string fkName, string childTable)
+    {
+        var isSqlServer = platform.Equals("SqlServer", StringComparison.OrdinalIgnoreCase);
+        var isPg = platform.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase);
+        var (open, close) = isSqlServer ? ("[", "]") : isPg ? ("\"", "\"") : ("`", "`");
+        string Q(string s) => $"{open}{s}{close}";
+
+        var parent = isSqlServer || isPg ? $"{Q(schema)}.{Q(tableName)}" : Q(tableName);
+        var child = isSqlServer || isPg ? $"{Q(schema)}.{Q(childTable)}" : Q(childTable);
+
+        return $"Table {parent} uses MergeType=Insert/Update/Delete but is referenced by FK {Q(fkName)} on {child} with ON DELETE CASCADE. " +
+               $"Deletes would cascade to {child}. Change MergeType to Insert/Update or remove the CASCADE rule.";
     }
 
     private static string GetSchemaOrDb(IDeliverableTable table, string databaseName, string platform)
