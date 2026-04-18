@@ -255,5 +255,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Work order details."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.WorkOrderRouting.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[WorkOrderID],[ProductID],[OperationSequence]"
   }
 }

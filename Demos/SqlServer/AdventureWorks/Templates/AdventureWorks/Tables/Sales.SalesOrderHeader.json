@@ -574,5 +574,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "General sales order information."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.SalesOrderHeader.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[SalesOrderID]"
   }
 }

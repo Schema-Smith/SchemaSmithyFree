@@ -192,5 +192,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/purchasing.productvendor.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "productid,businessentityid"
+  }
 }

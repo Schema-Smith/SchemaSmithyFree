@@ -167,5 +167,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Companies from whom Adventure Works Cycles purchases parts or other goods."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Purchasing.Vendor.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID]"
   }
 }

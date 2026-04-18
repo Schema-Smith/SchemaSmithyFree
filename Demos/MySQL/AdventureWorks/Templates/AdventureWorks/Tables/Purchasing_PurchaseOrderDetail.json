@@ -153,5 +153,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 8846
+  "AutoIncrementValue": 8846,
+  "DataDelivery": {
+    "ContentFile": "data/Purchasing_PurchaseOrderDetail.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`PurchaseOrderID`,`PurchaseOrderDetailID`"
+  }
 }

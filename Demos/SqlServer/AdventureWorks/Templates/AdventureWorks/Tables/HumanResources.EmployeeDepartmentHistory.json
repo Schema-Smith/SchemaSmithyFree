@@ -179,5 +179,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Employee department transfers."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources.EmployeeDepartmentHistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID],[StartDate],[DepartmentID],[ShiftID]"
   }
 }

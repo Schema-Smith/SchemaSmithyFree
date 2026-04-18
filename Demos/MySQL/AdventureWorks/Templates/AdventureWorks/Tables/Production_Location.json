@@ -79,5 +79,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 61
+  "AutoIncrementValue": 61,
+  "DataDelivery": {
+    "ContentFile": "data/Production_Location.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`LocationID`"
+  }
 }

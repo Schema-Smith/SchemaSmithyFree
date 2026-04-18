@@ -97,5 +97,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 6
+  "AutoIncrementValue": 6,
+  "DataDelivery": {
+    "ContentFile": "data/Purchasing_ShipMethod.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ShipMethodID`"
+  }
 }

@@ -199,5 +199,10 @@
   "Collation": "utf8mb4_unicode_ci",
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
-  "FullTextIndexes": []
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources_Employee.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`BusinessEntityID`"
+  }
 }

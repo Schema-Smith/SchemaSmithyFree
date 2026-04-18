@@ -242,5 +242,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Items required to make bicycles and bicycle subassemblies. It identifies the heirarchical relationship between a parent product and its components."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.BillOfMaterials.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BillOfMaterialsID]"
   }
 }

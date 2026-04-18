@@ -136,5 +136,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Shipping company lookup table."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Purchasing.ShipMethod.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ShipMethodID]"
   }
 }

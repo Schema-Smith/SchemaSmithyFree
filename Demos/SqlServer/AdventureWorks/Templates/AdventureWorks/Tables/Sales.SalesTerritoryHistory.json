@@ -159,5 +159,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Sales representative transfers to other sales territories."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.SalesTerritoryHistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID],[StartDate],[TerritoryID]"
   }
 }

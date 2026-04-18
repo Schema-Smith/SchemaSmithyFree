@@ -52,5 +52,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/person.countryregion.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "countryregioncode"
+  }
 }

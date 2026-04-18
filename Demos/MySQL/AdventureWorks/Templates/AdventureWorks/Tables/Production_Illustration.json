@@ -46,5 +46,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 8
+  "AutoIncrementValue": 8,
+  "DataDelivery": {
+    "ContentFile": "data/Production_Illustration.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`IllustrationID`"
+  }
 }

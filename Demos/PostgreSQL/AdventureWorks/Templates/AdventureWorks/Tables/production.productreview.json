@@ -118,5 +118,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/production.productreview.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "productreviewid"
+  }
 }

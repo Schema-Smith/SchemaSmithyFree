@@ -85,5 +85,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/sales.specialofferproduct.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "specialofferid,productid"
+  }
 }

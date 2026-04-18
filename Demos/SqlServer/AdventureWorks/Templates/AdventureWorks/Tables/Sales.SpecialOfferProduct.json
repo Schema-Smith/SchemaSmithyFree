@@ -130,5 +130,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Cross-reference table mapping products to special offer discounts."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.SpecialOfferProduct.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[SpecialOfferID],[ProductID]"
   }
 }

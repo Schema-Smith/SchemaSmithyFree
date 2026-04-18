@@ -130,5 +130,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 32522
+  "AutoIncrementValue": 32522,
+  "DataDelivery": {
+    "ContentFile": "data/Person_Address.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`AddressID`"
+  }
 }

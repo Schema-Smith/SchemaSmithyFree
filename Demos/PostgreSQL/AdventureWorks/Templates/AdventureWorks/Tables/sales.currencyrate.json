@@ -112,5 +112,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/sales.currencyrate.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "currencyrateid"
+  }
 }

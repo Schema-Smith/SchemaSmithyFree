@@ -96,5 +96,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Cross-reference table mapping sales orders to sales reason codes."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.SalesOrderHeaderSalesReason.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[SalesOrderID],[SalesReasonID]"
   }
 }

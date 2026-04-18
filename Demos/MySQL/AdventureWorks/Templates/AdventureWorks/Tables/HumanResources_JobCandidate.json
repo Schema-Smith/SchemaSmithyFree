@@ -71,5 +71,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 14
+  "AutoIncrementValue": 14,
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources_JobCandidate.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`JobCandidateID`"
+  }
 }

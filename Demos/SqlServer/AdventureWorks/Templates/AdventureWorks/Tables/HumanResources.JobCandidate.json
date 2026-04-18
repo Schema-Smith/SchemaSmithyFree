@@ -115,5 +115,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Résumés submitted to Human Resources by job applicants."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources.JobCandidate.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[JobCandidateID]"
   }
 }

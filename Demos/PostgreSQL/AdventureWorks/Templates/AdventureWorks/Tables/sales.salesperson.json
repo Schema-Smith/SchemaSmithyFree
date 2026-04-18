@@ -162,5 +162,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/sales.salesperson.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "businessentityid"
+  }
 }

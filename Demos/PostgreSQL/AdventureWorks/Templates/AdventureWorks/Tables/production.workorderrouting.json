@@ -186,5 +186,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/production.workorderrouting.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "workorderid,productid,operationsequence"
+  }
 }

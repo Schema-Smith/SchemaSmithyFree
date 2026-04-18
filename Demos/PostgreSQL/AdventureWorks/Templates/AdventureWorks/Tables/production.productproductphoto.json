@@ -73,5 +73,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/production.productproductphoto.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "productid,productphotoid"
+  }
 }

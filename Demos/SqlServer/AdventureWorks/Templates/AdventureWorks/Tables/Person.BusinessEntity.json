@@ -80,5 +80,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Source of the ID that connects vendors, customers, and employees with address and contact information."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Person.BusinessEntity.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID]"
   }
 }

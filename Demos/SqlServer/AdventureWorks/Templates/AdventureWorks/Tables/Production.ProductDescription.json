@@ -94,5 +94,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Product descriptions in several languages."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.ProductDescription.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductDescriptionID]"
   }
 }

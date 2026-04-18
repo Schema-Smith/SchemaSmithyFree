@@ -293,5 +293,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Human beings involved with AdventureWorks: employees, customer contacts, and vendor contacts."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Person.Person.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID]"
   }
 }

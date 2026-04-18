@@ -207,5 +207,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Sale discounts lookup table."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.SpecialOffer.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[SpecialOfferID]"
   }
 }

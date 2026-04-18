@@ -174,5 +174,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Transactions for previous years."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.TransactionHistoryArchive.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[TransactionID]"
   }
 }

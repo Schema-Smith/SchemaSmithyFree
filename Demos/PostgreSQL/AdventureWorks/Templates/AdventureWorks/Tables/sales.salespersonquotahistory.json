@@ -89,5 +89,10 @@
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/sales.salespersonquotahistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "businessentityid,quotadate"
+  }
 }

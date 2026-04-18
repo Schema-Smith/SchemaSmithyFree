@@ -72,5 +72,10 @@
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
   "FullTextIndexes": [],
-  "AutoIncrementValue": 5
+  "AutoIncrementValue": 5,
+  "DataDelivery": {
+    "ContentFile": "data/Production_ProductCategory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ProductCategoryID`"
+  }
 }

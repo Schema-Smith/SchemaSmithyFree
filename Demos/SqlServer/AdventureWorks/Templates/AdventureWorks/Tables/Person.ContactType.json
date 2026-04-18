@@ -79,5 +79,10 @@
   "Statistics": [],
   "ExtendedProperties": {
     "MS_Description": "Lookup table containing the types of business entity contacts."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Person.ContactType.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ContactTypeID]"
   }
 }
