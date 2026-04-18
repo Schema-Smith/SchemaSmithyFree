@@ -232,28 +232,30 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
-    public void ValidateDeleteCascade_EmptyTableList_ReturnsEmpty()
+    public void ValidateDeleteCascade_MySql_EmptyTableList_ReturnsEmpty()
     {
-        var errors = DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "testdb", new List<string>());
+        var errors = DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "MySQL", "testdb",
+            new List<(string, string)>());
 
         Assert.That(errors, Is.Empty);
         _mockCommand.DidNotReceive().ExecuteReader();
     }
 
     [Test]
-    public void ValidateDeleteCascade_NoCascadeFKs_ReturnsEmpty()
+    public void ValidateDeleteCascade_MySql_NoCascadeFKs_ReturnsEmpty()
     {
         var mockReader = Substitute.For<IDataReader>();
         mockReader.Read().Returns(false);
         _mockCommand.ExecuteReader().Returns(mockReader);
 
-        var errors = DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "testdb", new List<string> { "Users" });
+        var errors = DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "MySQL", "testdb",
+            new List<(string, string)> { ("testdb", "Users") });
 
         Assert.That(errors, Is.Empty);
     }
 
     [Test]
-    public void ValidateDeleteCascade_CascadeFKFound_ReturnsError()
+    public void ValidateDeleteCascade_MySql_CascadeFKFound_ReturnsError()
     {
         var mockReader = Substitute.For<IDataReader>();
         mockReader.Read().Returns(true, false);
@@ -261,50 +263,152 @@ public class DataDeliveryProcessorTests
         mockReader.GetString(1).Returns("Orders");
         _mockCommand.ExecuteReader().Returns(mockReader);
 
-        var errors = DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "testdb", new List<string> { "Users" });
+        var errors = DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "MySQL", "testdb",
+            new List<(string, string)> { ("testdb", "Users") });
 
         Assert.That(errors, Has.Count.EqualTo(1));
-        Assert.That(errors[0], Does.Contain("Users"));
-        Assert.That(errors[0], Does.Contain("FK_Orders_Users"));
-        Assert.That(errors[0], Does.Contain("Orders"));
+        Assert.That(errors[0], Does.Contain("`Users`"));
+        Assert.That(errors[0], Does.Contain("`FK_Orders_Users`"));
+        Assert.That(errors[0], Does.Contain("`Orders`"));
         Assert.That(errors[0], Does.Contain("CASCADE"));
     }
 
     [Test]
-    public void ValidateDeleteCascade_DatabaseNameWithBackticks_Trimmed()
+    public void ValidateDeleteCascade_MySql_UsesBinaryCaseSensitiveComparison()
     {
         var mockReader = Substitute.For<IDataReader>();
         mockReader.Read().Returns(false);
         _mockCommand.ExecuteReader().Returns(mockReader);
 
-        DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "`mydb`", new List<string> { "Users" });
+        DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "MySQL", "testdb",
+            new List<(string, string)> { ("testdb", "Users") });
+
+        Assert.That(_mockCommand.CommandText, Does.Contain("BINARY"));
+        Assert.That(_mockCommand.CommandText, Does.Contain("REFERENCED_TABLE_NAME"));
+    }
+
+    [Test]
+    public void ValidateDeleteCascade_MySql_DatabaseNameWithBackticks_Trimmed()
+    {
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(false);
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "MySQL", "`mydb`",
+            new List<(string, string)> { ("`mydb`", "Users") });
 
         Assert.That(_mockCommand.CommandText, Does.Contain("'mydb'"));
         Assert.That(_mockCommand.CommandText, Does.Not.Contain("`mydb`"));
     }
 
     [Test]
-    public void ValidateDeleteCascade_TableNameWithQuote_IsEscaped()
+    public void ValidateDeleteCascade_MySql_TableNameWithQuote_IsEscaped()
     {
         var mockReader = Substitute.For<IDataReader>();
         mockReader.Read().Returns(false);
         _mockCommand.ExecuteReader().Returns(mockReader);
 
-        DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "testdb", new List<string> { "O'Brien" });
+        DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "MySQL", "testdb",
+            new List<(string, string)> { ("testdb", "O'Brien") });
 
         Assert.That(_mockCommand.CommandText, Does.Contain("O''Brien"));
     }
 
     [Test]
-    public void ValidateDeleteCascade_MultipleTables_QueriesEachOne()
+    public void ValidateDeleteCascade_MySql_MultipleTables_QueriesEachOne()
     {
         var mockReader = Substitute.For<IDataReader>();
         mockReader.Read().Returns(false);
         _mockCommand.ExecuteReader().Returns(mockReader);
 
-        DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "testdb", new List<string> { "Users", "Orders" });
+        DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "MySQL", "testdb",
+            new List<(string, string)> { ("testdb", "Users"), ("testdb", "Orders") });
 
         _mockCommand.Received(2).ExecuteReader();
+    }
+
+    [Test]
+    public void ValidateDeleteCascade_SqlServer_UsesStandardJoinQuery()
+    {
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(false);
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "SqlServer", "testdb",
+            new List<(string, string)> { ("dbo", "Users") });
+
+        Assert.That(_mockCommand.CommandText, Does.Contain("INFORMATION_SCHEMA.TABLE_CONSTRAINTS"));
+        Assert.That(_mockCommand.CommandText, Does.Contain("'dbo'"));
+        Assert.That(_mockCommand.CommandText, Does.Contain("'Users'"));
+        Assert.That(_mockCommand.CommandText, Does.Not.Contain("BINARY"));
+        Assert.That(_mockCommand.CommandText, Does.Not.Contain("REFERENCED_TABLE_NAME"));
+    }
+
+    [Test]
+    public void ValidateDeleteCascade_SqlServer_CascadeFKFound_ErrorUsesBracketQuoting()
+    {
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(true, false);
+        mockReader.GetString(0).Returns("FK_Orders_Users");
+        mockReader.GetString(1).Returns("Orders");
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        var errors = DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "SqlServer", "testdb",
+            new List<(string, string)> { ("dbo", "Users") });
+
+        Assert.That(errors, Has.Count.EqualTo(1));
+        Assert.That(errors[0], Does.Contain("[dbo].[Users]"));
+        Assert.That(errors[0], Does.Contain("[FK_Orders_Users]"));
+        Assert.That(errors[0], Does.Contain("[Orders]"));
+        Assert.That(errors[0], Does.Contain("CASCADE"));
+    }
+
+    [Test]
+    public void ValidateDeleteCascade_SqlServer_SchemaWithQuote_IsEscaped()
+    {
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(false);
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "SqlServer", "testdb",
+            new List<(string, string)> { ("s'chema", "Users") });
+
+        Assert.That(_mockCommand.CommandText, Does.Contain("s''chema"));
+    }
+
+    [Test]
+    public void ValidateDeleteCascade_PostgreSql_UsesStandardJoinQuery()
+    {
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(false);
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "PostgreSQL", "testdb",
+            new List<(string, string)> { ("public", "Users") });
+
+        Assert.That(_mockCommand.CommandText, Does.Contain("INFORMATION_SCHEMA.TABLE_CONSTRAINTS"));
+        Assert.That(_mockCommand.CommandText, Does.Contain("'public'"));
+        Assert.That(_mockCommand.CommandText, Does.Contain("'Users'"));
+        Assert.That(_mockCommand.CommandText, Does.Not.Contain("BINARY"));
+    }
+
+    [Test]
+    public void ValidateDeleteCascade_PostgreSql_CascadeFKFound_ErrorUsesDoubleQuoteQuoting()
+    {
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(true, false);
+        mockReader.GetString(0).Returns("FK_Orders_Users");
+        mockReader.GetString(1).Returns("Orders");
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        var errors = DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "PostgreSQL", "testdb",
+            new List<(string, string)> { ("public", "Users") });
+
+        Assert.That(errors, Has.Count.EqualTo(1));
+        Assert.That(errors[0], Does.Contain("\"public\".\"Users\""));
+        Assert.That(errors[0], Does.Contain("\"FK_Orders_Users\""));
+        Assert.That(errors[0], Does.Contain("\"Orders\""));
+        Assert.That(errors[0], Does.Contain("CASCADE"));
     }
 
     [Test]
@@ -330,6 +434,84 @@ public class DataDeliveryProcessorTests
 
         _mockCommand.Received().ExecuteReader();
         Assert.That(_executedScripts, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void DeliverTables_SqlServerPlatform_WithDeleteMergeType_ValidatesCascade()
+    {
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(false);
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+            }
+        };
+        var context = MakeContext(tables);
+        context.Platform = "SqlServer";
+
+        processor.DeliverTables(context);
+
+        _mockCommand.Received().ExecuteReader();
+        Assert.That(_mockCommand.CommandText, Does.Contain("INFORMATION_SCHEMA.TABLE_CONSTRAINTS"));
+        Assert.That(_executedScripts, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void DeliverTables_PostgreSqlPlatform_WithDeleteMergeType_ValidatesCascade()
+    {
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(false);
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "public",
+                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+            }
+        };
+        var context = MakeContext(tables);
+        context.Platform = "PostgreSQL";
+
+        processor.DeliverTables(context);
+
+        _mockCommand.Received().ExecuteReader();
+        Assert.That(_mockCommand.CommandText, Does.Contain("INFORMATION_SCHEMA.TABLE_CONSTRAINTS"));
+        Assert.That(_executedScripts, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void DeliverTables_SqlServerPlatform_CascadeFKDetected_AbortsWithError()
+    {
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(true, false);
+        mockReader.GetString(0).Returns("FK_Orders_Users");
+        mockReader.GetString(1).Returns("Orders");
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+            }
+        };
+        var context = MakeContext(tables);
+        context.Platform = "SqlServer";
+
+        Assert.Throws<System.InvalidOperationException>(() => processor.DeliverTables(context));
+        Assert.That(_executedScripts, Is.Empty, "Delivery must abort before any script runs");
+        Assert.That(_logs, Has.Some.Contains("CASCADE"));
     }
 
     [Test]

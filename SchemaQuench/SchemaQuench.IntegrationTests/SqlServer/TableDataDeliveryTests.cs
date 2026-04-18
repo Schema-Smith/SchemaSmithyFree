@@ -23,11 +23,6 @@ namespace SchemaQuench.IntegrationTests.SqlServer;
 /// DatabaseQuench for multi-table scenarios (FK ordering, circular FKs,
 /// error-continue semantics). Uses dynamically created test databases via FixtureSetup.
 /// </summary>
-/// <remarks>
-/// MySQL's DataDeliveryProcessor.ValidateDeleteCascade pre-flight check is not implemented
-/// for SQL Server, so the "FailsFastOnReplaceCascade" scenario from the MySQL suite is
-/// omitted here (12 tests rather than 13).
-/// </remarks>
 [Category("SqlServer")]
 [TestFixture]
 [Category("Integration")]
@@ -692,6 +687,94 @@ public class TableDataDeliveryTests
                 command.ExecuteNonQuery();
                 command.CommandText = $"DROP TABLE IF EXISTS [{SchemaName}].[{storeTable}]";
                 command.ExecuteNonQuery();
+
+                FactoryContainer.Register<IConfigurationRoot>(savedConfig);
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+                if (Directory.Exists(checkpointDir)) Directory.Delete(checkpointDir, true);
+            }
+        }
+    }
+
+    [Test]
+    public void DeliverTableData_ViaQuench_FailsFastOnReplaceCascade()
+    {
+        // A table using MergeType=Insert/Update/Delete that is referenced by an ON DELETE CASCADE FK
+        // should fail pre-flight validation before any data is delivered.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            using var command = _connection.CreateCommand();
+            var parentTable = $"_test_rparent_{Guid.NewGuid():N}".Substring(0, 30);
+            var childTable = $"_test_rchild_{Guid.NewGuid():N}".Substring(0, 30);
+            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Combine(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
+
+            try
+            {
+                command.CommandText = $@"
+                    CREATE TABLE [{SchemaName}].[{parentTable}] (
+                        [id] INT PRIMARY KEY,
+                        [name] VARCHAR(100) NOT NULL
+                    )";
+                command.ExecuteNonQuery();
+
+                command.CommandText = $@"
+                    CREATE TABLE [{SchemaName}].[{childTable}] (
+                        [id] INT PRIMARY KEY,
+                        [parent_id] INT NOT NULL,
+                        CONSTRAINT [fk_cascade_{childTable}] FOREIGN KEY ([parent_id])
+                            REFERENCES [{SchemaName}].[{parentTable}] ([id]) ON DELETE CASCADE
+                    )";
+                command.ExecuteNonQuery();
+
+                command.CommandText = $"INSERT INTO [{SchemaName}].[{parentTable}] VALUES (1, 'Existing')";
+                command.ExecuteNonQuery();
+                command.CommandText = $"INSERT INTO [{SchemaName}].[{childTable}] VALUES (10, 1)";
+                command.ExecuteNonQuery();
+
+                Directory.CreateDirectory(tempDir);
+                File.WriteAllText(Path.Combine(tempDir, "parent.tabledata"),
+                    @"[{""id"":1,""name"":""Updated""}]");
+                File.WriteAllText(Path.Combine(tempDir, "Template.json"), "{}");
+
+                var template = new Template
+                {
+                    Name = "CascadeTest",
+                    FilePath = Path.Combine(tempDir, "Template.json")
+                };
+
+                template.Tables.Add(new SqlServerTable
+                {
+                    Name = parentTable,
+                    Schema = SchemaName,
+                    DataDelivery = new DataDelivery
+                    {
+                        MergeType = "Insert/Update/Delete",
+                        ContentFile = "parent.tabledata"
+                    }
+                });
+
+                RegisterTargetConfig();
+
+                var product = new Product { Name = "TestProduct", Platform = Platform.SqlServer };
+                var quench = new DatabaseQuench(FactoryContainer.Resolve<IConfigurationRoot>()["Target:Server"], product, template, _testDb,
+                    suppressKindling: true, whatIfOnly: "false", runScriptsTwice: false,
+                    dropRemovedTables: "0", dropUnknownIndexes: false, updateTables: false,
+                    deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
+                quench.Execute();
+
+                Assert.That(quench.QuenchSuccessful, Is.False, "Should fail due to Insert/Update/Delete+CASCADE");
+
+                // Child data must NOT have been cascade-deleted — pre-flight check prevented delivery
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{childTable}]";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1));
+            }
+            finally
+            {
+                command.CommandText = $"IF OBJECT_ID('[{SchemaName}].[{childTable}]', 'U') IS NOT NULL DROP TABLE [{SchemaName}].[{childTable}]";
+                try { command.ExecuteNonQuery(); } catch { }
+                command.CommandText = $"IF OBJECT_ID('[{SchemaName}].[{parentTable}]', 'U') IS NOT NULL DROP TABLE [{SchemaName}].[{parentTable}]";
+                try { command.ExecuteNonQuery(); } catch { }
 
                 FactoryContainer.Register<IConfigurationRoot>(savedConfig);
                 if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
