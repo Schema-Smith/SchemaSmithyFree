@@ -13,22 +13,19 @@ For full release details and download links, see [GitHub Releases](https://githu
 - **ShouldApplyExpression** — Template-level conditional deployment using SQL expressions evaluated at runtime
 - **Secondary servers** — Deploy the same product to additional server instances in a single run
 - **Custom script folders** — User-defined script execution slots beyond the built-in folder structure
-- **Extensions carrier** — User-extensible `Extensions` (JToken) on all table-level domain classes (Table, Column, Index, ForeignKey, etc.); preserved during SchemaTongs re-extraction
-- **Deployment summary reporting** — Post-deployment summary of all actions taken
+- **Extensions carrier** — User-extensible `Extensions` (JToken) on every domain object (Table, Column, Index, ForeignKey, IndexedView, MaterializedView, etc.). Because Extensions serialize alongside core properties, any custom metadata you attach is queryable from your scripts through the `{{TableSchema}}`, `{{IndexedViewSchema}}`, and `{{MaterializedViewSchema}}` auto-tokens — or through per-object tokens like `<*SpecificTable*>`. Opens the door to replication metadata, data dictionaries, environment-driven behavior, custom validation rules, anything your deployment needs. Preserved during SchemaTongs re-extraction.
 - **Modular table quench** — Monolithic TableQuench replaced with focused procedures: MissingTableAndColumnQuench, ModifiedTableQuench, MissingIndexesAndConstraintsQuench, ForeignKeyQuench, plus ParseTableJsonIntoTempTables for shared JSON parsing
 - **IndexOnlyQuench** — Template-level `IndexOnlyTableQuenches` mode for managing indexes without modifying table structure
 - **Expanded execution slots** — 9 total (7 template + 2 product): added BetweenTablesAndKeys, AfterTablesScripts, Product Before, Product After
-- **Indexed view support** — SchemaTongs extraction, SchemaQuench diff-based deployment; index-only changes skip view rebuild
-- **GenerateIndexedViewJson** — Stored procedure for indexed view extraction
-- **IndexedViewQuench** — Stored procedure for indexed view deployment with ownership tracking
-- **MinimumVersion** — Product-level property with SqlServerVersion enum (Sql2016–Sql2025)
+- **Indexed view support (SQL Server)** — SchemaTongs extraction, SchemaQuench diff-based deployment; index-only changes skip view rebuild
+- **GenerateIndexedViewJson / IndexedViewQuench** — Stored procedures for indexed view extraction and deployment with ownership tracking
+- **Materialized view support (PostgreSQL)** — SchemaTongs extraction and SchemaQuench diff-based deployment of PostgreSQL materialized views with full index management; index-only changes skip the materialized view rebuild
+- **GenerateMaterializedViewJson / MaterializedViewQuench / MissingMaterializedViewIndexesQuench** — Stored procedures for materialized view extraction and deployment, with ownership tracking and validation/fixup helpers
 - **Per-table and per-index UpdateFillFactor** — Granular fill factor control at table and index level (OR'd with template setting)
 - **ConnectionProperties** — Config section for arbitrary connection string properties, plus `Port` field and `--ConnectionString` CLI override
 - **DataTongs: Auto PK detection** — KeyColumns is now optional; auto-detected from primary key or best unique index when blank
 - **DataTongs: Geometry and HierarchyID support** — Added handling for GEOMETRY, HIERARCHYID data types; sql_variant/rowversion/timestamp excluded
-- **DataTongs: FK-ordered merge scripts** — Automatic foreign key dependency ordering for data deployment across all platforms
 - **DataTongs: MySQL tokenization** — Full token resolution support for MySQL merge scripts
-- **PrintWithNoWait** — Stored procedure for real-time progress logging using RAISERROR WITH NOWAIT
 - **WhatIf improvements** — Detailed per-script logging across all phases ("Would APPLY"/"Would SKIP (previously quenched)")
 - **RunScriptsTwice** — SchemaQuench setting that runs object scripts twice to verify idempotency; a CI/testing tool for catching `[ALWAYS]` script bugs before production
 - **SchemaTongs: Subfolder preservation** — ExtractionFileIndex per-folder tracking; scripts written back to same subfolder on re-extraction
@@ -36,9 +33,9 @@ For full release details and download links, see [GitHub Releases](https://githu
 - **SchemaTongs: Script validation** — Post-extraction syntax validation with `.sqlerror` files for invalid SQL
 - **SchemaTongs: CheckConstraintStyle** — Product-level switch for ColumnLevel or TableLevel constraint extraction
 - **SchemaTongs: --WriteSchemasOnly** — Regenerate JSON schema files from C# types without a database connection
-- **{{TableMetadata}} auto-token** — Automatically exposes table schema JSON to scripts at deployment time
-- **{{IndexedViewMetadata}} auto-token** — Same auto-token for indexed views
-- **Simple token support** — `{{TokenName}}` resolution in ALL script folders; tokens defined in Product.json and Template.json with environment variable overrides
+- **Simple tokens in every script** — `{{TokenName}}` resolution extended to every script folder — Before/After, object scripts, migrations, table data — not just the select few it used to work in. Tokens are defined in Product.json and Template.json with environment-variable overrides, so one package parameterizes cleanly across dev, test, and prod.
+- **Advanced token tags** — Token values can now carry `<*Query*>` (result of an inline SQL query), `<*QueryFile*>` (query loaded from a file), `<*File*>` / `<*BinaryFile*>` (file contents as text or hex), and `<*SpecificTable*>` / `<*SpecificIndexedView*>` / `<*SpecificMaterializedView*>` (single-object JSON). Resolvable anywhere simple tokens are — object scripts, migrations, validation, everywhere.
+- **`{{TableSchema}}` / `{{IndexedViewSchema}}` / `{{MaterializedViewSchema}}` auto-tokens** — The template's full table, indexed view, and materialized view definitions are exposed as JSON tokens at deployment time. Combined with the Extensions carrier, scripts can query any core OR custom property through standard JSON operations — no hand-authored metadata pipeline required.
 - **Parallel execution** — Parallel template processing across all tools
 - **Parallel file token resolution** — Token replacement and script loading parallelized within folders
 - **VerboseLogging setting** — Controls whether SQL informational messages appear in deployment logs; when disabled (default), noisy SQL info messages are suppressed
@@ -55,7 +52,6 @@ For full release details and download links, see [GitHub Releases](https://githu
 - **Copyright header CI** — Validates headers on all .cs and .sql files on every push
 - **TreatWarningsAsErrors** — Enabled globally in Directory.Build.props
 - **Multi-platform CI** — Parallel SQL Server, PostgreSQL, and MySQL integration test jobs with service containers
-- **SchemaSmith.Schema NuGet package** — Domain models published as a NuGet package for extensibility
 - **Checkpoint/resume for SchemaQuench** — `--ResumeQuench` and `--CheckpointDirectory` skip already-completed steps and migration scripts after a failed run; checkpoints cleaned up automatically on success
 - **FK-aware data delivery** — Declarative `DataDelivery` block on table JSON drives automatic foreign-key dependency ordering; two-pass delivery handles nullable FK columns without hand-authored merge scripts
 - **DataTongs `--ConfigureDataDelivery`** — Writes `DataDelivery` settings (ContentFile, MergeType, MatchColumns, MergeFilter, and trigger/rule flags) into table JSON files after extraction so the declarative pipeline can take over
@@ -79,7 +75,6 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ### Removed
 
-- **SchemaHammer desktop UI** — Removed from Community; available separately as a Pro add-on
 - **WiX MSI installer** — Setup/ and SetupAll/ projects removed; distribution via self-contained executables, ZIPs, Chocolatey, and Docker
 - **.NET Framework 4.8.1 builds** — All net481 targets and Chocolatey netfx481 packages removed
 - **SMO dependency** — Microsoft.SqlServer.SqlManagementObjects NuGet package removed
@@ -97,11 +92,8 @@ For full release details and download links, see [GitHub Releases](https://githu
 - **DataTongs empty tables** — Skip empty tables instead of generating invalid MERGE scripts
 - **Identity removal** — Data-preserving column swap now supports removing identity from a column
 - **MustSwapColumn** — Aligned column swap detection across all platforms
-- **SchemaGenerator StackOverflow** — Fixed stack overflow when mapping JToken Extensions property
 - **CommandLineParser null safety** — Added null-conditional in `ValueOfSwitch` to prevent NullReferenceException
 - **Product script folder names** — Aligned folder naming convention
-- **DataTongs triple-brace token format** — Fixed to use standard double-brace format across SQL Server and PostgreSQL
-- **DataTongs MySQL tokenization** — Added missing MySQL token resolution support
 - **Single quote escaping** — Proper escaping for `<*File*>` token values inside SQL string literals
 - **Backslash escaping for MySQL** — Platform-specific escaping (SQL Server/PostgreSQL don't need it)
 - **TrustServerCertificate default** — Removed from platform-agnostic defaults (broke MySQL connections)
