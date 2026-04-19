@@ -165,6 +165,12 @@ KindleForge
     [Test]
     public void ShouldPreserveCheckpointOnFailure()
     {
+        // Verifies cleanup is skipped when a quench fails. Pre-writes a representative
+        // checkpoint file, runs a deliberately-failing quench, and confirms the pre-existing
+        // file survives. Required because the real failing run (BeforeTemplateScriptError)
+        // fails before any successful step, so nothing is written to the checkpoint during
+        // the run itself — the only way to observe "cleanup did not run" is to seed disk
+        // state ahead of time and check that it's still there afterward.
         lock (FactoryContainer.SharedLockObject)
         {
             SetupSharedMocks();
@@ -172,10 +178,16 @@ KindleForge
             FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", "BeforeTemplateScriptError");
             FactoryContainer.Resolve<IConfigurationRoot>()["CheckpointDirectory"] = _checkpointDir;
 
+            // Seed a checkpoint file that should not be touched by the failing run's cleanup path.
+            var seededCheckpoint = Path.Combine(_checkpointDir, "BeforeTemplateScriptError.product.checkpoint");
+            const string seededContent = "# Seeded by test to verify cleanup is skipped on failure\n[Completed Templates]\nTemplate:Seeded\n";
+            Directory.CreateDirectory(_checkpointDir);
+            File.WriteAllText(seededCheckpoint, seededContent);
+
             RunSchemaQuench();
 
-            var checkpointFiles = Directory.GetFiles(_checkpointDir, "*.checkpoint");
-            Assert.That(checkpointFiles.Length, Is.GreaterThan(0), "Checkpoint files should be preserved after failure");
+            Assert.That(File.Exists(seededCheckpoint), Is.True, "Pre-existing checkpoint must not be deleted after a failed run");
+            Assert.That(File.ReadAllText(seededCheckpoint), Is.EqualTo(seededContent), "Pre-existing checkpoint content must not be altered after a failed run");
 
             _environment.Received(1).Exit(2);
 

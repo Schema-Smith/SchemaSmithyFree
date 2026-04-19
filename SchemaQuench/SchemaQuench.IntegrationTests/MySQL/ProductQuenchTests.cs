@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using log4net;
 using Microsoft.Extensions.Configuration;
 
@@ -34,25 +35,48 @@ public class ProductQuenchTests
 {
     private string _testFixturePath = null!;
     private string _testDb = null!;
+    private IConfigurationRoot _savedConfig;
+    private bool _lockTaken;
 
+    // Each test in this fixture temporarily Registers its own in-memory IConfigurationRoot
+    // to drive Product.Load(). To avoid racing with other fixtures (notably ProductUpdateTests
+    // below, which relies on the FixtureSetup-provided config being stable), the entire test
+    // body runs while holding FactoryContainer.SharedLockObject. Monitor.Enter in SetUp and
+    // Monitor.Exit in TearDown brackets the whole Test method. Save/restore preserves the
+    // FixtureSetup-provided config for the next fixture.
     [SetUp]
     public void SetUp()
     {
+        _lockTaken = false;
+        Monitor.Enter(FactoryContainer.SharedLockObject, ref _lockTaken);
+
+        _savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
+
         _testDb = FixtureSetup.MainDb;
 
-        // Get the path to test fixtures relative to the test assembly
         var assemblyLocation = Path.GetDirectoryName(typeof(ProductQuenchTests).Assembly.Location);
         _testFixturePath = Path.Combine(assemblyLocation!, "TestFixtures", "TestProduct");
-
-        // Clear any cached configuration
-        FactoryContainer.Register<IConfigurationRoot>(null);
     }
 
     [TearDown]
     public void TearDown()
     {
-        // Clean up configuration
-        FactoryContainer.Register<IConfigurationRoot>(null);
+        try
+        {
+            if (_savedConfig != null)
+                FactoryContainer.Register(_savedConfig);
+            else
+                FactoryContainer.Unregister<IConfigurationRoot>();
+            _savedConfig = null;
+        }
+        finally
+        {
+            if (_lockTaken)
+            {
+                Monitor.Exit(FactoryContainer.SharedLockObject);
+                _lockTaken = false;
+            }
+        }
     }
 
     [Test]

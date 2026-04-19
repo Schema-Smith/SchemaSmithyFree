@@ -234,7 +234,14 @@ public class ProductQuench
                     _progressLog.Info($"Skipping template '{template.Name}' (previously completed per checkpoint)");
                     continue;
                 }
-                _checkpointing.Track(ProductScope, stepName, () => QuenchTemplate(template, suppressKindling));
+                // Explicit check-then-mark rather than Track(): QuenchTemplate handles its own
+                // failure via LogBackup.BackupLogsAndExit(2), which terminates the process in
+                // production but is a mocked no-op under tests. Using Track() would interpret the
+                // non-throwing return as success and record the template as complete even when
+                // _updateFailed is set, leading to the template being skipped on the next run.
+                QuenchTemplate(template, suppressKindling);
+                if (!_updateFailed)
+                    _checkpointing.MarkStepCompleted(ProductScope, stepName);
             }
 
             QuenchProductScriptsWithCheckpoint(_product.AfterFolders, "After Product", false);
