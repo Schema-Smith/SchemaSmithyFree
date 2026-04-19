@@ -2,7 +2,11 @@
 
 using NUnit.Framework;
 
-// Limit parallel test execution to avoid exceeding MySQL max_connections (151)
-// Each test opens a connection, and with many fixtures running in parallel,
-// the connection count can easily exceed the server limit.
-[assembly: LevelOfParallelism(2)]
+// Serial execution. Parallelism is not the cause of the ProductQuench checkpoint-on-failed-
+// template bug (fixed via explicit HasCompleted + MarkStepCompleted in ProductQuench.cs),
+// but LevelOfParallelism(2) exposes a separate class of flakes in the MySQL
+// `[Parallelizable(ParallelScope.All)]` TableQuench_* fixtures — transient deadlock / setup
+// races that have nothing to do with the shipped product. Serial execution adds about a
+// minute per IT run and trades throughput for CI stability. Revisit if/when the individual
+// fixture-level parallel-scope races are audited and locked.
+[assembly: LevelOfParallelism(1)]

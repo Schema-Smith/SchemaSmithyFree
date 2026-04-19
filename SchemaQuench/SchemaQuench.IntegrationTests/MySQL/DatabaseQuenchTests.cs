@@ -4,12 +4,10 @@ using System.Data;
 using Schema.DataAccess;
 using System;
 using System.IO;
-using Microsoft.Extensions.Configuration;
 
 using NUnit.Framework;
 using Schema.IntegrationTests.MySQL;
 using Schema.Domain;
-using Schema.Isolators;
 using Schema.Utility;
 
 namespace SchemaQuench.IntegrationTests.MySQL;
@@ -36,9 +34,6 @@ public class DatabaseQuenchTests
         // Get the path to test fixtures relative to the test assembly
         var assemblyLocation = Path.GetDirectoryName(typeof(DatabaseQuenchTests).Assembly.Location);
         _testFixturePath = Path.Combine(assemblyLocation!, "TestFixtures", "TestProduct");
-
-        // Clear any cached configuration
-        FactoryContainer.Register<IConfigurationRoot>(null);
     }
 
     [TearDown]
@@ -46,7 +41,6 @@ public class DatabaseQuenchTests
     {
         _connection?.Close();
         _connection?.Dispose();
-        FactoryContainer.Register<IConfigurationRoot>(null);
     }
 
     [Test]
