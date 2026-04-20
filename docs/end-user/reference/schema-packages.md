@@ -539,6 +539,8 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 
 ## Foreign Keys
 
+Referential integrity lives in the table JSON alongside columns and indexes, not in separate migration scripts. The `ForeignKeys` array captures each relationship: the local columns, the related table they reference, and the optional cascade actions for deletes and updates. SchemaQuench reads the array, diffs it against the live database, and adds, drops, or recreates constraints to match.
+
 | Property | Type | Default | Description |
 |---|---|---|---|
 | `Name` | string | | Constraint name. |
