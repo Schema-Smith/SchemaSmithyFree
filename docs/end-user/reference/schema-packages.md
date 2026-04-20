@@ -557,6 +557,8 @@ For composite foreign keys, list all columns in both `Columns` and `RelatedColum
 
 ## DataDelivery
 
+Lookup tables, configuration rows, the reference data every environment needs to run -- that data is a schema-management problem as much as the tables themselves. The `DataDelivery` block declares how those rows land in the target database, alongside the table definition, so reference data travels with the schema it depends on.
+
 Declare how a table's data gets merged into the target database and let SchemaQuench handle the rest. Add a `DataDelivery` block to the table JSON, point it at a `.tabledata` file, tell it what a "match" looks like, and SchemaQuench delivers the data in foreign-key order -- no hand-rolled merge scripts.
 
 Tables without a `DataDelivery` block are left alone. Tables that declare one are picked up automatically during the data delivery step -- see [SchemaQuench -- Table Data Delivery](schemaquench.md#table-data-delivery) for the runtime behavior.
