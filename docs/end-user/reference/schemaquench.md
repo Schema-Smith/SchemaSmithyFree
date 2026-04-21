@@ -286,7 +286,6 @@ The four flags are a *profile*, not a menu -- mixing partial-package intent with
 
 ### Patterns that pair well with data fixes
 
-- **[ShouldApplyExpression](#shouldapplyexpression-and-conditional-deployment)** -- When a datafix should only apply to databases in a specific state (only production, only customers on a certain tier, only databases with a particular feature flag), use `ShouldApplyExpression` on the migration script to let SchemaQuench evaluate the condition per target and skip where it's false.
 - **[Checkpoint and resume](#checkpoint-and-resume)** -- When a datafix touches a large dataset and may need to be retried after a connection drop or server restart, enable resume so the fix picks up where it left off instead of re-running completed work.
 - **Slot choice** -- Even in a partial package, the migration script's slot still determines *when* in the deployment sequence it runs relative to the (skipped) table-quench phase. `BeforeTables`, `AfterTablesScripts`, and `After` are the usual homes for data fixes. The slot is a namespacing and timing signal; the fact that a data fix typically has no tables to run *between* doesn't change the ordering contract.
 
