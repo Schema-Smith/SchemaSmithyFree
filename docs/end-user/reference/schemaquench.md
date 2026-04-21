@@ -228,11 +228,7 @@ These files can be reviewed to understand exactly what structural changes were (
 
 ### When to use WhatIf
 
-| Environment | Guidance |
-|-------------|----------|
-| Development | Optional -- quench directly if you're comfortable with the changes. |
-| Staging | Recommended -- review WhatIf output to catch surprises before production-like data. |
-| Production | Non-negotiable -- always WhatIf first, read the generated SQL, then deploy in a separate run. |
+Reach for WhatIf while you're debugging a tricky deployment or while you're still building confidence with the tooling. Inspect the generated SQL, confirm the changes match intent, then run for real. Once you trust the package and the pipeline, direct quenches are the normal mode -- WhatIf isn't a required gate on every deployment.
 
 ---
 
