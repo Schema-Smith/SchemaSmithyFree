@@ -122,7 +122,7 @@ When SchemaQuench runs, the product quench executes these steps in order:
 
 1. **Log product info** -- Logs the product name, platform, template order, validation script, and any configured script tokens.
 2. **Test server connection** -- Opens a connection to the target server and runs a platform-appropriate liveness check. Aborts if the connection fails.
-3. **Validate server** -- If `Product.ValidationScript` is configured, executes it against the platform's administrative database (`master` on SQL Server, `postgres` on PostgreSQL, the connection database on MySQL). Aborts if the result is falsy.
+3. **Validate server** -- If `Product.ValidationScript` is configured, executes it against the platform's administrative database (`master` on SQL Server, `postgres` on PostgreSQL, `information_schema` on MySQL). Aborts if the result is falsy.
 4. **Validate baseline** -- If `Product.BaselineValidationScript` is configured, executes it. Aborts if the result is falsy.
 5. **Product Before scripts** -- Executes scripts from `Before Product` folder(s). On SQL Server with secondary servers, scripts run in parallel to all eligible servers.
 6. **Quench each template** -- For each template name in `Product.TemplateOrder`:
