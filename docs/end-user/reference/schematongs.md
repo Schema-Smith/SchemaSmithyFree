@@ -299,7 +299,7 @@ The preservation pass uses the component's `Name` (with quote/bracket characters
 | CheckConstraint | `Name` | Yes |
 | ExcludeConstraint | `Name` | PostgreSQL only |
 | Statistic | `Name` | PostgreSQL only |
-| FullTextIndex | `Name` | MySQL only |
+| FullTextIndex | `Name` | SQL Server, MySQL |
 | MaterializedView | root object | PostgreSQL only |
 | IndexedView | root object | SQL Server only |
 | XmlIndex | `Name` | SQL Server only |
