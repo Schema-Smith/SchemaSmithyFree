@@ -311,6 +311,8 @@ Then declare `ServerToQuench` on your product-level folders:
 
 ## Complete Folder Structure
 
+A schema package is a predictable directory tree. Every tool in the SchemaSmith toolset discovers what it needs by convention -- `Product.json` at the root, `Templates/` one level down, platform-specific script folders inside each template -- so you never have to configure paths or point a tool at individual files. Marker files and generated artifacts sit alongside the files you author, and the whole layout maps cleanly onto source control.
+
 ```
 MyProduct/
   Product.json                      Product configuration (required)
