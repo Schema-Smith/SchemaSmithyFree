@@ -236,13 +236,71 @@ These files can be reviewed to understand exactly what structural changes were (
 
 ---
 
+## Partial-Package Deployments (Data Fixes)
+
+A data fix is a deployment of a *deliberately partial* schema package -- usually a handful of migration scripts that correct a specific production issue -- rather than a full release. SchemaQuench supports this as a first-class mode through four configuration flags that flip together, called the **datafix profile**.
+
+The distinction matters because several SchemaQuench behaviors are correct for a full release and wrong for a partial package. A full release treats the package as the complete truth of what the database should look like: tables not in the package get dropped, migration tracking records with no matching script get pruned, helper infrastructure gets redeployed. A data fix does the opposite -- it runs only what's in the partial package and leaves everything else alone.
+
+### When to reach for a data fix
+
+- **Data backfills** -- Populate a new NOT NULL column's values, backfill a computed column, correct values that shipped wrong in a prior release.
+- **Compliance scrubs** -- Redact or delete data to meet a GDPR, HIPAA, or PCI deadline without waiting for the next release.
+- **Emergency indexes** -- Add an index to stop a query from timing out in production when you can't wait for the next full release cycle.
+- **Re-seeding reference tables** -- Restore a reference table that got clobbered by a bad manual change.
+- **Targeted data repairs** -- Fix a specific row, reset a stuck workflow state, correct a foreign-key orphan.
+- **Permissions-constrained deployments** -- Run data-only changes in an environment where the deployment user lacks DDL permissions.
+
+### How a data fix differs from a regular release
+
+| Dimension | Regular release | Data fix |
+|-----------|-----------------|----------|
+| Package content | Full product (tables, objects, DataDelivery, all migration scripts) | Partial (usually just migration scripts) |
+| Package semantics | Complete truth -- database reconciles to match | Surgical -- only what's in the package executes |
+| Table changes | Added, altered, dropped to match the package | No structural changes |
+| Migration tracking | Recorded and pruned to match the package | Not recorded; prior tracking preserved |
+| Infrastructure | KindleTheForge runs to sync helper procedures | Skipped -- existing infrastructure assumed correct |
+| Rerun-ability | Tracked scripts skip; `[ALWAYS]` always runs | Every script runs on every invocation |
+| Permissions needed | DDL + data | Data-only in most cases |
+| Typical cadence | Scheduled release train | On-demand, between releases |
+
+### The datafix profile
+
+```json
+{
+  "KindleTheForge": false,
+  "UpdateTables": false,
+  "DropTablesRemovedFromProduct": false,
+  "TrackRunOnceMigrations": false
+}
+```
+
+Each flag addresses a specific assumption that full-release mode makes and a data fix has to turn off:
+
+- **`KindleTheForge: false`** -- Skip redeployment of SchemaSmith's helper procedures and tracking table. The infrastructure is already in place from the most recent full release; a data fix doesn't need to touch it. Also reduces the DDL permissions the deployment user needs.
+- **`UpdateTables: false`** -- Skip the table-quench phase entirely. The partial package doesn't contain table JSON; this flag stops SchemaQuench from interpreting their absence as "drop everything." Combined with `DropTablesRemovedFromProduct: false`, it closes both paths to unintended structural changes.
+- **`DropTablesRemovedFromProduct: false`** -- Tables not in the partial package must not be dropped. A datafix package with two migration scripts and no table JSON would otherwise signal "the product has no tables" and trigger a mass drop.
+- **`TrackRunOnceMigrations: false`** -- Don't record migration script execution in `CompletedMigrationScripts`, and treat every script as if it carried `[ALWAYS]`. Data fixes often need to run more than once (the first run didn't quite land, the fix needs to be re-applied after data drift), and tracking would prevent that. This also forces `PruneObsoleteMigrationTracking` off regardless of its configured value, which protects the tracking records from prior full releases from being deleted by a partial package's pruning pass.
+
+The four flags are a *profile*, not a menu -- mixing partial-package intent with full-release reconciliation is how tracking records get corrupted or tables get dropped by mistake. Flip all four together.
+
+### Patterns that pair well with data fixes
+
+- **[ShouldApplyExpression](#shouldapplyexpression-and-conditional-deployment)** -- When a datafix should only apply to databases in a specific state (only production, only customers on a certain tier, only databases with a particular feature flag), use `ShouldApplyExpression` on the migration script to let SchemaQuench evaluate the condition per target and skip where it's false.
+- **[Checkpoint and resume](#checkpoint-and-resume)** -- When a datafix touches a large dataset and may need to be retried after a connection drop or server restart, enable resume so the fix picks up where it left off instead of re-running completed work.
+- **Slot choice** -- Even in a partial package, the migration script's slot still determines *when* in the deployment sequence it runs relative to the (skipped) table-quench phase. `BeforeTables`, `AfterTablesScripts`, and `After` are the usual homes for data fixes. The slot is a namespacing and timing signal; the fact that a data fix typically has no tables to run *between* doesn't change the ordering contract.
+
+A data fix should not carry `DataDelivery` blocks or table JSON. If your fix is "re-seed this reference table," the right shape is usually a migration script that does the seeding imperatively (or calls a stored procedure that does), not a DataDelivery block in what would then stop being a partial package.
+
+---
+
 ## KindleTheForge
 
 Before SchemaQuench can shape your database, it needs its tools in place. KindleTheForge deploys the SchemaSmith infrastructure to each target database. The infrastructure includes a per-platform set of helper functions, modular table-quench procedures, the indexed view or materialized view procedure where applicable, the reverse-engineering procedures used by SchemaTongs, and the `CompletedMigrationScripts` tracking table.
 
 KindleTheForge runs on every quench to ensure the helper procedures match the version of SchemaQuench being used. In a normal release pipeline, always leave this `true`.
 
-**When to set false -- the datafix pipeline:** When the deployment user has read/write access but no DDL modification ability, and you're running only migration scripts to fix data. Turning off KindleTheForge (along with `UpdateTables: false` and `DropTablesRemovedFromProduct: false`) reduces the scope of what executes and the permissions required. This is a deliberate permission boundary -- data fixes shouldn't make structural changes that the next full release would overwrite or conflict with.
+**When to set false:** Partial-package datafix deployments flip this off along with the rest of the datafix profile. See [Partial-Package Deployments (Data Fixes)](#partial-package-deployments-data-fixes) for the full profile and the reasoning behind each flag.
 
 ---
 
@@ -490,20 +548,9 @@ This is an **idempotency testing** tool, not a dependency resolution mechanism. 
 
 When `TrackRunOnceMigrations` is `false`, SchemaQuench treats all migration scripts as if they had the `[ALWAYS]` suffix -- no script is recorded in `CompletedMigrationScripts`, no script is skipped based on prior runs. Every migration script in every slot runs on every deployment.
 
-This is designed for **datafix and patch pipelines** where the package is deliberately partial -- it contains only the scripts needed for this specific fix, not the full release set. Tracking would prevent re-running a fix script if needed, and the partial package would cause the pruning logic to delete tracking records from prior full releases.
+This flag is the tracking half of the datafix profile -- see [Partial-Package Deployments (Data Fixes)](#partial-package-deployments-data-fixes) for when to flip it and why it pairs with the three other profile flags.
 
 When tracking is off, `PruneObsoleteMigrationTracking` is forced off regardless of its configured value.
-
-**The datafix profile:**
-
-```json
-{
-  "KindleTheForge": false,
-  "UpdateTables": false,
-  "DropTablesRemovedFromProduct": false,
-  "TrackRunOnceMigrations": false
-}
-```
 
 ---
 
@@ -511,7 +558,7 @@ When tracking is off, `PruneObsoleteMigrationTracking` is forced off regardless 
 
 When `PruneObsoleteMigrationTracking` is `true` (the default), SchemaQuench removes entries from `CompletedMigrationScripts` for scripts that no longer exist in the current package. This is correct for full release deployments where the package represents the complete truth.
 
-When `false`, existing tracking entries are left alone regardless of what scripts are in the current package. This is correct for datafix and patch deployments where the package is deliberately partial -- without this setting, a datafix package containing only two scripts would cause SchemaQuench to delete the tracking records for every other migration script from prior releases.
+When `false`, existing tracking entries are left alone regardless of what scripts are in the current package. This setting is relevant for partial-package deployments -- see [Partial-Package Deployments (Data Fixes)](#partial-package-deployments-data-fixes) for the full profile.
 
 This setting is ignored when `TrackRunOnceMigrations` is `false` (no tracking means no pruning).
 
