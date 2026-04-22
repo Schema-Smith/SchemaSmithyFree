@@ -270,7 +270,7 @@ If a key column is nullable, prefix it with `*` to generate NULL-safe comparison
 **Fix:** Use forward slashes (`/`) in configuration files. SchemaSmith normalizes paths internally, but forward slashes are valid on all platforms (Windows, macOS, Linux).
 
 ```json
-{ "Product": { "Path": "./my-product" }, "OutputPath": "./output/data" }
+{ "Product": { "Path": "./my-product" }, "ContentPath": "./my-product/data", "ScriptPath": "./my-product/Table Data" }
 ```
 
 Avoid backslashes in JSON configuration -- they require escaping (`\\`) and reduce portability.
