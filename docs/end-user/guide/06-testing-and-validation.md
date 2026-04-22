@@ -7,10 +7,10 @@ The best time to find a deployment problem is before it reaches production. A sc
 The demo included with SchemaSmith ships Docker Compose files that stand up complete environments from nothing -- database servers, databases created from scratch, and full schema deployments -- all in one command. This isn't just a convenience for trying the demo. It's a pattern you can adopt for your own projects, on any supported platform.
 
 ```bash
-docker compose -f demo/docker-compose.yml up
+cd Demos/SqlServer && ./run-demo.sh
 ```
 
-That single command does everything: starts a database server (SQL Server, PostgreSQL, or MySQL depending on the demo you're running), waits for it to be healthy, then deploys the matching schema package. When it finishes, you have a fully quenched database running locally.
+That single command does everything: starts a database server (SQL Server, PostgreSQL, or MySQL depending on which `Demos/` folder you launched), waits for it to be healthy, then deploys the matching schema package. When it finishes, you have a fully quenched database running locally. Swap `Demos/SqlServer` for `Demos/PostgreSQL` or `Demos/MySQL` to target a different engine.
 
 Here's how the compose pattern is structured:
 
