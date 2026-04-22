@@ -48,7 +48,8 @@ A complete `DataTongs.settings.json`:
       "TrustServerCertificate": "True"
     }
   },
-  "OutputPath": ".",
+  "ContentPath": "./Templates/Main/data",
+  "ScriptPath":  "./Templates/Main/Table Data",
   "Tables": [
     { "Name": "dbo.Country",  "KeyColumns": "CountryCode" },
     { "Name": "dbo.Currency", "KeyColumns": "CurrencyCode", "Filter": "IsActive = 1" }
@@ -75,11 +76,14 @@ A complete `DataTongs.settings.json`:
 
 The `--ConnectionString` switch bypasses all `Source` settings and passes the provided value directly to the platform-appropriate driver. `Source:Platform` is still required so the right script generator is used.
 
-### Output
+### Output paths
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `OutputPath` | string | `"."` | Directory where generated scripts are written. Created automatically if it doesn't exist. |
+| `ScriptPath` | string | `"."` | Directory where the generated `Populate <schema>.<table>.sql` merge scripts are written. Created automatically if it doesn't exist. |
+| `ContentPath` | string | `"."` | Directory where the sibling `.tabledata` files (raw JSON row data) are written. When `--ConfigureDataDelivery` is on, this path is also used to locate the enclosing template -- DataTongs walks upward from `ContentPath` looking for a `Template.json`. |
+
+The typical placement inside a schema package is `ScriptPath` pointing at `Templates/<Name>/Table Data` and `ContentPath` pointing at `Templates/<Name>/data`. That layout makes the script files visible to SchemaQuench's `TableData` quench slot and the `.tabledata` files reachable from each table's `DataDelivery` block.
 
 ### Tables array
 
@@ -87,15 +91,24 @@ The `--ConnectionString` switch bypasses all `Source` settings and passes the pr
 |-------|------|---------|-------------|
 | `Name` | string | _(required)_ | Table name in `schema.table` format. If no schema prefix is given, the platform default is assumed (`dbo` on SQL Server, `public` on PostgreSQL, the connection database on MySQL). |
 | `KeyColumns` | string | _(auto-detected)_ | Comma-separated column names for the row-matching key. When blank, auto-detected from the table's primary key or best unique index. Prefix a column with `*` for NULL-safe comparison on nullable keys. |
+| `SelectColumns` | string | _(all columns)_ | Comma-separated column names to extract. When blank, every non-excluded column is extracted. Use to narrow extraction to a specific subset. |
 | `Filter` | string | _(empty)_ | SQL `WHERE` clause (without the `WHERE` keyword) to filter which rows are extracted. Also applied to the delete clause when `MergeDelete` is enabled. |
+| `MergeType` | string | _(derived)_ | Per-table override for the `DataDelivery:MergeType` default. Values: `None`, `Insert`, `Insert/Update`, `Insert/Update/Delete`. When blank, derived from global `ShouldCast:MergeUpdate` + `ShouldCast:MergeDelete`. |
 
 ### Script generation flags (ShouldCast)
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `ShouldCast:OutputScripts` | bool | `true` | Generate merge scripts. When `false`, only `.tabledata` files are written. |
+| `ShouldCast:OutputContentFiles` | bool | `false` | Write raw data to sibling `.tabledata` content files. Automatically enabled when `ConfigureDataDelivery` is on. |
 | `ShouldCast:DisableTriggers` | bool | `false` | Wraps the generated script with platform-appropriate trigger disable/enable. |
 | `ShouldCast:MergeUpdate` | bool | `true` | Includes the update branch (matched rows whose data has changed). |
 | `ShouldCast:MergeDelete` | bool | `true` | Includes the delete branch (target rows missing from the source). MySQL note: `MergeDelete` is not supported via `INSERT ... ON DUPLICATE KEY UPDATE`; use `REPLACE` semantics or hand-author migration scripts when full delete sync is required on MySQL. |
+| `ShouldCast:MergeType` | string | `Insert/Update` | Default `DataDelivery:MergeType` for tables that don't set it explicitly. Values: `None`, `Insert`, `Insert/Update`, `Insert/Update/Delete`. Used when writing `DataDelivery` blocks via `--ConfigureDataDelivery`. |
+| `ShouldCast:ConfigureDataDelivery` | bool | `false` | After extraction, write a `DataDelivery` block into each matching table's JSON file. See [--ConfigureDataDelivery](#--configuredatadelivery). |
+| `ShouldCast:TokenizeScripts` | bool | `false` | **SQL Server only.** Replaces the source database name with script tokens in the generated merge scripts, matching SchemaTongs' tokenization behavior. |
+| `ShouldCast:DisableRules` | bool | `false` | **PostgreSQL only.** Wraps the delivery in `ALTER TABLE ... DISABLE RULE` / `ENABLE RULE`. |
+| `ShouldCast:UpdateDescendents` | bool | `true` | **PostgreSQL only.** When `false`, the generated `MERGE` uses `MERGE INTO ... ONLY` so partitioned-table writes do not propagate to descendant tables. |
 
 For environment variable mapping, see [Configuration Reference -- Environment Variables](configuration.md#environment-variables). The `Tables` array can't be configured via environment variables -- use the JSON configuration file for table definitions.
 
@@ -354,10 +367,11 @@ Table and schema names containing characters that are illegal in file names are 
 
 ### Output directory
 
-Files are written to the directory specified by `OutputPath`. The directory is created automatically if it doesn't exist. The typical placement is a schema package's `Table Data` folder:
+Merge scripts are written to `ScriptPath` and `.tabledata` content files to `ContentPath`. Both directories are created automatically if they don't exist. The typical placement inside a schema package is `ScriptPath` pointing at the template's `Table Data` folder and `ContentPath` pointing at the template's `data` folder:
 
 ```json
-"OutputPath": "C:\\SchemaPackage\\Templates\\Main\\Table Data"
+"ScriptPath":  "C:\\SchemaPackage\\Templates\\Main\\Table Data",
+"ContentPath": "C:\\SchemaPackage\\Templates\\Main\\data"
 ```
 
 When the output lands inside a `Table Data` folder of a schema package, SchemaQuench picks it up automatically on the next deployment via the `TableData` quench slot. Reference data ships alongside schema, in the same package, in the same release.
