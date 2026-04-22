@@ -21,21 +21,31 @@ cd SchemaSmithyFree
 
 ## Step 1: Start the Demo Environment
 
-From the repository root, start the demo Docker environment:
+Each platform has its own demo folder under `Demos/` with a `run-demo` launcher, a `docker-compose.yml`, and a `.env` credentials file. From the repository root, launch the SQL Server demo:
+
+**macOS / Linux:**
 
 ```bash
-docker compose -f demo/docker-compose.yml up -d
+cd Demos/SqlServer
+./run-demo.sh
 ```
 
-This starts a SQL Server instance on port `1440` (and PostgreSQL / MySQL on their usual ports if you're using those demos), then deploys the matching demo databases using SchemaQuench. The credentials are in `demo/.env`:
+**Windows:**
+
+```cmd
+cd Demos\SqlServer
+run-demo.cmd
+```
+
+The launcher runs `build-schemaquench.sh` to compile the SchemaQuench binary (requires the .NET SDK on the host), then `docker compose up --build` packages that binary into a local Docker image, starts a SQL Server instance on port `1440`, and deploys the demo databases using SchemaQuench. The launcher blocks until the `completed` service exits, which signals the databases are ready. Credentials live in `Demos/SqlServer/.env`:
 
 | Setting  | Value |
 |----------|-------|
 | SQL Server | `localhost,1440` |
 | User     | `TestUser` |
-| Password | _(see `demo/.env`)_ |
+| Password | _(see `Demos/SqlServer/.env`)_ |
 
-Wait for the setup to finish -- you can watch progress with `docker compose -f demo/docker-compose.yml logs -f`. When you see the `completed` service exit, the databases are ready.
+> **PostgreSQL or MySQL?** Swap the platform folder: `Demos/PostgreSQL` (port `5432`) or `Demos/MySQL` (port `3306`). Each platform has its own `run-demo.sh` / `run-demo.cmd` launcher, `.env` credentials file, and demo databases (Northwind, Chinook, AdventureWorks, and Sakila for PostgreSQL; Northwind and Chinook for SQL Server and MySQL).
 
 ## Step 2: Cast with SchemaTongs
 
