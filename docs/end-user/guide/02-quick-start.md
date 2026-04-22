@@ -153,7 +153,7 @@ One package. One command. A complete database -- built exactly as declared, ever
 
 ## Step 5: Make a Change
 
-Now for the real satisfaction. Let's modify the schema and watch SchemaSmith figure out exactly what needs to change.
+Now for the payoff. Let's modify the schema and watch SchemaSmith figure out exactly what needs to change.
 
 Open `demo/Northwind/Templates/Northwind/Tables/dbo.Shippers.json` (or your own re-extracted copy). The file declares the current state of the table: columns, indexes, the primary key. Add a new column for tracking email addresses. Insert this entry into the `Columns` array after the `[Phone]` column:
 
@@ -180,7 +180,7 @@ Now let's see what SchemaSmith will do -- without actually touching the database
   "WhatIfONLY": true,
   "SchemaPackagePath": "./demo/Northwind",
   "ScriptTokens": {
-    "NorthwindDb": "Northwind"
+    "NorthwindDb": "NorthwindClone"
   }
 }
 ```
@@ -191,15 +191,15 @@ Save this as `quench-whatif.json` and run:
 SchemaQuench --ConfigFile:quench-whatif.json
 ```
 
-In the output, you'll see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live database (which has no Email column) and determined that an `ALTER TABLE ... ADD` is needed. No changes were applied -- WhatIf mode is read-only. Preview before you commit. Confidence before you deploy.
+In the output, you'll see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live `NorthwindClone` database (which has no Email column) and determined that an `ALTER TABLE ... ADD` is needed. No changes were applied -- WhatIf mode is read-only. Preview before you commit. Confidence before you deploy.
 
-Now apply it for real. Change `"WhatIfONLY": true` to `"WhatIfONLY": false` and run again:
+Now apply it for real. Re-run the original `quench-deploy.json` from Step 4 -- it already has `WhatIfONLY: false`, so this run actually writes the change:
 
 ```bash
 SchemaQuench --ConfigFile:quench-deploy.json
 ```
 
-SchemaQuench connects to the Northwind database, sees that `dbo.Shippers` is missing the `[Email]` column, and adds it. Every other table, view, and procedure is already in sync, so nothing else changes. Exactly the right delta, computed automatically. No more, no less.
+SchemaQuench connects to the `NorthwindClone` database, sees that `dbo.Shippers` is missing the `[Email]` column, and adds it. Every other table, view, and procedure is already in sync, so nothing else changes. Exactly the right delta, computed automatically. No more, no less.
 
 ## Step 6: Verify the Change
 
