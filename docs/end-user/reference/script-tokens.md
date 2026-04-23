@@ -202,7 +202,13 @@ For test images, certificate blobs, signing keys -- anything you need to inject 
 INSERT dbo.BrandAssets(Name, Image) VALUES('Default', {{DefaultLogo}});
 ```
 
-The token resolves to `0x89504E47...` -- a SQL Server `VARBINARY` literal, equally valid as a PostgreSQL `BYTEA` literal in the appropriate syntax.
+The token resolves to the platform-appropriate binary literal form automatically, chosen from the product's `Platform`:
+
+- **SQL Server** — `0x89504E47...` (`VARBINARY` literal)
+- **MySQL** — `0x89504E47...` (`BLOB` literal)
+- **PostgreSQL** — `E'\\x89504E47...'::bytea` (`BYTEA` literal with escape-string + explicit cast)
+
+The same `<*BinaryFile*>` token works across all three engines with no per-environment editing. The resolver reads the file once and emits the correct literal form for the target; your SQL script just sees `{{DefaultLogo}}` land as whatever that engine will accept.
 
 ### Example — query the target server for a value
 
