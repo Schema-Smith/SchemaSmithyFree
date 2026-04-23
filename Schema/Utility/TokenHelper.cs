@@ -24,8 +24,9 @@ public static class TokenHelper
     public const string SpecificMaterializedViewTag = "<*SpecificMaterializedView*>";
     public const string SpecificIndexedViewTag = "<*SpecificIndexedView*>";
 
-    public static void ResolveFileTokens(Dictionary<string, string> tokens, string basePath)
+    public static void ResolveFileTokens(Dictionary<string, string> tokens, string basePath, Platform platform)
     {
+        _ = platform; // RED phase: signature threaded through callers; GREEN commit adds per-platform dispatch.
         var tokenErrors = new List<string>();
         ResolveFileTokensByTag(tokens, basePath, tokenErrors, FileTag, "", fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
         ResolveFileTokensByTag(tokens, basePath, tokenErrors, BinaryFileTag, "0x", fileName => BitConverter.ToString(ProductFileWrapper.GetFromFactory().ReadAllBytes(fileName)).Replace("-", ""));
