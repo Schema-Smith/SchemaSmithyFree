@@ -75,7 +75,6 @@ Define tokens in `Product.json` under `ScriptTokens`. These are available across
 ```json
 {
   "Name": "SaasProduct",
-  "ValidationScript": "SELECT CASE WHEN EXISTS(SELECT 1 FROM master.sys.databases WHERE [Name] = '{{RegistryDb}}') THEN 1 ELSE 0 END",
   "TemplateOrder": ["Registry", "Client"],
   "ScriptTokens": {
     "RegistryDb": "Registry",
@@ -84,7 +83,7 @@ Define tokens in `Product.json` under `ScriptTokens`. These are available across
 }
 ```
 
-In this example, `{{RegistryDb}}` resolves to `Registry` everywhere -- in the `ValidationScript`, in every template's scripts, and in every SQL file across the product.
+In this example, `{{RegistryDb}}` resolves to `Registry` everywhere -- in every template's scripts and in every SQL file across the product.
 
 ---
 
@@ -95,7 +94,6 @@ Define tokens in `Template.json` under `ScriptTokens`. Template tokens override 
 ```json
 {
   "Name": "Reporting",
-  "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] = '{{ReportDB}}'",
   "ScriptTokens": {
     "MainDB": "ReportingAlias",
     "SchemaOwner": "rpt"
@@ -157,7 +155,7 @@ The advanced tags:
 | Tag | Purpose |
 |---|---|
 | `<*File*>relative\path\file.sql` | Replace the token value with the contents of a text file, resolved relative to the product directory |
-| `<*BinaryFile*>relative\path\image.png` | Replace the token value with the file contents as a `0x`-prefixed hexadecimal string -- ready to embed in `VARBINARY` literals or PostgreSQL `BYTEA` constants |
+| `<*BinaryFile*>relative\path\image.png` | Replace the token value with the file contents as a platform-appropriate binary literal -- `0x<hex>` for SQL Server and MySQL, `E'\\x<hex>'::bytea` for PostgreSQL |
 | `<*Query*>SELECT ... FROM ...` | Execute a SQL query against the deployment target before substitution and replace the token value with the first column's rows joined by newlines |
 | `<*QueryFile*>relative\path\query.sql` | Same as `<*Query*>` but the query body is loaded from a file first |
 | `<*SpecificTable*>schema.tablename` | Replace the token value with the full serialized JSON of one specific table in the current template |
@@ -212,7 +210,9 @@ The same `<*BinaryFile*>` token works across all three engines with no per-envir
 
 ### Example — query the target server for a value
 
-Your deployment script needs a value from the target database itself -- a tenant ID, a feature flag, the next batch number, the result of a row count check. Resolve it at deployment time, before any of your scripts run, against the actual server you're deploying to:
+Your deployment script needs a value from the target database itself -- a tenant ID, a feature flag, the next batch number, the result of a row count check. Resolve it at deployment time, before any of your scripts run, against the actual server you're deploying to.
+
+**SQL Server:**
 
 ```json
 {
@@ -225,6 +225,37 @@ Your deployment script needs a value from the target database itself -- a tenant
 ```sql
 -- After resolution, {{ActiveTenants}} contains one tenant ID per line
 EXEC dbo.ProvisionAuditTables @TenantIdList = '{{ActiveTenants}}';
+```
+
+**PostgreSQL:**
+
+```json
+{
+  "ScriptTokens": {
+    "ActiveTenants": "<*Query*>SELECT tenant_id FROM public.tenants WHERE active = true"
+  }
+}
+```
+
+```sql
+-- After resolution, {{ActiveTenants}} contains one tenant ID per line
+CALL public.provision_audit_tables('{{ActiveTenants}}');
+```
+
+**MySQL:**
+
+```json
+{
+  "ScriptTokens": {
+    "ActiveTenants": "<*Query*>SELECT `TenantId` FROM `Tenants` WHERE `Active` = 1"
+  }
+}
+```
+
+```sql
+-- After resolution, {{ActiveTenants}} contains one tenant ID per line
+SET @TenantIdList = '{{ActiveTenants}}';
+CALL ProvisionAuditTables(@TenantIdList);
 ```
 
 ### Example — query body in a file
@@ -241,7 +272,9 @@ Long queries stay readable when they live in their own files. The token value po
 
 ### Example — embed one table's JSON
 
-When you only need *one* table's metadata in a script -- not the whole template -- the specific-table tag is the surgical option:
+When you only need *one* table's metadata in a script -- not the whole template -- the specific-table tag is the surgical option. The token value names one table; the resolved content is that table's full JSON, ready to hand to a stored procedure that introspects columns, indexes, or custom metadata.
+
+**SQL Server:**
 
 ```json
 {
@@ -252,12 +285,45 @@ When you only need *one* table's metadata in a script -- not the whole template 
 ```
 
 ```sql
--- Inside a stored procedure that introspects column definitions for one target table
 DECLARE @TableJson NVARCHAR(MAX) = '{{OrdersTable}}';
 EXEC dbo.GenerateAuditTriggerForTable @TableJson;
 ```
 
-The same pattern works for indexed views (`<*SpecificIndexedView*>`) and PostgreSQL materialized views (`<*SpecificMaterializedView*>`).
+**PostgreSQL:**
+
+```json
+{
+  "ScriptTokens": {
+    "OrdersTable": "<*SpecificTable*>public.orders"
+  }
+}
+```
+
+```sql
+DO $$
+DECLARE
+  v_table_json TEXT := '{{OrdersTable}}';
+BEGIN
+  CALL public.generate_audit_trigger_for_table(v_table_json);
+END $$;
+```
+
+**MySQL:**
+
+```json
+{
+  "ScriptTokens": {
+    "OrdersTable": "<*SpecificTable*>Orders"
+  }
+}
+```
+
+```sql
+SET @TableJson = '{{OrdersTable}}';
+CALL GenerateAuditTriggerForTable(@TableJson);
+```
+
+The same pattern works for indexed views (`<*SpecificIndexedView*>`, SQL Server) and materialized views (`<*SpecificMaterializedView*>`, PostgreSQL).
 
 ### Resolution order for advanced tags
 
@@ -355,7 +421,6 @@ A SaaS product uses tokens to manage database names and version stamps across de
 ```json
 {
   "Name": "SaasProduct",
-  "ValidationScript": "SELECT CASE WHEN EXISTS(SELECT 1 FROM master.sys.databases WHERE [Name] = '{{RegistryDb}}') THEN 1 ELSE 0 END",
   "TemplateOrder": ["Registry", "Client"],
   "ScriptTokens": {
     "RegistryDb": "Registry",
@@ -364,29 +429,35 @@ A SaaS product uses tokens to manage database names and version stamps across de
 }
 ```
 
-**Template.json** (Client) uses product tokens and automatic tokens:
+**A migration script** announces the deployment target using the resolved tokens. The token shape is identical across platforms; only the logging statement differs.
 
-```json
-{
-  "Name": "Client",
-  "DatabaseIdentificationScript": "SELECT [DatabaseName] FROM {{RegistryDb}}.dbo.ClientDBs WHERE [IsEnabled] = 1",
-  "VersionStampScript": "IF NOT EXISTS(SELECT 1 FROM dbo.ProductVersion WHERE Product = '{{ProductName}}' AND Version = '{{MigrationVersion}}') INSERT dbo.ProductVersion(Product, Version) VALUES('{{ProductName}}', '{{MigrationVersion}}')"
-}
-```
-
-**A migration script** (`Before Scripts/SyncRegistryLink.sql`) references the registry:
+**SQL Server:**
 
 ```sql
-IF NOT EXISTS (SELECT 1 FROM sys.servers WHERE name = 'RegistryLink')
-    EXEC sp_addlinkedserver @server = 'RegistryLink', @srvproduct = '',
-        @datasrc = '{{RegistryDb}}'
+PRINT 'Deploying {{ProductName}} {{MigrationVersion}} against {{RegistryDb}}';
+```
+
+**PostgreSQL:**
+
+```sql
+DO $$ BEGIN
+  RAISE NOTICE 'Deploying {{ProductName}} {{MigrationVersion}} against {{RegistryDb}}';
+END $$;
+```
+
+**MySQL:**
+
+```sql
+SELECT 'Deploying {{ProductName}} {{MigrationVersion}} against {{RegistryDb}}' AS deployment_banner;
 ```
 
 For staging, drop a `ScriptTokens.RegistryDb` override into `SchemaQuench.settings.json` and ship the same package. For CI, do the same via `SmithySettings_ScriptTokens__RegistryDb`. The schema package is unchanged across all three environments; only the resolved token values differ.
 
 ### Cross-database references with multiple tokens
 
-When templates need to reference databases managed by other templates, product-level tokens keep the references consistent:
+When templates need to reference sibling schema managed by other templates, product-level tokens keep the references consistent. The token pattern is the same across platforms; the naming the tokens encode differs because each engine isolates differently -- SQL Server and MySQL use separate databases, PostgreSQL uses schemas within one database.
+
+**SQL Server** -- separate databases, three-part names:
 
 ```json
 {
@@ -400,8 +471,6 @@ When templates need to reference databases managed by other templates, product-l
 }
 ```
 
-A view in the Reporting template can reference the others (SQL Server example):
-
 ```sql
 CREATE OR ALTER VIEW dbo.SalesSummary AS
 SELECT o.OrderDate, p.ProductName, o.Quantity, o.Total
@@ -409,37 +478,129 @@ FROM [{{OrdersDb}}].dbo.Orders o
 JOIN [{{CatalogDb}}].dbo.Products p ON o.ProductId = p.Id;
 ```
 
-PostgreSQL with `dblink` or `postgres_fdw` foreign tables uses the same token approach -- the names in your scripts stay constant, only the configured values change between environments.
+**PostgreSQL** -- one database, separate schemas:
+
+```json
+{
+  "Name": "ECommerce",
+  "TemplateOrder": ["Catalog", "Orders", "Reporting"],
+  "ScriptTokens": {
+    "CatalogSchema": "product_catalog",
+    "OrdersSchema": "order_processing",
+    "ReportSchema": "analytics"
+  }
+}
+```
+
+```sql
+CREATE OR REPLACE VIEW analytics.sales_summary AS
+SELECT o.order_date, p.product_name, o.quantity, o.total
+FROM {{OrdersSchema}}.orders o
+JOIN {{CatalogSchema}}.products p ON o.product_id = p.id;
+```
+
+**MySQL** -- separate databases, db-qualified names:
+
+```json
+{
+  "Name": "ECommerce",
+  "TemplateOrder": ["Catalog", "Orders", "Reporting"],
+  "ScriptTokens": {
+    "CatalogDb": "product_catalog",
+    "OrdersDb": "order_processing",
+    "ReportDb": "analytics"
+  }
+}
+```
+
+```sql
+CREATE OR REPLACE VIEW `analytics`.`SalesSummary` AS
+SELECT o.`OrderDate`, p.`ProductName`, o.`Quantity`, o.`Total`
+FROM `{{OrdersDb}}`.`Orders` o
+JOIN `{{CatalogDb}}`.`Products` p ON o.`ProductId` = p.`Id`;
+```
+
+> **PostgreSQL note:** PG can't join across separate databases natively -- the idiomatic pattern is one database with multiple schemas, and SchemaSmith deploys each template against its own schema within that database. Cross-database queries via `postgres_fdw` or `dblink` are possible but add setup that's out of scope for most deployments; if you need them, the token approach still works -- define foreign-server tokens and reference them the same way.
 
 ### Generating audit DDL from `{{TableSchema}}`
 
-A migration script that consumes the live table model to drive its own logic:
+A migration script that consumes the live table model to drive its own logic. The stored procedure walks the JSON, reads each table's columns and any `Extensions.AuditScope` you've attached, and emits the right `CREATE TRIGGER` statements -- one declarative source of truth, one runtime that adapts to it.
+
+**SQL Server:**
 
 ```sql
 DECLARE @TableSchema NVARCHAR(MAX) = '{{TableSchema}}';
 EXEC dbo.GenerateAuditTriggers @TableSchema;
 ```
 
-The stored procedure walks the JSON, reads each table's columns and any `Extensions.AuditScope` you've attached, and emits the right `CREATE TRIGGER` statements -- one declarative source of truth, one runtime that adapts to it.
+**PostgreSQL:**
+
+```sql
+DO $$
+DECLARE
+  v_table_schema TEXT := '{{TableSchema}}';
+BEGIN
+  CALL public.generate_audit_triggers(v_table_schema);
+END $$;
+```
+
+**MySQL:**
+
+```sql
+SET @TableSchema = '{{TableSchema}}';
+CALL GenerateAuditTriggers(@TableSchema);
+```
 
 ### Pulling deployment-time data from the target
 
-A `Before` migration script needs to know which databases on the server are flagged for the new feature:
+A `Before` migration script needs to know which rows on the server are flagged for the new feature. The query runs once against the actual server you're deploying to, and the resolved value is substituted into every script that references the token -- no manual configuration shuffling, no hardcoded environment lists.
+
+**SQL Server:**
 
 ```json
 {
   "ScriptTokens": {
-    "EnabledDbList": "<*Query*>SELECT DatabaseName FROM master.dbo.FeatureFlags WHERE FlagName = 'NewBilling' AND Enabled = 1"
+    "EnabledTargets": "<*Query*>SELECT TargetName FROM dbo.FeatureFlags WHERE FlagName = 'NewBilling' AND Enabled = 1"
   }
 }
 ```
 
 ```sql
--- {{EnabledDbList}} resolves to a newline-separated list at deployment time
-PRINT 'Applying new billing schema to: {{EnabledDbList}}';
+-- {{EnabledTargets}} resolves to a newline-separated list at deployment time
+PRINT 'Applying new billing schema to: {{EnabledTargets}}';
 ```
 
-The query runs once, against the actual server you're deploying to, and the resolved value is substituted into every script that references the token. No manual configuration shuffling, no hardcoded environment lists.
+**PostgreSQL:**
+
+```json
+{
+  "ScriptTokens": {
+    "EnabledTargets": "<*Query*>SELECT target_name FROM public.feature_flags WHERE flag_name = 'NewBilling' AND enabled = true"
+  }
+}
+```
+
+```sql
+-- {{EnabledTargets}} resolves to a newline-separated list at deployment time
+DO $$ BEGIN
+  RAISE NOTICE 'Applying new billing schema to: {{EnabledTargets}}';
+END $$;
+```
+
+**MySQL:**
+
+```json
+{
+  "ScriptTokens": {
+    "EnabledTargets": "<*Query*>SELECT `TargetName` FROM `FeatureFlags` WHERE `FlagName` = 'NewBilling' AND `Enabled` = 1"
+  }
+}
+```
+
+```sql
+-- {{EnabledTargets}} resolves to a newline-separated list at deployment time
+SELECT 'Applying new billing schema to: {{EnabledTargets}}' AS status;
+```
 
 ---
 
