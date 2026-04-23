@@ -26,11 +26,18 @@ public static class TokenHelper
 
     public static void ResolveFileTokens(Dictionary<string, string> tokens, string basePath, Platform platform)
     {
-        _ = platform; // RED phase: signature threaded through callers; GREEN commit adds per-platform dispatch.
+        // PostgreSQL BYTEA needs an E-string-escaped hex literal with an explicit cast; SQL Server VARBINARY and
+        // MySQL BLOB both accept 0x<hex> directly. Pattern mirrors GetDropTempTablesScript's platform branching.
+        var (binaryPrefix, binarySuffix) = platform switch
+        {
+            Platform.PostgreSQL => (@"E'\\x", "'::bytea"),
+            _ => ("0x", "")
+        };
+
         var tokenErrors = new List<string>();
-        ResolveFileTokensByTag(tokens, basePath, tokenErrors, FileTag, "", fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
-        ResolveFileTokensByTag(tokens, basePath, tokenErrors, BinaryFileTag, "0x", fileName => BitConverter.ToString(ProductFileWrapper.GetFromFactory().ReadAllBytes(fileName)).Replace("-", ""));
-        ResolveFileTokensByTag(tokens, basePath, tokenErrors, QueryFileTag, QueryTag, fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
+        ResolveFileTokensByTag(tokens, basePath, tokenErrors, FileTag, "", "", fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
+        ResolveFileTokensByTag(tokens, basePath, tokenErrors, BinaryFileTag, binaryPrefix, binarySuffix, fileName => BitConverter.ToString(ProductFileWrapper.GetFromFactory().ReadAllBytes(fileName)).Replace("-", ""));
+        ResolveFileTokensByTag(tokens, basePath, tokenErrors, QueryFileTag, QueryTag, "", fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
         if (tokenErrors.Count == 0) return;
         throw new Exception(string.Join("\r\n", tokenErrors));
     }
@@ -193,7 +200,7 @@ public static class TokenHelper
         return tables.FirstOrDefault(t => $"{t.Name}".Replace("\"", "").Replace("`", "").EqualsIgnoringCase(tableRef.Replace("\"", "").Replace("`", "")));
     }
 
-    private static void ResolveFileTokensByTag(Dictionary<string, string> tokens, string basePath, List<string> tokenErrors, string tag, string contentPrefix, Func<string, string> readFile)
+    private static void ResolveFileTokensByTag(Dictionary<string, string> tokens, string basePath, List<string> tokenErrors, string tag, string contentPrefix, string contentSuffix, Func<string, string> readFile)
     {
         var fileTokens = tokens.Where(t => t.Value.StartsWithIgnoringCase(tag)).ToList();
         if (fileTokens.Count == 0) return;
@@ -210,7 +217,7 @@ public static class TokenHelper
                 if (ProductFileWrapper.GetFromFactory().Exists(fileName))
                     try
                     {
-                        results[t.Key] = $"{contentPrefix}{readFile.Invoke(fileName)}";
+                        results[t.Key] = $"{contentPrefix}{readFile.Invoke(fileName)}{contentSuffix}";
                     }
                     catch (Exception e)
                     {
