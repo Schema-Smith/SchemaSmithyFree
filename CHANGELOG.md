@@ -98,6 +98,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 - **Backslash escaping for MySQL** — Platform-specific escaping (SQL Server/PostgreSQL don't need it)
 - **TrustServerCertificate default** — Removed from platform-agnostic defaults (broke MySQL connections)
 - **Docker release image UID** — Fixed UID 1000 conflict with Ubuntu 24.04 base image
+- **`<*BinaryFile*>` PostgreSQL output** — Resolver now emits PostgreSQL `BYTEA` literal syntax (`E'\\x...'::bytea`) when the product platform is PostgreSQL; SQL Server and MySQL continue to receive `0x<hex>` literals. Previously emitted `0x<hex>` unconditionally, which parses as an invalid integer on PostgreSQL and silently broke binary token insertion into BYTEA columns.
 
 ## [v1.1.8](https://github.com/Schema-Smith/SchemaSmithyFree/releases/tag/v1.1.8) — 2026-02-08
 
