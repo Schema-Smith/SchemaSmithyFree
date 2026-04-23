@@ -32,36 +32,35 @@ Tokens are replaced in every place SchemaSmith processes script content -- both 
 
 **Product-level JSON properties:**
 
-- `ValidationScript`
 - `BaselineValidationScript`
+- `ValidationScript`
 - `VersionStampScript`
 
 **Template-level JSON properties:**
 
+- `BaselineValidationScript`
 - `DatabaseIdentificationScript`
 - `VersionStampScript`
-- `BaselineValidationScript`
 
 **Table-component expression fields** (table JSON files):
 
-- `ShouldApplyExpression` on tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views, and other supported components
-- `Default` on columns
 - `CheckExpression` on columns
+- `Default` on columns
 - `Expression` on table-level check constraints
 - `FilterExpression` on indexes (where supported)
+- `ShouldApplyExpression` on tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views, and other supported components
 
 **SQL script files** in every product and template script folder:
 
 | Folder | Scope |
 |---|---|
-| `Before Scripts/` (template-level) | Template |
+| `Before Product/`, `After Product/` | Product |
+| `Before Scripts/`, `After Scripts/` | Template |
 | `Schemas/` | Template |
 | `DataTypes/` (SQL Server) / `Domain Types/`, `Enum Types/`, `Composite Types/` (PostgreSQL) / equivalents | Template |
 | `Functions/`, `Views/`, `Procedures/` | Template |
 | `Triggers/`, `DDLTriggers/` | Template |
 | `Table Data/` | Template |
-| `After Scripts/` (template-level) | Template |
-| `Before Product/`, `After Product/` | Product |
 | Any custom script folders defined in `Template.json` `ScriptFolders` | Template |
 
 The exact set of default folders depends on the product's `Platform`. Anything you add via custom `ScriptFolders` participates in token resolution exactly the same way as the defaults.
@@ -89,7 +88,21 @@ In this example, `{{RegistryDb}}` resolves to `Registry` everywhere -- in every 
 
 ## Template Tokens
 
-Define tokens in `Template.json` under `ScriptTokens`. Template tokens override product tokens with the same key for the duration of that template's execution.
+Define tokens in `Template.json` under `ScriptTokens`. Template tokens override product tokens with the same key for the duration of that template's execution, and they can also introduce new tokens that only exist inside the template.
+
+Say your `Product.json` defines a product-wide default for `MainDB`:
+
+```json
+{
+  "Name": "SaasProduct",
+  "TemplateOrder": ["Registry", "Reporting"],
+  "ScriptTokens": {
+    "MainDB": "ProductionMain"
+  }
+}
+```
+
+Then one of its templates overrides `MainDB` and adds a new `SchemaOwner` token that the product never declared:
 
 ```json
 {
@@ -101,7 +114,7 @@ Define tokens in `Template.json` under `ScriptTokens`. Template tokens override 
 }
 ```
 
-Within the Reporting template, `{{MainDB}}` resolves to `ReportingAlias` regardless of what the product defined. The `{{SchemaOwner}}` token is available only inside this template.
+Inside the Reporting template, `{{MainDB}}` resolves to `ReportingAlias` instead of the product-scope `ProductionMain`. The new `{{SchemaOwner}}` token is available only inside this template; other templates in the same product don't see it.
 
 ---
 
@@ -144,6 +157,8 @@ Anything you put in an `Extensions` object on a table component is also availabl
 }
 ```
 
+That single expression lets the index decide whether to apply itself based on metadata that lives on the parent table, without leaving the schema package or splitting the definition across environment-specific files.
+
 ---
 
 ## Advanced Token Tags
@@ -180,7 +195,8 @@ You have a long stored-procedure body or a static reference dataset stored in a 
 In any script in this template:
 
 ```sql
--- The next line will be replaced with the entire contents of resources/reference-data.sql
+-- The next line will be replaced with the
+-- entire contents of resources/reference-data.sql
 {{ReferenceData}}
 ```
 
@@ -434,21 +450,30 @@ A SaaS product uses tokens to manage database names and version stamps across de
 **SQL Server:**
 
 ```sql
-PRINT 'Deploying {{ProductName}} {{MigrationVersion}} against {{RegistryDb}}';
+PRINT 'Deploying {{ProductName}} '
+    + '{{MigrationVersion}} against '
+    + '{{RegistryDb}}';
 ```
 
 **PostgreSQL:**
 
 ```sql
 DO $$ BEGIN
-  RAISE NOTICE 'Deploying {{ProductName}} {{MigrationVersion}} against {{RegistryDb}}';
+  RAISE NOTICE 'Deploying % % against %',
+    '{{ProductName}}',
+    '{{MigrationVersion}}',
+    '{{RegistryDb}}';
 END $$;
 ```
 
 **MySQL:**
 
 ```sql
-SELECT 'Deploying {{ProductName}} {{MigrationVersion}} against {{RegistryDb}}' AS deployment_banner;
+SELECT CONCAT(
+  'Deploying {{ProductName}} ',
+  '{{MigrationVersion}} ',
+  'against {{RegistryDb}}'
+) AS deployment_banner;
 ```
 
 For staging, drop a `ScriptTokens.RegistryDb` override into `SchemaQuench.settings.json` and ship the same package. For CI, do the same via `SmithySettings_ScriptTokens__RegistryDb`. The schema package is unchanged across all three environments; only the resolved token values differ.
@@ -465,8 +490,7 @@ When templates need to reference sibling schema managed by other templates, prod
   "TemplateOrder": ["Catalog", "Orders", "Reporting"],
   "ScriptTokens": {
     "CatalogDb": "ProductCatalog",
-    "OrdersDb": "OrderProcessing",
-    "ReportDb": "Analytics"
+    "OrdersDb": "OrderProcessing"
   }
 }
 ```
@@ -486,8 +510,7 @@ JOIN [{{CatalogDb}}].dbo.Products p ON o.ProductId = p.Id;
   "TemplateOrder": ["Catalog", "Orders", "Reporting"],
   "ScriptTokens": {
     "CatalogSchema": "product_catalog",
-    "OrdersSchema": "order_processing",
-    "ReportSchema": "analytics"
+    "OrdersSchema": "order_processing"
   }
 }
 ```
@@ -507,8 +530,7 @@ JOIN {{CatalogSchema}}.products p ON o.product_id = p.id;
   "TemplateOrder": ["Catalog", "Orders", "Reporting"],
   "ScriptTokens": {
     "CatalogDb": "product_catalog",
-    "OrdersDb": "order_processing",
-    "ReportDb": "analytics"
+    "OrdersDb": "order_processing"
   }
 }
 ```
@@ -553,21 +575,32 @@ CALL GenerateAuditTriggers(@TableSchema);
 
 ### Pulling deployment-time data from the target
 
-A `Before` migration script needs to know which rows on the server are flagged for the new feature. The query runs once against the actual server you're deploying to, and the resolved value is substituted into every script that references the token -- no manual configuration shuffling, no hardcoded environment lists.
+A `Before` migration script needs to know which rows on the server are flagged for the new feature. Point the token at a query file using `<*QueryFile*>` so the SQL stays readable, and SchemaSmith runs that query once against the actual server you're deploying to before substituting the result into every script that references the token. The token definition is the same shape across platforms; the query body differs because each engine has its own catalog and quoting style.
 
 **SQL Server:**
 
 ```json
 {
   "ScriptTokens": {
-    "EnabledTargets": "<*Query*>SELECT TargetName FROM dbo.FeatureFlags WHERE FlagName = 'NewBilling' AND Enabled = 1"
+    "EnabledTargets": "<*QueryFile*>queries/enabled-targets.sql"
   }
 }
 ```
 
+`queries/enabled-targets.sql`:
+
 ```sql
--- {{EnabledTargets}} resolves to a newline-separated list at deployment time
-PRINT 'Applying new billing schema to: {{EnabledTargets}}';
+SELECT TargetName
+FROM dbo.FeatureFlags
+WHERE FlagName = 'NewBilling'
+  AND Enabled = 1;
+```
+
+Any script in the template:
+
+```sql
+-- {{EnabledTargets}} resolves to one target per line
+PRINT 'Applying billing schema to: {{EnabledTargets}}';
 ```
 
 **PostgreSQL:**
@@ -575,15 +608,26 @@ PRINT 'Applying new billing schema to: {{EnabledTargets}}';
 ```json
 {
   "ScriptTokens": {
-    "EnabledTargets": "<*Query*>SELECT target_name FROM public.feature_flags WHERE flag_name = 'NewBilling' AND enabled = true"
+    "EnabledTargets": "<*QueryFile*>queries/enabled-targets.sql"
   }
 }
 ```
 
+`queries/enabled-targets.sql`:
+
 ```sql
--- {{EnabledTargets}} resolves to a newline-separated list at deployment time
+SELECT target_name
+FROM public.feature_flags
+WHERE flag_name = 'NewBilling'
+  AND enabled = true;
+```
+
+Any script in the template:
+
+```sql
+-- {{EnabledTargets}} resolves to one target per line
 DO $$ BEGIN
-  RAISE NOTICE 'Applying new billing schema to: {{EnabledTargets}}';
+  RAISE NOTICE 'Applying billing schema to: %', '{{EnabledTargets}}';
 END $$;
 ```
 
@@ -592,15 +636,29 @@ END $$;
 ```json
 {
   "ScriptTokens": {
-    "EnabledTargets": "<*Query*>SELECT `TargetName` FROM `FeatureFlags` WHERE `FlagName` = 'NewBilling' AND `Enabled` = 1"
+    "EnabledTargets": "<*QueryFile*>queries/enabled-targets.sql"
   }
 }
 ```
 
+`queries/enabled-targets.sql`:
+
 ```sql
--- {{EnabledTargets}} resolves to a newline-separated list at deployment time
-SELECT 'Applying new billing schema to: {{EnabledTargets}}' AS status;
+SELECT `TargetName`
+FROM `FeatureFlags`
+WHERE `FlagName` = 'NewBilling'
+  AND `Enabled` = 1;
 ```
+
+Any script in the template:
+
+```sql
+-- {{EnabledTargets}} resolves to one target per line
+SELECT CONCAT('Applying billing schema to: ',
+              '{{EnabledTargets}}') AS status;
+```
+
+Across these four scenarios, the token shape stays constant -- `{{TokenName}}` in scripts, `ScriptTokens` in JSON -- while the SQL dialect and the override surface flex per environment. The same schema package ships unchanged to development, staging, and production; the token layer is where each environment's shape gets expressed.
 
 ---
 
