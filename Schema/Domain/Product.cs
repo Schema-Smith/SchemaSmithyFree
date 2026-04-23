@@ -109,7 +109,7 @@ namespace Schema.Domain
             var product = JsonHelper.ProductLoad(productFilePath);
             product.FilePath = productFilePath;
             OverrideProductScriptTokens(config, product);
-            TokenHelper.ResolveFileTokens(product.ScriptTokens, schemaPackagePath);
+            TokenHelper.ResolveFileTokens(product.ScriptTokens, schemaPackagePath, product.Platform);
             product.ScriptTokens.Add("ProductName", product.Name);
 
             product.InstanceLoad();

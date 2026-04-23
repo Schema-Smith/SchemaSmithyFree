@@ -177,7 +177,7 @@ namespace Schema.Domain
             foreach (var token in template.ScriptTokens)
                 template.LoggableTokens.Add(token.Key, token.Value);
 
-            TokenHelper.ResolveFileTokens(template.ScriptTokens, templatePath);
+            TokenHelper.ResolveFileTokens(template.ScriptTokens, templatePath, product.Platform);
 
             // Merge template and product script tokens — template takes precedence
             var scriptTokens = template.ScriptTokens

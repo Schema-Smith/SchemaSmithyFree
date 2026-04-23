@@ -37,14 +37,14 @@ public class TokenHelperTests
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register(mockFileWrapper);
-            TokenHelper.ResolveFileTokens(tokens, basePath);
+            TokenHelper.ResolveFileTokens(tokens, basePath, Platform.SqlServer);
             Assert.That(tokens["MyTableData"], Is.EqualTo(fileContent));
             FactoryContainer.Clear();
         }
     }
 
     [Test]
-    public void ShouldResolveBinaryFileTokens()
+    public void ShouldResolveBinaryFileTokens_SqlServer_EmitsHexWith0xPrefix()
     {
         var basePath = "C:/Projects/MyMetadata";
         var tokens = new Dictionary<string, string>
@@ -62,8 +62,56 @@ public class TokenHelperTests
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register(mockFileWrapper);
-            TokenHelper.ResolveFileTokens(tokens, basePath);
+            TokenHelper.ResolveFileTokens(tokens, basePath, Platform.SqlServer);
             Assert.That(tokens["BinaryContent"], Is.EqualTo($"0x{BitConverter.ToString(fileContent).Replace("-", "")}"));
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldResolveBinaryFileTokens_MySQL_EmitsHexWith0xPrefix()
+    {
+        var basePath = "C:/Projects/MyMetadata";
+        var tokens = new Dictionary<string, string>
+        {
+            {"MainDB", "MainDB"},
+            {"BinaryContent", "<*BinaryFile*>Files/MyBinary.dll"}
+        };
+        var filePath = Path.Combine(basePath, "Files/MyBinary.dll");
+        var fileContent = new byte[] {12, 255, 6, 55, 77, 125};
+
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(filePath).Returns(true);
+        mockFileWrapper.ReadAllBytes(filePath).Returns(fileContent);
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFileWrapper);
+            TokenHelper.ResolveFileTokens(tokens, basePath, Platform.MySQL);
+            Assert.That(tokens["BinaryContent"], Is.EqualTo($"0x{BitConverter.ToString(fileContent).Replace("-", "")}"));
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
+    public void ShouldResolveBinaryFileTokens_PostgreSQL_EmitsByteaEscapedHex()
+    {
+        var basePath = "C:/Projects/MyMetadata";
+        var tokens = new Dictionary<string, string>
+        {
+            {"MainDB", "MainDB"},
+            {"BinaryContent", "<*BinaryFile*>Files/MyBinary.dll"}
+        };
+        var filePath = Path.Combine(basePath, "Files/MyBinary.dll");
+        var fileContent = new byte[] {12, 255, 6, 55, 77, 125};
+
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(filePath).Returns(true);
+        mockFileWrapper.ReadAllBytes(filePath).Returns(fileContent);
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFileWrapper);
+            TokenHelper.ResolveFileTokens(tokens, basePath, Platform.PostgreSQL);
+            Assert.That(tokens["BinaryContent"], Is.EqualTo($"E'\\\\x{BitConverter.ToString(fileContent).Replace("-", "")}'::bytea"));
             FactoryContainer.Clear();
         }
     }
@@ -82,7 +130,7 @@ public class TokenHelperTests
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register(mockFileWrapper);
-            var ex = Assert.Throws<Exception>(() => TokenHelper.ResolveFileTokens(tokens, basePath));
+            var ex = Assert.Throws<Exception>(() => TokenHelper.ResolveFileTokens(tokens, basePath, Platform.SqlServer));
             Assert.That(ex.Message, Does.Contain("missing file"));
             FactoryContainer.Clear();
         }
@@ -156,7 +204,7 @@ public class TokenHelperTests
         lock (FactoryContainer.SharedLockObject)
         {
             FactoryContainer.Register(mockFileWrapper);
-            TokenHelper.ResolveFileTokens(tokens, basePath);
+            TokenHelper.ResolveFileTokens(tokens, basePath, Platform.SqlServer);
             Assert.That(tokens["MyQueryResult"], Is.EqualTo($"{TokenHelper.QueryTag}{fileContent}"));
             FactoryContainer.Clear();
         }
