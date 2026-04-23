@@ -274,6 +274,14 @@ The **error log** receives only error-level entries (such as SQL execution error
 
 Both log files are overwritten at the start of each run. Previous runs are preserved through the backup rotation described below.
 
+### Console output
+
+The console is a live mirror of the progress log, not a separate channel. Watching the console while a quench runs lets you follow startup, per-object progress, and completion in real time without tailing a file. Log4Net colorizes the console stream by level -- informational entries in green, warnings in yellow, errors in red -- so trouble catches your eye the moment it appears.
+
+When a script fails, you see a short error summary on the console and in the progress log (red, so it's hard to miss): the failing script path and the engine's error message, along with a `Debug Script:` pointer when a generated procedure is the source. That's enough to know what failed and where to look. The **full detail** -- the exception line numbers and the complete SQL batches SchemaSmith submitted -- lands in the error log only, so the console and progress stream don't drown in multi-KB failed-batch text during a rough deployment. When a run fails, the progress log tells you *what* broke; the error log tells you *exactly what SQL was sent* when it broke.
+
+> **Tip:** CI agents that capture stdout get the progress stream for free. If your pipeline step only saves stdout, you still have a readable transcript of successes and error summaries; archive the error log separately to keep the failed-batch detail.
+
 ### Log file location
 
 By default, logs are written to the tool's executable directory. Override this with `--LogPath`:
@@ -308,6 +316,36 @@ C:\Tools\
     SchemaQuench.0002\               (second run backup)
     SchemaQuench.0003\               (third run backup)
 ```
+
+### Debug SQL files
+
+When SchemaQuench runs one of its generated procedures against your target database, it dumps the exact SQL it sent to a companion `.sql` file next to the tool executable. If the procedure throws, the error log points you at the file by name. Open it in your query tool of choice, re-run the SQL by hand, and reproduce or narrow the problem without guessing what SchemaSmith actually executed.
+
+Generated procedures cover missing tables and columns, modified tables, indexes, foreign keys, materialized views, indexed views, and the table-JSON parse step. Debug files follow the pattern `SchemaQuench - <operation> <server>.<database>.sql`:
+
+```
+SchemaQuench - Quench Missing Tables And Columns prod-db.NorthwindClone.sql
+SchemaQuench - Quench Modified Tables prod-db.NorthwindClone.sql
+SchemaQuench - Quench Indexes prod-db.NorthwindClone.sql
+SchemaQuench - Quench Foreign Keys prod-db.NorthwindClone.sql
+SchemaQuench - Quench Materialized Views prod-db.NorthwindClone.sql
+SchemaQuench - Quench Indexed Views prod-db.NorthwindClone.sql
+SchemaQuench - Parse Table Json prod-db.NorthwindClone.sql
+```
+
+Each run overwrites the debug files for the operations it actually performed. Operations that don't apply to your platform (for example, `Indexed Views` on PostgreSQL or `Materialized Views` on MySQL) produce no file. Debug files always land next to the tool executable -- `--LogPath` controls the progress and error logs, not debug SQL.
+
+> **Note:** Debug files only cover SchemaSmith's own generated procedures. The user-authored scripts in your package (`Before/`, `After/`, migration scripts, programmable objects) already live on disk at their original paths -- when one of them fails, the error log points at the file you authored.
+
+### Engine notices
+
+SchemaSmith surfaces the database engine's informational output -- notices, prints, and server-side status messages -- into the progress log so you can see what the engine is telling you. The wiring differs per platform because each driver exposes that stream differently:
+
+- **SQL Server** -- `PRINT` output and severity-10-or-lower errors arrive through the `InfoMessage` event. By default SchemaSmith promotes only severity-above-10 errors and `RAISERROR ... WITH STATE 100` notifications to the progress log; set `VerboseLogging: true` to include every `PRINT` and informational message.
+- **PostgreSQL** -- `RAISE NOTICE` and `RAISE WARNING` output arrives through the Npgsql `Notice` event and lands in the progress log. SchemaSmith filters out the `"... does not exist, skipping"` and `"... already exists, skipping"` notices that `DROP ... IF EXISTS` and `CREATE ... IF NOT EXISTS` produce during normal runs, so your log stays readable.
+- **MySQL** -- the MySQL connector doesn't fire info-message events for long-running stored procedures, so SchemaSmith uses a table-based status channel. A `SchemaSmith_StatusMessages` table in the target database (created automatically during kindling) holds per-session progress rows; the generated quench procedures `INSERT` into it as they work, and a background poller on a separate connection reads the new rows every 200ms and writes them to the progress log. `SessionId` is scoped to `CONNECTION_ID()` so concurrent runs don't cross-talk, and the monitor deletes its rows on shutdown. There's no `VerboseLogging` dial on MySQL -- what you see is whatever the procedures chose to publish.
+
+`VerboseLogging` is a SchemaQuench setting and applies only to SQL Server's `InfoMessage` stream. The PostgreSQL and MySQL paths already behave the way `VerboseLogging: true` behaves on SQL Server -- SchemaSmith surfaces every engine-side notice (PostgreSQL) or procedure-emitted status message (MySQL) by default.
 
 ---
 
