@@ -278,9 +278,9 @@ Both log files are overwritten at the start of each run. Previous runs are prese
 
 The console is a live mirror of the progress log, not a separate channel. Watching the console while a quench runs lets you follow startup, per-object progress, and completion in real time without tailing a file. Log4Net colorizes the console stream by level -- informational entries in green, warnings in yellow, errors in red -- so trouble catches your eye the moment it appears.
 
-Errors flow differently. They land in the error log only, so the console stays focused on forward progress while the quench is in flight. When a run fails, read the error log for the exception and the progress log for the context around where it happened -- the two files run in lockstep and share timestamps.
+When a script fails, you see a short error summary on the console and in the progress log (red, so it's hard to miss): the failing script path and the engine's error message, along with a `Debug Script:` pointer when a generated procedure is the source. That's enough to know what failed and where to look. The **full detail** -- the exception line numbers and the complete SQL batches SchemaSmith submitted -- lands in the error log only, so the console and progress stream don't drown in multi-KB failed-batch text during a rough deployment. When a run fails, the progress log tells you *what* broke; the error log tells you *exactly what SQL was sent* when it broke.
 
-> **Tip:** CI agents that capture stdout get the progress stream for free. If your pipeline step only saves stdout, you still have a readable transcript of what the tool did; archive the progress and error files for the full picture.
+> **Tip:** CI agents that capture stdout get the progress stream for free. If your pipeline step only saves stdout, you still have a readable transcript of successes and error summaries; archive the error log separately to keep the failed-batch detail.
 
 ### Log file location
 
