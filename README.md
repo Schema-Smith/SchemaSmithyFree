@@ -43,4 +43,4 @@ SchemaSmith Community Edition is licensed under [SSCL v2.0](LICENSE). No organiz
 ## Additional Resources
 
 - [Documentation](https://schemasmith.com/documentation/mssql/community/getting-started.html)
-- [Community Command Center](https://github.com/Schema-Smith/Community) — roadmap, plans, feature matrices
+
