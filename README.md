@@ -1,6 +1,6 @@
 # SchemaSmith Community Edition
 
-*Terraform for SQL Server databases*
+*Terraform for SQL Server, Postgres, and MySQL databases*
 
 ![Build](https://github.com/Schema-Smith/SchemaSmithyFree/actions/workflows/continuous-integration.yml/badge.svg)
 [![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmithyFree)](https://github.com/Schema-Smith/SchemaSmithyFree/releases/latest)
