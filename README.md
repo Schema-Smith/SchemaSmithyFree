@@ -2,8 +2,8 @@
 
 *Terraform for SQL Server, Postgres, and MySQL databases*
 
-![Build](https://github.com/Schema-Smith/SchemaSmithyFree/actions/workflows/continuous-integration.yml/badge.svg)
-[![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmithyFree)](https://github.com/Schema-Smith/SchemaSmithyFree/releases/latest)
+![Build](https://github.com/Schema-Smith/SchemaSmith/actions/workflows/continuous-integration.yml/badge.svg)
+[![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/releases/latest)
 [![License: SSCL v2.0](https://img.shields.io/badge/license-SSCL%20v2.0-blue)](LICENSE)
 
 SchemaSmith is a state-based database schema management toolset for SQL Server. Define your desired database state as metadata — tables, views, procedures, triggers — and SchemaSmith transforms any target server to match.
@@ -30,12 +30,12 @@ For the complete feature reference, see [docs/FEATURE_LIST.md](docs/FEATURE_LIST
 
 ### GitHub Releases
 
-Download self-contained ZIP packages from the [latest release](https://github.com/Schema-Smith/SchemaSmithyFree/releases/latest). Extract and run — no .NET runtime required.
+Download self-contained ZIP packages from the [latest release](https://github.com/Schema-Smith/SchemaSmith/releases/latest). Extract and run — no .NET runtime required.
 
 ### Build from Source
 
 ```bash
-dotnet build SchemaSmithyFree.sln
+dotnet build SchemaSmith.sln
 ```
 
 For self-contained publishing:
@@ -69,7 +69,7 @@ docker compose -f demo/docker-compose.yml up -d demoserver
 Then run tests:
 
 ```bash
-dotnet test SchemaSmithyFree.sln
+dotnet test SchemaSmith.sln
 ```
 
 ## Demo Products

@@ -1,16 +1,16 @@
-# Contributing to SchemaSmithyFree
-First off, thank you for considering contributing to SchemaSmithyFree!
+# Contributing to SchemaSmith
+First off, thank you for considering contributing to SchemaSmith!
 
 Contributions are what make community-driven projects thrive, and we welcome pull requests, bug reports, and feature suggestions.
 
 # Ways to Contribute
 * **Report bugs** — Open an issue with detailed steps to reproduce.
-* **Suggest enhancements** — Share your ideas for improving SchemaSmithyFree in an issue.
+* **Suggest enhancements** — Share your ideas for improving SchemaSmith in an issue.
 * **Submit code** — Add features, fix bugs, or improve documentation.
 * **Improve docs** — Our [documentation site](https://schemasmith.com/documentation/mssql/community/getting-started.html), in-repo `docs/` directory, and README are always evolving. Contributions are welcome.
 
 # Development Setup
-The tools in SchemaSmithyFree target:
+The tools in SchemaSmith target:
 * **.NET**: `net10.0`
 * **IDEs**: Visual Studio 2026 or JetBrains Rider
 * **Database**: Tested against SQL Server `2022-latest`. Should work with any database set to compatibility level 130 or higher.
@@ -49,7 +49,7 @@ Connection details are defined in `demo/.env`. Connect at `localhost:1440`.
 # Community & Communication
 * Be respectful and constructive in discussions.
 * Assume positive intent.
-* Remember we're all working to make SchemaSmithyFree better.
+* Remember we're all working to make SchemaSmith better.
 
 # License
 By contributing, you agree that your contributions will be licensed under the [SSCL v2.0](LICENSE), the same license as the project.

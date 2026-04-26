@@ -1,6 +1,6 @@
 # SchemaSmith Community Demos
 
-Demo database schema packages for SQL Server, PostgreSQL, and MySQL, deployed by [SchemaSmith](https://github.com/Schema-Smith/SchemaSmithyFree) (SchemaQuench).
+Demo database schema packages for SQL Server, PostgreSQL, and MySQL, deployed by [SchemaSmith](https://github.com/Schema-Smith/SchemaSmith) (SchemaQuench).
 
 ## Demo Products
 

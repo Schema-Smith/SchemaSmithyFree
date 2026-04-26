@@ -8,15 +8,15 @@ This walkthrough uses **SQL Server** as the primary example, but the exact same 
 
 You need three things:
 
-**SchemaSmith tools.** Download self-contained ZIP packages from the [latest GitHub release](https://github.com/Schema-Smith/SchemaSmithyFree/releases/latest) and extract them anywhere on your PATH. No .NET runtime required.
+**SchemaSmith tools.** Download self-contained ZIP packages from the [latest GitHub release](https://github.com/Schema-Smith/SchemaSmith/releases/latest) and extract them anywhere on your PATH. No .NET runtime required.
 
 **A database server.** Either an existing instance or Docker (recommended). The repository includes a Docker Compose file that starts the demo servers for you.
 
 **The demo files.** Clone the repository or download just the `Demos/` folder:
 
 ```bash
-git clone https://github.com/Schema-Smith/SchemaSmithyFree.git
-cd SchemaSmithyFree
+git clone https://github.com/Schema-Smith/SchemaSmith.git
+cd SchemaSmith
 ```
 
 ## Step 1: Start the Demo Environment

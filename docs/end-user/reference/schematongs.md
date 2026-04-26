@@ -8,7 +8,7 @@ The same tool, the same package format, three engines. Whatever your team runs, 
 
 ## Installation
 
-**GitHub Releases** -- Download the latest release from the [SchemaSmith releases page](https://github.com/Schema-Smith/SchemaSmithyFree/releases). Unzip and place the executable on your PATH.
+**GitHub Releases** -- Download the latest release from the [SchemaSmith releases page](https://github.com/Schema-Smith/SchemaSmith/releases). Unzip and place the executable on your PATH.
 
 ---
 

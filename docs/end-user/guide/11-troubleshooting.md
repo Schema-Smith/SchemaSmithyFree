@@ -320,7 +320,7 @@ These map to `Target:Server`, `Target:User`, and `Target:Password` in the config
 
 ## Still stuck?
 
-If your issue isn't covered here, check the [reference documentation](../README.md#reference) for detailed behavior descriptions, or open an issue on [GitHub](https://github.com/Schema-Smith/SchemaSmithyFree/issues).
+If your issue isn't covered here, check the [reference documentation](../README.md#reference) for detailed behavior descriptions, or open an issue on [GitHub](https://github.com/Schema-Smith/SchemaSmith/issues).
 
 If you're still stuck and want to talk it through, reach out to Forge directly -- [ForgeBarrett@SchemaSmith.com](mailto:ForgeBarrett@SchemaSmith.com). Real developers on the other end. Real answers. We're happy to help.
 
