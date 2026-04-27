@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>schemasmith</id>
+    <version>__VERSION__</version>
+    <title>SchemaSmith</title>
+    <authors>SchemaSmith Contributors</authors>
+    <owners>SchemaSmith Contributors</owners>
+    <projectUrl>https://github.com/Schema-Smith/SchemaSmith</projectUrl>
+    <projectSourceUrl>https://github.com/Schema-Smith/SchemaSmith</projectSourceUrl>
+    <licenseUrl>https://github.com/Schema-Smith/SchemaSmith/blob/main/LICENSE</licenseUrl>
+    <docsUrl>https://schemasmith.com/</docsUrl>
+    <bugTrackerUrl>https://github.com/Schema-Smith/SchemaSmith/issues</bugTrackerUrl>
+    <copyright>© SchemaSmith Contributors. Licensed under the SSCL v2.0</copyright>
+    <tags>database schema migration sql-server postgresql mysql cli devops admin</tags>
+    <summary>Schema package management CLI tools for SQL Server, PostgreSQL, and MySQL.</summary>
+    <description><![CDATA[
+SchemaSmith is a state-based database schema management toolset for SQL Server, PostgreSQL, and MySQL. Define your desired database state as metadata — tables, views, procedures, indexes, foreign keys — and SchemaSmith transforms any target database to match.
+
+This package installs three self-contained command-line tools:
+
+- **schemaquench** — Deploys schema packages to a target database. Computes the exact DDL needed to bring the target in line with the package definition, with WhatIf analysis, idempotent deployments, and 9 ordered execution slots for fine-grained control.
+- **schematongs** — Extracts a live database schema into a deployable package. Pure SQL extraction (no SMO), preserves subfolder organization, validates scripts post-extraction, detects orphans.
+- **datatongs** — Extracts table data and generates idempotent MERGE scripts. Auto-detects primary keys, supports complex types, tokenized output for cross-environment reuse.
+
+The canonical workflow is `schematongs` → review/edit → `schemaquench` (extract → review → apply). Tools share the same package format and ship on synchronized versions.
+
+Self-contained binaries — no .NET runtime install required. Authenticode-signed via Azure Trusted Signing.
+
+Documentation: https://schemasmith.com/
+Source: https://github.com/Schema-Smith/SchemaSmith
+License: SSCL v2.0 (https://github.com/Schema-Smith/SchemaSmith/blob/main/LICENSE)
+]]></description>
+    <releaseNotes>https://github.com/Schema-Smith/SchemaSmith/releases/tag/v__VERSION__</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
