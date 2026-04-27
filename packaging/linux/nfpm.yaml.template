@@ -1,0 +1,38 @@
+name: schemasmith
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+maintainer: SchemaSmith Contributors <support@schemasmith.com>
+description: |
+  SchemaSmith CLI tools (schemaquench, schematongs, datatongs).
+  Schema package management for SQL Server, PostgreSQL, and MySQL:
+  extract schemas, deploy changes, and manage data delivery scripts.
+vendor: SchemaSmith Contributors
+homepage: https://schemasmith.com
+license: SSCL-2.0
+section: utils
+priority: optional
+rpm:
+  group: Applications/Databases
+contents:
+  - src: ./staging/SchemaQuench
+    dst: /usr/lib/schemasmith/schemaquench
+    file_info:
+      mode: 0755
+  - src: /usr/lib/schemasmith/schemaquench
+    dst: /usr/bin/schemaquench
+    type: symlink
+  - src: ./staging/SchemaTongs
+    dst: /usr/lib/schemasmith/schematongs
+    file_info:
+      mode: 0755
+  - src: /usr/lib/schemasmith/schematongs
+    dst: /usr/bin/schematongs
+    type: symlink
+  - src: ./staging/DataTongs
+    dst: /usr/lib/schemasmith/datatongs
+    file_info:
+      mode: 0755
+  - src: /usr/lib/schemasmith/datatongs
+    dst: /usr/bin/datatongs
+    type: symlink

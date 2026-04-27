@@ -199,9 +199,82 @@ jobs:
           path: "SchemaSmith-*.zip"
           retention-days: 5
 
+  package-linux:
+    runs-on: ubuntu-latest
+    needs: [build-release, read-version]
+    strategy:
+      fail-fast: false
+      matrix:
+        fmt: [deb, rpm]
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Map matrix arch to RID
+        id: rid
+        run: |
+          case "${{ matrix.arch }}" in
+            amd64) echo "rid=linux-x64" >> "$GITHUB_OUTPUT" ;;
+            arm64) echo "rid=linux-arm64" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: release-${{ steps.rid.outputs.rid }}
+          path: bins
+
+      - name: Install nfpm
+        env:
+          NFPM_VERSION: '2.46.3'
+        run: |
+          curl -sfL "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin nfpm
+          nfpm --version
+
+      - name: Stage binaries
+        run: |
+          RID="${{ steps.rid.outputs.rid }}"
+          mkdir -p staging
+          for tool in SchemaQuench SchemaTongs DataTongs; do
+            src="bins/$tool/bin/Release/net10.0/$RID/publish/$tool"
+            if [ ! -f "$src" ]; then
+              echo "::error::Missing binary $src"
+              exit 1
+            fi
+            cp "$src" "staging/$tool"
+            chmod 0755 "staging/$tool"
+          done
+          echo "Staged binaries:"
+          ls -la staging/
+
+      - name: Render nfpm config
+        env:
+          VERSION: ${{ needs.read-version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          envsubst < packaging/linux/nfpm.yaml.template > nfpm.yaml
+          echo "Rendered config:"
+          cat nfpm.yaml
+
+      - name: Pack ${{ matrix.fmt }}
+        run: |
+          mkdir -p output
+          nfpm pkg --packager ${{ matrix.fmt }} -f nfpm.yaml -t output/
+          echo "Built package:"
+          ls -la output/
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-pkg-${{ matrix.arch }}-${{ matrix.fmt }}
+          path: "output/*.${{ matrix.fmt }}"
+          retention-days: 5
+
   create-release:
     runs-on: ubuntu-latest
-    needs: [package-zip, read-version]
+    needs: [package-zip, package-linux, read-version]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -212,6 +285,13 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           pattern: zip-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Download all Linux packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: linux-pkg-*
           path: release-assets
           merge-multiple: true
 

@@ -10,6 +10,11 @@
     <Company>SchemaSmith Contributors</Company>
     <Authors>SchemaSmith Contributors</Authors>
     <Copyright>© SchemaSmith Contributors. Licensed under the SSCL v2.0</Copyright>
+    <!-- Run without ICU so self-contained publish works on minimal Linux containers
+         (slim Docker images, hardened distros) that ship without libicu. Identifier
+         comparison in this codebase is ASCII-dominated; invariant culture provides
+         a stable, locale-independent collation that matches our schema-naming domain. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
   <!-- Strip PDB files from Release/Demo publish output so ZIPs and MSIs never include them -->
