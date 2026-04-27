@@ -1,0 +1,83 @@
+name: chocolatey-publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chocolatey-publish-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Extract version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          $version = $tag.TrimStart("v")
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Packaging schemasmith version: $version"
+
+      - name: Download win-x64 bundle from Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $tag = "${{ github.event.release.tag_name }}"
+          $asset = "SchemaSmith-$version-win-x64.zip"
+          gh release download $tag --pattern $asset --repo ${{ github.repository }}
+          if (-not (Test-Path $asset)) {
+            Write-Error "Bundle ZIP $asset not found in release $tag"
+            exit 1
+          }
+          Write-Host "Downloaded: $asset"
+
+      - name: Extract bundle into Chocolatey tools/
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $asset = "SchemaSmith-$version-win-x64.zip"
+          $toolsDir = "packaging/chocolatey/schemasmith/tools"
+          Expand-Archive -Path $asset -DestinationPath $toolsDir -Force
+          Write-Host "Tools directory contents:"
+          Get-ChildItem $toolsDir | ForEach-Object { Write-Host "  $($_.Name)" }
+
+      - name: Stamp version in nuspec
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $nuspec = "packaging/chocolatey/schemasmith/schemasmith.nuspec"
+          (Get-Content $nuspec) -replace '__VERSION__', $version | Set-Content $nuspec
+          Write-Host "Stamped version $version in $nuspec"
+
+      - name: Pack Chocolatey package
+        shell: pwsh
+        working-directory: packaging/chocolatey/schemasmith
+        run: |
+          choco pack schemasmith.nuspec
+          Get-ChildItem *.nupkg | ForEach-Object { Write-Host "Packed: $($_.Name)" }
+
+      - name: Push to Chocolatey community feed
+        shell: pwsh
+        working-directory: packaging/chocolatey/schemasmith
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $package = "schemasmith.$version.nupkg"
+          if (-not (Test-Path $package)) {
+            Write-Error "Package $package not found"
+            exit 1
+          }
+          choco push $package --source https://push.chocolatey.org/ --api-key $env:CHOCOLATEY_API_KEY
+          Write-Host "Pushed: $package"
