@@ -60,7 +60,11 @@ tools/
 ## Demo pre-build output
 SchemaQuench/publish/
 
-## Chocolatey package staging — binaries land here in CI at pack time
+## Chocolatey package staging — binaries land here in CI at pack time.
+## The leading negation re-includes the package directory (the global `tools/`
+## rule above otherwise excludes it); the scoped ignores keep CI-staged
+## binaries out of commits.
+!packaging/chocolatey/schemasmith/tools/
 packaging/chocolatey/schemasmith/tools/*.exe
 packaging/chocolatey/schemasmith/tools/*.dll
 packaging/chocolatey/schemasmith/tools/*.json
