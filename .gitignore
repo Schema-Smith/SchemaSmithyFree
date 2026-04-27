@@ -59,3 +59,9 @@ tools/
 
 ## Demo pre-build output
 SchemaQuench/publish/
+
+## Chocolatey package staging — binaries land here in CI at pack time
+packaging/chocolatey/schemasmith/tools/*.exe
+packaging/chocolatey/schemasmith/tools/*.dll
+packaging/chocolatey/schemasmith/tools/*.json
+packaging/chocolatey/schemasmith/tools/*.nupkg
