@@ -52,19 +52,20 @@ jobs:
             exit 1
           fi
 
-      - name: Verify RELEASE_NOTES.md exists and matches version
+      - name: Verify CHANGELOG.md has a section for this version
         run: |
           VERSION="${{ steps.get-version.outputs.version }}"
-          if [ ! -f RELEASE_NOTES.md ]; then
-            echo "::error::RELEASE_NOTES.md not found in repo root. Copy finalized release notes before releasing."
+          if [ ! -f CHANGELOG.md ]; then
+            echo "::error::CHANGELOG.md not found in repo root."
             exit 1
           fi
-          HEADING=$(head -5 RELEASE_NOTES.md | grep -oP '(?<=## ).*' | head -1)
-          if ! echo "$HEADING" | grep -q "$VERSION"; then
-            echo "::error::RELEASE_NOTES.md heading '$HEADING' does not contain version '$VERSION'. Did you forget to update it?"
+          # Match either '## [v2.0.0]' (current/unreleased format) or
+          # '## [v2.0.0](url) — date' (post-release format with link)
+          if ! grep -qE "^## \[v${VERSION}\](\$|\()" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md is missing a section heading for v${VERSION}. Expected: '## [v${VERSION}]' (optionally followed by a link and date)."
             exit 1
           fi
-          echo "RELEASE_NOTES.md verified — heading matches version $VERSION"
+          echo "CHANGELOG.md verified — section heading found for v${VERSION}"
 
   build-release:
     runs-on: ubuntu-latest
@@ -217,6 +218,27 @@ jobs:
       - name: List release assets
         run: find release-assets -type f
 
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION="${{ needs.read-version.outputs.version }}"
+          # Capture from this version's heading line up to (but not including)
+          # the next "## " heading. Match either '## [v2.0.0]' (current format)
+          # or '## [v2.0.0](url) — date' (post-release format with link). Use
+          # index() rather than a constructed-from-string regex to avoid awk's
+          # string-escape rules eating the [ ] ( escape sequences.
+          awk -v ver="$VERSION" '
+            $0 == "## [v"ver"]" || index($0, "## [v"ver"](") == 1 { capture=1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md \
+            | awk 'NF { p=1 } p' \
+            | tac | awk 'NF { p=1 } p' | tac > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::Failed to extract release notes for v${VERSION} from CHANGELOG.md"
+            exit 1
+          fi
+          echo "Extracted $(wc -l < release-notes.md) lines from CHANGELOG.md"
+
       - name: Create tag
         run: |
           git tag "v${{ needs.read-version.outputs.version }}"
@@ -229,6 +251,6 @@ jobs:
           VERSION="${{ needs.read-version.outputs.version }}"
           gh release create "v${VERSION}" \
             --title "SchemaSmith v${VERSION}" \
-            --notes-file RELEASE_NOTES.md \
+            --notes-file release-notes.md \
             --draft \
             release-assets/*
