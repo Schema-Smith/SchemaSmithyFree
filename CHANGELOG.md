@@ -49,6 +49,8 @@ For full release details and download links, see [GitHub Releases](https://githu
 - **Self-contained executables** — Single-file builds for all tools across 6 RIDs (win/linux/osx × x64/arm64)
 - **Runtime JSON schema generator** — SchemaGenerator replaces static schema files; schemas regenerated on every product init
 - **Release workflow** — Automated build, package, and GitHub Release creation via workflow_dispatch
+- **Authenticode signing** — Windows binaries (`SchemaQuench.exe`, `SchemaTongs.exe`, `DataTongs.exe`) are signed via Azure Trusted Signing on every release. Eliminates SmartScreen "Windows protected your PC" warnings and lets users verify provenance with `signtool verify /pa /v`.
+- **Chocolatey package** — `choco install schemasmith` installs all three CLI tools as a single combined package on Windows. Embedded signed binaries — no checksum maintenance, no .NET runtime install needed. Triggered automatically on GitHub Release publish.
 - **Copyright header CI** — Validates headers on all .cs and .sql files on every push
 - **TreatWarningsAsErrors** — Enabled globally in Directory.Build.props
 - **Multi-platform CI** — Parallel SQL Server, PostgreSQL, and MySQL integration test jobs with service containers
