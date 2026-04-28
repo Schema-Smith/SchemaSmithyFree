@@ -112,6 +112,24 @@ download_release() {
     || fail "Failed to download ${base}/SHA256SUMS. Older SchemaSmith releases (pre-v2.0.0) did not include this manifest."
 }
 
+# Extracts the expected SHA-256 for the bundle's filename from SUMS_PATH and
+# compares against the actual hash of BUNDLE_PATH. Avoids `sha256sum -c`
+# because that tries to verify every entry in the manifest, including
+# artifacts we did not download, and shasum -c semantics differ across
+# macOS versions.
+verify_sha256() {
+  bundle_name="${BUNDLE_PATH##*/}"
+  expected=$(awk -v f="$bundle_name" '$2==f || $2=="*"f {print $1; exit}' "$SUMS_PATH")
+  if [ -z "$expected" ]; then
+    fail "No SHA256 entry for ${bundle_name} in SHA256SUMS. The release manifest may be corrupted or stale."
+  fi
+  actual=$(${SHA256_CMD} "$BUNDLE_PATH" | awk '{print $1}')
+  if [ "$expected" != "$actual" ]; then
+    fail "Checksum mismatch for ${bundle_name} (expected ${expected}, got ${actual}). Re-run; if persistent, file an issue."
+  fi
+  info "SHA256 verified: ${expected}"
+}
+
 main() {
   info "SchemaSmith install: starting"
   OS=$(detect_os)
@@ -133,6 +151,7 @@ main() {
   mkdir -p "$TARGET" || fail "Cannot create install dir ${TARGET}. Re-run with sudo, or set INSTALL_DIR=<writable path>."
 
   download_release
+  verify_sha256
 }
 
 main "$@"
