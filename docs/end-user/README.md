@@ -14,6 +14,14 @@ New to SchemaSmith? The guide takes you from "what is this?" to confidently mana
 
 ---
 
+## Get the Tools
+
+Before the walkthrough, install SchemaSmith. One command per platform — Chocolatey on Windows, `.deb` / `.rpm` / `install.sh` on Linux and macOS. No .NET runtime to install.
+
+**[Installation →](guide/installation.md)**
+
+---
+
 ## The Guide
 
 A hands-on journey from first contact to confident production deployment, organized around three pillars: **Shape** your schema, **Strengthen** your process, **Succeed** in production.
