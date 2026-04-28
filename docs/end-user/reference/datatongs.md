@@ -6,9 +6,9 @@ DataTongs supports **SQL Server**, **PostgreSQL**, and **MySQL**. The script syn
 
 ---
 
-## Installation and Invocation
+## Invocation
 
-DataTongs is included in the SchemaSmith distribution. Run it from the directory containing your `DataTongs.settings.json` configuration file:
+DataTongs ships as part of the SchemaSmith distribution — see the [Installation guide](../guide/installation.md) for how to get the binary on your PATH. Run it from the directory containing your `DataTongs.settings.json` configuration file:
 
 ```bash
 DataTongs

@@ -6,9 +6,9 @@ One executable, three platforms. The product's `Platform` value (`SqlServer`, `P
 
 ---
 
-## Installation and Invocation
+## Invocation
 
-SchemaQuench is included in the SchemaSmith distribution. Run it from the directory containing `SchemaQuench.settings.json`:
+SchemaQuench ships as part of the SchemaSmith distribution — see the [Installation guide](../guide/installation.md) for how to get the binary on your PATH. Run it from the directory containing `SchemaQuench.settings.json`:
 
 ```bash
 SchemaQuench
