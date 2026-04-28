@@ -94,6 +94,24 @@ resolve_install_dir() {
   fi
 }
 
+# Downloads the bundle tarball and SHA256SUMS for the resolved version+RID.
+# Sets BUNDLE_PATH and SUMS_PATH to the local file paths in $WORK. The bundle
+# filename can be recovered from BUNDLE_PATH via "${BUNDLE_PATH##*/}".
+download_release() {
+  base="https://github.com/${REPO}/releases/download/v${VERSION}"
+  bundle="SchemaSmith-${VERSION}-${RID}.tar.gz"
+  BUNDLE_PATH="${WORK}/${bundle}"
+  SUMS_PATH="${WORK}/SHA256SUMS"
+
+  info "Downloading ${bundle}"
+  curl -fsSL "${base}/${bundle}" -o "${BUNDLE_PATH}" \
+    || fail "Failed to download ${base}/${bundle}. Check network or pinned INSTALL_VERSION."
+
+  info "Downloading SHA256SUMS"
+  curl -fsSL "${base}/SHA256SUMS" -o "${SUMS_PATH}" \
+    || fail "Failed to download ${base}/SHA256SUMS. Older SchemaSmith releases (pre-v2.0.0) did not include this manifest."
+}
+
 main() {
   info "SchemaSmith install: starting"
   OS=$(detect_os)
@@ -113,6 +131,8 @@ main() {
   TARGET=$(resolve_install_dir)
   info "Install dir: ${TARGET}"
   mkdir -p "$TARGET" || fail "Cannot create install dir ${TARGET}. Re-run with sudo, or set INSTALL_DIR=<writable path>."
+
+  download_release
 }
 
 main "$@"
