@@ -26,9 +26,28 @@ info() {
   printf '%s\n' "$*"
 }
 
+detect_os() {
+  case "$(uname -s)" in
+    Linux)  echo linux ;;
+    Darwin) echo osx ;;
+    *)      fail "Unsupported OS: $(uname -s). install.sh supports Linux and macOS only. For Windows, install via Chocolatey: choco install schemasmith" ;;
+  esac
+}
+
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64)  echo x64 ;;
+    aarch64|arm64) echo arm64 ;;
+    *)             fail "Unsupported architecture: $(uname -m). install.sh supports x86_64 and aarch64/arm64 only." ;;
+  esac
+}
+
 main() {
   info "SchemaSmith install: starting"
-  # Subsequent tasks fill in the rest.
+  OS=$(detect_os)
+  ARCH=$(detect_arch)
+  RID="${OS}-${ARCH}"
+  info "Detected: ${RID}"
 }
 
 main "$@"
