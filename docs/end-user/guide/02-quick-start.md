@@ -8,7 +8,11 @@ This walkthrough uses **SQL Server** as the primary example, but the exact same 
 
 You need three things:
 
-**SchemaSmith tools.** Download self-contained ZIP packages from the [latest GitHub release](https://github.com/Schema-Smith/SchemaSmith/releases/latest) and extract them anywhere on your PATH. No .NET runtime required.
+**SchemaSmith tools.** Pick the fastest path for your platform:
+
+- **Windows:** `choco install schemasmith`
+- **Linux / macOS:** `curl -fsSL https://raw.githubusercontent.com/Schema-Smith/SchemaSmith/main/packaging/install/install.sh | sh`
+- **Debian/Ubuntu, RHEL/Fedora, manual ZIP, signature verification, all the rest:** see [Installation](installation.md).
 
 **A database server.** Either an existing instance or Docker (recommended). The repository includes a Docker Compose file that starts the demo servers for you.
 
