@@ -42,12 +42,36 @@ detect_arch() {
   esac
 }
 
+need_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    fail "$1 not found. Install via your package manager (e.g., 'apt install $1' on Debian/Ubuntu, 'brew install $1' on macOS)."
+  fi
+}
+
+# Picks sha256sum (Linux/coreutils) or shasum -a 256 (macOS/BSD).
+# Sets SHA256_CMD to the resolved command.
+detect_sha256_cmd() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    SHA256_CMD="sha256sum"
+  elif command -v shasum >/dev/null 2>&1; then
+    SHA256_CMD="shasum -a 256"
+  else
+    fail "Neither sha256sum nor shasum is available. Install GNU coreutils ('apt install coreutils', 'brew install coreutils') or perl shasum."
+  fi
+}
+
 main() {
   info "SchemaSmith install: starting"
   OS=$(detect_os)
   ARCH=$(detect_arch)
   RID="${OS}-${ARCH}"
   info "Detected: ${RID}"
+
+  need_cmd curl
+  need_cmd tar
+  need_cmd install
+  detect_sha256_cmd
+  info "Tooling: curl, tar, install, ${SHA256_CMD}"
 }
 
 main "$@"
