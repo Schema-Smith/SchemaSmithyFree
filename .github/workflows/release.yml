@@ -164,17 +164,17 @@ jobs:
           path: bins/
           retention-days: 1
 
-  package-zip:
+  package-zip-windows:
     runs-on: ubuntu-latest
     needs: [build-release, sign-windows, read-version]
     strategy:
       matrix:
-        rid: [win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64]
+        rid: [win-x64, win-arm64]
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
-          name: release-${{ matrix.rid }}${{ startsWith(matrix.rid, 'win-') && '-signed' || '' }}
+          name: release-${{ matrix.rid }}-signed
           path: bins
 
       - name: Assemble ZIP
@@ -197,6 +197,42 @@ jobs:
         with:
           name: zip-${{ matrix.rid }}
           path: "SchemaSmith-*.zip"
+          retention-days: 5
+
+  package-tar-unix:
+    runs-on: ubuntu-latest
+    needs: [build-release, read-version]
+    strategy:
+      matrix:
+        rid: [linux-x64, linux-arm64, osx-x64, osx-arm64]
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: release-${{ matrix.rid }}
+          path: bins
+
+      - name: Assemble tarball
+        run: |
+          VERSION="${{ needs.read-version.outputs.version }}"
+          mkdir -p tar-staging
+          for tool in SchemaQuench SchemaTongs DataTongs; do
+            src="bins/$tool/bin/Release/net10.0/${{ matrix.rid }}/publish"
+            if [ -d "$src" ]; then
+              cp "$src"/* tar-staging/ 2>/dev/null || true
+            fi
+          done
+          rm -f tar-staging/*.pdb
+          chmod 0755 tar-staging/SchemaQuench tar-staging/SchemaTongs tar-staging/DataTongs
+          echo "Tarball contents:"
+          ls -la tar-staging/
+          tar -czf "SchemaSmith-${VERSION}-${{ matrix.rid }}.tar.gz" -C tar-staging .
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: tar-${{ matrix.rid }}
+          path: "SchemaSmith-*.tar.gz"
           retention-days: 5
 
   package-linux:
@@ -274,7 +310,7 @@ jobs:
 
   create-release:
     runs-on: ubuntu-latest
-    needs: [package-zip, package-linux, read-version]
+    needs: [package-zip-windows, package-tar-unix, package-linux, read-version]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -288,6 +324,13 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Download all tarballs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: tar-*
+          path: release-assets
+          merge-multiple: true
+
       - name: Download all Linux packages
         uses: actions/download-artifact@v8
         with:
@@ -297,6 +340,13 @@ jobs:
 
       - name: List release assets
         run: find release-assets -type f
+
+      - name: Generate SHA256SUMS
+        working-directory: release-assets
+        run: |
+          sha256sum -- * > SHA256SUMS
+          echo "SHA256SUMS contents:"
+          cat SHA256SUMS
 
       - name: Extract release notes from CHANGELOG
         run: |
