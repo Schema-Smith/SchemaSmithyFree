@@ -79,6 +79,21 @@ resolve_version() {
   echo "$resolved"
 }
 
+# Resolves the install directory. INSTALL_DIR overrides; otherwise:
+#   /usr/local/bin if running as root
+#   ~/.local/bin   otherwise
+resolve_install_dir() {
+  if [ -n "${INSTALL_DIR:-}" ]; then
+    echo "$INSTALL_DIR"
+    return 0
+  fi
+  if [ "$(id -u)" -eq 0 ]; then
+    echo "/usr/local/bin"
+  else
+    echo "${HOME}/.local/bin"
+  fi
+}
+
 main() {
   info "SchemaSmith install: starting"
   OS=$(detect_os)
@@ -94,6 +109,10 @@ main() {
 
   VERSION=$(resolve_version)
   info "Version: ${VERSION}"
+
+  TARGET=$(resolve_install_dir)
+  info "Install dir: ${TARGET}"
+  mkdir -p "$TARGET" || fail "Cannot create install dir ${TARGET}. Re-run with sudo, or set INSTALL_DIR=<writable path>."
 }
 
 main "$@"
