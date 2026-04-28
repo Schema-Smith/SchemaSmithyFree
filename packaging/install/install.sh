@@ -153,6 +153,53 @@ extract_and_install() {
   done
 }
 
+# Returns 0 if TARGET is on $PATH, 1 otherwise.
+target_on_path() {
+  case ":${PATH}:" in
+    *":${TARGET}:"*) return 0 ;;
+    *)               return 1 ;;
+  esac
+}
+
+# Prints shell-specific PATH-fixup instructions for TARGET.
+# shellcheck disable=SC2016
+# The $PATH inside the single-quoted strings below is intentional: we are
+# emitting the literal text the user should append to their rc file, where
+# $PATH must remain unexpanded so the user's shell expands it at .bashrc
+# evaluation time (not at install-script evaluation time).
+print_path_fix() {
+  shell_name=$(basename "${SHELL:-/bin/bash}")
+  printf '\n%s is not on PATH. Add it:\n\n' "$TARGET"
+  case "$shell_name" in
+    bash)
+      printf '  echo '\''export PATH="%s:$PATH"'\'' >> ~/.bashrc\n' "$TARGET"
+      printf '  source ~/.bashrc\n' ;;
+    zsh)
+      printf '  echo '\''export PATH="%s:$PATH"'\'' >> ~/.zshrc\n' "$TARGET"
+      printf '  source ~/.zshrc\n' ;;
+    fish)
+      printf '  fish_add_path %s\n' "$TARGET" ;;
+    *)
+      printf '  # bash:\n'
+      printf '  echo '\''export PATH="%s:$PATH"'\'' >> ~/.bashrc\n\n' "$TARGET"
+      printf '  # zsh:\n'
+      printf '  echo '\''export PATH="%s:$PATH"'\'' >> ~/.zshrc\n' "$TARGET" ;;
+  esac
+}
+
+# Prints the success summary and uninstall one-liner.
+print_success() {
+  printf '\nSchemaSmith %s installed to %s\n' "$VERSION" "$TARGET"
+  printf '  schemaquench --version\n'
+  printf '  schematongs --version\n'
+  printf '  datatongs --version\n'
+  if ! target_on_path; then
+    print_path_fix
+  fi
+  printf '\nTo uninstall: rm -f %s/schemaquench %s/schematongs %s/datatongs\n' \
+    "$TARGET" "$TARGET" "$TARGET"
+}
+
 main() {
   info "SchemaSmith install: starting"
   OS=$(detect_os)
@@ -176,6 +223,7 @@ main() {
   download_release
   verify_sha256
   extract_and_install
+  print_success
 }
 
 main "$@"
