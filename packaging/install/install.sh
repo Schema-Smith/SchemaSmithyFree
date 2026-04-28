@@ -14,6 +14,8 @@
 
 set -eu
 
+REPO="Schema-Smith/SchemaSmith"
+
 WORK=$(mktemp -d 2>/dev/null || mktemp -d -t schemasmith-install)
 trap 'rm -rf "$WORK"' EXIT INT TERM
 
@@ -60,6 +62,23 @@ detect_sha256_cmd() {
   fi
 }
 
+# Resolves the version to install. If INSTALL_VERSION is set, uses it as-is.
+# Otherwise follows the /releases/latest redirect to /releases/tag/vX.Y.Z and
+# extracts the version. No GitHub API quota burn.
+resolve_version() {
+  if [ -n "${INSTALL_VERSION:-}" ]; then
+    echo "$INSTALL_VERSION"
+    return 0
+  fi
+  resolved=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+    "https://github.com/${REPO}/releases/latest" 2>/dev/null \
+    | sed -n 's|.*/tag/v\([^/]*\)$|\1|p')
+  if [ -z "$resolved" ]; then
+    fail "Could not resolve latest version from https://github.com/${REPO}/releases/latest. Try INSTALL_VERSION=<x.y.z>."
+  fi
+  echo "$resolved"
+}
+
 main() {
   info "SchemaSmith install: starting"
   OS=$(detect_os)
@@ -72,6 +91,9 @@ main() {
   need_cmd install
   detect_sha256_cmd
   info "Tooling: curl, tar, install, ${SHA256_CMD}"
+
+  VERSION=$(resolve_version)
+  info "Version: ${VERSION}"
 }
 
 main "$@"
