@@ -15,6 +15,7 @@
 set -eu
 
 REPO="Schema-Smith/SchemaSmith"
+TOOLS="SchemaQuench SchemaTongs DataTongs"
 
 WORK=$(mktemp -d 2>/dev/null || mktemp -d -t schemasmith-install)
 trap 'rm -rf "$WORK"' EXIT INT TERM
@@ -130,6 +131,28 @@ verify_sha256() {
   info "SHA256 verified: ${expected}"
 }
 
+# Extracts the verified bundle to a staging directory, then installs each
+# tool to TARGET with a lowercase name (matching the .deb/.rpm convention).
+extract_and_install() {
+  extract_dir="${WORK}/extract"
+  mkdir -p "$extract_dir"
+  bundle_name="${BUNDLE_PATH##*/}"
+  tar -xzf "$BUNDLE_PATH" -C "$extract_dir" \
+    || fail "Failed to extract ${bundle_name} — possibly a corrupt download."
+
+  for tool in $TOOLS; do
+    src="${extract_dir}/${tool}"
+    if [ ! -f "$src" ]; then
+      fail "Bundle is missing ${tool}. Re-run; if persistent, file an issue."
+    fi
+    lower=$(printf '%s' "$tool" | tr '[:upper:]' '[:lower:]')
+    dest="${TARGET}/${lower}"
+    install -m 0755 "$src" "$dest" \
+      || fail "Cannot write ${dest}. Re-run with sudo, or set INSTALL_DIR=<writable path>."
+    info "Installed ${dest}"
+  done
+}
+
 main() {
   info "SchemaSmith install: starting"
   OS=$(detect_os)
@@ -152,6 +175,7 @@ main() {
 
   download_release
   verify_sha256
+  extract_and_install
 }
 
 main "$@"
