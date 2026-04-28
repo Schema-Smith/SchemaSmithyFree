@@ -1,0 +1,5 @@
+# Shell scripts must be LF on every platform — busybox sh and dash
+# do not tolerate CR characters. Without this, Windows checkouts with
+# core.autocrlf=true would convert LF to CRLF and break install.sh
+# in Linux/macOS containers run from a Windows clone.
+*.sh text eol=lf
