@@ -16,7 +16,6 @@ body:
         - SchemaQuench (deploy)
         - SchemaTongs (extract)
         - DataTongs (data sync)
-        - SchemaHammer (desktop viewer)
         - General / Cross-tool
     validations:
       required: true
