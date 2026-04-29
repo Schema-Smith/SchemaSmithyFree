@@ -30,6 +30,15 @@
 		<ProjectReference Include="..\Schema\Schema.csproj" />
 	</ItemGroup>
 
+	<!-- Bundle ICU into self-contained Linux publish output so the CLI works on minimal
+	     containers (ubuntu:24.04, fedora:latest) without system libicu. Other RIDs
+	     (Windows, macOS) get nothing extra — system ICU is reliably present and is
+	     preferred at load time. ICU version is centralized in Directory.Build.props. -->
+	<ItemGroup>
+		<RuntimeHostConfigurationOption Include="System.Globalization.AppLocalIcu" Value="$(IcuVersion)" />
+		<PackageReference Include="Microsoft.ICU.ICU4C.Runtime" />
+	</ItemGroup>
+
 
 <ItemGroup>
 	  <None Update="SchemaTongs.settings.json">
