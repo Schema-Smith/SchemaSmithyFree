@@ -270,9 +270,12 @@ jobs:
           nfpm --version
 
       - name: Stage binaries
+        env:
+          ICU_VERSION: '72.1.0.3'
         run: |
           RID="${{ steps.rid.outputs.rid }}"
           mkdir -p staging
+          # Copy the three CLI binaries
           for tool in SchemaQuench SchemaTongs DataTongs; do
             src="bins/$tool/bin/Release/net10.0/$RID/publish/$tool"
             if [ ! -f "$src" ]; then
@@ -282,13 +285,26 @@ jobs:
             cp "$src" "staging/$tool"
             chmod 0755 "staging/$tool"
           done
-          echo "Staged binaries:"
+          # Copy the bundled ICU shared libs (from any one tool's publish dir — they're byte-identical
+          # across tools because they come from the same package version pulled into each csproj).
+          icu_src="bins/SchemaQuench/bin/Release/net10.0/$RID/publish"
+          for lib in libicudata libicui18n libicuuc; do
+            so="$icu_src/${lib}.so.${ICU_VERSION}"
+            if [ ! -f "$so" ]; then
+              echo "::error::Missing ICU shared lib $so"
+              exit 1
+            fi
+            cp "$so" "staging/${lib}.so.${ICU_VERSION}"
+            chmod 0644 "staging/${lib}.so.${ICU_VERSION}"
+          done
+          echo "Staged contents:"
           ls -la staging/
 
       - name: Render nfpm config
         env:
           VERSION: ${{ needs.read-version.outputs.version }}
           ARCH: ${{ matrix.arch }}
+          ICU_VERSION: '72.1.0.3'
         run: |
           envsubst < packaging/linux/nfpm.yaml.template > nfpm.yaml
           echo "Rendered config:"
