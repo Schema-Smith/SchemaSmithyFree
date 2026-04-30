@@ -36,3 +36,15 @@ contents:
   - src: /usr/lib/schemasmith/datatongs
     dst: /usr/bin/datatongs
     type: symlink
+  - src: ./staging/libicudata.so.${ICU_VERSION}
+    dst: /usr/lib/schemasmith/libicudata.so.${ICU_VERSION}
+    file_info:
+      mode: 0644
+  - src: ./staging/libicui18n.so.${ICU_VERSION}
+    dst: /usr/lib/schemasmith/libicui18n.so.${ICU_VERSION}
+    file_info:
+      mode: 0644
+  - src: ./staging/libicuuc.so.${ICU_VERSION}
+    dst: /usr/lib/schemasmith/libicuuc.so.${ICU_VERSION}
+    file_info:
+      mode: 0644
