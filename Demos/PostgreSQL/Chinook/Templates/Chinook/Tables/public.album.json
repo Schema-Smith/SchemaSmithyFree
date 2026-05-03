@@ -1,0 +1,78 @@
+{
+  "Name": "album",
+  "Columns": [
+    {
+      "Name": "album_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "GENERATED ALWAYS AS IDENTITY(START WITH 1 INCREMENT BY 1)",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "artist_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "title",
+      "DataType": "varchar(160)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "album_artist_id_idx",
+      "IndexColumns": "artist_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    },
+    {
+      "Name": "album_pkey",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "album_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "album_artist_id_fkey",
+      "Columns": "artist_id",
+      "RelatedTable": "artist",
+      "RelatedColumns": "artist_id",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "public",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.album.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "album_id"
+  }
+}

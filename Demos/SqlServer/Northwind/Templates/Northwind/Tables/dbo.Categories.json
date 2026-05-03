@@ -1,0 +1,81 @@
+{
+  "Name": "[Categories]",
+  "Columns": [
+    {
+      "Name": "[CategoryID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[CategoryName]",
+      "DataType": "NVARCHAR(15)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Description]",
+      "DataType": "NTEXT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Picture]",
+      "DataType": "IMAGE",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[CategoryName]",
+      "IndexColumns": "[CategoryName]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[PK_Categories]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[CategoryID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Categories.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[CategoryID]"
+  }
+}

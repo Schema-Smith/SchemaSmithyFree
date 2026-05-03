@@ -1,0 +1,128 @@
+{
+  "Name": "productinventory",
+  "Columns": [
+    {
+      "Name": "bin",
+      "DataType": "int2",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "locationid",
+      "DataType": "int2",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "productid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "quantity",
+      "DataType": "int2",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "rowguid",
+      "DataType": "uuid",
+      "Default": "uuid_generate_v1()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "shelf",
+      "DataType": "varchar(10)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_ProductInventory_ProductID_LocationID",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "productid,locationid",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_ProductInventory_Location_LocationID",
+      "Columns": "locationid",
+      "RelatedTable": "location",
+      "RelatedColumns": "locationid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "production",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_ProductInventory_Product_ProductID",
+      "Columns": "productid",
+      "RelatedTable": "product",
+      "RelatedColumns": "productid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "production",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_ProductInventory_Bin",
+      "Expression": "(bin >= 0) AND (bin <= 100)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "production",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/production.productinventory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "productid,locationid"
+  }
+}

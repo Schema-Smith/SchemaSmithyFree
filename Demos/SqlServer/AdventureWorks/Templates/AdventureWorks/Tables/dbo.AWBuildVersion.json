@@ -1,0 +1,92 @@
+{
+  "Name": "[AWBuildVersion]",
+  "Columns": [
+    {
+      "Name": "[Database Version]",
+      "DataType": "NVARCHAR(25)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Version number of the database in 9.yy.mm.dd.00 format."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[SystemInformationID]",
+      "DataType": "TINYINT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for AWBuildVersion records."
+      }
+    },
+    {
+      "Name": "[VersionDate]",
+      "DataType": "DATETIME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_AWBuildVersion_SystemInformationID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[SystemInformationID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Current version number of the AdventureWorks 2016 sample database. "
+  },
+  "DataDelivery": {
+    "ContentFile": "data/dbo.AWBuildVersion.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[SystemInformationID]"
+  }
+}

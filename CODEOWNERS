@@ -3,5 +3,13 @@
 # These owners will be the default owners for everything in the repo.
 # Protections will be placed so an owner must approve any PRs to the main branch.
 #
-# 
+#
 *       @drzacharysmith68 @AgentSmith71
+
+# Release-critical paths — stay at 2 maintainers even if the default above is ever widened.
+.github/workflows/      @drzacharysmith68 @AgentSmith71
+CODEOWNERS              @drzacharysmith68 @AgentSmith71
+packaging/              @drzacharysmith68 @AgentSmith71
+Directory.Build.props   @drzacharysmith68 @AgentSmith71
+LICENSE                 @drzacharysmith68 @AgentSmith71
+RELEASE_NOTES.md        @drzacharysmith68 @AgentSmith71

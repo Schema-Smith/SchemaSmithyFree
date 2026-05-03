@@ -1,0 +1,136 @@
+{
+  "Name": "[address]",
+  "Columns": [
+    {
+      "Name": "[address]",
+      "DataType": "NVARCHAR(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[address_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "Identity": true
+    },
+    {
+      "Name": "[address2]",
+      "DataType": "NVARCHAR(50)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[city_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[district]",
+      "DataType": "NVARCHAR(20)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[last_update]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[phone]",
+      "DataType": "NVARCHAR(20)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[postal_code]",
+      "DataType": "NVARCHAR(10)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[idx_fk_city_id]",
+      "IndexColumns": "[city_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[PK_address_address_id]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[address_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[fk_address_city]",
+      "Columns": "[city_id]",
+      "RelatedTable": "[city]",
+      "RelatedColumns": "[city_id]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.address.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[address_id]"
+  }
+}

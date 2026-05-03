@@ -1,0 +1,102 @@
+{
+  "Name": "employeepayhistory",
+  "Columns": [
+    {
+      "Name": "businessentityid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "payfrequency",
+      "DataType": "int2",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "rate",
+      "DataType": "numeric",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "ratechangedate",
+      "DataType": "timestamp",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_EmployeePayHistory_BusinessEntityID_RateChangeDate",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "businessentityid,ratechangedate",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_EmployeePayHistory_Employee_BusinessEntityID",
+      "Columns": "businessentityid",
+      "RelatedTable": "employee",
+      "RelatedColumns": "businessentityid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "humanresources",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_EmployeePayHistory_PayFrequency",
+      "Expression": "payfrequency = ANY (ARRAY[1, 2])",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_EmployeePayHistory_Rate",
+      "Expression": "(rate >= 6.50) AND (rate <= 200.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "humanresources",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/humanresources.employeepayhistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "businessentityid,ratechangedate"
+  }
+}

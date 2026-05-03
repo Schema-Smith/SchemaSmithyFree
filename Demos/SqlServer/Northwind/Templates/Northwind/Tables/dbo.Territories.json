@@ -1,0 +1,72 @@
+{
+  "Name": "[Territories]",
+  "Columns": [
+    {
+      "Name": "[RegionID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[TerritoryDescription]",
+      "DataType": "NCHAR(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[TerritoryID]",
+      "DataType": "NVARCHAR(20)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Territories]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[TerritoryID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Territories_Region]",
+      "Columns": "[RegionID]",
+      "RelatedTable": "[Region]",
+      "RelatedColumns": "[RegionID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Territories.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[TerritoryID]"
+  }
+}

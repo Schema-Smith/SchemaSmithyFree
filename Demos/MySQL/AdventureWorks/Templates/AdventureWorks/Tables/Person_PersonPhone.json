@@ -1,0 +1,93 @@
+{
+  "Name": "`Person_PersonPhone`",
+  "Columns": [
+    {
+      "Name": "`BusinessEntityID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`PhoneNumber`",
+      "DataType": "varchar(25)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`PhoneNumberTypeID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_Person_PersonPhone_PhoneNumberTypeID",
+      "IndexColumns": "`PhoneNumberTypeID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_PersonPhone_PhoneNumber",
+      "IndexColumns": "`PhoneNumber`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`BusinessEntityID`,`PhoneNumber`,`PhoneNumberTypeID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Person_PersonPhone_BusinessEntityID",
+      "Columns": "`BusinessEntityID`",
+      "RelatedTable": "`Person_Person`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Person_PersonPhone_PhoneNumberTypeID",
+      "Columns": "`PhoneNumberTypeID`",
+      "RelatedTable": "`Person_PhoneNumberType`",
+      "RelatedColumns": "`PhoneNumberTypeID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Person_PersonPhone.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`BusinessEntityID`,`PhoneNumber`,`PhoneNumberTypeID`"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "Name": "Chinook",
+  "DatabaseIdentificationScript": "SELECT name FROM master.sys.databases WHERE name = '{{ChinookDb}}'"
+}

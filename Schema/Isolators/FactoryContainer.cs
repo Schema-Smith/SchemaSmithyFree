@@ -1,4 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using System;
 using System.Collections.Concurrent;
 
@@ -35,35 +36,29 @@ public static class FactoryContainer
 
     public static I Resolve<I, T>() where T : I
     {
-        I result = default;
-        if (_container.ContainsKey(typeof(I)))
-            result = (I)_container[typeof(I)];
-        else if (_container.ContainsKey(typeof(T)))
-            result = (I)_container[typeof(T)];
-        return result;
+        if (_container.TryGetValue(typeof(I), out var byInterface))
+            return (I)byInterface;
+        if (_container.TryGetValue(typeof(T), out var byType))
+            return (I)byType;
+        return default;
     }
 
     public static T Resolve<T>()
     {
-        T result = default;
-        if (_container.ContainsKey(typeof(T)))
-            result = (T)_container[typeof(T)];
-        return result;
+        if (_container.TryGetValue(typeof(T), out var value))
+            return (T)value;
+        return default;
     }
 
     public static void Register<T>(T value)
     {
-        if (_container.ContainsKey(typeof(T)))
-            _container[typeof(T)] = value;
-        else
-            _container.TryAdd(typeof(T), value);
+        _container[typeof(T)] = value;
     }
 
     public static void Unregister<T>()
     {
         _container.TryRemove(typeof(T), out _);
     }
-
 
     public static void Clear()
     {

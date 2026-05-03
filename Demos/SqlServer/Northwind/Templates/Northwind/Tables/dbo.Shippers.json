@@ -1,0 +1,63 @@
+{
+  "Name": "[Shippers]",
+  "Columns": [
+    {
+      "Name": "[CompanyName]",
+      "DataType": "NVARCHAR(40)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Phone]",
+      "DataType": "NVARCHAR(24)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[ShipperID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Shippers]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[ShipperID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Shippers.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ShipperID]"
+  }
+}

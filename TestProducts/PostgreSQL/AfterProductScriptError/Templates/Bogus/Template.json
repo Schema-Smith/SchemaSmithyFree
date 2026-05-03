@@ -1,0 +1,12 @@
+{
+    "Name": "Bogus", 
+    "DatabaseIdentificationScript": "",
+    "VersionStampScript": "DO $$\nBEGIN\n  RAISE EXCEPTION 'BAD DICTIONARY';\nEND $$ LANGUAGE plpgsql;",
+    "ScriptFolders": [
+        { "FolderPath" : "Schemas", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Functions", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Views", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Procedures", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Triggers", "QuenchSlot" : "Objects" },
+    ]
+}

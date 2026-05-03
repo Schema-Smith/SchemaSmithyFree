@@ -1,0 +1,15 @@
+{
+    "Name": "AfterProductScriptError",
+    "ValidationScript": "SELECT EXISTS(SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{{MainDB}}')",
+    "TemplateOrder": [
+        "Bogus"
+    ],
+    "ScriptFolders": [
+        { "FolderPath": "Jobs", "QuenchSlot": "After" }
+    ],
+    "ScriptTokens": {
+        "MainDB": "TestMain",
+        "ReleaseVersion": ""
+    },
+    "Platform": "MySQL"
+}

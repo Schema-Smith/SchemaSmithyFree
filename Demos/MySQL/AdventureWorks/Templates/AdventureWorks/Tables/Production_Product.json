@@ -1,0 +1,366 @@
+{
+  "Name": "`Production_Product`",
+  "Columns": [
+    {
+      "Name": "`Class`",
+      "DataType": "char(2)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Color`",
+      "DataType": "varchar(15)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`DaysToManufacture`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`DiscontinuedDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`FinishedGoodsFlag`",
+      "DataType": "tinyint(1)",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ListPrice`",
+      "DataType": "decimal(19,4)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`MakeFlag`",
+      "DataType": "tinyint(1)",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Name`",
+      "DataType": "varchar(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ProductID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`ProductLine`",
+      "DataType": "char(2)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ProductModelID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductNumber`",
+      "DataType": "varchar(25)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ProductSubcategoryID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ReorderPoint`",
+      "DataType": "smallint",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`SafetyStockLevel`",
+      "DataType": "smallint",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SellEndDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SellStartDate`",
+      "DataType": "datetime",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Size`",
+      "DataType": "varchar(5)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`SizeUnitMeasureCode`",
+      "DataType": "char(3)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`StandardCost`",
+      "DataType": "decimal(19,4)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Style`",
+      "DataType": "char(2)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Weight`",
+      "DataType": "decimal(8,2)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`WeightUnitMeasureCode`",
+      "DataType": "char(3)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_Product_Name",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`Name`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "AK_Product_ProductNumber",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductNumber`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "AK_Product_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Production_Product_ProductModelID",
+      "IndexColumns": "`ProductModelID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Production_Product_ProductSubcategoryID",
+      "IndexColumns": "`ProductSubcategoryID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Production_Product_SizeUnitMeasureCode",
+      "IndexColumns": "`SizeUnitMeasureCode`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Production_Product_WeightUnitMeasureCode",
+      "IndexColumns": "`WeightUnitMeasureCode`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Production_Product_ProductModelID",
+      "Columns": "`ProductModelID`",
+      "RelatedTable": "`Production_ProductModel`",
+      "RelatedColumns": "`ProductModelID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_Product_ProductSubcategoryID",
+      "Columns": "`ProductSubcategoryID`",
+      "RelatedTable": "`Production_ProductSubcategory`",
+      "RelatedColumns": "`ProductSubcategoryID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_Product_SizeUnitMeasureCode",
+      "Columns": "`SizeUnitMeasureCode`",
+      "RelatedTable": "`Production_UnitMeasure`",
+      "RelatedColumns": "`UnitMeasureCode`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_Product_WeightUnitMeasureCode",
+      "Columns": "`WeightUnitMeasureCode`",
+      "RelatedTable": "`Production_UnitMeasure`",
+      "RelatedColumns": "`UnitMeasureCode`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Product_SellEndDate",
+      "Expression": "((`SellEndDate` >= `SellStartDate`) or (`SellEndDate` is null))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_Product_Class",
+      "Expression": "((upper(`Class`) = 'H') or (upper(`Class`) = 'M') or (upper(`Class`) = 'L') or (`Class` is null))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_Product_DaysToManufacture",
+      "Expression": "(`DaysToManufacture` >= 0)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_Product_ListPrice",
+      "Expression": "(`ListPrice` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_Product_ProductLine",
+      "Expression": "((upper(`ProductLine`) = 'R') or (upper(`ProductLine`) = 'M') or (upper(`ProductLine`) = 'T') or (upper(`ProductLine`) = 'S') or (`ProductLine` is null))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_Product_ReorderPoint",
+      "Expression": "(`ReorderPoint` > 0)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_Product_SafetyStockLevel",
+      "Expression": "(`SafetyStockLevel` > 0)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_Product_StandardCost",
+      "Expression": "(`StandardCost` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_Product_Style",
+      "Expression": "((upper(`Style`) = 'U') or (upper(`Style`) = 'M') or (upper(`Style`) = 'W') or (`Style` is null))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_Product_Weight",
+      "Expression": "(`Weight` > 0.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 1000,
+  "DataDelivery": {
+    "ContentFile": "data/Production_Product.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ProductID`"
+  }
+}

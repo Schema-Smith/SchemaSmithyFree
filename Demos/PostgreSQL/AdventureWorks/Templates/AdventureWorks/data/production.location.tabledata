@@ -1,0 +1,16 @@
+[
+{"availability":0.00,"costrate":0.0000,"locationid":1,"modifieddate":"2019-04-30T00:00:00","name":"Tool Crib"},
+{"availability":0.00,"costrate":0.0000,"locationid":2,"modifieddate":"2019-04-30T00:00:00","name":"Sheet Metal Racks"},
+{"availability":0.00,"costrate":0.0000,"locationid":3,"modifieddate":"2019-04-30T00:00:00","name":"Paint Shop"},
+{"availability":0.00,"costrate":0.0000,"locationid":4,"modifieddate":"2019-04-30T00:00:00","name":"Paint Storage"},
+{"availability":0.00,"costrate":0.0000,"locationid":5,"modifieddate":"2019-04-30T00:00:00","name":"Metal Storage"},
+{"availability":0.00,"costrate":0.0000,"locationid":6,"modifieddate":"2019-04-30T00:00:00","name":"Miscellaneous Storage"},
+{"availability":0.00,"costrate":0.0000,"locationid":7,"modifieddate":"2019-04-30T00:00:00","name":"Finished Goods Storage"},
+{"availability":96.00,"costrate":22.5000,"locationid":10,"modifieddate":"2019-04-30T00:00:00","name":"Frame Forming"},
+{"availability":108.00,"costrate":25.0000,"locationid":20,"modifieddate":"2019-04-30T00:00:00","name":"Frame Welding"},
+{"availability":120.00,"costrate":14.5000,"locationid":30,"modifieddate":"2019-04-30T00:00:00","name":"Debur and Polish"},
+{"availability":120.00,"costrate":15.7500,"locationid":40,"modifieddate":"2019-04-30T00:00:00","name":"Paint"},
+{"availability":80.00,"costrate":18.0000,"locationid":45,"modifieddate":"2019-04-30T00:00:00","name":"Specialized Paint"},
+{"availability":120.00,"costrate":12.2500,"locationid":50,"modifieddate":"2019-04-30T00:00:00","name":"Subassembly"},
+{"availability":120.00,"costrate":12.2500,"locationid":60,"modifieddate":"2019-04-30T00:00:00","name":"Final Assembly"}
+]

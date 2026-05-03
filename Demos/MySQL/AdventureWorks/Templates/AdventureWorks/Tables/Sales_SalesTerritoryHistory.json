@@ -1,0 +1,115 @@
+{
+  "Name": "`Sales_SalesTerritoryHistory`",
+  "Columns": [
+    {
+      "Name": "`BusinessEntityID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`EndDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`StartDate`",
+      "DataType": "datetime",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`TerritoryID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_SalesTerritoryHistory_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Sales_SalesTerritoryHistory_TerritoryID",
+      "IndexColumns": "`TerritoryID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`BusinessEntityID`,`StartDate`,`TerritoryID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Sales_SalesTerritoryHistory_BusinessEntityID",
+      "Columns": "`BusinessEntityID`",
+      "RelatedTable": "`Sales_SalesPerson`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesTerritoryHistory_TerritoryID",
+      "Columns": "`TerritoryID`",
+      "RelatedTable": "`Sales_SalesTerritory`",
+      "RelatedColumns": "`TerritoryID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_SalesTerritoryHistory_EndDate",
+      "Expression": "((`EndDate` >= `StartDate`) or (`EndDate` is null))",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Sales_SalesTerritoryHistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`BusinessEntityID`,`StartDate`,`TerritoryID`"
+  }
+}

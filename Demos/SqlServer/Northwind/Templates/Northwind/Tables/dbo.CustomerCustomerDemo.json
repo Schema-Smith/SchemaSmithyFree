@@ -1,0 +1,64 @@
+{
+  "Name": "[CustomerCustomerDemo]",
+  "Columns": [
+    {
+      "Name": "[CustomerID]",
+      "DataType": "NCHAR(5)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[CustomerTypeID]",
+      "DataType": "NCHAR(10)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_CustomerCustomerDemo]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[CustomerID],[CustomerTypeID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_CustomerCustomerDemo]",
+      "Columns": "[CustomerTypeID]",
+      "RelatedTable": "[CustomerDemographics]",
+      "RelatedColumns": "[CustomerTypeID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[FK_CustomerCustomerDemo_Customers]",
+      "Columns": "[CustomerID]",
+      "RelatedTable": "[Customers]",
+      "RelatedColumns": "[CustomerID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE"
+}

@@ -1,0 +1,137 @@
+{
+  "Name": "payment",
+  "Columns": [
+    {
+      "Name": "amount",
+      "DataType": "numeric(5, 2)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "customer_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "payment_date",
+      "DataType": "timestamp",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "payment_id",
+      "DataType": "int4",
+      "Default": "nextval('payment_payment_id_seq'::regclass)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "rental_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "staff_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "idx_fk_customer_id",
+      "IndexColumns": "customer_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    },
+    {
+      "Name": "idx_fk_staff_id",
+      "IndexColumns": "staff_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    },
+    {
+      "Name": "payment_pkey",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "payment_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "payment_customer_id_fkey",
+      "Columns": "customer_id",
+      "RelatedTable": "customer",
+      "RelatedColumns": "customer_id",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "payment_rental_id_fkey",
+      "Columns": "rental_id",
+      "RelatedTable": "rental",
+      "RelatedColumns": "rental_id",
+      "DeleteAction": "SET NULL",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "payment_staff_id_fkey",
+      "Columns": "staff_id",
+      "RelatedTable": "staff",
+      "RelatedColumns": "staff_id",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "public",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "MergeDisableRules": true,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.payment.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "payment_id",
+    "MergeDisableRules": true
+  }
+}

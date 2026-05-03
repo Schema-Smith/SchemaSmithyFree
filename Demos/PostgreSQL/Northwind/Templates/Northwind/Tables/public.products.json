@@ -1,0 +1,152 @@
+{
+  "Name": "products",
+  "Columns": [
+    {
+      "Name": "category_id",
+      "DataType": "int2",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "discontinued",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "product_id",
+      "DataType": "int2",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "product_name",
+      "DataType": "varchar(40)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "quantity_per_unit",
+      "DataType": "varchar(20)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "reorder_level",
+      "DataType": "int2",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "supplier_id",
+      "DataType": "int2",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "unit_price",
+      "DataType": "float4",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "units_in_stock",
+      "DataType": "int2",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "units_on_order",
+      "DataType": "int2",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_products",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "product_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_products_categories",
+      "Columns": "category_id",
+      "RelatedTable": "categories",
+      "RelatedColumns": "category_id",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "fk_products_suppliers",
+      "Columns": "supplier_id",
+      "RelatedTable": "suppliers",
+      "RelatedColumns": "supplier_id",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "public",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.products.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "product_id"
+  }
+}

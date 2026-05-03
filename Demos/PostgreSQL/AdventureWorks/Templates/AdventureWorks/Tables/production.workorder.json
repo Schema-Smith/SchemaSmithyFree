@@ -1,0 +1,157 @@
+{
+  "Name": "workorder",
+  "Columns": [
+    {
+      "Name": "duedate",
+      "DataType": "timestamp",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "enddate",
+      "DataType": "timestamp",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "orderqty",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "productid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "scrappedqty",
+      "DataType": "int2",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "scrapreasonid",
+      "DataType": "int2",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "startdate",
+      "DataType": "timestamp",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "workorderid",
+      "DataType": "int4",
+      "Default": "nextval('production.workorder_workorderid_seq'::regclass)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_WorkOrder_WorkOrderID",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "workorderid",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_WorkOrder_Product_ProductID",
+      "Columns": "productid",
+      "RelatedTable": "product",
+      "RelatedColumns": "productid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "production",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_WorkOrder_ScrapReason_ScrapReasonID",
+      "Columns": "scrapreasonid",
+      "RelatedTable": "scrapreason",
+      "RelatedColumns": "scrapreasonid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "production",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_WorkOrder_EndDate",
+      "Expression": "(enddate >= startdate) OR (enddate IS NULL)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_WorkOrder_OrderQty",
+      "Expression": "orderqty > 0",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_WorkOrder_ScrappedQty",
+      "Expression": "scrappedqty >= 0",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "production",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/production.workorder.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "workorderid"
+  }
+}

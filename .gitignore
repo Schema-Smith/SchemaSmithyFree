@@ -1,16 +1,72 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Claude Code
+.claude/*
+!.claude/skills/
+.mcp.json
+
+## Visual Studio
+.vs/
+*.rsuser
+[Tt]est[Rr]esult*/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+
+## NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## Build results
+[Bb]uild[Ll]og.*
+*.dll
+*.exe
+*.pdb
+publish/
+
+## OS files
 .DS_Store
+Thumbs.db
 
-.idea
-*.DotSettings.user
+## KeyFiles (license signing keys - dev only)
+KeyFiles/
 
-**/bin
-**/obj
-**/release
-**/debug
-*.orig
+## Rider
+.idea/
 
-packages
-.vs
-**/TestResults
+## Release artifacts
+Release/
+*.msi
+*.zip
+Setup/staging/
+WorkingExtractions/
 
-packaging/chocolatey/**/*.zip
+## NuGet lock files (not used)
+packages.lock.json
+
+# Working directories
+Logs/
+tools/
+.linux-pkg-tmp/
+
+## Demo pre-build output
+SchemaQuench/publish/
+
+## Chocolatey package staging — binaries land here in CI at pack time.
+## The leading negation re-includes the package directory (the global `tools/`
+## rule above otherwise excludes it); the scoped ignores keep CI-staged
+## binaries out of commits.
+!packaging/chocolatey/schemasmith/tools/
+packaging/chocolatey/schemasmith/tools/*.exe
+packaging/chocolatey/schemasmith/tools/*.dll
+packaging/chocolatey/schemasmith/tools/*.json
+packaging/chocolatey/schemasmith/tools/*.nupkg

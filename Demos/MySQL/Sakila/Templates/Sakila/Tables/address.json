@@ -1,0 +1,112 @@
+{
+  "Name": "`address`",
+  "Columns": [
+    {
+      "Name": "`address_id`",
+      "DataType": "int unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`address`",
+      "DataType": "varchar(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`address2`",
+      "DataType": "varchar(50)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`district`",
+      "DataType": "varchar(20)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`city_id`",
+      "DataType": "int unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`postal_code`",
+      "DataType": "varchar(10)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`phone`",
+      "DataType": "varchar(20)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`last_update`",
+      "DataType": "timestamp",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "idx_fk_city_id",
+      "IndexColumns": "`city_id`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`address_id`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_address_city",
+      "Columns": "`city_id`",
+      "RelatedTable": "`city`",
+      "RelatedColumns": "`city_id`",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb3_general_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb3",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 606,
+  "DataDelivery": {
+    "ContentFile": "data/address.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`address_id`"
+  }
+}

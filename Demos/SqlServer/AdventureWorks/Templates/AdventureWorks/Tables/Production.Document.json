@@ -1,0 +1,298 @@
+{
+  "Name": "[Document]",
+  "Columns": [
+    {
+      "Name": "[ChangeNumber]",
+      "DataType": "INT",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Engineering change approval number."
+      }
+    },
+    {
+      "Name": "[Document]",
+      "DataType": "VARBINARY(MAX)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Complete document."
+      }
+    },
+    {
+      "Name": "[DocumentLevel]",
+      "DataType": "SMALLINT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "ComputedExpression": "[DocumentNode].[GetLevel]()",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Depth in the document hierarchy."
+      }
+    },
+    {
+      "Name": "[DocumentNode]",
+      "DataType": "HIERARCHYID",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for Document records."
+      }
+    },
+    {
+      "Name": "[DocumentSummary]",
+      "DataType": "NVARCHAR(MAX)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Document abstract."
+      }
+    },
+    {
+      "Name": "[FileExtension]",
+      "DataType": "NVARCHAR(8)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "File extension indicating the document type. For example, .doc or .txt."
+      }
+    },
+    {
+      "Name": "[FileName]",
+      "DataType": "NVARCHAR(400)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "File name of the document"
+      }
+    },
+    {
+      "Name": "[FolderFlag]",
+      "DataType": "BIT",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = This is a folder, 1 = This is a document."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Owner]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Employee who controls the document.  Foreign key to Employee.BusinessEntityID"
+      }
+    },
+    {
+      "Name": "[Revision]",
+      "DataType": "NCHAR(5)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Revision number of the document. "
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Default": "newid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Required for FileStream."
+      }
+    },
+    {
+      "Name": "[Status]",
+      "DataType": "TINYINT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[Status]>=(1) AND [Status]<=(3)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "1 = Pending approval, 2 = Approved, 3 = Obsolete"
+      }
+    },
+    {
+      "Name": "[Title]",
+      "DataType": "NVARCHAR(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Title of the document."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_Document_DocumentLevel_DocumentNode]",
+      "Unique": true,
+      "IndexColumns": "[DocumentLevel],[DocumentNode]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[AK_Document_rowguid]",
+      "Unique": true,
+      "IndexColumns": "[rowguid]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support FileStream."
+      }
+    },
+    {
+      "Name": "[IX_Document_FileName_Revision]",
+      "IndexColumns": "[FileName],[Revision]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_Document_DocumentNode]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[DocumentNode]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    },
+    {
+      "Name": "[UQ__Document__F73921F7C81C642F]",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "[rowguid]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Document_Employee_Owner]",
+      "Columns": "[Owner]",
+      "RelatedTable": "[Employee]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[HumanResources]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Employee.BusinessEntityID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Production]",
+  "CompressionType": "NONE",
+  "FullTextIndex": {
+    "FullTextCatalog": "[AW2016FullTextCatalog]",
+    "KeyIndex": "[PK_Document_DocumentNode]",
+    "ChangeTracking": "AUTO",
+    "StopList": "SYSTEM",
+    "Columns": "[Document] TYPE COLUMN [FileExtension],[DocumentSummary]"
+  },
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Product maintenance documents."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.Document.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[DocumentNode]"
+  }
+}

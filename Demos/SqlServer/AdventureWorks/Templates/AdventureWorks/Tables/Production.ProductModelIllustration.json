@@ -1,0 +1,105 @@
+{
+  "Name": "[ProductModelIllustration]",
+  "Columns": [
+    {
+      "Name": "[IllustrationID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to Illustration.IllustrationID."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[ProductModelID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to ProductModel.ProductModelID."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_ProductModelIllustration_ProductModelID_IllustrationID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[ProductModelID],[IllustrationID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_ProductModelIllustration_Illustration_IllustrationID]",
+      "Columns": "[IllustrationID]",
+      "RelatedTable": "[Illustration]",
+      "RelatedColumns": "[IllustrationID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Production]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Illustration.IllustrationID."
+      }
+    },
+    {
+      "Name": "[FK_ProductModelIllustration_ProductModel_ProductModelID]",
+      "Columns": "[ProductModelID]",
+      "RelatedTable": "[ProductModel]",
+      "RelatedColumns": "[ProductModelID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Production]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing ProductModel.ProductModelID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Production]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Cross-reference table mapping product models and illustrations."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.ProductModelIllustration.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductModelID],[IllustrationID]"
+  }
+}

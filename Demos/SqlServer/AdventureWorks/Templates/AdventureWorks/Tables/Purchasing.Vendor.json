@@ -1,0 +1,176 @@
+{
+  "Name": "[Vendor]",
+  "Columns": [
+    {
+      "Name": "[AccountNumber]",
+      "DataType": "ACCOUNTNUMBER",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Vendor account (identification) number."
+      }
+    },
+    {
+      "Name": "[ActiveFlag]",
+      "DataType": "FLAG",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = Vendor no longer used. 1 = Vendor is actively used."
+      }
+    },
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for Vendor records.  Foreign key to BusinessEntity.BusinessEntityID"
+      }
+    },
+    {
+      "Name": "[CreditRating]",
+      "DataType": "TINYINT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[CreditRating]>=(1) AND [CreditRating]<=(5)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "1 = Superior, 2 = Excellent, 3 = Above average, 4 = Average, 5 = Below average"
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Name]",
+      "DataType": "NAME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Company name."
+      }
+    },
+    {
+      "Name": "[PreferredVendorStatus]",
+      "DataType": "FLAG",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "0 = Do not use if another vendor is available. 1 = Preferred over other vendors supplying the same product."
+      }
+    },
+    {
+      "Name": "[PurchasingWebServiceURL]",
+      "DataType": "NVARCHAR(1024)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Vendor URL."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_Vendor_AccountNumber]",
+      "Unique": true,
+      "IndexColumns": "[AccountNumber]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_Vendor_BusinessEntityID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[BusinessEntityID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Vendor_BusinessEntity_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTable": "[BusinessEntity]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Person]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID"
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Purchasing]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Companies from whom Adventure Works Cycles purchases parts or other goods."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Purchasing.Vendor.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID]"
+  }
+}

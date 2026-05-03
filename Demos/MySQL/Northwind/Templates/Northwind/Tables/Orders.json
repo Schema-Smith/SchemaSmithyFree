@@ -1,0 +1,225 @@
+{
+  "Name": "`Orders`",
+  "Columns": [
+    {
+      "Name": "`CustomerID`",
+      "DataType": "char(5)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`EmployeeID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Freight`",
+      "DataType": "decimal(19,4)",
+      "Nullable": true,
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`OrderDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`OrderID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`RequiredDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ShipAddress`",
+      "DataType": "varchar(60)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ShipCity`",
+      "DataType": "varchar(15)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ShipCountry`",
+      "DataType": "varchar(15)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ShipName`",
+      "DataType": "varchar(40)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ShippedDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ShipPostalCode`",
+      "DataType": "varchar(10)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ShipRegion`",
+      "DataType": "varchar(15)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ShipVia`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "CustomerID",
+      "IndexColumns": "`CustomerID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "CustomersOrders",
+      "IndexColumns": "`CustomerID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "EmployeeID",
+      "IndexColumns": "`EmployeeID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "EmployeesOrders",
+      "IndexColumns": "`EmployeeID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "OrderDate",
+      "IndexColumns": "`OrderDate`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`OrderID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "ShippedDate",
+      "IndexColumns": "`ShippedDate`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "ShippersOrders",
+      "IndexColumns": "`ShipVia`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "ShipPostalCode",
+      "IndexColumns": "`ShipPostalCode`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Orders_Customers",
+      "Columns": "`CustomerID`",
+      "RelatedTable": "`Customers`",
+      "RelatedColumns": "`CustomerID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Orders_Employees",
+      "Columns": "`EmployeeID`",
+      "RelatedTable": "`Employees`",
+      "RelatedColumns": "`EmployeeID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Orders_Shippers",
+      "Columns": "`ShipVia`",
+      "RelatedTable": "`Shippers`",
+      "RelatedColumns": "`ShipperID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 11078,
+  "DataDelivery": {
+    "ContentFile": "data/Orders.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`OrderID`"
+  }
+}

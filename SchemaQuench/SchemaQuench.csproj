@@ -1,67 +1,53 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFrameworks>net9.0;net481</TargetFrameworks>
-    <ImplicitUsings>disable</ImplicitUsings>
-    <Nullable>disable</Nullable>
-    <LangVersion>default</LangVersion>
-    <Nullable>enable</Nullable>
-	<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <UserSecretsId>ff52744b-86a4-4305-ad34-14b848e467f4</UserSecretsId>
-    <PublishAot>false</PublishAot>
+	<PropertyGroup>
+		<DefaultItemExcludes>$(DefaultItemExcludes);SchemaQuench.UnitTests\**;SchemaQuench.IntegrationTests\**</DefaultItemExcludes>
+		<OutputType>Exe</OutputType>
+		<PublishTrimmed>false</PublishTrimmed>
+		<PublishSingleFile>true</PublishSingleFile>
+		<PublishAot>false</PublishAot>
 
-    <Version>$(Version)</Version>
-    <FileVersion>$(Version)</FileVersion>
-    <Company>SchemaSmith, LLC</Company>
-    <Product>SchemaQuench MSSQL Community</Product>
-    <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
-    <ApplicationIcon>images\SchemaQuench.ico</ApplicationIcon>
-    <RunPostBuildEvent>OnOutputUpdated</RunPostBuildEvent>
-    <AssemblyName>SchemaQuench</AssemblyName>
-  </PropertyGroup>
+		<Product>SchemaQuench</Product>
+		<Description>Applies SchemaSmith schema packages to target databases, detecting differences and generating change scripts</Description>
+		<ApplicationIcon>images\SchemaQuench.ico</ApplicationIcon>
+		<UserSecretsId>a1b2c3d4-e5f6-7890-abcd-ef1234567890</UserSecretsId>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <None Remove="Log4Net.config" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="images\SchemaQuench.ico" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Log4Net.config">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </EmbeddedResource>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="System.Private.Uri" Version="4.3.2" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Schema\Schema.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="appsettings.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-
-  <Target Name="CleanLogFolders" BeforeTargets="Clean;PrepareForBuild;Build">
 	<ItemGroup>
-	  <_LogFolders Include="$(OutDir)\SchemaQuench.0*\*" />
-	  <_FilesToClean Include="$(OutDir)\*.log;$(OutDir)\*.sql" />
+		<None Remove="Log4Net.config" />
 	</ItemGroup>
-	<RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
-	<Delete Files="@(_FilesToClean)" />
-  </Target>
 
-  <Target Name="CopyOutputFiles" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG' And Exists('$(OutputPath)\..\..\..\..\Release')">
-    <ItemGroup>
-      <MySourceFiles Include="$(OutputPath)\**\*.*" Exclude="$(OutputPath)\publish\**;$(OutputPath)\win-x64\**;$(OutputPath)\**\*.pdb" />
-    </ItemGroup>
-    <Copy SourceFiles="@(MySourceFiles)" DestinationFiles="@(MySourceFiles->'$(OutputPath)\..\..\..\..\Release\Zips\$(TargetFramework)\SchemaQuench\%(RecursiveDir)%(Filename)%(Extension)')" />
-  </Target>
+	<ItemGroup>
+		<EmbeddedResource Include="Log4Net.config" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Schema\Schema.csproj" />
+	</ItemGroup>
+
+	<!-- Bundle ICU into self-contained Linux publish output so the CLI works on minimal
+	     containers (ubuntu:24.04, fedora:latest) without system libicu. Other RIDs
+	     (Windows, macOS) get nothing extra — system ICU is reliably present and is
+	     preferred at load time. ICU version is centralized in Directory.Build.props. -->
+	<ItemGroup>
+		<RuntimeHostConfigurationOption Include="System.Globalization.AppLocalIcu" Value="$(IcuVersion)" />
+		<PackageReference Include="Microsoft.ICU.ICU4C.Runtime" />
+	</ItemGroup>
+
+
+<ItemGroup>
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+			<_Parameter1>SchemaQuench.UnitTests</_Parameter1>
+		</AssemblyAttribute>
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+			<_Parameter1>SchemaQuench.IntegrationTests</_Parameter1>
+		</AssemblyAttribute>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="SchemaQuench.settings.json">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
 </Project>

@@ -1,0 +1,170 @@
+{
+  "Name": "[customer]",
+  "Columns": [
+    {
+      "Name": "[active]",
+      "DataType": "TINYINT",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[address_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[create_date]",
+      "DataType": "DATETIME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[customer_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "Identity": true
+    },
+    {
+      "Name": "[email]",
+      "DataType": "NVARCHAR(50)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[first_name]",
+      "DataType": "NVARCHAR(45)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[last_name]",
+      "DataType": "NVARCHAR(45)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[last_update]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[store_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[idx_fk_address_id]",
+      "IndexColumns": "[address_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[idx_fk_store_id]",
+      "IndexColumns": "[store_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[idx_last_name]",
+      "IndexColumns": "[last_name]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[PK_customer_customer_id]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[customer_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[fk_customer_address]",
+      "Columns": "[address_id]",
+      "RelatedTable": "[address]",
+      "RelatedColumns": "[address_id]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[fk_customer_store]",
+      "Columns": "[store_id]",
+      "RelatedTable": "[store]",
+      "RelatedColumns": "[store_id]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.customer.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[customer_id]"
+  }
+}

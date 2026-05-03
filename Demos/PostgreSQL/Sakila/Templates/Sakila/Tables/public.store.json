@@ -1,0 +1,101 @@
+{
+  "Name": "store",
+  "Columns": [
+    {
+      "Name": "address_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "last_update",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "manager_staff_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "store_id",
+      "DataType": "int4",
+      "Default": "nextval('store_store_id_seq'::regclass)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "idx_unq_manager_staff_id",
+      "Unique": true,
+      "IndexColumns": "manager_staff_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    },
+    {
+      "Name": "store_pkey",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "store_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "store_address_id_fkey",
+      "Columns": "address_id",
+      "RelatedTable": "address",
+      "RelatedColumns": "address_id",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "store_manager_staff_id_fkey",
+      "Columns": "manager_staff_id",
+      "RelatedTable": "staff",
+      "RelatedColumns": "staff_id",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "public",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.store.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "store_id"
+  }
+}

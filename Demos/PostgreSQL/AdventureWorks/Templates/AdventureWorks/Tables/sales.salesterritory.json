@@ -1,0 +1,163 @@
+{
+  "Name": "salesterritory",
+  "Columns": [
+    {
+      "Name": "costlastyear",
+      "DataType": "numeric",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "costytd",
+      "DataType": "numeric",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "countryregioncode",
+      "DataType": "varchar(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "group",
+      "DataType": "varchar(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "name",
+      "DataType": "\"public\".\"Name\"",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "rowguid",
+      "DataType": "uuid",
+      "Default": "uuid_generate_v1()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "saleslastyear",
+      "DataType": "numeric",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "salesytd",
+      "DataType": "numeric",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "territoryid",
+      "DataType": "int4",
+      "Default": "nextval('sales.salesterritory_territoryid_seq'::regclass)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_SalesTerritory_TerritoryID",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "territoryid",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_SalesTerritory_CountryRegion_CountryRegionCode",
+      "Columns": "countryregioncode",
+      "RelatedTable": "countryregion",
+      "RelatedColumns": "countryregioncode",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "person",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_SalesTerritory_CostLastYear",
+      "Expression": "costlastyear >= 0.00",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_SalesTerritory_CostYTD",
+      "Expression": "costytd >= 0.00",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_SalesTerritory_SalesLastYear",
+      "Expression": "saleslastyear >= 0.00",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_SalesTerritory_SalesYTD",
+      "Expression": "salesytd >= 0.00",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "sales",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/sales.salesterritory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "territoryid"
+  }
+}

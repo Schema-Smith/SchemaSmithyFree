@@ -1,0 +1,129 @@
+{
+  "Name": "employeedepartmenthistory",
+  "Columns": [
+    {
+      "Name": "businessentityid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "departmentid",
+      "DataType": "int2",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "enddate",
+      "DataType": "date",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "shiftid",
+      "DataType": "int2",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "startdate",
+      "DataType": "date",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_EmployeeDepartmentHistory_BusinessEntityID_StartDate_Departm",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "businessentityid,startdate,departmentid,shiftid",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_EmployeeDepartmentHistory_Department_DepartmentID",
+      "Columns": "departmentid",
+      "RelatedTable": "department",
+      "RelatedColumns": "departmentid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "humanresources",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_EmployeeDepartmentHistory_Employee_BusinessEntityID",
+      "Columns": "businessentityid",
+      "RelatedTable": "employee",
+      "RelatedColumns": "businessentityid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "humanresources",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_EmployeeDepartmentHistory_Shift_ShiftID",
+      "Columns": "shiftid",
+      "RelatedTable": "shift",
+      "RelatedColumns": "shiftid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "humanresources",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_EmployeeDepartmentHistory_EndDate",
+      "Expression": "(enddate >= startdate) OR (enddate IS NULL)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "humanresources",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/humanresources.employeedepartmenthistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "businessentityid,startdate,departmentid,shiftid"
+  }
+}

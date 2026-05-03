@@ -1,0 +1,3 @@
+DROP VIEW IF EXISTS `Order Details Extended`;
+CREATE VIEW `Order Details Extended` AS
+select `northwind`.`Order Details`.`OrderID` AS `OrderID`,`northwind`.`Order Details`.`ProductID` AS `ProductID`,`northwind`.`Products`.`ProductName` AS `ProductName`,`northwind`.`Order Details`.`UnitPrice` AS `UnitPrice`,`northwind`.`Order Details`.`Quantity` AS `Quantity`,`northwind`.`Order Details`.`Discount` AS `Discount`,round(((`northwind`.`Order Details`.`UnitPrice` * `northwind`.`Order Details`.`Quantity`) * (1 - `northwind`.`Order Details`.`Discount`)),2) AS `ExtendedPrice` from (`northwind`.`Products` join `northwind`.`Order Details` on((`northwind`.`Products`.`ProductID` = `northwind`.`Order Details`.`ProductID`)))

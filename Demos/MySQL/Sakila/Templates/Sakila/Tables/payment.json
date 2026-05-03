@@ -1,0 +1,130 @@
+{
+  "Name": "`payment`",
+  "Columns": [
+    {
+      "Name": "`payment_id`",
+      "DataType": "int unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`customer_id`",
+      "DataType": "int unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`staff_id`",
+      "DataType": "int unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rental_id`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`amount`",
+      "DataType": "decimal(5,2)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`payment_date`",
+      "DataType": "datetime",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`last_update`",
+      "DataType": "timestamp",
+      "Nullable": true,
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "fk_payment_rental",
+      "IndexColumns": "`rental_id`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "idx_fk_customer_id",
+      "IndexColumns": "`customer_id`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "idx_fk_staff_id",
+      "IndexColumns": "`staff_id`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`payment_id`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_payment_customer",
+      "Columns": "`customer_id`",
+      "RelatedTable": "`customer`",
+      "RelatedColumns": "`customer_id`",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "fk_payment_rental",
+      "Columns": "`rental_id`",
+      "RelatedTable": "`rental`",
+      "RelatedColumns": "`rental_id`",
+      "DeleteAction": "SET NULL",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "fk_payment_staff",
+      "Columns": "`staff_id`",
+      "RelatedTable": "`staff`",
+      "RelatedColumns": "`staff_id`",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb3_general_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb3",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 16050,
+  "DataDelivery": {
+    "ContentFile": "data/payment.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`payment_id`"
+  }
+}

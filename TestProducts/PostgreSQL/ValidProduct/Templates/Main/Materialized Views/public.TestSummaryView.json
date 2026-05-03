@@ -1,0 +1,15 @@
+{
+  "Name": "testsummaryview",
+  "Schema": "public",
+  "Definition": "SELECT \"Status\", COUNT(*) AS status_count, MAX(\"DateCreated\") AS latest_date FROM public.\"TestTable\" GROUP BY \"Status\"",
+  "AccessMethod": "heap",
+  "Indexes": [
+    {
+      "Name": "ix_testsummaryview_status",
+      "Unique": true,
+      "IndexColumns": "\"Status\"",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ]
+}

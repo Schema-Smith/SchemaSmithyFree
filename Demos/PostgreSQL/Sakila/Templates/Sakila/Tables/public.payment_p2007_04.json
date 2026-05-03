@@ -1,0 +1,125 @@
+{
+  "Name": "payment_p2007_04",
+  "Columns": [
+    {
+      "Name": "amount",
+      "DataType": "numeric(5, 2)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "customer_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "payment_date",
+      "DataType": "timestamp",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "payment_id",
+      "DataType": "int4",
+      "Default": "nextval('payment_payment_id_seq'::regclass)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "rental_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "staff_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "idx_fk_payment_p2007_04_customer_id",
+      "IndexColumns": "customer_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    },
+    {
+      "Name": "idx_fk_payment_p2007_04_staff_id",
+      "IndexColumns": "staff_id",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "payment_p2007_04_customer_id_fkey",
+      "Columns": "customer_id",
+      "RelatedTable": "customer",
+      "RelatedColumns": "customer_id",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "payment_p2007_04_rental_id_fkey",
+      "Columns": "rental_id",
+      "RelatedTable": "rental",
+      "RelatedColumns": "rental_id",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "payment_p2007_04_staff_id_fkey",
+      "Columns": "staff_id",
+      "RelatedTable": "staff",
+      "RelatedColumns": "staff_id",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "payment_p2007_04_payment_date_check",
+      "Expression": "(payment_date >= '2007-04-01 00:00:00'::timestamp without time zone) AND (payment_date < '2007-05-01 00:00:00'::timestamp without time zone)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "public",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100
+}

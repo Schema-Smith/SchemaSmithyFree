@@ -1,0 +1,245 @@
+# Quick Start
+
+In the next 15 minutes, you'll extract a real database into version-controlled files, deploy them to a fresh empty database, make a schema change, and watch SchemaSmith compute the exact DDL needed to bring the target in line. By the end, you'll have completed the full SchemaSmith cycle -- and you'll understand why teams stop writing migration scripts once they've seen this.
+
+This walkthrough uses **SQL Server** as the primary example, but the exact same workflow works against **PostgreSQL** and **MySQL**. Each platform has a demo product (Northwind and Chinook for SQL Server and MySQL, Northwind and Sakila for PostgreSQL) -- pick whichever engine your team runs.
+
+## Prerequisites
+
+You need three things:
+
+**SchemaSmith tools.** Pick the fastest path for your platform:
+
+- **Windows:** `choco install schemasmith`
+- **Linux / macOS:** `curl -fsSL https://raw.githubusercontent.com/Schema-Smith/SchemaSmith/main/packaging/install/install.sh | sh`
+- **Debian/Ubuntu, RHEL/Fedora, manual ZIP, signature verification, all the rest:** see [Installation](installation.md).
+
+**A database server.** Either an existing instance or Docker (recommended). The repository includes a Docker Compose file that starts the demo servers for you.
+
+**The demo files.** Clone the repository or download just the `Demos/` folder:
+
+```bash
+git clone https://github.com/Schema-Smith/SchemaSmith.git
+cd SchemaSmith
+```
+
+## Step 1: Start the Demo Environment
+
+Each platform has its own demo folder under `Demos/` with a `run-demo` launcher, a `docker-compose.yml`, and a `.env` credentials file. From the repository root, launch the SQL Server demo:
+
+**macOS / Linux:**
+
+```bash
+cd Demos/SqlServer
+./run-demo.sh
+```
+
+**Windows:**
+
+```cmd
+cd Demos\SqlServer
+run-demo.cmd
+```
+
+The launcher runs `build-schemaquench.sh` to compile the SchemaQuench binary (requires the .NET SDK on the host), then `docker compose up --build` packages that binary into a local Docker image, starts a SQL Server instance on port `1440`, and deploys the demo databases using SchemaQuench. The launcher blocks until the `completed` service exits, which signals the databases are ready. Credentials live in `Demos/SqlServer/.env`:
+
+| Setting  | Value |
+|----------|-------|
+| SQL Server | `localhost,1440` |
+| User     | `TestUser` |
+| Password | _(see `Demos/SqlServer/.env`)_ |
+
+> **PostgreSQL or MySQL?** Swap the platform folder: `Demos/PostgreSQL` (port `5432`) or `Demos/MySQL` (port `3306`). Each platform has its own `run-demo.sh` / `run-demo.cmd` launcher, `.env` credentials file, and demo databases (Northwind, Chinook, AdventureWorks, and Sakila for PostgreSQL; Northwind and Chinook for SQL Server and MySQL).
+
+## Step 2: Cast with SchemaTongs
+
+Now let's go the other direction. Pretend you already have a database and want to bring it under SchemaSmith management. SchemaTongs grips your live schema and casts it into structured files. Create a SchemaTongs configuration file called `tongs-extract.json`:
+
+```json
+{
+  "Source": {
+    "Platform": "SqlServer",
+    "Server": "localhost,1440",
+    "User": "TestUser",
+    "Password": "your-password-here",
+    "Database": "Northwind"
+  },
+  "Product": {
+    "Path": "./my-northwind",
+    "Name": "Northwind"
+  },
+  "Template": {
+    "Name": "Northwind"
+  },
+  "ShouldCast": {
+    "Tables": true,
+    "Schemas": true,
+    "UserDefinedTypes": true,
+    "Functions": true,
+    "Views": true,
+    "Procedures": true,
+    "TableTriggers": true,
+    "Catalogs": true,
+    "StopLists": true,
+    "DDLTriggers": true,
+    "XMLSchemaCollections": true,
+    "IndexedViews": true
+  }
+}
+```
+
+> **PostgreSQL or MySQL?** Set `"Platform"` to `"PostgreSQL"` or `"MySQL"` and adjust the connection string. The `ShouldCast` flags you don't need are simply ignored. Schemas, sequences, materialized views, exclude constraints, full-text indexes, events -- all the per-platform object types are toggled from the same flag list.
+
+Run the extraction:
+
+```bash
+SchemaTongs --ConfigFile:tongs-extract.json
+```
+
+Look at what appeared in the `my-northwind/` folder. You now have a complete schema package:
+
+```
+my-northwind/
+  Product.json                     ← Platform, templates, tokens
+  .json-schemas/                   ← JSON Schema validation, generated on the fly
+  Templates/
+    Northwind/
+      Template.json
+      Tables/
+        dbo.Categories.json
+        dbo.Customers.json
+        dbo.Orders.json
+        ... (13 tables)
+      Views/
+        dbo.Alphabetical list of products.sql
+        ...
+      Procedures/
+        dbo.CustOrderHist.sql
+        ...
+      Schemas/
+      Functions/
+      Triggers/
+      Table Data/
+```
+
+Every table is a JSON file describing its columns, indexes, and constraints. Every stored procedure and view is a plain SQL file. This is your entire database -- materialized as readable, diffable, reviewable source files. Commit this to source control and you have a complete history of every schema change from this point forward. For the full set of extraction options, see the [SchemaTongs Reference](../reference/schematongs.md).
+
+That's the cast. A live database, captured in files you can read, review, and version.
+
+## Step 3: Explore the Package
+
+No GUI editor needed -- the schema package is designed to read clearly in any editor or IDE. Open `my-northwind/` in VS Code, JetBrains Rider, Visual Studio, or whatever your team uses. The `.json-schemas/` folder gives you validation and autocomplete for every JSON file in the package automatically.
+
+Click through `Tables/dbo.Categories.json`. You'll see the column definitions, the primary key, and any indexes. Open a stored procedure in `Procedures/` and you see the full SQL definition ready to diff in a pull request. This is what schema review looks like when the files are designed for it: structured enough for tools, readable enough for humans, diff-friendly enough for code review.
+
+Take a minute to click around. Every table, every view, every procedure in the Northwind database is here, structured and browsable. No server connection needed to explore.
+
+## Step 4: Quench with SchemaQuench
+
+Here's where it gets powerful. Let's deploy -- quench -- the Northwind schema to a completely empty database on the same server. Your declared state is about to harden into a live database. Create a SchemaQuench configuration file called `quench-deploy.json`:
+
+```json
+{
+  "Target": {
+    "Server": "localhost,1440",
+    "User": "TestUser",
+    "Password": "your-password-here"
+  },
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./demo/Northwind",
+  "ScriptTokens": {
+    "NorthwindDb": "NorthwindClone"
+  }
+}
+```
+
+Notice the `ScriptTokens` section: we're telling SchemaQuench to use `NorthwindClone` as the database name instead of `Northwind`. The `{{NorthwindDb}}` token in the template's scripts will resolve to this value, creating a brand-new database. You'll learn more about tokens in [Core Concepts](03-core-concepts.md), and the full token system is documented in the [Script Tokens Reference](../reference/script-tokens.md).
+
+Run the deployment:
+
+```bash
+SchemaQuench --ConfigFile:quench-deploy.json
+```
+
+SchemaQuench reads the schema package, connects to the target server, and builds the entire database from scratch: creates `NorthwindClone`, runs migration scripts, creates all the tables with their columns and indexes, deploys all views and stored procedures. A complete, reproducible database from source files. Connect to `localhost,1440` with any SQL client and you'll find `NorthwindClone` with the full Northwind schema.
+
+One package. One command. A complete database -- built exactly as declared, every time. That's what quenching looks like.
+
+## Step 5: Make a Change
+
+Now for the payoff. Let's modify the schema and watch SchemaSmith figure out exactly what needs to change.
+
+Open `demo/Northwind/Templates/Northwind/Tables/dbo.Shippers.json` (or your own re-extracted copy). The file declares the current state of the table: columns, indexes, the primary key. Add a new column for tracking email addresses. Insert this entry into the `Columns` array after the `[Phone]` column:
+
+```json
+{
+  "Name": "[Email]",
+  "DataType": "NVARCHAR(100)",
+  "Nullable": true,
+  "OldName": ""
+}
+```
+
+You just declared the desired state: "the Shippers table should have an Email column." You didn't write an ALTER TABLE script. You didn't check whether the column already exists. You described what the table should look like. You decide the shape. The forge handles the rest.
+
+Now let's see what SchemaSmith will do -- without actually touching the database. Run SchemaQuench in WhatIf mode by setting `"WhatIfONLY": true` in a copy of your settings file:
+
+```json
+{
+  "Target": {
+    "Server": "localhost,1440",
+    "User": "TestUser",
+    "Password": "your-password-here"
+  },
+  "WhatIfONLY": true,
+  "SchemaPackagePath": "./demo/Northwind",
+  "ScriptTokens": {
+    "NorthwindDb": "NorthwindClone"
+  }
+}
+```
+
+Save this as `quench-whatif.json` and run:
+
+```bash
+SchemaQuench --ConfigFile:quench-whatif.json
+```
+
+In the output, you'll see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live `NorthwindClone` database (which has no Email column) and determined that an `ALTER TABLE ... ADD` is needed. No changes were applied -- WhatIf mode is read-only. Preview before you commit. Confidence before you deploy.
+
+Now apply it for real. Re-run the original `quench-deploy.json` from Step 4 -- it already has `WhatIfONLY: false`, so this run actually writes the change:
+
+```bash
+SchemaQuench --ConfigFile:quench-deploy.json
+```
+
+SchemaQuench connects to the `NorthwindClone` database, sees that `dbo.Shippers` is missing the `[Email]` column, and adds it. Every other table, view, and procedure is already in sync, so nothing else changes. Exactly the right delta, computed automatically. No more, no less.
+
+## Step 6: Verify the Change
+
+Connect to the database with whatever SQL client you prefer and look at the Shippers table:
+
+```sql
+SELECT TOP 1 [CompanyName], [Phone], [Email] FROM [dbo].[Shippers];
+```
+
+The `Email` column is there, right where you declared it. The file is the truth, the database matches, and your next commit records the change for posterity.
+
+## The Cycle Is Complete
+
+You just completed the full SchemaSmith workflow:
+
+1. **Cast** -- SchemaTongs gripped a live database and cast it into structured, version-controlled files
+2. **Review** -- The JSON and SQL files are human-readable and diff-friendly, ready for pull requests
+3. **Quench** -- SchemaQuench built a complete database from those files, reproducibly
+4. **Change** -- You edited a JSON file to declare a new column
+5. **Preview** -- WhatIf mode showed you the computed change without touching the database
+6. **Apply** -- SchemaQuench made the target match the declared state, changing only what needed to change
+
+No migration scripts. No ordered chains of ALTERs. No guessing what the target looks like. You declare the state you want, and SchemaSmith gets you there. Every time.
+
+## What's Next
+
+You just did state-based schema management. Now let's understand what is happening under the hood -- products, templates, tokens, and the deployment pipeline that makes it all work. Same concepts across all three platforms.
+
+Next: [Core Concepts](03-core-concepts.md)

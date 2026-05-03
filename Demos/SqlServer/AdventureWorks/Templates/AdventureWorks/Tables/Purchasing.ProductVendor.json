@@ -1,0 +1,257 @@
+{
+  "Name": "[ProductVendor]",
+  "Columns": [
+    {
+      "Name": "[AverageLeadTime]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[AverageLeadTime]>=(1)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "The average span of time (in days) between placing an order with the vendor and receiving the purchased product."
+      }
+    },
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to Vendor.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[LastReceiptCost]",
+      "DataType": "MONEY",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[LastReceiptCost]>(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "The selling price when last purchased."
+      }
+    },
+    {
+      "Name": "[LastReceiptDate]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the product was last received by the vendor."
+      }
+    },
+    {
+      "Name": "[MaxOrderQty]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[MaxOrderQty]>=(1)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "The minimum quantity that should be ordered."
+      }
+    },
+    {
+      "Name": "[MinOrderQty]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[MinOrderQty]>=(1)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "The maximum quantity that should be ordered."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[OnOrderQty]",
+      "DataType": "INT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[OnOrderQty]>=(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "The quantity currently on order."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[StandardPrice]",
+      "DataType": "MONEY",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[StandardPrice]>(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "The vendor's usual selling price."
+      }
+    },
+    {
+      "Name": "[UnitMeasureCode]",
+      "DataType": "NCHAR(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "The product's unit of measure."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_ProductVendor_BusinessEntityID]",
+      "IndexColumns": "[BusinessEntityID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[IX_ProductVendor_UnitMeasureCode]",
+      "IndexColumns": "[UnitMeasureCode]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_ProductVendor_ProductID_BusinessEntityID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[ProductID],[BusinessEntityID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_ProductVendor_Product_ProductID]",
+      "Columns": "[ProductID]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Production]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      }
+    },
+    {
+      "Name": "[FK_ProductVendor_UnitMeasure_UnitMeasureCode]",
+      "Columns": "[UnitMeasureCode]",
+      "RelatedTable": "[UnitMeasure]",
+      "RelatedColumns": "[UnitMeasureCode]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Production]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+      }
+    },
+    {
+      "Name": "[FK_ProductVendor_Vendor_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTable": "[Vendor]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Purchasing]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Vendor.BusinessEntityID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Purchasing]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Cross-reference table mapping vendors with the products they supply."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Purchasing.ProductVendor.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductID],[BusinessEntityID]"
+  }
+}

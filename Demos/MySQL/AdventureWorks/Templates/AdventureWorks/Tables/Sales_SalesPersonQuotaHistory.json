@@ -1,0 +1,91 @@
+{
+  "Name": "`Sales_SalesPersonQuotaHistory`",
+  "Columns": [
+    {
+      "Name": "`BusinessEntityID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`QuotaDate`",
+      "DataType": "datetime",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`SalesQuota`",
+      "DataType": "decimal(19,4)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_SalesPersonQuotaHistory_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`BusinessEntityID`,`QuotaDate`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Sales_SalesPersonQuotaHistory_BusinessEntityID",
+      "Columns": "`BusinessEntityID`",
+      "RelatedTable": "`Sales_SalesPerson`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Sales_SalesPersonQuotaHistory_SalesQuota",
+      "Expression": "(`SalesQuota` > 0.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Sales_SalesPersonQuotaHistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`BusinessEntityID`,`QuotaDate`"
+  }
+}

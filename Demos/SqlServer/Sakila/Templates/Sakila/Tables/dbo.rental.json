@@ -1,0 +1,163 @@
+{
+  "Name": "[rental]",
+  "Columns": [
+    {
+      "Name": "[customer_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[inventory_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[last_update]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[rental_date]",
+      "DataType": "DATETIME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[rental_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "Identity": true
+    },
+    {
+      "Name": "[return_date]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[staff_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[idx_fk_customer_id]",
+      "IndexColumns": "[customer_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[idx_fk_inventory_id]",
+      "IndexColumns": "[inventory_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[idx_fk_staff_id]",
+      "IndexColumns": "[staff_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[PK_rental_rental_id]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[rental_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true
+    },
+    {
+      "Name": "[rental_date]",
+      "Unique": true,
+      "IndexColumns": "[rental_date],[inventory_id],[customer_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[fk_rental_customer]",
+      "Columns": "[customer_id]",
+      "RelatedTable": "[customer]",
+      "RelatedColumns": "[customer_id]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[fk_rental_inventory]",
+      "Columns": "[inventory_id]",
+      "RelatedTable": "[inventory]",
+      "RelatedColumns": "[inventory_id]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[fk_rental_staff]",
+      "Columns": "[staff_id]",
+      "RelatedTable": "[staff]",
+      "RelatedColumns": "[staff_id]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.rental.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[rental_id]"
+  }
+}

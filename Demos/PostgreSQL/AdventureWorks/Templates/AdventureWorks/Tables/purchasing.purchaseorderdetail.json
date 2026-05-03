@@ -1,0 +1,160 @@
+{
+  "Name": "purchaseorderdetail",
+  "Columns": [
+    {
+      "Name": "duedate",
+      "DataType": "timestamp",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "orderqty",
+      "DataType": "int2",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "productid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "purchaseorderdetailid",
+      "DataType": "int4",
+      "Default": "nextval('purchasing.purchaseorderdetail_purchaseorderdetailid_seq'::regclass)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "purchaseorderid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "receivedqty",
+      "DataType": "numeric(8, 2)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "rejectedqty",
+      "DataType": "numeric(8, 2)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "unitprice",
+      "DataType": "numeric",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_PurchaseOrderDetail_PurchaseOrderID_PurchaseOrderDetailID",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "purchaseorderid,purchaseorderdetailid",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_PurchaseOrderDetail_Product_ProductID",
+      "Columns": "productid",
+      "RelatedTable": "product",
+      "RelatedColumns": "productid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "production",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_PurchaseOrderDetail_PurchaseOrderHeader_PurchaseOrderID",
+      "Columns": "purchaseorderid",
+      "RelatedTable": "purchaseorderheader",
+      "RelatedColumns": "purchaseorderid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "purchasing",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_PurchaseOrderDetail_OrderQty",
+      "Expression": "orderqty > 0",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_PurchaseOrderDetail_ReceivedQty",
+      "Expression": "receivedqty >= 0.00",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_PurchaseOrderDetail_RejectedQty",
+      "Expression": "rejectedqty >= 0.00",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_PurchaseOrderDetail_UnitPrice",
+      "Expression": "unitprice >= 0.00",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "purchasing",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/purchasing.purchaseorderdetail.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "purchaseorderid,purchaseorderdetailid"
+  }
+}

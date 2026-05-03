@@ -1,0 +1,119 @@
+{
+  "Name": "`Person_BusinessEntityAddress`",
+  "Columns": [
+    {
+      "Name": "`AddressID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`AddressTypeID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`BusinessEntityID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_BusinessEntityAddress_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_BusinessEntityAddress_AddressID",
+      "IndexColumns": "`AddressID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_BusinessEntityAddress_AddressTypeID",
+      "IndexColumns": "`AddressTypeID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`BusinessEntityID`,`AddressID`,`AddressTypeID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Person_BusinessEntityAddress_AddressID",
+      "Columns": "`AddressID`",
+      "RelatedTable": "`Person_Address`",
+      "RelatedColumns": "`AddressID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Person_BusinessEntityAddress_AddressTypeID",
+      "Columns": "`AddressTypeID`",
+      "RelatedTable": "`Person_AddressType`",
+      "RelatedColumns": "`AddressTypeID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Person_BusinessEntityAddress_BusinessEntityID",
+      "Columns": "`BusinessEntityID`",
+      "RelatedTable": "`Person_BusinessEntity`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Person_BusinessEntityAddress.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`BusinessEntityID`,`AddressID`,`AddressTypeID`"
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "Name": "`Sales_SalesPerson`",
+  "Columns": [
+    {
+      "Name": "`Bonus`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`BusinessEntityID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`CommissionPct`",
+      "DataType": "decimal(10,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`SalesLastYear`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SalesQuota`",
+      "DataType": "decimal(19,4)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SalesYTD`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`TerritoryID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_SalesPerson_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Sales_SalesPerson_TerritoryID",
+      "IndexColumns": "`TerritoryID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`BusinessEntityID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Sales_SalesPerson_BusinessEntityID",
+      "Columns": "`BusinessEntityID`",
+      "RelatedTable": "`HumanResources_Employee`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesPerson_TerritoryID",
+      "Columns": "`TerritoryID`",
+      "RelatedTable": "`Sales_SalesTerritory`",
+      "RelatedColumns": "`TerritoryID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Sales_SalesPerson_Bonus",
+      "Expression": "(`Bonus` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesPerson_CommissionPct",
+      "Expression": "(`CommissionPct` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesPerson_SalesLastYear",
+      "Expression": "(`SalesLastYear` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesPerson_SalesQuota",
+      "Expression": "(`SalesQuota` > 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesPerson_SalesYTD",
+      "Expression": "(`SalesYTD` >= 0.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Sales_SalesPerson.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`BusinessEntityID`"
+  }
+}

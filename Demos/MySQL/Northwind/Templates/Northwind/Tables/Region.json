@@ -1,0 +1,44 @@
+{
+  "Name": "`Region`",
+  "Columns": [
+    {
+      "Name": "`RegionDescription`",
+      "DataType": "char(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`RegionID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`RegionID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Region.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`RegionID`"
+  }
+}

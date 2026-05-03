@@ -1,0 +1,157 @@
+{
+  "Name": "[payment]",
+  "Columns": [
+    {
+      "Name": "[amount]",
+      "DataType": "DECIMAL(5, 2)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[customer_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[last_update]",
+      "DataType": "DATETIME",
+      "Nullable": true,
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[payment_date]",
+      "DataType": "DATETIME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[payment_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "Identity": true
+    },
+    {
+      "Name": "[rental_id]",
+      "DataType": "INT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[staff_id]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[fk_payment_rental]",
+      "IndexColumns": "[rental_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[idx_fk_customer_id]",
+      "IndexColumns": "[customer_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[idx_fk_staff_id]",
+      "IndexColumns": "[staff_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[PK_payment_payment_id]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[payment_id]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[fk_payment_customer]",
+      "Columns": "[customer_id]",
+      "RelatedTable": "[customer]",
+      "RelatedColumns": "[customer_id]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[fk_payment_rental]",
+      "Columns": "[rental_id]",
+      "RelatedTable": "[rental]",
+      "RelatedColumns": "[rental_id]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[fk_payment_staff]",
+      "Columns": "[staff_id]",
+      "RelatedTable": "[staff]",
+      "RelatedColumns": "[staff_id]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "DataDelivery": {
+    "ContentFile": "data/dbo.payment.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[payment_id]"
+  }
+}

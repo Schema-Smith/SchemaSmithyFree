@@ -1,0 +1,402 @@
+name: release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  statuses: read
+  checks: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: '10.0.x'
+
+jobs:
+  read-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify CI passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RESULT=$(gh api repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs \
+            --jq "[.check_runs[] | select(.name == \"build\")] | sort_by(.completed_at) | last | .conclusion")
+          if [ "$RESULT" != "success" ]; then
+            echo "::error::CI job 'build' has not passed (result: $RESULT). Run CI first."
+            exit 1
+          fi
+          echo "CI job 'build': passed"
+
+      - name: Extract version from Directory.Build.props
+        id: get-version
+        run: |
+          VERSION=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "## Release version: $VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify tag does not exist
+        run: |
+          if git rev-parse "v${{ steps.get-version.outputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag v${{ steps.get-version.outputs.version }} already exists. Bump the version in Directory.Build.props first."
+            exit 1
+          fi
+
+      - name: Verify CHANGELOG.md has a section for this version
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if [ ! -f CHANGELOG.md ]; then
+            echo "::error::CHANGELOG.md not found in repo root."
+            exit 1
+          fi
+          # Match either '## [v2.0.0]' (current/unreleased format) or
+          # '## [v2.0.0](url) — date' (post-release format with link)
+          if ! grep -qE "^## \[v${VERSION}\](\$|\()" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md is missing a section heading for v${VERSION}. Expected: '## [v${VERSION}]' (optionally followed by a link and date)."
+            exit 1
+          fi
+          echo "CHANGELOG.md verified — section heading found for v${VERSION}"
+
+  build-release:
+    runs-on: ubuntu-latest
+    needs: read-version
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish tools
+        run: |
+          for tool in SchemaQuench SchemaTongs DataTongs; do
+            dotnet publish $tool/$tool.csproj -c Release -r ${{ matrix.rid }} --self-contained
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.rid }}
+          path: |
+            SchemaQuench/bin/Release/net10.0/${{ matrix.rid }}/publish/
+            SchemaTongs/bin/Release/net10.0/${{ matrix.rid }}/publish/
+            DataTongs/bin/Release/net10.0/${{ matrix.rid }}/publish/
+          retention-days: 1
+
+  sign-windows:
+    runs-on: windows-latest
+    needs: build-release
+    environment: release
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64]
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: release-${{ matrix.rid }}
+          path: bins
+
+      - name: Collect binaries to sign
+        shell: pwsh
+        run: |
+          $ours = @("SchemaQuench.exe", "SchemaTongs.exe", "DataTongs.exe")
+          $files = Get-ChildItem -Path bins -Recurse -File |
+            Where-Object { $ours -contains $_.Name }
+          $staging = New-Item -ItemType Directory -Force -Path sign-staging
+          foreach ($f in $files) {
+            $dest = "$staging\$($f.Name)"
+            if (!(Test-Path $dest)) { Copy-Item $f.FullName $dest }
+          }
+          Write-Host "Files to sign:"
+          Get-ChildItem $staging | ForEach-Object { Write-Host "  $($_.Name)" }
+
+      - name: Sign binaries
+        uses: azure/artifact-signing-action@v1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_SIGNING_PROFILE }}
+          files-folder: sign-staging
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Copy signed binaries back
+        shell: pwsh
+        run: |
+          $ours = @("SchemaQuench.exe", "SchemaTongs.exe", "DataTongs.exe")
+          $signed = Get-ChildItem -Path sign-staging -File
+          $targets = Get-ChildItem -Path bins -Recurse -File |
+            Where-Object { $ours -contains $_.Name }
+          foreach ($s in $signed) {
+            $targets | Where-Object { $_.Name -eq $s.Name } | ForEach-Object {
+              Copy-Item $s.FullName $_.FullName -Force
+              Write-Host "Signed: $($_.FullName)"
+            }
+          }
+
+      - name: Re-upload signed artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.rid }}-signed
+          path: bins/
+          retention-days: 1
+
+  package-zip-windows:
+    runs-on: ubuntu-latest
+    needs: [build-release, sign-windows, read-version]
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64]
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: release-${{ matrix.rid }}-signed
+          path: bins
+
+      - name: Assemble ZIP
+        run: |
+          VERSION="${{ needs.read-version.outputs.version }}"
+          mkdir -p zip-staging
+          for tool in SchemaQuench SchemaTongs DataTongs; do
+            src="bins/$tool/bin/Release/net10.0/${{ matrix.rid }}/publish"
+            if [ -d "$src" ]; then
+              cp "$src"/* zip-staging/ 2>/dev/null || true
+            fi
+          done
+          rm -f zip-staging/*.pdb
+          echo "ZIP contents:"
+          ls -la zip-staging/
+          cd zip-staging && zip -r "../SchemaSmith-${VERSION}-${{ matrix.rid }}.zip" .
+
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          name: zip-${{ matrix.rid }}
+          path: "SchemaSmith-*.zip"
+          retention-days: 5
+
+  package-tar-unix:
+    runs-on: ubuntu-latest
+    needs: [build-release, read-version]
+    strategy:
+      matrix:
+        rid: [linux-x64, linux-arm64, osx-x64, osx-arm64]
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: release-${{ matrix.rid }}
+          path: bins
+
+      - name: Assemble tarball
+        run: |
+          VERSION="${{ needs.read-version.outputs.version }}"
+          mkdir -p tar-staging
+          for tool in SchemaQuench SchemaTongs DataTongs; do
+            src="bins/$tool/bin/Release/net10.0/${{ matrix.rid }}/publish"
+            if [ -d "$src" ]; then
+              cp "$src"/* tar-staging/ 2>/dev/null || true
+            fi
+          done
+          rm -f tar-staging/*.pdb
+          chmod 0755 tar-staging/SchemaQuench tar-staging/SchemaTongs tar-staging/DataTongs
+          echo "Tarball contents:"
+          ls -la tar-staging/
+          tar -czf "SchemaSmith-${VERSION}-${{ matrix.rid }}.tar.gz" -C tar-staging .
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: tar-${{ matrix.rid }}
+          path: "SchemaSmith-*.tar.gz"
+          retention-days: 5
+
+  package-linux:
+    runs-on: ubuntu-latest
+    needs: [build-release, read-version]
+    strategy:
+      fail-fast: false
+      matrix:
+        fmt: [deb, rpm]
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Map matrix arch to RID
+        id: rid
+        run: |
+          case "${{ matrix.arch }}" in
+            amd64) echo "rid=linux-x64" >> "$GITHUB_OUTPUT" ;;
+            arm64) echo "rid=linux-arm64" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: release-${{ steps.rid.outputs.rid }}
+          path: bins
+
+      - name: Install nfpm
+        env:
+          NFPM_VERSION: '2.46.3'
+        run: |
+          curl -sfL "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin nfpm
+          nfpm --version
+
+      - name: Stage binaries
+        env:
+          ICU_VERSION: '72.1.0.3'
+        run: |
+          RID="${{ steps.rid.outputs.rid }}"
+          mkdir -p staging
+          # Copy the three CLI binaries
+          for tool in SchemaQuench SchemaTongs DataTongs; do
+            src="bins/$tool/bin/Release/net10.0/$RID/publish/$tool"
+            if [ ! -f "$src" ]; then
+              echo "::error::Missing binary $src"
+              exit 1
+            fi
+            cp "$src" "staging/$tool"
+            chmod 0755 "staging/$tool"
+          done
+          # Copy the bundled ICU shared libs (from any one tool's publish dir — they're byte-identical
+          # across tools because they come from the same package version pulled into each csproj).
+          icu_src="bins/SchemaQuench/bin/Release/net10.0/$RID/publish"
+          for lib in libicudata libicui18n libicuuc; do
+            so="$icu_src/${lib}.so.${ICU_VERSION}"
+            if [ ! -f "$so" ]; then
+              echo "::error::Missing ICU shared lib $so"
+              exit 1
+            fi
+            cp "$so" "staging/${lib}.so.${ICU_VERSION}"
+            chmod 0644 "staging/${lib}.so.${ICU_VERSION}"
+          done
+          echo "Staged contents:"
+          ls -la staging/
+
+      - name: Render nfpm config
+        env:
+          VERSION: ${{ needs.read-version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          ICU_VERSION: '72.1.0.3'
+        run: |
+          envsubst < packaging/linux/nfpm.yaml.template > nfpm.yaml
+          echo "Rendered config:"
+          cat nfpm.yaml
+
+      - name: Pack ${{ matrix.fmt }}
+        run: |
+          mkdir -p output
+          nfpm pkg --packager ${{ matrix.fmt }} -f nfpm.yaml -t output/
+          echo "Built package:"
+          ls -la output/
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-pkg-${{ matrix.arch }}-${{ matrix.fmt }}
+          path: "output/*.${{ matrix.fmt }}"
+          retention-days: 5
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [package-zip-windows, package-tar-unix, package-linux, read-version]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all ZIPs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: zip-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Download all tarballs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: tar-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Download all Linux packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: linux-pkg-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: List release assets
+        run: find release-assets -type f
+
+      - name: Generate SHA256SUMS
+        working-directory: release-assets
+        run: |
+          sha256sum -- * > SHA256SUMS
+          echo "SHA256SUMS contents:"
+          cat SHA256SUMS
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION="${{ needs.read-version.outputs.version }}"
+          # Capture from this version's heading line up to (but not including)
+          # the next "## " heading. Match either '## [v2.0.0]' (current format)
+          # or '## [v2.0.0](url) — date' (post-release format with link). Use
+          # index() rather than a constructed-from-string regex to avoid awk's
+          # string-escape rules eating the [ ] ( escape sequences.
+          awk -v ver="$VERSION" '
+            $0 == "## [v"ver"]" || index($0, "## [v"ver"](") == 1 { capture=1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md \
+            | awk 'NF { p=1 } p' \
+            | tac | awk 'NF { p=1 } p' | tac > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::Failed to extract release notes for v${VERSION} from CHANGELOG.md"
+            exit 1
+          fi
+          echo "Extracted $(wc -l < release-notes.md) lines from CHANGELOG.md"
+
+      - name: Create tag
+        run: |
+          git tag "v${{ needs.read-version.outputs.version }}"
+          git push origin "v${{ needs.read-version.outputs.version }}"
+
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ needs.read-version.outputs.version }}"
+          gh release create "v${VERSION}" \
+            --title "SchemaSmith v${VERSION}" \
+            --notes-file release-notes.md \
+            --draft \
+            release-assets/*

@@ -1,0 +1,3 @@
+DROP VIEW IF EXISTS `Sales Totals by Amount`;
+CREATE VIEW `Sales Totals by Amount` AS
+select `northwind`.`Order Subtotals`.`Subtotal` AS `SaleAmount`,`northwind`.`Orders`.`OrderID` AS `OrderID`,`northwind`.`Customers`.`CompanyName` AS `CompanyName`,`northwind`.`Orders`.`ShippedDate` AS `ShippedDate` from (`northwind`.`Customers` join (`northwind`.`Orders` join `northwind`.`Order Subtotals` on((`northwind`.`Orders`.`OrderID` = `northwind`.`Order Subtotals`.`OrderID`))) on((`northwind`.`Customers`.`CustomerID` = `northwind`.`Orders`.`CustomerID`))) where ((`northwind`.`Order Subtotals`.`Subtotal` > 2500) and (`northwind`.`Orders`.`ShippedDate` between '1997-01-01' and '1997-12-31'))

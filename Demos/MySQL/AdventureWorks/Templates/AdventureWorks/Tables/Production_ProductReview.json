@@ -1,0 +1,114 @@
+{
+  "Name": "`Production_ProductReview`",
+  "Columns": [
+    {
+      "Name": "`Comments`",
+      "DataType": "varchar(3850)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`EmailAddress`",
+      "DataType": "varchar(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductReviewID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`Rating`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ReviewDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ReviewerName`",
+      "DataType": "varchar(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "IX_ProductReview_ProductID_Name",
+      "IndexColumns": "`ProductID`,`ReviewerName`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductReviewID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Production_ProductReview_ProductID",
+      "Columns": "`ProductID`",
+      "RelatedTable": "`Production_Product`",
+      "RelatedColumns": "`ProductID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Production_ProductReview_Rating",
+      "Expression": "((`Rating` >= 1) and (`Rating` <= 5))",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 5,
+  "DataDelivery": {
+    "ContentFile": "data/Production_ProductReview.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ProductReviewID`"
+  }
+}

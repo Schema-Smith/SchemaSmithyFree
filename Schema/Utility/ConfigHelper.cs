@@ -1,4 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using System;
 using System.IO;
 using System.Reflection;
@@ -14,9 +15,8 @@ public static class ConfigHelper
     public static void ConfigureLog4Net()
     {
         var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly() ?? Assembly.GetCallingAssembly());
-        var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
-        var logDir = Path.GetDirectoryName(assembly.Location) ?? @".\";
-        GlobalContext.Properties["LogPath"] = (CommandLineParser.ValueOfSwitch("LogPath", null) ?? logDir).TrimEnd('\\', '/');
+        var toolDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        GlobalContext.Properties["LogPath"] = (CommandLineParser.ValueOfSwitch("LogPath", null) ?? toolDir).TrimEnd('\\', '/');
         try
         {
             using var configStream = ResourceLoader.Load("Log4Net.config").ToStream();
@@ -28,7 +28,7 @@ public static class ConfigHelper
         }
     }
 
-    public const string Platform = "MSSQL";
+    // NOTE: No Platform constant — unified tools read platform from Product.Platform
 
     public static IConfigurationRoot GetAppSettingsAndUserSecrets(string app, Action<string> logLine)
     {
@@ -37,18 +37,26 @@ public static class ConfigHelper
             var config = FactoryContainer.Resolve<IConfigurationRoot>();
             if (config != null) return config;
 
-            var builder = new ConfigurationBuilder();
-            var settingsFile = CommandLineParser.ValueOfSwitch("ConfigFile", null) ?? "appsettings.json";
-            builder.AddJsonFile(settingsFile)
+            var basePath = Directory.GetCurrentDirectory();
+            var settingsFile = CommandLineParser.ValueOfSwitch("ConfigFile", null) ?? $"{app}.settings.json";
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(basePath);
+
+            // Check AppContext.BaseDirectory as fallback (test runners may not set CWD to the output directory)
+            var appBasePath = AppContext.BaseDirectory;
+            if (!File.Exists(Path.Combine(basePath, settingsFile)) && File.Exists(Path.Combine(appBasePath, settingsFile)))
+                builder.SetBasePath(appBasePath);
+
+            builder.AddJsonFile(settingsFile, optional: true)
 #if DEBUG
-                .AddUserSecrets(Assembly.GetCallingAssembly())
+                .AddUserSecrets(Assembly.GetCallingAssembly(), optional: true)
 #endif
-                .AddEnvironmentVariables("QuenchSettings_")
                 .AddEnvironmentVariables("SmithySettings_");
 
             config = builder.Build();
             FactoryContainer.Register(config);
-            logLine?.Invoke($"{app} {Platform} Community");
+            logLine?.Invoke(app);
+
             ConfigurationLogger.LogConfiguration(config, logLine);
 
             return config;

@@ -1,0 +1,41 @@
+{
+  "Name": "`CustomerDemographics`",
+  "Columns": [
+    {
+      "Name": "`CustomerDesc`",
+      "DataType": "text",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`CustomerTypeID`",
+      "DataType": "char(10)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`CustomerTypeID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": []
+}

@@ -1,0 +1,135 @@
+{
+  "Name": "[Order Details]",
+  "Columns": [
+    {
+      "Name": "[Discount]",
+      "DataType": "REAL",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[Discount]>=(0) AND [Discount]<=(1)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[OrderID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Quantity]",
+      "DataType": "SMALLINT",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[Quantity]>(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[UnitPrice]",
+      "DataType": "MONEY",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[UnitPrice]>=(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[OrderID]",
+      "IndexColumns": "[OrderID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[OrdersOrder_Details]",
+      "IndexColumns": "[OrderID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[PK_Order_Details]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[OrderID],[ProductID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true
+    },
+    {
+      "Name": "[ProductID]",
+      "IndexColumns": "[ProductID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[ProductsOrder_Details]",
+      "IndexColumns": "[ProductID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Order_Details_Orders]",
+      "Columns": "[OrderID]",
+      "RelatedTable": "[Orders]",
+      "RelatedColumns": "[OrderID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[FK_Order_Details_Products]",
+      "Columns": "[ProductID]",
+      "RelatedTable": "[Products]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.Order Details.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[OrderID],[ProductID]"
+  }
+}

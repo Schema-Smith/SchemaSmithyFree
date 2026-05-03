@@ -1,0 +1,216 @@
+{
+  "Name": "[SpecialOffer]",
+  "Columns": [
+    {
+      "Name": "[Category]",
+      "DataType": "NVARCHAR(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Group the discount applies to such as Reseller or Customer."
+      }
+    },
+    {
+      "Name": "[Description]",
+      "DataType": "NVARCHAR(255)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount description."
+      }
+    },
+    {
+      "Name": "[DiscountPct]",
+      "DataType": "SMALLMONEY",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[DiscountPct]>=(0.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount precentage."
+      }
+    },
+    {
+      "Name": "[EndDate]",
+      "DataType": "DATETIME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount end date."
+      }
+    },
+    {
+      "Name": "[MaxQty]",
+      "DataType": "INT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[MaxQty]>=(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Maximum discount percent allowed."
+      }
+    },
+    {
+      "Name": "[MinQty]",
+      "DataType": "INT",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[MinQty]>=(0)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Minimum discount percent allowed."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Default": "newid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[SpecialOfferID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for SpecialOffer records."
+      }
+    },
+    {
+      "Name": "[StartDate]",
+      "DataType": "DATETIME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount start date."
+      }
+    },
+    {
+      "Name": "[Type]",
+      "DataType": "NVARCHAR(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Discount type category."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_SpecialOffer_rowguid]",
+      "Unique": true,
+      "IndexColumns": "[rowguid]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[PK_SpecialOffer_SpecialOfferID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[SpecialOfferID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [
+    {
+      "Name": "[CK_SpecialOffer_EndDate]",
+      "Expression": "[EndDate]>=[StartDate]",
+      "ShouldApplyExpression": "",
+      "ExtendedProperties": {
+        "MS_Description": "Check constraint [EndDate] >= [StartDate]"
+      }
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Sales]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Sale discounts lookup table."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.SpecialOffer.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[SpecialOfferID]"
+  }
+}

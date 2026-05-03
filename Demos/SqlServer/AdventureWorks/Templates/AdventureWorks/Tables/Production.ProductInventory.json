@@ -1,0 +1,165 @@
+{
+  "Name": "[ProductInventory]",
+  "Columns": [
+    {
+      "Name": "[Bin]",
+      "DataType": "TINYINT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[Bin]>=(0) AND [Bin]<=(100)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Storage container on a shelf in an inventory location."
+      }
+    },
+    {
+      "Name": "[LocationID]",
+      "DataType": "SMALLINT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Inventory location identification number. Foreign key to Location.LocationID. "
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[Quantity]",
+      "DataType": "SMALLINT",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Quantity of products in the inventory location."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Default": "newid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[Shelf]",
+      "DataType": "NVARCHAR(10)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[Shelf] like '[A-Za-z]' OR [Shelf]='N/A'",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Storage compartment within an inventory location."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_ProductInventory_ProductID_LocationID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[ProductID],[LocationID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_ProductInventory_Location_LocationID]",
+      "Columns": "[LocationID]",
+      "RelatedTable": "[Location]",
+      "RelatedColumns": "[LocationID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Production]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Location.LocationID."
+      }
+    },
+    {
+      "Name": "[FK_ProductInventory_Product_ProductID]",
+      "Columns": "[ProductID]",
+      "RelatedTable": "[Product]",
+      "RelatedColumns": "[ProductID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Production]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Production]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Product inventory information."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.ProductInventory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductID],[LocationID]"
+  }
+}

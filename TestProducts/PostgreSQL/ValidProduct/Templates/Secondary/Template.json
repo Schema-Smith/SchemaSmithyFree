@@ -1,0 +1,15 @@
+{
+    "Name": "Secondary",
+    "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datistemplate = false AND datname = '{{SecondaryDB}}'",
+    "VersionStampScript": "DO $$\nBEGIN\nRAISE NOTICE '{{ReleaseVersion}}';\nEND;\n$$;",
+    "ScriptFolders": [
+        { "FolderPath" : "Before Scripts", "QuenchSlot" : "Before" },
+        { "FolderPath" : "Schemas", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Domain Types", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Functions", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Procedures", "QuenchSlot" : "Objects" },
+        { "FolderPath" : "Triggers", "QuenchSlot" : "AfterTablesObjects" },
+        { "FolderPath" : "Views", "QuenchSlot" : "AfterTablesObjects" },
+        { "FolderPath" : "After Scripts", "QuenchSlot" : "After" }
+    ]
+}

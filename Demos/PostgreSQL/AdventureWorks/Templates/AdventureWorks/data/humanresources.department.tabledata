@@ -1,0 +1,18 @@
+[
+{"departmentid":1,"groupname":"Research and Development","modifieddate":"2008-04-30T00:00:00","name":"Engineering"},
+{"departmentid":2,"groupname":"Research and Development","modifieddate":"2008-04-30T00:00:00","name":"Tool Design"},
+{"departmentid":3,"groupname":"Sales and Marketing","modifieddate":"2008-04-30T00:00:00","name":"Sales"},
+{"departmentid":4,"groupname":"Sales and Marketing","modifieddate":"2008-04-30T00:00:00","name":"Marketing"},
+{"departmentid":5,"groupname":"Inventory Management","modifieddate":"2008-04-30T00:00:00","name":"Purchasing"},
+{"departmentid":6,"groupname":"Research and Development","modifieddate":"2008-04-30T00:00:00","name":"Research and Development"},
+{"departmentid":7,"groupname":"Manufacturing","modifieddate":"2008-04-30T00:00:00","name":"Production"},
+{"departmentid":8,"groupname":"Manufacturing","modifieddate":"2008-04-30T00:00:00","name":"Production Control"},
+{"departmentid":9,"groupname":"Executive General and Administration","modifieddate":"2008-04-30T00:00:00","name":"Human Resources"},
+{"departmentid":10,"groupname":"Executive General and Administration","modifieddate":"2008-04-30T00:00:00","name":"Finance"},
+{"departmentid":11,"groupname":"Executive General and Administration","modifieddate":"2008-04-30T00:00:00","name":"Information Services"},
+{"departmentid":12,"groupname":"Quality Assurance","modifieddate":"2008-04-30T00:00:00","name":"Document Control"},
+{"departmentid":13,"groupname":"Quality Assurance","modifieddate":"2008-04-30T00:00:00","name":"Quality Assurance"},
+{"departmentid":14,"groupname":"Executive General and Administration","modifieddate":"2008-04-30T00:00:00","name":"Facilities and Maintenance"},
+{"departmentid":15,"groupname":"Inventory Management","modifieddate":"2008-04-30T00:00:00","name":"Shipping and Receiving"},
+{"departmentid":16,"groupname":"Executive General and Administration","modifieddate":"2008-04-30T00:00:00","name":"Executive"}
+]

@@ -1,0 +1,183 @@
+{
+  "Name": "[TransactionHistoryArchive]",
+  "Columns": [
+    {
+      "Name": "[ActualCost]",
+      "DataType": "MONEY",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product cost."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[ProductID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      }
+    },
+    {
+      "Name": "[Quantity]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Product quantity."
+      }
+    },
+    {
+      "Name": "[ReferenceOrderID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Purchase order, sales order, or work order identification number."
+      }
+    },
+    {
+      "Name": "[ReferenceOrderLineID]",
+      "DataType": "INT",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Line number associated with the purchase order, sales order, or work order."
+      }
+    },
+    {
+      "Name": "[TransactionDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time of the transaction."
+      }
+    },
+    {
+      "Name": "[TransactionID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for TransactionHistoryArchive records."
+      }
+    },
+    {
+      "Name": "[TransactionType]",
+      "DataType": "NCHAR(1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "upper([TransactionType])='P' OR upper([TransactionType])='S' OR upper([TransactionType])='W'",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "W = Work Order, S = Sales Order, P = Purchase Order"
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_TransactionHistoryArchive_ProductID]",
+      "IndexColumns": "[ProductID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[IX_TransactionHistoryArchive_ReferenceOrderID_ReferenceOrderLineID]",
+      "IndexColumns": "[ReferenceOrderID],[ReferenceOrderLineID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_TransactionHistoryArchive_TransactionID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[TransactionID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Production]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Transactions for previous years."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.TransactionHistoryArchive.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[TransactionID]"
+  }
+}

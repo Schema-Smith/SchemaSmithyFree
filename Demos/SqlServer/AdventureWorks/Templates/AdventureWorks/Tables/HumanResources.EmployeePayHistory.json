@@ -1,0 +1,122 @@
+{
+  "Name": "[EmployeePayHistory]",
+  "Columns": [
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Employee identification number. Foreign key to Employee.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[PayFrequency]",
+      "DataType": "TINYINT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[PayFrequency]=(2) OR [PayFrequency]=(1)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "1 = Salary received monthly, 2 = Salary received biweekly"
+      }
+    },
+    {
+      "Name": "[Rate]",
+      "DataType": "MONEY",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[Rate]>=(6.50) AND [Rate]<=(200.00)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Salary hourly rate."
+      }
+    },
+    {
+      "Name": "[RateChangeDate]",
+      "DataType": "DATETIME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date the change in pay is effective"
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_EmployeePayHistory_BusinessEntityID_RateChangeDate]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[BusinessEntityID],[RateChangeDate]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_EmployeePayHistory_Employee_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTable": "[Employee]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[HumanResources]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[HumanResources]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Employee pay history."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources.EmployeePayHistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID],[RateChangeDate]"
+  }
+}

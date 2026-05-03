@@ -1,0 +1,171 @@
+{
+  "Name": "[SalesTaxRate]",
+  "Columns": [
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Name]",
+      "DataType": "NAME",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Tax rate description."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Default": "newid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[SalesTaxRateID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for SalesTaxRate records."
+      }
+    },
+    {
+      "Name": "[StateProvinceID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "State, province, or country/region the sales tax applies to."
+      }
+    },
+    {
+      "Name": "[TaxRate]",
+      "DataType": "SMALLMONEY",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Tax rate amount."
+      }
+    },
+    {
+      "Name": "[TaxType]",
+      "DataType": "TINYINT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CheckExpression": "[TaxType]>=(1) AND [TaxType]<=(3)",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "1 = Tax applied to retail transactions, 2 = Tax applied to wholesale transactions, 3 = Tax applied to all sales (retail and wholesale) transactions."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_SalesTaxRate_rowguid]",
+      "Unique": true,
+      "IndexColumns": "[rowguid]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[AK_SalesTaxRate_StateProvinceID_TaxType]",
+      "Unique": true,
+      "IndexColumns": "[StateProvinceID],[TaxType]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_SalesTaxRate_SalesTaxRateID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[SalesTaxRateID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_SalesTaxRate_StateProvince_StateProvinceID]",
+      "Columns": "[StateProvinceID]",
+      "RelatedTable": "[StateProvince]",
+      "RelatedColumns": "[StateProvinceID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Person]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing StateProvince.StateProvinceID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Sales]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Tax rate lookup table."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.SalesTaxRate.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[SalesTaxRateID]"
+  }
+}

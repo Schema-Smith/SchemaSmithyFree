@@ -1,62 +1,282 @@
-name: continuous-integration
+name: CI
 
 on:
-  pull_request:
-    branches:
-      - main
   push:
-    branches:
-      - main
+    branches: [main, dev/v2]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '**/*.md'
+      - 'LICENSE'
+      - '.gitignore'
+  pull_request:
+    branches: [main, dev/v2]
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  TEST_USER: TestUser
+  TEST_PASSWORD: 'aCa2d805-41E5@40c4!98e7#92F93zzxo176'
+
 jobs:
-  build:
+  build-and-unit-tests:
+    name: Build & Unit Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore SchemaSmith.sln
+
+      - name: Build
+        run: dotnet build SchemaSmith.sln --no-restore -c Debug
+
+      - name: Schema Unit Tests
+        run: dotnet test Schema/Schema.UnitTests/Schema.UnitTests.csproj --no-build -c Debug --logger trx --results-directory TestResults
+
+      - name: SchemaQuench Unit Tests
+        run: dotnet test SchemaQuench/SchemaQuench.UnitTests/SchemaQuench.UnitTests.csproj --no-build -c Debug --logger trx --results-directory TestResults
+
+      - name: SchemaTongs Unit Tests
+        run: dotnet test SchemaTongs/SchemaTongs.UnitTests/SchemaTongs.UnitTests.csproj --no-build -c Debug --logger trx --results-directory TestResults
+
+      - name: DataTongs Unit Tests
+        run: dotnet test DataTongs/DataTongs.UnitTests/DataTongs.UnitTests.csproj --no-build -c Debug --logger trx --results-directory TestResults
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: unit-test-results
+          path: TestResults
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Test Summary
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
+        with:
+          name: Unit Tests
+          path: TestResults/*.trx
+          reporter: dotnet-trx
+          only-summary: 'true'
+          use-actions-summary: 'true'
+
+  integration-tests-sqlserver:
+    name: Integration Tests (SQL Server)
+    runs-on: ubuntu-latest
+    needs: build-and-unit-tests
+    permissions:
+      contents: read
+      checks: write
     services:
-      mssql:
+      sqlserver:
         image: mcr.microsoft.com/mssql/server:2019-CU27-ubuntu-20.04
         env:
-          SA_PASSWORD: aCa2d805-41E5@40c4!98e7#92F93zzxo176
-          ACCEPT_EULA: 'Y'
+          SA_PASSWORD: ${{ env.TEST_PASSWORD }}
+          ACCEPT_EULA: Y
         ports:
           - 1440:1433
         options: --name mssql
     steps:
-      - name: Update1 on mssql
-        run: docker exec -u 0 mssql apt-get update
-      - name: Install Curl on mssql
-        run: docker exec -u 0 mssql apt-get install -yq curl systemctl
-      - name: Configure sql server packages on mssql
-        run: docker exec -u 0 mssql curl https://packages.microsoft.com/config/ubuntu/20.04/mssql-server-2019.list -o /etc/apt/sources.list.d/mssql-server-2019.list
-      - name: Update2 on mssql
-        run: docker exec -u 0 mssql apt-get update
-      - name: Install Full Text on mssql
-        run: docker exec -u 0 mssql apt-get install -y mssql-server-fts
-      - name: Restart mssql
-        run: docker container restart mssql
-      - name: Checkout files
-        uses: actions/checkout@v4
-      - name: Setup dotnet
-        uses: actions/setup-dotnet@v4
+      - name: Install Full-Text Search on SQL Server
+        run: |
+          docker exec -u 0 mssql apt-get update
+          docker exec -u 0 mssql apt-get install -yq curl systemctl
+          docker exec -u 0 mssql curl https://packages.microsoft.com/config/ubuntu/20.04/mssql-server-2019.list -o /etc/apt/sources.list.d/mssql-server-2019.list
+          docker exec -u 0 mssql apt-get update
+          docker exec -u 0 mssql apt-get install -y mssql-server-fts
+          docker container restart mssql
+
+      - name: Wait for SQL Server to be ready
+        run: |
+          for i in $(seq 1 30); do
+            docker exec mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$TEST_PASSWORD" -Q "SELECT 1" > /dev/null 2>&1 && break
+            sleep 2
+          done
+
+      - name: Rename sa login to TestUser
+        run: |
+          docker exec mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$TEST_PASSWORD" -Q "
+            ALTER LOGIN [sa] WITH NAME = [$TEST_USER];
+          "
+
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '9.0.x'
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
-      - name: Install dependencies
-        run: dotnet restore SchemaSmithyFree.sln
-      - name: Test with dotnet
-        run: dotnet test SchemaSmithyFree.sln --framework net9.0 --logger trx --results-directory "TestResults"
-      - name: Upload dotnet test results
-        uses: actions/upload-artifact@v4
-        with:
-          name: dotnet-results
-          path: TestResults
-        # Use always() to always run this step to publish test results when there are test failures
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore & Build
+        run: dotnet build SchemaSmith.sln -c Debug
+
+      - name: Run SQL Server Integration Tests
+        run: |
+          dotnet test Schema/Schema.IntegrationTests/Schema.IntegrationTests.csproj --no-build -c Debug --filter "Category=SqlServer" --logger trx --results-directory TestResults
+          dotnet test SchemaQuench/SchemaQuench.IntegrationTests/SchemaQuench.IntegrationTests.csproj --no-build -c Debug --filter "Category=SqlServer" --logger trx --results-directory TestResults
+          dotnet test SchemaTongs/SchemaTongs.IntegrationTests/SchemaTongs.IntegrationTests.csproj --no-build -c Debug --filter "Category=SqlServer" --logger trx --results-directory TestResults
+          dotnet test DataTongs/DataTongs.IntegrationTests/DataTongs.IntegrationTests.csproj --no-build -c Debug --filter "Category=SqlServer" --logger trx --results-directory TestResults
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v7
         if: ${{ always() }}
-      - name: Test Summary
-        uses: dorny/test-reporter@v2
-        if: ${{ !cancelled() }}       # run this step even if previous step failed
         with:
-          name: Test with dotnet      # Name of the check run which will be created
-          path: TestResults/*.trx     # Path to test results
-          reporter: dotnet-trx        # Format of test results
+          name: sqlserver-test-results
+          path: TestResults
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Test Summary
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
+        with:
+          name: SQL Server Integration Tests
+          path: TestResults/*.trx
+          reporter: dotnet-trx
           only-summary: 'true'
-          use-actions-summary: 'true'    
+          use-actions-summary: 'true'
+
+  integration-tests-postgresql:
+    name: Integration Tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    needs: build-and-unit-tests
+    permissions:
+      contents: read
+      checks: write
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: ${{ env.TEST_USER }}
+          POSTGRES_PASSWORD: ${{ env.TEST_PASSWORD }}
+          POSTGRES_DB: TestMain
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U TestUser -d TestMain"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 15s
+    steps:
+      - name: Increase PostgreSQL max connections
+        run: |
+          PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -c "ALTER SYSTEM SET max_connections = 500;"
+          docker restart $(docker ps -q --filter "ancestor=postgres:latest")
+          sleep 5
+          for i in $(seq 1 30); do
+            PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -c "SELECT 1" > /dev/null 2>&1 && break
+            sleep 2
+          done
+
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore & Build
+        run: dotnet build SchemaSmith.sln -c Debug
+
+      - name: Run PostgreSQL Integration Tests
+        run: |
+          dotnet test Schema/Schema.IntegrationTests/Schema.IntegrationTests.csproj --no-build -c Debug --filter "Category=PostgreSQL" --logger trx --results-directory TestResults
+          dotnet test SchemaQuench/SchemaQuench.IntegrationTests/SchemaQuench.IntegrationTests.csproj --no-build -c Debug --filter "Category=PostgreSQL" --logger trx --results-directory TestResults
+          dotnet test SchemaTongs/SchemaTongs.IntegrationTests/SchemaTongs.IntegrationTests.csproj --no-build -c Debug --filter "Category=PostgreSQL" --logger trx --results-directory TestResults
+          dotnet test DataTongs/DataTongs.IntegrationTests/DataTongs.IntegrationTests.csproj --no-build -c Debug --filter "Category=PostgreSQL" --logger trx --results-directory TestResults
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: postgresql-test-results
+          path: TestResults
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Test Summary
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
+        with:
+          name: PostgreSQL Integration Tests
+          path: TestResults/*.trx
+          reporter: dotnet-trx
+          only-summary: 'true'
+          use-actions-summary: 'true'
+
+  integration-tests-mysql:
+    name: Integration Tests (MySQL)
+    runs-on: ubuntu-latest
+    needs: build-and-unit-tests
+    permissions:
+      contents: read
+      checks: write
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ env.TEST_PASSWORD }}
+          MYSQL_USER: ${{ env.TEST_USER }}
+          MYSQL_PASSWORD: ${{ env.TEST_PASSWORD }}
+          MYSQL_DATABASE: TestMain
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -u root -p'aCa2d805-41E5@40c4!98e7#92F93zzxo176'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Grant TestUser full privileges and increase max connections
+        run: |
+          mysql -h 127.0.0.1 -u root -p"$TEST_PASSWORD" -e "
+            GRANT ALL PRIVILEGES ON *.* TO '$TEST_USER'@'%' WITH GRANT OPTION;
+            FLUSH PRIVILEGES;
+            SET GLOBAL max_connections = 500;
+          "
+
+      - name: Restore & Build
+        run: dotnet build SchemaSmith.sln -c Debug
+
+      - name: Run MySQL Integration Tests
+        run: |
+          dotnet test Schema/Schema.IntegrationTests/Schema.IntegrationTests.csproj --no-build -c Debug --filter "Category=MySQL" --logger trx --results-directory TestResults
+          dotnet test SchemaQuench/SchemaQuench.IntegrationTests/SchemaQuench.IntegrationTests.csproj --no-build -c Debug --filter "Category=MySQL" --logger trx --results-directory TestResults
+          dotnet test SchemaTongs/SchemaTongs.IntegrationTests/SchemaTongs.IntegrationTests.csproj --no-build -c Debug --filter "Category=MySQL" --logger trx --results-directory TestResults
+          dotnet test DataTongs/DataTongs.IntegrationTests/DataTongs.IntegrationTests.csproj --no-build -c Debug --filter "Category=MySQL" --logger trx --results-directory TestResults
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: mysql-test-results
+          path: TestResults
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Test Summary
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
+        with:
+          name: MySQL Integration Tests
+          path: TestResults/*.trx
+          reporter: dotnet-trx
+          only-summary: 'true'
+          use-actions-summary: 'true'

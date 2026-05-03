@@ -1,0 +1,103 @@
+{
+  "Name": "[ProductDescription]",
+  "Columns": [
+    {
+      "Name": "[Description]",
+      "DataType": "NVARCHAR(400)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Description of the product."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[ProductDescriptionID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for ProductDescription records."
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Default": "newid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_ProductDescription_rowguid]",
+      "Unique": true,
+      "IndexColumns": "[rowguid]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[PK_ProductDescription_ProductDescriptionID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[ProductDescriptionID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Production]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Product descriptions in several languages."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Production.ProductDescription.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[ProductDescriptionID]"
+  }
+}

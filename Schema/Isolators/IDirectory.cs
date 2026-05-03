@@ -1,4 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using System.IO;
 
 namespace Schema.Isolators;
@@ -10,4 +11,6 @@ public interface IDirectory
     string[] GetFiles(string path, string searchPattern, SearchOption searchOption);
     string[] GetDirectories(string path, string searchPattern, SearchOption searchOption);
     void Delete(string path, bool recursive = false);
+    void Move(string sourceDirName, string destDirName);
+    string GetCurrentDirectory();
 }

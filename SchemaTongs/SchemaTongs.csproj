@@ -1,67 +1,49 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-	  <OutputType>Exe</OutputType>
-	  <TargetFrameworks>net9.0;net481</TargetFrameworks>
-	  <ImplicitUsings>disable</ImplicitUsings>
-	  <Nullable>disable</Nullable>
-	  <LangVersion>default</LangVersion>
-	  <Nullable>enable</Nullable>
-	  <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-	  <UserSecretsId>e821fe99-a762-4ea4-a7ea-5e64817550da</UserSecretsId>
-	  <PublishAot>false</PublishAot>
+	<PropertyGroup>
+		<DefaultItemExcludes>$(DefaultItemExcludes);SchemaTongs.UnitTests\**;SchemaTongs.IntegrationTests\**</DefaultItemExcludes>
+		<OutputType>Exe</OutputType>
+		<PublishTrimmed>false</PublishTrimmed>
+		<PublishSingleFile>true</PublishSingleFile>
+		<PublishAot>false</PublishAot>
 
-	  <Version>$(Version)</Version>
-	  <FileVersion>$(Version)</FileVersion>
-	  <Company>SchemaSmith, LLC</Company>
-	  <Product>SchemaTongs MSSQL Community</Product>
-	  <Copyright>© 2025 SchemaSmith, LLC. All rights reserved</Copyright>
-	  <ApplicationIcon>images\SchemaTongs.ico</ApplicationIcon>
-      <AssemblyName>SchemaTongs</AssemblyName>
-  </PropertyGroup>
+		<Product>SchemaTongs</Product>
+		<Description>Extracts database schemas into SchemaSmith package format</Description>
+		<ApplicationIcon>images\SchemaTongs.ico</ApplicationIcon>
+		<UserSecretsId>b2c3d4e5-f6a7-8901-bcde-f12345678901</UserSecretsId>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <None Remove="Log4Net.config" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="images\SchemaTongs.ico" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Log4Net.config">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </EmbeddedResource>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.SqlServer.SqlManagementObjects" Version="180.10.0" />
-    <PackageReference Include="System.Private.Uri" Version="4.3.2" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Schema\Schema.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="appsettings.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-
-  <Target Name="CleanLogFolders" BeforeTargets="Clean;PrepareForBuild;Build">
 	<ItemGroup>
-	  <_LogFolders Include="$(OutDir)\SchemaTongs.0*\*" />
-	  <_FilesToClean Include="$(OutDir)\*.log;$(OutDir)\*.sql" />
+		<None Remove="Log4Net.config" />
 	</ItemGroup>
-	<RemoveDir Directories="@(_LogFolders -> '%(RootDir)%(Directory)')" />
-	<Delete Files="@(_FilesToClean)" />
-  </Target>
 
-  <Target Name="CopyOutputFiles" AfterTargets="Build" Condition="'$(TargetFramework)' != '' And '$(Configuration)' != 'DEBUG' And Exists('$(OutputPath)\..\..\..\..\Release')">
-    <ItemGroup>
-	    <MySourceFiles Include="$(OutputPath)\**\*.*" Exclude="$(OutputPath)\publish\**;$(OutputPath)\win-x64\**;$(OutputPath)\**\*.pdb" />
-    </ItemGroup>
-    <Copy SourceFiles="@(MySourceFiles)" DestinationFiles="@(MySourceFiles->'$(OutputPath)\..\..\..\..\Release\Zips\$(TargetFramework)\SchemaTongs\%(RecursiveDir)%(Filename)%(Extension)')" />
-  </Target>
+	<ItemGroup>
+		<EmbeddedResource Include="Log4Net.config" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="SchemaTongs.UnitTests" />
+		<InternalsVisibleTo Include="SchemaTongs.IntegrationTests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Schema\Schema.csproj" />
+	</ItemGroup>
+
+	<!-- Bundle ICU into self-contained Linux publish output so the CLI works on minimal
+	     containers (ubuntu:24.04, fedora:latest) without system libicu. Other RIDs
+	     (Windows, macOS) get nothing extra — system ICU is reliably present and is
+	     preferred at load time. ICU version is centralized in Directory.Build.props. -->
+	<ItemGroup>
+		<RuntimeHostConfigurationOption Include="System.Globalization.AppLocalIcu" Value="$(IcuVersion)" />
+		<PackageReference Include="Microsoft.ICU.ICU4C.Runtime" />
+	</ItemGroup>
+
+
+<ItemGroup>
+	  <None Update="SchemaTongs.settings.json">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
 </Project>

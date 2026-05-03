@@ -1,0 +1,83 @@
+{
+  "Name": "[PlaylistTrack]",
+  "Columns": [
+    {
+      "Name": "[PlaylistId]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[TrackId]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IFK_PlaylistTrackPlaylistId]",
+      "IndexColumns": "[PlaylistId]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[IFK_PlaylistTrackTrackId]",
+      "IndexColumns": "[TrackId]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[PK_PlaylistTrack]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[PlaylistId],[TrackId]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_PlaylistTrackPlaylistId]",
+      "Columns": "[PlaylistId]",
+      "RelatedTable": "[Playlist]",
+      "RelatedColumns": "[PlaylistId]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[FK_PlaylistTrackTrackId]",
+      "Columns": "[TrackId]",
+      "RelatedTable": "[Track]",
+      "RelatedColumns": "[TrackId]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.PlaylistTrack.tabledata",
+    "MergeType": "Insert",
+    "MatchColumns": "[PlaylistId],[TrackId]"
+  }
+}

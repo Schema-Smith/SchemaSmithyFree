@@ -1,0 +1,208 @@
+{
+  "Name": "[Customer]",
+  "Columns": [
+    {
+      "Name": "[AccountNumber]",
+      "DataType": "VARCHAR(10)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "ComputedExpression": "isnull('AW'+[dbo].[ufnLeadingZeros]([CustomerID]),'')",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Unique number identifying the customer assigned by the accounting system."
+      }
+    },
+    {
+      "Name": "[CustomerID]",
+      "DataType": "INT IDENTITY(1, 1) NOT FOR REPLICATION",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[PersonID]",
+      "DataType": "INT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key to Person.BusinessEntityID"
+      }
+    },
+    {
+      "Name": "[rowguid]",
+      "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL",
+      "Default": "newid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      }
+    },
+    {
+      "Name": "[StoreID]",
+      "DataType": "INT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key to Store.BusinessEntityID"
+      }
+    },
+    {
+      "Name": "[TerritoryID]",
+      "DataType": "INT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "ID of the territory in which the customer is located. Foreign key to SalesTerritory.SalesTerritoryID."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[AK_Customer_AccountNumber]",
+      "Unique": true,
+      "IndexColumns": "[AccountNumber]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index."
+      }
+    },
+    {
+      "Name": "[AK_Customer_rowguid]",
+      "Unique": true,
+      "IndexColumns": "[rowguid]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      }
+    },
+    {
+      "Name": "[IX_Customer_TerritoryID]",
+      "IndexColumns": "[TerritoryID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_Customer_CustomerID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[CustomerID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Customer_Person_PersonID]",
+      "Columns": "[PersonID]",
+      "RelatedTable": "[Person]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Person]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Person.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[FK_Customer_SalesTerritory_TerritoryID]",
+      "Columns": "[TerritoryID]",
+      "RelatedTable": "[SalesTerritory]",
+      "RelatedColumns": "[TerritoryID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Sales]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing SalesTerritory.TerritoryID."
+      }
+    },
+    {
+      "Name": "[FK_Customer_Store_StoreID]",
+      "Columns": "[StoreID]",
+      "RelatedTable": "[Store]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Sales]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Store.BusinessEntityID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Sales]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Current customer information. Also see the Person and Store tables."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Sales.Customer.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[CustomerID]"
+  }
+}

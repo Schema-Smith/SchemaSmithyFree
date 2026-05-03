@@ -1,0 +1,210 @@
+{
+  "Name": "purchaseorderheader",
+  "Columns": [
+    {
+      "Name": "employeeid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "freight",
+      "DataType": "numeric",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "orderdate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "purchaseorderid",
+      "DataType": "int4",
+      "Default": "nextval('purchasing.purchaseorderheader_purchaseorderid_seq'::regclass)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "revisionnumber",
+      "DataType": "int2",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "shipdate",
+      "DataType": "timestamp",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "shipmethodid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "status",
+      "DataType": "int2",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "subtotal",
+      "DataType": "numeric",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "taxamt",
+      "DataType": "numeric",
+      "Default": "0.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "vendorid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_PurchaseOrderHeader_PurchaseOrderID",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "purchaseorderid",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_PurchaseOrderHeader_Employee_EmployeeID",
+      "Columns": "employeeid",
+      "RelatedTable": "employee",
+      "RelatedColumns": "businessentityid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "humanresources",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_PurchaseOrderHeader_ShipMethod_ShipMethodID",
+      "Columns": "shipmethodid",
+      "RelatedTable": "shipmethod",
+      "RelatedColumns": "shipmethodid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "purchasing",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_PurchaseOrderHeader_Vendor_VendorID",
+      "Columns": "vendorid",
+      "RelatedTable": "vendor",
+      "RelatedColumns": "businessentityid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "purchasing",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_PurchaseOrderHeader_Freight",
+      "Expression": "freight >= 0.00",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_PurchaseOrderHeader_ShipDate",
+      "Expression": "(shipdate >= orderdate) OR (shipdate IS NULL)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_PurchaseOrderHeader_Status",
+      "Expression": "(status >= 1) AND (status <= 4)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_PurchaseOrderHeader_SubTotal",
+      "Expression": "subtotal >= 0.00",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_PurchaseOrderHeader_TaxAmt",
+      "Expression": "taxamt >= 0.00",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "purchasing",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/purchasing.purchaseorderheader.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "purchaseorderid"
+  }
+}

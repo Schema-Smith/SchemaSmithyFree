@@ -1,0 +1,121 @@
+{
+  "Name": "currencyrate",
+  "Columns": [
+    {
+      "Name": "averagerate",
+      "DataType": "numeric",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "currencyratedate",
+      "DataType": "timestamp",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "currencyrateid",
+      "DataType": "int4",
+      "Default": "nextval('sales.currencyrate_currencyrateid_seq'::regclass)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "endofdayrate",
+      "DataType": "numeric",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "fromcurrencycode",
+      "DataType": "CHAR(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "tocurrencycode",
+      "DataType": "CHAR(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_CurrencyRate_CurrencyRateID",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "currencyrateid",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_CurrencyRate_Currency_FromCurrencyCode",
+      "Columns": "fromcurrencycode",
+      "RelatedTable": "currency",
+      "RelatedColumns": "currencycode",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "sales",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_CurrencyRate_Currency_ToCurrencyCode",
+      "Columns": "tocurrencycode",
+      "RelatedTable": "currency",
+      "RelatedColumns": "currencycode",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "sales",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "sales",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/sales.currencyrate.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "currencyrateid"
+  }
+}

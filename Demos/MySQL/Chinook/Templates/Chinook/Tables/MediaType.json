@@ -1,0 +1,48 @@
+{
+  "Name": "`MediaType`",
+  "Columns": [
+    {
+      "Name": "`MediaTypeId`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`Name`",
+      "DataType": "varchar(120)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`MediaTypeId`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 6,
+  "DataDelivery": {
+    "ContentFile": "data/MediaType.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`MediaTypeId`"
+  }
+}

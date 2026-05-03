@@ -1,0 +1,33 @@
+{
+	"Schema": "public",
+	"Name": "TestSecondaryTable",
+	"Columns": [
+		{
+			"Name": "TestSecondaryID",
+			"DataType": "UUID"
+		},
+		{
+			"Name": "DateCreated",
+			"DataType": "TIMESTAMP"
+		},
+		{
+			"Name": "Status",
+			"DataType": "SMALLINT",
+			"Nullable": true
+		}
+	],
+	"Indexes": [
+		{
+			"Name": "PK_TestSecondaryTable",
+			"PrimaryKey": true,
+			"IndexColumns": "TestSecondaryID"
+		},
+		{
+			"Name": "CIX_DateCreated",
+			"Clustered": true,
+			"IndexColumns": "DateCreated"
+		}
+	],
+	"ForeignKeys": [],
+	"CheckConstraints": []
+}

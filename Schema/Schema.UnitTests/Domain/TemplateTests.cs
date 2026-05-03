@@ -1,0 +1,321 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+using System.Collections.Generic;
+using System.Linq;
+using Newtonsoft.Json;
+using Schema.Domain;
+using Schema.Domain.PostgreSQL;
+using Schema.Domain.SqlServer;
+
+namespace Schema.UnitTests.Domain
+{
+    [TestFixture]
+    public class TemplateTests
+    {
+        [Test]
+        public void DefaultValues_AreCorrect()
+        {
+            var template = new Template();
+
+            Assert.That(template.Name, Is.EqualTo(""));
+            Assert.That(template.DatabaseIdentificationScript, Is.Null);
+            Assert.That(template.VersionStampScript, Is.Null);
+            Assert.That(template.IndexOnlyTableQuenches, Is.False);
+            Assert.That(template.ScriptFolders, Is.Not.Null);
+            Assert.That(template.ScriptFolders, Is.Empty);
+            Assert.That(template.ScriptTokens, Is.Not.Null);
+            Assert.That(template.ScriptTokens, Is.Empty);
+            Assert.That(template.UpdateFillFactor, Is.True);
+            Assert.That(template.BaselineValidationScript, Is.Null);
+            Assert.That(template.Required, Is.True);
+            Assert.That(template.Product, Is.Null);
+            Assert.That(template.Tables, Is.Not.Null);
+            Assert.That(template.Tables, Is.Empty);
+            Assert.That(template.TableSchema, Is.EqualTo(""));
+            Assert.That(template.FilePath, Is.Null);
+            Assert.That(template.QueryTokens, Is.Not.Null);
+            Assert.That(template.NonQueryTokens, Is.Not.Null);
+            Assert.That(template.LoggableTokens, Is.Not.Null);
+        }
+
+        [Test]
+        public void JsonRoundTrip_PreservesSerializedProperties()
+        {
+            var template = new Template
+            {
+                Name = "Default",
+                DatabaseIdentificationScript = "SELECT DB_NAME()",
+                VersionStampScript = "EXEC UpdateVersion",
+                IndexOnlyTableQuenches = true,
+                UpdateFillFactor = false,
+                BaselineValidationScript = "SELECT 1",
+                Required = false,
+                ScriptTokens = new Dictionary<string, string> { { "DB", "TestDB" } }
+            };
+
+            var json = JsonConvert.SerializeObject(template);
+            var deserialized = JsonConvert.DeserializeObject<Template>(json);
+
+            Assert.That(deserialized.Name, Is.EqualTo("Default"));
+            Assert.That(deserialized.DatabaseIdentificationScript, Is.EqualTo("SELECT DB_NAME()"));
+            Assert.That(deserialized.VersionStampScript, Is.EqualTo("EXEC UpdateVersion"));
+            Assert.That(deserialized.IndexOnlyTableQuenches, Is.True);
+            Assert.That(deserialized.UpdateFillFactor, Is.False);
+            Assert.That(deserialized.BaselineValidationScript, Is.EqualTo("SELECT 1"));
+            Assert.That(deserialized.Required, Is.False);
+            Assert.That(deserialized.ScriptTokens["DB"], Is.EqualTo("TestDB"));
+        }
+
+        [Test]
+        public void JsonIgnored_PropertiesNotSerialized()
+        {
+            var template = new Template
+            {
+                Name = "Test",
+                FilePath = "/some/path",
+                TableSchema = "dbo"
+            };
+            template.Product = new Product { Name = "TestProduct" };
+
+            var json = JsonConvert.SerializeObject(template);
+
+            Assert.That(json, Does.Not.Contain("FilePath"));
+            Assert.That(json, Does.Not.Contain("TableSchema"));
+            Assert.That(json, Does.Not.Contain("Product"));
+            Assert.That(json, Does.Not.Contain("Tables"));
+            Assert.That(json, Does.Not.Contain("QueryTokens"));
+            Assert.That(json, Does.Not.Contain("NonQueryTokens"));
+            Assert.That(json, Does.Not.Contain("LoggableTokens"));
+        }
+
+        [Test]
+        public void Clone_ReturnsDeepCopy_WithIndependentCollections()
+        {
+            var product = new Product { Name = "TestProduct" };
+            var original = new Template
+            {
+                Name = "Test",
+                FilePath = "/some/path",
+                TableSchema = "schema_json",
+                DatabaseIdentificationScript = "SELECT DB_NAME()",
+                VersionStampScript = "EXEC UpdateVersion",
+                ScriptTokens = new Dictionary<string, string> { { "DB", "TestDB" } },
+            };
+            original.Product = product;
+            original.Tables.Add(new Table { Name = "Users" });
+            original.ScriptFolders.Add(new TemplateFolder { FolderPath = "Objects", QuenchSlot = TemplateQuenchSlot.Objects });
+            original.QueryTokens = new Dictionary<string, string> { { "QToken", "QValue" } };
+            original.NonQueryTokens = new Dictionary<string, string> { { "NQToken", "NQValue" } };
+            original.LoggableTokens = new Dictionary<string, string> { { "LToken", "LValue" } };
+
+            var clone = original.Clone();
+
+            // Same values
+            Assert.That(clone.Name, Is.EqualTo("Test"));
+            Assert.That(clone.FilePath, Is.EqualTo("/some/path"));
+            Assert.That(clone.TableSchema, Is.EqualTo("schema_json"));
+            Assert.That(clone.DatabaseIdentificationScript, Is.EqualTo("SELECT DB_NAME()"));
+            Assert.That(clone.VersionStampScript, Is.EqualTo("EXEC UpdateVersion"));
+            Assert.That(clone.Product, Is.SameAs(product));
+            Assert.That(clone.Tables, Has.Count.EqualTo(1));
+            Assert.That(clone.ScriptFolders, Has.Count.EqualTo(1));
+            Assert.That(clone.QueryTokens, Has.Count.EqualTo(1));
+            Assert.That(clone.NonQueryTokens, Has.Count.EqualTo(1));
+            Assert.That(clone.LoggableTokens, Has.Count.EqualTo(1));
+            Assert.That(clone.ScriptTokens["DB"], Is.EqualTo("TestDB"));
+
+            // Independent references
+            Assert.That(clone, Is.Not.SameAs(original));
+            Assert.That(clone.Tables, Is.Not.SameAs(original.Tables));
+            Assert.That(clone.ScriptFolders, Is.Not.SameAs(original.ScriptFolders));
+            Assert.That(clone.QueryTokens, Is.Not.SameAs(original.QueryTokens));
+            Assert.That(clone.NonQueryTokens, Is.Not.SameAs(original.NonQueryTokens));
+            Assert.That(clone.LoggableTokens, Is.Not.SameAs(original.LoggableTokens));
+
+            // Mutating clone does not affect original
+            clone.Tables.Clear();
+            Assert.That(original.Tables, Has.Count.EqualTo(1));
+
+            clone.ScriptFolders.Clear();
+            Assert.That(original.ScriptFolders, Has.Count.EqualTo(1));
+
+            clone.QueryTokens.Clear();
+            Assert.That(original.QueryTokens, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public void MaterializedViews_DefaultsToEmptyList()
+        {
+            var template = new Template();
+            Assert.That(template.MaterializedViews, Is.Not.Null);
+            Assert.That(template.MaterializedViews, Is.Empty);
+        }
+
+        [Test]
+        public void MaterializedViewSchema_DefaultsToEmptyArray()
+        {
+            var template = new Template();
+            Assert.That(template.MaterializedViewSchema, Is.EqualTo("[]"));
+        }
+
+        [Test]
+        public void Clone_CopiesMaterializedViews()
+        {
+            var original = new Template { Name = "Test" };
+            original.Product = new Product { Name = "P" };
+            original.MaterializedViews.Add(new PostgreSqlMaterializedView { Name = "mv_test", Definition = "SELECT 1" });
+            original.MaterializedViewSchema = "[{\"Name\":\"mv_test\"}]";
+
+            var clone = original.Clone();
+
+            Assert.That(clone.MaterializedViews, Has.Count.EqualTo(1));
+            Assert.That(clone.MaterializedViews[0].Name, Is.EqualTo("mv_test"));
+            Assert.That(clone.MaterializedViewSchema, Is.EqualTo("[{\"Name\":\"mv_test\"}]"));
+            Assert.That(clone.MaterializedViews, Is.Not.SameAs(original.MaterializedViews));
+
+            // Mutating clone does not affect original
+            clone.MaterializedViews.Clear();
+            Assert.That(original.MaterializedViews, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public void JsonIgnored_MaterializedViewProperties_NotSerialized()
+        {
+            var template = new Template { Name = "Test" };
+            template.MaterializedViews.Add(new PostgreSqlMaterializedView { Name = "mv" });
+            template.MaterializedViewSchema = "[{\"Name\":\"mv\"}]";
+
+            var json = JsonConvert.SerializeObject(template);
+
+            Assert.That(json, Does.Not.Contain("MaterializedViews"));
+            Assert.That(json, Does.Not.Contain("MaterializedViewSchema"));
+        }
+
+        [Test]
+        public void IndexedViews_DefaultsToEmptyList()
+        {
+            var template = new Template();
+            Assert.That(template.IndexedViews, Is.Not.Null);
+            Assert.That(template.IndexedViews, Is.Empty);
+        }
+
+        [Test]
+        public void IndexedViewSchema_DefaultsToEmptyArray()
+        {
+            var template = new Template();
+            Assert.That(template.IndexedViewSchema, Is.EqualTo("[]"));
+        }
+
+        [Test]
+        public void Clone_CopiesIndexedViews()
+        {
+            var original = new Template { Name = "Test" };
+            original.Product = new Product { Name = "P" };
+            original.IndexedViews.Add(new SqlServerIndexedView { Name = "[iv_test]", Definition = "SELECT 1" });
+            original.IndexedViewSchema = "[{\"Name\":\"[iv_test]\"}]";
+
+            var clone = original.Clone();
+
+            Assert.That(clone.IndexedViews, Has.Count.EqualTo(1));
+            Assert.That(clone.IndexedViews[0].Name, Is.EqualTo("[iv_test]"));
+            Assert.That(clone.IndexedViewSchema, Is.EqualTo("[{\"Name\":\"[iv_test]\"}]"));
+            Assert.That(clone.IndexedViews, Is.Not.SameAs(original.IndexedViews));
+
+            // Mutating clone does not affect original
+            clone.IndexedViews.Clear();
+            Assert.That(original.IndexedViews, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public void Clone_CopiesIndexedViewSchema()
+        {
+            var original = new Template { Name = "Test" };
+            original.Product = new Product { Name = "P" };
+            original.IndexedViewSchema = "[{\"Name\":\"[iv_test]\"}]";
+
+            var clone = original.Clone();
+
+            Assert.That(clone.IndexedViewSchema, Is.EqualTo("[{\"Name\":\"[iv_test]\"}]"));
+        }
+
+        [Test]
+        public void JsonIgnored_IndexedViewProperties_NotSerialized()
+        {
+            var template = new Template { Name = "Test" };
+            template.IndexedViews.Add(new SqlServerIndexedView { Name = "[iv]" });
+            template.IndexedViewSchema = "[{\"Name\":\"[iv]\"}]";
+
+            var json = JsonConvert.SerializeObject(template);
+
+            Assert.That(json, Does.Not.Contain("IndexedViews"));
+            Assert.That(json, Does.Not.Contain("IndexedViewSchema"));
+        }
+
+        [Test]
+        public void GetDefaultTemplateFolders_SqlServer_ReturnsExpectedFolders()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.SqlServer);
+            Assert.That(folders, Has.Count.GreaterThan(0));
+            Assert.That(folders.Any(f => f.QuenchSlot == TemplateQuenchSlot.Objects), Is.True);
+            Assert.That(folders.Any(f => f.FolderPath == "Schemas"), Is.True);
+            Assert.That(folders.Any(f => f.FolderPath == "DDLTriggers"), Is.True);
+        }
+
+        [Test]
+        public void GetDefaultTemplateFolders_SqlServer_UsesStandardizedFolderNames()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.SqlServer);
+            Assert.That(folders.First(f => f.QuenchSlot == TemplateQuenchSlot.Before).FolderPath, Is.EqualTo("Before Scripts"));
+            Assert.That(folders.First(f => f.QuenchSlot == TemplateQuenchSlot.After).FolderPath, Is.EqualTo("After Scripts"));
+            Assert.That(folders.First(f => f.QuenchSlot == TemplateQuenchSlot.TableData).FolderPath, Is.EqualTo("Table Data"));
+        }
+
+        [Test]
+        public void GetDefaultTemplateFolders_SqlServer_DoesNotContainLegacyFolderNames()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.SqlServer);
+            Assert.That(folders.Any(f => f.FolderPath.Contains("MigrationScripts")), Is.False);
+            Assert.That(folders.Any(f => f.FolderPath == "TableData"), Is.False);
+        }
+
+        [Test]
+        public void GetDefaultTemplateFolders_PostgreSQL_ReturnsExpectedFolders()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.PostgreSQL);
+            Assert.That(folders, Has.Count.GreaterThan(0));
+            Assert.That(folders.Any(f => f.FolderPath == "Domain Types"), Is.True);
+            Assert.That(folders.Any(f => f.FolderPath == "Trigger Functions"), Is.True);
+            Assert.That(folders.Any(f => f.FolderPath == "Sequences"), Is.True);
+        }
+
+        [Test]
+        public void GetDefaultTemplateFolders_MySQL_ReturnsExpectedFolders()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.MySQL);
+            Assert.That(folders, Has.Count.GreaterThan(0));
+            Assert.That(folders.Any(f => f.FolderPath == "Events"), Is.True);
+            Assert.That(folders.Any(f => f.FolderPath.Contains("Schemas")), Is.False);
+        }
+
+        [Test]
+        public void Clone_DeepClonesQueryTokens_ForPerDatabaseResolution()
+        {
+            var original = new Template { Name = "Test" };
+            original.Product = new Product { Name = "P" };
+            original.QueryTokens = new Dictionary<string, string>
+            {
+                { "<*Query*>ServerVersion", "SELECT @@VERSION" },
+                { "<*Query*>DbId", "SELECT DB_ID()" }
+            };
+
+            var clone = original.Clone();
+
+            // Modify clone's query tokens
+            clone.QueryTokens["<*Query*>ServerVersion"] = "RESOLVED_VALUE";
+
+            // Original should be unaffected
+            Assert.That(original.QueryTokens["<*Query*>ServerVersion"], Is.EqualTo("SELECT @@VERSION"));
+        }
+    }
+}
+

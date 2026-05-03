@@ -1,0 +1,145 @@
+{
+  "Name": "`Customers`",
+  "Columns": [
+    {
+      "Name": "`Address`",
+      "DataType": "varchar(60)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`City`",
+      "DataType": "varchar(15)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`CompanyName`",
+      "DataType": "varchar(40)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ContactName`",
+      "DataType": "varchar(30)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ContactTitle`",
+      "DataType": "varchar(30)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Country`",
+      "DataType": "varchar(15)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`CustomerID`",
+      "DataType": "char(5)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Fax`",
+      "DataType": "varchar(24)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Phone`",
+      "DataType": "varchar(24)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`PostalCode`",
+      "DataType": "varchar(10)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Region`",
+      "DataType": "varchar(15)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "City",
+      "IndexColumns": "`City`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "CompanyName",
+      "IndexColumns": "`CompanyName`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PostalCode",
+      "IndexColumns": "`PostalCode`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`CustomerID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "Region",
+      "IndexColumns": "`Region`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Customers.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`CustomerID`"
+  }
+}

@@ -1,4 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -12,7 +13,7 @@ public static class SqlHelpers
         var batches = new List<string>();
         var lines = (script + "\nGO") // make sure we end with a GO
             .Replace("\r\n", "\n").Replace("\r", "\n") // normalize line endings
-            .Split(['\n'], StringSplitOptions.None);
+            .Split(new[] { '\n' }, StringSplitOptions.None);
         var batch = new StringBuilder();
         var inMultiLine = false;
         var inIdentifier = false;
@@ -35,9 +36,10 @@ public static class SqlHelpers
         }
 
         if (!string.IsNullOrWhiteSpace(batch.ToString()) && batch.Length > 0)
-            throw new Exception("Batch Parsing Failed: " + (inString ? "Unterminated single quote string" : inString2 ? "Unterminated double quote string" : inMultiLine ? "Unterminated comment" : inIdentifier ? "Unterminated identifier": ""));
+            throw new Exception("Batch Parsing Failed: " + (inString ? "Unterminated single quote string" : inString2 ? "Unterminated double quote string" : inMultiLine ? "Unterminated comment" : inIdentifier ? "Unterminated identifier" : ""));
         return batches;
     }
+
 
     // Handle strings in comments and comments in strings while hunting for batch terminators
     private static string CleanseLine(string line, ref bool inString, ref bool inString2, ref bool inMultiLine, ref bool inIdentifier)

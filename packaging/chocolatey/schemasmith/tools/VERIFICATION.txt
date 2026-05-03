@@ -1,0 +1,49 @@
+VERIFICATION
+
+Verification is intended to assist the Chocolatey moderators and end users
+in verifying that this package's contents are trustworthy.
+
+This package is created and maintained by SchemaSmith Contributors. The
+embedded binaries (schemaquench.exe, schematongs.exe, datatongs.exe) are
+built and signed by GitHub Actions on a tagged commit and published to
+the GitHub Release that this package's version corresponds to.
+
+PROVENANCE
+----------
+
+  - Source code:   https://github.com/Schema-Smith/SchemaSmith
+  - GitHub Release: https://github.com/Schema-Smith/SchemaSmith/releases/tag/v__VERSION__
+  - Build workflow: https://github.com/Schema-Smith/SchemaSmith/blob/main/.github/workflows/release.yml
+
+The binaries embedded in this package are a copy of the win-x64 self-
+contained bundle attached to the GitHub Release. They have not been
+modified between download from the Release page and packaging into this
+nupkg.
+
+VERIFYING THE EMBEDDED BINARIES
+-------------------------------
+
+The Windows binaries are Authenticode-signed via Azure Trusted Signing
+with a Microsoft-issued certificate registered to "SchemaSmith
+Contributors". You can verify the signature on your machine:
+
+  signtool verify /pa /v "C:\ProgramData\chocolatey\lib\schemasmith\tools\schemaquench.exe"
+  signtool verify /pa /v "C:\ProgramData\chocolatey\lib\schemasmith\tools\schematongs.exe"
+  signtool verify /pa /v "C:\ProgramData\chocolatey\lib\schemasmith\tools\datatongs.exe"
+
+Each command should report "Successfully verified" against a SchemaSmith
+Trusted Signing certificate. (signtool ships with the Windows SDK; if it
+is not on PATH, look under
+"C:\Program Files (x86)\Windows Kits\10\bin\<version>\x64\".)
+
+You can also recompute the SHA256 of any embedded binary and compare
+against the checksum file attached to the GitHub Release linked above.
+
+LICENSE
+-------
+
+SchemaSmith is licensed under the SchemaSmith Community License (SSCL)
+v2.0. The full license text is included in this package as LICENSE.txt
+and is also available at:
+
+  https://github.com/Schema-Smith/SchemaSmith/blob/main/LICENSE

@@ -1,0 +1,21 @@
+{
+  "Name": "Northwind",
+  "DatabaseIdentificationScript": "SELECT name FROM master.sys.databases WHERE name = '{{NorthwindDb}}'",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Schemas",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Schemas"
+    },
+    {
+      "FolderPath": "Views",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Views"
+    },
+    {
+      "FolderPath": "Procedures",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Procedures"
+    }
+  ]
+}

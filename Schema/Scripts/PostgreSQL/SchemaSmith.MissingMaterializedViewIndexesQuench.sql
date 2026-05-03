@@ -1,0 +1,114 @@
+-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+-- Licensed for use and modification with SchemaSmith products only.
+-- Redistribution outside of SchemaSmith product usage is prohibited.
+
+CREATE OR REPLACE PROCEDURE "SchemaSmith"."MissingMaterializedViewIndexesQuench"
+  (p_WhatIf BOOLEAN = FALSE,
+   p_UpdateFillFactor BOOLEAN = TRUE)
+  LANGUAGE plpgsql
+AS $$
+DECLARE
+  sql_script TEXT = '';
+BEGIN
+  RAISE NOTICE 'Materialized View Indexes — Drop Changed';
+
+  -- Drop indexes that have changed properties (will be recreated below)
+  SELECT STRING_AGG('RAISE NOTICE ''  Dropping changed materialized view index ' || n.nspname || '.' || i.relname || ''';' || CHR(10) ||
+                    'DROP INDEX IF EXISTS "' || n.nspname || '"."' || i.relname || '";', CHR(10))
+    INTO sql_script
+    FROM temp_mv_indexes t
+    JOIN pg_class c ON c.relname = t."ViewName"
+                   AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = t."ViewSchema")
+                   AND c.relkind = 'm'
+    JOIN pg_index idx ON idx.indrelid = c.oid
+    JOIN pg_class i ON i.oid = idx.indexrelid AND i.relname = t."Name"
+    JOIN pg_namespace n ON n.oid = i.relnamespace
+    WHERE (
+      -- Unique changed
+      idx.indisunique != t."Unique"
+      -- Clustered changed
+      OR idx.indisclustered != t."Clustered"
+      -- Access method changed
+      OR (SELECT am.amname FROM pg_am am WHERE i.relam = am.oid) != t."AccessMethod"
+      -- NullsNotDistinct changed
+      OR idx.indnullsnotdistinct != t."NullsNotDistinct"
+      -- Filter expression changed
+      OR COALESCE("SchemaSmith"."StripParenWrapping"(PG_GET_EXPR(idx.indpred, idx.indrelid)), '') != t."FilterExpression"
+      -- FillFactor changed (when UpdateFillFactor is true)
+      OR (t."UpdateFillFactor" AND
+          COALESCE(NULLIF((REGEXP_MATCH(ARRAY_TO_STRING(i.reloptions, ','), 'fillfactor=(\d+)'))[1]::int, 0), 90) != t."FillFactor")
+      -- IndexColumns changed
+      OR (SELECT STRING_AGG(TRIM(BOTH '"' FROM PG_GET_INDEXDEF(idx.indexrelid, u.idx::int4, true)) ||
+                            CASE WHEN (idx.indoption[u.idx-1] & 1) = 1 THEN ' DESC' || CASE WHEN (idx.indoption[u.idx-1] & 2) = 2 THEN '' ELSE ' NULLS LAST' END
+                                 ELSE CASE WHEN (idx.indoption[u.idx-1] & 2) = 2 THEN ' NULLS FIRST' ELSE '' END
+                                END, ',' ORDER BY u.idx)
+            FROM UNNEST(idx.indkey) WITH ORDINALITY AS u(element, idx)
+            WHERE u.idx <= idx.indnkeyatts) != t."IndexColumns"
+      -- IncludeColumns changed
+      OR COALESCE((SELECT STRING_AGG(a.attname, ',' ORDER BY u.idx)
+                     FROM pg_attribute a
+                     CROSS JOIN LATERAL UNNEST(idx.indkey) WITH ORDINALITY AS u(element, idx)
+                     WHERE a.attrelid = idx.indrelid AND u.idx > idx.indnkeyatts AND a.attnum = u.element), '') != COALESCE(t."IncludeColumns", '')
+    );
+  CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
+  RAISE NOTICE 'Materialized View Indexes — Drop Removed';
+
+  -- Drop indexes that exist in DB but not in definitions (for views that still exist)
+  SELECT STRING_AGG('RAISE NOTICE ''  Dropping removed materialized view index ' || n.nspname || '.' || i.relname || ''';' || CHR(10) ||
+                    'DROP INDEX IF EXISTS "' || n.nspname || '"."' || i.relname || '";', CHR(10))
+    INTO sql_script
+    FROM temp_materialized_views tv
+    JOIN pg_class c ON c.relname = tv."Name"
+                   AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = tv."Schema")
+                   AND c.relkind = 'm'
+    JOIN pg_index idx ON idx.indrelid = c.oid
+    JOIN pg_class i ON i.oid = idx.indexrelid
+    JOIN pg_namespace n ON n.oid = i.relnamespace
+    WHERE NOT EXISTS (SELECT 1 FROM temp_mv_indexes t
+                       WHERE t."ViewSchema" = tv."Schema" AND t."ViewName" = tv."Name" AND t."Name" = i.relname);
+  CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
+  RAISE NOTICE 'Materialized View Indexes — Create Missing';
+
+  -- Create indexes that are defined but don't exist in DB
+  SELECT STRING_AGG(
+    'RAISE NOTICE ''  Creating materialized view index ' || t."ViewSchema" || '.' || t."ViewName" || '.' || t."Name" || ''';' || CHR(10) ||
+    'CREATE' || CASE WHEN t."Unique" THEN ' UNIQUE' ELSE '' END
+    || ' INDEX "' || t."Name" || '" ON "' || t."ViewSchema" || '"."' || t."ViewName" || '"'
+    || CASE WHEN t."AccessMethod" != 'btree' THEN ' USING ' || t."AccessMethod" ELSE '' END
+    || ' (' || t."IndexColumns" || ')'
+    || CASE WHEN NULLIF(t."IncludeColumns", '') IS NOT NULL THEN ' INCLUDE (' || t."IncludeColumns" || ')' ELSE '' END
+    || CASE WHEN t."NullsNotDistinct" THEN ' NULLS NOT DISTINCT' ELSE '' END
+    || CASE WHEN NULLIF(t."FilterExpression", '') IS NOT NULL THEN ' WHERE ' || t."FilterExpression" ELSE '' END
+    || CASE WHEN COALESCE(t."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
+            THEN ' WITH (fillfactor = ' || t."FillFactor" || ')'
+            ELSE '' END
+    || ';',
+    CHR(10))
+    INTO sql_script
+    FROM temp_mv_indexes t
+    JOIN pg_class c ON c.relname = t."ViewName"
+                   AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = t."ViewSchema")
+                   AND c.relkind = 'm'
+    WHERE NOT EXISTS (SELECT 1 FROM pg_index idx
+                       JOIN pg_class i ON i.oid = idx.indexrelid AND i.relname = t."Name"
+                       WHERE idx.indrelid = c.oid);
+  CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
+  -- Cluster if specified
+  SELECT STRING_AGG('ALTER INDEX "' || t."ViewSchema" || '"."' || t."Name" || '" SET (fillfactor = ' || t."FillFactor" || ');'
+    || CASE WHEN t."Clustered" THEN CHR(10) || 'CLUSTER "' || t."ViewSchema" || '"."' || t."ViewName" || '" USING "' || t."Name" || '";' ELSE '' END,
+    CHR(10))
+    INTO sql_script
+    FROM temp_mv_indexes t
+    WHERE t."Clustered"
+      AND COALESCE(t."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
+      AND EXISTS (SELECT 1 FROM pg_class c
+                   JOIN pg_index idx ON idx.indrelid = c.oid
+                   JOIN pg_class i ON i.oid = idx.indexrelid AND i.relname = t."Name"
+                   WHERE c.relname = t."ViewName"
+                     AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = t."ViewSchema")
+                     AND NOT idx.indisclustered);
+  CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+END $$;

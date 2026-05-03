@@ -1,0 +1,124 @@
+{
+  "Name": "[JobCandidate]",
+  "Columns": [
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Employee identification number if applicant was hired. Foreign key to Employee.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[JobCandidateID]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Primary key for JobCandidate records."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[Resume]",
+      "DataType": "XML([HumanResources].[HRResumeSchemaCollection])",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Résumé in XML format."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_JobCandidate_BusinessEntityID]",
+      "IndexColumns": "[BusinessEntityID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_JobCandidate_JobCandidateID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[JobCandidateID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_JobCandidate_Employee_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTable": "[Employee]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[HumanResources]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[HumanResources]",
+  "CompressionType": "NONE",
+  "FullTextIndex": {
+    "FullTextCatalog": "[AW2016FullTextCatalog]",
+    "KeyIndex": "[PK_JobCandidate_JobCandidateID]",
+    "ChangeTracking": "AUTO",
+    "StopList": "SYSTEM",
+    "Columns": "[Resume]"
+  },
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Résumés submitted to Human Resources by job applicants."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources.JobCandidate.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[JobCandidateID]"
+  }
+}

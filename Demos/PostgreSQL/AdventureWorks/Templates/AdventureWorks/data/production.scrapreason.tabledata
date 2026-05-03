@@ -1,0 +1,18 @@
+[
+{"modifieddate":"2019-04-30T00:00:00","name":"Brake assembly not as ordered","scrapreasonid":1},
+{"modifieddate":"2019-04-30T00:00:00","name":"Color incorrect","scrapreasonid":2},
+{"modifieddate":"2019-04-30T00:00:00","name":"Gouge in metal","scrapreasonid":3},
+{"modifieddate":"2019-04-30T00:00:00","name":"Drill pattern incorrect","scrapreasonid":4},
+{"modifieddate":"2019-04-30T00:00:00","name":"Drill size too large","scrapreasonid":5},
+{"modifieddate":"2019-04-30T00:00:00","name":"Drill size too small","scrapreasonid":6},
+{"modifieddate":"2019-04-30T00:00:00","name":"Handling damage","scrapreasonid":7},
+{"modifieddate":"2019-04-30T00:00:00","name":"Paint process failed","scrapreasonid":8},
+{"modifieddate":"2019-04-30T00:00:00","name":"Primer process failed","scrapreasonid":9},
+{"modifieddate":"2019-04-30T00:00:00","name":"Seat assembly not as ordered","scrapreasonid":10},
+{"modifieddate":"2019-04-30T00:00:00","name":"Stress test failed","scrapreasonid":11},
+{"modifieddate":"2019-04-30T00:00:00","name":"Thermoform temperature too high","scrapreasonid":12},
+{"modifieddate":"2019-04-30T00:00:00","name":"Thermoform temperature too low","scrapreasonid":13},
+{"modifieddate":"2019-04-30T00:00:00","name":"Trim length too long","scrapreasonid":14},
+{"modifieddate":"2019-04-30T00:00:00","name":"Trim length too short","scrapreasonid":15},
+{"modifieddate":"2019-04-30T00:00:00","name":"Wheel misaligned","scrapreasonid":16}
+]

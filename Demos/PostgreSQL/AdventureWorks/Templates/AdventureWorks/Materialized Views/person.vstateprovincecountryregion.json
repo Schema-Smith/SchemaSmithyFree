@@ -1,0 +1,18 @@
+{
+  "Name": "vstateprovincecountryregion",
+  "Schema": "person",
+  "Definition": " SELECT sp.stateprovinceid,\n    sp.stateprovincecode,\n    sp.isonlystateprovinceflag,\n    sp.name AS stateprovincename,\n    sp.territoryid,\n    cr.countryregioncode,\n    cr.name AS countryregionname\n   FROM (person.stateprovince sp\n     JOIN person.countryregion cr ON (((sp.countryregioncode)::text = (cr.countryregioncode)::text)));",
+  "AccessMethod": "heap",
+  "ShouldApplyExpression": "",
+  "Indexes": [
+    {
+      "Name": "ix_vstateprovincecountryregion",
+      "Unique": true,
+      "IndexColumns": "stateprovinceid,countryregioncode",
+      "ShouldApplyExpression": "",
+      "Clustered": true,
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ]
+}

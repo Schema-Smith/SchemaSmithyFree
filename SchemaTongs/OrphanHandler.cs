@@ -1,0 +1,120 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using log4net;
+using Schema.Domain;
+using Schema.Isolators;
+using Schema.Utility;
+
+namespace SchemaTongs;
+
+public class OrphanHandler
+{
+    private readonly ILog _log = LogFactory.GetLogger("ProgressLog");
+
+    public void ProcessOrphans(
+        Dictionary<string, ExtractionFileIndex> folderIndexes,
+        Platform platform,
+        OrphanHandlingMode mode,
+        HashSet<string> fullyExtractedFolders,
+        string logsDirectory,
+        Dictionary<string, ScriptObjectType> folderObjectTypes)
+    {
+        var allOrphans = new Dictionary<string, List<string>>();
+
+        foreach (var (folderName, index) in folderIndexes)
+        {
+            if (!fullyExtractedFolders.Contains(folderName)) continue;
+
+            var orphans = index.GetOrphans();
+            if (orphans.Count > 0)
+                allOrphans[folderName] = orphans;
+        }
+
+        if (allOrphans.Count == 0) return;
+
+        LogOrphans(allOrphans);
+
+        if (mode == OrphanHandlingMode.Detect) return;
+
+        ArchiveExistingCleanupScripts(logsDirectory);
+        GenerateCleanupScripts(allOrphans, platform, logsDirectory, folderObjectTypes);
+
+        if (mode == OrphanHandlingMode.DetectDeleteAndCleanup)
+            DeleteOrphanFiles(allOrphans);
+    }
+
+    private void LogOrphans(Dictionary<string, List<string>> allOrphans)
+    {
+        var totalCount = allOrphans.Values.Sum(l => l.Count);
+        _log.Warn($"{totalCount} orphaned file(s) detected across {allOrphans.Count} folder(s):");
+
+        foreach (var (folderName, orphans) in allOrphans)
+        {
+            _log.Warn($"  {folderName}: {orphans.Count} orphan(s)");
+            foreach (var orphan in orphans)
+                _log.Warn($"    {Path.GetFileName(orphan)}");
+        }
+    }
+
+    private void ArchiveExistingCleanupScripts(string logsDirectory)
+    {
+        var directory = DirectoryWrapper.GetFromFactory();
+        var file = FileWrapper.GetFromFactory();
+
+        if (!directory.Exists(logsDirectory)) return;
+
+        var existingScripts = directory.GetFiles(logsDirectory, "_OrphanCleanup_*.sql", SearchOption.TopDirectoryOnly);
+        if (existingScripts.Length == 0) return;
+
+        var archiveDir = Path.Combine(logsDirectory, DateTime.Now.ToString("yyyy-MM-dd_HHmmss"));
+        directory.CreateDirectory(archiveDir);
+
+        foreach (var script in existingScripts)
+        {
+            var destPath = Path.Combine(archiveDir, Path.GetFileName(script));
+            file.Move(script, destPath);
+        }
+    }
+
+    private void GenerateCleanupScripts(
+        Dictionary<string, List<string>> allOrphans,
+        Platform platform,
+        string logsDirectory,
+        Dictionary<string, ScriptObjectType> folderObjectTypes)
+    {
+        var file = FileWrapper.GetFromFactory();
+        var directory = DirectoryWrapper.GetFromFactory();
+
+        foreach (var (folderName, orphans) in allOrphans)
+        {
+            var objectType = folderObjectTypes.GetValueOrDefault(folderName, ScriptObjectType.None);
+            var fileNames = orphans.Select(Path.GetFileName).ToList();
+
+            var script = CleanupScriptGenerator.GenerateCleanupScript(fileNames, objectType, platform, folderName);
+            if (script == null) continue;
+
+            directory.CreateDirectory(logsDirectory);
+            var scriptFileName = $"_OrphanCleanup_{folderName.Replace(" ", "")}.sql";
+            var scriptPath = Path.Combine(logsDirectory, scriptFileName);
+            file.WriteAllText(scriptPath, script);
+
+            var dropCount = fileNames.Count(f =>
+                CleanupScriptGenerator.GenerateDropStatement(f, objectType, platform, folderName) != null);
+            _log.Info($"Generated {scriptFileName} with {dropCount} DROP statement(s).");
+        }
+    }
+
+    private void DeleteOrphanFiles(Dictionary<string, List<string>> allOrphans)
+    {
+        var file = FileWrapper.GetFromFactory();
+        foreach (var orphans in allOrphans.Values)
+        {
+            foreach (var orphan in orphans)
+                file.Delete(orphan);
+        }
+    }
+}

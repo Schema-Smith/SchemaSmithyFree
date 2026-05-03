@@ -1,0 +1,16 @@
+{
+  "Name": "AdventureWorks",
+  "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] IN ('{{AdventureWorksDb}}', 'TestMain')) THEN 1 ELSE 0 END AS BIT)",
+  "TemplateOrder": [
+    "Initialize",
+    "AdventureWorks"
+  ],
+  "ScriptTokens": {
+    "AdventureWorksDb": "AdventureWorks"
+  },
+  "ScriptFolders": [],
+  "BranchNameFile": "{{repo_path}}/.git/HEAD",
+  "BeforeBranchNameMask": "ref: refs/heads/",
+  "AfterBranchNameMask": "",
+  "Platform": "SqlServer"
+}

@@ -1,0 +1,160 @@
+{
+  "Name": "`Customer`",
+  "Columns": [
+    {
+      "Name": "`CustomerId`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`FirstName`",
+      "DataType": "varchar(40)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`LastName`",
+      "DataType": "varchar(20)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`Company`",
+      "DataType": "varchar(80)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`Address`",
+      "DataType": "varchar(70)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`City`",
+      "DataType": "varchar(40)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`State`",
+      "DataType": "varchar(40)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`Country`",
+      "DataType": "varchar(40)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`PostalCode`",
+      "DataType": "varchar(10)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`Phone`",
+      "DataType": "varchar(24)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`Fax`",
+      "DataType": "varchar(24)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`Email`",
+      "DataType": "varchar(60)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`SupportRepId`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "IFK_CustomerSupportRepId",
+      "IndexColumns": "`SupportRepId`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`CustomerId`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_CustomerSupportRepId",
+      "Columns": "`SupportRepId`",
+      "RelatedTable": "`Employee`",
+      "RelatedColumns": "`EmployeeId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 60,
+  "DataDelivery": {
+    "ContentFile": "data/Customer.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`CustomerId`"
+  }
+}

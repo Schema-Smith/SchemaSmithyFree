@@ -1,0 +1,63 @@
+{
+  "type": "object",
+  "properties": {
+    "Name": {
+      "type": "string"
+    },
+    "DatabaseIdentificationScript": {
+      "type": "string"
+    },
+    "VersionStampScript": {
+      "type": "string"
+    },
+    "IndexOnlyTableQuenches": {
+      "type": "boolean"
+    },
+    "ScriptFolders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "FolderPath": {
+            "type": "string"
+          },
+          "QuenchSlot": {
+            "type": "integer"
+          },
+          "ObjectType": {
+            "type": "string",
+            "pattern": "None|Views|Functions|Procedures|Triggers|Schemas|DataTypes|FullTextCatalogs|FullTextStopLists|XMLSchemaCollections|DDLTriggers|IndexedViews|DomainTypes|EnumTypes|CompositeTypes|TriggerFunctions|WindowFunctions|Aggregates|Sequences|Rules|MaterializedViews|Events"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "FolderPath"
+        ]
+      }
+    },
+    "ScriptTokens": {
+      "type": "object"
+    },
+    "UpdateFillFactor": {
+      "type": "boolean"
+    },
+    "BaselineValidationScript": {
+      "type": "string"
+    },
+    "Required": {
+      "type": "boolean"
+    },
+    "SkipIfReadOnly": {
+      "type": "boolean"
+    },
+    "ServerToQuench": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "Name",
+    "DatabaseIdentificationScript",
+    "ServerToQuench"
+  ]
+}

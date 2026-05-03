@@ -1,0 +1,26 @@
+{
+  "Name": "Sakila",
+  "DatabaseIdentificationScript": "SELECT name FROM master.sys.databases WHERE name = '{{SakilaDb}}'",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Functions",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Functions"
+    },
+    {
+      "FolderPath": "Procedures",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Procedures"
+    },
+    {
+      "FolderPath": "Views",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Views"
+    },
+    {
+      "FolderPath": "Triggers",
+      "QuenchSlot": "AfterTablesObjects",
+      "ObjectType": "Triggers"
+    }
+  ]
+}

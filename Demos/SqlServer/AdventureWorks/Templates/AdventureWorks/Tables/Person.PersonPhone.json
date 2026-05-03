@@ -1,0 +1,128 @@
+{
+  "Name": "[PersonPhone]",
+  "Columns": [
+    {
+      "Name": "[BusinessEntityID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Business entity identification number. Foreign key to Person.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[ModifiedDate]",
+      "DataType": "DATETIME",
+      "Default": "getdate()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Date and time the record was last updated."
+      }
+    },
+    {
+      "Name": "[PhoneNumber]",
+      "DataType": "PHONE",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Telephone number identification number."
+      }
+    },
+    {
+      "Name": "[PhoneNumberTypeID]",
+      "DataType": "INT",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": "",
+      "ExtendedProperties": {
+        "MS_Description": "Kind of phone number. Foreign key to PhoneNumberType.PhoneNumberTypeID."
+      }
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_PersonPhone_PhoneNumber]",
+      "IndexColumns": "[PhoneNumber]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "ExtendedProperties": {
+        "MS_Description": "Nonclustered index."
+      }
+    },
+    {
+      "Name": "[PK_PersonPhone_BusinessEntityID_PhoneNumber_PhoneNumberTypeID]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[BusinessEntityID],[PhoneNumber],[PhoneNumberTypeID]",
+      "ShouldApplyExpression": "",
+      "CompressionType": "NONE",
+      "Clustered": true,
+      "ExtendedProperties": {
+        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      }
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_PersonPhone_Person_BusinessEntityID]",
+      "Columns": "[BusinessEntityID]",
+      "RelatedTable": "[Person]",
+      "RelatedColumns": "[BusinessEntityID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Person]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing Person.BusinessEntityID."
+      }
+    },
+    {
+      "Name": "[FK_PersonPhone_PhoneNumberType_PhoneNumberTypeID]",
+      "Columns": "[PhoneNumberTypeID]",
+      "RelatedTable": "[PhoneNumberType]",
+      "RelatedColumns": "[PhoneNumberTypeID]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "[Person]",
+      "ExtendedProperties": {
+        "MS_Description": "Foreign key constraint referencing PhoneNumberType.PhoneNumberTypeID."
+      }
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "[Person]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "ExtendedProperties": {
+    "MS_Description": "Telephone number and type of a person."
+  },
+  "DataDelivery": {
+    "ContentFile": "data/Person.PersonPhone.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[BusinessEntityID],[PhoneNumber],[PhoneNumberTypeID]"
+  }
+}

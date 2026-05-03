@@ -1,0 +1,174 @@
+{
+  "Name": "billofmaterials",
+  "Columns": [
+    {
+      "Name": "billofmaterialsid",
+      "DataType": "int4",
+      "Default": "nextval('production.billofmaterials_billofmaterialsid_seq'::regclass)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "bomlevel",
+      "DataType": "int2",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "componentid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "enddate",
+      "DataType": "timestamp",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "modifieddate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "perassemblyqty",
+      "DataType": "numeric(8, 2)",
+      "Default": "1.00",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "productassemblyid",
+      "DataType": "int4",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "startdate",
+      "DataType": "timestamp",
+      "Default": "now()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
+    },
+    {
+      "Name": "unitmeasurecode",
+      "DataType": "CHAR(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_BillOfMaterials_BillOfMaterialsID",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "billofmaterialsid",
+      "ShouldApplyExpression": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_BillOfMaterials_Product_ComponentID",
+      "Columns": "componentid",
+      "RelatedTable": "product",
+      "RelatedColumns": "productid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "production",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_BillOfMaterials_Product_ProductAssemblyID",
+      "Columns": "productassemblyid",
+      "RelatedTable": "product",
+      "RelatedColumns": "productid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "production",
+      "MatchType": "SIMPLE"
+    },
+    {
+      "Name": "FK_BillOfMaterials_UnitMeasure_UnitMeasureCode",
+      "Columns": "unitmeasurecode",
+      "RelatedTable": "unitmeasure",
+      "RelatedColumns": "unitmeasurecode",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": "production",
+      "MatchType": "SIMPLE"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_BillOfMaterials_BOMLevel",
+      "Expression": "((productassemblyid IS NULL) AND (bomlevel = 0) AND (perassemblyqty = 1.00)) OR ((productassemblyid IS NOT NULL) AND (bomlevel >= 1))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_BillOfMaterials_EndDate",
+      "Expression": "(enddate > startdate) OR (enddate IS NULL)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_BillOfMaterials_PerAssemblyQty",
+      "Expression": "perassemblyqty >= 1.00",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_BillOfMaterials_ProductAssemblyID",
+      "Expression": "productassemblyid <> componentid",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Schema": "production",
+  "MergeUpdateDescendents": true,
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100,
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/production.billofmaterials.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "billofmaterialsid"
+  }
+}

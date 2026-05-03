@@ -1,5 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
 using log4net;
+using System;
 using System.Collections.Concurrent;
 
 namespace Schema.Utility;
@@ -11,13 +13,19 @@ public static class LogFactory
 
     private static readonly object LockObject = new();
 
+    /// <summary>
+    /// Optional initializer action called once before the first logger is created.
+    /// Set this to configure log4net (e.g., via ConfigHelper.ConfigureLog4Net).
+    /// </summary>
+    public static Action LogInitializer { get; set; }
+
     public static ILog GetLogger(string name)
     {
         lock (LockObject)
         {
             if (!logConfigured)
             {
-                ConfigHelper.ConfigureLog4Net();
+                LogInitializer?.Invoke();
                 logConfigured = true;
             }
 
@@ -45,5 +53,6 @@ public static class LogFactory
     public static void Clear()
     {
         NamedLoggers.Clear();
+        logConfigured = false;
     }
 }

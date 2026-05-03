@@ -1,0 +1,391 @@
+{
+  "Name": "`Sales_SalesOrderHeader`",
+  "Columns": [
+    {
+      "Name": "`AccountNumber`",
+      "DataType": "varchar(15)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`BillToAddressID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Comment`",
+      "DataType": "varchar(128)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`CreditCardApprovalCode`",
+      "DataType": "varchar(15)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`CreditCardID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`CurrencyRateID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`CustomerID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`DueDate`",
+      "DataType": "datetime",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Freight`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`OnlineOrderFlag`",
+      "DataType": "tinyint(1)",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`OrderDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`PurchaseOrderNumber`",
+      "DataType": "varchar(25)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`RevisionNumber`",
+      "DataType": "tinyint unsigned",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`SalesOrderID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`SalesPersonID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ShipDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ShipMethodID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ShipToAddressID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Status`",
+      "DataType": "tinyint unsigned",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SubTotal`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`TaxAmt`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`TerritoryID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`TotalDue`",
+      "DataType": "decimal(19,4)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "STORED",
+      "GenerationExpression": "coalesce(((`SubTotal` + `TaxAmt`) + `Freight`),0)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_SalesOrderHeader_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_BillToAddressID",
+      "IndexColumns": "`BillToAddressID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_CreditCardID",
+      "IndexColumns": "`CreditCardID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_CurrencyRateID",
+      "IndexColumns": "`CurrencyRateID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_ShipMethodID",
+      "IndexColumns": "`ShipMethodID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_ShipToAddressID",
+      "IndexColumns": "`ShipToAddressID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_TerritoryID",
+      "IndexColumns": "`TerritoryID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_SalesOrderHeader_CustomerID",
+      "IndexColumns": "`CustomerID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_SalesOrderHeader_SalesPersonID",
+      "IndexColumns": "`SalesPersonID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`SalesOrderID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Sales_SalesOrderHeader_BillToAddressID",
+      "Columns": "`BillToAddressID`",
+      "RelatedTable": "`Person_Address`",
+      "RelatedColumns": "`AddressID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_CreditCardID",
+      "Columns": "`CreditCardID`",
+      "RelatedTable": "`Sales_CreditCard`",
+      "RelatedColumns": "`CreditCardID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_CurrencyRateID",
+      "Columns": "`CurrencyRateID`",
+      "RelatedTable": "`Sales_CurrencyRate`",
+      "RelatedColumns": "`CurrencyRateID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_CustomerID",
+      "Columns": "`CustomerID`",
+      "RelatedTable": "`Sales_Customer`",
+      "RelatedColumns": "`CustomerID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_SalesPersonID",
+      "Columns": "`SalesPersonID`",
+      "RelatedTable": "`Sales_SalesPerson`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_ShipMethodID",
+      "Columns": "`ShipMethodID`",
+      "RelatedTable": "`Purchasing_ShipMethod`",
+      "RelatedColumns": "`ShipMethodID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_ShipToAddressID",
+      "Columns": "`ShipToAddressID`",
+      "RelatedTable": "`Person_Address`",
+      "RelatedColumns": "`AddressID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesOrderHeader_TerritoryID",
+      "Columns": "`TerritoryID`",
+      "RelatedTable": "`Sales_SalesTerritory`",
+      "RelatedColumns": "`TerritoryID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Sales_SalesOrderHeader_Freight",
+      "Expression": "(`Freight` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesOrderHeader_Status",
+      "Expression": "((`Status` >= 0) and (`Status` <= 8))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesOrderHeader_SubTotal",
+      "Expression": "(`SubTotal` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesOrderHeader_TaxAmt",
+      "Expression": "(`TaxAmt` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_SalesOrderHeader_DueDate",
+      "Expression": "(`DueDate` >= `OrderDate`)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_SalesOrderHeader_ShipDate",
+      "Expression": "((`ShipDate` >= `OrderDate`) or (`ShipDate` is null))",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 75124,
+  "DataDelivery": {
+    "ContentFile": "data/Sales_SalesOrderHeader.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`SalesOrderID`"
+  }
+}

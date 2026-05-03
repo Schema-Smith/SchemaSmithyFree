@@ -1,0 +1,184 @@
+{
+  "Name": "`Products`",
+  "Columns": [
+    {
+      "Name": "`CategoryID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Discontinued`",
+      "DataType": "tinyint(1)",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`ProductName`",
+      "DataType": "varchar(40)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`QuantityPerUnit`",
+      "DataType": "varchar(20)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ReorderLevel`",
+      "DataType": "smallint",
+      "Nullable": true,
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SupplierID`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`UnitPrice`",
+      "DataType": "decimal(19,4)",
+      "Nullable": true,
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`UnitsInStock`",
+      "DataType": "smallint",
+      "Nullable": true,
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`UnitsOnOrder`",
+      "DataType": "smallint",
+      "Nullable": true,
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "CategoriesProducts",
+      "IndexColumns": "`CategoryID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "CategoryID",
+      "IndexColumns": "`CategoryID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "ProductName",
+      "IndexColumns": "`ProductName`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "SupplierID",
+      "IndexColumns": "`SupplierID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "SuppliersProducts",
+      "IndexColumns": "`SupplierID`",
+      "ShouldApplyExpression": "",
+      "Visible": 1,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Products_Categories",
+      "Columns": "`CategoryID`",
+      "RelatedTable": "`Categories`",
+      "RelatedColumns": "`CategoryID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Products_Suppliers",
+      "Columns": "`SupplierID`",
+      "RelatedTable": "`Suppliers`",
+      "RelatedColumns": "`SupplierID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Products_ReorderLevel",
+      "Expression": "(`ReorderLevel` >= 0)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Products_UnitPrice",
+      "Expression": "(`UnitPrice` >= 0)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Products_UnitsInStock",
+      "Expression": "(`UnitsInStock` >= 0)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Products_UnitsOnOrder",
+      "Expression": "(`UnitsOnOrder` >= 0)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 78,
+  "DataDelivery": {
+    "ContentFile": "data/Products.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ProductID`"
+  }
+}

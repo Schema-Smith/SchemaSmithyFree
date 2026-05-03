@@ -1,0 +1,10 @@
+{
+    "Name": "InvalidServer",
+    "ValidationScript": "SELECT CAST(0 AS BIT)",
+    "TemplateOrder": [],
+    "ScriptTokens": {
+        "MainDB": "",
+        "ReleaseVersion": ""
+    },
+    "Platform": "PostgreSQL"
+}
