@@ -114,10 +114,11 @@ BEGIN TRY
   DROP TABLE IF EXISTS #ColumnChanges
   SELECT c.[Schema], c.[TableName], c.[ColumnName],
          -- For computed columns, only the expression is needed
-         CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) <> '' 
+         CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) <> ''
               THEN 'AS (' + ComputedExpression + ')' + CASE WHEN c.[Persisted] = 1 THEN ' PERSISTED' ELSE '' END
+                                                    + CASE WHEN c.[Persisted] = 1 AND ISNULL(c.[Nullable], 1) = 0 THEN ' NOT NULL' ELSE '' END
               -- Otherwise we need to build the column definition
-              ELSE REPLACE(REPLACE(UPPER(LEFT([DataType], COALESCE(NULLIF(CHARINDEX('IDENTITY', [DataType]), 0), LEN([DataType]) + 1) - 1)), 'ROWGUIDCOL', ''), 'NOT FOR REPLICATION', '') + 
+              ELSE REPLACE(REPLACE(UPPER(LEFT([DataType], COALESCE(NULLIF(CHARINDEX('IDENTITY', [DataType]), 0), LEN([DataType]) + 1) - 1)), 'ROWGUIDCOL', ''), 'NOT FOR REPLICATION', '') +
                    CASE WHEN [Collation] <> 'IGNORE' AND ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') <> [Collation] THEN ' COLLATE ' + ISNULL(NULLIF(RTRIM([Collation]), ''), @v_DatabaseCollation) ELSE '' END +
                    CASE WHEN [Sparse] = 1 THEN ' SPARSE' ELSE '' END +
                    CASE WHEN Nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END +
@@ -180,7 +181,7 @@ BEGIN TRY
                                                 CASE WHEN ident.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
                                            ELSE '' END, ', ', ',')  <> REPLACE(c.DataType, ', ', ',')
         OR CASE WHEN c.Nullable = 1 THEN 'YES' ELSE 'NO' END <> ic.IS_NULLABLE
-        OR ISNULL(SchemaSmith.fn_StripParenWrapping(cc.[definition]), '') <> ISNULL(c.ComputedExpression, '')
+        OR ISNULL(SchemaSmith.fn_NormalizeExpression(cc.[definition]), '') <> ISNULL(SchemaSmith.fn_NormalizeExpression(c.ComputedExpression), '')
         OR ISNULL(cc.is_persisted, 0) <> ISNULL(c.[Persisted], 0))
         OR sc.is_sparse <> [Sparse]
         OR ISNULL(mc.masking_function, '') COLLATE DATABASE_DEFAULT <> [DataMaskFunction]
@@ -191,7 +192,8 @@ BEGIN TRY
   RAISERROR('Detect Computed Columns Impacted by Other Column Changes', 10, 100) WITH NOWAIT
   INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, MustSwapColumn, [DropOnly])
     SELECT C.[Schema], C.[TableName], c.[ColumnName],
-           [ColumnScript] = 'AS (' + ComputedExpression + ')' + CASE WHEN c.[Persisted] = 1 THEN ' PERSISTED' ELSE '' END,
+           [ColumnScript] = 'AS (' + ComputedExpression + ')' + CASE WHEN c.[Persisted] = 1 THEN ' PERSISTED' ELSE '' END
+                                                              + CASE WHEN c.[Persisted] = 1 AND ISNULL(c.[Nullable], 1) = 0 THEN ' NOT NULL' ELSE '' END,
            [SpecialColumnScript] = '',
            MustDropAndRecreate = CAST(1 AS BIT), MustSwapColumn = CAST(0 AS BIT), [DropOnly] = CAST(0 AS BIT)
       FROM #ColumnChanges cc WITH (NOLOCK)

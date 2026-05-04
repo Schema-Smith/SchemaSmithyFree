@@ -43,7 +43,19 @@
   
   RAISERROR('Parse Columns from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #Columns
-  SELECT t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]), [DataType] = REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP'), [Nullable] = ISNULL(c.[Nullable], 0), 
+  SELECT t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]),
+         -- Canonicalize the JSON DataType so the live-vs-declared comparison
+         -- in ModifiedTableQuench (which builds USER_TYPE + DATETIME_PRECISION
+         -- as e.g. "DATETIME2(7)") matches a JSON-declared "DATETIME2" without
+         -- explicit precision. SQL Server defaults DATETIME2 / TIME /
+         -- DATETIMEOFFSET to precision 7 — without canonicalization, every
+         -- re-quench against a column declared with the default precision sees
+         -- false drift and emits a destructive ALTER COLUMN that cascades to
+         -- any dependent computed columns and indexes.
+         [DataType] = CASE WHEN UPPER(LTRIM(RTRIM(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')))) IN ('DATETIME2', 'TIME', 'DATETIMEOFFSET')
+                            THEN UPPER(LTRIM(RTRIM(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')))) + '(7)'
+                            ELSE REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP') END,
+         [Nullable] = ISNULL(c.[Nullable], 0),
          c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
          [Sparse] = ISNULL(c.[Sparse], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')), 
          [EncryptionType] = ISNULL(c.[EncryptionType], 'NONE'), [EncryptionKey] = RTRIM(ISNULL(c.[EncryptionKey], '')), [EncryptionAlgorithm] = RTRIM(ISNULL(c.[EncryptionAlgorithm], '')),
@@ -58,6 +70,7 @@
          SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]) + ' ' +
          -- For computed columns only the expression is needed
          CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) <> '' THEN 'AS (' + ComputedExpression + ')' + CASE WHEN ISNULL(c.[Persisted], 0) = 1 THEN ' PERSISTED' ELSE '' END
+                                                                                                     + CASE WHEN ISNULL(c.[Persisted], 0) = 1 AND ISNULL(c.[Nullable], 1) = 0 THEN ' NOT NULL' ELSE '' END
               -- Otherwise build the column definition
               ELSE UPPER(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')) + 
                    CASE WHEN RTRIM(ISNULL([Collation], '')) NOT IN ('IGNORE', '') THEN ' COLLATE ' + [Collation] ELSE '' END +                   

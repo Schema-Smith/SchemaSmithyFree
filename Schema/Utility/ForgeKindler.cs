@@ -44,6 +44,7 @@ public static class ForgeKindler
         KindleOneFile(command, "SchemaSmith.fn_StripParenWrapping.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.fn_StripBracketWrapping.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.fn_SafeBracketWrap.sql", Platform.SqlServer);
+        KindleOneFile(command, "SchemaSmith.fn_NormalizeExpression.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.PrintWithNoWait.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.MissingTableAndColumnQuench.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.ModifiedTableQuench.sql", Platform.SqlServer);
@@ -181,6 +182,7 @@ public static class ForgeKindler
                 "SchemaSmith.fn_StripParenWrapping.sql",
                 "SchemaSmith.fn_StripBracketWrapping.sql",
                 "SchemaSmith.fn_SafeBracketWrap.sql",
+                "SchemaSmith.fn_NormalizeExpression.sql",
                 "SchemaSmith.PrintWithNoWait.sql",
                 "SchemaSmith.MissingTableAndColumnQuench.sql",
                 "SchemaSmith.ModifiedTableQuench.sql",
