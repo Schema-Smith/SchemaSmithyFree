@@ -157,7 +157,7 @@ BEGIN TRY
   
   RAISERROR('Add Missing Check Constraints', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ConstraintName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ADD CONSTRAINT ' + cc.[ConstraintName] + ' CHECK (' + cc.[Expression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ADD CONSTRAINT [' + SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]) + '] CHECK (' + cc.[Expression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #CheckConstraints cc WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.check_constraints sc WITH (NOLOCK)

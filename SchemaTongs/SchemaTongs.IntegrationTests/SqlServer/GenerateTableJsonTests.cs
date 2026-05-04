@@ -468,6 +468,44 @@ EXEC sys.sp_addextendedproperty 'MS_Description', 'An index', 'SCHEMA', [dbo], '
         conn.Close();
     }
 
+    [Test]
+    public void ShouldPreserveNonDefaultSchemaThroughTongsRoundTrip()
+    {
+        // Bug A — round-trip regression: SchemaTongs's extraction at
+        // SchemaTongs.cs:2266 deserializes the JSON output of GenerateTableJSON
+        // with `JsonConvert.DeserializeObject<Table>(json)` — the BASE Table type
+        // which has no Schema property. The Schema field emitted by
+        // GenerateTableJSON is silently dropped, the file gets written without it,
+        // and downstream JsonHelper.TableLoad falls back to SqlServerTable.Schema's
+        // class default of "dbo". On the demo Northwind walkthrough this round-trips
+        // recyclebin.Registry into a duplicate dbo.Registry on quench.
+        // The fix is to deserialize with PlatformDeserializer (which returns the
+        // SqlServerTable subclass) before re-serializing. This test simulates that
+        // exact extraction path.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE [Test].[NonDefaultSchemaTable] (
+    Id INT NOT NULL,
+    CONSTRAINT [PK_NonDefaultSchemaTable] PRIMARY KEY CLUSTERED (Id)
+)
+";
+        cmd.ExecuteNonQuery();
+
+        var json = GenerateTableJson(cmd, "Test", "NonDefaultSchemaTable");
+
+        // Mirror SchemaTongs.cs:2266 — production extraction path's
+        // deserialize-then-serialize round trip. The fix swaps in
+        // PlatformDeserializer.DeserializeTable so the platform subclass
+        // materializes and Schema survives.
+        var tableObj = PlatformDeserializer.DeserializeTable(json, Platform.SqlServer);
+        var roundTrippedJson = JsonHelper.Serialize(tableObj);
+
+        Assert.That(roundTrippedJson, Does.Contain("\"Schema\""), "After SchemaTongs's deserialize+serialize round-trip, the Schema property must survive — otherwise non-default-schema tables get round-tripped into dbo.");
+        conn.Close();
+    }
+
     private string GenerateTableJson(IDbCommand cmd, string schema, string table)
     {
         cmd.CommandText = $"EXEC [SchemaSmith].GenerateTableJson @p_Schema = '{schema}', @p_Table = '{table}'";

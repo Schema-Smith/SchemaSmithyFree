@@ -49,7 +49,7 @@ The launcher runs `build-schemaquench.sh` to compile the SchemaQuench binary (re
 | User     | `TestUser` |
 | Password | _(see `Demos/SqlServer/.env`)_ |
 
-> **PostgreSQL or MySQL?** Swap the platform folder: `Demos/PostgreSQL` (port `5432`) or `Demos/MySQL` (port `3306`). Each platform has its own `run-demo.sh` / `run-demo.cmd` launcher, `.env` credentials file, and demo databases (Northwind, Chinook, AdventureWorks, and Sakila for PostgreSQL; Northwind and Chinook for SQL Server and MySQL).
+> **PostgreSQL or MySQL?** Swap the platform folder: `Demos/PostgreSQL` (port `5432`) or `Demos/MySQL` (port `3306`). Each platform has its own `run-demo.sh` / `run-demo.cmd` launcher, `.env` credentials file, and demo databases (Northwind, Chinook, AdventureWorks, and Sakila for PostgreSQL; Northwind and Chinook for SQL Server and MySQL). On MySQL the demo databases are stored in lowercase (`northwind`, `chinook`) because Linux MySQL containers default to `lower_case_table_names=1`; use the lowercase form in your `Database` / `NorthwindDb` config values when the platform is MySQL.
 
 ## Step 2: Cast with SchemaTongs
 
@@ -62,7 +62,10 @@ Now let's go the other direction. Pretend you already have a database and want t
     "Server": "localhost,1440",
     "User": "TestUser",
     "Password": "your-password-here",
-    "Database": "Northwind"
+    "Database": "Northwind",
+    "ConnectionProperties": {
+      "TrustServerCertificate": "True"
+    }
   },
   "Product": {
     "Path": "./my-northwind",
@@ -136,24 +139,27 @@ Take a minute to click around. Every table, every view, every procedure in the N
 
 ## Step 4: Quench with SchemaQuench
 
-Here's where it gets powerful. Let's deploy -- quench -- the Northwind schema to a completely empty database on the same server. Your declared state is about to harden into a live database. Create a SchemaQuench configuration file called `quench-deploy.json`:
+Here's where it gets powerful. You just extracted the live Northwind schema into `my-northwind/`. Now let's quench that package back at the same database to prove the round-trip — declared state in, target verified against it, exact-delta DDL out. Create a SchemaQuench configuration file called `quench-deploy.json`:
 
 ```json
 {
   "Target": {
     "Server": "localhost,1440",
     "User": "TestUser",
-    "Password": "your-password-here"
+    "Password": "your-password-here",
+    "ConnectionProperties": {
+      "TrustServerCertificate": "True"
+    }
   },
   "WhatIfONLY": false,
-  "SchemaPackagePath": "./demo/Northwind",
+  "SchemaPackagePath": "./my-northwind",
   "ScriptTokens": {
-    "NorthwindDb": "NorthwindClone"
+    "NorthwindDb": "Northwind"
   }
 }
 ```
 
-Notice the `ScriptTokens` section: we're telling SchemaQuench to use `NorthwindClone` as the database name instead of `Northwind`. The `{{NorthwindDb}}` token in the template's scripts will resolve to this value, creating a brand-new database. You'll learn more about tokens in [Core Concepts](03-core-concepts.md), and the full token system is documented in the [Script Tokens Reference](../reference/script-tokens.md).
+Notice the `ScriptTokens` section: SchemaQuench resolves the `{{NorthwindDb}}` token in the package's scripts to `Northwind`, the database we want to manage. Tokens parameterize a package so the same source files can deploy to dev, staging, and production by changing one value at deploy time — point a token at a different database name to spin up a clone for testing without touching another file. You'll learn more about tokens in [Core Concepts](03-core-concepts.md), and the full token system is documented in the [Script Tokens Reference](../reference/script-tokens.md).
 
 Run the deployment:
 
@@ -161,15 +167,15 @@ Run the deployment:
 SchemaQuench --ConfigFile:quench-deploy.json
 ```
 
-SchemaQuench reads the schema package, connects to the target server, and builds the entire database from scratch: creates `NorthwindClone`, runs migration scripts, creates all the tables with their columns and indexes, deploys all views and stored procedures. A complete, reproducible database from source files. Connect to `localhost,1440` with any SQL client and you'll find `NorthwindClone` with the full Northwind schema.
+SchemaQuench reads the schema package, connects to the live `Northwind` database, and compares your declared state to what's actually there. Since you just extracted this package from that exact database, the two are in sync — no DDL is emitted on this first run. That's the point: SchemaSmith only changes what's actually different. The diff comes alive in the next step.
 
-One package. One command. A complete database -- built exactly as declared, every time. That's what quenching looks like.
+One package. One command. A target verified against your declared source of truth. That's what quenching looks like.
 
 ## Step 5: Make a Change
 
 Now for the payoff. Let's modify the schema and watch SchemaSmith figure out exactly what needs to change.
 
-Open `demo/Northwind/Templates/Northwind/Tables/dbo.Shippers.json` (or your own re-extracted copy). The file declares the current state of the table: columns, indexes, the primary key. Add a new column for tracking email addresses. Insert this entry into the `Columns` array after the `[Phone]` column:
+Open `my-northwind/Templates/Northwind/Tables/dbo.Shippers.json`. The file declares the current state of the table: columns, indexes, the primary key. Add a new column for tracking email addresses. Insert this entry into the `Columns` array after the `[Phone]` column:
 
 ```json
 {
@@ -189,12 +195,15 @@ Now let's see what SchemaSmith will do -- without actually touching the database
   "Target": {
     "Server": "localhost,1440",
     "User": "TestUser",
-    "Password": "your-password-here"
+    "Password": "your-password-here",
+    "ConnectionProperties": {
+      "TrustServerCertificate": "True"
+    }
   },
   "WhatIfONLY": true,
-  "SchemaPackagePath": "./demo/Northwind",
+  "SchemaPackagePath": "./my-northwind",
   "ScriptTokens": {
-    "NorthwindDb": "NorthwindClone"
+    "NorthwindDb": "Northwind"
   }
 }
 ```
@@ -205,7 +214,7 @@ Save this as `quench-whatif.json` and run:
 SchemaQuench --ConfigFile:quench-whatif.json
 ```
 
-In the output, you'll see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live `NorthwindClone` database (which has no Email column) and determined that an `ALTER TABLE ... ADD` is needed. No changes were applied -- WhatIf mode is read-only. Preview before you commit. Confidence before you deploy.
+In the output, you'll see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live `Northwind` database (which has no Email column) and determined that an `ALTER TABLE ... ADD` is needed. No changes were applied -- WhatIf mode is read-only. Preview before you commit. Confidence before you deploy.
 
 Now apply it for real. Re-run the original `quench-deploy.json` from Step 4 -- it already has `WhatIfONLY: false`, so this run actually writes the change:
 
@@ -213,7 +222,7 @@ Now apply it for real. Re-run the original `quench-deploy.json` from Step 4 -- i
 SchemaQuench --ConfigFile:quench-deploy.json
 ```
 
-SchemaQuench connects to the `NorthwindClone` database, sees that `dbo.Shippers` is missing the `[Email]` column, and adds it. Every other table, view, and procedure is already in sync, so nothing else changes. Exactly the right delta, computed automatically. No more, no less.
+SchemaQuench connects to the `Northwind` database, sees that `dbo.Shippers` is missing the `[Email]` column, and adds it. Every other table, view, and procedure is already in sync, so nothing else changes. Exactly the right delta, computed automatically. No more, no less.
 
 ## Step 6: Verify the Change
 
