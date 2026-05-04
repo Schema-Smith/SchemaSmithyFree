@@ -12,8 +12,8 @@ Self-contained, single-file executables for Windows, Linux, and macOS. No .NET r
 
 ## Tools
 
-- **SchemaQuench** — Deploys schema packages to SQL Server, PostgreSQL, and MySQL. 9 execution slots, conditional deployment via `ShouldApplyExpression`, secondary-server fan-out, FK-aware data delivery, checkpoint/resume, WhatIf analysis, indexed views (SQL Server), materialized views (PostgreSQL), and a token system that reaches every script.
 - **SchemaTongs** — Extracts databases into schema packages across all three platforms. Pure SQL extraction with no external SDKs, orphan detection with cleanup-script generation, post-extraction script validation, and subfolder preservation so your repository organization survives re-extraction.
+- **SchemaQuench** — Deploys schema packages to SQL Server, PostgreSQL, and MySQL. 9 execution slots, conditional deployment via `ShouldApplyExpression`, secondary-server fan-out, FK-aware data delivery, checkpoint/resume, WhatIf analysis, indexed views (SQL Server), materialized views (PostgreSQL), and a token system that reaches every script.
 - **DataTongs** — Extracts table data and generates platform-aware MERGE scripts for SQL Server, PostgreSQL, and MySQL. Auto primary-key detection, complex type support (geometry, hierarchyid, binary), and full token resolution including MySQL.
 
 For the complete feature reference, see [docs/FEATURE_LIST.md](docs/FEATURE_LIST.md).
