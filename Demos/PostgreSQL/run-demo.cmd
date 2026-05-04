@@ -8,5 +8,8 @@ if not exist "%~dp0..\..\SchemaQuench\publish\SchemaQuench" (
 )
 
 echo Starting PostgreSQL demo...
+:: `up -d` blocks on the service_completed_successfully chain, so by the time it
+:: returns every quench has finished. Don't follow up with `docker compose wait
+:: completed` -- it races with the completed service's cleanup and Docker Desktop
+:: emits "no containers for project" when the container is already gone.
 docker compose up --build -d
-docker compose wait completed

@@ -63,6 +63,7 @@ services:
 
   demoserver:
     image: postgis/postgis:latest # PostGIS-enabled PostgreSQL for spatial data support
+    platform: linux/amd64 # postgis/postgis has no arm64 manifest; force amd64 emulation on macOS arm64
     ports:
       - "${PostGreSQL_PORT:-5432}:5432"
     environment:

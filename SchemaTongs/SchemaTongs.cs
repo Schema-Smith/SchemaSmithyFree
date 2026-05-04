@@ -2145,7 +2145,11 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                         continue;
                     }
 
-                    var tableObj = JsonConvert.DeserializeObject<Table>(json);
+                    // Use the platform-aware deserializer so the platform subclass
+                    // (e.g., SqlServerTable) materializes — otherwise the base Table
+                    // type loses platform-only properties like Schema, and non-default-
+                    // schema tables get round-tripped as dbo.<name> on the next quench.
+                    var tableObj = PlatformDeserializer.DeserializeTable(json, _platform);
                     if (tableObj == null)
                     {
                         _progressLog.Error($"    ERROR: Failed to deserialize json for {table}");
@@ -2263,7 +2267,11 @@ SELECT TABLE_SCHEMA, TABLE_NAME
 
                 var filename = ResolveOutputPath(tableDir, EncodeFileName($"{reader["TABLE_SCHEMA"]}", $"{reader["TABLE_NAME"]}", ".json"));
                 _progressLog.Info($"    Casting {filename}");
-                var tableObj = JsonConvert.DeserializeObject<Table>(json);
+                // Use the platform-aware deserializer so the platform subclass
+                // (e.g., SqlServerTable) materializes — otherwise the base Table
+                // type loses platform-only properties like Schema, and non-default-
+                // schema tables get round-tripped as dbo.<name> on the next quench.
+                var tableObj = PlatformDeserializer.DeserializeTable(json, _platform);
 
                 if (_checkConstraintStyle == CheckConstraintStyle.TableLevel && _platform == Platform.SqlServer && tableObj is SqlServerTable sqlTable)
                 {

@@ -3,3 +3,7 @@
 # core.autocrlf=true would convert LF to CRLF and break install.sh
 # in Linux/macOS containers run from a Windows clone.
 *.sh text eol=lf
+
+# Windows batch files keep CRLF — cmd.exe expects it.
+*.cmd text eol=crlf
+*.bat text eol=crlf
