@@ -88,11 +88,25 @@ jobs:
     steps:
       - name: Install Full-Text Search on SQL Server
         run: |
-          docker exec -u 0 mssql apt-get update
-          docker exec -u 0 mssql apt-get install -yq curl systemctl
-          docker exec -u 0 mssql curl https://packages.microsoft.com/config/ubuntu/20.04/mssql-server-2019.list -o /etc/apt/sources.list.d/mssql-server-2019.list
-          docker exec -u 0 mssql apt-get update
-          docker exec -u 0 mssql apt-get install -y mssql-server-fts
+          retry() {
+            local n=1 max=3 delay=10
+            while true; do
+              if "$@"; then return 0; fi
+              if [ $n -ge $max ]; then
+                echo "Command failed after $n attempts: $*" >&2
+                return 1
+              fi
+              echo "Attempt $n failed: $*  — retrying in ${delay}s" >&2
+              sleep $delay
+              n=$((n+1))
+              delay=$((delay*2))
+            done
+          }
+          retry docker exec -u 0 mssql apt-get update
+          retry docker exec -u 0 mssql apt-get install -yq curl systemctl
+          retry docker exec -u 0 mssql curl -fsSL https://packages.microsoft.com/config/ubuntu/20.04/mssql-server-2019.list -o /etc/apt/sources.list.d/mssql-server-2019.list
+          retry docker exec -u 0 mssql apt-get update
+          retry docker exec -u 0 mssql apt-get install -y mssql-server-fts
           docker container restart mssql
 
       - name: Wait for SQL Server to be ready
