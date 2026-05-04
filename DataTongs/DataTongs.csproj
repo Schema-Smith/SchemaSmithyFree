@@ -31,10 +31,14 @@
 	</ItemGroup>
 
 	<!-- Bundle ICU into self-contained Linux publish output so the CLI works on minimal
-	     containers (ubuntu:24.04, fedora:latest) without system libicu. Other RIDs
-	     (Windows, macOS) get nothing extra — system ICU is reliably present and is
-	     preferred at load time. ICU version is centralized in Directory.Build.props. -->
-	<ItemGroup>
+	     containers (ubuntu:24.04, fedora:latest) without system libicu. Linux-only:
+	     setting AppLocalIcu unconditionally forces app-local lookup on every host,
+	     and Microsoft.ICU.ICU4C.Runtime only ships Linux dylibs — so on macOS/Windows
+	     the runtime hard-fails ("Failed to load app-local ICU: libicuuc...") instead
+	     of falling back to system ICU. Gate on RuntimeIdentifier so non-Linux RIDs
+	     (osx-*, win-*) and framework-dependent builds use system ICU as intended.
+	     ICU version is centralized in Directory.Build.props. -->
+	<ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux'))">
 		<RuntimeHostConfigurationOption Include="System.Globalization.AppLocalIcu" Value="$(IcuVersion)" />
 		<PackageReference Include="Microsoft.ICU.ICU4C.Runtime" />
 	</ItemGroup>
