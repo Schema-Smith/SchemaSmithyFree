@@ -93,7 +93,7 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        Assert.That(sqlServer.Length, Is.EqualTo(18)); // was 14, adding 4 indexed view scripts
+        Assert.That(sqlServer.Length, Is.EqualTo(19)); // was 18, +1 for fn_NormalizeExpression
         Assert.That(postgres.Length, Is.EqualTo(22));
         Assert.That(mysql.Length, Is.EqualTo(15));
     }
