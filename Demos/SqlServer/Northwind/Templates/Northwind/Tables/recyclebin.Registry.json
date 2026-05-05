@@ -62,7 +62,7 @@
       "Name": "[ExpirationDate]",
       "DataType": "DATETIME2",
       "Nullable": false,
-      "ComputedExpression": "DATEADD(DAY, [RetentionDays], [RecycledDate])",
+      "ComputedExpression": "dateadd(day,[RetentionDays],[RecycledDate])",
       "Persisted": true,
       "Sparse": false,
       "Collation": "",
