@@ -30,13 +30,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RESULT=$(gh api repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs \
-            --jq "[.check_runs[] | select(.name == \"build\")] | sort_by(.completed_at) | last | .conclusion")
-          if [ "$RESULT" != "success" ]; then
-            echo "::error::CI job 'build' has not passed (result: $RESULT). Run CI first."
+          REQUIRED_CHECKS=(
+            "Build & Unit Tests"
+            "Integration Tests (SQL Server)"
+            "Integration Tests (PostgreSQL)"
+            "Integration Tests (MySQL)"
+            "check-headers"
+          )
+          FAILED=0
+          for check in "${REQUIRED_CHECKS[@]}"; do
+            RESULT=$(gh api repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs \
+              --jq "[.check_runs[] | select(.name == \"$check\")] | sort_by(.completed_at) | last | .conclusion")
+            if [ "$RESULT" != "success" ]; then
+              echo "::error::Required CI check '$check' has not passed on this commit (result: ${RESULT:-not found}). Run CI first."
+              FAILED=1
+            else
+              echo "  ✓ $check"
+            fi
+          done
+          if [ "$FAILED" -eq 1 ]; then
             exit 1
           fi
-          echo "CI job 'build': passed"
+          echo "All required CI checks passed."
 
       - name: Extract version from Directory.Build.props
         id: get-version
