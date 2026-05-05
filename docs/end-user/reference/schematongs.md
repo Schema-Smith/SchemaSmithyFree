@@ -43,10 +43,14 @@ SchemaTongs connects to the source database, reads every enabled object type, an
 
 ### Schema-only mode
 
-If you just need to regenerate the `.json-schemas/*.schema` validation files for an existing product -- without connecting to a database -- use the `--WriteSchemasOnly` switch:
+If you just need to regenerate the `.json-schemas/*.schema` validation files for an existing product -- without connecting to a database -- use the `--WriteSchemasOnly` switch. The product path comes from your `SchemaTongs.settings.json` (or an environment variable override), not from the command line:
 
 ```bash
-SchemaTongs --WriteSchemasOnly --Product:Path:./my-product
+# Run from the directory that contains SchemaTongs.settings.json with Product:Path already set
+SchemaTongs --WriteSchemasOnly
+
+# Or set the path inline via environment variable (note the double underscore for the nested key)
+SmithySettings_Product__Path=./my-product SchemaTongs --WriteSchemasOnly
 ```
 
 This reads the `Platform` from `Product.json`, regenerates the schema files on the fly from the current engine's C# domain types, and exits. No database connection, no extraction. Useful when you've updated SchemaSmith and want CI validation to match the new engine without re-extracting.
@@ -450,8 +454,10 @@ When SchemaTongs encounters an encrypted object on SQL Server (a function, view,
 SchemaTongs automatically excludes the platform's system schemas and internal infrastructure:
 
 - **System objects** -- Anything flagged as system-shipped by the source engine.
-- **Built-in schemas** -- `dbo`, `guest`, `INFORMATION_SCHEMA`, `sys` (SQL Server); `pg_*`, `information_schema` (PostgreSQL); `mysql`, `information_schema`, `performance_schema`, `sys` (MySQL).
+- **System schemas** -- `sys` and `INFORMATION_SCHEMA` (SQL Server); `pg_catalog`, `information_schema`, `pg_toast`, and the per-session `pg_temp_*` / `pg_toast_temp_*` schemas (PostgreSQL). On MySQL, SchemaTongs is single-schema-scoped: it extracts only the schema named in `Source:Database`, so the system schemas (`mysql`, `information_schema`, `performance_schema`, `sys`) are simply outside scope unless you point at one explicitly.
+- **User schemas are NOT excluded.** SQL Server's `dbo` and `guest`, and PostgreSQL's `public`, are user schemas. Their tables, views, procedures, functions, triggers, and types are all extracted normally. The shipped Northwind demo lives under `dbo` and round-trips end to end.
 - **SchemaSmith infrastructure** -- All objects in the `SchemaSmith` schema (the helper procedures SchemaTongs and SchemaQuench deploy).
+- **Schema-creation script gaps (SQL Server)** -- The pass that emits `Schemas/*.sql` scripts additionally skips system-shipped schemas (`schema_id <= 4`, which covers `dbo`, `guest`, `INFORMATION_SCHEMA`, `sys`) and database-role schemas (names matching `db[_]%`). Object extraction under those schemas is not affected -- the gap is only in the standalone `CREATE SCHEMA` scripts.
 - **Replication artifacts** (SQL Server) -- Tables prefixed with `MSPeer_` or `MSPub_`.
 - **Legacy system tables** (SQL Server) -- `dtproperties` and `sysdiagrams`.
 

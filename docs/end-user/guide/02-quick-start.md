@@ -2,7 +2,7 @@
 
 In the next 15 minutes, you'll extract a real database into version-controlled files, deploy them to a fresh empty database, make a schema change, and watch SchemaSmith compute the exact DDL needed to bring the target in line. By the end, you'll have completed the full SchemaSmith cycle -- and you'll understand why teams stop writing migration scripts once they've seen this.
 
-This walkthrough uses **SQL Server** as the primary example, but the exact same workflow works against **PostgreSQL** and **MySQL**. Each platform has a demo product (Northwind and Chinook for SQL Server and MySQL, Northwind and Sakila for PostgreSQL) -- pick whichever engine your team runs.
+This walkthrough uses **SQL Server** as the primary example, but the exact same workflow works against **PostgreSQL** and **MySQL**. Every platform ships the same four demo products (AdventureWorks, Chinook, Northwind, Sakila) -- pick whichever engine your team runs.
 
 ## Prerequisites
 
@@ -49,7 +49,7 @@ The launcher runs `build-schemaquench.sh` to compile the SchemaQuench binary (re
 | User     | `TestUser` |
 | Password | _(see `Demos/SqlServer/.env`)_ |
 
-> **PostgreSQL or MySQL?** Swap the platform folder: `Demos/PostgreSQL` (port `5432`) or `Demos/MySQL` (port `3306`). Each platform has its own `run-demo.sh` / `run-demo.cmd` launcher, `.env` credentials file, and demo databases (Northwind, Chinook, AdventureWorks, and Sakila for PostgreSQL; Northwind and Chinook for SQL Server and MySQL). On MySQL the demo databases are stored in lowercase (`northwind`, `chinook`) because Linux MySQL containers default to `lower_case_table_names=1`; use the lowercase form in your `Database` / `NorthwindDb` config values when the platform is MySQL.
+> **PostgreSQL or MySQL?** Swap the platform folder: `Demos/PostgreSQL` (port `5432`) or `Demos/MySQL` (port `3306`). Each platform has its own `run-demo.sh` / `run-demo.cmd` launcher, `.env` credentials file, and the same four demo databases (AdventureWorks, Chinook, Northwind, Sakila). On MySQL the demo databases are stored in lowercase (`adventureworks`, `chinook`, `northwind`, `sakila`) because Linux MySQL containers default to `lower_case_table_names=1`; use the lowercase form in your `Database` / `NorthwindDb` config values when the platform is MySQL.
 
 ## Step 2: Cast with SchemaTongs
 

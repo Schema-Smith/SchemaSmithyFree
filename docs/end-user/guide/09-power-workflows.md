@@ -193,7 +193,7 @@ Then declare per-folder routing on your product-level folders:
 
 ```json
 {
-  "Folders": [
+  "ScriptFolders": [
     { "FolderPath": "Before Product",       "QuenchSlot": "Before", "ServerToQuench": "Both" },
     { "FolderPath": "Linked Server Setup",  "QuenchSlot": "Before", "ServerToQuench": "Primary" },
     { "FolderPath": "Local Cache Build",    "QuenchSlot": "After",  "ServerToQuench": "Secondary" }

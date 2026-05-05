@@ -58,9 +58,11 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
 | `KindleTheForge` | bool | `true` | Deploy SchemaSmith helper procedures and the migration tracking table to each target database before quenching. |
 | `UpdateTables` | bool | `true` | Apply table structure changes (columns, indexes, constraints, foreign keys) from the schema package. |
 | `DropTablesRemovedFromProduct` | bool | `true` | Drop tables that exist in the database but aren't defined in the schema package. |
+| `DeliverData` | bool | `true` | Run the per-table `DataDelivery` step and the `TableData`-slot scripts. Set to `false` to ship a structure-only deployment that leaves reference data untouched -- pairs naturally with `UpdateTables: true` for "deploy schema, skip data" pipelines. |
 | `RunScriptsTwice` | bool | `false` | Run object scripts twice to verify idempotency. A CI/testing tool. |
 | `TrackRunOnceMigrations` | bool | `true` | Track run-once migration scripts. When `false`, all scripts run on every deployment. |
 | `PruneObsoleteMigrationTracking` | bool | `true` | Remove tracking entries for scripts no longer in the package. |
+| `CheckpointDirectory` | string | `""` | Directory for checkpoint files used by `--ResumeQuench`. When blank, defaults to a per-platform temp location. See [Checkpoint and Resume](#checkpoint-and-resume). |
 | `MaxThreads` | int | `10` | Number of parallel database operations. Range 1--20. |
 | `VerboseLogging` | bool | `false` | Include `PRINT` / `RAISE NOTICE` / equivalent informational output from user scripts in logs. |
 | `ScriptTokens` | object | `{}` | Config-level overrides for product script tokens. |
@@ -84,9 +86,11 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
   "KindleTheForge": true,
   "UpdateTables": true,
   "DropTablesRemovedFromProduct": true,
+  "DeliverData": true,
   "RunScriptsTwice": false,
   "TrackRunOnceMigrations": true,
   "PruneObsoleteMigrationTracking": true,
+  "CheckpointDirectory": "",
   "MaxThreads": 10,
   "VerboseLogging": false,
   "ScriptTokens": {}
@@ -283,7 +287,7 @@ The four flags are a *profile*, not a menu -- mixing partial-package intent with
 ### Patterns that pair well with data fixes
 
 - **[Checkpoint and resume](#checkpoint-and-resume)** -- When a datafix touches a large dataset and may need to be retried after a connection drop or server restart, enable resume so the fix picks up where it left off instead of re-running completed work.
-- **Slot choice** -- Even in a partial package, the migration script's slot still determines *when* in the deployment sequence it runs relative to the (skipped) table-quench phase. `BeforeTables`, `AfterTablesScripts`, and `After` are the usual homes for data fixes. The slot is a namespacing and timing signal; the fact that a data fix typically has no tables to run *between* doesn't change the ordering contract.
+- **Slot choice** -- Even in a partial package, the migration script's slot still determines *when* in the deployment sequence it runs relative to the (skipped) table-quench phase. The four sequential, tracked migration slots -- `Before`, `BetweenTablesAndKeys`, `AfterTablesScripts`, and `After` -- are the usual homes for data fixes. The slot is a namespacing and timing signal; the fact that a data fix typically has no tables to run *between* doesn't change the ordering contract.
 
 A data fix should not carry `DataDelivery` blocks or table JSON. If your fix is "re-seed this reference table," the right shape is usually a migration script that does the seeding imperatively (or calls a stored procedure that does), not a DataDelivery block in what would then stop being a partial package.
 
@@ -413,7 +417,9 @@ You can also pass the full schema tokens (`{{TableSchema}}`, `{{IndexedViewSchem
 | WhatIf | Default: off | Default: off | Default: off |
 | DropUnknownIndexes | Default: off | -- | -- |
 | DropTablesRemovedFromProduct | Default: on | -- | -- |
-| UpdateFillFactor | Default: on | Default: off | Default: on |
+| UpdateFillFactor | SQL Server / PG only -- Default: on | Default: off | Default: on |
+
+> **MySQL note:** `SchemaSmith_TableQuench` on MySQL has no `UpdateFillFactor` parameter -- fill factor is a SQL Server / PostgreSQL concept and the MySQL procedure simply omits it. The MySQL example above (six positional args) reflects the actual signature.
 
 **When to use direct calls:** When a migration script needs a table or view to exist before it can run -- for example, bootstrapping an audit table in a Before Script before inserting migration tracking data, or ensuring a materialized view is deployed before populating dependent tables.
 
@@ -663,7 +669,7 @@ SchemaQuench tracks two kinds of progress:
 | `IndexedViewQuench` | SQL Server indexed view deployment. |
 | `VersionStamp` | Version stamp script. |
 
-In addition, each template slot (`Before`, `Objects`, `AfterTablesObjects`, `BetweenTablesAndKeys`, `AfterTable`, `TableData`, `After`) records the exact scripts that ran, so resumed runs skip each individual script that already succeeded.
+In addition, each template slot (`Before`, `Objects`, `BetweenTablesAndKeys`, `AfterTablesScripts`, `AfterTablesObjects`, `TableData`, `After`) records the exact scripts that ran, so resumed runs skip each individual script that already succeeded.
 
 ### Automatic cleanup after success
 

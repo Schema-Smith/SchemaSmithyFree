@@ -24,7 +24,10 @@ The `Product.json` file sits at the root of the schema package and is the top-le
 | `DropUnknownIndexes` | bool | `false` | No | When `true`, the table quench drops indexes on managed tables that aren't defined in the table JSON. |
 | `MinimumVersion` | string | | No | Minimum target server version. Currently metadata only -- displayed in tooling and available for future version-adaptive features. Use `ValidationScript` for runtime version enforcement. |
 | `CheckConstraintStyle` | string | `"ColumnLevel"` | No | Controls how SchemaTongs writes check constraints during extraction: `"ColumnLevel"` (inline `CheckExpression` on the column) or `"TableLevel"` (named constraints in the `CheckConstraints` array). |
-| `Folders` | array | `[]` | No | Optional product-level folder definitions. Used to add custom folder paths or assign secondary-server filtering. See [Custom Script Folders](#custom-script-folders). |
+| `ScriptFolders` | array | `[]` | No | Optional product-level folder definitions. Used to add custom folder paths or assign secondary-server filtering. See [Custom Script Folders](#custom-script-folders). |
+| `BranchNameFile` | string | `"{{repo_path}}/.git/HEAD"` | No | Path to the file SchemaSmith reads to derive the `{{BranchName}}` automatic token. Default points at Git's `HEAD`. Use any VCS that exposes the current branch as a single-line file (Mercurial's `.hg/branch`, Subversion working-copy markers, etc.); the only requirement is that the file exists and contains the branch identifier somewhere on its first line. |
+| `BeforeBranchNameMask` | string | `"ref: refs/heads/"` | No | Prefix to strip from the line read out of `BranchNameFile`. Default matches Git's `ref: refs/heads/<branch>` format. Set to `""` for VCSs whose branch file already contains the bare branch name. |
+| `AfterBranchNameMask` | string | `""` | No | Suffix to strip after the prefix is removed. Default empty. Set when your VCS appends extra text after the branch name. |
 | `Extensions` | any | `null` | No | Reserved. `Product.json` does not currently use `Extensions` for custom properties. |
 
 ### Settings intent
@@ -177,7 +180,7 @@ Custom script folders are how you make the schema package fit *your* deployment 
 
 ### Custom product-level folders
 
-`Product.json` can also declare custom folders via its `Folders` array. The shape is similar but uses `ProductQuenchSlot` (`Before` or `After`) and supports a `ServerToQuench` setting that controls whether the folder runs on the primary, secondaries, or both. See [Secondary Servers](#secondary-servers) below.
+`Product.json` can also declare custom folders via its `ScriptFolders` array (the property name is the same as `Template.json`'s). The shape is similar but uses `ProductQuenchSlot` (`Before` or `After`) and supports a `ServerToQuench` setting that controls whether the folder runs on the primary, secondaries, or both. See [Secondary Servers](#secondary-servers) below.
 
 ---
 
@@ -295,7 +298,7 @@ Then declare `ServerToQuench` on your product-level folders:
 {
   "Name": "MyProduct",
   "Platform": "SqlServer",
-  "Folders": [
+  "ScriptFolders": [
     { "FolderPath": "Before Product",        "QuenchSlot": "Before", "ServerToQuench": "Both" },
     { "FolderPath": "Linked Server Setup",   "QuenchSlot": "Before", "ServerToQuench": "Primary" },
     { "FolderPath": "Local Cache Build",     "QuenchSlot": "After",  "ServerToQuench": "Secondary" }
@@ -375,7 +378,7 @@ Each platform's table definition extends the shared properties with engine-speci
 |---|---|---|---|
 | `Schema` | string | `"dbo"` | Database schema. Use bracket notation in extracted files (e.g., `"[Production]"`). |
 | `CompressionType` | string | `"NONE"` | Data compression: `"NONE"`, `"ROW"`, `"PAGE"`. |
-| `IsTemporal` | bool | `false` | Marks the table as a system-versioned temporal table. |
+| `IsTemporal` | bool | `false` | When `true`, SchemaQuench manages the table as system-versioned temporal: emits `ALTER TABLE ... SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = <Schema>.<Name>_Hist))` and protects the period columns (`ValidFrom` / `ValidTo`) from drop detection. When toggled back to `false`, SchemaQuench emits `SET (SYSTEM_VERSIONING = OFF)`. The history table itself (`<Name>_Hist` in the same schema) is not auto-created -- declare it as a sibling table JSON in your package or rely on a Before script that creates it before the `IsTemporal=true` table is quenched. |
 | `XmlIndexes` | array | `[]` | XML index definitions. See [XML Indexes (SQL Server)](#xml-indexes-sql-server). |
 | `Statistics` | array | `[]` | Custom statistics definitions. See [Statistics (SQL Server)](#statistics-sql-server). |
 | `FullTextIndex` | object | `null` | Single full-text index on the table. See [Full-Text Index (SQL Server)](#full-text-index-sql-server). |

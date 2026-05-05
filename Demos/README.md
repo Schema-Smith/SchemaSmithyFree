@@ -6,11 +6,10 @@ Demo database schema packages for SQL Server, PostgreSQL, and MySQL, deployed by
 
 | Product | SQL Server | PostgreSQL | MySQL |
 |---------|:---:|:---:|:---:|
-| ValidProduct | Done | Done | Done |
 | AdventureWorks | Done | Done | Done |
-| Sakila | Done | Done | Done |
-| Northwind | Done | Done | Done |
 | Chinook | Done | Done | Done |
+| Northwind | Done | Done | Done |
+| Sakila | Done | Done | Done |
 
 ## Quick Start
 

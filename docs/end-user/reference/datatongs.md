@@ -2,7 +2,7 @@
 
 Lookup tables, configuration rows, seed data -- every database has reference data that needs to travel with the schema. DataTongs grips that data from a live database and produces self-contained synchronization scripts that bring it into any target. Point it at a source, list the tables you care about, and it produces one SQL file per table -- ready to drop into a schema package's `Table Data` folder or run directly against any compatible instance.
 
-DataTongs supports **SQL Server**, **PostgreSQL**, and **MySQL**. The script syntax adapts per platform: SQL Server and PostgreSQL use `MERGE`, MySQL uses `INSERT ... ON DUPLICATE KEY UPDATE` (or `REPLACE` where appropriate). The configuration shape and the workflow are identical across all three.
+DataTongs supports **SQL Server**, **PostgreSQL**, and **MySQL**. The script syntax adapts per platform: SQL Server and PostgreSQL use `MERGE`, MySQL uses `INSERT ... ON DUPLICATE KEY UPDATE` (paired with a conditional `DELETE WHERE NOT EXISTS` step when full delete sync is enabled). The configuration shape and the workflow are identical across all three.
 
 ---
 
@@ -103,7 +103,7 @@ The typical placement inside a schema package is `ScriptPath` pointing at `Templ
 | `ShouldCast:OutputContentFiles` | bool | `false` | Write raw data to sibling `.tabledata` content files. Automatically enabled when `ConfigureDataDelivery` is on. |
 | `ShouldCast:DisableTriggers` | bool | `false` | Wraps the generated script with platform-appropriate trigger disable/enable. |
 | `ShouldCast:MergeUpdate` | bool | `true` | Includes the update branch (matched rows whose data has changed). |
-| `ShouldCast:MergeDelete` | bool | `true` | Includes the delete branch (target rows missing from the source). MySQL note: `MergeDelete` is not supported via `INSERT ... ON DUPLICATE KEY UPDATE`; use `REPLACE` semantics or hand-author migration scripts when full delete sync is required on MySQL. |
+| `ShouldCast:MergeDelete` | bool | `true` | Includes the delete branch (target rows missing from the source). On all three platforms: SQL Server / PostgreSQL emit `WHEN NOT MATCHED BY SOURCE THEN DELETE` inside the `MERGE`; MySQL emits an `INSERT ... ON DUPLICATE KEY UPDATE` followed by a separate `DELETE WHERE NOT EXISTS` step (because MySQL has no `MERGE`). |
 | `ShouldCast:MergeType` | string | `Insert/Update` | Default `DataDelivery:MergeType` for tables that don't set it explicitly. Values: `None`, `Insert`, `Insert/Update`, `Insert/Update/Delete`. Used when writing `DataDelivery` blocks via `--ConfigureDataDelivery`. |
 | `ShouldCast:ConfigureDataDelivery` | bool | `false` | After extraction, write a `DataDelivery` block into each matching table's JSON file. See [--ConfigureDataDelivery](#--configuredatadelivery). |
 | `ShouldCast:TokenizeScripts` | bool | `false` | **SQL Server only.** Replaces the source database name with script tokens in the generated merge scripts, matching SchemaTongs' tokenization behavior. |
@@ -282,9 +282,14 @@ When enabled, DataTongs wraps each generated script with platform-appropriate tr
 
 When enabled, the script updates existing rows whose data has changed. When disabled, the script only inserts new rows and (on MERGE platforms, if `MergeDelete` is on) deletes missing rows -- existing rows are left untouched regardless of whether their data differs.
 
-### MergeDelete (SQL Server / PostgreSQL)
+### MergeDelete
 
 When enabled, the script deletes rows from the target that don't exist in the source data. When a `Filter` is configured, the delete clause respects the filter so that rows outside the filter are never removed. When disabled, the script only inserts and updates -- no rows are ever deleted from the target.
+
+**Per-platform implementation:**
+
+- **SQL Server / PostgreSQL:** The delete is a `WHEN NOT MATCHED BY SOURCE THEN DELETE` clause inside the same `MERGE` statement.
+- **MySQL:** Because MySQL has no `MERGE`, the generated script is two statements -- an `INSERT ... ON DUPLICATE KEY UPDATE` for the upsert plus a separate `DELETE WHERE NOT EXISTS` that removes target rows missing from the source. (The retired `REPLACE INTO` idiom isn't used: it deletes and re-inserts every matched row, which breaks `ON DELETE RESTRICT` foreign keys.)
 
 ### Delivery scenarios
 
