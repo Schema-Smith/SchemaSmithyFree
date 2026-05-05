@@ -134,7 +134,7 @@ When `RunScriptsTwice` is enabled, SchemaQuench runs the entire set of object sc
 {
   "Name": "MyProduct",
   "Platform": "SqlServer",
-  "MinimumVersion": "Sql2016",
+  "MinimumVersion": "2017",
   "ValidationScript": "SELECT CAST(1 AS BIT)"
 }
 ```

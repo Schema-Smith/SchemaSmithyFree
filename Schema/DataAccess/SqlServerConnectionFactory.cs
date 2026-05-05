@@ -1,4 +1,4 @@
-// Copyright (c) SchemaSmith, LLC. All rights reserved.
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System.Data;
 using Microsoft.Data.SqlClient;

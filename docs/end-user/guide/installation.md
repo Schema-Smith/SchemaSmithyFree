@@ -33,7 +33,7 @@ wget https://github.com/Schema-Smith/SchemaSmith/releases/download/v2.0.0/schema
 sudo dpkg -i schemasmith_2.0.0_amd64.deb
 ```
 
-Binaries land under `/usr/lib/schemasmith/` with symlinks in `/usr/bin/` so `schemaquench`, `schematongs`, and `datatongs` are immediately on PATH. Zero declared package dependencies -- the binaries are fully self-contained and run with `InvariantGlobalization` enabled, so they work on minimal containers and hardened distros that ship without `libicu`.
+Binaries land under `/usr/lib/schemasmith/` with symlinks in `/usr/bin/` so `schemaquench`, `schematongs`, and `datatongs` are immediately on PATH. Zero declared package dependencies -- the binaries are fully self-contained and bundle their own ICU runtime alongside the executables, so they work on minimal containers and hardened distros that ship without `libicu`.
 
 Both `amd64` and `arm64` builds are published with every release. Use `schemasmith_<version>_arm64.deb` on ARM hosts.
 

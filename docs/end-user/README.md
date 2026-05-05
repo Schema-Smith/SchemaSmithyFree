@@ -84,7 +84,9 @@ Already know what you're looking for? Jump straight to the details.
 
 Nothing beats working with real data. The repository includes demo products you can extract, deploy, and explore against a local database container.
 
-- **Northwind** — the classic getting-started schema
 - **AdventureWorks** — real-world complexity
+- **Chinook** — the classic media-store schema
+- **Northwind** — the canonical getting-started schema
+- **Sakila** — the DVD rental store schema
 
-All demos were extracted and deployed end-to-end with SchemaSmith tools.
+All four demos are deployed on all three platforms (SQL Server, PostgreSQL, MySQL) by the per-platform `docker-compose.yml` files under `Demos/`. Each one was extracted and deployed end-to-end with SchemaSmith tools.

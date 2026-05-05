@@ -234,7 +234,7 @@ The extraction engine. Reads a live database into a versioned schema package usi
 | `FolderMapping` rename (per object type) | ✓ | ✓ | ✓ | |
 | `CREATE OR ALTER` formatting | ✓ | ✓ | ✓ | |
 | Extensions / custom-property preservation across re-extraction | ✓ | ✓ | ✓ | |
-| Auto-exclusion of system schemas | ✓ | ✓ | ✓ | `dbo`/`sys`/`pg_*`/`mysql`/`information_schema` etc. |
+| Auto-exclusion of system / SchemaSmith objects | ✓ | ✓ | ✓ | Objects under `sys` / `INFORMATION_SCHEMA` (SQL Server), `pg_*` / `information_schema` (PG), `mysql` / `information_schema` / `performance_schema` / `sys` (MySQL), and the `SchemaSmith` infrastructure schema. `dbo` (SQL Server) and `public` (PG) are extracted normally — they're user schemas, not system. |
 | Encrypted object skip + warn | ✓ | n/a | n/a | NULL `sys.sql_modules.definition` |
 | Replication-artifact exclusion | ✓ | n/a | n/a | `MSPeer_`, `MSPub_` |
 | Dynamic function-dependency drop / recreate scripting | ✓ | ✓ | ✓ | `ScriptDynamicDependencyRemovalForFunctions` |

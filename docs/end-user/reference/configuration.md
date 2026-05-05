@@ -6,7 +6,7 @@ Applies to: SchemaQuench, SchemaTongs, DataTongs — SQL Server, PostgreSQL, and
 
 Every SchemaSmith CLI tool shares the same configuration spine -- one consistent system for settings files, environment variables, and command-line switches. Learn it once and it works the same way whether you're casting schemas, quenching databases, or extracting data, and whether your target is SQL Server, PostgreSQL, or MySQL. Tool-specific settings live on each tool's own reference page; this page covers the shared foundation.
 
-The **platform** each operation runs against is not a CLI switch or an environment variable -- it's a property of the schema package itself. `Product.json` declares `Platform` (`SqlServer`, `PostgreSql`, or `MySql`), and the tools adapt their behavior accordingly. One tool, three engines, same muscle memory.
+The **platform** each operation runs against is not a CLI switch or an environment variable -- it's a property of the schema package itself. `Product.json` declares `Platform` (`SqlServer`, `PostgreSQL`, or `MySQL`), and the tools adapt their behavior accordingly. One tool, three engines, same muscle memory.
 
 ---
 
@@ -40,7 +40,7 @@ Every SchemaSmith CLI tool recognizes these switches. They're processed before a
 
 | Switch | Aliases | Description |
 |---|---|---|
-| `--version` | `-v`, `--ver` | Print the tool name, edition, and version number, then exit. |
+| `--version` | `-v`, `--ver` | Print the tool name and version number, then exit. |
 | `--help` | `-h`, `-?` | Print the available command-line switches, then exit. |
 | `--ConfigFile:<path>` | | Path to the settings file. Overrides the default `<ToolName>.settings.json`. |
 | `--LogPath:<path>` | | Directory for log files and backup subdirectories. Defaults to the tool's executable directory. |
@@ -294,7 +294,7 @@ DataTongs --LogPath:D:\BuildLogs
 
 ### Startup configuration dump
 
-Immediately after loading configuration, every tool logs its complete active configuration to the progress log. This includes the tool name, edition, and version number, followed by every configuration key and its value (with passwords masked). This makes it straightforward to verify what settings were in effect for any given run.
+Immediately after loading configuration, every tool logs its complete active configuration to the progress log. This includes the tool name and version number, followed by every configuration key and its value (with passwords masked). This makes it straightforward to verify what settings were in effect for any given run.
 
 ### Log backup rotation
 
