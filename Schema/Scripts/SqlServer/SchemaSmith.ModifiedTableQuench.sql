@@ -181,7 +181,7 @@ BEGIN TRY
                                                 CASE WHEN ident.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
                                            ELSE '' END, ', ', ',')  <> REPLACE(c.DataType, ', ', ',')
         OR CASE WHEN c.Nullable = 1 THEN 'YES' ELSE 'NO' END <> ic.IS_NULLABLE
-        OR ISNULL(SchemaSmith.fn_NormalizeExpression(cc.[definition]), '') <> ISNULL(SchemaSmith.fn_NormalizeExpression(c.ComputedExpression), '')
+        OR ISNULL(SchemaSmith.fn_StripParenWrapping(cc.[definition]), '') <> ISNULL(c.ComputedExpression, '')
         OR ISNULL(cc.is_persisted, 0) <> ISNULL(c.[Persisted], 0))
         OR sc.is_sparse <> [Sparse]
         OR ISNULL(mc.masking_function, '') COLLATE DATABASE_DEFAULT <> [DataMaskFunction]
