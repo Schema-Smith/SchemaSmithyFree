@@ -45,6 +45,25 @@ detect_arch() {
   esac
 }
 
+# Detects whether this Linux is glibc or musl. The .NET self-contained
+# binaries we ship target glibc; musl-based distros (Alpine, etc.) need
+# the .deb / .rpm packages — or a glibc base image — instead. Returns
+# "glibc", "musl", or "n/a" (non-Linux).
+detect_libc() {
+  case "$(uname -s)" in
+    Linux) ;;
+    *)     echo n/a; return 0 ;;
+  esac
+  if ldd --version 2>&1 | grep -qi musl; then
+    echo musl
+  else
+    # Treat anything that is not unambiguously musl as glibc. Worst case
+    # we fall through to a runtime "Failed to load app-local ICU" error,
+    # which is exactly the behavior before this detection existed.
+    echo glibc
+  fi
+}
+
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     fail "$1 not found. Install via your package manager (e.g., 'apt install $1' on Debian/Ubuntu, 'brew install $1' on macOS)."
@@ -151,6 +170,20 @@ extract_and_install() {
       || fail "Cannot write ${dest}. Re-run with sudo, or set INSTALL_DIR=<writable path>."
     info "Installed ${dest}"
   done
+
+  # Linux RIDs bundle three ICU shared libraries (libicudata, libicui18n,
+  # libicuuc — version 72.1.0.3 as of v2.0.0) that the .NET AppLocalIcu
+  # host config loads at startup. They MUST be installed alongside the
+  # binaries in TARGET or every CLI invocation fails with
+  # "Failed to load app-local ICU: libicudata.so.<ver>". macOS RIDs use
+  # system libicu and ship no libicu*.so.* files, so this loop is a
+  # no-op on Darwin.
+  for lib in "${extract_dir}"/libicu*.so.*; do
+    [ -e "$lib" ] || continue
+    install -m 0644 "$lib" "${TARGET}/${lib##*/}" \
+      || fail "Cannot write ${TARGET}/${lib##*/}. Re-run with sudo, or set INSTALL_DIR=<writable path>."
+    info "Installed ${TARGET}/${lib##*/}"
+  done
 }
 
 # Returns 0 if TARGET is on $PATH, 1 otherwise.
@@ -196,8 +229,8 @@ print_success() {
   if ! target_on_path; then
     print_path_fix
   fi
-  printf '\nTo uninstall: rm -f %s/schemaquench %s/schematongs %s/datatongs\n' \
-    "$TARGET" "$TARGET" "$TARGET"
+  printf '\nTo uninstall: rm -f %s/schemaquench %s/schematongs %s/datatongs %s/libicu*.so.*\n' \
+    "$TARGET" "$TARGET" "$TARGET" "$TARGET"
 }
 
 main() {
@@ -206,6 +239,11 @@ main() {
   ARCH=$(detect_arch)
   RID="${OS}-${ARCH}"
   info "Detected: ${RID}"
+
+  LIBC=$(detect_libc)
+  if [ "$OS" = "linux" ] && [ "$LIBC" = "musl" ]; then
+    fail "install.sh ships glibc-based Linux binaries; this system uses musl libc (typically Alpine Linux). The .NET self-contained binaries we publish target glibc and won't run on a musl loader. Options: (1) install via the .deb / .rpm packages on a glibc-based distro (Debian, Ubuntu, RHEL, Fedora, Amazon Linux), (2) use a glibc base image instead of an Alpine base, or (3) file an issue requesting a linux-musl-x64 build. Until then, install.sh on Alpine is unsupported."
+  fi
 
   need_cmd curl
   need_cmd tar
