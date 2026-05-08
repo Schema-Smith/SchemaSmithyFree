@@ -2,7 +2,7 @@
 
 *Terraform for SQL Server, Postgres, and MySQL databases*
 
-> **🎉 SchemaSmith v2.0 is live.** State-based schema deployment across SQL Server, PostgreSQL, and MySQL from one package — no migration scripts to author or order. Self-contained executables, no organization-size license caps. [Read the v2.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/226) · [Get started](https://schemasmith.com/documentation/getting-started.html) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.0.0)
+> **🎉 SchemaSmith v2.0 is live.** State-based schema deployment across SQL Server, PostgreSQL, and MySQL from one package — no migration scripts to author or order. Self-contained executables, no organization-size license caps. [Read the v2.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/226) · [Get started](https://schemasmith.com/walls-came-down.html?utm_source=github&utm_content=readme-banner&utm_campaign=20260513) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.0.0)
 
 ![Build](https://github.com/Schema-Smith/SchemaSmith/actions/workflows/continuous-integration.yml/badge.svg)
 [![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/releases/latest)
