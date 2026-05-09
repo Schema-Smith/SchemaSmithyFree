@@ -2,13 +2,13 @@
 
 *Terraform for SQL Server, Postgres, and MySQL databases*
 
-> **🎉 SchemaSmith v2.0 is live.** State-based schema deployment across SQL Server, PostgreSQL, and MySQL from one package — no migration scripts to author or order. Self-contained executables, no organization-size license caps. [Read the v2.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/226) · [Get started](https://schemasmith.com/walls-came-down.html?utm_source=github&utm_content=readme-banner&utm_campaign=20260513) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.0.0)
+> **🎉 SchemaSmith v2.0 is live.** State-based schema deployment for SQL Server, PostgreSQL, and MySQL — no migration scripts to author or order. Self-contained executables, no organization-size license caps. [Read the v2.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/226) · [Get started](https://schemasmith.com/walls-came-down.html?utm_source=github&utm_content=readme-banner&utm_campaign=20260513) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.0.0)
 
 ![Build](https://github.com/Schema-Smith/SchemaSmith/actions/workflows/continuous-integration.yml/badge.svg)
 [![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/releases/latest)
 [![License: SSCL v2.0](https://img.shields.io/badge/license-SSCL%20v2.0-blue)](LICENSE)
 
-SchemaSmith is a state-based database schema management toolset for SQL Server, PostgreSQL, and MySQL. Define your desired database state as metadata — tables, views, procedures, indexes, constraints, data — and SchemaSmith transforms any target server to match. One package definition, three platforms, zero hand-written DDL.
+SchemaSmith is a state-based database schema management toolset for SQL Server, PostgreSQL, and MySQL. Define your desired database state as metadata — tables, views, procedures, indexes, constraints, data — and SchemaSmith transforms any target server to match. Same toolset, same package format, three engines — no migration scripts to author or order.
 
 Self-contained, single-file executables for Windows, Linux, and macOS. No .NET runtime install needed.
 
