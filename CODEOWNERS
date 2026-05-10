@@ -12,4 +12,4 @@ CODEOWNERS              @drzacharysmith68 @AgentSmith71
 packaging/              @drzacharysmith68 @AgentSmith71
 Directory.Build.props   @drzacharysmith68 @AgentSmith71
 LICENSE                 @drzacharysmith68 @AgentSmith71
-RELEASE_NOTES.md        @drzacharysmith68 @AgentSmith71
+CHANGELOG.md            @drzacharysmith68 @AgentSmith71
