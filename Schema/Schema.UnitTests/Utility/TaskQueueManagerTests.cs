@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using Schema.Utility;
 
 namespace Schema.UnitTests.Utility;
@@ -183,6 +184,59 @@ public class TaskQueueManagerTests
         Assert.That(processed, Has.Count.EqualTo(2));
         Assert.That(processed, Does.Contain(date1));
         Assert.That(processed, Does.Contain(date2));
+    }
+
+    [Test]
+    public void WaitForAll_DoesNotHangWhenWorkThrows()
+    {
+        using var manager = new TaskQueueManager<int>(maxTasks: 1);
+
+        manager.AddToQueue(1, _ => throw new InvalidOperationException("boom"));
+
+        var waitTask = Task.Run(() => manager.WaitForAll());
+        Assert.That(waitTask.Wait(TimeSpan.FromSeconds(5)), Is.True,
+            "WaitForAll should complete even when the work procedure throws");
+    }
+
+    [Test]
+    public void AddToQueue_LaterItemsRunAfterEarlierItemThrows()
+    {
+        using var manager = new TaskQueueManager<int>(maxTasks: 1);
+        var processed = new List<int>();
+        var lockObj = new object();
+
+        manager.AddToQueue(1, _ => throw new InvalidOperationException("boom"));
+        manager.AddToQueue(2, item =>
+        {
+            lock (lockObj) { processed.Add(item); }
+        });
+
+        var waitTask = Task.Run(() => manager.WaitForAll());
+        Assert.That(waitTask.Wait(TimeSpan.FromSeconds(5)), Is.True,
+            "WaitForAll should complete after the throwing work runs");
+        Assert.That(processed, Does.Contain(2),
+            "Subsequent queue items should run even after an earlier item throws");
+    }
+
+    [Test]
+    public void AddToQueue_QueueRecoversAfterAllWorkerSlotsFail()
+    {
+        using var manager = new TaskQueueManager<int>(maxTasks: 2);
+        var processed = new List<int>();
+        var lockObj = new object();
+
+        manager.AddToQueue(1, _ => throw new InvalidOperationException("boom1"));
+        manager.AddToQueue(2, _ => throw new InvalidOperationException("boom2"));
+        manager.AddToQueue(3, item =>
+        {
+            lock (lockObj) { processed.Add(item); }
+        });
+
+        var waitTask = Task.Run(() => manager.WaitForAll());
+        Assert.That(waitTask.Wait(TimeSpan.FromSeconds(5)), Is.True,
+            "WaitForAll should complete after every worker slot's task has failed");
+        Assert.That(processed, Does.Contain(3),
+            "New items should still execute after every worker slot has failed");
     }
 
     [Test]
