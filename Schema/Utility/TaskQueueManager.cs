@@ -93,8 +93,17 @@ public class TaskQueueManager<T> : IDisposable
 
         private void DoWork()
         {
-            workProcedure(item);
-            owner.TaskComplete(this);
+            // TaskComplete must run unconditionally — otherwise an unhandled exception in
+            // workProcedure leaves this WorkerTask in _workingTasks forever, permanently
+            // reducing the queue's effective capacity and hanging WaitForAll.
+            try
+            {
+                workProcedure(item);
+            }
+            finally
+            {
+                owner.TaskComplete(this);
+            }
         }
 
         public void StartTask()
