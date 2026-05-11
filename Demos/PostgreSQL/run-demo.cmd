@@ -1,11 +1,9 @@
 @echo off
 setlocal
 
-if not exist "%~dp0..\..\SchemaQuench\publish\SchemaQuench" (
-    echo SchemaQuench not built yet, building...
-    call "%~dp0..\..\build-schemaquench.cmd"
-    if %ERRORLEVEL% neq 0 exit /b 1
-)
+echo Publishing SchemaQuench...
+call "%~dp0..\..\build-schemaquench.cmd"
+if %ERRORLEVEL% neq 0 exit /b 1
 
 echo Starting PostgreSQL demo...
 :: `up -d` blocks on the service_completed_successfully chain, so by the time it

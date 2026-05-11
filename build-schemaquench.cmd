@@ -18,4 +18,10 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
+if not exist "%~dp0SchemaQuench\publish\SchemaQuench" (
+    echo BUILD FAILED: SchemaQuench\publish\SchemaQuench was not produced. Check the dotnet publish output above.
+    echo Likely cause: .NET 10 SDK is not installed, or a NuGet restore step failed silently.
+    exit /b 1
+)
+
 echo   Build complete: SchemaQuench/publish/

@@ -4,6 +4,13 @@ All notable changes to SchemaSmith Community Edition are documented here.
 
 For full release details and download links, see [GitHub Releases](https://github.com/Schema-Smith/SchemaSmith/releases).
 
+## [Unreleased]
+
+### Fixed
+
+- **Demo `run-demo.cmd` always rebuilds SchemaQuench** — The Windows demo runners (`Demos/{SqlServer,MySQL,PostgreSQL}/run-demo.cmd`) previously skipped the publish step if `SchemaQuench/publish/SchemaQuench` existed. The check could spuriously pass with an incomplete or stale publish folder, after which `docker compose up --build` emitted a cryptic "failed to calculate checksum of ref ... /publish: not found" error from the COPY step in `Dockerfile.release`. The Windows runners now match the always-build behavior the `.sh` runners already used. Source edits to SchemaQuench are now picked up on every demo run.
+- **Demo build script verifies publish output** — `build-schemaquench.cmd` and `build-schemaquench.sh` now verify that `SchemaQuench/publish/SchemaQuench` actually exists and is non-empty after `dotnet publish` returns. If the binary is missing despite a zero exit code (silent NuGet restore failure, missing .NET 10 SDK detected as a no-op publish, etc.), the script fails with a clear message pointing at the publish output and the likely cause, instead of letting the demo fall through to a confusing Docker checksum error.
+
 ## [v2.0.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.0.0) — 2026-05-06
 
 ### Added
