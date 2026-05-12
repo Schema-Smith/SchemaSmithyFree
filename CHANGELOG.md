@@ -4,6 +4,12 @@ All notable changes to SchemaSmith Community Edition are documented here.
 
 For full release details and download links, see [GitHub Releases](https://github.com/Schema-Smith/SchemaSmith/releases).
 
+## [Unreleased]
+
+### Fixed
+
+- **TaskQueueManager wedge on uncaught work-procedure exceptions** — When a work procedure threw, the failed worker was never removed from the queue's working set, hanging `WaitForAll` and reducing effective capacity by one per failure. Parallel work in `ProductQuench` (server/database quench), `Template` (per-table token resolution), `ScriptFolder` (parallel file load), and `TokenHelper` (file-token resolution) could silently hang on any uncaught exception inside a work item. The worker now wraps the work procedure in `try`/`finally` so the completion handshake always runs.
+
 ## [v2.0.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.0.0) — 2026-05-06
 
 ### Added
