@@ -76,7 +76,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 - **SSCL v2.0 license** — Removed organization size and revenue restrictions; feature-based tiers only
 - **SchemaTongs: Pure SQL extraction** — Complete rewrite from SMO-based to direct SQL queries; Microsoft.SqlServer.SqlManagementObjects dependency removed
 - **`TableData` folder renamed to `Table Data`** — Legacy folders auto-renamed on re-extraction
-- **SQL Server 2022 in CI** — Upgraded from 2019; port changed from 1440 to 1450
+- **SQL Server integration CI** — Runs SQL Server 2019 on port 1440, matching the checked-in integration test settings
 - **Central NuGet package management** — Version centralization via Directory.Packages.props
 - **Demo products reorganized** — Per-platform directories under `Demos/` with dedicated docker-compose per platform
 - **Platform naming** — MSSQL → SqlServer in code and Product.json (accepts both on read)
