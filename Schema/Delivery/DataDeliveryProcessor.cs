@@ -63,16 +63,23 @@ public class DataDeliveryProcessor : IDataDelivery
 
         var tableEdges = new Dictionary<IDeliverableTable, (HashSet<string> RequiredDeps, List<string> DeferredColumns)>();
         var tableDataMap = new Dictionary<IDeliverableTable, string>();
+        var contentFileErrors = new List<string>();
 
         foreach (var table in tablesToDeliver.ToList())
         {
             tableEdges[table] = DataDeliveryHelper.ClassifyFKEdges(table, deliverySet, platform);
+            var tableKey = DataDeliveryHelper.GetTableKey(table, platform);
 
             var contentPath = ResolveContentFilePath(context.TemplateRootPath, table.DataDelivery.ContentFile);
-            if (contentPath == null || context.ReadFileContent == null)
+            if (contentPath == null)
             {
-                logError($"    SKIPPING {DataDeliveryHelper.GetTableKey(table, platform)}. Unable to locate content file: '{table.DataDelivery.ContentFile}'");
-                tablesToDeliver.Remove(table);
+                contentFileErrors.Add($"{tableKey}: Unable to locate content file: '{table.DataDelivery.ContentFile}'");
+                continue;
+            }
+
+            if (context.ReadFileContent == null)
+            {
+                contentFileErrors.Add($"{tableKey}: No content file reader configured for '{contentPath}'");
                 continue;
             }
 
@@ -81,17 +88,22 @@ public class DataDeliveryProcessor : IDataDelivery
                 var content = context.ReadFileContent(contentPath);
                 if (content == null)
                 {
-                    logError($"    SKIPPING {DataDeliveryHelper.GetTableKey(table, platform)}. Content file not found: '{contentPath}'");
-                    tablesToDeliver.Remove(table);
+                    contentFileErrors.Add($"{tableKey}: Content file not found: '{contentPath}'");
                     continue;
                 }
                 tableDataMap[table] = content;
             }
             catch (Exception ex)
             {
-                logError($"    SKIPPING {DataDeliveryHelper.GetTableKey(table, platform)}. Error reading content file: '{contentPath}' - {ex.Message}");
-                tablesToDeliver.Remove(table);
+                contentFileErrors.Add($"{tableKey}: Error reading content file: '{contentPath}' - {ex.Message}");
             }
+        }
+
+        if (contentFileErrors.Count > 0)
+        {
+            foreach (var error in contentFileErrors)
+                logError($"    {error}");
+            throw new InvalidOperationException("Data delivery aborted: Unable to read one or more content files.");
         }
 
         var delivered = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);

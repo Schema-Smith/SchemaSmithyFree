@@ -8,6 +8,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ### Fixed
 
+- **DataDelivery content file failures** — Declared data delivery files now abort deployment when missing or unreadable instead of logging `SKIPPING` and continuing without delivering the table data.
 - **ZIP package file reads for data delivery and binary tokens** — DataDelivery content files now use the package-aware file wrapper, and ZIP-backed packages can resolve binary file tokens through `ReadAllBytes`.
 - **Product-level script routing for SQL Server secondary servers** — Product-level script folders configured for secondary servers now open the command against the routed server instead of always using the primary server connection.
 - **TaskQueueManager wedge on uncaught work-procedure exceptions** — When a work procedure threw, the failed worker was never removed from the queue's working set, hanging `WaitForAll` and reducing effective capacity by one per failure. Parallel work in `ProductQuench` (server/database quench), `Template` (per-table token resolution), `ScriptFolder` (parallel file load), and `TokenHelper` (file-token resolution) could silently hang on any uncaught exception inside a work item. The worker now wraps the work procedure in `try`/`finally` so the completion handshake always runs.
