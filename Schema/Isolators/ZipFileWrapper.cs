@@ -27,18 +27,22 @@ public class ZipFileWrapper : IFile, IDisposable
 
     public string ReadAllText(string path)
     {
-        if (string.IsNullOrEmpty(NormalizePath(path)))
-            throw new FileNotFoundException($"Invalid entry requested: '{path}'");
-
         lock (_lockObject)
         {
-            var entry = ZipEntries!.FirstOrDefault(e => NormalizePath(e.FullName).EqualsIgnoringCase(NormalizePath(path)));
-            if (entry == null)
-                throw new FileNotFoundException($"Entry '{path}' not found in zip file '{_zipFilePath}'.");
-
-            using var stream = entry.Open();
+            using var stream = OpenEntry(path);
             using var reader = new StreamReader(stream);
             return reader.ReadToEnd();
+        }
+    }
+
+    public byte[] ReadAllBytes(string path)
+    {
+        lock (_lockObject)
+        {
+            using var stream = OpenEntry(path);
+            using var memoryStream = new MemoryStream();
+            stream.CopyTo(memoryStream);
+            return memoryStream.ToArray();
         }
     }
 
@@ -77,6 +81,18 @@ public class ZipFileWrapper : IFile, IDisposable
         return path?.Replace('\\', '/').Trim('/');
     }
 
+    private Stream OpenEntry(string path)
+    {
+        if (string.IsNullOrEmpty(NormalizePath(path)))
+            throw new FileNotFoundException($"Invalid entry requested: '{path}'");
+
+        var entry = ZipEntries!.FirstOrDefault(e => NormalizePath(e.FullName).EqualsIgnoringCase(NormalizePath(path)));
+        if (entry == null)
+            throw new FileNotFoundException($"Entry '{path}' not found in zip file '{_zipFilePath}'.");
+
+        return entry.Open();
+    }
+
     public static IFile GetFromFactory(string zipFileName)
     {
         var zipFile = FactoryContainer.ResolveOrCreate<ZipFileWrapper>(true);
@@ -98,7 +114,6 @@ public class ZipFileWrapper : IFile, IDisposable
     // Other IFile methods not used for zip access
     public Stream OpenRead(string path) => throw new NotImplementedException();
     public void WriteAllText(string path, string contents) => throw new NotImplementedException();
-    public byte[] ReadAllBytes(string path) => throw new NotImplementedException();
     public void Copy(string source, string destination, bool overwrite = false) => throw new NotImplementedException();
     public void Move(string sourceFileName, string destFileName) => throw new NotImplementedException();
     public void Delete(string path) => throw new NotImplementedException();
