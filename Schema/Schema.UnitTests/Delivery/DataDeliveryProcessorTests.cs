@@ -515,7 +515,7 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
-    public void DeliverTables_NullReadFileContent_SkipsTable()
+    public void DeliverTables_NullReadFileContent_AbortsDelivery()
     {
         var processor = new DataDeliveryProcessor();
         var tables = new List<IDeliverableTable>
@@ -529,14 +529,16 @@ public class DataDeliveryProcessorTests
         var context = MakeContext(tables);
         context.ReadFileContent = null;
 
-        processor.DeliverTables(context);
+        var ex = Assert.Throws<InvalidOperationException>(() => processor.DeliverTables(context));
 
         Assert.That(_executedScripts, Is.Empty);
-        Assert.That(_logs, Has.Some.Contains("ERROR:").And.Some.Contains("SKIPPING"));
+        Assert.That(ex!.Message, Does.Contain("Unable to read"));
+        Assert.That(_logs, Has.Some.Contains("ERROR:").And.Some.Contains("No content file reader configured"));
+        Assert.That(_logs, Has.None.Contains("SKIPPING"));
     }
 
     [Test]
-    public void DeliverTables_ReadFileContentReturnsNull_SkipsTable()
+    public void DeliverTables_ReadFileContentReturnsNull_AbortsDelivery()
     {
         var processor = new DataDeliveryProcessor();
         var tables = new List<IDeliverableTable>
@@ -550,14 +552,16 @@ public class DataDeliveryProcessorTests
         var context = MakeContext(tables);
         context.ReadFileContent = _ => null;
 
-        processor.DeliverTables(context);
+        var ex = Assert.Throws<InvalidOperationException>(() => processor.DeliverTables(context));
 
         Assert.That(_executedScripts, Is.Empty);
-        Assert.That(_logs, Has.Some.Contains("ERROR:").And.Some.Contains("SKIPPING"));
+        Assert.That(ex!.Message, Does.Contain("Unable to read"));
+        Assert.That(_logs, Has.Some.Contains("ERROR:").And.Some.Contains("Content file not found"));
+        Assert.That(_logs, Has.None.Contains("SKIPPING"));
     }
 
     [Test]
-    public void DeliverTables_ReadFileContentThrows_SkipsTable()
+    public void DeliverTables_ReadFileContentThrows_AbortsDelivery()
     {
         var processor = new DataDeliveryProcessor();
         var tables = new List<IDeliverableTable>
@@ -571,10 +575,12 @@ public class DataDeliveryProcessorTests
         var context = MakeContext(tables);
         context.ReadFileContent = _ => throw new System.IO.IOException("File not found");
 
-        processor.DeliverTables(context);
+        var ex = Assert.Throws<InvalidOperationException>(() => processor.DeliverTables(context));
 
         Assert.That(_executedScripts, Is.Empty);
-        Assert.That(_logs, Has.Some.Contains("ERROR:").And.Some.Contains("SKIPPING"));
+        Assert.That(ex!.Message, Does.Contain("Unable to read"));
+        Assert.That(_logs, Has.Some.Contains("ERROR:").And.Some.Contains("Error reading content file"));
+        Assert.That(_logs, Has.None.Contains("SKIPPING"));
     }
 
     [Test]
