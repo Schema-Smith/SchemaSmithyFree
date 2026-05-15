@@ -167,7 +167,7 @@ jobs:
     runs-on: self-hosted
     services:
       sqlserver:
-        image: mcr.microsoft.com/mssql/mssql-server:2022-latest
+        image: mcr.microsoft.com/mssql/server:2022-latest
         env:
           ACCEPT_EULA: Y
           SA_PASSWORD: YourStr0ngPassword!
