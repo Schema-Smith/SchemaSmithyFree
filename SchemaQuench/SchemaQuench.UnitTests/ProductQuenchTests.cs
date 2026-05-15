@@ -1,9 +1,16 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
+using System.Collections.Generic;
+using System.Data;
+using System.IO;
 using System.Linq;
+using System.Reflection;
+using Microsoft.Extensions.Configuration;
+using NSubstitute;
 using NUnit.Framework;
 using Schema.Domain;
+using Schema.Isolators;
 
 namespace SchemaQuench.UnitTests;
 
@@ -85,6 +92,82 @@ public class ProductQuenchTests
     public void SpecialTokenTags_ContainsIndexedViewSchema()
     {
         Assert.That(ProductQuench.SpecialTokenTags, Does.Contain("IndexedViewSchema_"));
+    }
+
+    #endregion
+
+    #region Product Script Server Routing Tests
+
+    [Test]
+    public void QuenchScriptsToServerWithCheckpoint_UsesRequestedServerForCommand()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Clear();
+            var schemaPackagePath = "Product";
+            var productPath = Path.Combine(schemaPackagePath, "Product.json");
+            var file = Substitute.For<IFile>();
+            var directory = Substitute.For<IDirectory>();
+
+            file.Exists(schemaPackagePath).Returns(false);
+            directory.Exists(schemaPackagePath).Returns(true);
+            file.Exists(productPath).Returns(true);
+            file.ReadAllText(productPath).Returns("""
+                                                  {
+                                                    "Name": "TestProduct",
+                                                    "Platform": "SqlServer",
+                                                    "ScriptFolders": []
+                                                  }
+                                                  """);
+
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string>
+                {
+                    ["SchemaPackagePath"] = schemaPackagePath,
+                    ["Target:Server"] = "primary-server",
+                    ["Target:SecondaryServers"] = "secondary-server",
+                    ["WhatIfONLY"] = "true"
+                })
+                .Build();
+
+            FactoryContainer.Register<IConfigurationRoot>(config);
+            FactoryContainer.Register<IFile>(file);
+            FactoryContainer.Register<IDirectory>(directory);
+
+            try
+            {
+                var quench = new RecordingProductQuench();
+
+                InvokeQuenchScriptsToServerWithCheckpoint(quench, "secondary-server");
+
+                Assert.That(quench.CommandServers, Is.EqualTo(new[] { "secondary-server" }));
+            }
+            finally
+            {
+                FactoryContainer.Clear();
+            }
+        }
+    }
+
+    private static void InvokeQuenchScriptsToServerWithCheckpoint(ProductQuench quench, string server)
+    {
+        var method = typeof(ProductQuench).GetMethod("QuenchScriptsToServerWithCheckpoint",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        method!.Invoke(quench, [server, "Before Product", Array.Empty<SqlScript>(), true]);
+    }
+
+    private sealed class RecordingProductQuench : ProductQuench
+    {
+        public List<string> CommandServers { get; } = [];
+
+        internal override IDbCommand GetCommand(string server)
+        {
+            CommandServers.Add(server);
+            var command = Substitute.For<IDbCommand>();
+            command.Connection.Returns(Substitute.For<IDbConnection>());
+            return command;
+        }
     }
 
     #endregion

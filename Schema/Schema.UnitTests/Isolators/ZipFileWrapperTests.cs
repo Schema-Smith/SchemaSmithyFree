@@ -34,6 +34,14 @@ public class ZipFileWrapperTests
         return entry;
     }
 
+    private static IZipEntry MockBinaryEntry(string fullName, byte[] content)
+    {
+        var entry = Substitute.For<IZipEntry>();
+        entry.FullName.Returns(fullName);
+        entry.Open().Returns(_ => new MemoryStream(content));
+        return entry;
+    }
+
     // --- Exists ---
 
     [Test]
@@ -116,6 +124,47 @@ public class ZipFileWrapperTests
             Assert.Throws<FileNotFoundException>(() => _wrapper.ReadAllText(null));
             Assert.Throws<FileNotFoundException>(() => _wrapper.ReadAllText(""));
         });
+    }
+
+    // --- ReadAllBytes ---
+
+    [Test]
+    public void ReadAllBytes_ReturnsContent_WhenEntryFound()
+    {
+        var bytes = new byte[] { 0, 1, 2, 255 };
+        _wrapper.SetZipEntries([MockBinaryEntry("Templates/Main/blob.bin", bytes)]);
+
+        var content = _wrapper.ReadAllBytes("Templates/Main/blob.bin");
+
+        Assert.That(content, Is.EqualTo(bytes));
+    }
+
+    [Test]
+    public void ReadAllBytes_IsCaseInsensitive()
+    {
+        var bytes = new byte[] { 10, 20, 30 };
+        _wrapper.SetZipEntries([MockBinaryEntry("ProductData/File.bin", bytes)]);
+
+        Assert.That(_wrapper.ReadAllBytes("productdata/file.bin"), Is.EqualTo(bytes));
+    }
+
+    [Test]
+    public void ReadAllBytes_NormalizesSlashes()
+    {
+        var bytes = new byte[] { 42 };
+        _wrapper.SetZipEntries([MockBinaryEntry("Templates/Main/File.bin", bytes)]);
+
+        Assert.That(_wrapper.ReadAllBytes(@"Templates\Main\File.bin"), Is.EqualTo(bytes));
+    }
+
+    [Test]
+    public void ReadAllBytes_ThrowsFileNotFound_WhenEntryMissing()
+    {
+        _wrapper.SetZipEntries([MockBinaryEntry("other.bin", [1])]);
+
+        var ex = Assert.Throws<FileNotFoundException>(() => _wrapper.ReadAllBytes("missing.bin"));
+
+        Assert.That(ex!.Message, Does.Contain("missing.bin"));
     }
 
     // --- IsValidZipFile ---
