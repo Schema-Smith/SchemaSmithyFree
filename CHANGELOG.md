@@ -8,6 +8,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ### Fixed
 
+- **Completed migration script tracking SQL literals** — Product names, quench slots, and script paths are now escaped before being embedded in completed-script tracking SQL.
 - **DataDelivery content file failures** — Declared data delivery files now abort deployment when missing or unreadable instead of logging `SKIPPING` and continuing without delivering the table data.
 - **ZIP package file reads for data delivery and binary tokens** — DataDelivery content files now use the package-aware file wrapper, and ZIP-backed packages can resolve binary file tokens through `ReadAllBytes`.
 - **Product-level script routing for SQL Server secondary servers** — Product-level script folders configured for secondary servers now open the command against the routed server instead of always using the primary server connection.
