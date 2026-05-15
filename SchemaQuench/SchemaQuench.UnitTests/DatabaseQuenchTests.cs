@@ -392,6 +392,28 @@ public class DatabaseQuenchTests
         Assert.That(sql, Does.Contain("INSERT INTO `SchemaSmith_CompletedMigrationScripts`"));
     }
 
+    [TestCase(Platform.SqlServer)]
+    [TestCase(Platform.PostgreSQL)]
+    [TestCase(Platform.MySQL)]
+    public void CompletedScriptSql_EscapesSingleQuotesInLiteralValues(Platform platform)
+    {
+        var falseValue = platform == Platform.PostgreSQL ? "false" : "0";
+        var product = new Product { Name = "Test", Platform = platform };
+        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
+            false, falseValue, false, falseValue, falseValue, false, false, null);
+
+        var selectSql = quench.GetSelectCompletedScriptsSql("O'Brien", "Before's");
+        var deleteSql = quench.GetDeleteCompletedScriptSql("O'Brien", "Before's", "scripts/O'Brien.sql");
+        var insertSql = quench.GetInsertCompletedScriptSql("scripts/O'Brien.sql", "O'Brien", "Before's");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(selectSql, Does.Contain("O''Brien").And.Contain("Before''s"));
+            Assert.That(deleteSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("scripts/O''Brien.sql"));
+            Assert.That(insertSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("scripts/O''Brien.sql"));
+        });
+    }
+
     #endregion
 
     #region Template Script Collection Properties
