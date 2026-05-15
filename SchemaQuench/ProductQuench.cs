@@ -144,7 +144,7 @@ public class ProductQuench
         Server = server
     };
 
-    private IDbCommand GetCommand(string server)
+    internal virtual IDbCommand GetCommand(string server)
     {
         var initDb = GetInitDatabase(_product.Platform);
         var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
@@ -402,7 +402,7 @@ public class ProductQuench
     private void QuenchScriptsToServerWithCheckpoint(string server, string message, IEnumerable<SqlScript> scripts, bool isBefore)
     {
         _progressLog.Info($"Quenching {message} Scripts to {server}");
-        using var productScriptCommand = GetCommand(_primaryServer);
+        using var productScriptCommand = GetCommand(server);
         try
         {
             var scriptsToQuench = scripts.Select(j => j.Clone()).ToList();
