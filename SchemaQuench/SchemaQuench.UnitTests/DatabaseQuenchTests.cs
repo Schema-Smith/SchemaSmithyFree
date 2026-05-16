@@ -995,6 +995,143 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region Schema-Template (Slice 3) — Constructor + DbScope + Log Prefix
+
+    [Test]
+    public void Constructor_SchemaName_DefaultsToEmptyString()
+    {
+        // Forwarding constructor (no schemaName arg) leaves SchemaName empty for regular templates.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.SchemaName, Is.EqualTo(""));
+    }
+
+    [Test]
+    public void Constructor_SchemaName_PreservedFromExplicitArgument()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_acme",
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.SchemaName, Is.EqualTo("tenant_acme"));
+    }
+
+    [Test]
+    public void Constructor_SchemaName_NullCoercedToEmpty()
+    {
+        // Tracking-table column convention (slice 2) uses '' rather than NULL for regular-template rows.
+        // The ctor coerces null to empty so DbScope.SchemaName never carries a null downstream.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db", null,
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.SchemaName, Is.EqualTo(""));
+    }
+
+    [Test]
+    public void Constructor_InternalSchemaName_PreservedFromExplicitArgument()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_globex",
+            false, "false", false, "false", "false", false, false, null);
+
+        Assert.That(quench.SchemaName, Is.EqualTo("tenant_globex"));
+    }
+
+    [Test]
+    public void DbScope_SchemaName_FlowsFromConstructor()
+    {
+        // DbScope is private; the SchemaName surfaces in the SQL that touches the tracking table —
+        // observe via the SQL emitters that route DbScope.SchemaName into the WHERE clause.
+        var product = new Product { Name = "MyProduct", Platform = Platform.SqlServer };
+        var template = new Template { Name = "TenantBody" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd", "tenant_acme",
+            false, "0", false, "0", false, false, false, null);
+
+        var sql = quench.GetSelectCompletedScriptsSql(
+            quench.ProductName, "Before", "TenantBody", quench.SchemaName);
+
+        Assert.That(sql, Does.Contain("[schema_name] = 'tenant_acme'"));
+        Assert.That(sql, Does.Contain("[template_name] IN ('', 'TenantBody')"));
+    }
+
+    [Test]
+    public void DbScope_SchemaName_EmptyForRegularTemplate()
+    {
+        var product = new Product { Name = "MyProduct", Platform = Platform.SqlServer };
+        var template = new Template { Name = "Core" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd",
+            false, "0", false, "0", false, false, false, null);
+
+        var sql = quench.GetSelectCompletedScriptsSql(
+            quench.ProductName, "Before", "Core", quench.SchemaName);
+
+        Assert.That(sql, Does.Contain("[schema_name] = ''"));
+    }
+
+    [Test]
+    public void LogPrefix_SchemaName_IncludesSchemaTag()
+    {
+        // Per design §5.8, every log line emitted during a schema iteration carries the
+        // [Schema: <name>] prefix so a multi-iteration deploy log stays greppable per tenant.
+        // LogPrefix is the single source of truth for the prefix; SafeProgressLog and its
+        // siblings all route through it.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "TenantBody" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd", "tenant_acme",
+            false, "0", false, "0", false, false, false, null);
+
+        var prefix = GetLogPrefix(quench);
+
+        Assert.That(prefix, Is.EqualTo("[srv].[AppProd] [Schema: tenant_acme]"));
+    }
+
+    [Test]
+    public void LogPrefix_NoSchemaName_OmitsSchemaTag()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "Core" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd",
+            false, "0", false, "0", false, false, false, null);
+
+        var prefix = GetLogPrefix(quench);
+
+        Assert.That(prefix, Is.EqualTo("[srv].[AppProd]"));
+    }
+
+    [Test]
+    public void LogPrefix_EmptySchemaName_OmitsSchemaTag()
+    {
+        // Explicit empty string is equivalent to "no schema iteration" (the work-unit convention
+        // for regular templates) — must not render an empty "[Schema: ]" tag.
+        var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "Core" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd", "",
+            false, "false", false, "false", "false", false, false, null);
+
+        var prefix = GetLogPrefix(quench);
+
+        Assert.That(prefix, Is.EqualTo("[srv].[AppProd]"));
+    }
+
+    private static string GetLogPrefix(DatabaseQuench quench)
+    {
+        // LogPrefix is private; routed via SafeProgressLog into all log calls. Read it directly
+        // via reflection so we can assert the prefix invariant without standing up a log4net
+        // appender chain.
+        var prop = typeof(DatabaseQuench).GetProperty("LogPrefix",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        return (string)prop!.GetValue(quench);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static IDbCommand CreateMockCommand()

@@ -277,6 +277,12 @@ namespace Schema.Domain
 
             SchemaDefaultResolver.Resolve(template);
 
+            // Resolve the per-token TokenScope map so the SchemaQuench dispatcher can decide which
+            // <*Query*> tokens need re-running per schema iteration vs. once per DB. Idempotent on
+            // regular templates (no {{SchemaName}} references → every token stays at its default
+            // scope), so the call is harmless when there's no schema-template fan-out in play.
+            template.ResolveTokenScopes();
+
             // Warn (but don't fail) when schema-only fields are set non-default on regular templates.
             // These have no effect outside the schema-template fan-out path; surface the likely-mistake
             // through the progress log instead of failing the load (the user may be experimenting).

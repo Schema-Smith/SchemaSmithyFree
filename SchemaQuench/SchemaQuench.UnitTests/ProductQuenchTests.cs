@@ -250,4 +250,568 @@ public class ProductQuenchTests
     }
 
     #endregion
+
+    #region Schema-Template Work-Unit Enumeration (Slice 3)
+
+    [Test]
+    public void EnumerateWorkUnits_RegularTemplate_OnePerDatabase()
+    {
+        // Regular templates produce one work unit per (server, db) pair with empty SchemaName.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppA", "AppB", "AppC" };
+
+            var template = new Template
+            {
+                Name = "Core",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Has.Count.EqualTo(3));
+                Assert.That(units.Select(u => u.DatabaseName), Is.EquivalentTo(new[] { "AppA", "AppB", "AppC" }));
+                Assert.That(units.All(u => u.SchemaName == ""), Is.True);
+                Assert.That(units.All(u => u.Server == "primary"), Is.True);
+                Assert.That(units.All(u => u.TemplateName == "Core"), Is.True);
+            });
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_SchemaTemplate_OnePerSchemaPerDb()
+    {
+        // Schema templates: each (server, db) hits SchemaDiscovery and produces one work unit per
+        // discovered schema. The plan's worked example: 2 DBs × 4 schemas = 8 units.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "Tenants_East", "Tenants_West" };
+            quench.SchemaDiscoveryResults[("primary", "Tenants_East")] =
+                new List<string> { "tenant_acme", "tenant_globex", "tenant_initech", "tenant_umbrella" };
+            quench.SchemaDiscoveryResults[("primary", "Tenants_West")] =
+                new List<string> { "tenant_acme", "tenant_globex", "tenant_initech", "tenant_umbrella" };
+
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Has.Count.EqualTo(8));
+                Assert.That(units.Where(u => u.DatabaseName == "Tenants_East").Select(u => u.SchemaName),
+                    Is.EquivalentTo(new[] { "tenant_acme", "tenant_globex", "tenant_initech", "tenant_umbrella" }));
+                Assert.That(units.All(u => u.TemplateName == "TenantBody"), Is.True);
+            });
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_RegularThreeDatabases_ThreeWorkUnits()
+    {
+        // §3.4 plan case: Regular template + 3 DBs → 3 work units.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppA", "AppB", "AppC" };
+
+            var template = new Template
+            {
+                Name = "Core",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.That(units, Has.Count.EqualTo(3));
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_SchemaTemplate_DifferentSchemasPerDb()
+    {
+        // Schema sets need not be uniform across DBs — the discovery query may return per-DB sets.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppA", "AppB" };
+            quench.SchemaDiscoveryResults[("primary", "AppA")] = new List<string> { "tenant_x", "tenant_y" };
+            quench.SchemaDiscoveryResults[("primary", "AppB")] = new List<string> { "tenant_z" };
+
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Has.Count.EqualTo(3));
+                Assert.That(units.Single(u => u.DatabaseName == "AppB").SchemaName, Is.EqualTo("tenant_z"));
+            });
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_SchemaTemplate_NoSchemasReturned_NoUnitsForThatDb()
+    {
+        // A DB whose discovery script returns zero schemas contributes zero work units. Slice 3 with
+        // a Required template + 0 schemas → empty work-unit list → required-empty error.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppEmpty" };
+            quench.SchemaDiscoveryResults[("primary", "AppEmpty")] = new List<string>();
+
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.That(units, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void QuenchTemplate_RequiredEmpty_RegularTemplate_SetsUpdateFailed()
+    {
+        // Required + zero work units → error logged + _updateFailed set. Regular-template flavor:
+        // zero DBs returned by DatabaseIdentificationScript.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = System.Array.Empty<string>();
+
+            var template = new Template
+            {
+                Name = "Core",
+                Required = true,
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+
+            quench.InvokeQuenchTemplate(template);
+
+            Assert.That(quench.UpdateFailed, Is.True);
+            Assert.That(quench.LogBackupCalled, Is.True);
+        });
+    }
+
+    [Test]
+    public void QuenchTemplate_RequiredEmpty_SchemaTemplate_ZeroSchemas_SetsUpdateFailed()
+    {
+        // Required + schema template + DBs present but zero schemas discovered → still empty work
+        // list → required-empty error fires. Mirrors the design's "empty across all servers" rule.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppA" };
+            quench.SchemaDiscoveryResults[("primary", "AppA")] = new List<string>();
+
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Required = true,
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            quench.InvokeQuenchTemplate(template);
+
+            Assert.That(quench.UpdateFailed, Is.True);
+        });
+    }
+
+    [Test]
+    public void QuenchTemplate_OptionalEmpty_DoesNotFail()
+    {
+        // Optional templates with zero work units skip silently — no error, no _updateFailed.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = System.Array.Empty<string>();
+
+            var template = new Template
+            {
+                Name = "Optional",
+                Required = false,
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+
+            quench.InvokeQuenchTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(quench.UpdateFailed, Is.False);
+                Assert.That(quench.LogBackupCalled, Is.False);
+            });
+        });
+    }
+
+    [Test]
+    public void LogSchemaTemplateFields_SchemaTemplate_EchoesFields()
+    {
+        // Per §3.6, templates with SchemaIdentificationScript echo their schema-fan-out config to
+        // the progress log at template-start. Regular templates skip the echo.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT 1",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas",
+                CreateSchemaIfMissing = true,
+                AllowParallel = false,
+                ContinueOnSchemaFailure = false
+            };
+
+            quench.InvokeLogSchemaTemplateFieldsIfSet(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("SchemaIdentificationScript:"));
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("CreateSchemaIfMissing: True"));
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("AllowParallel: False"));
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("ContinueOnSchemaFailure: False"));
+            });
+        });
+    }
+
+    [Test]
+    public void LogSchemaTemplateFields_RegularTemplate_AllDefaults_LogsNothing()
+    {
+        // Regular template + ContinueOnDatabaseFailure at default → no echo at all.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var template = new Template
+            {
+                Name = "Core",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT 1",
+                ContinueOnDatabaseFailure = true
+            };
+
+            quench.InvokeLogSchemaTemplateFieldsIfSet(template);
+
+            Assert.That(quench.ProgressLogLines, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void LogSchemaTemplateFields_ContinueOnDatabaseFailureFalse_EchoesIt()
+    {
+        // ContinueOnDatabaseFailure applies to ALL templates (regular + schema); echo only when
+        // non-default (false).
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var template = new Template
+            {
+                Name = "Core",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT 1",
+                ContinueOnDatabaseFailure = false
+            };
+
+            quench.InvokeLogSchemaTemplateFieldsIfSet(template);
+
+            Assert.That(quench.ProgressLogLines, Has.Some.Contains("ContinueOnDatabaseFailure: False"));
+        });
+    }
+
+    [Test]
+    public void DispatchWorkUnits_TemplateOrderPreserved_AllUnitsCompleteBeforeNextTemplate()
+    {
+        // Each template is dispatched via its own WorkUnitDispatcher.Run() — a synchronous, blocking
+        // call. As long as QuenchTemplate iterates templates in TemplateOrder sequence (today's
+        // behavior), template N+1's dispatch can't start until template N's dispatcher returns. This
+        // test verifies that invariant at the dispatch layer: a single dispatcher's Run() completes
+        // all its work before returning.
+        var sequenceLog = new System.Collections.Concurrent.ConcurrentQueue<(string Template, string Phase)>();
+        var allUnits = new List<WorkUnit>
+        {
+            new("s", "db1", "Shared", ""),
+            new("s", "db2", "Shared", ""),
+            new("s", "db3", "Shared", "")
+        };
+
+        var dispatcher = new WorkUnitDispatcher(allUnits, maxThreads: 3, new Dictionary<string, bool>(),
+            unit =>
+            {
+                sequenceLog.Enqueue((unit.TemplateName, "start"));
+                System.Threading.Thread.Sleep(20);
+                sequenceLog.Enqueue((unit.TemplateName, "end"));
+            });
+        dispatcher.Run();
+
+        // After Run() returns, every unit's end must have been observed. Subsequent template's
+        // Run() can only start after this point — that's the TemplateOrder guarantee.
+        var ends = sequenceLog.Count(e => e.Phase == "end");
+        Assert.That(ends, Is.EqualTo(3), "All 3 units must have completed before Run() returns.");
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_ReservedSchemaName_SetsUpdateFailed()
+    {
+        // SchemaDiscovery throws on reserved names ('dbo', 'public', etc. — design §5.4). The
+        // enumeration loop catches the exception, logs the failure, and surfaces by setting
+        // _updateFailed. Other DBs continue to enumerate (slice-3 enumeration-level continue —
+        // the dispatcher itself is fail-loud, but enumeration is best-effort logging).
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppBad", "AppGood" };
+            quench.SchemaDiscoveryFailures[("primary", "AppBad")] =
+                new System.InvalidOperationException("reserved schema name 'dbo'");
+            quench.SchemaDiscoveryResults[("primary", "AppGood")] = new List<string> { "tenant_x" };
+
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                // AppBad contributes zero units (discovery failed); AppGood still produces its one.
+                Assert.That(units, Has.Count.EqualTo(1));
+                Assert.That(units.Single().DatabaseName, Is.EqualTo("AppGood"));
+                Assert.That(quench.UpdateFailed, Is.True);
+            });
+        });
+    }
+
+    /// <summary>
+    /// Hand-builds a minimal SQL Server ProductQuench (no real connections, no Product.json on disk)
+    /// inside the FactoryContainer lock and runs <paramref name="body"/> against the recorded test
+    /// double. Keeps every schema-template work-unit test self-contained: build → assert → tear down.
+    /// </summary>
+    private static void WithMinimalSqlServerProductQuench(System.Action<RecordingWorkUnitProductQuench> body)
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Clear();
+            Schema.Utility.LogFactory.Clear();
+            const string schemaPackagePath = "Product";
+            var productPath = Path.Combine(schemaPackagePath, "Product.json");
+            var file = Substitute.For<IFile>();
+            var directory = Substitute.For<IDirectory>();
+
+            file.Exists(schemaPackagePath).Returns(false);
+            directory.Exists(schemaPackagePath).Returns(true);
+            file.Exists(productPath).Returns(true);
+            file.ReadAllText(productPath).Returns("""
+                                                  {
+                                                    "Name": "TestProduct",
+                                                    "Platform": "SqlServer",
+                                                    "ScriptFolders": []
+                                                  }
+                                                  """);
+
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string>
+                {
+                    ["SchemaPackagePath"] = schemaPackagePath,
+                    ["Target:Server"] = "primary",
+                    ["WhatIfONLY"] = "true"
+                })
+                .Build();
+
+            FactoryContainer.Register<IConfigurationRoot>(config);
+            FactoryContainer.Register<IFile>(file);
+            FactoryContainer.Register<IDirectory>(directory);
+
+            // CRITICAL: prevent LogBackup.BackupLogsAndExit's Environment.Exit(n) from killing the
+            // test host. The QuenchTemplate failure paths route through BackupLogsAndExit, which
+            // calls Environment.Exit unless IEnvironment is mocked. Without this substitute the
+            // first required-empty test brings down the whole nunit host.
+            FactoryContainer.Register<IEnvironment>(Substitute.For<IEnvironment>());
+
+            // Substitute a capture-friendly logger BEFORE constructing ProductQuench so its
+            // _progressLog field (captured in the constructor) points at the fake.
+            var progressLog = Substitute.For<log4net.ILog>();
+            var progressLogLines = new List<string>();
+            progressLog.When(l => l.Info(Arg.Any<object>()))
+                .Do(ci => progressLogLines.Add($"{ci.Arg<object>()}"));
+            progressLog.When(l => l.Error(Arg.Any<object>()))
+                .Do(ci => progressLogLines.Add($"ERROR: {ci.Arg<object>()}"));
+            progressLog.When(l => l.Warn(Arg.Any<object>()))
+                .Do(ci => progressLogLines.Add($"WARN: {ci.Arg<object>()}"));
+            Schema.Utility.LogFactory.Register("ProgressLog", progressLog);
+            Schema.Utility.LogFactory.Register("ErrorLog", Substitute.For<log4net.ILog>());
+
+            try
+            {
+                var quench = new RecordingWorkUnitProductQuench(progressLogLines);
+                body(quench);
+            }
+            finally
+            {
+                FactoryContainer.Clear();
+                Schema.Utility.LogFactory.Clear();
+            }
+        }
+    }
+
+    /// <summary>
+    /// ProductQuench test double for slice-3 work-unit enumeration. Stubs out the live-connection
+    /// surface (<see cref="ProductQuench.GetCommand"/>, <see cref="ProductQuench.DiscoverSchemas"/>)
+    /// with in-memory result tables, captures the progress-log output for inspection, and exposes
+    /// the private <c>_updateFailed</c> flag via reflection so tests can assert on it.
+    /// </summary>
+    private sealed class RecordingWorkUnitProductQuench : ProductQuench
+    {
+        public Dictionary<string, string[]> IdentifiedDatabases { get; } = new();
+        public Dictionary<(string Server, string Db), List<string>> SchemaDiscoveryResults { get; } = new();
+        public Dictionary<(string Server, string Db), System.Exception> SchemaDiscoveryFailures { get; } = new();
+        public List<string> ProgressLogLines { get; }
+        public bool LogBackupCalled { get; private set; }
+
+        public RecordingWorkUnitProductQuench(List<string> progressLogLines)
+        {
+            ProgressLogLines = progressLogLines;
+        }
+
+        internal override IDbCommand GetCommand(string server)
+        {
+            var dbs = IdentifiedDatabases.TryGetValue(server, out var list) ? list : System.Array.Empty<string>();
+            return MakeReaderCommand(dbs);
+        }
+
+        internal override List<string> DiscoverSchemas(string server, string databaseName, Template template)
+        {
+            if (SchemaDiscoveryFailures.TryGetValue((server, databaseName), out var ex))
+                throw ex;
+            return SchemaDiscoveryResults.TryGetValue((server, databaseName), out var list)
+                ? new List<string>(list)
+                : new List<string>();
+        }
+
+        // Capture, don't dispatch. Slice-3 enumeration tests only need to assert on the work
+        // unit list shape — running the dispatcher would require a live DatabaseQuench.Execute()
+        // and a real connection, neither of which is in scope at this layer.
+        public List<WorkUnit> DispatchedWorkUnits { get; } = new();
+
+        internal override void DispatchWorkUnits(Template template, List<WorkUnit> workUnits, bool suppressKindling)
+        {
+            DispatchedWorkUnits.AddRange(workUnits);
+        }
+
+        public bool UpdateFailed
+        {
+            get
+            {
+                var fi = typeof(ProductQuench).GetField("_updateFailed",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                return (bool)fi!.GetValue(this);
+            }
+        }
+
+        public void InvokeQuenchTemplate(Template template)
+        {
+            try
+            {
+                var method = typeof(ProductQuench).GetMethod("QuenchTemplate",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                method!.Invoke(this, new object[] { template, true });
+            }
+            catch (System.Reflection.TargetInvocationException tie) when (
+                tie.InnerException is System.Exception { Message: var m } && m.Contains("BackupLogsAndExit"))
+            {
+                // LogBackup.BackupLogsAndExit calls Environment.Exit in production; in tests the
+                // file-backup mock no-ops but might still throw. Either way the test observes the
+                // failure through UpdateFailed.
+                LogBackupCalled = true;
+            }
+
+            // The check at the bottom of QuenchTemplate calls LogBackup.BackupLogsAndExit when
+            // _updateFailed is true. Under tests it's a no-op; surface the equivalent observation
+            // by reading _updateFailed directly.
+            LogBackupCalled = LogBackupCalled || UpdateFailed;
+        }
+
+        public void InvokeLogSchemaTemplateFieldsIfSet(Template template)
+        {
+            ProgressLogLines.Clear();
+            var method = typeof(ProductQuench).GetMethod("LogSchemaTemplateFieldsIfSet",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            method!.Invoke(this, new object[] { template });
+        }
+
+        private static IDbCommand MakeReaderCommand(string[] rows)
+        {
+            var command = Substitute.For<IDbCommand>();
+            command.Connection.Returns(Substitute.For<IDbConnection>());
+            command.ExecuteReader().Returns(_ => new InMemoryRowReader(rows));
+            return command;
+        }
+    }
+
+    /// <summary>
+    /// Single-column <see cref="IDataReader"/> stub that yields the supplied string values in order.
+    /// Mirrors the shape of what <c>SELECT name FROM sys.databases</c> would produce — one column,
+    /// N rows.
+    /// </summary>
+    private sealed class InMemoryRowReader : IDataReader
+    {
+        private readonly string[] _rows;
+        private int _idx = -1;
+
+        public InMemoryRowReader(string[] rows) { _rows = rows ?? System.Array.Empty<string>(); }
+
+        public bool Read() { _idx++; return _idx < _rows.Length; }
+
+        public object this[int i] => _rows[_idx];
+        public object this[string name] => _rows[_idx];
+
+        public void Dispose() { }
+        public void Close() { }
+        public bool NextResult() => false;
+        public int Depth => 0;
+        public bool IsClosed => false;
+        public int RecordsAffected => -1;
+        public int FieldCount => 1;
+
+        public string GetName(int i) => "name";
+        public string GetDataTypeName(int i) => "VARCHAR";
+        public System.Type GetFieldType(int i) => typeof(string);
+        public object GetValue(int i) => _rows[_idx];
+        public int GetValues(object[] values) { values[0] = _rows[_idx]; return 1; }
+        public int GetOrdinal(string name) => 0;
+        public bool GetBoolean(int i) => throw new System.NotSupportedException();
+        public byte GetByte(int i) => throw new System.NotSupportedException();
+        public long GetBytes(int i, long fieldOffset, byte[] buffer, int bufferoffset, int length) => 0;
+        public char GetChar(int i) => throw new System.NotSupportedException();
+        public long GetChars(int i, long fieldoffset, char[] buffer, int bufferoffset, int length) => 0;
+        public System.Guid GetGuid(int i) => throw new System.NotSupportedException();
+        public short GetInt16(int i) => throw new System.NotSupportedException();
+        public int GetInt32(int i) => throw new System.NotSupportedException();
+        public long GetInt64(int i) => throw new System.NotSupportedException();
+        public float GetFloat(int i) => throw new System.NotSupportedException();
+        public double GetDouble(int i) => throw new System.NotSupportedException();
+        public string GetString(int i) => _rows[_idx];
+        public decimal GetDecimal(int i) => throw new System.NotSupportedException();
+        public System.DateTime GetDateTime(int i) => throw new System.NotSupportedException();
+        public IDataReader GetData(int i) => throw new System.NotSupportedException();
+        public bool IsDBNull(int i) => _rows[_idx] == null;
+        public System.Data.DataTable GetSchemaTable() => null;
+    }
+
+    #endregion
 }

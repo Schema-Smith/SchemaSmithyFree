@@ -431,6 +431,7 @@ public class ProductQuench
         if (string.IsNullOrWhiteSpace(template.DatabaseIdentificationScript)) return;
 
         _progressLog.Info($"Quenching Template: {template.Name}");
+        LogSchemaTemplateFieldsIfSet(template);
         if (template.LoggableTokens.Any())
         {
             _progressLog.Info("Template Script Tokens:");
@@ -440,10 +441,21 @@ public class ProductQuench
 
         _updateFailed = false;
 
-        if (_product.Platform == Platform.SqlServer)
-            QuenchTemplateSqlServer(template, suppressKindling);
-        else
-            UpdateDatabasesForTemplate(template, suppressKindling, _primaryServer);
+        // Slice-3 fan-out: enumerate the flat work-unit list across all eligible servers, then
+        // dispatch to a single MaxThreads-bounded pool. SQL Server's per-server ServerToQuench
+        // selection is applied at enumeration; PostgreSQL/MySQL run against the primary server only.
+        var workUnits = EnumerateWorkUnitsForTemplate(template);
+
+        if (template.Required && workUnits.Count == 0)
+        {
+            _progressLog.Error($"No databases found to quench for required template {template.Name}");
+            _updateFailed = true;
+        }
+
+        if (workUnits.Count > 0 && !_updateFailed)
+        {
+            DispatchWorkUnits(template, workUnits, suppressKindling);
+        }
 
         if (!_updateFailed) return;
         _anyFailure = true;
@@ -452,64 +464,216 @@ public class ProductQuench
     }
 
     /// <summary>
-    /// SQL Server template quench: handles ServerToQuench (Primary/Secondary/Both) from SqlServerTemplate.
+    /// Per design §3.6: when a template surfaces schema-template-only fields with non-default
+    /// values, echo them through the startup log so a reader can confirm at-a-glance how the
+    /// engine will treat this template. Regular templates without these fields skip the echo —
+    /// no extra noise for the 99% case. <see cref="Template.ContinueOnDatabaseFailure"/> is the
+    /// one universal field; echo it only when set non-default.
     /// </summary>
-    private void QuenchTemplateSqlServer(Template template, bool suppressKindling)
+    private void LogSchemaTemplateFieldsIfSet(Template template)
     {
-        var serverList = new List<string>();
+        if (!template.IsSchemaTemplate && template.ContinueOnDatabaseFailure)
+            return;
+
+        if (template.IsSchemaTemplate)
+        {
+            _progressLog.Info($"  SchemaIdentificationScript: (set)");
+            _progressLog.Info($"  CreateSchemaIfMissing: {template.CreateSchemaIfMissing}");
+            _progressLog.Info($"  AllowParallel: {template.AllowParallel}");
+            _progressLog.Info($"  ContinueOnSchemaFailure: {template.ContinueOnSchemaFailure}");
+        }
+
+        if (!template.ContinueOnDatabaseFailure)
+            _progressLog.Info($"  ContinueOnDatabaseFailure: {template.ContinueOnDatabaseFailure}");
+    }
+
+    /// <summary>
+    /// Builds the flat list of work units for this template across every eligible server.
+    /// SQL Server respects <see cref="SqlServerTemplate.ServerToQuench"/> (Primary / Secondary / Both);
+    /// PostgreSQL and MySQL run against the primary server only. For schema templates, each
+    /// (server, database) pair invokes <see cref="SchemaDiscovery.Discover"/> on a live connection
+    /// before producing one work unit per discovered schema. <para>
+    /// Internal+virtual so tests can override and bypass live DB connections without re-implementing
+    /// the SQL-Server-vs-other-platforms server-selection logic. The default implementation is what
+    /// production code runs.</para>
+    /// </summary>
+    internal virtual List<WorkUnit> EnumerateWorkUnitsForTemplate(Template template)
+    {
+        var serverList = DetermineServerListForTemplate(template);
+        var workUnits = new List<WorkUnit>();
+        foreach (var server in serverList)
+        {
+            EnumerateWorkUnitsForServer(template, server, workUnits);
+        }
+        return workUnits;
+    }
+
+    /// <summary>
+    /// Returns the deduplicated server list a template runs against. SQL Server templates may
+    /// override the default Primary-only behavior via <see cref="SqlServerTemplate.ServerToQuench"/>;
+    /// PostgreSQL/MySQL templates always run against the primary server only.
+    /// </summary>
+    private List<string> DetermineServerListForTemplate(Template template)
+    {
+        if (_product.Platform != Platform.SqlServer)
+            return new List<string> { _primaryServer };
+
         var serverToQuench = ServerToQuench.Primary;
         if (template is SqlServerTemplate sqlTemplate)
             serverToQuench = sqlTemplate.ServerToQuench;
 
+        var list = new List<string>();
         if (serverToQuench is ServerToQuench.Primary or ServerToQuench.Both)
-            serverList.Add(_primaryServer);
+            list.Add(_primaryServer);
         if (serverToQuench is ServerToQuench.Secondary or ServerToQuench.Both)
-            serverList.AddRange(_secondaryServers);
-
-        var serverQueue = new TaskQueueManager<string>(_maxThreads);
-        serverList.Distinct().ToList()
-            .ForEach(server => serverQueue.AddToQueue(server, s => UpdateDatabasesForTemplate(template, suppressKindling, s)));
-        serverQueue.WaitForAll();
+            list.AddRange(_secondaryServers);
+        return list.Distinct().ToList();
     }
 
-    private void UpdateDatabasesForTemplate(Template template, bool suppressKindling, string server)
+    /// <summary>
+    /// Runs <c>template.DatabaseIdentificationScript</c> on the given server, and for each returned
+    /// database (a) opens a connection to enumerate schemas if the template is a schema template,
+    /// (b) appends one or more work units to <paramref name="workUnits"/>. Slice-3 stance: any
+    /// enumeration failure (connection, identification script, schema-discovery script, reserved-name
+    /// guard) is logged and surfaces by setting <c>_updateFailed = true</c>. Per-DB
+    /// <c>ContinueOnDatabaseFailure</c> routing arrives in slice 4.
+    /// </summary>
+    private void EnumerateWorkUnitsForServer(Template template, string server, List<WorkUnit> workUnits)
     {
-        var dbList = new List<DatabaseQuench>();
-        var dbQueue = new TaskQueueManager<DatabaseQuench>(_maxThreads);
-        using var command = GetCommand(server);
+        _progressLog.Info($"Locate Databases To Quench ({server})");
+        List<string> databases;
+        using (var command = GetCommand(server))
+        {
+            try
+            {
+                command.CommandText = template.DatabaseIdentificationScript;
+                databases = new List<string>();
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                    databases.Add($"{reader[0]}");
+            }
+            finally
+            {
+                command.Connection?.Close();
+                command.Connection?.Dispose();
+            }
+        }
+
+        foreach (var db in databases)
+        {
+            if (template.IsSchemaTemplate)
+            {
+                List<string> schemas;
+                try
+                {
+                    schemas = DiscoverSchemas(server, db, template);
+                }
+                catch (Exception e)
+                {
+                    _progressLog.Error($"Schema discovery FAILED for template {template.Name} on {server}.{db}: {e.Message}");
+                    _errorLog.Error($"Schema discovery failed for {server}.{db} (template {template.Name}):\r\n{e}");
+                    _updateFailed = true;
+                    continue;
+                }
+
+                foreach (var schema in schemas)
+                    workUnits.Add(new WorkUnit(server, db, template.Name, schema));
+            }
+            else
+            {
+                workUnits.Add(new WorkUnit(server, db, template.Name, ""));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Opens a per-DB connection and runs <see cref="SchemaDiscovery.Discover"/>. Factored out so
+    /// tests can override schema discovery without standing up a live connection.
+    /// </summary>
+    internal virtual List<string> DiscoverSchemas(string server, string databaseName, Template template)
+    {
+        using var dbCommand = GetCommandForDatabase(server, databaseName);
         try
         {
-            _progressLog.Info("Locate Databases To Quench");
-            command.CommandText = template.DatabaseIdentificationScript;
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                var quench = new DatabaseQuench(server, _product, template, $"{reader[0]}", suppressKindling,
-                    _whatIfOnly, _runScriptsTwice, _dropRemovedTables, _product.DropUnknownIndexes,
-                    _updateTables && template.Tables.Count > 0, _deliverData, _checkpointing,
-                    _trackRunOnceMigrations, _pruneObsoleteMigrationTracking);
-                dbList.Add(quench);
-                dbQueue.AddToQueue(quench, db => db.Execute());
-            }
+            return SchemaDiscovery.Discover(dbCommand, template);
         }
         finally
         {
-            command.Connection?.Close();
-            command.Connection?.Dispose();
+            dbCommand.Connection?.Close();
+            dbCommand.Connection?.Dispose();
         }
+    }
 
-        dbQueue.WaitForAll();
-
-        if (template.Required && dbList.Count == 0)
+    /// <summary>
+    /// Opens a command against a specific database on a server (vs. the platform-default init DB
+    /// used by <see cref="GetCommand"/>). Used by schema discovery, which needs to query schemas
+    /// in the actual target DB. Test override pattern same as <see cref="GetCommand"/>.
+    /// </summary>
+    internal virtual IDbCommand GetCommandForDatabase(string server, string databaseName)
+    {
+        var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
+        string connectionString;
+        if (!string.IsNullOrEmpty(connectionStringOverride) && server == _primaryServer)
         {
-            _progressLog.Error($"No databases found to quench for required template {template.Name} on server {server}");
-            _updateFailed = true;
-            return;
+            connectionString = connectionStringOverride;
         }
+        else
+        {
+            var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+            connectionString = ConnectionString.Build(_product.Platform, server, databaseName,
+                _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
+        }
+        var factory = DbConnectionFactory.ForPlatform(_product.Platform);
+        var connection = factory.GetDbConnection(connectionString);
+        connection.Open();
+        var command = connection.CreateCommand();
+        command.CommandTimeout = 0;
+        return command;
+    }
 
-        if (dbList.All(d => d.QuenchSuccessful)) return;
-        _progressLog.Error($"One or more database quenches FAILED on {server}");
-        _updateFailed = true;
+    /// <summary>
+    /// Dispatches the enumerated work units through <see cref="WorkUnitDispatcher"/>. Each work
+    /// unit's callback constructs a fresh <see cref="DatabaseQuench"/> and invokes
+    /// <see cref="DatabaseQuench.Execute"/>; if <see cref="DatabaseQuench.QuenchSuccessful"/> is
+    /// false, the callback throws to engage the dispatcher's slice-3 fail-loud path. The slice-3
+    /// stance is "any failure aborts the template"; slice 4 swaps in the
+    /// <c>ContinueOnSchemaFailure</c> / <c>ContinueOnDatabaseFailure</c> isolation policies.
+    /// <para>Internal+virtual so tests can intercept the dispatch step.</para>
+    /// </summary>
+    internal virtual void DispatchWorkUnits(Template template, List<WorkUnit> workUnits, bool suppressKindling)
+    {
+        var allowParallel = new Dictionary<string, bool> { [template.Name] = template.AllowParallel };
+        var dispatcher = new WorkUnitDispatcher(workUnits, _maxThreads, allowParallel,
+            unit => RunOneWorkUnit(unit, template, suppressKindling));
+        try
+        {
+            dispatcher.Run();
+        }
+        catch (AggregateException ae)
+        {
+            _updateFailed = true;
+            _progressLog.Error($"Template '{template.Name}' had {ae.InnerExceptions.Count} failed work unit(s)");
+        }
+    }
+
+    /// <summary>
+    /// The dispatcher callback: build a <see cref="DatabaseQuench"/> for the work unit and run it.
+    /// Throws on failure so the dispatcher engages its fail-loud abort path (slice 3).
+    /// </summary>
+    private void RunOneWorkUnit(WorkUnit unit, Template template, bool suppressKindling)
+    {
+        var quench = new DatabaseQuench(unit.Server, _product, template, unit.DatabaseName, unit.SchemaName,
+            suppressKindling, _whatIfOnly, _runScriptsTwice, _dropRemovedTables,
+            _product.DropUnknownIndexes,
+            _updateTables && template.Tables.Count > 0, _deliverData, _checkpointing,
+            _trackRunOnceMigrations, _pruneObsoleteMigrationTracking);
+        quench.Execute();
+        if (!quench.QuenchSuccessful)
+        {
+            // Slice 3 fail-loud: surface to dispatcher so the rest of the template's units abort.
+            var schemaSuffix = string.IsNullOrEmpty(unit.SchemaName) ? "" : $" [Schema: {unit.SchemaName}]";
+            throw new Exception($"Work unit failed: {unit.Server}.{unit.DatabaseName}{schemaSuffix} (template {unit.TemplateName})");
+        }
     }
 
     private void QuenchScriptsWithCheckpoint(IDbCommand destCmd, List<SqlScript> scriptList, string server, bool isBefore)
