@@ -116,5 +116,79 @@ namespace Schema.UnitTests.Domain
 
             Assert.That(template.IsIterationScoped("Bogus"), Is.False);
         }
+
+        [Test]
+        public void IsIterationScoped_LookupIsCaseInsensitive()
+        {
+            // Token names are case-insensitive throughout the token system (SqlScript.TokenReplace
+            // matches case-insensitively at runtime); the resolution map must agree, otherwise
+            // callers querying with a casing different from the walk's keys would get wrong-false.
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens = { ["TenantId"] = "<*Query*>SELECT TenantId FROM {{SchemaName}}.Config" }
+            };
+
+            template.ResolveTokenScopes();
+
+            Assert.That(template.IsIterationScoped("TenantId"), Is.True);
+            Assert.That(template.IsIterationScoped("tenantid"), Is.True);
+            Assert.That(template.IsIterationScoped("TENANTID"), Is.True);
+        }
+
+        [Test]
+        public void TokenReferencingLowercaseSchemaName_AlsoMarkedIterationScoped()
+        {
+            // {{schemaname}} (any casing) is recognized as the iteration trigger — locks in the
+            // case-insensitive matching the walk applies via TokenHelper.GetTokensFromString.
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens = { ["TenantId"] = "<*Query*>SELECT TenantId FROM {{schemaname}}.Config" }
+            };
+
+            template.ResolveTokenScopes();
+
+            Assert.That(template.IsIterationScoped("TenantId"), Is.True);
+        }
+
+        [Test]
+        public void TokenReferencingItself_DetectedAsCycle()
+        {
+            // Degenerate single-node cycle (A → A). The walk must surface this as a cycle rather
+            // than silently looping or treating the self-reference as an unknown name.
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens = { ["A"] = "<*Query*>SELECT {{A}}" }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => template.ResolveTokenScopes());
+            Assert.That(ex!.Message, Does.Contain("cycle").IgnoreCase);
+            Assert.That(ex.Message, Does.Contain("A"));
+        }
+
+        [Test]
+        public void TokenCycle_ThreeNodes_DetectedAtLoad()
+        {
+            // A → B → C → A. All three should appear in the cycle-path message; the order in
+            // which Walk happens to encounter them first doesn't matter, but each must be named.
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens =
+                {
+                    ["A"] = "<*Query*>SELECT {{B}}",
+                    ["B"] = "<*Query*>SELECT {{C}}",
+                    ["C"] = "<*Query*>SELECT {{A}}"
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => template.ResolveTokenScopes());
+            Assert.That(ex!.Message, Does.Contain("cycle").IgnoreCase);
+            Assert.That(ex.Message, Does.Contain("A"));
+            Assert.That(ex.Message, Does.Contain("B"));
+            Assert.That(ex.Message, Does.Contain("C"));
+        }
     }
 }

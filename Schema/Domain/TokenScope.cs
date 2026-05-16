@@ -9,7 +9,7 @@ namespace Schema.Domain
     /// walk only ever ESCALATES a token's scope when its body (directly or transitively) references
     /// <c>{{SchemaName}}</c>.
     /// </summary>
-    public enum TokenScope : ushort
+    public enum TokenScope
     {
         /// <summary>Fully static, no &lt;*Query*&gt; — resolved once per product (today's behavior).</summary>
         PerProduct,

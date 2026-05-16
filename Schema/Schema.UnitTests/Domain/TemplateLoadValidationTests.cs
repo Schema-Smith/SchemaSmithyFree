@@ -411,22 +411,6 @@ namespace Schema.UnitTests.Domain
         }
 
         [Test]
-        public void RegularTemplate_CreateSchemaIfMissingTrue_WarnsButLoads()
-        {
-            // CreateSchemaIfMissing=true without SchemaIdentificationScript is the hard-reject (rule 5).
-            // But what if CreateSchemaIfMissing is set to its *default* (false) on a regular template? That's fine.
-            // The warning path covers: regular template with CreateSchemaIfMissing set "non-default" — but since
-            // CreateSchemaIfMissing's default is false, and any "non-default" is true, and true is already rejected
-            // by rule 5… there's no warn path for CreateSchemaIfMissing distinct from rule 5. So this test asserts
-            // that the rule-5 hard error happens BEFORE the warning logic on a regular template.
-            // (Documented here so a future reader doesn't wonder why the schema-only fields enumerated in
-            // CLAUDE.md don't all have a warn case.)
-            Assert.Pass(
-                "CreateSchemaIfMissing=true is always rejected by rule 5 (presence check). " +
-                "No warn-only path exists distinct from that error.");
-        }
-
-        [Test]
         public void RegularTemplate_ContinueOnDatabaseFailureFalse_NoWarning()
         {
             // ContinueOnDatabaseFailure applies universally — it's DB-level, not schema-template-specific.

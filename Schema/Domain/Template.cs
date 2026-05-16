@@ -160,6 +160,19 @@ namespace Schema.Domain
         private Dictionary<string, TokenScope> _tokenScopes;
 
         /// <summary>
+        /// Database-scoped ObjectTypes that schema templates may not declare ScriptFolders for —
+        /// these cannot fan out per schema iteration and must live on a regular template that runs
+        /// earlier in TemplateOrder. See <see cref="ValidateSchemaTemplateRules"/> rule 2.
+        /// </summary>
+        private static readonly HashSet<ScriptObjectType> DisallowedSchemaTemplateObjectTypes = new()
+        {
+            ScriptObjectType.Schemas,
+            ScriptObjectType.DDLTriggers,
+            ScriptObjectType.FullTextCatalogs,
+            ScriptObjectType.FullTextStopLists
+        };
+
+        /// <summary>
         /// The path used for logging (stripped of long path prefix).
         /// </summary>
         [JsonIgnore]
@@ -534,6 +547,13 @@ namespace Schema.Domain
         {
             // Rule 5 applies regardless of platform / SchemaIdentificationScript presence:
             // a true value here without a discovery script is always a config error.
+            // Note: this is intentionally a hard throw rather than a warn. CreateSchemaIfMissing's
+            // default is false, so any "non-default" on a regular template means the user explicitly
+            // set it to true — and a true value without a SchemaIdentificationScript can never do
+            // anything useful (no schemas to discover, no fan-out to perform). There is no
+            // distinct warn path for this field on regular templates — the schema-only-field
+            // warn surface (see WarnIfSchemaOnlyFieldsSetOnRegularTemplate) deliberately omits
+            // CreateSchemaIfMissing for that reason.
             if (CreateSchemaIfMissing && !IsSchemaTemplate)
                 throw new InvalidOperationException(
                     $"Template '{Name}' (file: {FilePath}) sets CreateSchemaIfMissing=true but " +
@@ -553,14 +573,7 @@ namespace Schema.Domain
                     $"instead (one DatabaseIdentificationScript-driven template per tenant DB).");
 
             // Rule 2: database-scoped ObjectType rejection.
-            var disallowed = new HashSet<ScriptObjectType>
-            {
-                ScriptObjectType.Schemas,
-                ScriptObjectType.DDLTriggers,
-                ScriptObjectType.FullTextCatalogs,
-                ScriptObjectType.FullTextStopLists
-            };
-            var offending = ScriptFolders.FirstOrDefault(f => disallowed.Contains(f.ObjectType));
+            var offending = ScriptFolders.FirstOrDefault(f => DisallowedSchemaTemplateObjectTypes.Contains(f.ObjectType));
             if (offending != null)
                 throw new InvalidOperationException(
                     $"Template '{Name}' (file: {FilePath}) is a schema template but declares a " +
@@ -602,7 +615,7 @@ namespace Schema.Domain
                     throw new InvalidOperationException(
                         $"Template '{Name}' (file: {FilePath}) is a schema template; the {ownerKind} " +
                         $"file '{fileName}' has a schema-qualified name. Schema templates require " +
-                        $"unqualified filenames — rename to '{bareName.Substring(bareName.IndexOf('.') + 1)}.json' " +
+                        $"unqualified filenames — rename to '{bareName.Substring(bareName.LastIndexOf('.') + 1)}.json' " +
                         $"(the schema is supplied per iteration via {{{{SchemaName}}}}).");
                 }
             }
@@ -643,11 +656,16 @@ namespace Schema.Domain
         /// </summary>
         public void ResolveTokenScopes()
         {
-            _tokenScopes = new Dictionary<string, TokenScope>();
+            _tokenScopes = new Dictionary<string, TokenScope>(StringComparer.OrdinalIgnoreCase);
 
             // Walk QueryTokens and NonQueryTokens together — both can splice {{SchemaName}}.
             // Static (non-query) tokens that include {{SchemaName}} in their body are still
             // iteration-scoped: their substituted value differs per iteration.
+            // The NonQueryTokens.Where(...!QueryTokens.ContainsKey...) filter is dead defense on the
+            // production Load path (TokenHelper.SplitOutQueryTokens leaves the two dictionaries
+            // disjoint by construction), but it matters for tests that hand-construct a Template
+            // and populate both dictionaries with overlapping keys — without the filter, the
+            // ToDictionary call would throw on a duplicate key before validation could surface it.
             var allBodies = QueryTokens
                 .Concat(NonQueryTokens.Where(nq => !QueryTokens.ContainsKey(nq.Key)))
                 .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
@@ -657,10 +675,13 @@ namespace Schema.Domain
                 defaultScope[kv.Key] = QueryTokens.ContainsKey(kv.Key) ? TokenScope.PerDb : TokenScope.PerProduct;
 
             var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Ordered recursion stack — mirrors `visiting` but preserves insertion order so the
+            // cycle-detection error message names ONLY the cycle nodes (sliced from where `name`
+            // first appears), not arbitrary prefix nodes that led to the cycle entry point.
+            var visitingStack = new List<string>();
             foreach (var name in allBodies.Keys.ToList())
                 Walk(name);
 
-            // Defensive copy back so external mutation of allBodies doesn't matter.
             return;
 
             TokenScope Walk(string name)
@@ -674,10 +695,20 @@ namespace Schema.Domain
                     return TokenScope.PerProduct;
                 }
                 if (!visiting.Add(name))
+                {
+                    // Slice the stack from the first occurrence of `name` so the path message names
+                    // only the cycle itself (e.g. A → B → A), not prefix nodes that led into it.
+                    var startIndex = visitingStack.FindIndex(
+                        x => string.Equals(x, name, StringComparison.OrdinalIgnoreCase));
+                    var cyclePath = startIndex >= 0
+                        ? visitingStack.GetRange(startIndex, visitingStack.Count - startIndex)
+                        : visitingStack;
                     throw new InvalidOperationException(
                         $"Cycle detected in template '{Name}' token graph involving '{name}'. " +
-                        $"The token graph contains a cycle: {string.Join(" → ", visiting)} → {name}. " +
+                        $"The token graph contains a cycle: {string.Join(" → ", cyclePath)} → {name}. " +
                         $"Remove the circular reference between these tokens.");
+                }
+                visitingStack.Add(name);
 
                 try
                 {
@@ -711,6 +742,9 @@ namespace Schema.Domain
                 finally
                 {
                     visiting.Remove(name);
+                    if (visitingStack.Count > 0 && string.Equals(
+                            visitingStack[^1], name, StringComparison.OrdinalIgnoreCase))
+                        visitingStack.RemoveAt(visitingStack.Count - 1);
                 }
             }
         }
