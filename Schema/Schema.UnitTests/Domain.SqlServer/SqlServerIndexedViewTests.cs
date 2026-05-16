@@ -27,7 +27,9 @@ namespace Schema.UnitTests.Domain.SqlServer
             var view = new SqlServerIndexedView();
             Assert.Multiple(() =>
             {
-                Assert.That(view.Schema, Is.EqualTo("dbo"));
+                // Slice 1 (Schema Templates): bare-constructor Schema is null;
+                // SchemaDefaultResolver fills it. See SchemaDefaultResolverTests.
+                Assert.That(view.Schema, Is.Null);
                 Assert.That(view.Name, Is.EqualTo(""));
                 Assert.That(view.Definition, Is.EqualTo(""));
                 Assert.That(view.ShouldApplyExpression, Is.Null);

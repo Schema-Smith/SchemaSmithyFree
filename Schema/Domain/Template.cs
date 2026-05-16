@@ -25,12 +25,31 @@ namespace Schema.Domain
         public string DatabaseIdentificationScript { get; set; }
 
         /// <summary>
-        /// Backward compatibility: MySQL uses "Schema" and "Database" interchangeably.
-        /// Accepts "SchemaIdentificationScript" in JSON, maps to DatabaseIdentificationScript.
-        /// Write-only — never serialized back to JSON.
+        /// Schema templates (SQL Server / PostgreSQL only): a query returning one column,
+        /// N rows; each row is a schema name to iterate over. When set, the engine fans the
+        /// template out across the returned schemas, exposing the active name as the
+        /// {{SchemaName}} token. Mirrors <see cref="DatabaseIdentificationScript"/> semantics,
+        /// one level down.
+        ///
+        /// PLATFORM-SPECIFIC NOTE: This JSON field name has historically been a backward-compat
+        /// alias for <see cref="DatabaseIdentificationScript"/> on MySQL packages (MySQL conflates
+        /// "schema" and "database"). To preserve that backward compat without breaking existing
+        /// MySQL packages, <see cref="Load(string, Product)"/> performs a platform-aware migration
+        /// after deserialization: on MySQL, a value found here is moved into
+        /// <see cref="DatabaseIdentificationScript"/> (when that is null) and a deprecation warning
+        /// is logged. On SQL Server / PostgreSQL, the value drives the new schema-template
+        /// fan-out feature unchanged. The schema-template feature is intentionally not offered on
+        /// MySQL (no namespace-inside-database concept) — see design doc §2 for rationale.
         /// </summary>
-        [JsonProperty("SchemaIdentificationScript")]
-        private string SchemaIdentificationScriptCompat { set => DatabaseIdentificationScript ??= value; }
+        [JsonProperty(Order = 11, NullValueHandling = NullValueHandling.Ignore)]
+        public string SchemaIdentificationScript { get; set; }
+
+        /// <summary>
+        /// True when this template fans out across schemas (i.e. <see cref="SchemaIdentificationScript"/>
+        /// is non-empty after platform-aware migration). False for regular templates.
+        /// </summary>
+        [JsonIgnore]
+        public bool IsSchemaTemplate => !string.IsNullOrWhiteSpace(SchemaIdentificationScript);
 
         [JsonProperty(Order = 3)]
         public string VersionStampScript { get; set; }
@@ -174,6 +193,8 @@ namespace Schema.Domain
             template.FilePath = templateFilePath;
             template.Product = product;
 
+            template.MigrateMySqlSchemaIdentificationScriptAlias();
+
             foreach (var token in template.ScriptTokens)
                 template.LoggableTokens.Add(token.Key, token.Value);
 
@@ -186,7 +207,32 @@ namespace Schema.Domain
                 .ToDictionary(k => k.Key, v => v.Value);
 
             template.InstanceLoad(scriptTokens, product.Platform);
+
+            SchemaDefaultResolver.Resolve(template);
+
             return template;
+        }
+
+        /// <summary>
+        /// Backward compatibility: on MySQL, <see cref="SchemaIdentificationScript"/> was historically
+        /// an alias for <see cref="DatabaseIdentificationScript"/> (MySQL conflates the two concepts).
+        /// MySQL packages still in the wild may use the legacy field name. When a MySQL template
+        /// arrives with the legacy alias populated, migrate the value into the canonical field
+        /// (when that is null), warn the user to rename, and clear the alias so downstream code
+        /// sees a regular MySQL template (no schema-fan-out, which is intentionally SQL-Server /
+        /// PostgreSQL only — see design doc §2).
+        /// </summary>
+        private void MigrateMySqlSchemaIdentificationScriptAlias()
+        {
+            if (Product?.Platform != Platform.MySQL) return;
+            if (string.IsNullOrWhiteSpace(SchemaIdentificationScript)) return;
+
+            DatabaseIdentificationScript ??= SchemaIdentificationScript;
+            LogFactory.GetLogger("ProgressLog").Warn(
+                $"Template '{Name}' (MySQL) uses the legacy 'SchemaIdentificationScript' alias. " +
+                $"Rename the field to 'DatabaseIdentificationScript' in {FilePath}. " +
+                $"The alias is preserved for backward compatibility and migrates the value silently.");
+            SchemaIdentificationScript = null;
         }
 
         private void InstanceLoad(Dictionary<string, string> scriptTokens, Platform platform)

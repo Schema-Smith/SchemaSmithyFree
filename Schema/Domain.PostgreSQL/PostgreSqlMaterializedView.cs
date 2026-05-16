@@ -13,9 +13,10 @@ namespace Schema.Domain.PostgreSQL
         [JsonProperty(Order = 1)]
         public string Name { get; set; } = "";
 
-        [JsonProperty(Order = 2)]
-        [DefaultValue("public")]
-        public string Schema { get; set; } = "public";
+        // Default resolution moved to SchemaDefaultResolver. Regular templates: defaults to "public".
+        // Schema templates: defaults to "{{SchemaName}}"; explicit literals are rejected at load.
+        [JsonProperty(Order = 2, NullValueHandling = NullValueHandling.Ignore)]
+        public string Schema { get; set; }
 
         [SchemaProperty(Required = true)]
         [JsonProperty(Order = 3)]

@@ -20,7 +20,9 @@ namespace Schema.UnitTests.Domain.PostgreSQL
         {
             var fk = new PostgreSqlForeignKey();
 
-            Assert.That(fk.RelatedTableSchema, Is.EqualTo("public"));
+            // Slice 1 (Schema Templates): bare-constructor RelatedTableSchema is null;
+            // SchemaDefaultResolver fills it. See PostgreSqlForeignKeyDefaultingTests.
+            Assert.That(fk.RelatedTableSchema, Is.Null);
             Assert.That(fk.Deferrable, Is.False);
             Assert.That(fk.InitiallyDeferred, Is.False);
             Assert.That(fk.MatchType, Is.EqualTo("FULL"));

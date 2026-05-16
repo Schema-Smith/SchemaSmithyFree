@@ -27,7 +27,10 @@ namespace Schema.UnitTests.Domain.SqlServer
         {
             var table = new SqlServerTable();
 
-            Assert.That(table.Schema, Is.EqualTo("dbo"));
+            // Slice 1 (Schema Templates): bare-constructor Schema is null; the load-time
+            // SchemaDefaultResolver fills it (with "dbo" for regular templates, "{{SchemaName}}"
+            // for schema templates). See SqlServerTableDefaultingTests for the resolved-state contract.
+            Assert.That(table.Schema, Is.Null);
             Assert.That(table.CompressionType, Is.EqualTo("NONE"));
             Assert.That(table.IsTemporal, Is.False);
             Assert.That(table.XmlIndexes, Is.Not.Null.And.Empty);
