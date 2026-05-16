@@ -123,7 +123,8 @@ public class CheckpointIntegrationTests
             manager.MarkScriptCompleted(scope, "Before", "MigrationScripts/Script1.sql");
             manager.MarkScriptCompleted(scope, "Object", "Functions/Func1.sql");
 
-            var filePath = Path.Combine(_checkpointDir, "TestProduct.Main.localhost.TestDB.checkpoint");
+            // Slice 2: filename includes a 5th segment for SchemaName (empty for regular templates).
+            var filePath = Path.Combine(_checkpointDir, "TestProduct.Main.localhost.TestDB..checkpoint");
             Assert.That(File.Exists(filePath), Is.True, "Database checkpoint file should exist on disk");
 
             var content = File.ReadAllText(filePath);
@@ -174,8 +175,9 @@ public class CheckpointIntegrationTests
             manager.MarkStepCompleted(scope1, "KindleForge");
             manager.MarkStepCompleted(scope2, "KindleForge");
 
-            var path1 = Path.Combine(_checkpointDir, "TestProduct.Main.localhost.DB1.checkpoint");
-            var path2 = Path.Combine(_checkpointDir, "TestProduct.Main.localhost.DB2.checkpoint");
+            // Slice 2: filename includes a 5th segment for SchemaName (empty for regular templates).
+            var path1 = Path.Combine(_checkpointDir, "TestProduct.Main.localhost.DB1..checkpoint");
+            var path2 = Path.Combine(_checkpointDir, "TestProduct.Main.localhost.DB2..checkpoint");
             Assert.That(File.Exists(path1), Is.True);
             Assert.That(File.Exists(path2), Is.True);
 

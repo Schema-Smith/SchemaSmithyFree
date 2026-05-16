@@ -22,6 +22,18 @@ CALL "SchemaSmith"."TableQuench"(p_ProductName := 'SchemaQuench', p_TableDefinit
       "Nullable": false
     },
     {
+      "Name": "template_name",
+      "DataType": "VARCHAR(256)",
+      "Nullable": false,
+      "Default": "''''"
+    },
+    {
+      "Name": "schema_name",
+      "DataType": "VARCHAR(256)",
+      "Nullable": false,
+      "Default": "''''"
+    },
+    {
       "Name": "QuenchDate",
       "DataType": "TIMESTAMP",
       "Nullable": false,
@@ -36,7 +48,7 @@ CALL "SchemaSmith"."TableQuench"(p_ProductName := 'SchemaQuench', p_TableDefinit
       "UniqueConstraint": false,
       "Clustered": true,
       "FillFactor": 0,
-      "IndexColumns": "ScriptPath,ProductName,QuenchSlot"
+      "IndexColumns": "ScriptPath,ProductName,QuenchSlot,template_name,schema_name"
     }
   ]
 }', p_DropUnknownIndexes := TRUE, p_DropTablesRemovedFromProduct := FALSE);

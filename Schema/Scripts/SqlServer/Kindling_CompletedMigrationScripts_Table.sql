@@ -23,6 +23,18 @@ EXEC SchemaSmith.TableQuench @ProductName = 'SchemaQuench', @TableDefinitions = 
       "Nullable": false
     },
     {
+      "Name": "[template_name]",
+      "DataType": "NVARCHAR(256)",
+      "Nullable": false,
+      "Default": "''''"
+    },
+    {
+      "Name": "[schema_name]",
+      "DataType": "NVARCHAR(256)",
+      "Nullable": false,
+      "Default": "''''"
+    },
+    {
       "Name": "[QuenchDate]",
       "DataType": "DATETIME",
       "Nullable": false,
@@ -39,7 +51,7 @@ EXEC SchemaSmith.TableQuench @ProductName = 'SchemaQuench', @TableDefinitions = 
       "Clustered": true,
       "ColumnStore": false,
       "FillFactor": 0,
-      "IndexColumns": "[ScriptPath],[Productname],[QuenchSlot]"
+      "IndexColumns": "[ScriptPath],[Productname],[QuenchSlot],[template_name],[schema_name]"
     }
   ]
 }', @DropUnknownIndexes = 1, @DropTablesRemovedFromProduct = 0

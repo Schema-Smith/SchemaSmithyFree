@@ -305,10 +305,12 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "0", false, "0", "0", false, false, null);
 
-        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql");
+        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("SchemaSmith.CompletedMigrationScripts"));
         Assert.That(sql, Does.Contain("[ProductName]"));
         Assert.That(sql, Does.Contain("[QuenchSlot]"));
+        Assert.That(sql, Does.Contain("[template_name] IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("[schema_name] = ''"));
     }
 
     [Test]
@@ -318,9 +320,11 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "false", false, "false", "false", false, false, null);
 
-        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql");
+        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("\"SchemaSmith\".\"CompletedMigrationScripts\""));
         Assert.That(sql, Does.Contain("\"ProductName\""));
+        Assert.That(sql, Does.Contain("template_name IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("schema_name = ''"));
     }
 
     [Test]
@@ -330,9 +334,11 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "0", false, "0", "0", false, false, null);
 
-        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql");
+        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("`SchemaSmith_CompletedMigrationScripts`"));
         Assert.That(sql, Does.Contain("`ProductName`"));
+        Assert.That(sql, Does.Contain("`template_name` IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("`schema_name` = ''"));
     }
 
     [Test]
@@ -342,8 +348,10 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "0", false, "0", "0", false, false, null);
 
-        var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before");
+        var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before", "T", "");
         Assert.That(sql, Does.Contain("WITH (NOLOCK)"));
+        Assert.That(sql, Does.Contain("[template_name] IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("[schema_name] = ''"));
     }
 
     [Test]
@@ -353,9 +361,11 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "false", false, "false", "false", false, false, null);
 
-        var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before");
+        var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before", "T", "tenant_acme");
         Assert.That(sql, Does.Not.Contain("NOLOCK"));
         Assert.That(sql, Does.Contain("\"SchemaSmith\".\"CompletedMigrationScripts\""));
+        Assert.That(sql, Does.Contain("template_name IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("schema_name = 'tenant_acme'"));
     }
 
     [Test]
@@ -365,9 +375,11 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "0", false, "0", "0", false, false, null);
 
-        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before");
+        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before", "TenantBody", "tenant_acme");
         Assert.That(sql, Does.Contain("INSERT SchemaSmith.CompletedMigrationScripts"));
         Assert.That(sql, Does.Contain("path/script.sql"));
+        Assert.That(sql, Does.Contain("'TenantBody'"));
+        Assert.That(sql, Does.Contain("'tenant_acme'"));
     }
 
     [Test]
@@ -377,8 +389,10 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "false", false, "false", "false", false, false, null);
 
-        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before");
+        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before", "TenantBody", "tenant_acme");
         Assert.That(sql, Does.Contain("INSERT INTO \"SchemaSmith\".\"CompletedMigrationScripts\""));
+        Assert.That(sql, Does.Contain("template_name"));
+        Assert.That(sql, Does.Contain("schema_name"));
     }
 
     [Test]
@@ -388,8 +402,10 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "0", false, "0", "0", false, false, null);
 
-        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before");
+        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before", "T", "");
         Assert.That(sql, Does.Contain("INSERT INTO `SchemaSmith_CompletedMigrationScripts`"));
+        Assert.That(sql, Does.Contain("`template_name`"));
+        Assert.That(sql, Does.Contain("`schema_name`"));
     }
 
     [TestCase(Platform.SqlServer)]
@@ -402,15 +418,15 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, falseValue, false, falseValue, falseValue, false, false, null);
 
-        var selectSql = quench.GetSelectCompletedScriptsSql("O'Brien", "Before's");
-        var deleteSql = quench.GetDeleteCompletedScriptSql("O'Brien", "Before's", "scripts/O'Brien.sql");
-        var insertSql = quench.GetInsertCompletedScriptSql("scripts/O'Brien.sql", "O'Brien", "Before's");
+        var selectSql = quench.GetSelectCompletedScriptsSql("O'Brien", "Before's", "Tem'plate", "schem'a");
+        var deleteSql = quench.GetDeleteCompletedScriptSql("O'Brien", "Before's", "scripts/O'Brien.sql", "Tem'plate", "schem'a");
+        var insertSql = quench.GetInsertCompletedScriptSql("scripts/O'Brien.sql", "O'Brien", "Before's", "Tem'plate", "schem'a");
 
         Assert.Multiple(() =>
         {
-            Assert.That(selectSql, Does.Contain("O''Brien").And.Contain("Before''s"));
-            Assert.That(deleteSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("scripts/O''Brien.sql"));
-            Assert.That(insertSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("scripts/O''Brien.sql"));
+            Assert.That(selectSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("Tem''plate").And.Contain("schem''a"));
+            Assert.That(deleteSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("scripts/O''Brien.sql").And.Contain("Tem''plate").And.Contain("schem''a"));
+            Assert.That(insertSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("scripts/O''Brien.sql").And.Contain("Tem''plate").And.Contain("schem''a"));
         });
     }
 

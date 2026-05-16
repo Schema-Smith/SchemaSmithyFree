@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS `SchemaSmith_CompletedMigrationScripts` (
     `ProductName` VARCHAR(100) NOT NULL,
     `QuenchSlot` VARCHAR(50) NOT NULL,
     `ScriptPath` VARCHAR(500) NOT NULL,
+    `template_name` VARCHAR(255) NOT NULL DEFAULT '',
+    `schema_name` VARCHAR(255) NOT NULL DEFAULT '',
     `CompletedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY `uk_script` (`ProductName`, `QuenchSlot`, `ScriptPath`(255))
+    UNIQUE KEY `uk_script` (`ProductName`, `QuenchSlot`, `ScriptPath`(200), `template_name`(50), `schema_name`(50))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

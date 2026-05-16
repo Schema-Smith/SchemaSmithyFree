@@ -195,7 +195,7 @@ public class FileCheckpointManager : ICheckpointing
     {
         if (!IsDatabaseScope(scope)) return DatabaseCheckpointSummary.Empty;
 
-        var filePath = GetDatabaseCheckpointPath(scope.ProductName, scope.TemplateName, scope.Server, scope.DatabaseName);
+        var filePath = GetDatabaseCheckpointPath(scope.ProductName, scope.TemplateName, scope.Server, scope.DatabaseName, scope.SchemaName);
         if (!File.Exists(filePath)) return DatabaseCheckpointSummary.Empty;
 
         var checkpoint = GetOrLoadDatabaseCheckpoint(scope);
@@ -211,26 +211,28 @@ public class FileCheckpointManager : ICheckpointing
 
     private DatabaseCheckpoint GetOrLoadDatabaseCheckpoint(TrackingScope scope)
     {
-        var key = $"{scope.ProductName}|{scope.TemplateName}|{scope.Server}|{scope.DatabaseName}";
-        return _dbCheckpoints.GetOrAdd(key, _ => LoadDatabaseCheckpoint(scope));
+        // CompositeKey includes SchemaName so two iterations of the same template against
+        // the same DB but for different tenant schemas don't collide.
+        return _dbCheckpoints.GetOrAdd(scope.CompositeKey, _ => LoadDatabaseCheckpoint(scope));
     }
 
     private DatabaseCheckpoint LoadDatabaseCheckpoint(TrackingScope scope)
     {
-        var filePath = GetDatabaseCheckpointPath(scope.ProductName, scope.TemplateName, scope.Server, scope.DatabaseName);
+        var filePath = GetDatabaseCheckpointPath(scope.ProductName, scope.TemplateName, scope.Server, scope.DatabaseName, scope.SchemaName);
         if (!File.Exists(filePath))
             return new DatabaseCheckpoint
             {
                 ProductName = scope.ProductName,
                 TemplateName = scope.TemplateName,
                 Server = scope.Server,
-                DatabaseName = scope.DatabaseName
+                DatabaseName = scope.DatabaseName,
+                SchemaName = scope.SchemaName ?? ""
             };
 
         try
         {
             var content = File.ReadAllText(filePath);
-            return ParseDatabaseCheckpoint(content, scope.ProductName, scope.TemplateName, scope.Server, scope.DatabaseName);
+            return ParseDatabaseCheckpoint(content, scope.ProductName, scope.TemplateName, scope.Server, scope.DatabaseName, scope.SchemaName);
         }
         catch
         {
@@ -239,14 +241,15 @@ public class FileCheckpointManager : ICheckpointing
                 ProductName = scope.ProductName,
                 TemplateName = scope.TemplateName,
                 Server = scope.Server,
-                DatabaseName = scope.DatabaseName
+                DatabaseName = scope.DatabaseName,
+                SchemaName = scope.SchemaName ?? ""
             };
         }
     }
 
     private void SaveDatabaseCheckpoint(DatabaseCheckpoint checkpoint)
     {
-        var filePath = GetDatabaseCheckpointPath(checkpoint.ProductName, checkpoint.TemplateName, checkpoint.Server, checkpoint.DatabaseName);
+        var filePath = GetDatabaseCheckpointPath(checkpoint.ProductName, checkpoint.TemplateName, checkpoint.Server, checkpoint.DatabaseName, checkpoint.SchemaName);
         WriteFileThreadSafe(filePath, FormatDatabaseCheckpoint(checkpoint));
     }
 
@@ -265,20 +268,24 @@ public class FileCheckpointManager : ICheckpointing
         catch { }
     }
 
-    private string GetDatabaseCheckpointPath(string productName, string templateName, string server, string databaseName)
+    private string GetDatabaseCheckpointPath(string productName, string templateName, string server, string databaseName, string schemaName)
     {
+        // SchemaName segment is included in the filename so per-iteration checkpoints
+        // for schema templates don't collide on disk. Empty schema_name produces an
+        // empty segment which FileNameEncoder represents stably for regular templates.
         return Path.Combine(_checkpointDirectory,
-            $"{FileNameEncoder.Encode(productName)}.{FileNameEncoder.Encode(templateName)}.{FileNameEncoder.Encode(server)}.{FileNameEncoder.Encode(databaseName)}.checkpoint");
+            $"{FileNameEncoder.Encode(productName)}.{FileNameEncoder.Encode(templateName)}.{FileNameEncoder.Encode(server)}.{FileNameEncoder.Encode(databaseName)}.{FileNameEncoder.Encode(schemaName ?? "")}.checkpoint");
     }
 
-    internal static DatabaseCheckpoint ParseDatabaseCheckpoint(string content, string productName, string templateName, string server, string databaseName)
+    internal static DatabaseCheckpoint ParseDatabaseCheckpoint(string content, string productName, string templateName, string server, string databaseName, string schemaName = "")
     {
         var checkpoint = new DatabaseCheckpoint
         {
             ProductName = productName,
             TemplateName = templateName,
             Server = server,
-            DatabaseName = databaseName
+            DatabaseName = databaseName,
+            SchemaName = schemaName ?? ""
         };
 
         var lines = content.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
@@ -337,6 +344,8 @@ public class FileCheckpointManager : ICheckpointing
         sb.AppendLine($"# Template: {checkpoint.TemplateName}");
         sb.AppendLine($"# Server: {checkpoint.Server}");
         sb.AppendLine($"# Database: {checkpoint.DatabaseName}");
+        if (!string.IsNullOrEmpty(checkpoint.SchemaName))
+            sb.AppendLine($"# Schema: {checkpoint.SchemaName}");
         sb.AppendLine($"# Started: {checkpoint.StartedAt:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine();
 

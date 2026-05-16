@@ -149,7 +149,8 @@ KindleForge
 [After Scripts]
 ";
             var dbCheckpointPath = Path.Combine(_checkpointDir,
-                $"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.checkpoint");
+                // Slice 2: filename now includes a 5th segment for SchemaName (empty for regular templates).
+                $"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.{FileNameEncoder.Encode("")}.checkpoint");
             File.WriteAllText(dbCheckpointPath, dbCheckpointContent);
 
             RunSchemaQuench();

@@ -12,6 +12,7 @@ internal class DatabaseCheckpoint
     public string TemplateName { get; set; } = "";
     public string Server { get; set; } = "";
     public string DatabaseName { get; set; } = "";
+    public string SchemaName { get; set; } = "";
     public DateTime StartedAt { get; set; } = DateTime.Now;
 
     public List<string> CompletedSteps { get; set; } = [];

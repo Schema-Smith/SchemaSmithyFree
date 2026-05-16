@@ -89,6 +89,11 @@ public static class ForgeKindler
     private static void KindleForMySQL(IDbCommand command)
     {
         KindleOneFile(command, "Kindling_CompletedMigrationScripts_Table.sql", Platform.MySQL);
+        // Idempotent upgrade path for legacy tables created before the slice-2
+        // schema-templates extension. MySQL's CREATE TABLE IF NOT EXISTS won't add
+        // missing columns to existing tables, so we do explicit ALTERs guarded by
+        // information_schema checks. No-op on tables already at the new shape.
+        KindleOneFile(command, "Kindling_AlterCompletedMigrationScripts.sql", Platform.MySQL);
         KindleOneFile(command, "Kindling_ProductOwnership_Table.sql", Platform.MySQL);
         KindleOneFile(command, "Kindling_StatusMessages_Table.sql", Platform.MySQL);
 
@@ -222,6 +227,7 @@ public static class ForgeKindler
             ],
             Platform.MySQL => [
                 "Kindling_CompletedMigrationScripts_Table.sql",
+                "Kindling_AlterCompletedMigrationScripts.sql",
                 "Kindling_ProductOwnership_Table.sql",
                 "Kindling_StatusMessages_Table.sql",
                 "SchemaSmith_QuoteIdentifier.sql",

@@ -95,7 +95,7 @@ public class ForgeKindlerTests
 
         Assert.That(sqlServer.Length, Is.EqualTo(18)); // was 14, adding 4 indexed view scripts
         Assert.That(postgres.Length, Is.EqualTo(22));
-        Assert.That(mysql.Length, Is.EqualTo(15));
+        Assert.That(mysql.Length, Is.EqualTo(16)); // +1 for Kindling_AlterCompletedMigrationScripts.sql (slice 2)
     }
 
     [Test]
