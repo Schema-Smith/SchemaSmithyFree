@@ -309,7 +309,10 @@ public class DatabaseQuenchTests
         Assert.That(sql, Does.Contain("SchemaSmith.CompletedMigrationScripts"));
         Assert.That(sql, Does.Contain("[ProductName]"));
         Assert.That(sql, Does.Contain("[QuenchSlot]"));
-        Assert.That(sql, Does.Contain("[template_name] IN ('', 'T')"));
+        // DELETE is STRICT on template_name (no permissive IN) so a prune in template A
+        // can't shadow-delete a legacy blank-template row that template B still needs.
+        Assert.That(sql, Does.Contain("[template_name] = 'T'"));
+        Assert.That(sql, Does.Not.Contain("[template_name] IN"));
         Assert.That(sql, Does.Contain("[schema_name] = ''"));
     }
 
@@ -323,7 +326,8 @@ public class DatabaseQuenchTests
         var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("\"SchemaSmith\".\"CompletedMigrationScripts\""));
         Assert.That(sql, Does.Contain("\"ProductName\""));
-        Assert.That(sql, Does.Contain("template_name IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("template_name = 'T'"));
+        Assert.That(sql, Does.Not.Contain("template_name IN"));
         Assert.That(sql, Does.Contain("schema_name = ''"));
     }
 
@@ -337,7 +341,8 @@ public class DatabaseQuenchTests
         var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("`SchemaSmith_CompletedMigrationScripts`"));
         Assert.That(sql, Does.Contain("`ProductName`"));
-        Assert.That(sql, Does.Contain("`template_name` IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("`template_name` = 'T'"));
+        Assert.That(sql, Does.Not.Contain("`template_name` IN"));
         Assert.That(sql, Does.Contain("`schema_name` = ''"));
     }
 

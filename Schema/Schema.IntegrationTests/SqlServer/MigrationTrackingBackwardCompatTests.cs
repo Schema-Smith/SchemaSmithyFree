@@ -175,6 +175,38 @@ public class MigrationTrackingBackwardCompatTests
     }
 
     [Test]
+    public void DeleteIsStrictOnTemplateName_LegacyBlankTemplateRow_NotSharedAcrossTemplates()
+    {
+        // Regression: a pre-extension product with templates A and B that both have a script
+        // with the same filename (e.g. Migration_001.sql) had ONE legacy tracking row with
+        // template_name=''. Both A's and B's permissive SELECTs match it. If A's PruneObsolete
+        // step DELETEd permissively on template_name IN ('', 'A'), it would nuke the row B
+        // still needs. Strict DELETE on template_name = @template prevents this.
+        ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+        _command.CommandText = @"
+            INSERT INTO SchemaSmith.CompletedMigrationScripts
+                ([ScriptPath], [ProductName], [QuenchSlot], [template_name], [schema_name])
+            VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before', '', '');";
+        _command.ExecuteNonQuery();
+
+        // Simulate template A's prune: DELETE with template_name = 'A' (the new strict form).
+        _command.CommandText = @"
+            DELETE SchemaSmith.CompletedMigrationScripts
+            WHERE [ProductName] = 'Demo' AND [QuenchSlot] = 'Before'
+              AND [ScriptPath] = 'Before Scripts/Migration_001.sql'
+              AND [template_name] = 'A'
+              AND [schema_name] = '';";
+        _command.ExecuteNonQuery();
+
+        // Assert: the legacy blank-template row is preserved (template B still relies on it).
+        _command.CommandText = @"
+            SELECT COUNT(*) FROM SchemaSmith.CompletedMigrationScripts
+            WHERE ScriptPath = 'Before Scripts/Migration_001.sql' AND template_name = '';";
+        Assert.That((int)_command.ExecuteScalar(), Is.EqualTo(1),
+            "Strict DELETE on template_name must NOT touch legacy blank-template rows owned by no specific template.");
+    }
+
+    [Test]
     public void KindleTheForge_RunTwice_RemainsIdempotent_NoDuplicateColumns()
     {
         _command.CommandText = @"

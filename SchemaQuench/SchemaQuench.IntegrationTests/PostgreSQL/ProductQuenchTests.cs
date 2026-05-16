@@ -54,9 +54,12 @@ public class ProductQuenchTests
             cmd.CommandText = @$"
 TRUNCATE TABLE ""SchemaSmith"".""CompletedMigrationScripts"";
 DROP TABLE IF EXISTS ""SchemaSmith"".""TestLog"";
-INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts"" (""ScriptPath"", ""ProductName"", ""QuenchSlot"") VALUES('After Scripts/Create TestSecondary.sql', '{product.Name}', 'After');
-INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts"" (""ScriptPath"", ""ProductName"", ""QuenchSlot"") VALUES('Before Scripts/MigrationScript0.sql', '{product.Name}', 'Before');
-INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts"" (""ScriptPath"", ""ProductName"", ""QuenchSlot"") VALUES('Before Scripts/Obsolete.sql', '{product.Name}', 'Before'); -- this entry should be removed from the CompletedMigrationScripts table
+-- Slice 2 contract: writes always populate template_name with the actual template the row
+-- belongs to. The prune DELETE is strict on template_name = @template so each template's
+-- prune only deletes its own rows (legacy blank-template rows persist as harmless residue).
+INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts"" (""ScriptPath"", ""ProductName"", ""QuenchSlot"", template_name, schema_name) VALUES('After Scripts/Create TestSecondary.sql', '{product.Name}', 'After', 'Main', '');
+INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts"" (""ScriptPath"", ""ProductName"", ""QuenchSlot"", template_name, schema_name) VALUES('Before Scripts/MigrationScript0.sql', '{product.Name}', 'Before', 'Main', '');
+INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts"" (""ScriptPath"", ""ProductName"", ""QuenchSlot"", template_name, schema_name) VALUES('Before Scripts/Obsolete.sql', '{product.Name}', 'Before', 'Main', ''); -- this entry should be removed from the CompletedMigrationScripts table
 ";
             cmd.ExecuteNonQuery();
 

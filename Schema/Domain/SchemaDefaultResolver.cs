@@ -62,30 +62,59 @@ namespace Schema.Domain
 
         /// <summary>
         /// Resolves all platform-typed children of a template in one pass. Called from
-        /// Template.Load after deserialization completes.
+        /// Template.Load after deserialization completes. Fails loud (throws) when the
+        /// template's Product / Platform isn't set rather than silently no-opping —
+        /// a silent no-op would leave Schema fields unresolved and produce confusing
+        /// downstream "schema name is null" DDL errors several layers away.
+        ///
+        /// In production Product.Platform always comes through PlatformJsonConverter +
+        /// ParsePlatform, which reject Unknown at deserialization. So a thrown error
+        /// here means the caller built a Template programmatically without hooking up
+        /// the Product (a programmer error) — which is precisely when failing loud helps.
         /// </summary>
         public static void Resolve(Template template)
         {
-            if (template == null) return;
+            if (template == null)
+                throw new ArgumentNullException(nameof(template));
+            if (template.Product == null)
+                throw new InvalidOperationException(
+                    $"Template '{template.Name}' has no Product set. SchemaDefaultResolver " +
+                    $"requires Template.Product to determine the platform default. Did you " +
+                    $"construct the Template directly instead of going through Template.Load?");
+            var platform = template.Product.Platform;
+            if (platform == Platform.Unknown)
+                throw new InvalidOperationException(
+                    $"Template '{template.Name}' (file: {template.FilePath}) has Product.Platform = " +
+                    $"Unknown. Set Platform to SqlServer, PostgreSQL, or MySQL in Product.json.");
+
             var isSchemaTemplate = template.IsSchemaTemplate;
-            var platform = template.Product?.Platform ?? Platform.Unknown;
-            if (platform == Platform.Unknown) return;
 
-            foreach (var table in template.Tables)
+            try
             {
-                switch (table)
+                foreach (var table in template.Tables)
                 {
-                    case SqlServerTable sst: Resolve(sst, isSchemaTemplate, platform); break;
-                    case PostgreSqlTable pgt: Resolve(pgt, isSchemaTemplate, platform); break;
-                    // MySqlTable: no schema defaulting (MySQL has no namespace concept).
+                    switch (table)
+                    {
+                        case SqlServerTable sst: Resolve(sst, isSchemaTemplate, platform); break;
+                        case PostgreSqlTable pgt: Resolve(pgt, isSchemaTemplate, platform); break;
+                        // MySqlTable: no schema defaulting (MySQL has no namespace concept).
+                    }
                 }
+
+                foreach (var view in template.IndexedViews)
+                    Resolve(view, isSchemaTemplate, platform);
+
+                foreach (var view in template.MaterializedViews)
+                    Resolve(view, isSchemaTemplate, platform);
             }
-
-            foreach (var view in template.IndexedViews)
-                Resolve(view, isSchemaTemplate, platform);
-
-            foreach (var view in template.MaterializedViews)
-                Resolve(view, isSchemaTemplate, platform);
+            catch (InvalidOperationException inner)
+            {
+                // Rewrap with template context so a user staring at a multi-template product
+                // can find the offending JSON file without grep-spelunking.
+                throw new InvalidOperationException(
+                    $"In template '{template.Name}' (file: {template.FilePath}): {inner.Message}",
+                    inner);
+            }
         }
 
         private static string ResolveTableSchema(

@@ -454,17 +454,17 @@ public class DatabaseQuench
     internal static string EscapeSqlLiteral(string value) => value?.Replace("'", "''") ?? "";
 
     /// <summary>
-    /// Gets the delete SQL for CompletedMigrationScripts per platform. Filters on the
-    /// active (template_name, schema_name) scope so a selective run can't prune outside scope.
-    /// template_name is matched permissively (IN ('', @template)) to also pick up legacy rows
-    /// pre-dating the column-extension migration; schema_name is matched strictly so legacy
-    /// blank-schema rows aren't shadow-deleted by per-tenant operations.
+    /// Gets the delete SQL for CompletedMigrationScripts per platform. Strict equality on
+    /// BOTH template_name and schema_name so a prune in one (template, schema) iteration
+    /// can never delete rows owned by a different iteration — including legacy blank-template
+    /// rows that may be shared across multiple templates in the same product. (Reads are
+    /// permissive on template_name to pick up those legacy rows; writes/deletes are strict.)
     /// </summary>
     internal string GetDeleteCompletedScriptSql(string productName, string slot, string obsoleteScript, string templateName, string schemaName) => _product.Platform switch
     {
-        Platform.SqlServer => $"DELETE SchemaSmith.CompletedMigrationScripts WHERE [ProductName] = '{EscapeSqlLiteral(productName)}' AND [QuenchSlot] = '{EscapeSqlLiteral(slot)}' AND [ScriptPath] = '{EscapeSqlLiteral(obsoleteScript)}' AND [template_name] IN ('', '{EscapeSqlLiteral(templateName)}') AND [schema_name] = '{EscapeSqlLiteral(schemaName)}'",
-        Platform.PostgreSQL => $"DELETE FROM \"SchemaSmith\".\"CompletedMigrationScripts\" WHERE \"ProductName\" = '{EscapeSqlLiteral(productName)}' AND \"QuenchSlot\" = '{EscapeSqlLiteral(slot)}' AND \"ScriptPath\" = '{EscapeSqlLiteral(obsoleteScript)}' AND template_name IN ('', '{EscapeSqlLiteral(templateName)}') AND schema_name = '{EscapeSqlLiteral(schemaName)}'",
-        Platform.MySQL => $"DELETE FROM `SchemaSmith_CompletedMigrationScripts` WHERE `ProductName` = '{EscapeSqlLiteral(productName)}' AND `QuenchSlot` = '{EscapeSqlLiteral(slot)}' AND `ScriptPath` = '{EscapeSqlLiteral(obsoleteScript)}' AND `template_name` IN ('', '{EscapeSqlLiteral(templateName)}') AND `schema_name` = '{EscapeSqlLiteral(schemaName)}'",
+        Platform.SqlServer => $"DELETE SchemaSmith.CompletedMigrationScripts WHERE [ProductName] = '{EscapeSqlLiteral(productName)}' AND [QuenchSlot] = '{EscapeSqlLiteral(slot)}' AND [ScriptPath] = '{EscapeSqlLiteral(obsoleteScript)}' AND [template_name] = '{EscapeSqlLiteral(templateName)}' AND [schema_name] = '{EscapeSqlLiteral(schemaName)}'",
+        Platform.PostgreSQL => $"DELETE FROM \"SchemaSmith\".\"CompletedMigrationScripts\" WHERE \"ProductName\" = '{EscapeSqlLiteral(productName)}' AND \"QuenchSlot\" = '{EscapeSqlLiteral(slot)}' AND \"ScriptPath\" = '{EscapeSqlLiteral(obsoleteScript)}' AND template_name = '{EscapeSqlLiteral(templateName)}' AND schema_name = '{EscapeSqlLiteral(schemaName)}'",
+        Platform.MySQL => $"DELETE FROM `SchemaSmith_CompletedMigrationScripts` WHERE `ProductName` = '{EscapeSqlLiteral(productName)}' AND `QuenchSlot` = '{EscapeSqlLiteral(slot)}' AND `ScriptPath` = '{EscapeSqlLiteral(obsoleteScript)}' AND `template_name` = '{EscapeSqlLiteral(templateName)}' AND `schema_name` = '{EscapeSqlLiteral(schemaName)}'",
         _ => throw new ArgumentOutOfRangeException()
     };
 

@@ -153,6 +153,58 @@ namespace Schema.UnitTests.Domain
         }
 
         [Test]
+        public void Resolve_Template_NullTemplate_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => SchemaDefaultResolver.Resolve(null));
+        }
+
+        [Test]
+        public void Resolve_Template_NoProduct_ThrowsWithProgrammerHint()
+        {
+            var template = new Template { Name = "Standalone" };
+            var ex = Assert.Throws<InvalidOperationException>(() => SchemaDefaultResolver.Resolve(template));
+            Assert.That(ex.Message, Does.Contain("Standalone"));
+            Assert.That(ex.Message, Does.Contain("Product"));
+        }
+
+        [Test]
+        public void Resolve_Template_HardLiteralSchemaInside_RewrapsWithTemplateContext()
+        {
+            var template = new Template
+            {
+                Name = "TenantBody",
+                FilePath = @"C:\app\Templates\TenantBody\Template.json",
+                SchemaIdentificationScript = "SELECT 'tenant_a' AS SchemaName",
+                Product = new Product { Platform = Platform.SqlServer }
+            };
+            template.Tables.Add(new SqlServerTable { Name = "Customers", Schema = "dbo" });
+
+            var ex = Assert.Throws<InvalidOperationException>(() => SchemaDefaultResolver.Resolve(template));
+
+            // Outer wrap surfaces template name + file path so the user can find the bad JSON.
+            Assert.That(ex.Message, Does.Contain("TenantBody"));
+            Assert.That(ex.Message, Does.Contain("Template.json"));
+            // Inner exception's detail (table name) is preserved either in the message or InnerException.
+            Assert.That(ex.Message, Does.Contain("Customers"));
+            Assert.That(ex.InnerException, Is.InstanceOf<InvalidOperationException>());
+        }
+
+        [Test]
+        public void Resolve_Template_PlatformUnknown_ThrowsWithFilePathHint()
+        {
+            var template = new Template
+            {
+                Name = "Bad",
+                FilePath = @"C:\some\Templates\Bad\Template.json",
+                Product = new Product { Platform = Platform.Unknown }
+            };
+            var ex = Assert.Throws<InvalidOperationException>(() => SchemaDefaultResolver.Resolve(template));
+            Assert.That(ex.Message, Does.Contain("Bad"));
+            Assert.That(ex.Message, Does.Contain("Unknown"));
+            Assert.That(ex.Message, Does.Contain("Template.json"));
+        }
+
+        [Test]
         public void Resolve_Template_DerivesSchemaTemplateFlag_FromSchemaIdentificationScriptPresence()
         {
             var regular = new Template { Name = "Regular" };
