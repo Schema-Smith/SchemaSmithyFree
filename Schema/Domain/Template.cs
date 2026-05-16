@@ -77,6 +77,46 @@ namespace Schema.Domain
         [JsonProperty(Order = 10)]
         public bool SkipIfReadOnly { get; set; }
 
+        /// <summary>
+        /// Schema templates only: when true and a schema returned by
+        /// <see cref="SchemaIdentificationScript"/> does not exist on the target database, the
+        /// engine emits <c>CREATE SCHEMA</c> for it before running the iteration. Default-false
+        /// forces explicit opt-in — a typo in the discovery query should not silently create
+        /// unintended schemas. Ignored on regular templates (warned if set non-default).
+        /// </summary>
+        [JsonProperty(Order = 12)]
+        public bool CreateSchemaIfMissing { get; set; } = false;
+
+        /// <summary>
+        /// Schema templates only: when false, this template's per-schema work units run serially
+        /// even though the global thread pool may have capacity. Escape hatch for templates that
+        /// touch a shared resource and must not parallelize. Ignored on regular templates
+        /// (warned if set non-default).
+        /// </summary>
+        [JsonProperty(Order = 13)]
+        [DefaultValue(true)]
+        public bool AllowParallel { get; set; } = true;
+
+        /// <summary>
+        /// Schema templates only: when true (default), a single schema iteration's failure does
+        /// not halt the others — remaining iterations continue and the product run exits non-zero.
+        /// When false, on first iteration failure the dispatcher stops dispatching new iterations,
+        /// in-flight iterations drain, and subsequent templates in <c>TemplateOrder</c> do not run.
+        /// Ignored on regular templates (warned if set non-default).
+        /// </summary>
+        [JsonProperty(Order = 14)]
+        [DefaultValue(true)]
+        public bool ContinueOnSchemaFailure { get; set; } = true;
+
+        /// <summary>
+        /// Failure-isolation parity at the database level — applies to BOTH regular and schema
+        /// templates. When true (default), one database's failure does not abort the product run
+        /// across other databases. When false, the run aborts at the first DB-level failure.
+        /// </summary>
+        [JsonProperty(Order = 15)]
+        [DefaultValue(true)]
+        public bool ContinueOnDatabaseFailure { get; set; } = true;
+
         [JsonIgnore]
         public Product Product { get; set; }
 
@@ -109,6 +149,15 @@ namespace Schema.Domain
 
         [JsonIgnore]
         public Dictionary<string, string> LoggableTokens { get; set; } = [];
+
+        /// <summary>
+        /// Resolved per-token <see cref="TokenScope"/> map, populated by
+        /// <see cref="ResolveTokenScopes"/>. Null until the walk runs; callers should treat any
+        /// "missing" entry as <see cref="TokenScope.PerDb"/> for query tokens (today's default)
+        /// or <see cref="TokenScope.PerProduct"/> for static tokens.
+        /// </summary>
+        [JsonIgnore]
+        private Dictionary<string, TokenScope> _tokenScopes;
 
         /// <summary>
         /// The path used for logging (stripped of long path prefix).
@@ -195,6 +244,11 @@ namespace Schema.Domain
 
             template.MigrateMySqlSchemaIdentificationScriptAlias();
 
+            // Validate schema-template structural rules (folders, filenames, presence) BEFORE
+            // expensive load work — fail fast with a clear error rather than after Table.Load
+            // has parsed half a dozen JSON files.
+            template.ValidateSchemaTemplateRules(templatePath);
+
             foreach (var token in template.ScriptTokens)
                 template.LoggableTokens.Add(token.Key, token.Value);
 
@@ -209,6 +263,11 @@ namespace Schema.Domain
             template.InstanceLoad(scriptTokens, product.Platform);
 
             SchemaDefaultResolver.Resolve(template);
+
+            // Warn (but don't fail) when schema-only fields are set non-default on regular templates.
+            // These have no effect outside the schema-template fan-out path; surface the likely-mistake
+            // through the progress log instead of failing the load (the user may be experimenting).
+            template.WarnIfSchemaOnlyFieldsSetOnRegularTemplate();
 
             return template;
         }
@@ -284,7 +343,7 @@ namespace Schema.Domain
             IndexedViewSchema = JArray.FromObject(IndexedViews).ToString();
             tokens.Add(new("IndexedViewSchema", IndexedViewSchema.Replace("'", "''")));
 
-            if (ScriptFolders.Count == 0) ScriptFolders.AddRange(GetDefaultTemplateFolders(platform));
+            if (ScriptFolders.Count == 0) ScriptFolders.AddRange(GetDefaultTemplateFolders(platform, IsSchemaTemplate));
 
             var templateDir = Path.GetDirectoryName(FilePath) ?? "";
             if (platform == Platform.SqlServer)
@@ -299,57 +358,90 @@ namespace Schema.Domain
             BaselineValidationScript = SqlScript.TokenReplace(BaselineValidationScript ?? "", tokens);
         }
 
-        public static List<TemplateFolder> GetDefaultTemplateFolders(Platform platform) => platform switch
+        /// <summary>
+        /// Single-arg overload preserved for callers (SchemaTongs, FolderMappingConfig, existing tests)
+        /// that don't need the schema-template carve-out. Returns the regular-template default set.
+        /// </summary>
+        public static List<TemplateFolder> GetDefaultTemplateFolders(Platform platform) =>
+            GetDefaultTemplateFolders(platform, isSchemaTemplate: false);
+
+        /// <summary>
+        /// Returns the per-platform default <see cref="TemplateFolder"/> set used when a Template.json
+        /// has no explicit <c>ScriptFolders</c>. When <paramref name="isSchemaTemplate"/> is true, omits
+        /// database-scoped object types that cannot legitimately fan out per schema (design §3.3):
+        /// <list type="bullet">
+        /// <item><see cref="ScriptObjectType.Schemas"/> — schema objects ARE the iteration unit; defining
+        /// them as content would be self-referential.</item>
+        /// <item><see cref="ScriptObjectType.DDLTriggers"/>, <see cref="ScriptObjectType.FullTextCatalogs"/>,
+        /// <see cref="ScriptObjectType.FullTextStopLists"/> — database-scoped on SQL Server; fanning out
+        /// per tenant would either fail with duplicate-name errors or create N copies that all fire on
+        /// every DDL change.</item>
+        /// </list>
+        /// MySQL has no schema-template path; the parameter is ignored on MySQL.
+        /// </summary>
+        public static List<TemplateFolder> GetDefaultTemplateFolders(Platform platform, bool isSchemaTemplate)
         {
-            Platform.SqlServer =>
-            [
-                new TemplateFolder { FolderPath = "Before Scripts", QuenchSlot = TemplateQuenchSlot.Before },
-                new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Schemas },
-                new TemplateFolder { FolderPath = "DataTypes", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DataTypes },
-                new TemplateFolder { FolderPath = "FullTextCatalogs", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.FullTextCatalogs },
-                new TemplateFolder { FolderPath = "FullTextStopLists", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.FullTextStopLists },
-                new TemplateFolder { FolderPath = "XMLSchemaCollections", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.XMLSchemaCollections },
-                new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions },
-                new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Views },
-                new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures },
-                new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
-                new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.DDLTriggers },
-                new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
-                new TemplateFolder { FolderPath = "After Scripts", QuenchSlot = TemplateQuenchSlot.After },
-            ],
-            Platform.PostgreSQL =>
-            [
-                new TemplateFolder { FolderPath = "Before Scripts", QuenchSlot = TemplateQuenchSlot.Before },
-                new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Schemas },
-                new TemplateFolder { FolderPath = "Domain Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DomainTypes },
-                new TemplateFolder { FolderPath = "Enum Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.EnumTypes },
-                new TemplateFolder { FolderPath = "Composite Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.CompositeTypes },
-                new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions },
-                new TemplateFolder { FolderPath = "Trigger Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.TriggerFunctions },
-                new TemplateFolder { FolderPath = "Window Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.WindowFunctions },
-                new TemplateFolder { FolderPath = "Aggregates", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Aggregates },
-                new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures },
-                new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences },
-                new TemplateFolder { FolderPath = "Rules", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Rules },
-                new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
-                new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Views },
-                new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
-                new TemplateFolder { FolderPath = "After Scripts", QuenchSlot = TemplateQuenchSlot.After },
-            ],
-            Platform.MySQL =>
-            [
-                new TemplateFolder { FolderPath = "Before Scripts", QuenchSlot = TemplateQuenchSlot.Before },
-                new TemplateFolder { FolderPath = "Events", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Events },
-                new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions },
-                new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures },
-                new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
-                new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Views },
-                new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
-                new TemplateFolder { FolderPath = "After Scripts", QuenchSlot = TemplateQuenchSlot.After },
-            ],
-            Platform.Unknown => throw new ArgumentOutOfRangeException(nameof(platform), platform, "Platform has not been assigned."),
-            _ => []
-        };
+            var folders = platform switch
+            {
+                Platform.SqlServer =>
+                [
+                    new TemplateFolder { FolderPath = "Before Scripts", QuenchSlot = TemplateQuenchSlot.Before },
+                    new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Schemas },
+                    new TemplateFolder { FolderPath = "DataTypes", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DataTypes },
+                    new TemplateFolder { FolderPath = "FullTextCatalogs", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.FullTextCatalogs },
+                    new TemplateFolder { FolderPath = "FullTextStopLists", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.FullTextStopLists },
+                    new TemplateFolder { FolderPath = "XMLSchemaCollections", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.XMLSchemaCollections },
+                    new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions },
+                    new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Views },
+                    new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures },
+                    new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
+                    new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.DDLTriggers },
+                    new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
+                    new TemplateFolder { FolderPath = "After Scripts", QuenchSlot = TemplateQuenchSlot.After },
+                ],
+                Platform.PostgreSQL =>
+                [
+                    new TemplateFolder { FolderPath = "Before Scripts", QuenchSlot = TemplateQuenchSlot.Before },
+                    new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Schemas },
+                    new TemplateFolder { FolderPath = "Domain Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DomainTypes },
+                    new TemplateFolder { FolderPath = "Enum Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.EnumTypes },
+                    new TemplateFolder { FolderPath = "Composite Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.CompositeTypes },
+                    new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions },
+                    new TemplateFolder { FolderPath = "Trigger Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.TriggerFunctions },
+                    new TemplateFolder { FolderPath = "Window Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.WindowFunctions },
+                    new TemplateFolder { FolderPath = "Aggregates", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Aggregates },
+                    new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures },
+                    new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences },
+                    new TemplateFolder { FolderPath = "Rules", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Rules },
+                    new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
+                    new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Views },
+                    new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
+                    new TemplateFolder { FolderPath = "After Scripts", QuenchSlot = TemplateQuenchSlot.After },
+                ],
+                Platform.MySQL =>
+                [
+                    new TemplateFolder { FolderPath = "Before Scripts", QuenchSlot = TemplateQuenchSlot.Before },
+                    new TemplateFolder { FolderPath = "Events", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Events },
+                    new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions },
+                    new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures },
+                    new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
+                    new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Views },
+                    new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
+                    new TemplateFolder { FolderPath = "After Scripts", QuenchSlot = TemplateQuenchSlot.After },
+                ],
+                Platform.Unknown => throw new ArgumentOutOfRangeException(nameof(platform), platform, "Platform has not been assigned."),
+                _ => new List<TemplateFolder>()
+            };
+
+            if (!isSchemaTemplate) return folders;
+
+            // Database-scoped objects cannot legitimately fan out per schema (design §3.3).
+            return folders.Where(f =>
+                f.ObjectType != ScriptObjectType.Schemas &&
+                f.ObjectType != ScriptObjectType.DDLTriggers &&
+                f.ObjectType != ScriptObjectType.FullTextCatalogs &&
+                f.ObjectType != ScriptObjectType.FullTextStopLists).ToList();
+        }
 
         /// <summary>
         /// For SQL Server products with no explicit ScriptFolders, checks whether the default
@@ -430,5 +522,209 @@ namespace Schema.Domain
                 .OrderBy(x => x);
             Tables.AddRange(files.Select(f => Table.Load(f, platform)));
         }
+
+        /// <summary>
+        /// Runs the schema-template load-time validation rules (design §3.3) that don't require
+        /// the materialized domain objects — folder set, filename prefixes, and
+        /// <see cref="CreateSchemaIfMissing"/> presence dependency. Table <c>Schema</c> literal
+        /// rejection is handled by <see cref="SchemaDefaultResolver"/> (slice 1) and bubbles up
+        /// with file context via that resolver's outer wrap.
+        /// </summary>
+        private void ValidateSchemaTemplateRules(string templateDir)
+        {
+            // Rule 5 applies regardless of platform / SchemaIdentificationScript presence:
+            // a true value here without a discovery script is always a config error.
+            if (CreateSchemaIfMissing && !IsSchemaTemplate)
+                throw new InvalidOperationException(
+                    $"Template '{Name}' (file: {FilePath}) sets CreateSchemaIfMissing=true but " +
+                    $"has no SchemaIdentificationScript. CreateSchemaIfMissing only applies to " +
+                    $"schema templates — add a SchemaIdentificationScript or remove " +
+                    $"CreateSchemaIfMissing from the template configuration.");
+
+            if (!IsSchemaTemplate) return;
+
+            // Rule 1 (defensive): MySQL never reaches here as a schema template because the alias
+            // migration clears the field. If somehow we get here, fail loud with the design's
+            // database-per-tenant hint rather than silently producing broken DDL.
+            if (Product?.Platform == Platform.MySQL)
+                throw new InvalidOperationException(
+                    $"Template '{Name}' (file: {FilePath}) is a schema template on MySQL. " +
+                    $"MySQL has no schema-inside-database concept — use database-per-tenant " +
+                    $"instead (one DatabaseIdentificationScript-driven template per tenant DB).");
+
+            // Rule 2: database-scoped ObjectType rejection.
+            var disallowed = new HashSet<ScriptObjectType>
+            {
+                ScriptObjectType.Schemas,
+                ScriptObjectType.DDLTriggers,
+                ScriptObjectType.FullTextCatalogs,
+                ScriptObjectType.FullTextStopLists
+            };
+            var offending = ScriptFolders.FirstOrDefault(f => disallowed.Contains(f.ObjectType));
+            if (offending != null)
+                throw new InvalidOperationException(
+                    $"Template '{Name}' (file: {FilePath}) is a schema template but declares a " +
+                    $"ScriptFolder for '{offending.ObjectType}' (path: '{offending.FolderPath}'). " +
+                    $"{offending.ObjectType} is database-scoped and cannot fan out per schema. " +
+                    $"Move {offending.ObjectType} content into a non-schema-template that runs " +
+                    $"before this one in TemplateOrder.");
+
+            // Rule 3: filename prefix check for tables, materialized views, indexed views.
+            ValidateSchemaTemplateFilenames(templateDir);
+        }
+
+        /// <summary>
+        /// Schema templates require unqualified filenames (e.g. <c>Customers.json</c>, not
+        /// <c>dbo.Customers.json</c>) for tables, materialized views, and indexed views — the
+        /// schema is supplied per-iteration via <c>{{SchemaName}}</c>, so a literal prefix is
+        /// semantically wrong. Strips a single trailing <c>.json</c> extension before checking
+        /// for further dots in the bare name.
+        /// </summary>
+        private void ValidateSchemaTemplateFilenames(string templateDir)
+        {
+            var dir = ProductDirectoryWrapper.GetFromFactory();
+
+            CheckFolder(Path.Combine(templateDir, "Tables"), "table");
+            CheckFolder(Path.Combine(templateDir, "Materialized Views"), "materialized view");
+            CheckFolder(Path.Combine(templateDir, "Indexed Views"), "indexed view");
+
+            return;
+
+            void CheckFolder(string folder, string ownerKind)
+            {
+                if (!dir.Exists(folder)) return;
+                foreach (var file in dir.GetFiles(folder, "*.json", SearchOption.AllDirectories))
+                {
+                    var fileName = Path.GetFileName(file);
+                    var bareName = Path.GetFileNameWithoutExtension(fileName);
+                    if (!bareName.Contains('.')) continue;
+
+                    throw new InvalidOperationException(
+                        $"Template '{Name}' (file: {FilePath}) is a schema template; the {ownerKind} " +
+                        $"file '{fileName}' has a schema-qualified name. Schema templates require " +
+                        $"unqualified filenames — rename to '{bareName.Substring(bareName.IndexOf('.') + 1)}.json' " +
+                        $"(the schema is supplied per iteration via {{{{SchemaName}}}}).");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Per design §3.3, schema-only fields set non-default on a regular template are almost
+        /// certainly a configuration mistake. Don't fail the load — surface a clear warning
+        /// through the progress log so the user can correct it. <see cref="ContinueOnDatabaseFailure"/>
+        /// is excluded: it applies universally (DB-level failure isolation parity).
+        /// </summary>
+        private void WarnIfSchemaOnlyFieldsSetOnRegularTemplate()
+        {
+            if (IsSchemaTemplate) return;
+
+            var log = LogFactory.GetLogger("ProgressLog");
+
+            if (!AllowParallel)
+                log.Warn(
+                    $"Template '{Name}' (file: {FilePath}) sets AllowParallel=false but is not a " +
+                    $"schema template. AllowParallel only affects schema-template fan-out; the " +
+                    $"setting is ignored for regular templates.");
+
+            if (!ContinueOnSchemaFailure)
+                log.Warn(
+                    $"Template '{Name}' (file: {FilePath}) sets ContinueOnSchemaFailure=false but " +
+                    $"is not a schema template. ContinueOnSchemaFailure only affects schema-template " +
+                    $"fan-out; for DB-level failure-isolation use ContinueOnDatabaseFailure.");
+        }
+
+        /// <summary>
+        /// Resolves the per-token <see cref="TokenScope"/> for every token defined on this Template
+        /// via a depth-first dependency walk (design §5.6). A token's body is scanned for
+        /// <c>{{SchemaName}}</c> (direct iteration scope) and for <c>{{OtherToken}}</c> references
+        /// (transitive promotion when the referenced token is iteration-scoped). Cycles are
+        /// detected via the recursion stack and surface as <see cref="InvalidOperationException"/>.
+        /// Idempotent; safe to call multiple times.
+        /// </summary>
+        public void ResolveTokenScopes()
+        {
+            _tokenScopes = new Dictionary<string, TokenScope>();
+
+            // Walk QueryTokens and NonQueryTokens together — both can splice {{SchemaName}}.
+            // Static (non-query) tokens that include {{SchemaName}} in their body are still
+            // iteration-scoped: their substituted value differs per iteration.
+            var allBodies = QueryTokens
+                .Concat(NonQueryTokens.Where(nq => !QueryTokens.ContainsKey(nq.Key)))
+                .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+
+            var defaultScope = new Dictionary<string, TokenScope>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in allBodies)
+                defaultScope[kv.Key] = QueryTokens.ContainsKey(kv.Key) ? TokenScope.PerDb : TokenScope.PerProduct;
+
+            var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in allBodies.Keys.ToList())
+                Walk(name);
+
+            // Defensive copy back so external mutation of allBodies doesn't matter.
+            return;
+
+            TokenScope Walk(string name)
+            {
+                if (_tokenScopes.TryGetValue(name, out var resolved))
+                    return resolved;
+                if (!allBodies.TryGetValue(name, out var body))
+                {
+                    // Unknown reference (token doesn't exist on this template — could be a product-level
+                    // token or a typo). Don't escalate the caller on the strength of an unknown.
+                    return TokenScope.PerProduct;
+                }
+                if (!visiting.Add(name))
+                    throw new InvalidOperationException(
+                        $"Cycle detected in template '{Name}' token graph involving '{name}'. " +
+                        $"The token graph contains a cycle: {string.Join(" → ", visiting)} → {name}. " +
+                        $"Remove the circular reference between these tokens.");
+
+                try
+                {
+                    var scope = defaultScope[name];
+                    if (body != null && body.Contains(SchemaDefaultResolver.SchemaNameToken))
+                        scope = TokenScope.Iteration;
+
+                    if (scope != TokenScope.Iteration && body != null)
+                    {
+                        foreach (var referenced in TokenHelper.GetTokensFromString(body))
+                        {
+                            if (referenced.Equals("SchemaName", StringComparison.OrdinalIgnoreCase))
+                            {
+                                scope = TokenScope.Iteration;
+                                break;
+                            }
+                            // Only walk references that resolve to tokens we own — unknown names
+                            // (product-level, built-in) cannot be iteration-scoped from our perspective.
+                            if (!allBodies.ContainsKey(referenced)) continue;
+                            if (Walk(referenced) == TokenScope.Iteration)
+                            {
+                                scope = TokenScope.Iteration;
+                                break;
+                            }
+                        }
+                    }
+
+                    _tokenScopes[name] = scope;
+                    return scope;
+                }
+                finally
+                {
+                    visiting.Remove(name);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns true when the named token was promoted to <see cref="TokenScope.Iteration"/>
+        /// by the most recent <see cref="ResolveTokenScopes"/> call. Returns false when the walk
+        /// has not yet run or the token is unknown. The dispatcher uses this to decide whether
+        /// to re-materialize a <c>&lt;*Query*&gt;</c> token's value per schema iteration.
+        /// </summary>
+        public bool IsIterationScoped(string tokenName) =>
+            _tokenScopes != null
+            && tokenName != null
+            && _tokenScopes.TryGetValue(tokenName, out var s)
+            && s == TokenScope.Iteration;
     }
 }
