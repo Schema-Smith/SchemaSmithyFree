@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -10,6 +9,11 @@ namespace SchemaQuench;
 
 /// <summary>
 /// Bounded thread-pool dispatcher for schema-template fan-out work units (design §5.2).
+///
+/// <para><b>Single-use.</b> Each instance dispatches exactly one batch of work. Calling
+/// <see cref="Run"/> a second time on the same instance throws — wrapping <see cref="Run"/>
+/// in a retry loop is a misuse pattern, since the queues drain on the first call and a second
+/// call would otherwise silently no-op. Construct a fresh dispatcher per dispatch.</para>
 ///
 /// <para><b>Slice-3 behavior — fail loud, abort fast.</b> If any work unit's callback throws,
 /// the dispatcher stops accepting new work, lets currently-running callbacks complete naturally
@@ -42,7 +46,7 @@ namespace SchemaQuench;
 public sealed class WorkUnitDispatcher
 {
     private readonly int _maxThreads;
-    private readonly Action<WorkUnit, CancellationToken> _callback;
+    private readonly Action<WorkUnit> _callback;
     private readonly IReadOnlyDictionary<string, bool> _allowParallel;
     private readonly Queue<WorkUnit> _parallelQueue;
     private readonly Dictionary<string, Queue<WorkUnit>> _serialQueues;
@@ -50,6 +54,7 @@ public sealed class WorkUnitDispatcher
     private readonly object _lock = new();
     private readonly List<Exception> _failures = new();
     private bool _abort;
+    private bool _hasRun;
 
     /// <summary>
     /// Creates a dispatcher that will execute <paramref name="callback"/> for each work unit in
@@ -66,7 +71,7 @@ public sealed class WorkUnitDispatcher
         IEnumerable<WorkUnit> units,
         int maxThreads,
         IReadOnlyDictionary<string, bool> allowParallel,
-        Action<WorkUnit, CancellationToken> callback)
+        Action<WorkUnit> callback)
     {
         if (units == null) throw new ArgumentNullException(nameof(units));
         _callback = callback ?? throw new ArgumentNullException(nameof(callback));
@@ -99,16 +104,28 @@ public sealed class WorkUnitDispatcher
     /// every unit has either completed or — in the failure path — every in-flight unit has
     /// drained. Throws an <see cref="AggregateException"/> wrapping the first callback failure
     /// (and any additional in-flight failures observed while draining).
+    /// <para>Single-use: a second call on the same instance throws
+    /// <see cref="InvalidOperationException"/>.</para>
     /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when <see cref="Run"/> is called more than once on the same instance.</exception>
     public void Run()
     {
+        lock (_lock)
+        {
+            if (_hasRun)
+            {
+                throw new InvalidOperationException(
+                    "WorkUnitDispatcher is single-use; create a new instance per Run.");
+            }
+            _hasRun = true;
+        }
+
         if (TotalRemaining() == 0) return;
 
-        using var cts = new CancellationTokenSource();
         var tasks = new List<Task>(_maxThreads);
         for (var i = 0; i < _maxThreads; i++)
         {
-            tasks.Add(Task.Run(() => WorkerLoop(cts.Token)));
+            tasks.Add(Task.Run(WorkerLoop));
         }
 
         Task.WaitAll(tasks.ToArray());
@@ -121,7 +138,7 @@ public sealed class WorkUnitDispatcher
         }
     }
 
-    private void WorkerLoop(CancellationToken token)
+    private void WorkerLoop()
     {
         while (true)
         {
@@ -142,7 +159,7 @@ public sealed class WorkUnitDispatcher
 
             try
             {
-                _callback(unit, token);
+                _callback(unit);
             }
             catch (Exception ex)
             {

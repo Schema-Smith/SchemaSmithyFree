@@ -50,6 +50,7 @@ public class SchemaDiscoveryTests
         var cmd = Substitute.For<IDbCommand>();
         var reader = Substitute.For<IDataReader>();
         cmd.ExecuteReader().Returns(reader);
+        reader.FieldCount.Returns(1);
 
         // Configure Read() to return true for each row then false.
         var readReturns = new bool[rows.Length + 1];
@@ -226,6 +227,24 @@ public class SchemaDiscoveryTests
 
         var ex = Assert.Throws<InvalidOperationException>(() => SchemaDiscovery.Discover(cmd, template));
         Assert.That(ex!.Message, Does.Contain("MySQL"));
+    }
+
+    [Test]
+    public void Discover_MultiColumnResultSet_Throws()
+    {
+        // Defensive guard: the design specifies a single-column result set. If the user's
+        // SchemaIdentificationScript projects two or more columns, fail loud rather than
+        // silently discarding the trailing columns.
+        var template = SqlServerSchemaTemplate();
+        var cmd = Substitute.For<IDbCommand>();
+        var reader = Substitute.For<IDataReader>();
+        cmd.ExecuteReader().Returns(reader);
+        reader.FieldCount.Returns(2);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SchemaDiscovery.Discover(cmd, template));
+        Assert.That(ex!.Message, Does.Contain(template.Name));
+        Assert.That(ex.Message, Does.Contain("2 columns"));
+        Assert.That(ex.Message, Does.Contain("single-column"));
     }
 
     [Test]

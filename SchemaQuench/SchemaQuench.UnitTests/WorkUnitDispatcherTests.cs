@@ -24,7 +24,7 @@ public class WorkUnitDispatcherTests
         var processed = new ConcurrentBag<WorkUnit>();
 
         var dispatcher = new WorkUnitDispatcher(units, maxThreads: 2, allowParallel: new Dictionary<string, bool>(),
-            (unit, _) => processed.Add(unit));
+            unit => processed.Add(unit));
 
         dispatcher.Run();
 
@@ -47,7 +47,7 @@ public class WorkUnitDispatcherTests
         var release = new ManualResetEventSlim(false);
 
         var dispatcher = new WorkUnitDispatcher(units, maxThreads, new Dictionary<string, bool>(),
-            (_, _) =>
+            _ =>
             {
                 lock (lockObj)
                 {
@@ -93,7 +93,7 @@ public class WorkUnitDispatcherTests
         var first = true;
 
         var dispatcher = new WorkUnitDispatcher(units, maxThreads: 4, allowParallel,
-            (_, _) =>
+            _ =>
             {
                 bool isFirst;
                 lock (lockObj)
@@ -155,7 +155,7 @@ public class WorkUnitDispatcherTests
         var parallelStartedWhileSerialHeld = 0;
 
         var dispatcher = new WorkUnitDispatcher(units, maxThreads: 4, allowParallel,
-            (unit, _) =>
+            unit =>
             {
                 if (unit.TemplateName == "Serial")
                 {
@@ -215,10 +215,11 @@ public class WorkUnitDispatcherTests
         var bailed = false;
 
         var dispatcher = new WorkUnitDispatcher(units, maxThreads: 1, new Dictionary<string, bool>(),
-            (unit, _) =>
+            unit =>
             {
                 if (unit.DatabaseName == "db1")
                 {
+                    // safe: maxThreads=1, all callback invocations run on the single worker thread
                     bailed = true;
                     failureSignal.Set();
                     throw new InvalidOperationException("boom");
@@ -249,7 +250,7 @@ public class WorkUnitDispatcherTests
         var release = new ManualResetEventSlim(false);
 
         var dispatcher = new WorkUnitDispatcher(units, maxThreads: 3, allowParallel: new Dictionary<string, bool>(),
-            (_, _) =>
+            _ =>
             {
                 lock (lockObj)
                 {
@@ -279,8 +280,38 @@ public class WorkUnitDispatcherTests
     {
         var dispatcher = new WorkUnitDispatcher(
             new List<WorkUnit>(), maxThreads: 4, new Dictionary<string, bool>(),
-            (_, _) => Assert.Fail("Callback should not be invoked for an empty work set."));
+            _ => Assert.Fail("Callback should not be invoked for an empty work set."));
 
         Assert.DoesNotThrow(() => dispatcher.Run());
+    }
+
+    [Test]
+    public void Run_SecondCallOnSameInstance_Throws()
+    {
+        // Dispatcher is single-use — wrapping Run() in a retry loop would otherwise silently
+        // no-op because the queues drain on the first call.
+        var units = new[] { new WorkUnit("s", "db1", "Core", "") };
+        var dispatcher = new WorkUnitDispatcher(units, maxThreads: 1, new Dictionary<string, bool>(),
+            _ => { });
+
+        dispatcher.Run();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => dispatcher.Run());
+        Assert.That(ex!.Message, Does.Contain("single-use"));
+    }
+
+    [Test]
+    public void Run_SecondCallOnSameInstance_EvenWithEmptyUnits_Throws()
+    {
+        // Even when the first Run is a no-op (no units), a second call still throws — the
+        // single-use guard catches the caller's intent independently of whether any work
+        // happened on the first run.
+        var dispatcher = new WorkUnitDispatcher(
+            new List<WorkUnit>(), maxThreads: 1, new Dictionary<string, bool>(),
+            _ => { });
+
+        dispatcher.Run();
+
+        Assert.Throws<InvalidOperationException>(() => dispatcher.Run());
     }
 }

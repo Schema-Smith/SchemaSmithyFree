@@ -91,6 +91,13 @@ public static class SchemaDiscovery
         command.CommandText = template.SchemaIdentificationScript;
         var results = new List<string>();
         using var reader = command.ExecuteReader();
+        if (reader.FieldCount != 1)
+        {
+            throw new InvalidOperationException(
+                $"SchemaIdentificationScript for template '{template.Name}' returned {reader.FieldCount} columns; " +
+                "discovery expects a single-column result set of schema names. " +
+                "Adjust the script's SELECT to project exactly one column (the schema name).");
+        }
         while (reader.Read())
         {
             var raw = reader[0];
