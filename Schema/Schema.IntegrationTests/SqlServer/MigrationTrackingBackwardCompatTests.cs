@@ -175,6 +175,51 @@ public class MigrationTrackingBackwardCompatTests
     }
 
     [Test]
+    public void EagerMigrate_ClaimsLegacyBlankRow_WhenScriptIsOnDiskForCurrentTemplate()
+    {
+        // Transitional slice-2 mechanic: when a permissive SELECT matches a legacy
+        // blank-template row AND the row's ScriptPath is in the current template's on-disk
+        // script set, an UPDATE claims the row by setting template_name to the current
+        // template. Future prune passes can then clean the row up correctly.
+        ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+        _command.CommandText = @"
+            INSERT INTO SchemaSmith.CompletedMigrationScripts
+                ([ScriptPath], [ProductName], [QuenchSlot], [template_name], [schema_name])
+            VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before', '', '');";
+        _command.ExecuteNonQuery();
+
+        // Simulate the eager-migrate UPDATE that DatabaseQuench would emit when 'Main'
+        // sees the legacy row's ScriptPath in its on-disk script list.
+        _command.CommandText = @"
+            UPDATE SchemaSmith.CompletedMigrationScripts
+            SET [template_name] = 'Main'
+            WHERE [ProductName] = 'Demo' AND [QuenchSlot] = 'Before'
+              AND [template_name] = '' AND [schema_name] = ''
+              AND [ScriptPath] IN ('Before Scripts/Migration_001.sql');";
+        _command.ExecuteNonQuery();
+
+        _command.CommandText = @"
+            SELECT template_name FROM SchemaSmith.CompletedMigrationScripts
+            WHERE ScriptPath = 'Before Scripts/Migration_001.sql';";
+        Assert.That(_command.ExecuteScalar()?.ToString(), Is.EqualTo("Main"),
+            "Eager-migrate must have set template_name to the claiming template.");
+
+        // After claim, a subsequent strict DELETE (the prune path) for Main now matches the row.
+        _command.CommandText = @"
+            DELETE SchemaSmith.CompletedMigrationScripts
+            WHERE [ProductName] = 'Demo' AND [QuenchSlot] = 'Before'
+              AND [ScriptPath] = 'Before Scripts/Migration_001.sql'
+              AND [template_name] = 'Main' AND [schema_name] = '';";
+        _command.ExecuteNonQuery();
+
+        _command.CommandText = @"
+            SELECT COUNT(*) FROM SchemaSmith.CompletedMigrationScripts
+            WHERE ScriptPath = 'Before Scripts/Migration_001.sql';";
+        Assert.That((int)_command.ExecuteScalar(), Is.EqualTo(0),
+            "Once claimed, a future prune can clean the row up correctly.");
+    }
+
+    [Test]
     public void DeleteIsStrictOnTemplateName_LegacyBlankTemplateRow_NotSharedAcrossTemplates()
     {
         // Regression: a pre-extension product with templates A and B that both have a script
