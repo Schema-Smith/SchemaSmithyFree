@@ -481,7 +481,15 @@ public class DatabaseQuench
     {
         if (string.IsNullOrEmpty(_schemaName))
         {
-            // Regular-template path: zero-overhead pass-through.
+            // Regular templates intentionally use the existing computed-script accessors (which
+            // allocate a fresh List<SqlScript> per access but share the SqlScript references).
+            // This preserves today's shared-state behavior across parallel iterations — multiple
+            // regular-template DatabaseQuench instances on the same Template observe each other's
+            // mutations to SqlScript.HasBeenQuenched, which is how the engine avoids re-running an
+            // already-applied script on a sibling DB inside the same template. A future refactor
+            // that switches to per-iteration clones for regular templates would silently change
+            // observable script-mutation semantics — don't "fix" the aliasing without explicitly
+            // re-validating the regular-template parallel-DB scenarios.
             _iterationBeforeScripts = _template.BeforeScripts;
             _iterationObjectScripts = _template.ObjectScripts;
             _iterationAfterTablesObjectScripts = _template.AfterTablesObjectScripts;
@@ -1335,8 +1343,11 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
     /// Per-tenant log discipline (design §5.8): when this is a schema-template iteration, every log
     /// line carries a <c>[Schema: &lt;name&gt;]</c> prefix so a 100-iteration deploy log is still
     /// greppable per tenant. Empty schema name (regular template) skips the prefix entirely.
+    /// <para>Visible to tests (matches the existing <c>internal Platform Platform</c> /
+    /// <c>internal string ProductName</c> / <c>internal string SchemaName</c> pattern) so tests can
+    /// assert the prefix shape without reflection.</para>
     /// </summary>
-    private string LogPrefix => string.IsNullOrEmpty(_schemaName)
+    internal string LogPrefix => string.IsNullOrEmpty(_schemaName)
         ? $"[{_server}].[{_databaseName}]"
         : $"[{_server}].[{_databaseName}] [Schema: {_schemaName}]";
 

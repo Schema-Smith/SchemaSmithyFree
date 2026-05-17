@@ -464,11 +464,16 @@ public class ProductQuench
     }
 
     /// <summary>
-    /// Per design §3.6: when a template surfaces schema-template-only fields with non-default
-    /// values, echo them through the startup log so a reader can confirm at-a-glance how the
-    /// engine will treat this template. Regular templates without these fields skip the echo —
-    /// no extra noise for the 99% case. <see cref="Template.ContinueOnDatabaseFailure"/> is the
-    /// one universal field; echo it only when set non-default.
+    /// Per design §3.6: surfaces template-shape configuration through the startup log so a reader
+    /// can confirm at-a-glance how the engine will treat this template. Schema templates echo their
+    /// fan-out config (<c>SchemaIdentificationScript</c>, <c>CreateSchemaIfMissing</c>,
+    /// <c>AllowParallel</c>, <c>ContinueOnSchemaFailure</c>) <b>unconditionally</b> — every schema
+    /// template gets the four-line echo so ops can see the active settings without spelunking the
+    /// template file. Regular templates skip those four lines entirely (no fan-out config to echo).
+    /// <see cref="Template.ContinueOnDatabaseFailure"/> applies to all templates and is echoed only
+    /// when set non-default (false); the default-true case stays silent for the 99% regular-template
+    /// path. The deliberate verbosity for schema templates is the ops-friendly trade: echoing config
+    /// that drives behavior is more informative than suppressing it.
     /// </summary>
     private void LogSchemaTemplateFieldsIfSet(Template template)
     {
@@ -503,7 +508,13 @@ public class ProductQuench
         var workUnits = new List<WorkUnit>();
         foreach (var server in serverList)
         {
-            EnumerateWorkUnitsForServer(template, server, workUnits);
+            // TRANSITIONAL (slice 3 of schema-templates): per-server enumeration failure aborts
+            // enumeration across the entire template (we break out of the per-server loop too).
+            // Slice 4 routes server/DB failures through ContinueOnDatabaseFailure so a single
+            // unreachable server doesn't sink the rest of the template. See Community roadmap:
+            // "Slice 3 transitional aids".
+            if (!EnumerateWorkUnitsForServer(template, server, workUnits))
+                break;
         }
         return workUnits;
     }
@@ -534,16 +545,24 @@ public class ProductQuench
     /// Runs <c>template.DatabaseIdentificationScript</c> on the given server, and for each returned
     /// database (a) opens a connection to enumerate schemas if the template is a schema template,
     /// (b) appends one or more work units to <paramref name="workUnits"/>. Slice-3 stance: any
-    /// enumeration failure (connection, identification script, schema-discovery script, reserved-name
-    /// guard) is logged and surfaces by setting <c>_updateFailed = true</c>. Per-DB
-    /// <c>ContinueOnDatabaseFailure</c> routing arrives in slice 4.
+    /// enumeration failure (server-level connection, identification script, schema-discovery script,
+    /// reserved-name guard) is logged, sets <c>_updateFailed = true</c>, and aborts enumeration for
+    /// this server. <see cref="EnumerateWorkUnitsForTemplate"/>'s caller observes the aborted
+    /// enumeration via <c>_updateFailed</c> and skips dispatch entirely — consistent with the
+    /// slice-3 fail-loud stance (a stranded partial work-unit list that the dispatcher then skips
+    /// is internally inconsistent and confusing in logs).
+    /// <para>Returns <c>true</c> when enumeration completed cleanly for this server; <c>false</c>
+    /// when a failure aborted enumeration. Callers use the return value to break out of the
+    /// per-server loop so the template stops at the first failed server rather than producing
+    /// stranded work units against other servers.</para>
     /// </summary>
-    private void EnumerateWorkUnitsForServer(Template template, string server, List<WorkUnit> workUnits)
+    private bool EnumerateWorkUnitsForServer(Template template, string server, List<WorkUnit> workUnits)
     {
         _progressLog.Info($"Locate Databases To Quench ({server})");
         List<string> databases;
-        using (var command = GetCommand(server))
+        try
         {
+            using var command = GetCommand(server);
             try
             {
                 command.CommandText = template.DatabaseIdentificationScript;
@@ -558,6 +577,20 @@ public class ProductQuench
                 command.Connection?.Dispose();
             }
         }
+        catch (Exception e)
+        {
+            // TRANSITIONAL (slice 3 of schema-templates): server-level enumeration failures
+            // (unreachable host, bad DatabaseIdentificationScript) abort enumeration and trip
+            // _updateFailed. Slice 4 routes this through ContinueOnDatabaseFailure (and a future
+            // server-level analog) so a transient outage on one server doesn't sink the whole
+            // template. Until then, fail loud — silently propagating exceptions out of
+            // QuenchTemplate (the prior behavior on this code path) was the worse failure mode.
+            // See Community roadmap: "Slice 3 transitional aids".
+            _progressLog.Error($"Database enumeration FAILED for template {template.Name} on {server}: {e.Message}");
+            _errorLog.Error($"Database enumeration failed for {server} (template {template.Name}):\r\n{e}");
+            _updateFailed = true;
+            return false;
+        }
 
         foreach (var db in databases)
         {
@@ -570,10 +603,17 @@ public class ProductQuench
                 }
                 catch (Exception e)
                 {
+                    // TRANSITIONAL (slice 3 of schema-templates): per-DB schema-discovery failure
+                    // (e.g., reserved-name guard, bad SchemaIdentificationScript) aborts the rest
+                    // of this server's enumeration. The slice-3 stance is fail-loud — letting
+                    // enumeration produce a partial work-unit list that the dispatcher then skips
+                    // (because _updateFailed is set) is internally inconsistent. Slice 4 replaces
+                    // this with ContinueOnDatabaseFailure routing so one bad DB doesn't sink the
+                    // rest of the template. See Community roadmap: "Slice 3 transitional aids".
                     _progressLog.Error($"Schema discovery FAILED for template {template.Name} on {server}.{db}: {e.Message}");
                     _errorLog.Error($"Schema discovery failed for {server}.{db} (template {template.Name}):\r\n{e}");
                     _updateFailed = true;
-                    continue;
+                    return false;
                 }
 
                 foreach (var schema in schemas)
@@ -584,6 +624,8 @@ public class ProductQuench
                 workUnits.Add(new WorkUnit(server, db, template.Name, ""));
             }
         }
+
+        return true;
     }
 
     /// <summary>
@@ -651,6 +693,12 @@ public class ProductQuench
         }
         catch (AggregateException ae)
         {
+            // TRANSITIONAL (slice 3 of schema-templates): the dispatcher surfaces ANY callback
+            // failure as an AggregateException; slice 3 trips _updateFailed for the whole template
+            // (fail-loud stance). Slice 4 inspects per-failure context and honors
+            // ContinueOnSchemaFailure (per-iteration isolation within a DB) and
+            // ContinueOnDatabaseFailure (per-DB isolation across DBs) instead of aborting the
+            // template. See Community roadmap: "Slice 3 transitional aids".
             _updateFailed = true;
             _progressLog.Error($"Template '{template.Name}' had {ae.InnerExceptions.Count} failed work unit(s)");
         }
@@ -670,7 +718,12 @@ public class ProductQuench
         quench.Execute();
         if (!quench.QuenchSuccessful)
         {
-            // Slice 3 fail-loud: surface to dispatcher so the rest of the template's units abort.
+            // TRANSITIONAL (slice 3 of schema-templates): unconditional rethrow on per-work-unit
+            // failure — the dispatcher's fail-loud abort path catches it and stops the template.
+            // Slice 4 inspects the work unit's owning template and routes per
+            // ContinueOnSchemaFailure (continue with other iterations in the same DB on a
+            // per-iteration failure) and ContinueOnDatabaseFailure (continue with other DBs after
+            // a whole-DB failure). See Community roadmap: "Slice 3 transitional aids".
             var schemaSuffix = string.IsNullOrEmpty(unit.SchemaName) ? "" : $" [Schema: {unit.SchemaName}]";
             throw new Exception($"Work unit failed: {unit.Server}.{unit.DatabaseName}{schemaSuffix} (template {unit.TemplateName})");
         }

@@ -564,14 +564,17 @@ public class ProductQuenchTests
     }
 
     [Test]
-    public void EnumerateWorkUnits_ReservedSchemaName_SetsUpdateFailed()
+    public void EnumerateWorkUnits_ReservedSchemaName_AbortsEnumeration()
     {
-        // SchemaDiscovery throws on reserved names ('dbo', 'public', etc. — design §5.4). The
-        // enumeration loop catches the exception, logs the failure, and surfaces by setting
-        // _updateFailed. Other DBs continue to enumerate (slice-3 enumeration-level continue —
-        // the dispatcher itself is fail-loud, but enumeration is best-effort logging).
+        // SchemaDiscovery throws on reserved names ('dbo', 'public', etc. — design §5.4). Per the
+        // slice-3 fail-loud stance: discovery failure aborts the rest of the server's enumeration
+        // for this template AND trips _updateFailed. Stranded work units that the dispatcher would
+        // then skip (because _updateFailed is set) would be internally inconsistent and confusing
+        // in logs. Slice 4 will swap this for ContinueOnDatabaseFailure-aware routing.
         WithMinimalSqlServerProductQuench(quench =>
         {
+            // AppBad is enumerated first; its discovery failure aborts the remainder. AppGood is
+            // never touched.
             quench.IdentifiedDatabases["primary"] = new[] { "AppBad", "AppGood" };
             quench.SchemaDiscoveryFailures[("primary", "AppBad")] =
                 new System.InvalidOperationException("reserved schema name 'dbo'");
@@ -589,10 +592,76 @@ public class ProductQuenchTests
 
             Assert.Multiple(() =>
             {
-                // AppBad contributes zero units (discovery failed); AppGood still produces its one.
-                Assert.That(units, Has.Count.EqualTo(1));
+                Assert.That(units, Is.Empty,
+                    "AppBad's discovery failure aborts enumeration; AppGood is never enumerated.");
+                Assert.That(quench.UpdateFailed, Is.True);
+            });
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_ReservedSchemaName_LaterDb_PreservesEarlierUnits()
+    {
+        // Mirror-image case: when the failing DB comes AFTER a successful one, the earlier DB's
+        // work units are still in the list — but the enumeration aborts as soon as the failure is
+        // hit, and _updateFailed is set so the dispatcher won't run them. The point of this test
+        // is to lock in WHERE the abort fires (immediately on failure, not at the start).
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppGood", "AppBad" };
+            quench.SchemaDiscoveryResults[("primary", "AppGood")] = new List<string> { "tenant_x" };
+            quench.SchemaDiscoveryFailures[("primary", "AppBad")] =
+                new System.InvalidOperationException("reserved schema name 'dbo'");
+
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Has.Count.EqualTo(1),
+                    "AppGood produced its unit before AppBad's failure aborted enumeration.");
                 Assert.That(units.Single().DatabaseName, Is.EqualTo("AppGood"));
                 Assert.That(quench.UpdateFailed, Is.True);
+            });
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_ServerConnectionFailure_AbortsAndFlagsUpdateFailed()
+    {
+        // Server-level enumeration failure (unreachable server, bad DatabaseIdentificationScript)
+        // must be caught, logged, and surface as _updateFailed=true. Previously the exception
+        // propagated out of QuenchTemplate; the slice-3 transition catches it and uses the same
+        // fail-loud signal as schema-discovery failures. Slice 4 will route per
+        // ContinueOnDatabaseFailure (and a future server-level policy).
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.FailGetCommandFor.Add("primary");
+
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Is.Empty, "Server enumeration failed; no work units produced.");
+                Assert.That(quench.UpdateFailed, Is.True);
+                Assert.That(quench.ProgressLogLines,
+                    Has.Some.Contains("Database enumeration FAILED"),
+                    "Server-level failure must be logged so ops can see it without trawling the error log.");
             });
         });
     }
@@ -680,6 +749,7 @@ public class ProductQuenchTests
         public Dictionary<string, string[]> IdentifiedDatabases { get; } = new();
         public Dictionary<(string Server, string Db), List<string>> SchemaDiscoveryResults { get; } = new();
         public Dictionary<(string Server, string Db), System.Exception> SchemaDiscoveryFailures { get; } = new();
+        public HashSet<string> FailGetCommandFor { get; } = new();
         public List<string> ProgressLogLines { get; }
         public bool LogBackupCalled { get; private set; }
 
@@ -690,6 +760,8 @@ public class ProductQuenchTests
 
         internal override IDbCommand GetCommand(string server)
         {
+            if (FailGetCommandFor.Contains(server))
+                throw new System.Exception($"Unable to connect to {server} (simulated)");
             var dbs = IdentifiedDatabases.TryGetValue(server, out var list) ? list : System.Array.Empty<string>();
             return MakeReaderCommand(dbs);
         }

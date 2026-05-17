@@ -15,12 +15,15 @@ namespace SchemaQuench;
 /// in a retry loop is a misuse pattern, since the queues drain on the first call and a second
 /// call would otherwise silently no-op. Construct a fresh dispatcher per dispatch.</para>
 ///
-/// <para><b>Slice-3 behavior — fail loud, abort fast.</b> If any work unit's callback throws,
-/// the dispatcher stops accepting new work, lets currently-running callbacks complete naturally
-/// (no aggressive cancellation mid-script — partial-transaction risk too high), and surfaces
-/// the failure as an <see cref="AggregateException"/> from <see cref="Run"/>. Failure isolation
-/// (the <c>ContinueOnSchemaFailure</c> / <c>ContinueOnDatabaseFailure</c> settings on
-/// <c>Template</c>) lands in slice 4 along with the rich per-failure logging.</para>
+/// <para><b>TRANSITIONAL (slice 3 of schema-templates) — fail loud, abort fast.</b> If any
+/// work unit's callback throws, the dispatcher stops accepting new work, lets currently-running
+/// callbacks complete naturally (no aggressive cancellation mid-script — partial-transaction
+/// risk too high), and surfaces the failure as an <see cref="AggregateException"/> from
+/// <see cref="Run"/>. Failure isolation (the <c>ContinueOnSchemaFailure</c> /
+/// <c>ContinueOnDatabaseFailure</c> settings on <c>Template</c>) lands in slice 4 along with
+/// the rich per-failure logging. Slice 4 will replace the unconditional abort with per-policy
+/// routing — the dispatcher itself becomes aware of which failures are isolatable and which
+/// still abort. See Community roadmap: "Slice 3 transitional aids".</para>
 ///
 /// <para><b>Scheduling model.</b> Each work unit's template name maps via the
 /// <c>allowParallel</c> dictionary to one of two queues:</para>
@@ -36,7 +39,7 @@ namespace SchemaQuench;
 /// <para><b>Choice rationale (vs <c>TaskQueueManager&lt;T&gt;</c>).</b> The codebase already
 /// has <c>Schema.Utility.TaskQueueManager&lt;T&gt;</c>, which is used elsewhere for plain
 /// bounded-concurrency work (e.g., table token resolution in <c>Template.cs</c> and database
-/// fan-out in <c>ProductQuench.UpdateDatabasesForTemplate</c>). It was considered for this
+/// fan-out in <c>ProductQuench.EnumerateWorkUnitsForServer</c>). It was considered for this
 /// dispatcher and rejected for slice 3 because (a) it silently swallows worker exceptions
 /// (no fail-loud path), and (b) it has no notion of per-template serial sub-queues.
 /// Wrapping it to add both behaviors would be more code than implementing the focused

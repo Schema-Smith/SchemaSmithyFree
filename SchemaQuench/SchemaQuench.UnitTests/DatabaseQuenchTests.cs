@@ -1087,9 +1087,7 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, template, "AppProd", "tenant_acme",
             false, "0", false, "0", false, false, false, null);
 
-        var prefix = GetLogPrefix(quench);
-
-        Assert.That(prefix, Is.EqualTo("[srv].[AppProd] [Schema: tenant_acme]"));
+        Assert.That(quench.LogPrefix, Is.EqualTo("[srv].[AppProd] [Schema: tenant_acme]"));
     }
 
     [Test]
@@ -1100,9 +1098,7 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, template, "AppProd",
             false, "0", false, "0", false, false, false, null);
 
-        var prefix = GetLogPrefix(quench);
-
-        Assert.That(prefix, Is.EqualTo("[srv].[AppProd]"));
+        Assert.That(quench.LogPrefix, Is.EqualTo("[srv].[AppProd]"));
     }
 
     [Test]
@@ -1115,19 +1111,7 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, template, "AppProd", "",
             false, "false", false, "false", "false", false, false, null);
 
-        var prefix = GetLogPrefix(quench);
-
-        Assert.That(prefix, Is.EqualTo("[srv].[AppProd]"));
-    }
-
-    private static string GetLogPrefix(DatabaseQuench quench)
-    {
-        // LogPrefix is private; routed via SafeProgressLog into all log calls. Read it directly
-        // via reflection so we can assert the prefix invariant without standing up a log4net
-        // appender chain.
-        var prop = typeof(DatabaseQuench).GetProperty("LogPrefix",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        return (string)prop!.GetValue(quench);
+        Assert.That(quench.LogPrefix, Is.EqualTo("[srv].[AppProd]"));
     }
 
     #endregion
