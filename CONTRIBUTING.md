@@ -11,6 +11,12 @@ This document is the rules of the road for contributing. We point at it when we 
 - **Submit code** — Fix bugs, add features, improve docs. For non-trivial changes, open an issue first so we can align on direction before you invest implementation time.
 - **Improve docs** — The [documentation site](https://schemasmith.com/), in-repo `docs/` directory, README, and CHANGELOG are all fair game.
 
+## AI-Assisted Contributions
+
+AI-assisted PRs are welcome — many of us use AI tooling in our own workflow. The standards in this document apply regardless of how the patch was authored: tests come first, the same review bar applies, the contributor owns the PR and is responsible for understanding the code they're submitting, defending design choices in review, and addressing follow-up issues.
+
+If you use AI tooling with its own GitHub identity, both your handle and the tool's handle may appear in the commit history. Both are credited in CHANGELOG attribution (see *How Contributors Are Recognized* below); the welcome line for first-time contributors fires on whichever handle opens the PR.
+
 ## Before You Start
 
 For anything beyond a typo fix or a one-line bug repro, please skim this whole document before opening a PR. It's shorter than the review you'd otherwise get back. Two specific items contributors most often miss:
@@ -230,6 +236,18 @@ A PR is ready to merge when:
 5. README is updated if the build process, project structure, or getting-started experience changed.
 6. Self-review checklist (above) is complete.
 7. Reviewer feedback has been addressed.
+
+## How Contributors Are Recognized
+
+Contributors are credited in three places:
+
+- **CHANGELOG entries** — user-visible PRs (anything that generates a CHANGELOG entry) carry a `Thanks to @handle` line crediting all contributor handles that appear in the PR. Doc-only and non-released-tooling PRs that don't generate CHANGELOG entries are still credited via the README contributors section and the auto-generated GitHub contributors page.
+- **First-PR welcome** — the first PR a new contributor opens carries an extra welcome line in its CHANGELOG entry (when one exists), or via the README contributors update otherwise.
+- **README contributors section** — a running list of external contributors with links to their GitHub profiles, alongside [GitHub's auto-generated contributors page](https://github.com/Schema-Smith/SchemaSmith/graphs/contributors).
+
+For substantial design contributions or beta-testing partnerships, we may credit the contributor by real name in the relevant release notes or feature callout — with explicit consent, separate from the routine handle-credit above.
+
+Maintainer commits don't get per-entry CHANGELOG credit; maintainer authorship is established via project ownership and git history.
 
 ## Community & Communication
 
