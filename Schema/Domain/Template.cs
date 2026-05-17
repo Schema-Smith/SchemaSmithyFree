@@ -277,6 +277,14 @@ namespace Schema.Domain
 
             SchemaDefaultResolver.Resolve(template);
 
+            // SchemaDefaultResolver fills unset Schema fields on tables / views with
+            // either the platform default ("dbo" / "public") for regular templates or
+            // the "{{SchemaName}}" token for schema templates. The TableSchema JSON
+            // snapshot was serialized BEFORE the resolver ran (inside InstanceLoad),
+            // so re-snapshot after defaulting so the engine-generated DDL paths see
+            // a JSON literal that carries the resolved Schema values.
+            template.RebuildSerializedSchemaSnapshots();
+
             // Resolve the per-token TokenScope map so the SchemaQuench dispatcher can decide which
             // <*Query*> tokens need re-running per schema iteration vs. once per DB. Idempotent on
             // regular templates (no {{SchemaName}} references → every token stays at its default
@@ -375,6 +383,26 @@ namespace Schema.Domain
             DatabaseIdentificationScript = SqlScript.TokenReplace(DatabaseIdentificationScript ?? "", tokens);
             VersionStampScript = SqlScript.TokenReplace(VersionStampScript ?? "", tokens);
             BaselineValidationScript = SqlScript.TokenReplace(BaselineValidationScript ?? "", tokens);
+        }
+
+        /// <summary>
+        /// Re-serializes the <see cref="TableSchema"/> / <see cref="MaterializedViewSchema"/> /
+        /// <see cref="IndexedViewSchema"/> JSON snapshots from the current materialized domain
+        /// objects. Called from <see cref="Load"/> after <see cref="SchemaDefaultResolver"/> has
+        /// filled in default <c>Schema</c> values, so the snapshots carry the resolved values
+        /// (platform defaults for regular templates, <c>{{SchemaName}}</c> for schema templates)
+        /// rather than the pre-resolver nulls that <see cref="InstanceLoad"/> originally captured.
+        /// <para>Engine-generated DDL in <c>DatabaseQuench</c> consumes these JSON literals
+        /// verbatim, so a stale (pre-resolver) snapshot would deploy tables with NO schema
+        /// qualifier — i.e. into the user's default schema. This is also what enables per-iteration
+        /// <c>{{SchemaName}}</c> substitution downstream — the token has to be in the JSON for
+        /// the iteration-time replace to do anything.</para>
+        /// </summary>
+        internal void RebuildSerializedSchemaSnapshots()
+        {
+            TableSchema = JArray.FromObject(Tables).ToString();
+            MaterializedViewSchema = JArray.FromObject(MaterializedViews).ToString();
+            IndexedViewSchema = JArray.FromObject(IndexedViews).ToString();
         }
 
         /// <summary>

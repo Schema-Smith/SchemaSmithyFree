@@ -67,6 +67,19 @@ public class DatabaseQuench
     private string _iterationBaselineValidationScript;
     private string _iterationVersionStampScript;
 
+    // Per-iteration table / view JSON serializations passed into the platform-specific
+    // engine-generated DDL procs (MissingTableAndColumnQuench, IndexOnlyQuench, MaterializedViewQuench).
+    // For schema-template iterations PrepareIterationContent substitutes {{SchemaName}} so the procs
+    // receive fully-qualified table definitions. Regular templates leave the fields null and the
+    // properties below fall back to _template.<field> — no substitution, no behavior change.
+    // <para>The fall-back also lets test-only entry points (which call QuenchMaterializedViews /
+    // QuenchMissingTablesAndColumns directly without going through Execute → PrepareIterationContent)
+    // continue to work without forcing every test to drive the full pipeline.</para>
+    private string _iterationTableSchema;
+    private string _iterationMaterializedViewSchema;
+    private string IterationTableSchema => _iterationTableSchema ?? _template.TableSchema ?? "";
+    private string IterationMaterializedViewSchema => _iterationMaterializedViewSchema ?? _template.MaterializedViewSchema ?? "";
+
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         string schemaName, bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
         bool dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
@@ -499,6 +512,10 @@ public class DatabaseQuench
             _iterationAfterScripts = _template.AfterScripts;
             _iterationBaselineValidationScript = _template.BaselineValidationScript;
             _iterationVersionStampScript = _template.VersionStampScript;
+            // _iterationTableSchema / _iterationMaterializedViewSchema deliberately left null —
+            // the IterationTableSchema / IterationMaterializedViewSchema properties fall back to
+            // _template.<field>, so regular templates and bypass-Execute test entry points both
+            // observe the existing string verbatim.
             return;
         }
 
@@ -522,6 +539,13 @@ public class DatabaseQuench
             _template.BaselineValidationScript ?? "", schemaNameTokens, _product.Platform);
         _iterationVersionStampScript = SqlScript.TokenReplace(
             _template.VersionStampScript ?? "", schemaNameTokens, _product.Platform);
+
+        // Engine-generated DDL (MissingTableAndColumnQuench, IndexOnlyQuench, MaterializedViewQuench)
+        // consumes the serialized table-definition JSON literally. Slice 1's SchemaDefaultResolver
+        // defaults schema-template tables / views to "{{SchemaName}}", which means the JSON carries
+        // the token verbatim — substitute here so each iteration sees a fully-qualified DDL payload.
+        _iterationTableSchema = (_template.TableSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iterationMaterializedViewSchema = (_template.MaterializedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
     }
 
     private static List<SqlScript> CloneAndSubstitute(
@@ -754,7 +778,7 @@ public class DatabaseQuench
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
                 tableCommand.CommandText = $@"
-DECLARE @TableDefinitions VARCHAR(MAX)= '{_template.TableSchema.Replace("'", "''")}',
+DECLARE @TableDefinitions VARCHAR(MAX)= '{IterationTableSchema.Replace("'", "''")}',
         @UpdateFillFactor BIT = {updateFillFactor}
 {ForgeKindler.GetParseTableJsonScript(Platform.SqlServer)}
 EXEC [{_databaseName}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {_whatIfOnly}";
@@ -766,7 +790,7 @@ EXEC [{_databaseName}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {_whatI
 DO $$
 DECLARE
   p_UpdateFillFactor BOOL = {_template.UpdateFillFactor.ToString().ToLower()};
-  table_json JSON = '{_template.TableSchema.Replace("'", "''")}';
+  table_json JSON = '{IterationTableSchema.Replace("'", "''")}';
   sql_script TEXT = '';
 BEGIN
 {ForgeKindler.GetParseTableJsonScript(Platform.PostgreSQL)}
@@ -837,14 +861,14 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
-                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{_product.Name}', @TableDefinitions = '{_template.TableSchema.Replace("'", "''")}', @DropUnknownIndexes = {_dropUnknownIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}"
+                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{_product.Name}', @TableDefinitions = '{IterationTableSchema.Replace("'", "''")}', @DropUnknownIndexes = {_dropUnknownIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}"
                     : $"EXEC [{_databaseName}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{_product.Name}', @WhatIf = {_whatIfOnly}";
                 break;
             }
             case Platform.PostgreSQL:
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
                     ? $@"
-CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{_template.TableSchema.Replace("'", "''")}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()});
+CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{IterationTableSchema.Replace("'", "''")}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()});
 CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}');
 "
                     : $@"
@@ -909,7 +933,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
         SafeProgressLog("  Quenching materialized views");
 
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
-        tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{_product.Name.Replace("'", "''")}', '{_template.MaterializedViewSchema.Replace("'", "''")}', {_whatIfOnly}, {updateFillFactor});";
+        tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{_product.Name.Replace("'", "''")}', '{IterationMaterializedViewSchema.Replace("'", "''")}', {_whatIfOnly}, {updateFillFactor});";
 
         _debugFileLocation = $"SchemaQuench - Quench Materialized Views {_server}.{_databaseName}.sql";
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
@@ -942,6 +966,10 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
         if (applicableViews.Count == 0) return;
 
         var viewSchema = JArray.FromObject(applicableViews).ToString();
+        // Schema-template iteration: substitute {{SchemaName}} so the engine-generated DDL targets
+        // the iteration's resolved schema. Regular templates leave the literal alone (no token present).
+        if (!string.IsNullOrEmpty(_schemaName))
+            viewSchema = viewSchema.Replace("{{SchemaName}}", _schemaName);
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         tableCommand.CommandText = $@"EXEC [SchemaSmith].[IndexedViewQuench] @ProductName = '{_product.Name.Replace("'", "''")}', @IndexedViewSchema = '{viewSchema.Replace("'", "''")}', @WhatIf = {_whatIfOnly}, @UpdateFillFactor = {updateFillFactor};";
 

@@ -1,0 +1,22 @@
+{
+  "Schema": "public",
+  "Name": "shared_audit",
+  "Columns": [
+    {
+      "Name": "audit_id",
+      "DataType": "INTEGER"
+    },
+    {
+      "Name": "note",
+      "DataType": "VARCHAR(256)",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_shared_audit",
+      "PrimaryKey": true,
+      "IndexColumns": "audit_id"
+    }
+  ]
+}
