@@ -13,14 +13,12 @@ if "%PROCESSOR_ARCHITECTURE%"=="ARM64" (
 echo   Architecture: %RID%
 
 :: Read <IcuVersion> from Directory.Build.props so the verification below stays in
-:: lockstep with the package version. Single source of truth.
+:: lockstep with the package version. Single source of truth. Splitting the
+:: matched line on `<` and `>` yields four tokens — leading whitespace, opening
+:: tag name, value, closing tag name — so token 3 is the version.
 set ICU_VERSION=
-for /f "tokens=2 delims=<>" %%V in ('findstr /R "<IcuVersion>" "%~dp0Directory.Build.props"') do (
-    if /I "%%V"=="IcuVersion" (
-        rem skip the opening tag itself; the value is in the next token
-    ) else (
-        set ICU_VERSION=%%V
-    )
+for /f "tokens=3 delims=<>" %%V in ('findstr /R "<IcuVersion>" "%~dp0Directory.Build.props"') do (
+    set ICU_VERSION=%%V
 )
 if "%ICU_VERSION%"=="" (
     echo BUILD FAILED: Could not read ^<IcuVersion^> from Directory.Build.props.
