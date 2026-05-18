@@ -13,25 +13,26 @@ Demo database schema packages for SQL Server, PostgreSQL, and MySQL, deployed by
 
 ## Quick Start
 
-Choose a platform and run:
+Choose a platform and run the matching launcher:
 
 ```bash
 # SQL Server
-cd SqlServer && docker compose pull && docker compose build && docker compose up
+cd SqlServer && ./run-demo.sh
 
 # PostgreSQL
-cd PostgreSQL && docker compose pull && docker compose up
+cd PostgreSQL && ./run-demo.sh
 
 # MySQL
-cd MySQL && docker compose pull && docker compose up
+cd MySQL && ./run-demo.sh
 ```
+
+On Windows, use `run-demo.cmd` in place of `run-demo.sh`. The launcher publishes SchemaQuench from source (via `build-schemaquench.sh` / `.cmd` — requires the .NET SDK on the host), then runs `docker compose up --build -d` to start the database server and deploy the demo schemas.
 
 Each platform folder contains:
 - Demo schema packages (product folders)
 - A `docker-compose.yml` that spins up the database server and runs SchemaQuench to deploy the demo schemas
+- A `run-demo.sh` / `run-demo.cmd` launcher
 - A `.env` file with default credentials
-
-SQL Server requires `docker compose build` because it uses a custom Dockerfile to install Full-Text Search.
 
 ## Sources & Licensing
 
