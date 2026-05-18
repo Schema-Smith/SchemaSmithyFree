@@ -15,15 +15,18 @@ namespace SchemaQuench;
 /// in a retry loop is a misuse pattern, since the queues drain on the first call and a second
 /// call would otherwise silently no-op. Construct a fresh dispatcher per dispatch.</para>
 ///
-/// <para><b>TRANSITIONAL (slice 3 of schema-templates) — fail loud, abort fast.</b> If any
-/// work unit's callback throws, the dispatcher stops accepting new work, lets currently-running
-/// callbacks complete naturally (no aggressive cancellation mid-script — partial-transaction
-/// risk too high), and surfaces the failure as an <see cref="AggregateException"/> from
-/// <see cref="Run"/>. Failure isolation (the <c>ContinueOnSchemaFailure</c> /
-/// <c>ContinueOnDatabaseFailure</c> settings on <c>Template</c>) lands in slice 4 along with
-/// the rich per-failure logging. Slice 4 will replace the unconditional abort with per-policy
-/// routing — the dispatcher itself becomes aware of which failures are isolatable and which
-/// still abort. See Community roadmap: "Slice 3 transitional aids".</para>
+/// <para><b>Failure modes (design §5.5).</b> Controlled by the <c>continueOnFailure</c>
+/// constructor parameter:</para>
+/// <list type="bullet">
+///   <item><description><b>Continue mode (<c>continueOnFailure = true</c>, default for
+///   schema templates):</b> a failing callback records the exception and keeps dispatching
+///   remaining work units. At the end of <see cref="Run"/>, all failures are surfaced as an
+///   <see cref="AggregateException"/>. Exit code is the caller's responsibility.</description></item>
+///   <item><description><b>Abort mode (<c>continueOnFailure = false</c>):</b> the first
+///   failure sets an abort flag; no new work units are dequeued. In-flight units drain
+///   naturally (no aggressive <c>IDbCommand.Cancel()</c> — partial-transaction risk too high).
+///   Failures are surfaced as an <see cref="AggregateException"/>.</description></item>
+/// </list>
 ///
 /// <para><b>Scheduling model.</b> Each work unit's template name maps via the
 /// <c>allowParallel</c> dictionary to one of two queues:</para>
@@ -40,11 +43,10 @@ namespace SchemaQuench;
 /// has <c>Schema.Utility.TaskQueueManager&lt;T&gt;</c>, which is used elsewhere for plain
 /// bounded-concurrency work (e.g., table token resolution in <c>Template.cs</c> and database
 /// fan-out in <c>ProductQuench.EnumerateWorkUnitsForServer</c>). It was considered for this
-/// dispatcher and rejected for slice 3 because (a) it silently swallows worker exceptions
-/// (no fail-loud path), and (b) it has no notion of per-template serial sub-queues.
-/// Wrapping it to add both behaviors would be more code than implementing the focused
-/// dispatcher directly, and would obscure the simpler scheduling model this slice needs.
-/// Slice 4 will revisit if the dispatcher and <c>TaskQueueManager&lt;T&gt;</c> converge.</para>
+/// dispatcher and rejected because (a) it silently swallows worker exceptions (no fail-loud path),
+/// and (b) it has no notion of per-template serial sub-queues. Wrapping it to add both behaviors
+/// would be more code than implementing the focused dispatcher directly, and would obscure the
+/// simpler scheduling model this dispatcher needs.</para>
 /// </summary>
 public sealed class WorkUnitDispatcher
 {
@@ -56,6 +58,7 @@ public sealed class WorkUnitDispatcher
     private readonly HashSet<string> _serialBusy = new();
     private readonly object _lock = new();
     private readonly List<Exception> _failures = new();
+    private readonly bool _continueOnFailure;
     private bool _abort;
     private bool _hasRun;
 
@@ -69,17 +72,27 @@ public sealed class WorkUnitDispatcher
     /// Per-template parallelism: missing templates default to <c>true</c> (parallel-eligible).
     /// Templates mapped to <c>false</c> get a per-template serial queue.
     /// </param>
-    /// <param name="callback">Invoked once per work unit. Throwing aborts the dispatch (slice-3 stance).</param>
+    /// <param name="callback">Invoked once per work unit. Throwing engages the failure path.</param>
+    /// <param name="continueOnFailure">
+    /// When <c>true</c> (continue mode): a failing callback records the exception and continues
+    /// dispatching remaining units; all failures surface together at the end via
+    /// <see cref="AggregateException"/>. When <c>false</c> (abort mode, the default): the first
+    /// failure sets an abort flag, no new units are dequeued, in-flight units drain naturally,
+    /// and failures surface via <see cref="AggregateException"/>. Defaults to <c>false</c> to
+    /// preserve backward compatibility for callers that do not pass the parameter.
+    /// </param>
     public WorkUnitDispatcher(
         IEnumerable<WorkUnit> units,
         int maxThreads,
         IReadOnlyDictionary<string, bool> allowParallel,
-        Action<WorkUnit> callback)
+        Action<WorkUnit> callback,
+        bool continueOnFailure = false)
     {
         if (units == null) throw new ArgumentNullException(nameof(units));
         _callback = callback ?? throw new ArgumentNullException(nameof(callback));
         _allowParallel = allowParallel ?? new Dictionary<string, bool>();
         _maxThreads = maxThreads < 1 ? 1 : maxThreads;
+        _continueOnFailure = continueOnFailure;
 
         _parallelQueue = new Queue<WorkUnit>();
         _serialQueues = new Dictionary<string, Queue<WorkUnit>>();
@@ -135,8 +148,9 @@ public sealed class WorkUnitDispatcher
 
         if (_failures.Count > 0)
         {
+            var mode = _continueOnFailure ? "continue mode; all units attempted" : "abort mode; in-flight units drained";
             throw new AggregateException(
-                "One or more work units failed; dispatcher aborted (slice-3 fail-loud stance).",
+                $"One or more work units failed ({mode}).",
                 _failures);
         }
     }
@@ -169,7 +183,8 @@ public sealed class WorkUnitDispatcher
                 lock (_lock)
                 {
                     _failures.Add(ex);
-                    _abort = true;
+                    if (!_continueOnFailure)
+                        _abort = true;
                     Monitor.PulseAll(_lock);
                 }
             }

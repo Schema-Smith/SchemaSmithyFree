@@ -1,0 +1,17 @@
+{
+  "Schema": "public",
+  "Name": "tenants",
+  "Columns": [
+    {
+      "Name": "name",
+      "DataType": "VARCHAR(128)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_tenants",
+      "PrimaryKey": true,
+      "IndexColumns": "name"
+    }
+  ]
+}

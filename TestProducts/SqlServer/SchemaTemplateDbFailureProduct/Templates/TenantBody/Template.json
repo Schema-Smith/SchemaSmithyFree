@@ -1,0 +1,6 @@
+{
+    "Name": "TenantBody",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "SchemaIdentificationScript": "SELECT 'dbo'",
+    "ScriptFolders": []
+}

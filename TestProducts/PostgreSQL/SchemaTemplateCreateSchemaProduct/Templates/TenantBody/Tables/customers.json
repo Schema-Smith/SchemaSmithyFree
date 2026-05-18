@@ -1,0 +1,21 @@
+{
+  "Name": "customers",
+  "Columns": [
+    {
+      "Name": "customer_id",
+      "DataType": "INTEGER"
+    },
+    {
+      "Name": "marker",
+      "DataType": "VARCHAR(200)",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_customers",
+      "PrimaryKey": true,
+      "IndexColumns": "customer_id"
+    }
+  ]
+}

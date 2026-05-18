@@ -533,10 +533,9 @@ public class ProductQuenchTests
     public void LogSchemaTemplateFields_SchemaTemplate_EchoesFields()
     {
         // Per §3.6, templates with SchemaIdentificationScript echo their schema-fan-out config to
-        // the progress log at template-start. Regular templates skip the echo. Three of the echoed
-        // fields (CreateSchemaIfMissing, ContinueOnSchemaFailure, ContinueOnDatabaseFailure) are
-        // slice-4 stubs and carry a "(not yet honored — slice 4)" suffix; AllowParallel and
-        // SchemaIdentificationScript are honored in slice 3 and do not carry the suffix.
+        // the progress log at template-start. Regular templates skip the echo. All four echoed
+        // fields (SchemaIdentificationScript, CreateSchemaIfMissing, AllowParallel,
+        // ContinueOnSchemaFailure) are now honored by the slice-4 engine; no stub annotation suffix.
         WithMinimalSqlServerProductQuench(quench =>
         {
             var template = new Template
@@ -555,9 +554,10 @@ public class ProductQuenchTests
             Assert.Multiple(() =>
             {
                 Assert.That(quench.ProgressLogLines, Has.Some.Contains("SchemaIdentificationScript:"));
-                Assert.That(quench.ProgressLogLines, Has.Some.Contains("CreateSchemaIfMissing: True (not yet honored — slice 4)"));
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("CreateSchemaIfMissing: True"));
+                Assert.That(quench.ProgressLogLines, Has.None.Contains("not yet honored"));
                 Assert.That(quench.ProgressLogLines, Has.Some.Contains("AllowParallel: False"));
-                Assert.That(quench.ProgressLogLines, Has.Some.Contains("ContinueOnSchemaFailure: False (not yet honored — slice 4)"));
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("ContinueOnSchemaFailure: False"));
             });
         });
     }
@@ -585,9 +585,8 @@ public class ProductQuenchTests
     [Test]
     public void LogSchemaTemplateFields_ContinueOnDatabaseFailureFalse_EchoesIt()
     {
-        // ContinueOnDatabaseFailure applies to ALL templates (regular + schema); echo only when
-        // non-default (false). The field is a slice-4 stub and carries the
-        // "(not yet honored — slice 4)" suffix until slice 4 wires it to actual failure routing.
+        // ContinueOnDatabaseFailure applies to ALL templates (regular + schema); echoed only when
+        // non-default (false). Slice 4 now wires it to actual failure routing — no stub suffix.
         WithMinimalSqlServerProductQuench(quench =>
         {
             var template = new Template
@@ -600,7 +599,11 @@ public class ProductQuenchTests
 
             quench.InvokeLogSchemaTemplateFieldsIfSet(template);
 
-            Assert.That(quench.ProgressLogLines, Has.Some.Contains("ContinueOnDatabaseFailure: False (not yet honored — slice 4)"));
+            Assert.Multiple(() =>
+            {
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("ContinueOnDatabaseFailure: False"));
+                Assert.That(quench.ProgressLogLines, Has.None.Contains("not yet honored"));
+            });
         });
     }
 
@@ -693,17 +696,14 @@ public class ProductQuenchTests
     }
 
     [Test]
-    public void EnumerateWorkUnits_ReservedSchemaName_AbortsEnumeration()
+    public void EnumerateWorkUnits_ReservedSchemaName_ContinueMode_SkipsBadDbAndContinues()
     {
-        // SchemaDiscovery throws on reserved names ('dbo', 'public', etc. — design §5.4). Per the
-        // slice-3 fail-loud stance: discovery failure aborts the rest of the server's enumeration
-        // for this template AND trips _updateFailed. Stranded work units that the dispatcher would
-        // then skip (because _updateFailed is set) would be internally inconsistent and confusing
-        // in logs. Slice 4 will swap this for ContinueOnDatabaseFailure-aware routing.
+        // SchemaDiscovery throws on reserved names ('dbo', 'public', etc. — design §5.4).
+        // With ContinueOnDatabaseFailure=true (default), a per-DB discovery failure trips
+        // _updateFailed but does NOT abort enumeration — the loop continues to the next DB.
         WithMinimalSqlServerProductQuench(quench =>
         {
-            // AppBad is enumerated first; its discovery failure aborts the remainder. AppGood is
-            // never touched.
+            // AppBad fails first; with continue=true, AppGood is still enumerated.
             quench.IdentifiedDatabases["primary"] = new[] { "AppBad", "AppGood" };
             quench.SchemaDiscoveryFailures[("primary", "AppBad")] =
                 new System.InvalidOperationException("reserved schema name 'dbo'");
@@ -714,7 +714,41 @@ public class ProductQuenchTests
                 Name = "TenantBody",
                 Product = quench.LoadedProduct,
                 DatabaseIdentificationScript = "SELECT name FROM sys.databases",
-                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas",
+                ContinueOnDatabaseFailure = true  // default; explicit for clarity
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Has.Count.EqualTo(1),
+                    "AppBad skipped; AppGood's unit still enumerated in continue mode.");
+                Assert.That(units.Single().DatabaseName, Is.EqualTo("AppGood"));
+                Assert.That(quench.UpdateFailed, Is.True, "_updateFailed set even in continue mode.");
+            });
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_ReservedSchemaName_AbortMode_StopsEnumeration()
+    {
+        // With ContinueOnDatabaseFailure=false, a per-DB discovery failure aborts enumeration
+        // for the rest of this server — AppGood is never touched.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppBad", "AppGood" };
+            quench.SchemaDiscoveryFailures[("primary", "AppBad")] =
+                new System.InvalidOperationException("reserved schema name 'dbo'");
+            quench.SchemaDiscoveryResults[("primary", "AppGood")] = new List<string> { "tenant_x" };
+
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas",
+                ContinueOnDatabaseFailure = false
             };
 
             var units = quench.EnumerateWorkUnitsForTemplate(template);
@@ -722,7 +756,7 @@ public class ProductQuenchTests
             Assert.Multiple(() =>
             {
                 Assert.That(units, Is.Empty,
-                    "AppBad's discovery failure aborts enumeration; AppGood is never enumerated.");
+                    "AppBad's discovery failure aborts enumeration in abort mode; AppGood is never enumerated.");
                 Assert.That(quench.UpdateFailed, Is.True);
             });
         });
@@ -731,10 +765,11 @@ public class ProductQuenchTests
     [Test]
     public void EnumerateWorkUnits_ReservedSchemaName_LaterDb_PreservesEarlierUnits()
     {
-        // Mirror-image case: when the failing DB comes AFTER a successful one, the earlier DB's
-        // work units are still in the list — but the enumeration aborts as soon as the failure is
-        // hit, and _updateFailed is set so the dispatcher won't run them. The point of this test
-        // is to lock in WHERE the abort fires (immediately on failure, not at the start).
+        // With ContinueOnDatabaseFailure=true (default): AppGood's unit is produced; AppBad's
+        // failure is skipped via continue; no more DBs. The earlier unit is preserved and
+        // _updateFailed is set. With continue=true the unit IS dispatched (vs slice-3 where
+        // _updateFailed caused the dispatcher to skip everything — that was an inconsistency
+        // the slice-4 routing resolves).
         WithMinimalSqlServerProductQuench(quench =>
         {
             quench.IdentifiedDatabases["primary"] = new[] { "AppGood", "AppBad" };
@@ -747,7 +782,8 @@ public class ProductQuenchTests
                 Name = "TenantBody",
                 Product = quench.LoadedProduct,
                 DatabaseIdentificationScript = "SELECT name FROM sys.databases",
-                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas",
+                ContinueOnDatabaseFailure = true  // default; AppBad's failure is skipped
             };
 
             var units = quench.EnumerateWorkUnitsForTemplate(template);
@@ -755,9 +791,55 @@ public class ProductQuenchTests
             Assert.Multiple(() =>
             {
                 Assert.That(units, Has.Count.EqualTo(1),
-                    "AppGood produced its unit before AppBad's failure aborted enumeration.");
+                    "AppGood's unit is preserved; AppBad's failure is skipped in continue mode.");
                 Assert.That(units.Single().DatabaseName, Is.EqualTo("AppGood"));
-                Assert.That(quench.UpdateFailed, Is.True);
+                Assert.That(quench.UpdateFailed, Is.True, "_updateFailed set even in continue mode.");
+            });
+        });
+    }
+
+    /// <summary>
+    /// Regression guard for the dispatch-guard bug: when ContinueOnDatabaseFailure=true and one DB's
+    /// schema discovery fails, <c>_updateFailed</c> is set during enumeration but valid work units
+    /// from the surviving DB are still added to the list. Before the fix the dispatch condition was
+    /// <c>workUnits.Count > 0 &amp;&amp; !_updateFailed</c>, which evaluated false and silently
+    /// dropped the valid units. The fix drops <c>&amp;&amp; !_updateFailed</c> so the dispatcher
+    /// runs whenever there are units regardless of enumeration-time failures. This test MUST FAIL
+    /// against the pre-fix code (no units dispatched) and pass after the fix (one unit dispatched).
+    /// </summary>
+    [Test]
+    public void QuenchTemplate_ContinueOnDbFailure_ValidUnitsDispatchedDespiteEnumerationFailure()
+    {
+        // Two DBs: AppBad's schema discovery fails; AppGood produces one valid unit.
+        // With ContinueOnDatabaseFailure=true, _updateFailed is set during enumeration but
+        // AppGood's work unit is still in the list. The dispatcher must still run.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppBad", "AppGood" };
+            quench.SchemaDiscoveryFailures[("primary", "AppBad")] =
+                new System.InvalidOperationException("reserved schema name 'dbo'");
+            quench.SchemaDiscoveryResults[("primary", "AppGood")] = new List<string> { "tenant_x" };
+
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas",
+                ContinueOnDatabaseFailure = true,
+                ContinueOnSchemaFailure = true
+            };
+
+            quench.InvokeQuenchTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(quench.DispatchedWorkUnits, Has.Count.EqualTo(1),
+                    "AppGood's valid unit must reach the dispatcher even though _updateFailed was set " +
+                    "during AppBad's enumeration failure. Pre-fix this was 0.");
+                Assert.That(quench.DispatchedWorkUnits.Single().DatabaseName, Is.EqualTo("AppGood"));
+                Assert.That(quench.UpdateFailed, Is.True,
+                    "_updateFailed stays set so the non-zero exit path fires after dispatch.");
             });
         });
     }
@@ -766,10 +848,8 @@ public class ProductQuenchTests
     public void EnumerateWorkUnits_ServerConnectionFailure_AbortsAndFlagsUpdateFailed()
     {
         // Server-level enumeration failure (unreachable server, bad DatabaseIdentificationScript)
-        // must be caught, logged, and surface as _updateFailed=true. Previously the exception
-        // propagated out of QuenchTemplate; the slice-3 transition catches it and uses the same
-        // fail-loud signal as schema-discovery failures. Slice 4 will route per
-        // ContinueOnDatabaseFailure (and a future server-level policy).
+        // must be caught, logged, and surface as _updateFailed=true. With only one server in the
+        // list and no work units produced, the result is empty regardless of ContinueOnDatabaseFailure.
         WithMinimalSqlServerProductQuench(quench =>
         {
             quench.FailGetCommandFor.Add("primary");

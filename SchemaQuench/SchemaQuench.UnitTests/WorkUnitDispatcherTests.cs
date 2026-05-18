@@ -314,4 +314,130 @@ public class WorkUnitDispatcherTests
 
         Assert.Throws<InvalidOperationException>(() => dispatcher.Run());
     }
+
+    // -----------------------------------------------------------------------
+    // continueOnFailure = true (slice 4 continue mode)
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void Run_ContinueMode_AllUnitsAttempted_EvenAfterFailure()
+    {
+        // With continueOnFailure=true, a single failing unit does not stop the dispatcher;
+        // all remaining units still run. The AggregateException surfaces at the end.
+        var units = Enumerable.Range(1, 5)
+            .Select(i => new WorkUnit("s", $"db{i}", "Core", ""))
+            .ToList();
+        var processed = new ConcurrentBag<string>();
+
+        var dispatcher = new WorkUnitDispatcher(units, maxThreads: 1, new Dictionary<string, bool>(),
+            unit =>
+            {
+                if (unit.DatabaseName == "db2")
+                    throw new InvalidOperationException("boom");
+                processed.Add(unit.DatabaseName);
+            },
+            continueOnFailure: true);
+
+        var ex = Assert.Throws<AggregateException>(() => dispatcher.Run());
+        Assert.That(ex!.InnerExceptions.Count, Is.EqualTo(1));
+
+        // All 4 non-failing units were processed.
+        Assert.That(processed.Count, Is.EqualTo(4),
+            "Continue mode must attempt all units even after one fails.");
+    }
+
+    [Test]
+    public void Run_ContinueMode_MultipleFailures_AllCollected()
+    {
+        // With continueOnFailure=true, every exception from every failing unit is collected
+        // in the AggregateException — none are silently swallowed.
+        var units = Enumerable.Range(1, 5)
+            .Select(i => new WorkUnit("s", $"db{i}", "Core", ""))
+            .ToList();
+
+        var dispatcher = new WorkUnitDispatcher(units, maxThreads: 1, new Dictionary<string, bool>(),
+            unit =>
+            {
+                if (unit.DatabaseName is "db1" or "db3")
+                    throw new InvalidOperationException($"boom {unit.DatabaseName}");
+            },
+            continueOnFailure: true);
+
+        var ex = Assert.Throws<AggregateException>(() => dispatcher.Run());
+        Assert.That(ex!.InnerExceptions.Count, Is.EqualTo(2),
+            "Both failures must appear in the AggregateException.");
+        Assert.That(ex.InnerExceptions.Select(e => e.Message),
+            Is.EquivalentTo(new[] { "boom db1", "boom db3" }));
+    }
+
+    [Test]
+    public void Run_ContinueMode_ParallelFailures_AllCollectedThreadSafe()
+    {
+        // Three workers throw simultaneously — no exception should be lost to a race on the
+        // collection path. maxThreads:3 with 6 units where the first three fail concurrently.
+        const int failingCount = 3;
+        var units = Enumerable.Range(1, 6)
+            .Select(i => new WorkUnit("s", $"db{i}", "Core", ""))
+            .ToList();
+
+        // A barrier that holds each failing worker until all three are ready to throw at once,
+        // maximising the chance of concurrent writes to the exception collection.
+        var barrier = new Barrier(failingCount);
+
+        var dispatcher = new WorkUnitDispatcher(units, maxThreads: 3, new Dictionary<string, bool>(),
+            unit =>
+            {
+                var n = int.Parse(unit.DatabaseName[2..]);
+                if (n <= failingCount)
+                {
+                    barrier.SignalAndWait(TimeSpan.FromSeconds(5));
+                    throw new InvalidOperationException($"boom {unit.DatabaseName}");
+                }
+            },
+            continueOnFailure: true);
+
+        var ex = Assert.Throws<AggregateException>(() => dispatcher.Run());
+        Assert.That(ex!.InnerExceptions.Count, Is.EqualTo(failingCount),
+            "All three concurrent failures must be captured — none lost to a collection race.");
+    }
+
+    [Test]
+    public void Run_AbortMode_IsDefaultBehavior()
+    {
+        // The default (no continueOnFailure param) still aborts on first failure —
+        // backward-compatible, no caller changes needed for abort-mode callers.
+        var units = Enumerable.Range(1, 4)
+            .Select(i => new WorkUnit("s", $"db{i}", "Core", ""))
+            .ToList();
+        var processed = new ConcurrentBag<string>();
+
+        var dispatcher = new WorkUnitDispatcher(units, maxThreads: 1, new Dictionary<string, bool>(),
+            unit =>
+            {
+                if (unit.DatabaseName == "db1")
+                    throw new InvalidOperationException("boom");
+                processed.Add(unit.DatabaseName);
+            });
+
+        Assert.Throws<AggregateException>(() => dispatcher.Run());
+        Assert.That(processed.Count, Is.EqualTo(0),
+            "Abort mode (default) must not process any units after the first failure.");
+    }
+
+    [Test]
+    public void Run_ContinueMode_NoFailures_CompletesNormally()
+    {
+        // When continueOnFailure=true but nothing fails, Run() returns without throwing.
+        var units = Enumerable.Range(1, 3)
+            .Select(i => new WorkUnit("s", $"db{i}", "Core", ""))
+            .ToList();
+        var processed = new ConcurrentBag<string>();
+
+        var dispatcher = new WorkUnitDispatcher(units, maxThreads: 2, new Dictionary<string, bool>(),
+            unit => processed.Add(unit.DatabaseName),
+            continueOnFailure: true);
+
+        Assert.DoesNotThrow(() => dispatcher.Run());
+        Assert.That(processed.Count, Is.EqualTo(3));
+    }
 }

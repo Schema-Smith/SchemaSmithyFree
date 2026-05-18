@@ -1,0 +1,40 @@
+{
+  "Name": "[Orders]",
+  "Columns": [
+    {
+      "Name": "[OrderID]",
+      "DataType": "INT"
+    },
+    {
+      "Name": "[CustomerID]",
+      "DataType": "INT"
+    },
+    {
+      "Name": "[LookupID]",
+      "DataType": "INT",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Orders]",
+      "PrimaryKey": true,
+      "IndexColumns": "[OrderID]"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Orders_Customers]",
+      "Columns": "[CustomerID]",
+      "RelatedTable": "[Customers]",
+      "RelatedColumns": "[CustomerID]"
+    },
+    {
+      "Name": "[FK_Orders_Lookup]",
+      "Columns": "[LookupID]",
+      "RelatedTableSchema": "[dbo]",
+      "RelatedTable": "[Lookup]",
+      "RelatedColumns": "[LookupID]"
+    }
+  ]
+}

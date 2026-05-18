@@ -1,0 +1,21 @@
+{
+  "Name": "[Customers]",
+  "Columns": [
+    {
+      "Name": "[CustomerID]",
+      "DataType": "INT"
+    },
+    {
+      "Name": "[Marker]",
+      "DataType": "NVARCHAR(200)",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Customers]",
+      "PrimaryKey": true,
+      "IndexColumns": "[CustomerID]"
+    }
+  ]
+}

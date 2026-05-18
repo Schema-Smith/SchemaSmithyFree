@@ -226,6 +226,12 @@ public class DatabaseQuench
                     command.ExecuteNonQuery();
                 }
 
+                // Schema-template existence check: run before slot 1 (kindling) so a missing
+                // schema fails fast with a clear error before any DDL is attempted. MySQL schema
+                // templates are rejected at load time (no namespace-inside-database concept);
+                // the empty-schemaName guard handles MySQL and regular templates both.
+                EnsureSchemaExists(command);
+
                 var effectiveTableCmd = tableCommand ?? command;
                 var effectiveObjectsCmd = objectsCommand ?? command;
                 var effectiveSilentCmd = silentCommand ?? command;
@@ -569,6 +575,65 @@ public class DatabaseQuench
     }
 
     /// <summary>
+    /// Schema-template existence check (design §5.3 step 3). Called before slot 1 (kindling)
+    /// on every schema-template iteration. For regular templates and MySQL, <see cref="_schemaName"/>
+    /// is empty and this method returns immediately. For schema templates:
+    /// <list type="bullet">
+    ///   <item><description>Schema exists → return (no-op).</description></item>
+    ///   <item><description>Schema missing + <c>CreateSchemaIfMissing: true</c> → emit
+    ///   <c>CREATE SCHEMA</c> and proceed.</description></item>
+    ///   <item><description>Schema missing + <c>CreateSchemaIfMissing: false</c> (default) →
+    ///   throw with a clear error pointing at the three onboarding paths.</description></item>
+    /// </list>
+    /// Schema names are safe to interpolate directly: <see cref="SchemaDiscovery.Discover"/>
+    /// already rejects any name containing bracket / quote / brace characters (slice-3 audit I6),
+    /// so <c>[{_schemaName}]</c> / <c>"{_schemaName}"</c> interpolation cannot be injected.
+    /// </summary>
+    private void EnsureSchemaExists(IDbCommand command)
+    {
+        if (string.IsNullOrEmpty(_schemaName)) return;  // regular template or MySQL — no schema iteration
+
+        if (SchemaExists(command))
+            return;  // already exists — skip
+
+        if (!_template.CreateSchemaIfMissing)
+            throw new Exception(
+                $"Schema '{_schemaName}' does not exist in database '{_databaseName}'. " +
+                "Onboarding options: (1) Set CreateSchemaIfMissing: true on the template " +
+                "(accepts typo risk in discovery output). (2) Pre-create the schema manually. " +
+                "(3) Call a Shared-template helper procedure (e.g., dbo.OnboardTenant) " +
+                "that runs CREATE SCHEMA + INSERT atomically — see the TenantCRM demo.");
+
+        var ddl = _product.Platform == Platform.SqlServer
+            ? $"CREATE SCHEMA [{_schemaName}]"
+            : $"CREATE SCHEMA \"{_schemaName}\"";
+        SafeProgressLog($"  Creating schema (CreateSchemaIfMissing=true)");
+        command.Parameters.Clear();
+        command.CommandText = ddl;
+        command.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Returns true if <see cref="_schemaName"/> already exists on the target platform.
+    /// Uses a parameter to pass the schema name so no string interpolation into the WHERE clause.
+    /// </summary>
+    private bool SchemaExists(IDbCommand command)
+    {
+        command.Parameters.Clear();
+        command.CommandText = _product.Platform == Platform.SqlServer
+            ? "SELECT COUNT(*) FROM sys.schemas WHERE name = @name"
+            : "SELECT COUNT(*) FROM pg_namespace WHERE nspname = @name";
+        var param = command.CreateParameter();
+        param.ParameterName = "@name";
+        param.Value = _schemaName;
+        param.DbType = DbType.String;
+        command.Parameters.Add(param);
+        var result = Convert.ToInt32(command.ExecuteScalar());
+        command.Parameters.Clear();
+        return result > 0;
+    }
+
+    /// <summary>
     /// Resolves the template's <c>&lt;*Query*&gt;</c> tokens against the live silent command and
     /// applies the resolved values to every script in this iteration. <para>
     /// Regular templates keep today's behavior — the <c>_template.QueryTokens</c> dict is mutated
@@ -623,9 +688,9 @@ public class DatabaseQuench
         // 2. Build the per-iteration QueryTokens dict, substituting {{SchemaName}} into the
         //    bodies of iteration-scoped tokens BEFORE the query runs. Per-DB query tokens
         //    pass through unchanged; ResolveQueryTokens still executes them against the
-        //    connection, which means they get re-run per iteration too — slice 3 keeps the
-        //    fan-out cost simple (one execution per query token per work unit). Slice 4+
-        //    can introduce per-DB caching if profiling shows it matters.
+        //    connection, which means they get re-run per iteration too — fan-out cost is
+        //    one execution per query token per work unit. Per-DB caching can be introduced
+        //    later if profiling shows it matters.
         var iterationQueryTokens = new Dictionary<string, string>(_template.QueryTokens.Count);
         foreach (var kv in _template.QueryTokens)
         {

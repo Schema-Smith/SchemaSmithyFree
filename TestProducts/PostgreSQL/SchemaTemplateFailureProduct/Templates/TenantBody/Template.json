@@ -1,0 +1,9 @@
+{
+    "Name": "TenantBody",
+    "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datistemplate = false AND datname = '{{MainDB}}'",
+    "SchemaIdentificationScript": "SELECT name FROM public.tenants ORDER BY name",
+    "AllowParallel": false,
+    "ScriptFolders": [
+        { "FolderPath" : "Before Scripts", "QuenchSlot" : "Before" }
+    ]
+}

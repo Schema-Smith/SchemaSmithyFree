@@ -1,0 +1,6 @@
+{
+    "Name": "TenantBody",
+    "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datistemplate = false AND datname = '{{MainDB}}'",
+    "SchemaIdentificationScript": "SELECT 'public'",
+    "ScriptFolders": []
+}

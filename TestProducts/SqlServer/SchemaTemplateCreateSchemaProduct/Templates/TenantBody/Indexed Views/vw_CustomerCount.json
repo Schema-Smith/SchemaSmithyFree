@@ -1,0 +1,12 @@
+{
+  "Name": "[vw_CustomerCount]",
+  "Definition": "SELECT [CustomerID], COUNT_BIG(*) AS [RowCount] FROM [{{SchemaName}}].[Customers] GROUP BY [CustomerID]",
+  "Indexes": [
+    {
+      "Name": "[CIX_vw_CustomerCount]",
+      "Unique": true,
+      "Clustered": true,
+      "IndexColumns": "[CustomerID]"
+    }
+  ]
+}

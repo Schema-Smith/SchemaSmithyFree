@@ -1,0 +1,9 @@
+{
+    "Name": "TenantBody",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "SchemaIdentificationScript": "SELECT [Name] FROM dbo.Tenants ORDER BY [Name]",
+    "AllowParallel": false,
+    "ScriptFolders": [
+        { "FolderPath" : "Before Scripts", "QuenchSlot" : "Before" }
+    ]
+}
