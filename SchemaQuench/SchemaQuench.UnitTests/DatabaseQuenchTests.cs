@@ -1078,6 +1078,86 @@ public class DatabaseQuenchTests
         Assert.That(mockCmd.CommandText, Does.Not.Contain("[vw_Excluded]"));
     }
 
+    // Slice-3 audit B5: QuenchIndexedViews threads @TemplateName + @SchemaName so the
+    // existing-views drop-candidate lookup in the proc is scoped per (template, schema).
+    // Regular templates pass @SchemaName = '' and the proc falls through to today's
+    // all-schemas behavior.
+    [Test]
+    public void QuenchIndexedViews_SchemaTemplate_ThreadsTemplateNameAndSchemaName()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_acme'"
+        };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Orders]",
+            Schema = "{{SchemaName}}",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_acme",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexedViews(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@TemplateName = N'TenantBody'"));
+        Assert.That(mockCmd.CommandText, Does.Contain("@SchemaName = N'tenant_acme'"));
+    }
+
+    [Test]
+    public void QuenchIndexedViews_RegularTemplate_PassesEmptyTemplateAndSchemaName()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "Core" };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Orders]",
+            Schema = "dbo",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexedViews(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@TemplateName = N'Core'"));
+        Assert.That(mockCmd.CommandText, Does.Contain("@SchemaName = N''"));
+    }
+
+    [Test]
+    public void QuenchIndexedViews_TemplateNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "Tenant's Body" };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Orders]",
+            Schema = "dbo",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexedViews(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@TemplateName = N'Tenant''s Body'"));
+    }
+
     #endregion
 
     #region QuenchMaterializedViews Tests

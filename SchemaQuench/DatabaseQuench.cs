@@ -992,7 +992,10 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
                 viewSchema = viewSchema.Replace("{{SchemaName}}", _schemaName);
         }
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
-        tableCommand.CommandText = $@"EXEC [SchemaSmith].[IndexedViewQuench] @ProductName = '{_product.Name.Replace("'", "''")}', @IndexedViewSchema = '{viewSchema.Replace("'", "''")}', @WhatIf = {_whatIfOnly}, @UpdateFillFactor = {updateFillFactor};";
+        // B5 fix: thread @TemplateName + @SchemaName so the existing-views lookup in the proc
+        // is scoped to the iteration's schema. Regular templates pass @SchemaName = '' and the
+        // proc falls through to today's all-schemas behavior.
+        tableCommand.CommandText = $@"EXEC [SchemaSmith].[IndexedViewQuench] @ProductName = '{_product.Name.Replace("'", "''")}', @IndexedViewSchema = '{viewSchema.Replace("'", "''")}', @WhatIf = {_whatIfOnly}, @UpdateFillFactor = {updateFillFactor}, @TemplateName = N'{EscapeSqlLiteral(_template.Name)}', @SchemaName = N'{EscapeSqlLiteral(_schemaName)}';";
 
         _debugFileLocation = GetDebugFileName("Quench Indexed Views");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);

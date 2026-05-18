@@ -934,6 +934,72 @@ IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
         }
     }
 
+    [Test]
+    public void Indexed_View_Per_Tenant_Survives_Second_Quench_No_Cross_Tenant_Drops()
+    {
+        // Slice-3 audit B5 regression: SQL Server SchemaSmith.IndexedViewQuench previously
+        // read existing indexed views GLOBALLY across all schemas owned by the product, then
+        // dropped any view not in this iteration's substituted @IndexedViewSchema JSON. Under
+        // parallel schema-template execution, tenant_acme's iteration saw tenant_beta's and
+        // tenant_globex's indexed views in @ExistingViews and tried to drop them; sibling
+        // iterations raced. Fix scopes the existing-views lookup to (@TemplateName, @SchemaName)
+        // when @SchemaName is non-empty (regular templates pass '' and fall through to
+        // today's all-schemas behavior).
+        //
+        // Test pattern mirrors PG's MaterializedView regression: deploy 3 tenants whose
+        // TenantBody template carries an indexed view; quench twice; assert every tenant
+        // still owns its IV after the second pass.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(DefaultTenants);
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("SqlServer", ProductName);
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                foreach (var tenant in DefaultTenants)
+                {
+                    var ivCount = ScalarCount($@"
+SELECT COUNT(*) FROM sys.views v
+  INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+  WHERE s.name = '{tenant}' AND v.name = 'vw_CustomerCount'
+  AND OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1");
+                    Assert.That(ivCount, Is.EqualTo(1),
+                        $"Tenant '{tenant}' must have its vw_CustomerCount indexed view after first quench.");
+                }
+
+                // Second quench: bug-trigger path. Pre-fix, tenant_acme's iteration would see
+                // tenant_beta's and tenant_globex's vw_CustomerCount as "removed from product"
+                // and drop them (and sibling iterations would race trying to drop tenant_acme's).
+                // Post-fix, each iteration's @ExistingViews is scoped to its own schema.
+                _progressLog.ClearReceivedCalls();
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                foreach (var tenant in DefaultTenants)
+                {
+                    var ivCount = ScalarCount($@"
+SELECT COUNT(*) FROM sys.views v
+  INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+  WHERE s.name = '{tenant}' AND v.name = 'vw_CustomerCount'
+  AND OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1");
+                    Assert.That(ivCount, Is.EqualTo(1),
+                        $"After second quench tenant '{tenant}' must still have vw_CustomerCount — sibling iterations must not have dropped it.");
+                }
+            }
+            finally
+            {
+                DropTenantSchemas(DefaultTenants);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
     // ----- Helpers ---------------------------------------------------------------------------
 
     private void SetupSharedMocks()

@@ -183,7 +183,7 @@ jobs:
     steps:
       - name: Increase PostgreSQL max connections
         run: |
-          PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -c "ALTER SYSTEM SET max_connections = 500;"
+          PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -c "ALTER SYSTEM SET max_connections = 1000;"
           # shellcheck disable=SC2046  # docker restart accepts multiple IDs; word splitting is intentional
           docker restart $(docker ps -q --filter "ancestor=postgres:latest")
           sleep 5

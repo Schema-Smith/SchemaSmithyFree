@@ -2,11 +2,21 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
+-- TRANSITIONAL (slice 3 audit B5 of schema-templates) @TemplateName and @SchemaName
+-- default to empty for backward compatibility. New callers pass the active template
+-- name + iteration schema so the existing-indexed-views lookup that drives the drop
+-- cursor is scoped to that schema. Regular templates pass @SchemaName = '' and the
+-- lookup falls through to today's all-schemas behavior. Without this scoping, parallel
+-- schema-template iterations treat sibling iterations' indexed views as
+-- "removed from product" and race to drop each other's objects. Tracked in the
+-- Community roadmap under "Slice 3 audit B5".
 CREATE OR ALTER PROCEDURE [SchemaSmith].[IndexedViewQuench]
     @ProductName NVARCHAR(200),
     @IndexedViewSchema NVARCHAR(MAX),
     @WhatIf BIT = 0,
-    @UpdateFillFactor BIT = 0
+    @UpdateFillFactor BIT = 0,
+    @TemplateName NVARCHAR(256) = '',
+    @SchemaName NVARCHAR(256) = ''
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -60,12 +70,17 @@ BEGIN
         CurrentDefinition NVARCHAR(MAX)
     );
 
+    -- TRANSITIONAL (slice 3 audit B5 of schema-templates): @SchemaName non-empty restricts
+    -- the drop-candidate set to the iteration's schema so a multi-tenant TenantBody iteration
+    -- cannot see sibling iterations' indexed views as "removed from product". Regular
+    -- templates pass @SchemaName = '' and the predicate degenerates to today's behavior.
     INSERT INTO @ExistingViews
     SELECT s.name, v.name, v.object_id, m.definition
     FROM sys.views v
     INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
     INNER JOIN sys.sql_modules m ON v.object_id = m.object_id
     WHERE OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1
+    AND (@SchemaName = N'' OR s.name = @SchemaName)
     AND EXISTS (
         SELECT 1 FROM sys.extended_properties ep
         WHERE ep.major_id = v.object_id AND ep.minor_id = 0
@@ -73,7 +88,9 @@ BEGIN
     );
 
     -- Process removals: views owned by product but not in new schema
-    DECLARE @objectId INT, @schemaName NVARCHAR(200), @viewName NVARCHAR(200);
+    -- (Local cursor variables prefixed with @iv* to avoid colliding with the @SchemaName
+    -- proc parameter — SQL Server identifiers are case-insensitive.)
+    DECLARE @objectId INT, @ivSchema NVARCHAR(200), @ivName NVARCHAR(200);
     DECLARE @sql NVARCHAR(MAX), @msg NVARCHAR(MAX);
 
     DECLARE remove_cursor CURSOR LOCAL FAST_FORWARD FOR
@@ -82,28 +99,28 @@ BEGIN
         WHERE NOT EXISTS (SELECT 1 FROM @Views v WHERE v.ViewSchema = e.SchemaName AND v.ViewName = e.ViewName);
 
     OPEN remove_cursor;
-    FETCH NEXT FROM remove_cursor INTO @objectId, @schemaName, @viewName;
+    FETCH NEXT FROM remove_cursor INTO @objectId, @ivSchema, @ivName;
     WHILE @@FETCH_STATUS = 0
     BEGIN
-        SET @msg = N'Dropping removed indexed view ' + @schemaName + N'.' + @viewName;
+        SET @msg = N'Dropping removed indexed view ' + @ivSchema + N'.' + @ivName;
         EXEC [SchemaSmith].[PrintWithNoWait] @msg;
         -- Drop nonclustered indexes first
         DECLARE @ncDropSql NVARCHAR(MAX);
-        SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName), '; ')
+        SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName), '; ')
         FROM sys.indexes i WHERE i.object_id = @objectId AND i.type > 1;
         IF @ncDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @ncDropSql;
 
         -- Drop clustered index
         DECLARE @clDropSql NVARCHAR(MAX);
-        SELECT @clDropSql = 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName)
+        SELECT @clDropSql = 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
         FROM sys.indexes i WHERE i.object_id = @objectId AND i.type = 1;
         IF @clDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @clDropSql;
 
         -- Drop view
-        SET @sql = 'DROP VIEW ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName);
+        SET @sql = 'DROP VIEW ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName);
         IF @WhatIf = 0 EXEC sp_executesql @sql;
 
-        FETCH NEXT FROM remove_cursor INTO @objectId, @schemaName, @viewName;
+        FETCH NEXT FROM remove_cursor INTO @objectId, @ivSchema, @ivName;
     END;
     CLOSE remove_cursor;
     DEALLOCATE remove_cursor;
@@ -117,7 +134,7 @@ BEGIN
         SELECT v.ViewSchema, v.ViewName, v.Definition, v.IndexJson FROM @Views v;
 
     OPEN view_cursor;
-    FETCH NEXT FROM view_cursor INTO @schemaName, @viewName, @defn, @indexJson;
+    FETCH NEXT FROM view_cursor INTO @ivSchema, @ivName, @defn, @indexJson;
     WHILE @@FETCH_STATUS = 0
     BEGIN
         SET @needsRecreate = 0;
@@ -127,7 +144,7 @@ BEGIN
         -- Check if view exists
         SELECT @existingObjectId = e.ObjectId, @existingDef = e.CurrentDefinition
         FROM @ExistingViews e
-        WHERE e.SchemaName = @schemaName AND e.ViewName = @viewName;
+        WHERE e.SchemaName = @ivSchema AND e.ViewName = @ivName;
 
         IF @existingObjectId IS NOT NULL
         BEGIN
@@ -154,18 +171,18 @@ BEGIN
             BEGIN
                 SET @needsRecreate = 1;
                 -- Drop existing: nonclustered → clustered → view
-                SET @msg = N'Definition changed for indexed view ' + @schemaName + N'.' + @viewName + N' — dropping for recreation';
+                SET @msg = N'Definition changed for indexed view ' + @ivSchema + N'.' + @ivName + N' — dropping for recreation';
                 EXEC [SchemaSmith].[PrintWithNoWait] @msg;
 
-                SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName), '; ')
+                SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName), '; ')
                 FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type > 1;
                 IF @ncDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @ncDropSql;
 
-                SELECT @clDropSql = 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName)
+                SELECT @clDropSql = 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
                 FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type = 1;
                 IF @clDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @clDropSql;
 
-                SET @sql = 'DROP VIEW ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName);
+                SET @sql = 'DROP VIEW ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName);
                 IF @WhatIf = 0 EXEC sp_executesql @sql;
             END
             ELSE
@@ -177,18 +194,18 @@ BEGIN
         -- Create view if needed
         IF @needsRecreate = 1
         BEGIN
-            SET @sql = 'CREATE VIEW ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName) + ' WITH SCHEMABINDING AS ' + @defn;
-            SET @msg = N'Creating indexed view ' + @schemaName + N'.' + @viewName;
+            SET @sql = 'CREATE VIEW ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName) + ' WITH SCHEMABINDING AS ' + @defn;
+            SET @msg = N'Creating indexed view ' + @ivSchema + N'.' + @ivName;
             EXEC [SchemaSmith].[PrintWithNoWait] @msg;
             IF @WhatIf = 0 EXEC sp_executesql @sql;
 
             -- Tag ownership
             IF @WhatIf = 0
             BEGIN
-                DECLARE @newObjectId INT = OBJECT_ID(QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName));
+                DECLARE @newObjectId INT = OBJECT_ID(QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName));
                 IF @newObjectId IS NOT NULL AND NOT EXISTS (
                     SELECT 1 FROM sys.extended_properties WHERE major_id = @newObjectId AND minor_id = 0 AND name = 'SchemaSmith_Product')
-                    EXEC sp_addextendedproperty 'SchemaSmith_Product', @ProductName, 'SCHEMA', @schemaName, 'VIEW', @viewName;
+                    EXEC sp_addextendedproperty 'SchemaSmith_Product', @ProductName, 'SCHEMA', @ivSchema, 'VIEW', @ivName;
             END;
         END;
 
@@ -285,16 +302,16 @@ BEGIN
                 IF @clusteredNeedsChange = 1
                 BEGIN
                     -- Clustered index changing — must drop all indexes (nonclustered → clustered)
-                    SET @msg = N'Clustered index changed on ' + @schemaName + N'.' + @viewName + N' — dropping all indexes for recreation';
+                    SET @msg = N'Clustered index changed on ' + @ivSchema + N'.' + @ivName + N' — dropping all indexes for recreation';
                     EXEC [SchemaSmith].[PrintWithNoWait] @msg;
 
                     SET @ncDropSql = NULL;
-                    SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName), '; ')
+                    SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName), '; ')
                     FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type > 1;
                     IF @ncDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @ncDropSql;
 
                     SET @clDropSql = NULL;
-                    SELECT @clDropSql = 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName)
+                    SELECT @clDropSql = 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
                     FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type = 1;
                     IF @clDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @clDropSql;
                 END
@@ -306,7 +323,7 @@ BEGIN
                     -- Drop changed nonclustered indexes (properties differ from spec)
                     SET @dropSql = NULL;
                     SELECT @dropSql = STRING_AGG(
-                        'DROP INDEX ' + QUOTENAME(e.Name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName), '; ')
+                        'DROP INDEX ' + QUOTENAME(e.Name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName), '; ')
                     FROM @ExistingIdx e
                     INNER JOIN @DesiredIdx d ON d.Name = e.Name
                     WHERE e.IsClustered = 0
@@ -317,7 +334,7 @@ BEGIN
                          OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor]));
                     IF @dropSql IS NOT NULL
                     BEGIN
-                        SET @msg = N'Dropping changed nonclustered indexes on ' + @schemaName + N'.' + @viewName;
+                        SET @msg = N'Dropping changed nonclustered indexes on ' + @ivSchema + N'.' + @ivName;
                         EXEC [SchemaSmith].[PrintWithNoWait] @msg;
                         IF @WhatIf = 0 EXEC sp_executesql @dropSql;
                     END;
@@ -325,13 +342,13 @@ BEGIN
                     -- Drop removed nonclustered indexes (in DB but not in spec)
                     SET @dropSql = NULL;
                     SELECT @dropSql = STRING_AGG(
-                        'DROP INDEX ' + QUOTENAME(e.Name) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName), '; ')
+                        'DROP INDEX ' + QUOTENAME(e.Name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName), '; ')
                     FROM @ExistingIdx e
                     WHERE e.IsClustered = 0
                     AND NOT EXISTS (SELECT 1 FROM @DesiredIdx d WHERE d.Name = e.Name);
                     IF @dropSql IS NOT NULL
                     BEGIN
-                        SET @msg = N'Dropping removed nonclustered indexes on ' + @schemaName + N'.' + @viewName;
+                        SET @msg = N'Dropping removed nonclustered indexes on ' + @ivSchema + N'.' + @ivName;
                         EXEC [SchemaSmith].[PrintWithNoWait] @msg;
                         IF @WhatIf = 0 EXEC sp_executesql @dropSql;
                     END;
@@ -360,14 +377,14 @@ BEGIN
                 -- Skip indexes that already exist (unchanged during index-only update)
                 IF NOT EXISTS (
                     SELECT 1 FROM sys.indexes si
-                    WHERE si.object_id = OBJECT_ID(QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName))
+                    WHERE si.object_id = OBJECT_ID(QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName))
                     AND si.name = @idxName
                 )
                 BEGIN
                     SET @sql = 'CREATE ';
                     IF @idxUnique = 1 SET @sql += 'UNIQUE ';
                     IF @idxClustered = 1 SET @sql += 'CLUSTERED ';
-                    SET @sql += 'INDEX ' + QUOTENAME(@idxName) + ' ON ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName) + ' (' + @idxColumns + ')';
+                    SET @sql += 'INDEX ' + QUOTENAME(@idxName) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName) + ' (' + @idxColumns + ')';
                     IF @idxInclude IS NOT NULL SET @sql += ' INCLUDE (' + @idxInclude + ')';
 
                     DECLARE @withOpts NVARCHAR(MAX) = '';
@@ -390,7 +407,7 @@ BEGIN
             DEALLOCATE idx_cursor;
         END;
 
-        FETCH NEXT FROM view_cursor INTO @schemaName, @viewName, @defn, @indexJson;
+        FETCH NEXT FROM view_cursor INTO @ivSchema, @ivName, @defn, @indexJson;
     END;
     CLOSE view_cursor;
     DEALLOCATE view_cursor;

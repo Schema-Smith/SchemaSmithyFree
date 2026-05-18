@@ -54,11 +54,12 @@ public class SchemaTemplateHappyPathTests
     }
 
     /// <summary>
-    /// PG's default max_connections is 100; the fan-out from 3 tenants * multiple per-iteration
-    /// command pools + per-test assertion connections accumulates across the test suite. Clearing
-    /// the Npgsql pool around each test keeps the suite under the connection cap. SetUp + TearDown
-    /// both fire because (a) accumulation from earlier fixtures shouldn't strand the first test
-    /// in this fixture, and (b) the [TearDown] keeps subsequent test fixtures from inheriting our
+    /// The test PG container runs with max_connections=500 (matches the CI workflow override and
+    /// the Demos PG compose). Even at that ceiling, the 3-tenant fan-out * multiple per-iteration
+    /// command pools + per-test assertion connections accumulates across the suite, so we still
+    /// flush the Npgsql pool around each test to bound the count. SetUp + TearDown both fire
+    /// because (a) accumulation from earlier fixtures shouldn't strand the first test in this
+    /// fixture, and (b) the [TearDown] keeps subsequent test fixtures from inheriting our
     /// accumulated pool.
     /// </summary>
     [SetUp]
@@ -78,7 +79,9 @@ public class SchemaTemplateHappyPathTests
     {
         // Final pool flush before the next fixture in the test run inherits our state.
         // Without this, ~25 connections per test * 11 tests = ~275 connections accumulate
-        // before TIME_WAIT releases them, blowing past PG's default max_connections=100.
+        // before TIME_WAIT releases them; with max_connections=500 (CI + Demos compose) the
+        // suite has headroom, but disciplined pool flushing keeps unrelated PG fixtures in
+        // the same run from starving for connections.
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
@@ -436,16 +439,14 @@ SELECT COUNT(*) FROM information_schema.table_constraints tc
         }
     }
 
-    // [ALWAYS] / WhatIf / Tenant offboarding+re-onboarding scenarios are covered by the SQL
-    // Server mirror in this fixture's SQL Server sibling. The PG fan-out (3 tenants * ~5
-    // connections per iteration) plus other PG fixtures in the same dotnet test run pushes
-    // the default PG max_connections=100 cap when the schema-template suite grows past a
-    // certain size, so we don't duplicate every SqlServer-side coverage point in PG. The
-    // platform-specific paths (DataDelivery, ProductOwnership, MaterializedView) DO get
-    // dedicated PG coverage — those are below.
+    // [ALWAYS] / WhatIf / Tenant offboarding+re-onboarding / MaterializedView scenarios were
+    // previously [Ignore]'d on this PG mirror to keep connection-pool pressure below the default
+    // max_connections=100. With the test container bumped to max_connections=500 (matches the CI
+    // override and the Demos PG compose), all four scenarios run alongside the existing 7 PG
+    // tests in this fixture. SetUp / TearDown / OneTimeTearDown still flush Npgsql pools to keep
+    // accumulation bounded.
 
     [Test]
-    [Ignore("Removed to keep PG cross-fixture connection-pool pressure below max_connections=100. Equivalent coverage on the SQL Server mirror.")]
     public void Always_Tagged_Script_Runs_Every_Quench_Per_Iteration_And_Is_Not_Tracked()
     {
         // Design §6.7: a [ALWAYS] script runs every quench and is not added to
@@ -501,7 +502,6 @@ SELECT COUNT(*) FROM information_schema.table_constraints tc
     }
 
     [Test]
-    [Ignore("Removed to keep PG cross-fixture connection-pool pressure below max_connections=100. Equivalent coverage on the SQL Server mirror.")]
     public void WhatIf_With_Schema_Template_Iterates_Per_Tenant_And_Makes_No_State_Changes()
     {
         // Design §5.10: WhatIf in schema templates uses the same iteration model — every
@@ -562,7 +562,6 @@ SELECT COUNT(*) FROM information_schema.table_constraints tc
     }
 
     [Test]
-    [Ignore("Removed to keep PG cross-fixture connection-pool pressure below max_connections=100. Equivalent coverage on the SQL Server mirror.")]
     public void Tenant_Offboarding_And_Re_Onboarding_Skips_Migrations_On_Return()
     {
         // Design §6.8 scenario D — see SQL Server mirror for the full scenario.
@@ -626,7 +625,6 @@ SELECT COUNT(*) FROM information_schema.table_constraints tc
     }
 
     [Test]
-    [Ignore("Removed: keeping an MV in the shared TenantBody fixture multiplied PG connection pressure across 7+ existing tests (each iteration opens an extra connection for the MV quench), pushing the suite past PG's default max_connections=100. Add this back in a dedicated MV-only schema-template fixture when the suite gains pool-pressure isolation. The PG MaterializedView scoping path is unit-tested in DatabaseQuenchTests + DataDeliveryProcessorTests; this integration test was the round-trip check that didn't fit cross-fixture.")]
     public void Materialized_View_Per_Tenant_Is_Created_And_Refreshable()
     {
         // PG schema templates support materialized views — each iteration creates the MV in
@@ -680,7 +678,8 @@ SELECT COUNT(*) FROM information_schema.table_constraints tc
     /// <summary>
     /// Single-connection snapshot of the three per-tenant metrics the WhatIf test asserts on
     /// (marker, tracking row count, [ALWAYS] audit row count). Reduces PG connection pressure
-    /// — at this fan-out size the default Postgres max_connections of 100 is tight.
+    /// — at this fan-out size the cross-fixture connection count is still tight enough that
+    /// consolidating round-trips pays for itself.
     /// </summary>
     private string CaptureWhatIfStateSnapshot()
     {
