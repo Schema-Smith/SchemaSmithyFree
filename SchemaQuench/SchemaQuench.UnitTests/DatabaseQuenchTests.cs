@@ -1116,6 +1116,55 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region Debug File Name
+
+    [Test]
+    public void GetDebugFileName_RegularTemplate_OmitsSchemaSuffix()
+    {
+        // Regular (non-schema) templates have empty _schemaName — the debug filename must end
+        // with .sql directly, preserving the pre-slice-3 filename shape. Behavior for the
+        // overwhelmingly common path must not change.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "Core" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd",
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.GetDebugFileName("Quench Missing Tables And Columns"),
+            Is.EqualTo("SchemaQuench - Quench Missing Tables And Columns srv.AppProd.sql"));
+    }
+
+    [Test]
+    public void GetDebugFileName_SchemaTemplate_IncludesSchemaSuffix()
+    {
+        // Schema-template iterations share _server/_databaseName across siblings; the schema
+        // name must be part of the debug filename or parallel iterations collide on the same
+        // file path, hitting a Win32 file-sharing violation that throws before the SQL batch
+        // executes (slice-3 audit bug B2).
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "TenantBody" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd", "tenant_acme",
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.GetDebugFileName("Quench Missing Tables And Columns"),
+            Is.EqualTo("SchemaQuench - Quench Missing Tables And Columns srv.AppProd.tenant_acme.sql"));
+    }
+
+    [Test]
+    public void GetDebugFileName_EmptySchemaName_OmitsSchemaSuffix()
+    {
+        // Explicit empty string is equivalent to "no schema iteration" — must not render
+        // a stray "." before .sql.
+        var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "Core" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd", "",
+            false, "false", false, "false", "false", false, false, null);
+
+        Assert.That(quench.GetDebugFileName("Quench Indexes"),
+            Is.EqualTo("SchemaQuench - Quench Indexes srv.AppProd.sql"));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static IDbCommand CreateMockCommand()

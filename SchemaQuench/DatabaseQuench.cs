@@ -808,7 +808,7 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
             }
         }
 
-        _debugFileLocation = $"SchemaQuench - Quench Missing Tables And Columns {_server}.{_databaseName}.sql";
+        _debugFileLocation = GetDebugFileName("Quench Missing Tables And Columns");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand);
         _debugFileLocation = "";
@@ -842,7 +842,7 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             }
         }
 
-        _debugFileLocation = $"SchemaQuench - Quench Modified Tables {_server}.{_databaseName}.sql";
+        _debugFileLocation = GetDebugFileName("Quench Modified Tables");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand);
         _debugFileLocation = "";
@@ -890,7 +890,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
             }
         }
 
-        _debugFileLocation = $"SchemaQuench - Quench Indexes {_server}.{_databaseName}.sql";
+        _debugFileLocation = GetDebugFileName("Quench Indexes");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand);
         _debugFileLocation = "";
@@ -922,7 +922,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
             }
         }
 
-        _debugFileLocation = $"SchemaQuench - Quench Foreign Keys {_server}.{_databaseName}.sql";
+        _debugFileLocation = GetDebugFileName("Quench Foreign Keys");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand);
         _debugFileLocation = "";
@@ -935,7 +935,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{_product.Name.Replace("'", "''")}', '{IterationMaterializedViewSchema.Replace("'", "''")}', {_whatIfOnly}, {updateFillFactor});";
 
-        _debugFileLocation = $"SchemaQuench - Quench Materialized Views {_server}.{_databaseName}.sql";
+        _debugFileLocation = GetDebugFileName("Quench Materialized Views");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand);
         _debugFileLocation = "";
@@ -973,7 +973,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         tableCommand.CommandText = $@"EXEC [SchemaSmith].[IndexedViewQuench] @ProductName = '{_product.Name.Replace("'", "''")}', @IndexedViewSchema = '{viewSchema.Replace("'", "''")}', @WhatIf = {_whatIfOnly}, @UpdateFillFactor = {updateFillFactor};";
 
-        _debugFileLocation = $"SchemaQuench - Quench Indexed Views {_server}.{_databaseName}.sql";
+        _debugFileLocation = GetDebugFileName("Quench Indexed Views");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand);
         _debugFileLocation = "";
@@ -989,7 +989,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
             ? _template.TableSchema
             : JsonHelper.SerializeAll(_template.Tables);
         command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_databaseName.Replace("'", "''")}', @tableJson)";
-        _debugFileLocation = $"SchemaQuench - Parse Table Json {_server}.{_databaseName}.sql";
+        _debugFileLocation = GetDebugFileName("Parse Table Json");
         LogSqlScript(_debugFileLocation, command.CommandText.Replace("@tableJson", $"'{tableJson.Replace("'", "''")}'"));
         AddJsonParameter(command, "@tableJson", tableJson);
         ExecuteNonQueryHandlingMessages(command);
@@ -1378,6 +1378,20 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
     internal string LogPrefix => string.IsNullOrEmpty(_schemaName)
         ? $"[{_server}].[{_databaseName}]"
         : $"[{_server}].[{_databaseName}] [Schema: {_schemaName}]";
+
+    /// <summary>
+    /// Builds the debug script filename used by <see cref="LogSqlScript"/>. For schema-template
+    /// iterations the schema name is appended as a suffix so parallel iterations of the same
+    /// database write to distinct files — without it, sibling iterations collide on a single
+    /// path and hit a Win32 file-sharing violation that throws before the SQL batch executes
+    /// (slice-3 audit bug B2). Regular templates leave <c>_schemaName</c> empty, so the
+    /// suffix is omitted and the pre-slice-3 filename shape is preserved.
+    /// </summary>
+    internal string GetDebugFileName(string label)
+    {
+        var schemaSuffix = string.IsNullOrEmpty(_schemaName) ? "" : $".{_schemaName}";
+        return $"SchemaQuench - {label} {_server}.{_databaseName}{schemaSuffix}.sql";
+    }
 
     private void SafeProgressLog(string msg)
     {
