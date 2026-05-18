@@ -2,11 +2,20 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
+-- TRANSITIONAL (slice 3 audit B1 of schema-templates) p_TemplateName defaults
+-- to empty for backward compatibility. New callers pass the active template
+-- name so ProductOwnership reads/writes are scoped to that template. Inline
+-- view-removed-from-product detection joins permissively on template_name
+-- against the current and legacy-empty values. Tracked in the Community
+-- roadmap under Slice 3 transitional aids -- ProductOwnership template_name
+-- extension.
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."MaterializedViewQuench"
   (p_ProductName VARCHAR(50),
    p_ViewDefinitions TEXT,
    p_WhatIf BOOLEAN = FALSE,
-   p_UpdateFillFactor BOOLEAN = TRUE)
+   p_UpdateFillFactor BOOLEAN = TRUE,
+   p_TemplateName VARCHAR(256) = '',
+   p_SchemaName VARCHAR(256) = '')
   LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -65,7 +74,9 @@ BEGIN
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, false);
 
   -- Validate ownership
-  CALL "SchemaSmith"."ValidateMaterializedViewOwnership"(p_ProductName, p_WhatIf);
+  CALL "SchemaSmith"."ValidateMaterializedViewOwnership"(p_ProductName, p_WhatIf, p_TemplateName);
+  -- (ValidateMaterializedViewOwnership does not own temp_product_ownership; the inline
+  -- drop-detection below is what enforces per-template/per-schema scope.)
 
   -- Drop/recreate changed and removed materialized views
   RAISE NOTICE 'Materialized View Diff — Drop Changed/Removed';
@@ -82,10 +93,14 @@ BEGIN
     JOIN pg_class i ON i.oid = idx.indexrelid
     JOIN pg_namespace n ON n.oid = i.relnamespace
     WHERE (
-      -- View removed from product
+      -- View removed from product. Strict on template_name (legacy '' rows excluded).
+      -- p_SchemaName non-empty (schema-template iteration) further restricts to the
+      -- iterations schema so other tenants views are never dropped.
       EXISTS (SELECT 1 FROM "SchemaSmith"."ProductOwnership" po
                WHERE po."Schema" = mv.schemaname AND po."TableName" = mv.matviewname
-                 AND po."IndexName" IS NULL AND po."ProductName" = p_ProductName)
+                 AND po."IndexName" IS NULL AND po."ProductName" = p_ProductName
+                 AND po.template_name = p_TemplateName
+                 AND (p_SchemaName = '' OR po."Schema" = p_SchemaName))
       AND NOT EXISTS (SELECT 1 FROM temp_materialized_views t
                        WHERE t."Schema" = mv.schemaname AND t."Name" = mv.matviewname)
     ) OR (
@@ -103,10 +118,14 @@ BEGIN
     INTO sql_script
     FROM pg_matviews mv
     WHERE (
-      -- View removed from product
+      -- View removed from product. Strict on template_name (legacy '' rows excluded).
+      -- p_SchemaName non-empty (schema-template iteration) further restricts to the
+      -- iterations schema so other tenants views are never dropped.
       EXISTS (SELECT 1 FROM "SchemaSmith"."ProductOwnership" po
                WHERE po."Schema" = mv.schemaname AND po."TableName" = mv.matviewname
-                 AND po."IndexName" IS NULL AND po."ProductName" = p_ProductName)
+                 AND po."IndexName" IS NULL AND po."ProductName" = p_ProductName
+                 AND po.template_name = p_TemplateName
+                 AND (p_SchemaName = '' OR po."Schema" = p_SchemaName))
       AND NOT EXISTS (SELECT 1 FROM temp_materialized_views t
                        WHERE t."Schema" = mv.schemaname AND t."Name" = mv.matviewname)
     ) OR (
@@ -139,5 +158,5 @@ BEGIN
   CALL "SchemaSmith"."MissingMaterializedViewIndexesQuench"(p_WhatIf, p_UpdateFillFactor);
 
   -- Fixup ownership
-  CALL "SchemaSmith"."FixupMaterializedViewOwnership"(p_ProductName);
+  CALL "SchemaSmith"."FixupMaterializedViewOwnership"(p_ProductName, p_TemplateName, p_SchemaName);
 END $$;

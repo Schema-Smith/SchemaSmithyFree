@@ -28,13 +28,6 @@ namespace SchemaQuench.IntegrationTests.PostgreSQL;
 /// scope here.</para>
 /// </summary>
 [Category("PostgreSQL")]
-[Explicit("Slice-3 PG schema-template tests fail with 'relation public.lookup does not exist' " +
-          "at FK creation time even though the Shared template's MissingTableAndColumnQuench " +
-          "checkpoint confirms the table was created. SQL Server tests for the identical fixture " +
-          "all pass. Suspected PG-specific timing or connection-pool visibility issue in the " +
-          "engine-generated DDL path; needs a focused investigation pass before unmarking " +
-          "[Explicit]. Tracked under 'Slice 3 transitional aids — PG schema-template parity' " +
-          "in the Community roadmap.")]
 public class SchemaTemplateHappyPathTests
 {
     private const string ProductName = "SchemaTemplateProduct";
@@ -89,6 +82,17 @@ public class SchemaTemplateHappyPathTests
                 AssertTableExists("public", "shared_audit");
                 Assert.That(ScalarCount("SELECT COUNT(*) FROM public.lookup WHERE lookup_id = 1 AND code = 'ALPHA'"),
                     Is.EqualTo(1), "Shared SeedLookup migration should have inserted exactly one row.");
+
+                // Regression for slice-3 audit B1: Shared template's ProductOwnership rows
+                // must carry template_name = 'Shared' AND survive TenantBody iteration's
+                // FixupTableOwnership prune + ModifiedTableQuench drop pass.
+                foreach (var sharedTable in new[] { "tenants", "lookup", "shared_audit" })
+                {
+                    var ownershipCount = ScalarCount(
+                        $"SELECT COUNT(*) FROM \"SchemaSmith\".\"ProductOwnership\" WHERE \"ProductName\" = '{ProductName}' AND \"Schema\" = 'public' AND \"TableName\" = '{sharedTable}' AND \"IndexName\" IS NULL AND template_name = '{SharedTemplate}'");
+                    Assert.That(ownershipCount, Is.EqualTo(1),
+                        $"Shared table public.{sharedTable} must have exactly one ProductOwnership row scoped to template '{SharedTemplate}' (survived tenant iterations).");
+                }
 
                 // Per-tenant structure.
                 foreach (var tenant in DefaultTenants)

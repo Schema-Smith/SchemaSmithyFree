@@ -828,7 +828,7 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
                 break;
             case Platform.PostgreSQL:
                 tableCommand.CommandText = $@"
-CALL ""SchemaSmith"".""ValidateTableOwnership""(p_ProductName := '{_product.Name}', p_WhatIf := {_whatIfOnly});
+CALL ""SchemaSmith"".""ValidateTableOwnership""(p_ProductName := '{_product.Name}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_DropTablesRemovedFromProduct := {_dropRemovedTables});";
                 break;
             case Platform.MySQL:
@@ -869,12 +869,12 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
                     ? $@"
 CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{IterationTableSchema.Replace("'", "''")}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()});
-CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}');
+CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}', p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 "
                     : $@"
 CALL ""SchemaSmith"".""MissingIndexesAndConstraintsQuench""(p_WhatIf := {_whatIfOnly});
-CALL ""SchemaSmith"".""FixupTableOwnership""(p_ProductName := '{_product.Name}');
-CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}');
+CALL ""SchemaSmith"".""FixupTableOwnership""(p_ProductName := '{_product.Name}', p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
+CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}', p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 ";
                 break;
             case Platform.MySQL:
@@ -933,7 +933,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
         SafeProgressLog("  Quenching materialized views");
 
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
-        tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{_product.Name.Replace("'", "''")}', '{IterationMaterializedViewSchema.Replace("'", "''")}', {_whatIfOnly}, {updateFillFactor});";
+        tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{_product.Name.Replace("'", "''")}', '{IterationMaterializedViewSchema.Replace("'", "''")}', {_whatIfOnly}, {updateFillFactor}, '{EscapeSqlLiteral(_template.Name)}', '{EscapeSqlLiteral(_schemaName)}');";
 
         _debugFileLocation = GetDebugFileName("Quench Materialized Views");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
