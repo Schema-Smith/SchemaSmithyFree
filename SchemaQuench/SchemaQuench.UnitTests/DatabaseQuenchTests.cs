@@ -954,6 +954,130 @@ public class DatabaseQuenchTests
         Assert.That(mockCmd.CommandText, Does.Contain("Test''s Product"));
     }
 
+    // I10: QuenchIndexedViews routes through _iterationIndexedViewSchema mirroring the
+    // pattern for tables and materialized views. PrepareIterationContent populates the
+    // field for schema-template iterations; regular templates fall through to the
+    // template's own IndexedViewSchema.
+    [Test]
+    public void PrepareIterationContent_SchemaTemplate_PopulatesIterationIndexedViewSchema()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            IndexedViewSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"vw_Orders\"}]"
+        };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Orders]",
+            Schema = "{{SchemaName}}",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", "0", false, false, null);
+
+        quench.PrepareIterationContent();
+
+        Assert.That(quench.IterationIndexedViewSchema, Does.Contain("\"Schema\":\"tenant_a\""));
+        Assert.That(quench.IterationIndexedViewSchema, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_RegularTemplate_IterationIndexedViewSchema_FallsThroughToTemplate()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "Core",
+            IndexedViewSchema = "[{\"Schema\":\"dbo\",\"Name\":\"vw_Stuff\"}]"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        quench.PrepareIterationContent();
+
+        Assert.That(quench.IterationIndexedViewSchema,
+            Is.EqualTo("[{\"Schema\":\"dbo\",\"Name\":\"vw_Stuff\"}]"));
+    }
+
+    [Test]
+    public void QuenchIndexedViews_SchemaTemplate_UsesSubstitutedIterationSchema()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            // In production, InstanceLoad serializes the in-memory views into
+            // IndexedViewSchema after SchemaDefaultResolver fills the {{SchemaName}} token.
+            // The test sets the pre-baked JSON to exercise the same path PrepareIterationContent
+            // sees in the real load flow.
+            IndexedViewSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"[vw_Orders]\"}]"
+        };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Orders]",
+            Schema = "{{SchemaName}}",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexedViews(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("tenant_a"));
+        Assert.That(mockCmd.CommandText, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    [Test]
+    public void QuenchIndexedViews_SchemaTemplate_PreservesShouldApplyFilter()
+    {
+        // Per-call ShouldApplyExpression filter must still fire after the iteration-schema
+        // substitution — the filtered-out view should not appear in the substituted payload.
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'"
+        };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Active]",
+            Schema = "{{SchemaName}}",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Excluded]",
+            Schema = "{{SchemaName}}",
+            Definition = "SELECT 1",
+            ShouldApplyExpression = "false",
+            Indexes = [new SqlServerIndex { Name = "[IX_2]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexedViews(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("[vw_Active]"));
+        Assert.That(mockCmd.CommandText, Does.Not.Contain("[vw_Excluded]"));
+    }
+
     #endregion
 
     #region QuenchMaterializedViews Tests

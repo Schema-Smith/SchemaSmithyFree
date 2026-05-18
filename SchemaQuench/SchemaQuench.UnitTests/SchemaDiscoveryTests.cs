@@ -260,4 +260,80 @@ public class SchemaDiscoveryTests
         Assert.That(SchemaDiscovery.Discover(cmd, template),
             Is.EqualTo(new List<string> { "pg_temporary_data" }));
     }
+
+    // I6: SchemaDiscovery rejects schema names with characters that would corrupt
+    // generated SQL, JSON payloads, or token substitution.
+    [TestCase("tenant]bad", "]")]
+    [TestCase("tenant[bad", "[")]
+    [TestCase("tenant\"bad", "\"")]
+    [TestCase("tenant'bad", "'")]
+    [TestCase("tenant{bad", "{")]
+    [TestCase("tenant}bad", "}")]
+    [TestCase("{{SchemaName}}", "{")]
+    public void Discover_SchemaNameWithSqlInjectionChar_Throws(string raw, string offending)
+    {
+        var template = SqlServerSchemaTemplate();
+        var cmd = MockCommandReturning(raw);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SchemaDiscovery.Discover(cmd, template));
+        Assert.That(ex!.Message, Does.Contain(raw));
+        Assert.That(ex.Message, Does.Contain(offending));
+    }
+
+    [TestCase("tenant\tbad")]
+    [TestCase("tenant\nbad")]
+    [TestCase("tenant\rbad")]
+    [TestCase("tenantbad")]
+    [TestCase("tenant bad")]
+    public void Discover_SchemaNameWithControlChar_Throws(string raw)
+    {
+        var template = SqlServerSchemaTemplate();
+        var cmd = MockCommandReturning(raw);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SchemaDiscovery.Discover(cmd, template));
+        Assert.That(ex!.Message.ToLowerInvariant(), Does.Contain("control"));
+    }
+
+    [TestCase("tenant_acme")]
+    [TestCase("Tenant1")]
+    [TestCase("a")]
+    [TestCase("tenant-east")]
+    [TestCase("tenant.east")]
+    [TestCase("ünicode_tenant")]
+    [TestCase("tenant 1")]   // space is allowed (a delimited identifier with embedded space is legal)
+    public void Discover_NormalIdentifierChars_Allowed(string raw)
+    {
+        // Letters (including non-ASCII), digits, underscores, hyphens, dots, and spaces
+        // are all valid characters in delimited identifiers across SQL Server and PostgreSQL.
+        // The disallowed set is narrowly scoped to characters that break the SchemaSmith
+        // engine's quoting, JSON serialization, or token substitution.
+        var template = SqlServerSchemaTemplate();
+        var cmd = MockCommandReturning(raw);
+
+        Assert.That(SchemaDiscovery.Discover(cmd, template),
+            Is.EqualTo(new List<string> { raw }));
+    }
+
+    // I7: SchemaDiscovery throws on duplicate names returned by
+    // SchemaIdentificationScript (fail-loud per audit guidance).
+    [Test]
+    public void Discover_DuplicateSchemaNames_Throws()
+    {
+        var template = SqlServerSchemaTemplate();
+        var cmd = MockCommandReturning("tenant_a", "tenant_b", "tenant_a");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SchemaDiscovery.Discover(cmd, template));
+        Assert.That(ex!.Message, Does.Contain("duplicate"));
+        Assert.That(ex.Message, Does.Contain("tenant_a"));
+    }
+
+    [Test]
+    public void Discover_DuplicateSchemaNames_CaseInsensitive_Throws()
+    {
+        var template = SqlServerSchemaTemplate();
+        var cmd = MockCommandReturning("tenant_a", "TENANT_A");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SchemaDiscovery.Discover(cmd, template));
+        Assert.That(ex!.Message, Does.Contain("duplicate"));
+    }
 }

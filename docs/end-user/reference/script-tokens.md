@@ -139,6 +139,8 @@ SchemaSmith adds these tokens automatically. You don't define them -- they appea
 
 The cross-template variants (`{{TableSchema_OtherTemplate}}`) are how a deployment script in one template can read the schema of another. This unlocks coordination between linked templates without copy-pasting JSON.
 
+> **Note:** When the referenced template is a schema template, each table / view's `Schema` field would normally hold the per-iteration `{{SchemaName}}` token. The cross-template snapshot replaces that token with the literal placeholder `<per-iteration>` so the consuming template sees clearly that schemas in the referenced set are iteration-dependent. Use the cross-template variants for structural introspection (column counts, custom properties, table names) — schema-qualified DDL still needs to live inside the schema template itself, where `{{SchemaName}}` resolves per iteration.
+
 ### Custom property tokens
 
 Anything you put in an `Extensions` object on a table component is also available as a token in that component's expression fields. Bare names from the component's own Extensions, `Table.`-prefixed names from the parent table. See [Custom Properties](custom-properties.md) for the full mechanism.

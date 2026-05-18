@@ -249,6 +249,74 @@ public class ProductQuenchTests
         Assert.That(tokens["IndexedViewSchema_Core"], Is.EqualTo("[{\"Name\":\"test''s view\"}]"));
     }
 
+    // I8: cross-template snapshots of schema-template content (TableSchema_/
+    // MaterializedViewSchema_/IndexedViewSchema_) must NOT contain the literal
+    // {{SchemaName}} token — once embedded in a regular template's script, the
+    // token would never be substituted at runtime and would corrupt DDL.
+    [Test]
+    public void BuildSpecialTokens_SchemaTemplate_TableSchema_ReplacesSchemaNameToken()
+    {
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            TableSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"Customers\"}]"
+        };
+
+        var tokens = ProductQuench.BuildSpecialTokens(template);
+
+        Assert.That(tokens["TableSchema_TenantBody"], Does.Not.Contain("{{SchemaName}}"));
+        Assert.That(tokens["TableSchema_TenantBody"], Does.Contain("<per-iteration>"));
+    }
+
+    [Test]
+    public void BuildSpecialTokens_SchemaTemplate_MaterializedViewSchema_ReplacesSchemaNameToken()
+    {
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            MaterializedViewSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"OrderSummary\"}]"
+        };
+
+        var tokens = ProductQuench.BuildSpecialTokens(template);
+
+        Assert.That(tokens["MaterializedViewSchema_TenantBody"], Does.Not.Contain("{{SchemaName}}"));
+        Assert.That(tokens["MaterializedViewSchema_TenantBody"], Does.Contain("<per-iteration>"));
+    }
+
+    [Test]
+    public void BuildSpecialTokens_SchemaTemplate_IndexedViewSchema_ReplacesSchemaNameToken()
+    {
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            IndexedViewSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"vw_Orders\"}]"
+        };
+
+        var tokens = ProductQuench.BuildSpecialTokens(template);
+
+        Assert.That(tokens["IndexedViewSchema_TenantBody"], Does.Not.Contain("{{SchemaName}}"));
+        Assert.That(tokens["IndexedViewSchema_TenantBody"], Does.Contain("<per-iteration>"));
+    }
+
+    [Test]
+    public void BuildSpecialTokens_RegularTemplate_LeavesContentUnchanged()
+    {
+        // No SchemaIdentificationScript → not a schema template, so {{SchemaName}} is not
+        // expected to appear; but defensively confirm the path doesn't munge regular content.
+        var template = new Template
+        {
+            Name = "Core",
+            TableSchema = "[{\"Schema\":\"dbo\",\"Name\":\"Customers\"}]"
+        };
+
+        var tokens = ProductQuench.BuildSpecialTokens(template);
+
+        Assert.That(tokens["TableSchema_Core"], Is.EqualTo("[{\"Schema\":\"dbo\",\"Name\":\"Customers\"}]"));
+    }
+
     #endregion
 
     #region Schema-Template Work-Unit Enumeration (Slice 3)

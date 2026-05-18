@@ -264,18 +264,43 @@ public class ProductQuench
 
     internal static readonly string[] SpecialTokenTags = ["TableSchema_", "ObjectScripts_", "QueryTokens_", "MaterializedViewSchema_", "IndexedViewSchema_"];
 
+    /// <summary>
+    /// Cross-template placeholder for the per-iteration <c>{{SchemaName}}</c> token (audit I8).
+    /// Snapshots of a schema template's TableSchema / MaterializedViewSchema / IndexedViewSchema
+    /// surface in OTHER templates as <c>{{TableSchema_&lt;SchemaTemplate&gt;}}</c> tokens. Those
+    /// consuming templates don't re-run per-iteration substitution, so a literal
+    /// <c>{{SchemaName}}</c> would leak into the consumer's runtime SQL. Replacing it with this
+    /// visible placeholder preserves introspection (users see "this is iteration-dependent")
+    /// while avoiding the corruption. Documented in
+    /// <c>docs/end-user/reference/script-tokens.md</c>.
+    /// </summary>
+    internal const string CrossTemplateSchemaPlaceholder = "<per-iteration>";
+
     internal static Dictionary<string, string> BuildSpecialTokens(Template template)
     {
+        // Schema-template content carries the {{SchemaName}} token until iteration time.
+        // When a regular (or other) template embeds this snapshot via {{TableSchema_<Name>}},
+        // the literal token would never be resolved at runtime — replace it with a visible
+        // placeholder so the cross-template surface is iteration-aware.
+        var tableSchema = ScrubSchemaNameToken(template.TableSchema);
+        var matViewSchema = ScrubSchemaNameToken(template.MaterializedViewSchema);
+        var indexedViewSchema = ScrubSchemaNameToken(template.IndexedViewSchema);
+
         var tokens = new Dictionary<string, string>
         {
-            { $"TableSchema_{template.Name}", template.TableSchema.Replace("'", "''") },
+            { $"TableSchema_{template.Name}", tableSchema.Replace("'", "''") },
             { $"ObjectScripts_{template.Name}", JsonHelper.Serialize(template.ObjectScripts.Concat(template.AfterTablesObjectScripts)).Replace("'", "''") },
             { $"QueryTokens_{template.Name}", JsonHelper.Serialize(template.QueryTokens).Replace("'", "''") },
-            { $"MaterializedViewSchema_{template.Name}", template.MaterializedViewSchema.Replace("'", "''") },
-            { $"IndexedViewSchema_{template.Name}", template.IndexedViewSchema.Replace("'", "''") }
+            { $"MaterializedViewSchema_{template.Name}", matViewSchema.Replace("'", "''") },
+            { $"IndexedViewSchema_{template.Name}", indexedViewSchema.Replace("'", "''") }
         };
         return tokens;
     }
+
+    private static string ScrubSchemaNameToken(string snapshot) =>
+        string.IsNullOrEmpty(snapshot)
+            ? snapshot
+            : snapshot.Replace(Schema.Domain.SchemaDefaultResolver.SchemaNameToken, CrossTemplateSchemaPlaceholder);
 
     private List<Template> LoadTemplates()
     {

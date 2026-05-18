@@ -229,7 +229,15 @@ namespace Schema.Domain
                 Product = Product,
                 ScriptTokens = new Dictionary<string, string>(ScriptTokens),
                 NonQueryTokens = new Dictionary<string, string>(NonQueryTokens),
-                LoggableTokens = new Dictionary<string, string>(LoggableTokens)
+                LoggableTokens = new Dictionary<string, string>(LoggableTokens),
+                // Slice 3 schema-template fields: clone all five so per-iteration clones honor
+                // the original's fan-out config (audit issue I9). Without these copies, an
+                // iteration clone would observe defaults instead of the user's settings.
+                SchemaIdentificationScript = SchemaIdentificationScript,
+                CreateSchemaIfMissing = CreateSchemaIfMissing,
+                AllowParallel = AllowParallel,
+                ContinueOnSchemaFailure = ContinueOnSchemaFailure,
+                ContinueOnDatabaseFailure = ContinueOnDatabaseFailure
             };
             foreach (var token in QueryTokens)
                 clone.QueryTokens.Add(token.Key, token.Value);
@@ -239,6 +247,12 @@ namespace Schema.Domain
             clone.MaterializedViewSchema = MaterializedViewSchema;
             clone.IndexedViews.AddRange(IndexedViews);
             clone.IndexedViewSchema = IndexedViewSchema;
+            // Rebuild the token-scope map from the cloned tokens. Cheaper than copying the
+            // private Dictionary (which the audit explicitly recommended against) and
+            // ensures the cloned scope map references the cloned token dictionaries, not
+            // the originals.
+            if (_tokenScopes != null)
+                clone.ResolveTokenScopes();
             return clone;
         }
 

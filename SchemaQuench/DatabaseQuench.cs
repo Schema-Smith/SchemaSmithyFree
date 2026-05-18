@@ -77,8 +77,16 @@ public class DatabaseQuench
     // continue to work without forcing every test to drive the full pipeline.</para>
     private string _iterationTableSchema;
     private string _iterationMaterializedViewSchema;
-    private string IterationTableSchema => _iterationTableSchema ?? _template.TableSchema ?? "";
-    private string IterationMaterializedViewSchema => _iterationMaterializedViewSchema ?? _template.MaterializedViewSchema ?? "";
+    private string _iterationIndexedViewSchema;
+    internal string IterationTableSchema => _iterationTableSchema ?? _template.TableSchema ?? "";
+    internal string IterationMaterializedViewSchema => _iterationMaterializedViewSchema ?? _template.MaterializedViewSchema ?? "";
+    // I10: Mirror the iteration-schema pattern for indexed views. QuenchIndexedViews used to
+    // rebuild the JSON inline per call; routing through this field puts the substitution alongside
+    // the table / materialized-view substitution in PrepareIterationContent. Per-call ShouldApply
+    // filtering still happens inside QuenchIndexedViews (the filter is per-view and can't be done
+    // once at iteration-prepare time without losing the filter on regular templates that bypass
+    // PrepareIterationContent through the constructor → QuenchIndexedViews test entry points).
+    internal string IterationIndexedViewSchema => _iterationIndexedViewSchema ?? _template.IndexedViewSchema ?? "";
 
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         string schemaName, bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
@@ -492,7 +500,7 @@ public class DatabaseQuench
     /// <see cref="ResolveAndApplyQueryTokens"/>.
     /// </para>
     /// </summary>
-    private void PrepareIterationContent()
+    internal void PrepareIterationContent()
     {
         if (string.IsNullOrEmpty(_schemaName))
         {
@@ -548,6 +556,7 @@ public class DatabaseQuench
         // the token verbatim — substitute here so each iteration sees a fully-qualified DDL payload.
         _iterationTableSchema = (_template.TableSchema ?? "").Replace("{{SchemaName}}", _schemaName);
         _iterationMaterializedViewSchema = (_template.MaterializedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iterationIndexedViewSchema = (_template.IndexedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
     }
 
     private static List<SqlScript> CloneAndSubstitute(
@@ -967,11 +976,21 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
             .ToList();
         if (applicableViews.Count == 0) return;
 
-        var viewSchema = JArray.FromObject(applicableViews).ToString();
-        // Schema-template iteration: substitute {{SchemaName}} so the engine-generated DDL targets
-        // the iteration's resolved schema. Regular templates leave the literal alone (no token present).
-        if (!string.IsNullOrEmpty(_schemaName))
-            viewSchema = viewSchema.Replace("{{SchemaName}}", _schemaName);
+        // I10: Route through the iteration-aware schema string. When PrepareIterationContent
+        // has already substituted {{SchemaName}}, prefer that value (mirrors the table /
+        // materialized-view pattern). When the filter removed views, fall back to a fresh
+        // serialization of the filtered subset and apply iteration substitution manually.
+        string viewSchema;
+        if (applicableViews.Count == _template.IndexedViews.Count)
+        {
+            viewSchema = IterationIndexedViewSchema;
+        }
+        else
+        {
+            viewSchema = JArray.FromObject(applicableViews).ToString();
+            if (!string.IsNullOrEmpty(_schemaName))
+                viewSchema = viewSchema.Replace("{{SchemaName}}", _schemaName);
+        }
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         tableCommand.CommandText = $@"EXEC [SchemaSmith].[IndexedViewQuench] @ProductName = '{_product.Name.Replace("'", "''")}', @IndexedViewSchema = '{viewSchema.Replace("'", "''")}', @WhatIf = {_whatIfOnly}, @UpdateFillFactor = {updateFillFactor};";
 

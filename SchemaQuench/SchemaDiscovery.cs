@@ -90,6 +90,7 @@ public static class SchemaDiscovery
 
         command.CommandText = template.SchemaIdentificationScript;
         var results = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using var reader = command.ExecuteReader();
         if (reader.FieldCount != 1)
         {
@@ -105,10 +106,50 @@ public static class SchemaDiscovery
             var name = raw.ToString();
             if (string.IsNullOrWhiteSpace(name)) continue;
             ValidateNotReserved(name, platform, template.Name);
+            ValidateCharacters(name, template.Name);
+            // I7: duplicates are almost always a SchemaIdentificationScript bug — fail loud
+            // rather than silently deduping, which would mask the underlying script error.
+            if (!seen.Add(name))
+            {
+                throw new InvalidOperationException(
+                    $"SchemaIdentificationScript for template '{template.Name}' returned duplicate schema name '{name}'. " +
+                    "Each iteration target must appear exactly once in the result set — " +
+                    "fix the discovery query to project distinct schema names (e.g. add SELECT DISTINCT or remove the join causing the fan-out).");
+            }
             results.Add(name);
         }
 
         return results;
+    }
+
+    // I6: schema names containing these characters would corrupt the engine's bracket /
+    // quote-escaping ([ ]), the JSON payload (" '), or the {{Token}} substitution layer
+    // ({ }). The set is deliberately narrow — letters (including non-ASCII), digits,
+    // underscores, hyphens, dots, and spaces are all valid delimited-identifier characters
+    // on SQL Server and PostgreSQL and are passed through unchanged.
+    private static readonly char[] DisallowedSchemaNameChars = { ']', '[', '"', '\'', '{', '}' };
+
+    private static void ValidateCharacters(string name, string templateName)
+    {
+        foreach (var ch in name)
+        {
+            if (ch < ' ')
+                throw new InvalidOperationException(
+                    $"SchemaIdentificationScript for template '{templateName}' returned schema name '{name}' " +
+                    $"containing control character (U+{(int)ch:X4}). " +
+                    "Schema names cannot contain control characters — clean the discovery query's result.");
+        }
+
+        foreach (var bad in DisallowedSchemaNameChars)
+        {
+            if (name.IndexOf(bad) >= 0)
+                throw new InvalidOperationException(
+                    $"SchemaIdentificationScript for template '{templateName}' returned schema name '{name}' " +
+                    $"containing disallowed character '{bad}'. " +
+                    "Schema names cannot contain brackets, quotes, or braces — these characters would corrupt " +
+                    "SchemaSmith's SQL quoting, JSON serialization, or token substitution. " +
+                    "Rename the schema (or fix the discovery query) to use only letters, digits, underscores, hyphens, dots, or spaces.");
+        }
     }
 
     private static void ValidateNotReserved(string name, Platform platform, string templateName)

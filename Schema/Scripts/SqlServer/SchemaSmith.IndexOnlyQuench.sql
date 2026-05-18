@@ -9,12 +9,29 @@ CREATE OR ALTER PROCEDURE SchemaSmith.IndexOnlyQuench
   @DropUnknownIndexes BIT = 0,
   @UpdateFillFactor BIT = 1
 AS
-BEGIN TRY  
+BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = ''
   SET NOCOUNT ON
   RAISERROR('Parse Tables from Json', 10, 100) WITH NOWAIT
+
+  -- I5: missing/blank [Schema] is a programmer error after slice-1's SchemaDefaultResolver.
+  -- Silent 'dbo' fallback here is data-loss-equivalent — fail loud with a clear pointer at
+  -- the Template.Load contract.
+  IF EXISTS (SELECT 1 FROM OPENJSON(@TableDefinitions) WITH ([Schema] NVARCHAR(500) '$.Schema', [Name] NVARCHAR(500) '$.Name')
+                 WHERE NULLIF(RTRIM(ISNULL([Schema], '')), '') IS NULL)
+  BEGIN
+    DECLARE @v_BadTable NVARCHAR(500) =
+      (SELECT TOP 1 ISNULL([Name], '<unnamed>') FROM OPENJSON(@TableDefinitions) WITH ([Schema] NVARCHAR(500) '$.Schema', [Name] NVARCHAR(500) '$.Name')
+         WHERE NULLIF(RTRIM(ISNULL([Schema], '')), '') IS NULL);
+    DECLARE @v_Msg NVARCHAR(2000) = 'Table JSON is missing Schema for table ''' + @v_BadTable + '''. ' +
+      'Schema must be populated before reaching IndexOnlyQuench — this is a programmer error. ' +
+      'In production the SchemaDefaultResolver fills Schema with the platform default or the {{SchemaName}} token; ' +
+      'a blank value here means a caller bypassed Template.Load or substituted the token away.';
+    THROW 51000, @v_Msg, 1;
+  END
+
   DROP TABLE IF EXISTS #TableDefinitions
-  SELECT [Schema] = SchemaSmith.fn_SafeBracketWrap(ISNULL([Schema], 'dbo')), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL([CompressionType], 'NONE'),
+  SELECT [Schema] = SchemaSmith.fn_SafeBracketWrap([Schema]), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL([CompressionType], 'NONE'),
          [UpdateFillFactor] = ISNULL([UpdateFillFactor], 0), [Indexes], [XmlIndexes], [Statistics], [FullTextIndex]
     INTO #TableDefinitions
     FROM OPENJSON(@TableDefinitions) WITH (
