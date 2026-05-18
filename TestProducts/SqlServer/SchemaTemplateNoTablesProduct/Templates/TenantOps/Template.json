@@ -1,0 +1,10 @@
+{
+    "Name": "TenantOps",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "SchemaIdentificationScript": "SELECT s.name FROM sys.schemas s WHERE s.name LIKE 'tenantops_%'",
+    "AllowParallel": true,
+    "ScriptFolders": [
+        { "FolderPath" : "Before Scripts", "QuenchSlot" : "Before" },
+        { "FolderPath" : "After Scripts", "QuenchSlot" : "After" }
+    ]
+}

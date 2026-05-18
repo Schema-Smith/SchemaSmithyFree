@@ -1289,6 +1289,178 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region PrepareIterationContent — BaselineValidationScript / VersionStampScript / Table Schema
+
+    // Slice-3 audit Phase 4: design §5.3 steps 4 + 6 require per-iteration {{SchemaName}}
+    // substitution into BaselineValidationScript and VersionStampScript. The private fields
+    // are observed via reflection rather than a dedicated accessor (production code change
+    // out of scope for this phase).
+    private static string GetPrivateString(DatabaseQuench quench, string fieldName)
+    {
+        var field = typeof(DatabaseQuench).GetField(fieldName,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.That(field, Is.Not.Null, $"Expected private field '{fieldName}' on DatabaseQuench.");
+        return (string)field.GetValue(quench);
+    }
+
+    [Test]
+    public void PrepareIterationContent_SchemaTemplate_SubstitutesIntoBaselineValidationScript()
+    {
+        // Design §5.3 step 4: BaselineValidationScript runs per iteration with {{SchemaName}}
+        // resolved. A discovery script that returns 'tenant_a' must observe the per-tenant
+        // baseline body with the token replaced by that tenant name.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            BaselineValidationScript = "SELECT CAST(CASE WHEN SCHEMA_ID('{{SchemaName}}') IS NULL THEN 0 ELSE 1 END AS BIT)"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        var substituted = GetPrivateString(quench, "_iterationBaselineValidationScript");
+        Assert.That(substituted, Does.Contain("SCHEMA_ID('tenant_a')"));
+        Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_RegularTemplate_BaselineValidationScript_LeftVerbatim()
+    {
+        // Regular templates short-circuit the substitution path — the verbatim template body
+        // (which never had a {{SchemaName}} token reason to exist) flows through unmodified.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "Core",
+            BaselineValidationScript = "SELECT CAST(1 AS BIT)"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        var captured = GetPrivateString(quench, "_iterationBaselineValidationScript");
+        Assert.That(captured, Is.EqualTo("SELECT CAST(1 AS BIT)"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_SchemaTemplate_SubstitutesIntoVersionStampScript()
+    {
+        // Design §5.3 step 6: VersionStampScript runs per iteration with {{SchemaName}}
+        // resolved. A stamp that touches a per-tenant audit table must see the iteration
+        // schema substituted.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_globex'",
+            VersionStampScript = "INSERT INTO [{{SchemaName}}].[VersionStamp] (Version) VALUES ('1.0')"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_globex",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        var substituted = GetPrivateString(quench, "_iterationVersionStampScript");
+        Assert.That(substituted, Does.Contain("[tenant_globex]"));
+        Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_RegularTemplate_VersionStampScript_LeftVerbatim()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
+        var template = new Template
+        {
+            Name = "Core",
+            VersionStampScript = "DO $$ BEGIN RAISE NOTICE 'stamped'; END $$;"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "false", false, false, null);
+        quench.PrepareIterationContent();
+
+        var captured = GetPrivateString(quench, "_iterationVersionStampScript");
+        Assert.That(captured, Is.EqualTo("DO $$ BEGIN RAISE NOTICE 'stamped'; END $$;"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_SchemaTemplate_SubstitutesIntoIterationTableSchema()
+    {
+        // Design §5.3 step 5 fan-out: the serialized table-definition JSON consumed by the
+        // engine-generated DDL procs must have {{SchemaName}} resolved for the iteration.
+        // Slice 1's SchemaDefaultResolver fills the Schema field with "{{SchemaName}}";
+        // PrepareIterationContent then materializes that token per iteration.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_acme'",
+            TableSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"Customers\"}]"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_acme",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        Assert.That(quench.IterationTableSchema, Does.Contain("\"Schema\":\"tenant_acme\""));
+        Assert.That(quench.IterationTableSchema, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_RegularTemplate_IterationTableSchema_FallsThroughToTemplate()
+    {
+        // Regular templates leave _iterationTableSchema null; the property falls back to
+        // Template.TableSchema verbatim — no substitution, no behavior change vs. pre-slice-3.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "Core",
+            TableSchema = "[{\"Schema\":\"dbo\",\"Name\":\"Customers\"}]"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        Assert.That(quench.IterationTableSchema,
+            Is.EqualTo("[{\"Schema\":\"dbo\",\"Name\":\"Customers\"}]"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_SchemaTemplate_MultipleSchemaNameOccurrences_AllReplaced()
+    {
+        // Audit item 15: multiple {{SchemaName}} occurrences in a single body. The
+        // String.Replace path used in PrepareIterationContent replaces all occurrences;
+        // exercise the case end-to-end for VersionStampScript so a future regex-style
+        // single-replace refactor would surface here.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            VersionStampScript =
+                "INSERT INTO [{{SchemaName}}].[VersionStamp] (Schema_, Version) " +
+                "VALUES ('{{SchemaName}}', '1.0'); PRINT 'Stamped {{SchemaName}}';"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        var substituted = GetPrivateString(quench, "_iterationVersionStampScript");
+        Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
+        // tenant_a appears in the table-name, value, and PRINT — three occurrences.
+        var occurrences = System.Text.RegularExpressions.Regex.Matches(substituted, "tenant_a").Count;
+        Assert.That(occurrences, Is.EqualTo(3),
+            "All three {{SchemaName}} occurrences must be replaced — not just the first.");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static IDbCommand CreateMockCommand()

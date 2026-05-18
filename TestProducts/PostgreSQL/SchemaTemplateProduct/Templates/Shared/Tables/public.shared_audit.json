@@ -7,6 +7,10 @@
       "DataType": "INTEGER"
     },
     {
+      "Name": "tenant",
+      "DataType": "VARCHAR(128)"
+    },
+    {
       "Name": "note",
       "DataType": "VARCHAR(256)",
       "Nullable": true
@@ -16,7 +20,7 @@
     {
       "Name": "pk_shared_audit",
       "PrimaryKey": true,
-      "IndexColumns": "audit_id"
+      "IndexColumns": "audit_id, tenant"
     }
   ]
 }

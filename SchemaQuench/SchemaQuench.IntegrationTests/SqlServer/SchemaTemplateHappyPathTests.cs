@@ -411,6 +411,529 @@ WHERE fs.name = '{tenant}' AND ft.name = 'Orders' AND fk.name = 'FK_Orders_Looku
         }
     }
 
+    [Test]
+    public void Always_Tagged_Script_Runs_Every_Quench_Per_Iteration_And_Is_Not_Tracked()
+    {
+        // Design §6.7: a [ALWAYS] script runs every quench and is not added to
+        // CompletedMigrationScripts. In a schema template the script runs once per iteration
+        // per quench — two quenches against N tenants produce 2*N audit rows total.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(DefaultTenants);
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("SqlServer", ProductName);
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // After quench #1, each tenant should have exactly one audit row.
+                foreach (var tenant in DefaultTenants)
+                {
+                    var rowsAfterFirst = ScalarCount(
+                        $"SELECT COUNT(*) FROM dbo.SharedAudit WHERE [Tenant] = N'{tenant}' AND [Note] = N'always-touched'");
+                    Assert.That(rowsAfterFirst, Is.EqualTo(1),
+                        $"After quench #1 tenant '{tenant}' should have exactly one [ALWAYS] audit row.");
+                }
+
+                // The [ALWAYS] script must NOT show up in CompletedMigrationScripts — that's the
+                // whole point of the [ALWAYS] tag (design §6.7).
+                foreach (var tenant in DefaultTenants)
+                {
+                    var tracked = ScalarCount(
+                        $"SELECT COUNT(*) FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE ProductName = '{ProductName}' AND template_name = '{TenantBodyTemplate}' AND schema_name = '{tenant}' AND ScriptPath LIKE '%TouchAudit%'");
+                    Assert.That(tracked, Is.EqualTo(0),
+                        $"Tenant '{tenant}': [ALWAYS] script must not appear in CompletedMigrationScripts.");
+                }
+
+                // Second quench: same tenants, no changes. Each tenant should now have TWO rows.
+                _progressLog.ClearReceivedCalls();
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                foreach (var tenant in DefaultTenants)
+                {
+                    var rowsAfterSecond = ScalarCount(
+                        $"SELECT COUNT(*) FROM dbo.SharedAudit WHERE [Tenant] = N'{tenant}' AND [Note] = N'always-touched'");
+                    Assert.That(rowsAfterSecond, Is.EqualTo(2),
+                        $"After quench #2 tenant '{tenant}' should have two [ALWAYS] audit rows ([ALWAYS] re-ran).");
+                }
+            }
+            finally
+            {
+                DropTenantSchemas(DefaultTenants);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void WhatIf_With_Schema_Template_Iterates_Per_Tenant_And_Makes_No_State_Changes()
+    {
+        // Design §5.10: WhatIf in schema templates uses the same iteration model — every
+        // "execute" becomes "log the SQL that would have run." Real deploy first so tables
+        // exist; then re-quench with WhatIfONLY=true and assert the second pass is read-only.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(DefaultTenants);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+
+            try
+            {
+                // First quench: real deploy.
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Capture per-tenant state BEFORE WhatIf.
+                var markerBefore = DefaultTenants
+                    .ToDictionary(t => t, t => ScalarString($"SELECT Marker FROM [{t}].[Customers] WITH (NOLOCK) WHERE CustomerID = 1"));
+                var trackingRowsBefore = DefaultTenants
+                    .ToDictionary(t => t, t => ScalarCount(
+                        $"SELECT COUNT(*) FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE ProductName = '{ProductName}' AND template_name = '{TenantBodyTemplate}' AND schema_name = '{t}'"));
+                var alwaysRowsBefore = DefaultTenants
+                    .ToDictionary(t => t, t => ScalarCount(
+                        $"SELECT COUNT(*) FROM dbo.SharedAudit WITH (NOLOCK) WHERE [Tenant] = N'{t}' AND [Note] = N'always-touched'"));
+
+                _progressLog.ClearReceivedCalls();
+
+                // Second quench: WhatIf mode.
+                config["WhatIfONLY"] = "true";
+                RunSchemaQuench();
+
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+                _environment.DidNotReceive().Exit(2);
+                _environment.DidNotReceive().Exit(3);
+
+                foreach (var tenant in DefaultTenants)
+                    _progressLog.Received(1).Info(
+                        $"[{_server}].[{_mainDb}] [Schema: {tenant}] Successfully Quenched");
+
+                foreach (var tenant in DefaultTenants)
+                {
+                    _progressLog.Received().Info(Arg.Is<string>(s =>
+                        s.Contains($"[Schema: {tenant}]") && s.Contains("[WhatIf] Before database scripts:")));
+                }
+
+                // State must be unchanged after WhatIf.
+                foreach (var tenant in DefaultTenants)
+                {
+                    var markerAfter = ScalarString($"SELECT Marker FROM [{tenant}].[Customers] WITH (NOLOCK) WHERE CustomerID = 1");
+                    Assert.That(markerAfter, Is.EqualTo(markerBefore[tenant]),
+                        $"Tenant '{tenant}': WhatIf must not modify the customer marker.");
+
+                    var trackingAfter = ScalarCount(
+                        $"SELECT COUNT(*) FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE ProductName = '{ProductName}' AND template_name = '{TenantBodyTemplate}' AND schema_name = '{tenant}'");
+                    Assert.That(trackingAfter, Is.EqualTo(trackingRowsBefore[tenant]),
+                        $"Tenant '{tenant}': WhatIf must not change tracking row count.");
+
+                    var alwaysAfter = ScalarCount(
+                        $"SELECT COUNT(*) FROM dbo.SharedAudit WITH (NOLOCK) WHERE [Tenant] = N'{tenant}' AND [Note] = N'always-touched'");
+                    Assert.That(alwaysAfter, Is.EqualTo(alwaysRowsBefore[tenant]),
+                        $"Tenant '{tenant}': WhatIf must not execute the [ALWAYS] script.");
+                }
+            }
+            finally
+            {
+                config["WhatIfONLY"] = "false";
+                DropTenantSchemas(DefaultTenants);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void Tenant_Offboarding_And_Re_Onboarding_Skips_Migrations_On_Return()
+    {
+        // Design §6.8 scenario D: a tenant removed from discovery has its tracking rows
+        // retained (harmless). Re-adding the tenant later finds the rows intact and run-once
+        // migrations correctly skip. Concretely:
+        //   1. Quench with {acme, beta, globex} — beta's SeedTenantMarker tracked.
+        //   2. Remove beta from dbo.Tenants. Mutate beta's Marker row directly.
+        //   3. Quench again — beta is NOT in discovery → no iteration → no mutation.
+        //   4. Re-add beta. Quench again — beta's tracking row still exists → migration
+        //      skips → the mutated marker is preserved.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(DefaultTenants);
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("SqlServer", ProductName);
+
+            try
+            {
+                // Quench 1: deploys all three tenants and tracks SeedTenantMarker per tenant.
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+                AssertMigrationTracked(TenantBodyTemplate, "tenant_beta", "MigrationScripts/Before/SeedTenantMarker.sql");
+
+                // Mutate beta's marker so we can prove the migration is NOT re-run after the
+                // tenant returns.
+                ExecuteOnMainDb("UPDATE [tenant_beta].[Customers] SET Marker = N'mutated' WHERE CustomerID = 1");
+
+                // Offboard beta from discovery.
+                ExecuteOnMainDb("DELETE FROM dbo.Tenants WHERE [Name] = N'tenant_beta'");
+
+                // Quench 2: beta is not in discovery, so no work unit is dispatched for it.
+                _progressLog.ClearReceivedCalls();
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // The beta-iteration log line for "Successfully Quenched" must NOT appear in
+                // quench 2 — beta was offboarded.
+                _progressLog.DidNotReceive().Info(
+                    $"[{_server}].[{_mainDb}] [Schema: tenant_beta] Successfully Quenched");
+
+                // Beta's mutated marker should still be there (no run-once migration touched it).
+                var markerAfterOffboard = ScalarString(
+                    "SELECT Marker FROM [tenant_beta].[Customers] WITH (NOLOCK) WHERE CustomerID = 1");
+                Assert.That(markerAfterOffboard, Is.EqualTo("mutated"),
+                    "Offboarded tenant must not be re-touched by any subsequent quench.");
+
+                // Beta's tracking row must still exist — it's the seed for the re-onboarding case.
+                AssertMigrationTracked(TenantBodyTemplate, "tenant_beta", "MigrationScripts/Before/SeedTenantMarker.sql");
+
+                // Re-onboard beta.
+                ExecuteOnMainDb("INSERT INTO dbo.Tenants ([Name]) VALUES (N'tenant_beta')");
+
+                // Quench 3: beta is back. Its tracking row exists, so SeedTenantMarker must skip.
+                _progressLog.ClearReceivedCalls();
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                _progressLog.Received(1).Info(
+                    $"[{_server}].[{_mainDb}] [Schema: tenant_beta] Successfully Quenched");
+
+                // The mutated marker should still be there — SeedTenantMarker was correctly skipped
+                // for the re-onboarded tenant. Slice 2 migration tracking earns its keep here.
+                var markerAfterReOnboard = ScalarString(
+                    "SELECT Marker FROM [tenant_beta].[Customers] WITH (NOLOCK) WHERE CustomerID = 1");
+                Assert.That(markerAfterReOnboard, Is.EqualTo("mutated"),
+                    "Re-onboarded tenant must skip already-tracked run-once migrations.");
+
+                // Still exactly one tracking row for SeedTenantMarker on tenant_beta — no duplicates.
+                var betaTrackingCount = ScalarCount(
+                    $"SELECT COUNT(*) FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE ProductName = '{ProductName}' AND template_name = '{TenantBodyTemplate}' AND schema_name = 'tenant_beta' AND ScriptPath = 'MigrationScripts/Before/SeedTenantMarker.sql'");
+                Assert.That(betaTrackingCount, Is.EqualTo(1),
+                    "Re-onboarded tenant must not produce a duplicate tracking row.");
+            }
+            finally
+            {
+                DropTenantSchemas(DefaultTenants);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void Schema_Template_With_No_Tables_Only_Before_And_After_Scripts_Iterates_Per_Schema()
+    {
+        // Design surface: a schema template whose ScriptFolders include only Before/After
+        // (no Tables, no Procedures, no engine-generated DDL) must still iterate per
+        // discovered schema, substitute {{SchemaName}}, and track the run-once Before
+        // migration per (template, schema). Uses a dedicated fixture so the existing
+        // multi-template SchemaTemplateProduct keeps its full-pipeline shape.
+        const string noTablesProduct = "SchemaTemplateNoTablesProduct";
+        var tenants = new[] { "tenantops_a", "tenantops_b" };
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            // Clean any prior state + create the per-tenant schemas + audit tables (the
+            // template itself can't create tables — it has no Tables folder).
+            Schema.Checkpointing.FileCheckpointManager.GetFromFactory().DeleteCheckpoints(noTablesProduct);
+            using (var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
+            {
+                conn.Open();
+                conn.ChangeDatabase(_mainDb);
+                using var cmd = conn.CreateCommand();
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @$"
+IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
+    DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{noTablesProduct}';";
+                cmd.ExecuteNonQuery();
+                foreach (var tenant in tenants)
+                {
+                    cmd.CommandText = $@"
+IF SCHEMA_ID('{tenant}') IS NULL EXEC('CREATE SCHEMA [{tenant}]');
+IF OBJECT_ID('[{tenant}].[Audit]', 'U') IS NULL
+    CREATE TABLE [{tenant}].[Audit] ([AuditID] INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Audit_{tenant}] PRIMARY KEY, [Note] NVARCHAR(256) NOT NULL);";
+                    cmd.ExecuteNonQuery();
+                }
+                conn.Close();
+            }
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("SqlServer", noTablesProduct);
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                foreach (var tenant in tenants)
+                {
+                    _progressLog.Received(1).Info(
+                        $"[{_server}].[{_mainDb}] [Schema: {tenant}] Successfully Quenched");
+
+                    // Both Before and After scripts must have landed per tenant.
+                    var beforeRow = ScalarCount(
+                        $"SELECT COUNT(*) FROM [{tenant}].[Audit] WITH (NOLOCK) WHERE [Note] = N'no-tables-marker-{tenant}'");
+                    Assert.That(beforeRow, Is.EqualTo(1),
+                        $"Tenant '{tenant}': Before-slot script must run with {{{{SchemaName}}}} substituted.");
+
+                    var afterRow = ScalarCount(
+                        $"SELECT COUNT(*) FROM [{tenant}].[Audit] WITH (NOLOCK) WHERE [Note] = N'after-{tenant}'");
+                    Assert.That(afterRow, Is.EqualTo(1),
+                        $"Tenant '{tenant}': After-slot script must run with {{{{SchemaName}}}} substituted.");
+
+                    // Run-once Before migration must be tracked per (template, schema).
+                    var trackedBefore = ScalarCount(
+                        $"SELECT COUNT(*) FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE ProductName = '{noTablesProduct}' AND template_name = 'TenantOps' AND schema_name = '{tenant}' AND ScriptPath = 'Before Scripts/SeedMarker.sql'");
+                    Assert.That(trackedBefore, Is.EqualTo(1),
+                        $"Tenant '{tenant}': Before-slot migration must be tracked.");
+                }
+            }
+            finally
+            {
+                using (var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
+                {
+                    conn.Open();
+                    conn.ChangeDatabase(_mainDb);
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandTimeout = 0;
+                    foreach (var tenant in tenants)
+                    {
+                        cmd.CommandText = $@"
+IF OBJECT_ID('[{tenant}].[Audit]', 'U') IS NOT NULL DROP TABLE [{tenant}].[Audit];
+IF SCHEMA_ID('{tenant}') IS NOT NULL EXEC('DROP SCHEMA [{tenant}]');";
+                        cmd.ExecuteNonQuery();
+                    }
+                    cmd.CommandText = @$"
+IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
+    DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{noTablesProduct}';";
+                    cmd.ExecuteNonQuery();
+                    conn.Close();
+                }
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void Two_Schema_Templates_Sharing_Script_Filename_Track_Independently_Per_Template()
+    {
+        // Slice 2 strict template_name on writes/deletes: two schema templates with the SAME
+        // script relative path must produce independent tracking rows. A second quench must
+        // skip BOTH (each via its own row), and the audit table must show both INSERTs landed
+        // (not just one — the lookup must not shadow-skip the second template's run).
+        const string dupProduct = "SchemaTemplateDupScriptProduct";
+        var tenants = new[] { "dupset_x", "dupset_y" };
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            Schema.Checkpointing.FileCheckpointManager.GetFromFactory().DeleteCheckpoints(dupProduct);
+            using (var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
+            {
+                conn.Open();
+                conn.ChangeDatabase(_mainDb);
+                using var cmd = conn.CreateCommand();
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @$"
+IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
+    DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{dupProduct}';";
+                cmd.ExecuteNonQuery();
+                foreach (var tenant in tenants)
+                {
+                    cmd.CommandText = $@"
+IF SCHEMA_ID('{tenant}') IS NULL EXEC('CREATE SCHEMA [{tenant}]');
+IF OBJECT_ID('[{tenant}].[DupAudit]', 'U') IS NULL
+    CREATE TABLE [{tenant}].[DupAudit] ([DupID] INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DupAudit_{tenant}] PRIMARY KEY, [Source] NVARCHAR(256) NOT NULL);";
+                    cmd.ExecuteNonQuery();
+                }
+                conn.Close();
+            }
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("SqlServer", dupProduct);
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Each tenant's DupAudit must have BOTH the Alpha and Beta INSERT — independent
+                // template_name tracking must not shadow the second template's run.
+                foreach (var tenant in tenants)
+                {
+                    var alphaRows = ScalarCount(
+                        $"SELECT COUNT(*) FROM [{tenant}].[DupAudit] WITH (NOLOCK) WHERE [Source] = N'DupAlpha-{tenant}'");
+                    Assert.That(alphaRows, Is.EqualTo(1),
+                        $"Tenant '{tenant}': DupAlpha's Before/Seed.sql must run.");
+
+                    var betaRows = ScalarCount(
+                        $"SELECT COUNT(*) FROM [{tenant}].[DupAudit] WITH (NOLOCK) WHERE [Source] = N'DupBeta-{tenant}'");
+                    Assert.That(betaRows, Is.EqualTo(1),
+                        $"Tenant '{tenant}': DupBeta's Before/Seed.sql must run despite sharing the same relative path as DupAlpha's.");
+
+                    // Two distinct tracking rows: one per (template, schema, scriptPath).
+                    var trackingRows = ScalarCount(
+                        $"SELECT COUNT(*) FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE ProductName = '{dupProduct}' AND schema_name = '{tenant}' AND ScriptPath = 'Before Scripts/Seed.sql'");
+                    Assert.That(trackingRows, Is.EqualTo(2),
+                        $"Tenant '{tenant}': must have TWO tracking rows for 'Before Scripts/Seed.sql' — one per template_name.");
+
+                    var alphaTracked = ScalarCount(
+                        $"SELECT COUNT(*) FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE ProductName = '{dupProduct}' AND template_name = 'DupAlpha' AND schema_name = '{tenant}' AND ScriptPath = 'Before Scripts/Seed.sql'");
+                    Assert.That(alphaTracked, Is.EqualTo(1), $"DupAlpha tracking row must exist for tenant '{tenant}'.");
+
+                    var betaTracked = ScalarCount(
+                        $"SELECT COUNT(*) FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE ProductName = '{dupProduct}' AND template_name = 'DupBeta' AND schema_name = '{tenant}' AND ScriptPath = 'Before Scripts/Seed.sql'");
+                    Assert.That(betaTracked, Is.EqualTo(1), $"DupBeta tracking row must exist for tenant '{tenant}'.");
+                }
+
+                // Second quench: both should skip — neither row shadow-pruning the other.
+                _progressLog.ClearReceivedCalls();
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                foreach (var tenant in tenants)
+                {
+                    var totalRows = ScalarCount(
+                        $"SELECT COUNT(*) FROM [{tenant}].[DupAudit] WITH (NOLOCK)");
+                    Assert.That(totalRows, Is.EqualTo(2),
+                        $"Tenant '{tenant}': second quench must skip both seed scripts — total rows stay at 2.");
+                }
+            }
+            finally
+            {
+                using (var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
+                {
+                    conn.Open();
+                    conn.ChangeDatabase(_mainDb);
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandTimeout = 0;
+                    foreach (var tenant in tenants)
+                    {
+                        cmd.CommandText = $@"
+IF OBJECT_ID('[{tenant}].[DupAudit]', 'U') IS NOT NULL DROP TABLE [{tenant}].[DupAudit];
+IF SCHEMA_ID('{tenant}') IS NOT NULL EXEC('DROP SCHEMA [{tenant}]');";
+                        cmd.ExecuteNonQuery();
+                    }
+                    cmd.CommandText = @$"
+IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
+    DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{dupProduct}';";
+                    cmd.ExecuteNonQuery();
+                    conn.Close();
+                }
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void Schema_Template_With_IndexOnlyTableQuenches_True_Adds_Missing_Index_Without_Creating_Table()
+    {
+        // Combination test: IndexOnlyTableQuenches=true on a schema template skips
+        // MissingTableAndColumnQuench / ModifiedTableQuench but still runs IndexOnlyQuench
+        // with {{SchemaName}}-substituted IterationTableSchema. The test pre-creates the
+        // tenant table (without the IX_Widgets_Label index), runs a quench, and asserts
+        // the index now exists but the table wasn't recreated.
+        const string idxOnlyProduct = "SchemaTemplateIndexOnlyProduct";
+        var tenants = new[] { "idxonly_one" };
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            Schema.Checkpointing.FileCheckpointManager.GetFromFactory().DeleteCheckpoints(idxOnlyProduct);
+            using (var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
+            {
+                conn.Open();
+                conn.ChangeDatabase(_mainDb);
+                using var cmd = conn.CreateCommand();
+                cmd.CommandTimeout = 0;
+                cmd.CommandText = @$"
+IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
+    DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{idxOnlyProduct}';";
+                cmd.ExecuteNonQuery();
+                foreach (var tenant in tenants)
+                {
+                    cmd.CommandText = $@"
+IF SCHEMA_ID('{tenant}') IS NULL EXEC('CREATE SCHEMA [{tenant}]');
+IF OBJECT_ID('[{tenant}].[Widgets]', 'U') IS NULL
+    CREATE TABLE [{tenant}].[Widgets] (
+        [WidgetID] INT NOT NULL CONSTRAINT [PK_Widgets] PRIMARY KEY,
+        [Label] NVARCHAR(64) NOT NULL);";
+                    cmd.ExecuteNonQuery();
+                }
+                conn.Close();
+            }
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("SqlServer", idxOnlyProduct);
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                foreach (var tenant in tenants)
+                {
+                    // The missing IX_Widgets_Label index must now exist.
+                    var ixCount = ScalarCount($@"
+SELECT COUNT(*) FROM sys.indexes i
+  INNER JOIN sys.tables t ON i.object_id = t.object_id
+  INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+  WHERE s.name = '{tenant}' AND t.name = 'Widgets' AND i.name = 'IX_Widgets_Label'");
+                    Assert.That(ixCount, Is.EqualTo(1),
+                        $"Tenant '{tenant}': IndexOnlyQuench must add the missing IX_Widgets_Label index.");
+
+                    // Table still exists. PK count is exactly 1 — the engine doesn't
+                    // add a second PK on top of the pre-existing one.
+                    var pkCount = ScalarCount($@"
+SELECT COUNT(*) FROM sys.key_constraints kc
+  INNER JOIN sys.tables t ON kc.parent_object_id = t.object_id
+  INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+  WHERE s.name = '{tenant}' AND t.name = 'Widgets' AND kc.type = 'PK'");
+                    Assert.That(pkCount, Is.EqualTo(1),
+                        $"Tenant '{tenant}': exactly one PK on Widgets after quench (engine did not add a duplicate).");
+                }
+            }
+            finally
+            {
+                using (var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
+                {
+                    conn.Open();
+                    conn.ChangeDatabase(_mainDb);
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandTimeout = 0;
+                    foreach (var tenant in tenants)
+                    {
+                        cmd.CommandText = $@"
+IF OBJECT_ID('[{tenant}].[Widgets]', 'U') IS NOT NULL DROP TABLE [{tenant}].[Widgets];
+IF SCHEMA_ID('{tenant}') IS NOT NULL EXEC('DROP SCHEMA [{tenant}]');";
+                        cmd.ExecuteNonQuery();
+                    }
+                    cmd.CommandText = @$"
+IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
+    DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{idxOnlyProduct}';";
+                    cmd.ExecuteNonQuery();
+                    conn.Close();
+                }
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
     // ----- Helpers ---------------------------------------------------------------------------
 
     private void SetupSharedMocks()
@@ -508,14 +1031,18 @@ IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
     {
         foreach (var tenant in tenants)
         {
-            // Drop all objects in the schema, then drop the schema itself. Order: FKs first (procs +
-            // tables can be in any order once FKs are gone).
+            // Drop all objects in the schema, then drop the schema itself. Order: FKs first, then
+            // VIEWS (indexed views with SCHEMABINDING block table drops), then procs, then tables.
             cmd.CommandText = $@"
 DECLARE @sql NVARCHAR(MAX) = N'';
 SELECT @sql = @sql + 'ALTER TABLE [' + s.name + '].[' + t.name + '] DROP CONSTRAINT [' + fk.name + '];' + CHAR(10)
   FROM sys.foreign_keys fk
   INNER JOIN sys.tables t ON fk.parent_object_id = t.object_id
   INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+  WHERE s.name = '{tenant}';
+SELECT @sql = @sql + 'DROP VIEW [' + s.name + '].[' + v.name + '];' + CHAR(10)
+  FROM sys.views v
+  INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
   WHERE s.name = '{tenant}';
 SELECT @sql = @sql + 'DROP PROCEDURE [' + s.name + '].[' + o.name + '];' + CHAR(10)
   FROM sys.objects o

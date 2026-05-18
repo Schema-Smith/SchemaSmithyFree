@@ -1,0 +1,7 @@
+{
+    "Name": "IdxOnlyTenant",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "SchemaIdentificationScript": "SELECT s.name FROM sys.schemas s WHERE s.name LIKE 'idxonly_%'",
+    "IndexOnlyTableQuenches": true,
+    "ScriptFolders": []
+}

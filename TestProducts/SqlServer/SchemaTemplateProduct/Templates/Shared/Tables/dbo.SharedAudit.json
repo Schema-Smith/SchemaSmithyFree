@@ -7,6 +7,10 @@
       "DataType": "INT"
     },
     {
+      "Name": "[Tenant]",
+      "DataType": "NVARCHAR(128)"
+    },
+    {
       "Name": "[Note]",
       "DataType": "NVARCHAR(256)",
       "Nullable": true
@@ -16,7 +20,7 @@
     {
       "Name": "[PK_SharedAudit]",
       "PrimaryKey": true,
-      "IndexColumns": "[AuditID]"
+      "IndexColumns": "[AuditID], [Tenant]"
     }
   ]
 }

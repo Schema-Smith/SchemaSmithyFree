@@ -1,0 +1,24 @@
+{
+  "Name": "[Widgets]",
+  "Columns": [
+    {
+      "Name": "[WidgetID]",
+      "DataType": "INT"
+    },
+    {
+      "Name": "[Label]",
+      "DataType": "NVARCHAR(64)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Widgets]",
+      "PrimaryKey": true,
+      "IndexColumns": "[WidgetID]"
+    },
+    {
+      "Name": "[IX_Widgets_Label]",
+      "IndexColumns": "[Label]"
+    }
+  ]
+}
