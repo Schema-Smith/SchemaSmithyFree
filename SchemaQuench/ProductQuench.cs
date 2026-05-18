@@ -505,16 +505,23 @@ public class ProductQuench
         if (!template.IsSchemaTemplate && template.ContinueOnDatabaseFailure)
             return;
 
+        // TRANSITIONAL (slice 3 of schema-templates) — when slice 4 wires CreateSchemaIfMissing /
+        // ContinueOn* to actual execution logic, remove the "(not yet honored — slice 4)"
+        // annotations below. AllowParallel and SchemaIdentificationScript are honored in slice 3
+        // and must remain un-annotated.
+        // Roadmap: docs/plans/roadmap.md "Slice 3 transitional aids".
+        const string StubSuffix = " (not yet honored — slice 4)";
+
         if (template.IsSchemaTemplate)
         {
             _progressLog.Info($"  SchemaIdentificationScript: (set)");
-            _progressLog.Info($"  CreateSchemaIfMissing: {template.CreateSchemaIfMissing}");
+            _progressLog.Info($"  CreateSchemaIfMissing: {template.CreateSchemaIfMissing}{StubSuffix}");
             _progressLog.Info($"  AllowParallel: {template.AllowParallel}");
-            _progressLog.Info($"  ContinueOnSchemaFailure: {template.ContinueOnSchemaFailure}");
+            _progressLog.Info($"  ContinueOnSchemaFailure: {template.ContinueOnSchemaFailure}{StubSuffix}");
         }
 
         if (!template.ContinueOnDatabaseFailure)
-            _progressLog.Info($"  ContinueOnDatabaseFailure: {template.ContinueOnDatabaseFailure}");
+            _progressLog.Info($"  ContinueOnDatabaseFailure: {template.ContinueOnDatabaseFailure}{StubSuffix}");
     }
 
     /// <summary>

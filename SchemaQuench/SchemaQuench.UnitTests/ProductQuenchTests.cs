@@ -533,7 +533,10 @@ public class ProductQuenchTests
     public void LogSchemaTemplateFields_SchemaTemplate_EchoesFields()
     {
         // Per §3.6, templates with SchemaIdentificationScript echo their schema-fan-out config to
-        // the progress log at template-start. Regular templates skip the echo.
+        // the progress log at template-start. Regular templates skip the echo. Three of the echoed
+        // fields (CreateSchemaIfMissing, ContinueOnSchemaFailure, ContinueOnDatabaseFailure) are
+        // slice-4 stubs and carry a "(not yet honored — slice 4)" suffix; AllowParallel and
+        // SchemaIdentificationScript are honored in slice 3 and do not carry the suffix.
         WithMinimalSqlServerProductQuench(quench =>
         {
             var template = new Template
@@ -552,9 +555,9 @@ public class ProductQuenchTests
             Assert.Multiple(() =>
             {
                 Assert.That(quench.ProgressLogLines, Has.Some.Contains("SchemaIdentificationScript:"));
-                Assert.That(quench.ProgressLogLines, Has.Some.Contains("CreateSchemaIfMissing: True"));
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("CreateSchemaIfMissing: True (not yet honored — slice 4)"));
                 Assert.That(quench.ProgressLogLines, Has.Some.Contains("AllowParallel: False"));
-                Assert.That(quench.ProgressLogLines, Has.Some.Contains("ContinueOnSchemaFailure: False"));
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("ContinueOnSchemaFailure: False (not yet honored — slice 4)"));
             });
         });
     }
@@ -583,7 +586,8 @@ public class ProductQuenchTests
     public void LogSchemaTemplateFields_ContinueOnDatabaseFailureFalse_EchoesIt()
     {
         // ContinueOnDatabaseFailure applies to ALL templates (regular + schema); echo only when
-        // non-default (false).
+        // non-default (false). The field is a slice-4 stub and carries the
+        // "(not yet honored — slice 4)" suffix until slice 4 wires it to actual failure routing.
         WithMinimalSqlServerProductQuench(quench =>
         {
             var template = new Template
@@ -596,7 +600,64 @@ public class ProductQuenchTests
 
             quench.InvokeLogSchemaTemplateFieldsIfSet(template);
 
-            Assert.That(quench.ProgressLogLines, Has.Some.Contains("ContinueOnDatabaseFailure: False"));
+            Assert.That(quench.ProgressLogLines, Has.Some.Contains("ContinueOnDatabaseFailure: False (not yet honored — slice 4)"));
+        });
+    }
+
+    [Test]
+    public void LogSchemaTemplateFields_AllowParallel_NoStubAnnotation()
+    {
+        // AllowParallel IS consulted by slice-3 dispatch (single-thread vs MaxThreads-bounded pool).
+        // It must NOT carry the "(not yet honored — slice 4)" suffix.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT 1",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas",
+                AllowParallel = true
+            };
+
+            quench.InvokeLogSchemaTemplateFieldsIfSet(template);
+
+            var allowParallelLines = quench.ProgressLogLines
+                .Where(line => line.Contains("AllowParallel:"))
+                .ToList();
+            Assert.Multiple(() =>
+            {
+                Assert.That(allowParallelLines, Is.Not.Empty);
+                Assert.That(allowParallelLines, Has.None.Contains("not yet honored"));
+            });
+        });
+    }
+
+    [Test]
+    public void LogSchemaTemplateFields_SchemaIdentificationScript_NoStubAnnotation()
+    {
+        // SchemaIdentificationScript IS load-bearing in slice 3 (schema discovery runs against it).
+        // It must NOT carry the "(not yet honored — slice 4)" suffix.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var template = new Template
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT 1",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            quench.InvokeLogSchemaTemplateFieldsIfSet(template);
+
+            var schemaIdLines = quench.ProgressLogLines
+                .Where(line => line.Contains("SchemaIdentificationScript:"))
+                .ToList();
+            Assert.Multiple(() =>
+            {
+                Assert.That(schemaIdLines, Is.Not.Empty);
+                Assert.That(schemaIdLines, Has.None.Contains("not yet honored"));
+            });
         });
     }
 
