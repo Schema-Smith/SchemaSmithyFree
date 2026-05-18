@@ -1,0 +1,25 @@
+{
+  "Name": "lookups",
+  "Columns": [
+    {
+      "Name": "lookup_id",
+      "DataType": "INTEGER"
+    },
+    {
+      "Name": "code",
+      "DataType": "VARCHAR(32)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_lookups",
+      "PrimaryKey": true,
+      "IndexColumns": "lookup_id"
+    }
+  ],
+  "DataDelivery": {
+    "ContentFile": "Tables/lookups.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "lookup_id"
+  }
+}

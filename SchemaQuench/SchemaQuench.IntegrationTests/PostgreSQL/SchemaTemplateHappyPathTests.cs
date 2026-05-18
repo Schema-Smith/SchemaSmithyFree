@@ -310,6 +310,51 @@ SELECT pg_get_functiondef(p.oid)
     }
 
     [Test]
+    public void Schema_Template_DataDelivery_MergesPerIteration()
+    {
+        // Slice-3 audit B3 regression: a schema-template table with DataDelivery.MergeType
+        // configured must deliver its content into EACH tenant schema. Pre-fix, the literal
+        // "{{SchemaName}}" reached MergeScriptHelper, the catalog probes returned empty
+        // result sets, and the emitted MERGE referenced "{{SchemaName}}"."lookups" —
+        // silently broken end-to-end.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(DefaultTenants);
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("PostgreSQL", ProductName);
+
+            try
+            {
+                RunSchemaQuench();
+
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Each tenant's lookups table must contain the seeded rows.
+                foreach (var tenant in DefaultTenants)
+                {
+                    AssertTableExists(tenant, "lookups");
+                    var count = ScalarCount(
+                        $"SELECT COUNT(*) FROM \"{tenant}\".lookups");
+                    Assert.That(count, Is.EqualTo(3),
+                        $"Tenant '{tenant}' must have all three lookups rows delivered.");
+
+                    var codes = QueryRows(
+                        $"SELECT code FROM \"{tenant}\".lookups ORDER BY lookup_id");
+                    Assert.That(codes, Is.EqualTo(new[] { "ALPHA", "BETA", "GAMMA" }),
+                        $"Tenant '{tenant}' lookups codes must match the content file.");
+                }
+            }
+            finally
+            {
+                DropTenantSchemas(DefaultTenants);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
     public void Cross_Schema_Foreign_Key_To_Shared_Lookup_Is_Created_Per_Tenant()
     {
         lock (FactoryContainer.SharedLockObject)

@@ -296,6 +296,30 @@ public class MergeScriptHelperTests
         Assert.That(result, Does.Not.Contain("[[dbo]]"));
     }
 
+    [Test]
+    public void BuildMergeScript_SqlServer_SchemaTemplate_EmitsResolvedSchemaQualifier()
+    {
+        // The DataDeliveryProcessor is responsible for substituting {{SchemaName}} ->
+        // iteration value BEFORE calling BuildMergeScript. This test verifies that when
+        // the caller passes the already-resolved schema, the MERGE INTO clause carries
+        // the resolved name and no token leak occurs.
+        var cmd = CreateSqlServerMockCommand(
+            jsonSelectCols: "[LookupID],[Code]",
+            needsIdentity: false,
+            jsonColDefs: "           [LookupID] INT,\r\n           [Code] NVARCHAR(32)",
+            insertCols: "        [LookupID],\r\n        [Code]",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, cmd,
+            "tenant_acme", "Lookups", "[{\"LookupID\":1}]", "[LookupID]",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null);
+
+        Assert.That(result, Does.Contain("MERGE INTO [tenant_acme].[Lookups] AS Target"));
+        Assert.That(result, Does.Not.Contain("{{SchemaName}}"),
+            "Resolved schema name must replace the iteration token before reaching the helper.");
+    }
+
     #endregion
 
     #region BuildMergeScript - PostgreSQL Tests
