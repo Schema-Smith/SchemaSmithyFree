@@ -88,17 +88,22 @@ public class ProductQuench
     /// Reads a <c>Target.*</c> filter array from configuration. .NET configuration represents
     /// JSON arrays as keys of the form <c>Target:Templates:0</c>, <c>Target:Templates:1</c>;
     /// <c>GetSection().GetChildren()</c> enumerates those values in declaration order. Null or
-    /// empty values are filtered so a stray <c>"Target:Templates:5": null</c> (carried over
-    /// from a test resetting array slots) doesn't sneak into the filter.
+    /// whitespace-only values are filtered so a stray <c>"Target:Templates:5": null</c> (carried
+    /// over from a test resetting array slots) doesn't sneak into the filter. Surviving values
+    /// are <c>Trim()</c>med so a user-supplied <c>" tenant_acme"</c> matches <c>"tenant_acme"</c>
+    /// instead of surfacing as an unknown-name error.
     /// </summary>
-    private IReadOnlyList<string> ReadFilterArray(string sectionKey)
+    internal static IReadOnlyList<string> ReadFilterArray(IConfiguration config, string sectionKey)
     {
-        var section = _config.GetSection(sectionKey);
+        var section = config.GetSection(sectionKey);
         return section.GetChildren()
             .Select(c => c.Value)
             .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v!.Trim())
             .ToList();
     }
+
+    private IReadOnlyList<string> ReadFilterArray(string sectionKey) => ReadFilterArray(_config, sectionKey);
 
     /// <summary>
     /// Returns the init database name used for server-level connections per platform.

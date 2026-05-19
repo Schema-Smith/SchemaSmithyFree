@@ -24,7 +24,7 @@ namespace SchemaQuench;
 /// (2) a non-empty filter set that intersects to zero throws with the input filter diagnostic.
 /// </para>
 /// </summary>
-public sealed class WorkUnitFilter
+internal sealed class WorkUnitFilter
 {
     private readonly IReadOnlyList<string> _templates;
     private readonly IReadOnlyList<string> _databases;
@@ -36,13 +36,6 @@ public sealed class WorkUnitFilter
         _databases = databases ?? [];
         _schemas = schemas ?? [];
     }
-
-    /// <summary>True when any of the three filter arrays is non-empty.</summary>
-    public bool HasAnyFilter => _templates.Count > 0 || _databases.Count > 0 || _schemas.Count > 0;
-
-    public IReadOnlyList<string> Templates => _templates;
-    public IReadOnlyList<string> Databases => _databases;
-    public IReadOnlyList<string> Schemas => _schemas;
 
     /// <summary>
     /// Applies the configured filters to <paramref name="discovered"/>. Validates first
@@ -114,7 +107,6 @@ public sealed class WorkUnitFilter
         // still warn so the user knows the filter had no effect — they may have intended a
         // different dimension (Target.Databases, perhaps) and the silent no-op would mislead.
         if (_schemas.Count == 0) return;
-        if (warn == null) return;
         if (discovered.Any(u => !string.IsNullOrEmpty(u.SchemaName))) return;
         warn($"Target.Schemas={FormatList(_schemas)} was set, but no schema-template work " +
              $"units were discovered — all units are from regular templates and bypass the " +

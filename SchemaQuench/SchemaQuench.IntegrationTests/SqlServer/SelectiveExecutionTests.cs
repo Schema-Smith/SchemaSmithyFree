@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using System.Linq;
 
 namespace SchemaQuench.IntegrationTests.SqlServer;
 
@@ -181,8 +182,13 @@ IF NOT EXISTS (SELECT 1 FROM [{{SchemaName}}].[Customers] WHERE CustomerID = 999
                 RunSchemaQuench();
 
                 // The error must mention the bad value AND list the discovered set so the user
-                // can fix the typo.
+                // can fix the typo. Both progress + error log must carry the message — a future
+                // regression that sends to only one would silently break ops dashboards that
+                // tail one stream.
                 _progressLog.Received().Error(Arg.Is<string>(s =>
+                    s.Contains("tenant_does_not_exist") &&
+                    s.Contains("tenant_acme")));
+                _errorLog.Received().Error(Arg.Is<string>(s =>
                     s.Contains("tenant_does_not_exist") &&
                     s.Contains("tenant_acme")));
             }
@@ -215,15 +221,15 @@ IF NOT EXISTS (SELECT 1 FROM [{{SchemaName}}].[Customers] WHERE CustomerID = 999
     /// run. .NET's in-memory configuration provider is shared across tests in the same fixture,
     /// so a stale array index must be explicitly unset (setting to null + empty string both work;
     /// null removes the key, which is what `GetSection().GetChildren()` reads as "empty array").
+    /// Enumerates the live config so any number of slots a prior test populated gets cleared,
+    /// rather than hard-coding a 0..7 range that drifts as tests grow. `.ToList()` snapshots the
+    /// children first — enumerating the live collection while nulling keys mutates it underfoot.
     /// </summary>
     private static void ClearTargetFilters(IConfigurationRoot config)
     {
-        for (var i = 0; i < 8; i++)
-        {
-            config[$"Target:Templates:{i}"] = null;
-            config[$"Target:Databases:{i}"] = null;
-            config[$"Target:Schemas:{i}"] = null;
-        }
+        foreach (var dim in new[] { "Templates", "Databases", "Schemas" })
+            foreach (var child in config.GetSection($"Target:{dim}").GetChildren().ToList())
+                config[$"Target:{dim}:{child.Key}"] = null;
     }
 
     private static void ClearCheckpointsForProduct()

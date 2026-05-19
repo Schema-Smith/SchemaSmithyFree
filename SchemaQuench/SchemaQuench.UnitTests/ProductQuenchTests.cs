@@ -319,6 +319,55 @@ public class ProductQuenchTests
 
     #endregion
 
+    #region ReadFilterArray (Slice 5)
+
+    [Test]
+    public void ReadFilterArray_NullSection_ReturnsEmpty()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>())
+            .Build();
+
+        Assert.That(ProductQuench.ReadFilterArray(config, "Target:Templates"), Is.Empty);
+    }
+
+    [Test]
+    public void ReadFilterArray_WhitespaceOnlyValues_AreFilteredOut()
+    {
+        // Stale config slots from prior tests come back as null or "" via the in-memory provider.
+        // Whitespace-only values are equivalent — none should reach the filter.
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["Target:Templates:0"] = "",
+                ["Target:Templates:1"] = "   ",
+                ["Target:Templates:2"] = null
+            })
+            .Build();
+
+        Assert.That(ProductQuench.ReadFilterArray(config, "Target:Templates"), Is.Empty);
+    }
+
+    [Test]
+    public void ReadFilterArray_TrimsLeadingAndTrailingWhitespace()
+    {
+        // A user-supplied `" tenant_acme "` in their settings file must normalize to `"tenant_acme"`
+        // so it matches the discovered universe (which never carries surrounding whitespace).
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["Target:Schemas:0"] = " tenant_acme",
+                ["Target:Schemas:1"] = "tenant_globex ",
+                ["Target:Schemas:2"] = "  tenant_beta  "
+            })
+            .Build();
+
+        Assert.That(ProductQuench.ReadFilterArray(config, "Target:Schemas"),
+            Is.EqualTo(new[] { "tenant_acme", "tenant_globex", "tenant_beta" }));
+    }
+
+    #endregion
+
     #region Schema-Template Work-Unit Enumeration (Slice 3)
 
     [Test]

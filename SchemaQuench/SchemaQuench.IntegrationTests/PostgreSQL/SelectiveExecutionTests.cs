@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using System.Linq;
 
 namespace SchemaQuench.IntegrationTests.PostgreSQL;
 
@@ -174,7 +175,12 @@ INSERT INTO ""{{SchemaName}}"".customers (customer_id, marker)
             {
                 RunSchemaQuench();
 
+                // Both progress + error log must carry the message — a future regression that
+                // sends to only one would silently break ops dashboards that tail one stream.
                 _progressLog.Received().Error(Arg.Is<string>(s =>
+                    s.Contains("tenant_does_not_exist") &&
+                    s.Contains("tenant_acme")));
+                _errorLog.Received().Error(Arg.Is<string>(s =>
                     s.Contains("tenant_does_not_exist") &&
                     s.Contains("tenant_acme")));
             }
@@ -202,14 +208,16 @@ INSERT INTO ""{{SchemaName}}"".customers (customer_id, marker)
 
     private static void RunSchemaQuench() => Program.Main(["SkipKindlingForge"]);
 
+    /// <summary>
+    /// Enumerates any live <c>Target:*</c> array slots and nulls them so the in-memory config
+    /// shared across tests starts from a clean state. `.ToList()` snapshots the children first
+    /// — enumerating live while mutating keys is asking for grief.
+    /// </summary>
     private static void ClearTargetFilters(IConfigurationRoot config)
     {
-        for (var i = 0; i < 8; i++)
-        {
-            config[$"Target:Templates:{i}"] = null;
-            config[$"Target:Databases:{i}"] = null;
-            config[$"Target:Schemas:{i}"] = null;
-        }
+        foreach (var dim in new[] { "Templates", "Databases", "Schemas" })
+            foreach (var child in config.GetSection($"Target:{dim}").GetChildren().ToList())
+                config[$"Target:{dim}:{child.Key}"] = null;
     }
 
     private static void ClearCheckpointsForProduct()
