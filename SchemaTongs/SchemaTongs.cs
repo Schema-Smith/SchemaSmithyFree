@@ -33,6 +33,22 @@ public class SchemaTongs
     private FolderMappingConfig _folderMappingConfig;
     internal Dictionary<ScriptObjectType, string> ResolvedFolders { get; } = new();
 
+    // Schema-template extraction mode (design §7). Activated by Template.SourceSchema non-empty.
+    private bool _isSchemaTemplate;
+    private string _sourceSchema;
+    private string _schemaIdentificationScript;
+
+    // Aggregated unqualified-identifier audit (design §7.4). Populated as each .sql body is
+    // rewritten in schema-template mode; emitted once as a Warn at the end of CastTemplate.
+    private readonly List<(string RelativePath, IReadOnlyList<int> Lines)> _unqualifiedReferenceAudit = new();
+
+    // Audit entries for unqualified refs detected inside JSON property bodies (table-level
+    // expression strings like CheckConstraint.Expression, Column.ComputedExpression, etc.).
+    // Line numbers within these property bodies are not meaningful to a reviewer (they
+    // don't align to the JSON file's lines), so we attribute by property context instead:
+    // "Tables/Customers.json: CheckConstraint 'CK_Email_Format'".
+    private readonly List<(string RelativePath, string PropertyContext)> _unqualifiedPropertyAudit = new();
+
     // Platform-specific ShouldCast flags
     // Common
     private bool _includeTables;
@@ -96,7 +112,11 @@ public class SchemaTongs
 
         var template = JsonHelper.Load<Template>(templateFile);
 
-        var defaultSlots = Template.GetDefaultTemplateFolders(_platform)
+        // In schema-template mode (design §7.2), the four database-scoped types are
+        // intentionally omitted from the folder set — using the schema-template overload
+        // ensures ResolveFolderMappings doesn't silently re-add them via FolderMapping
+        // configuration defaults.
+        var defaultSlots = Template.GetDefaultTemplateFolders(_platform, _isSchemaTemplate)
             .Where(f => f.ObjectType != ScriptObjectType.None)
             .ToDictionary(f => f.ObjectType, f => f.QuenchSlot);
 
@@ -222,7 +242,12 @@ public class SchemaTongs
 
         ApplyCheckConstraintStyle(productFile, productIsNew, configStyle);
 
-        _templatePath = RepositoryHelper.UpdateOrInitTemplate(_productPath, config["Template:Name"], targetDb, _platform);
+        _templatePath = RepositoryHelper.UpdateOrInitTemplate(
+            _productPath, config["Template:Name"], targetDb, _platform,
+            sourceSchema: _isSchemaTemplate ? _sourceSchema : null,
+            userSchemaIdentificationScript: _isSchemaTemplate
+                ? (string.IsNullOrWhiteSpace(_schemaIdentificationScript) ? null : _schemaIdentificationScript)
+                : null);
 
         ResolveFolderMappings();
 
@@ -234,9 +259,169 @@ public class SchemaTongs
         CleanupResolvedSqulerrorFiles();
         ProcessOrphanedFiles();
         GenerateInvalidObjectCleanupScript();
+        EmitUnqualifiedReferenceAudit();
         _stopwatch.Stop();
         LogSummary();
     }
+
+    /// <summary>
+    /// Emits the aggregated unqualified-identifier audit warning at the end of a
+    /// schema-template extraction (design §7.4). One warning lists every <c>.sql</c>
+    /// file containing unqualified references along with their 1-based line numbers.
+    /// No-op outside schema-template mode and when no unqualified refs were observed.
+    /// </summary>
+    private void EmitUnqualifiedReferenceAudit()
+    {
+        if (!_isSchemaTemplate
+            || (_unqualifiedReferenceAudit.Count == 0 && _unqualifiedPropertyAudit.Count == 0))
+            return;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("The following extracted files contain unqualified object references. " +
+                      "Review them and add `{{SchemaName}}.` qualification where the reference " +
+                      "targets the iteration schema. Unqualified references that target a shared " +
+                      "schema (built-in functions, shared lookup tables) can stay as-is — make that " +
+                      "decision deliberately, because the deployed engine does not set a default " +
+                      "schema per iteration.");
+        foreach (var (relPath, lines) in _unqualifiedReferenceAudit)
+            sb.AppendLine($"  - {relPath}: lines {string.Join(", ", lines)}");
+        foreach (var (relPath, context) in _unqualifiedPropertyAudit)
+            sb.AppendLine($"  - {relPath}: {context}");
+        _progressLog.Warn(sb.ToString());
+    }
+
+    /// <summary>
+    /// Helper invoked at every <c>.sql</c>-body write site in schema-template mode. Rewrites
+    /// source-schema-qualified identifiers to <c>{{SchemaName}}</c>, captures unqualified-ref
+    /// line numbers for the audit warning, and returns the body to write. No-op (returns the
+    /// input verbatim) outside schema-template mode.
+    /// </summary>
+    private string RewriteSqlBodyForSchemaTemplate(string body, string fileName)
+    {
+        if (!_isSchemaTemplate) return body;
+        var result = SqlBodyRewriter.Rewrite(body, _sourceSchema);
+        if (result.UnqualifiedReferenceLines.Count > 0)
+        {
+            var relativePath = fileName.StartsWith(_templatePath, StringComparison.OrdinalIgnoreCase)
+                ? fileName.Substring(_templatePath.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                : Path.GetFileName(fileName);
+            _unqualifiedReferenceAudit.Add((relativePath, result.UnqualifiedReferenceLines));
+        }
+        return result.Body;
+    }
+
+    /// <summary>
+    /// In schema-template mode, scrub schema-bearing properties on a deserialized table so the
+    /// downstream <c>JsonHelper.Write</c> emits an unqualified package:
+    /// <list type="bullet">
+    /// <item>The platform-specific <c>Schema</c> property is nulled (engine fills with
+    /// <c>{{SchemaName}}</c> at template load via <see cref="SchemaDefaultResolver"/>).</item>
+    /// <item>FK <c>RelatedTableSchema</c> values matching the source schema are nulled
+    /// (same-iteration FK); cross-schema literals are preserved as-is per design §7.2.</item>
+    /// <item>SQL expression strings carried as JSON properties (table-level check constraints,
+    /// column defaults / computed / check / generation expressions, filtered-index expressions,
+    /// exclude-constraint filter expressions) are rewritten through <see cref="SqlBodyRewriter"/>
+    /// so source-schema-qualified references collapse to <c>{{SchemaName}}</c> (design §7.3).
+    /// Unqualified references inside those bodies are captured for the §7.4 audit, attributed
+    /// by property context (e.g. <c>CheckConstraint 'CK_Email_Format'</c>) rather than line
+    /// number — line numbers within a JSON property body don't align to the JSON file's lines.</item>
+    /// </list>
+    /// No-op outside schema-template mode.
+    /// </summary>
+    private void ScrubSchemaForTemplate(Table tableObj, string fileName = null)
+    {
+        if (!_isSchemaTemplate || tableObj == null) return;
+        var relPath = ResolveAuditRelativePath(fileName);
+
+        // Common expression rewrites (Table-level CheckConstraints, Column.Default,
+        // base Index — none of those properties are platform-specific).
+        foreach (var check in tableObj.CheckConstraints ?? Enumerable.Empty<CheckConstraint>())
+            check.Expression = RewriteJsonExpression(check.Expression, relPath, $"CheckConstraint '{check.Name}'");
+        foreach (var col in tableObj.Columns ?? Enumerable.Empty<Column>())
+            col.Default = RewriteJsonExpression(col.Default, relPath, $"Column.Default '{col.Name}'");
+
+        switch (tableObj)
+        {
+            case SqlServerTable ss:
+                ss.Schema = null;
+                foreach (var fk in ss.ForeignKeys.OfType<SqlServerForeignKey>())
+                {
+                    if (string.Equals(fk.RelatedTableSchema, _sourceSchema, StringComparison.Ordinal))
+                        fk.RelatedTableSchema = null;
+                }
+                foreach (var col in ss.Columns.OfType<SqlServerColumn>())
+                {
+                    col.CheckExpression = RewriteJsonExpression(col.CheckExpression, relPath, $"Column.CheckExpression '{col.Name}'");
+                    col.ComputedExpression = RewriteJsonExpression(col.ComputedExpression, relPath, $"Column.ComputedExpression '{col.Name}'");
+                }
+                foreach (var idx in ss.Indexes.OfType<SqlServerIndex>())
+                    idx.FilterExpression = RewriteJsonExpression(idx.FilterExpression, relPath, $"Index.FilterExpression '{idx.Name}'");
+                foreach (var stat in ss.Statistics ?? Enumerable.Empty<Schema.Domain.SqlServer.Statistic>())
+                    stat.FilterExpression = RewriteJsonExpression(stat.FilterExpression, relPath, $"Statistic.FilterExpression '{stat.Name}'");
+                break;
+            case PostgreSqlTable pg:
+                pg.Schema = null;
+                foreach (var fk in pg.ForeignKeys.OfType<PostgreSqlForeignKey>())
+                {
+                    if (string.Equals(fk.RelatedTableSchema, _sourceSchema, StringComparison.Ordinal))
+                        fk.RelatedTableSchema = null;
+                }
+                foreach (var col in pg.Columns.OfType<PostgreSqlColumn>())
+                    col.GenerationExpression = RewriteJsonExpression(col.GenerationExpression, relPath, $"Column.GenerationExpression '{col.Name}'");
+                foreach (var idx in pg.Indexes.OfType<PostgreSqlIndex>())
+                    idx.FilterExpression = RewriteJsonExpression(idx.FilterExpression, relPath, $"Index.FilterExpression '{idx.Name}'");
+                foreach (var ex in pg.ExcludeConstraints ?? Enumerable.Empty<ExcludeConstraint>())
+                    ex.FilterExpression = RewriteJsonExpression(ex.FilterExpression, relPath, $"ExcludeConstraint.FilterExpression '{ex.Name}'");
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Rewrites one expression-bearing JSON property value in schema-template mode. Returns the
+    /// rewritten body and, when the property contained an unqualified table-position identifier,
+    /// records a §7.4 audit entry attributed by <paramref name="propertyContext"/>. Returns the
+    /// input verbatim for null/empty values or outside schema-template mode.
+    /// </summary>
+    private string RewriteJsonExpression(string value, string relPath, string propertyContext)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        var result = SqlBodyRewriter.Rewrite(value, _sourceSchema);
+        if (result.UnqualifiedReferenceLines.Count > 0 && !string.IsNullOrEmpty(relPath))
+            _unqualifiedPropertyAudit.Add((relPath, propertyContext));
+        return result.Body;
+    }
+
+    /// <summary>
+    /// Computes the audit-friendly relative path for a JSON file inside the template root.
+    /// Returns <c>null</c> when <paramref name="fileName"/> is null/empty so callers can skip
+    /// audit attribution cleanly.
+    /// </summary>
+    private string ResolveAuditRelativePath(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName)) return null;
+        return fileName.StartsWith(_templatePath, StringComparison.OrdinalIgnoreCase)
+            ? fileName.Substring(_templatePath.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            : Path.GetFileName(fileName);
+    }
+
+    /// <summary>
+    /// True when the (schema, name) tuple should be extracted in the current run. In
+    /// schema-template mode, only objects whose schema matches <see cref="_sourceSchema"/>
+    /// are emitted; cross-schema objects are skipped (they belong on a regular template
+    /// earlier in <c>TemplateOrder</c>). Outside schema-template mode this is always true.
+    /// </summary>
+    private bool ShouldExtractFromSchema(string schema)
+        => !_isSchemaTemplate
+           || string.Equals(schema, _sourceSchema, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Returns the appropriate filename for a per-schema object. In schema-template mode the
+    /// schema prefix is omitted per design §7.2.
+    /// </summary>
+    private string EncodeObjectFileName(string schema, string name, string extension)
+        => _isSchemaTemplate
+            ? EncodeFileName(name, extension)
+            : EncodeFileName(schema, name, extension);
 
     private void LoadShouldCastSettings(IConfigurationRoot config)
     {
@@ -248,6 +433,22 @@ public class SchemaTongs
 
         _includeTables = config["ShouldCast:Tables"]?.ToLower() != "false";
         _includeViews = config["ShouldCast:Views"]?.ToLower() != "false";
+
+        // Schema-template extraction mode (design §7.1). Activated by Template.SourceSchema non-empty.
+        _sourceSchema = config["Template:SourceSchema"] ?? "";
+        _schemaIdentificationScript = config["Template:SchemaIdentificationScript"] ?? "";
+        _isSchemaTemplate = !string.IsNullOrWhiteSpace(_sourceSchema);
+
+        if (_isSchemaTemplate && _platform == Platform.MySQL)
+        {
+            // MySQL has no schema-inside-database concept (design §2). Refuse to silently produce
+            // a broken package — surface a clear error pointing the user at the database-per-tenant
+            // pattern that DatabaseIdentificationScript already covers.
+            throw new Exception(
+                "Schema-template extraction (Template.SourceSchema) is not supported on MySQL. " +
+                "MySQL has no schema-inside-database concept — use database-per-tenant instead " +
+                "(one DatabaseIdentificationScript-driven template per tenant DB).");
+        }
 
         switch (_platform)
         {
@@ -285,6 +486,62 @@ public class SchemaTongs
                 _includeTableTriggers = config["ShouldCast:TableTriggers"]?.ToLower() != "false";
                 _includeEvents = config["ShouldCast:Events"]?.ToLower() != "false";
                 break;
+        }
+
+        if (_isSchemaTemplate) ForceDatabaseScopedShouldCastFalse();
+    }
+
+    /// <summary>
+    /// Schema-template extraction (design §7.2) does not emit content for the four
+    /// database-scoped object types — they don't fan out per schema iteration and must live in
+    /// a regular template that runs earlier in <c>TemplateOrder</c>. If the user left the
+    /// corresponding <c>ShouldCast</c> flags at <c>true</c>, force them off and warn so the
+    /// user knows the setting was ignored. The warning is emitted only when the user set the
+    /// flag (or relied on a default-true that produces extraction); a quiet skip would be too
+    /// surprising.
+    /// </summary>
+    private void ForceDatabaseScopedShouldCastFalse()
+    {
+        if (_platform == Platform.SqlServer)
+        {
+            if (_includeSchemas)
+            {
+                _progressLog.Warn("ShouldCast.Schemas is ignored in schema-template extraction mode " +
+                                  "(schema objects ARE the iteration unit). Move shared schema scripts " +
+                                  "to a regular template earlier in TemplateOrder.");
+                _includeSchemas = false;
+            }
+            if (_includeDDLTriggers)
+            {
+                _progressLog.Warn("ShouldCast.DDLTriggers is ignored in schema-template extraction mode " +
+                                  "(DDL triggers are database-scoped). Move them to a regular template " +
+                                  "earlier in TemplateOrder.");
+                _includeDDLTriggers = false;
+            }
+            if (_includeFullTextCatalogs)
+            {
+                _progressLog.Warn("ShouldCast.Catalogs (full-text catalogs) is ignored in schema-template " +
+                                  "extraction mode (full-text catalogs are database-scoped). Move them to " +
+                                  "a regular template earlier in TemplateOrder.");
+                _includeFullTextCatalogs = false;
+            }
+            if (_includeFullTextStopLists)
+            {
+                _progressLog.Warn("ShouldCast.StopLists (full-text stop lists) is ignored in schema-template " +
+                                  "extraction mode (full-text stop lists are database-scoped). Move them to " +
+                                  "a regular template earlier in TemplateOrder.");
+                _includeFullTextStopLists = false;
+            }
+        }
+        else if (_platform == Platform.PostgreSQL)
+        {
+            if (_includeSchemas)
+            {
+                _progressLog.Warn("ShouldCast.Schemas is ignored in schema-template extraction mode " +
+                                  "(schema objects ARE the iteration unit). Move shared schema scripts " +
+                                  "to a regular template earlier in TemplateOrder.");
+                _includeSchemas = false;
+            }
         }
     }
 
@@ -782,6 +1039,7 @@ SELECT s.name AS SchemaName, t.name AS TypeName,
             {
                 var schema = reader.GetString(0);
                 var name = reader.GetString(1);
+                if (!ShouldExtractFromSchema(schema)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
                 types.Add((schema, name, reader.GetString(2), reader.GetInt16(3), reader.GetByte(4), reader.GetByte(5), reader.GetBoolean(6)));
             }
@@ -794,7 +1052,8 @@ SELECT s.name AS SchemaName, t.name AS TypeName,
             var script = $"IF NOT EXISTS (SELECT * FROM sys.types st JOIN sys.schemas ss ON st.schema_id = ss.schema_id WHERE st.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
                          $"CREATE TYPE [{schema}].[{name}] FROM {typeSpec} {nullSpec}";
 
-            var fileName = ResolveOutputPath(castPath, EncodeFileName(schema, name, ".sql"));
+            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
+            script = RewriteSqlBodyForSchemaTemplate(script, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, script);
             _stats.DataTypes++;
@@ -817,6 +1076,7 @@ SELECT s.name AS SchemaName, tt.name AS TypeName, tt.type_table_object_id
             {
                 var schema = reader.GetString(0);
                 var name = reader.GetString(1);
+                if (!ShouldExtractFromSchema(schema)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
                 tableTypes.Add((schema, name, reader.GetInt32(2)));
             }
@@ -945,7 +1205,8 @@ SELECT cc.name, cc.definition
             var script = $"IF NOT EXISTS (SELECT * FROM sys.types st JOIN sys.schemas ss ON st.schema_id = ss.schema_id WHERE st.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
                          createScript;
 
-            var fileName = ResolveOutputPath(castPath, EncodeFileName(schema, name, ".sql"));
+            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
+            script = RewriteSqlBodyForSchemaTemplate(script, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, script);
             _stats.DataTypes++;
@@ -975,6 +1236,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
             {
                 var schema = reader.GetString(0);
                 var name = reader.GetString(1);
+                if (!ShouldExtractFromSchema(schema)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
                 functions.Add((schema, name));
             }
@@ -1038,8 +1300,9 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                 sql = sql.Substring(0, firstGoEnd) + dependencyBlock + sql.Substring(firstGoEnd);
             }
 
-            var fileName = ResolveOutputPath(castPath, EncodeFileName(schema, name, ".sql"));
+            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
             if (ShouldSkipKnownBadScript(fileName)) { _stats.Functions++; continue; }
+            sql = RewriteSqlBodyForSchemaTemplate(sql, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
             ValidateAndHandleScript(command.Connection, fileName, sql, ScriptObjectType.Functions);
@@ -1070,6 +1333,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
             {
                 var schema = reader.GetString(0);
                 var name = reader.GetString(1);
+                if (!ShouldExtractFromSchema(schema)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
                 views.Add((schema, name));
             }
@@ -1080,8 +1344,9 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "VIEW");
             if (sql == null) continue;
 
-            var fileName = ResolveOutputPath(castPath, EncodeFileName(schema, name, ".sql"));
+            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
             if (ShouldSkipKnownBadScript(fileName)) { _stats.Views++; continue; }
+            sql = RewriteSqlBodyForSchemaTemplate(sql, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
             ValidateAndHandleScript(command.Connection, fileName, sql, ScriptObjectType.Views);
@@ -1111,6 +1376,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
             {
                 var schema = reader.GetString(0);
                 var name = reader.GetString(1);
+                if (!ShouldExtractFromSchema(schema)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
                 procedures.Add((schema, name));
             }
@@ -1121,8 +1387,9 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "PROCEDURE");
             if (sql == null) continue;
 
-            var fileName = ResolveOutputPath(castPath, EncodeFileName(schema, name, ".sql"));
+            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
             if (ShouldSkipKnownBadScript(fileName)) { _stats.Procedures++; continue; }
+            sql = RewriteSqlBodyForSchemaTemplate(sql, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
             ValidateAndHandleScript(command.Connection, fileName, sql, ScriptObjectType.Procedures);
@@ -1152,8 +1419,10 @@ SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
             while (reader.Read())
             {
                 var triggerName = reader.GetString(2);
+                var schemaName = reader.GetString(0);
+                if (!ShouldExtractFromSchema(schemaName)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(triggerName.ToLower())) continue;
-                triggers.Add((reader.GetString(0), reader.GetString(1), triggerName));
+                triggers.Add((schemaName, reader.GetString(1), triggerName));
             }
         }
 
@@ -1167,8 +1436,13 @@ SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
             var tablePattern = $@"(?<=\bON\s+)\[?{escapedSchema}\]?\.\[?{escapedTable}\]?";
             sql = Regex.Replace(sql, tablePattern, $"[{tableSchema}].[{tableName}]", RegexOptions.IgnoreCase);
 
-            var fileName = ResolveOutputPath(castPath, $"{FileNameEncoder.Encode(tableSchema)}.{FileNameEncoder.Encode(tableName)}.{FileNameEncoder.Encode(triggerName)}.sql");
+            // Schema-template mode: drop the schema-qualified prefix in the filename.
+            var encodedFile = _isSchemaTemplate
+                ? $"{FileNameEncoder.Encode(tableName)}.{FileNameEncoder.Encode(triggerName)}.sql"
+                : $"{FileNameEncoder.Encode(tableSchema)}.{FileNameEncoder.Encode(tableName)}.{FileNameEncoder.Encode(triggerName)}.sql";
+            var fileName = ResolveOutputPath(castPath, encodedFile);
             if (ShouldSkipKnownBadScript(fileName)) { _stats.Triggers++; continue; }
+            sql = RewriteSqlBodyForSchemaTemplate(sql, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
             ValidateAndHandleScript(command.Connection, fileName, sql, ScriptObjectType.Triggers);
@@ -1373,6 +1647,7 @@ SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
 
         foreach (var (schema, name) in collections)
         {
+            if (!ShouldExtractFromSchema(schema)) continue;
             if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
 
             command.CommandText = $"SELECT CAST(XML_SCHEMA_NAMESPACE(N'{EscapeSql(schema)}', N'{EscapeSql(name)}') AS NVARCHAR(MAX))";
@@ -1387,7 +1662,8 @@ SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
             if (extProps.Length > 0)
                 script += "\r\nGO\r\n" + extProps;
 
-            var fileName = ResolveOutputPath(castPath, EncodeFileName(schema, name, ".sql"));
+            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
+            script = RewriteSqlBodyForSchemaTemplate(script, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, script);
             _stats.XmlSchemaCollections++;
@@ -1516,7 +1792,12 @@ SELECT s.name AS SchemaName, v.name AS ViewName
         var indexedViews = new List<(string Schema, string Name)>();
         using (var reader = command.ExecuteReader())
         {
-            while (reader.Read()) indexedViews.Add((reader["SchemaName"].ToString(), reader["ViewName"].ToString()));
+            while (reader.Read())
+            {
+                var schemaName = reader["SchemaName"].ToString();
+                if (!ShouldExtractFromSchema(schemaName)) continue;
+                indexedViews.Add((schemaName, reader["ViewName"].ToString()));
+            }
         }
 
         if (indexedViews.Count == 0) return;
@@ -1541,7 +1822,18 @@ SELECT s.name AS SchemaName, v.name AS ViewName
                 continue;
             }
             var viewObj = JsonConvert.DeserializeObject<SqlServerIndexedView>(viewJson);
-            var viewFile = ResolveOutputPath(castPath, EncodeFileName(schema, name, ".json"));
+            var viewFile = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".json"));
+            // Schema-template mode (design §7.2 / §7.3): strip the Schema field; rewrite the indexed
+            // view's Definition body AND any contained filtered-index FilterExpression so source-
+            // schema references collapse to {{SchemaName}}. Capture unqualified-ref audit hits.
+            if (_isSchemaTemplate)
+            {
+                viewObj.Schema = null;
+                var relPath = ResolveAuditRelativePath(viewFile);
+                viewObj.Definition = RewriteJsonExpression(viewObj.Definition, relPath, $"IndexedView.Definition '{viewObj.Name}'");
+                foreach (var idx in viewObj.Indexes ?? new List<SqlServerIndex>())
+                    idx.FilterExpression = RewriteJsonExpression(idx.FilterExpression, relPath, $"Index.FilterExpression '{idx.Name}'");
+            }
             _progressLog.Info($"    Casting {viewFile}");
             JsonHelper.Write(viewFile, viewObj);
             _stats.IndexedViews++;
@@ -1598,7 +1890,12 @@ SELECT t.schemaname, t.tablename
         var tables = new List<(string Schema, string Table)>();
         using (var reader = command.ExecuteReader())
         {
-            while (reader.Read()) tables.Add((reader["schemaname"].ToString(), reader["tablename"].ToString()));
+            while (reader.Read())
+            {
+                var sch = reader["schemaname"].ToString();
+                if (!ShouldExtractFromSchema(sch)) continue;
+                tables.Add((sch, reader["tablename"].ToString()));
+            }
         }
 
         var castPath = Path.Combine(_templatePath, "Tables");
@@ -1617,15 +1914,20 @@ SELECT t.schemaname, t.tablename
                 _stats.TableErrors++;
                 continue;
             }
-            var tableObj = JsonConvert.DeserializeObject<Table>(tableJson);
-            var tableFile = ResolveOutputPath(castPath, EncodeFileName(schema, table, ".json"));
-            var oldTableFile = ResolveOutputPath(castPath, EncodeFileName(schema, tableObj.OldName.Trim('"'), ".json"));
+            // Schema-template mode needs the typed PostgreSqlTable so the Schema/RelatedTableSchema
+            // properties exist on the in-memory object and can be scrubbed before serialization.
+            var tableObj = _isSchemaTemplate
+                ? PlatformDeserializer.DeserializeTable(tableJson, _platform)
+                : JsonConvert.DeserializeObject<Table>(tableJson);
+            var tableFile = ResolveOutputPath(castPath, EncodeObjectFileName(schema, table, ".json"));
+            var oldTableFile = ResolveOutputPath(castPath, EncodeObjectFileName(schema, tableObj.OldName.Trim('"'), ".json"));
             _progressLog.Info($"    Casting {tableFile}");
             if (FileWrapper.GetFromFactory().Exists(tableFile) || FileWrapper.GetFromFactory().Exists(oldTableFile))
             {
                 var original = JsonHelper.Load<Table>(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile);
                 ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
             }
+            ScrubSchemaForTemplate(tableObj, tableFile);
             JsonHelper.Write(tableFile, tableObj);
             _stats.Tables++;
         }
@@ -1877,7 +2179,12 @@ SELECT mv.schemaname, mv.matviewname
         var matViews = new List<(string Schema, string Name)>();
         using (var reader = command.ExecuteReader())
         {
-            while (reader.Read()) matViews.Add((reader["schemaname"].ToString(), reader["matviewname"].ToString()));
+            while (reader.Read())
+            {
+                var sch = reader["schemaname"].ToString();
+                if (!ShouldExtractFromSchema(sch)) continue;
+                matViews.Add((sch, reader["matviewname"].ToString()));
+            }
         }
 
         if (matViews.Count == 0) return;
@@ -1902,7 +2209,18 @@ SELECT mv.schemaname, mv.matviewname
                 continue;
             }
             var viewObj = JsonConvert.DeserializeObject<PostgreSqlMaterializedView>(viewJson);
-            var viewFile = ResolveOutputPath(castPath, EncodeFileName(schema, name, ".json"));
+            var viewFile = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".json"));
+            // Schema-template mode (design §7.2 / §7.3): strip the Schema field; rewrite the
+            // materialized view's Definition body AND any contained filtered-index FilterExpression
+            // so source-schema references collapse to {{SchemaName}}. Capture audit hits.
+            if (_isSchemaTemplate)
+            {
+                viewObj.Schema = null;
+                var relPath = ResolveAuditRelativePath(viewFile);
+                viewObj.Definition = RewriteJsonExpression(viewObj.Definition, relPath, $"MaterializedView.Definition '{viewObj.Name}'");
+                foreach (var idx in viewObj.Indexes ?? new List<PostgreSqlIndex>())
+                    idx.FilterExpression = RewriteJsonExpression(idx.FilterExpression, relPath, $"Index.FilterExpression '{idx.Name}'");
+            }
             _progressLog.Info($"    Casting {viewFile}");
             JsonHelper.Write(viewFile, viewObj);
             _stats.MaterializedViews++;
@@ -1923,7 +2241,17 @@ SELECT mv.schemaname, mv.matviewname
                 var fullName = reader["FullName"].ToString();
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(fullName.ToLower()) && !_objectsToCast.Contains($"{fullName}.~~~".Split('.')[1].ToLower())) continue;
 
-                var fileName = ResolveOutputPath(castPath, EncodeFullName(fullName, ".sql"));
+                // Schema-template mode: skip objects outside the source schema; emit unqualified filenames.
+                var parts = fullName.Split('.');
+                if (_isSchemaTemplate && parts.Length >= 2)
+                {
+                    if (!ShouldExtractFromSchema(parts[0])) continue;
+                }
+
+                var outputName = _isSchemaTemplate && parts.Length >= 2
+                    ? EncodeFileName(parts[^1], ".sql")
+                    : EncodeFullName(fullName, ".sql");
+                var fileName = ResolveOutputPath(castPath, outputName);
                 var folderName = reader["Folder"].ToString();
                 if (ShouldSkipKnownBadScript(fileName)) { IncrementStatForFolder(folderName); continue; }
                 var script = string.Join("\r\n", reader["Code"].ToString());
@@ -1933,10 +2261,11 @@ SELECT mv.schemaname, mv.matviewname
 
         foreach (var (_, _, fileName, script, folderName, _) in records)
         {
+            var body = RewriteSqlBodyForSchemaTemplate(script, fileName);
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            FileWrapper.GetFromFactory().WriteAllText(fileName, body);
             var objectType = ScriptFolderTypeInference.InferFromFolderName(folderName);
-            ValidateAndHandleScript(command.Connection, fileName, script, objectType);
+            ValidateAndHandleScript(command.Connection, fileName, body, objectType);
             IncrementStatForFolder(folderName);
         }
     }
@@ -2249,10 +2578,13 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{reader["TABLE_NAME"]}".ToLower()) && !_objectsToCast.Contains($"{reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}".ToLower())) continue;
+                var tableSchema = $"{reader["TABLE_SCHEMA"]}";
+                var tableName = $"{reader["TABLE_NAME"]}";
+                if (!ShouldExtractFromSchema(tableSchema)) continue;
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(tableName.ToLower()) && !_objectsToCast.Contains($"{tableSchema}.{tableName}".ToLower())) continue;
 
-                _progressLog.Info($"  Cast Json for {reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}");
-                commandJson.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{reader["TABLE_SCHEMA"]}', @p_Table = '{reader["TABLE_NAME"]}'";
+                _progressLog.Info($"  Cast Json for {tableSchema}.{tableName}");
+                commandJson.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{tableSchema}', @p_Table = '{tableName}'";
 
                 using var jsonReader = commandJson.ExecuteReader();
                 var json = "";
@@ -2260,12 +2592,12 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                     json += $"{jsonReader[0]}\r\n";
                 if (string.IsNullOrWhiteSpace(json) || json.Trim().Equals("{}"))
                 {
-                    _progressLog.Error($"    No json returned for {reader["TABLE_SCHEMA"]}.{reader["TABLE_NAME"]}");
+                    _progressLog.Error($"    No json returned for {tableSchema}.{tableName}");
                     _stats.TableErrors++;
                     continue;
                 }
 
-                var filename = ResolveOutputPath(tableDir, EncodeFileName($"{reader["TABLE_SCHEMA"]}", $"{reader["TABLE_NAME"]}", ".json"));
+                var filename = ResolveOutputPath(tableDir, EncodeObjectFileName(tableSchema, tableName, ".json"));
                 _progressLog.Info($"    Casting {filename}");
                 // Use the platform-aware deserializer so the platform subclass
                 // (e.g., SqlServerTable) materializes — otherwise the base Table
@@ -2280,7 +2612,7 @@ SELECT cc.name AS [Name],
        SchemaSmith.fn_StripParenWrapping(cc.definition) AS [Expression],
        cc.parent_column_id
   FROM sys.check_constraints cc WITH (NOLOCK)
- WHERE cc.parent_object_id = OBJECT_ID('{EscapeSql($"{reader["TABLE_SCHEMA"]}")}.{EscapeSql($"{reader["TABLE_NAME"]}")}')
+ WHERE cc.parent_object_id = OBJECT_ID('{EscapeSql(tableSchema)}.{EscapeSql(tableName)}')
  ORDER BY cc.name";
 
                     var allConstraints = new List<CheckConstraint>();
@@ -2292,12 +2624,16 @@ SELECT cc.name AS [Name],
                     PromoteCheckConstraintsToTableLevel(sqlTable, allConstraints);
                 }
 
-                var oldTableFile = ResolveOutputPath(tableDir, EncodeFileName($"{reader["TABLE_SCHEMA"]}", tableObj.OldName.Trim('"'), ".json"));
+                var oldTableFile = ResolveOutputPath(tableDir, EncodeObjectFileName(tableSchema, tableObj.OldName.Trim('"'), ".json"));
                 if (FileWrapper.GetFromFactory().Exists(filename) || FileWrapper.GetFromFactory().Exists(oldTableFile))
                 {
                     var original = JsonHelper.Load<Table>(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile);
                     ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
                 }
+                // Schema-template mode: strip the platform Schema field and any same-source RelatedTableSchema
+                // values on the in-memory table object before serialization (design §7.2), and rewrite
+                // source-schema-qualified refs inside expression-bearing JSON properties (design §7.3).
+                ScrubSchemaForTemplate(tableObj, filename);
                 JsonHelper.Write(filename, tableObj);
                 _stats.Tables++;
             }

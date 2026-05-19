@@ -107,6 +107,24 @@ public static class RepositoryHelper
     /// Initializes or updates a Template.json and creates platform-appropriate script folders.
     /// </summary>
     public static string UpdateOrInitTemplate(string productPath, string templateName, string dbName, Platform platform)
+        => UpdateOrInitTemplate(productPath, templateName, dbName, platform, sourceSchema: null, userSchemaIdentificationScript: null);
+
+    /// <summary>
+    /// Schema-template-aware overload (design §7.5). When <paramref name="sourceSchema"/> is non-empty,
+    /// the generated <c>Template.json</c> stub includes <c>SchemaIdentificationScript</c>
+    /// (user-supplied or a placeholder returning <paramref name="sourceSchema"/> as a single row),
+    /// <c>CreateSchemaIfMissing: false</c>, and the schema-template default folder set
+    /// (database-scoped object types — Schemas, DDLTriggers, FullTextCatalogs, FullTextStopLists —
+    /// are omitted). When the file already exists, its content is preserved as-is on the
+    /// schema-template path too: a SchemaTongs re-cast does not clobber the user's edits.
+    /// </summary>
+    public static string UpdateOrInitTemplate(
+        string productPath,
+        string templateName,
+        string dbName,
+        Platform platform,
+        string sourceSchema,
+        string userSchemaIdentificationScript)
     {
         var file = FileWrapper.GetFromFactory();
         var directory = DirectoryWrapper.GetFromFactory();
@@ -115,15 +133,32 @@ public static class RepositoryHelper
         directory.CreateDirectory(templatePath);
         var templateFile = Path.Combine(templatePath, "Template.json");
 
+        var isSchemaTemplate = !string.IsNullOrWhiteSpace(sourceSchema);
+
         var template = new Template
         {
             Name = templateName,
             DatabaseIdentificationScript = GetDatabaseIdentificationScript(templateName, platform)
         };
 
+        if (isSchemaTemplate)
+        {
+            template.SchemaIdentificationScript = !string.IsNullOrWhiteSpace(userSchemaIdentificationScript)
+                ? userSchemaIdentificationScript
+                : GetSchemaIdentificationStub(sourceSchema, platform);
+            // Defensive: schema-template mode requires false here, so pin it locally rather than
+            // relying on the model default — a future model-default flip should not silently
+            // re-enable CREATE SCHEMA on extracted templates.
+            template.CreateSchemaIfMissing = false;
+            // AllowParallel and ContinueOnSchemaFailure default to true — JsonHelper omits default
+            // values, so they don't appear in the serialized output. Template.Load reads them back
+            // as default-true. Design §7.5 specifies the desired values: AllowParallel: true,
+            // ContinueOnSchemaFailure: true.
+        }
+
         if (!file.Exists(templateFile))
         {
-            AddDefaultScriptFolders(template, platform);
+            AddDefaultScriptFolders(template, platform, isSchemaTemplate);
             JsonHelper.Write(templateFile, template);
         }
         else
@@ -144,6 +179,25 @@ public static class RepositoryHelper
             directory.CreateDirectory(Path.Combine(templatePath, folder.FolderPath));
         return templatePath;
     }
+
+    /// <summary>
+    /// Builds the placeholder <c>SchemaIdentificationScript</c> for a freshly extracted
+    /// schema template (design §7.5). The stub returns the source schema as a single row
+    /// so the package quench-tests immediately without user editing.
+    /// </summary>
+    internal static string GetSchemaIdentificationStub(string sourceSchema, Platform platform) => platform switch
+    {
+        Platform.SqlServer =>
+            "-- TODO: replace with a query returning the active iteration schemas.\n" +
+            "-- Placeholder uses the seed schema as a single-row example.\n" +
+            $"SELECT '{sourceSchema}' AS SchemaName",
+        Platform.PostgreSQL =>
+            "-- TODO: replace with a query returning the active iteration schemas.\n" +
+            "-- Placeholder uses the seed schema as a single-row example.\n" +
+            $"SELECT '{sourceSchema}' AS \"SchemaName\"",
+        _ => throw new ArgumentOutOfRangeException(nameof(platform), platform,
+            $"Schema-template extraction is not supported on {platform}.")
+    };
 
     private static SchemaFileResult WriteSchemaFileWithResult(string schemaPath, string fileName, Platform platform)
     {
@@ -227,27 +281,43 @@ public static class RepositoryHelper
     }
 
     private static void AddDefaultScriptFolders(Template template, Platform platform)
+        => AddDefaultScriptFolders(template, platform, isSchemaTemplate: false);
+
+    /// <summary>
+    /// Adds the platform-appropriate default <see cref="TemplateFolder"/> set. When
+    /// <paramref name="isSchemaTemplate"/> is true, omits the database-scoped object types
+    /// (<c>Schemas</c>, <c>DDLTriggers</c>, <c>FullTextCatalogs</c>, <c>FullTextStopLists</c>)
+    /// per design §3.3 / §7.2 — those don't fan out per schema iteration and must live in a
+    /// regular template that runs earlier in <c>TemplateOrder</c>.
+    /// </summary>
+    private static void AddDefaultScriptFolders(Template template, Platform platform, bool isSchemaTemplate)
     {
         template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Before Scripts", QuenchSlot = TemplateQuenchSlot.Before });
 
         switch (platform)
         {
             case Platform.SqlServer:
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Schemas });
+                if (!isSchemaTemplate)
+                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Schemas });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "DataTypes", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DataTypes });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "FullTextCatalogs", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.FullTextCatalogs });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "FullTextStopLists", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.FullTextStopLists });
+                if (!isSchemaTemplate)
+                {
+                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "FullTextCatalogs", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.FullTextCatalogs });
+                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "FullTextStopLists", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.FullTextStopLists });
+                }
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "XMLSchemaCollections", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.XMLSchemaCollections });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Views });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.DDLTriggers });
+                if (!isSchemaTemplate)
+                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.DDLTriggers });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData });
                 break;
 
             case Platform.PostgreSQL:
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Schemas });
+                if (!isSchemaTemplate)
+                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Schemas });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Domain Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DomainTypes });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Enum Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.EnumTypes });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Composite Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.CompositeTypes });

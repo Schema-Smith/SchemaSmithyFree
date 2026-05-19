@@ -156,6 +156,35 @@ public class RepositoryHelperTests
         Assert.That(script, Does.Contain("{{MyTemplateDb}}"));
     }
 
+    // --- SchemaIdentificationScript stub tests (design §7.5) ---
+
+    [Test]
+    public void GetSchemaIdentificationStub_SqlServer_UsesSchemaNameAliasUnquoted()
+    {
+        // Design §7.5: stub should select the source schema literal as a single-row example
+        // aliased as SchemaName (matches the column-name convention used in built-in
+        // identification scripts elsewhere in the codebase). SQL Server identifiers are
+        // case-insensitive by default; no quoting needed.
+        var script = RepositoryHelper.GetSchemaIdentificationStub("tenant_seed", Platform.SqlServer);
+        Assert.That(script, Does.Contain("'tenant_seed'"));
+        Assert.That(script, Does.Contain("AS SchemaName"));
+        Assert.That(script, Does.Not.Contain("schemaname"),
+            "SQL Server stub must use the canonical SchemaName casing, not lowercase.");
+    }
+
+    [Test]
+    public void GetSchemaIdentificationStub_PostgreSQL_UsesQuotedSchemaNameAlias()
+    {
+        // Design §7.5: PG stub must use the same SchemaName alias as the SQL Server stub
+        // for spec-text consistency. PostgreSQL folds unquoted identifiers to lowercase, so
+        // the alias is double-quoted to preserve the canonical CamelCase casing.
+        var script = RepositoryHelper.GetSchemaIdentificationStub("tenant_seed", Platform.PostgreSQL);
+        Assert.That(script, Does.Contain("'tenant_seed'"));
+        Assert.That(script, Does.Contain("AS \"SchemaName\""));
+        Assert.That(script, Does.Not.Contain("AS schemaname"),
+            "PG stub must quote SchemaName to keep the casing — bare schemaname folds and drifts from the SQL Server stub.");
+    }
+
     // --- On-the-fly schema generation tests ---
 
     [Test]
