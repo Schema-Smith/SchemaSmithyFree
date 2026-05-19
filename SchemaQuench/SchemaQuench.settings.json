@@ -5,7 +5,10 @@
         "Password": "",
         "Port": "", // Optional for all platforms — overrides default port
         "SecondaryServers": "", // SQL Server only — comma-separated list of secondary servers for Availability Groups
-        "ConnectionProperties": {}
+        "ConnectionProperties": {},
+        "Templates": [], // When non-empty, only these templates run. Empty = all.
+        "Databases": [], // When non-empty, only these databases are touched. Empty = all.
+        "Schemas":   []  // When non-empty, only these schemas are touched (in schema templates). Empty = all.
     },
     "MaxThreads": 10,
     "WhatIfONLY": false, // Log all changes without executing them

@@ -34,6 +34,9 @@ public class ProductQuench
     private readonly bool _deliverData;
     private readonly bool _trackRunOnceMigrations;
     private readonly bool _pruneObsoleteMigrationTracking;
+    private readonly IReadOnlyList<string> _targetTemplates;
+    private readonly IReadOnlyList<string> _targetDatabases;
+    private readonly IReadOnlyList<string> _targetSchemas;
     private readonly ICheckpointing _checkpointing;
     private bool _updateFailed;
     private bool _dbFailure;
@@ -64,6 +67,9 @@ public class ProductQuench
         _deliverData = _config["DeliverData"]?.ToLower() != "false";
         _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
         _pruneObsoleteMigrationTracking = _config["PruneObsoleteMigrationTracking"]?.ToLower() != "false";
+        _targetTemplates = ReadFilterArray("Target:Templates");
+        _targetDatabases = ReadFilterArray("Target:Databases");
+        _targetSchemas = ReadFilterArray("Target:Schemas");
         _checkpointing = FileCheckpointManager.GetFromFactory();
 
         // Secondary servers are SqlServer-only (Availability Groups)
@@ -77,6 +83,22 @@ public class ProductQuench
 
     // Visible for testing
     internal Product LoadedProduct => _product;
+
+    /// <summary>
+    /// Reads a <c>Target.*</c> filter array from configuration. .NET configuration represents
+    /// JSON arrays as keys of the form <c>Target:Templates:0</c>, <c>Target:Templates:1</c>;
+    /// <c>GetSection().GetChildren()</c> enumerates those values in declaration order. Null or
+    /// empty values are filtered so a stray <c>"Target:Templates:5": null</c> (carried over
+    /// from a test resetting array slots) doesn't sneak into the filter.
+    /// </summary>
+    private IReadOnlyList<string> ReadFilterArray(string sectionKey)
+    {
+        var section = _config.GetSection(sectionKey);
+        return section.GetChildren()
+            .Select(c => c.Value)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .ToList();
+    }
 
     /// <summary>
     /// Returns the init database name used for server-level connections per platform.
@@ -228,7 +250,15 @@ public class ProductQuench
 
             var templates = LoadTemplates();
             var suppressKindling = suppressKindlingForTesting || _skipKindling;
-            foreach (var template in templates)
+
+            // Slice-5 selective execution (§9.3): filter the templates list by Target.Templates
+            // before enumeration; the excluded templates' DatabaseIdentificationScripts never run
+            // (no point validating against a universe we're not touching). Filter-value validation
+            // for Target.Templates runs against the loaded template list — typos surface here.
+            if (!TryFilterTemplatesByTarget(templates, out var templatesInScope))
+                return;
+
+            foreach (var template in templatesInScope)
             {
                 var stepName = $"Template:{template.Name}";
                 if (_checkpointing.HasCompleted(ProductScope, stepName))
@@ -485,6 +515,32 @@ public class ProductQuench
         // dispatch to a single MaxThreads-bounded pool. SQL Server's per-server ServerToQuench
         // selection is applied at enumeration; PostgreSQL/MySQL run against the primary server only.
         var workUnits = EnumerateWorkUnitsForTemplate(template);
+        var discoveredCount = workUnits.Count;
+
+        // Slice-5 selective execution (§9.3, §9.4): apply Target.Databases / Target.Schemas to
+        // the per-template enumerated set, validating filter values against this template's
+        // discovered universe. Target.Templates already filtered the template list upstream
+        // before we got here, so we skip it on the per-template filter to avoid validating a
+        // value already known to be in scope.
+        if (_targetDatabases.Count > 0 || _targetSchemas.Count > 0)
+        {
+            var perTemplateFilter = new WorkUnitFilter([], _targetDatabases, _targetSchemas);
+            try
+            {
+                workUnits = perTemplateFilter.Apply(workUnits, _progressLog.Warn);
+                _progressLog.Info($"[Target] Resolved {workUnits.Count} work unit(s) after filtering {discoveredCount} discovered unit(s) for template '{template.Name}'.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                _progressLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
+                _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
+                _dbFailure = true;
+                _updateFailed = true;
+                _anyFailure = true;
+                LogBackup.BackupLogsAndExit("SchemaQuench", 2);
+                return;
+            }
+        }
 
         if (template.Required && workUnits.Count == 0)
         {
@@ -514,6 +570,45 @@ public class ProductQuench
         if (!shouldAbort) return;
 
         LogBackup.BackupLogsAndExit("SchemaQuench", 2);
+    }
+
+    /// <summary>
+    /// Slice-5 selective execution: filters the loaded template list by <c>Target.Templates</c>
+    /// (design §9.3). Returns <c>true</c> when the in-scope template list is non-empty and ready
+    /// to iterate; <c>false</c> when the filter produced zero or rejected an unknown name —
+    /// callers should return early. Logs the filter values and resolved unit-count summary so
+    /// the user can verify their intent at a glance (§9.11).
+    /// </summary>
+    private bool TryFilterTemplatesByTarget(List<Template> templates, out List<Template> inScope)
+    {
+        inScope = templates;
+        var anyFilter = _targetTemplates.Count > 0 || _targetDatabases.Count > 0 || _targetSchemas.Count > 0;
+        if (anyFilter)
+        {
+            _progressLog.Info($"[Target] Templates: {WorkUnitFilter.FormatList(_targetTemplates)}");
+            _progressLog.Info($"[Target] Databases: {WorkUnitFilter.FormatList(_targetDatabases)}");
+            _progressLog.Info($"[Target] Schemas:   {WorkUnitFilter.FormatList(_targetSchemas)}");
+        }
+
+        if (_targetTemplates.Count == 0) return true;
+
+        var loadedNames = templates.Select(t => t.Name).ToList();
+        var missing = _targetTemplates.Where(t => !loadedNames.Contains(t)).ToList();
+        if (missing.Count > 0)
+        {
+            var message =
+                $"Target.Templates value(s) not present in the loaded template list: " +
+                $"[{string.Join(",", missing)}]. Available: [{string.Join(",", loadedNames)}].";
+            _progressLog.Error(message);
+            _errorLog.Error(message);
+            _anyFailure = true;
+            LogBackup.BackupLogsAndExit("SchemaQuench", 2);
+            return false;
+        }
+
+        inScope = templates.Where(t => _targetTemplates.Contains(t.Name)).ToList();
+        _progressLog.Info($"[Target] Resolved {inScope.Count} of {templates.Count} loaded template(s) in scope.");
+        return true;
     }
 
     /// <summary>
