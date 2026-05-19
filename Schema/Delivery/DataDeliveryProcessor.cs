@@ -166,9 +166,10 @@ public class DataDeliveryProcessor : IDataDelivery
                 var tableData = tableDataMap.TryGetValue(table, out var data) ? data : "";
                 var update = (delivery.MergeType ?? "").IndexOf("Update", StringComparison.OrdinalIgnoreCase) >= 0;
                 var delete = (delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0;
+                var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
 
                 var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
-                    tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, delivery.MergeFilter,
+                    tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
                     delivery.MergeDisableRules, delivery.MergeUpdateDescendents);
 
                 if (!context.WhatIf)
@@ -220,8 +221,9 @@ public class DataDeliveryProcessor : IDataDelivery
             log($"    Delivering {tableKey}");
             var update = (delivery.MergeType ?? "").IndexOf("Update", StringComparison.OrdinalIgnoreCase) >= 0;
             var delete = (delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0;
+            var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
             var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
-                tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, delivery.MergeFilter,
+                tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
                 delivery.MergeDisableRules, delivery.MergeUpdateDescendents);
 
             if (!context.WhatIf)
@@ -339,6 +341,24 @@ WHERE tc_p.TABLE_SCHEMA = '{schema.Replace("'", "''")}'
             return null;
 
         return Path.Combine(templateRootPath, contentFile.Replace('\\', '/'));
+    }
+
+    /// <summary>
+    /// Substitutes the <c>{{SchemaName}}</c> token in a user-authored
+    /// <see cref="DataDelivery.MergeFilter"/> with the iteration's resolved schema name.
+    /// Mirrors the <see cref="GetSchemaOrDb"/> pattern (slice-3 audit B3) for the parallel
+    /// case: MergeFilter is verbatim text embedded into the executed merge body and never
+    /// passes through engine-level token resolution between the helper and the database.
+    /// Without this substitution, schema-template authors who reference <c>{{SchemaName}}</c>
+    /// in MergeFilter would see the literal token reach the server and produce a SQL parse
+    /// error. Regular templates pass an empty <paramref name="iterationSchemaName"/> and
+    /// MergeFilter is returned unchanged.
+    /// </summary>
+    internal static string ResolveMergeFilter(string mergeFilter, string iterationSchemaName)
+    {
+        if (string.IsNullOrEmpty(mergeFilter) || string.IsNullOrEmpty(iterationSchemaName))
+            return mergeFilter;
+        return mergeFilter.Replace("{{SchemaName}}", iterationSchemaName);
     }
 
     private static readonly string[] ValidMergeTypes =

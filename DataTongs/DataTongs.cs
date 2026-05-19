@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using log4net;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json.Linq;
 using Schema.DataAccess;
 using Schema.Delivery;
 using Schema.Domain;
@@ -90,15 +91,43 @@ public class DataTongs
             || config["ShouldCast:ConfigureDataDelivery"]?.ToLower() == "true";
         var templatePath = CommandLineParser.ValueOfSwitch("TemplatePath", null)
             ?? config["TemplatePath"];
+        var sourceSchemaSetting = config["Source:Schema"] ?? "";
 
-        if (configureDataDelivery && string.IsNullOrWhiteSpace(templatePath))
+        // Always resolve template root — schema-template mode detection (§8.1) must run even
+        // when Source.Schema is unset, so we can error out cleanly if the user pointed at a
+        // schema template without setting Source.Schema. Walking up is a single Exists check
+        // per ancestor and runs once.
+        if (string.IsNullOrWhiteSpace(templatePath))
         {
             templatePath = FindTemplateRootPath(contentsPath);
-            if (string.IsNullOrWhiteSpace(templatePath))
+            if (string.IsNullOrWhiteSpace(templatePath) && configureDataDelivery)
             {
                 _progressLog.Warn($"  ContentPath '{contentsPath}' is not within a template (no Template.json found walking up). Disabling ConfigureDataDelivery.");
                 configureDataDelivery = false;
             }
+        }
+
+        // Two-signal schema-template mode detection (design §8.1):
+        //   signal 1 = target Template.json has SchemaIdentificationScript
+        //   signal 2 = Source.Schema set in DataTongs.settings.json
+        var targetTemplateIsSchemaTemplate = !string.IsNullOrWhiteSpace(templatePath)
+            && TargetTemplateHasSchemaIdentificationScript(templatePath);
+        var sourceSchemaSet = !string.IsNullOrWhiteSpace(sourceSchemaSetting);
+        var schemaTemplateMode = targetTemplateIsSchemaTemplate && sourceSchemaSet;
+
+        if (targetTemplateIsSchemaTemplate && !sourceSchemaSet)
+        {
+            throw new InvalidOperationException(
+                "Target template is a schema template (has SchemaIdentificationScript), but Source.Schema " +
+                "is not set in DataTongs.settings.json. Set Source.Schema to the name of the source schema " +
+                "you are extracting data from (typically a seed-tenant schema), or point DataTongs at a " +
+                "regular template instead.");
+        }
+
+        if (!targetTemplateIsSchemaTemplate && sourceSchemaSet)
+        {
+            _progressLog.Warn($"  Source.Schema='{sourceSchemaSetting}' is set, but the target template is not a schema template " +
+                              $"(no SchemaIdentificationScript). Source.Schema is ignored in regular extraction mode.");
         }
 
         if (outputContents) DirectoryWrapper.GetFromFactory().CreateDirectory(contentsPath);
@@ -120,9 +149,29 @@ public class DataTongs
             .Where(t => !string.IsNullOrWhiteSpace(t.TableName))
             .ToList();
 
+        // Schema-template mode: Tables[N].Name must be unqualified — Source.Schema is the
+        // single source schema for every entry. Reject qualified names with a directive
+        // error per §8.3.
+        if (schemaTemplateMode)
+        {
+            for (var i = 0; i < tables.Count; i++)
+            {
+                if (tables[i].TableName.Contains('.'))
+                {
+                    throw new InvalidOperationException(
+                        $"Table names in schema-template mode must be unqualified. " +
+                        $"Tables[{i}].Name = \"{tables[i].TableName}\". " +
+                        $"Use \"{tables[i].TableName.Split('.').Last()}\" and let Source.Schema specify the source. " +
+                        $"Cross-schema data extraction (e.g., from dbo) goes in a separate DataTongs run targeting a regular template.");
+                }
+            }
+        }
+
         _progressLog.Info("Starting DataTongs...");
         _progressLog.Info($"  Platform: {_platform}");
         _progressLog.Info($"  Source Database: {sourceDb}");
+        if (schemaTemplateMode)
+            _progressLog.Info($"  Schema-template extraction mode: source schema = '{sourceSchemaSetting}', destination refs use {{{{SchemaName}}}}.");
 
         if (tables.Count == 0)
         {
@@ -144,13 +193,18 @@ public class DataTongs
                 _progressLog.Info($"  Casting data for: {table.TableName}");
 
                 var parts = ParseTableName(table.TableName, sourceDb);
-                var tableSchema = parts.Schema;
+                // In schema-template mode the user supplies unqualified Tables[N].Name and
+                // Source.Schema names the source schema. Override the parsed schema with the
+                // settings value so catalog queries hit the right source rows.
+                var tableSchema = schemaTemplateMode ? sourceSchemaSetting : parts.Schema;
                 var tableName = parts.Name;
 
                 // MySQL uses the database name for INFORMATION_SCHEMA queries, not a schema prefix
                 var querySchema = _platform == Platform.MySQL ? sourceDb : tableSchema;
                 var displayName = FormatTableName(tableSchema, tableName);
-                var encodedDisplayName = string.IsNullOrEmpty(tableSchema)
+                // Schema-template mode emits unqualified filenames: Customers.tabledata,
+                // Populate Customers.sql. The merge script's content-file token must match.
+                var encodedDisplayName = schemaTemplateMode || string.IsNullOrEmpty(tableSchema)
                     ? FileNameEncoder.Encode(tableName)
                     : $"{FileNameEncoder.Encode(tableSchema)}.{FileNameEncoder.Encode(tableName)}";
 
@@ -246,9 +300,10 @@ public class DataTongs
 
                 if (!outputScripts) { tablesProcessed++; continue; }
 
+                var destSchemaOverride = schemaTemplateMode ? "{{SchemaName}}" : null;
                 var mergeSQL = MergeScriptHelper.BuildMergeScript(_platform, cmd, querySchema, tableName, tableData,
                     keyColumns, mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, table.Filter,
-                    disableRules, updateDescendents);
+                    disableRules, updateDescendents, destSchemaOverride);
 
                 var scriptFilePath = Path.Combine(scriptPath, $"Populate {encodedDisplayName}.sql");
                 _progressLog.Info($"    Writing merge script to : {scriptFilePath}");
@@ -267,6 +322,39 @@ public class DataTongs
         _progressLog.Info($"  Tables processed: {tablesProcessed}");
         if (errors > 0) _progressLog.Info($"  Errors: {errors}");
         _progressLog.Info("DataTongs completed.");
+    }
+
+    /// <summary>
+    /// Returns true when the <c>Template.json</c> at <paramref name="templateRoot"/> has a
+    /// non-empty <c>SchemaIdentificationScript</c> field — i.e. the target template is a
+    /// schema template (design §8.1, signal 1). Reads the file directly via JObject rather
+    /// than going through <c>Template.Load</c> because we only need one scalar field and
+    /// the full load path requires the Product to be set, which DataTongs does not have
+    /// in its calling context.
+    /// </summary>
+    internal static bool TargetTemplateHasSchemaIdentificationScript(string templateRoot)
+    {
+        if (string.IsNullOrWhiteSpace(templateRoot)) return false;
+
+        var templateJsonPath = Path.Combine(templateRoot, "Template.json");
+        var fileWrapper = FileWrapper.GetFromFactory();
+        if (!fileWrapper.Exists(templateJsonPath)) return false;
+
+        try
+        {
+            var json = fileWrapper.ReadAllText(templateJsonPath);
+            if (string.IsNullOrWhiteSpace(json)) return false;
+            var obj = JObject.Parse(json);
+            var scriptValue = obj["SchemaIdentificationScript"]?.ToString();
+            return !string.IsNullOrWhiteSpace(scriptValue);
+        }
+        catch
+        {
+            // Malformed Template.json is not our problem to diagnose here — the engine
+            // surfaces a richer error at quench time. Return false so DataTongs falls
+            // back to regular mode.
+            return false;
+        }
     }
 
     /// <summary>

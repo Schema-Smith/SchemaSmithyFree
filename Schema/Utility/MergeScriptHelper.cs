@@ -441,7 +441,8 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
     /// </summary>
     /// <param name="platform">Target database platform.</param>
     /// <param name="cmd">Database command for metadata queries.</param>
-    /// <param name="schemaOrDb">Schema name (SQL Server/PostgreSQL) or database name (MySQL).</param>
+    /// <param name="schemaOrDb">Schema name (SQL Server/PostgreSQL) or database name (MySQL). Used for
+    /// INFORMATION_SCHEMA / catalog probes regardless of <paramref name="destSchemaOverride"/>.</param>
     /// <param name="tableName">Target table name.</param>
     /// <param name="tableData">JSON array of row data.</param>
     /// <param name="keyColumns">Comma-separated key columns for matching.</param>
@@ -452,11 +453,18 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
     /// <param name="mergeFilter">Optional filter for delete clause.</param>
     /// <param name="disableRules">PostgreSQL only: whether to disable rules during merge.</param>
     /// <param name="updateDescendents">PostgreSQL only: whether to update descendant tables (omits ONLY keyword).</param>
+    /// <param name="destSchemaOverride">When non-empty, used in place of <paramref name="schemaOrDb"/> for
+    /// destination-side refs in the emitted script body (MERGE INTO / ALTER TABLE / IDENTITY_INSERT / SETVAL)
+    /// AND for the content-file token (which becomes unqualified — just <c>{{tableName.tabledata}}</c>).
+    /// Source-side catalog probes still use <paramref name="schemaOrDb"/>. Exists for DataTongs schema-template
+    /// extraction (design §8) where the caller passes <c>{{SchemaName}}</c> so the engine resolves the destination
+    /// schema at quench time. MySQL ignores the override (no schema-inside-database concept).</param>
     public static string BuildMergeScript(Platform platform, IDbCommand cmd,
         string schemaOrDb, string tableName, string tableData, string keyColumns,
         bool mergeUpdate, bool mergeDelete, bool disableTriggers,
         bool tokenizeScripts, string mergeFilter,
-        bool disableRules = false, bool updateDescendents = false)
+        bool disableRules = false, bool updateDescendents = false,
+        string destSchemaOverride = null)
     {
         // Extract JSON keys to filter columns — only include columns present in the data.
         // For tokenized scripts, data is replaced at runtime so we include all columns.
@@ -465,9 +473,9 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
         return platform switch
         {
             Platform.SqlServer => BuildMergeScriptSqlServer(cmd, schemaOrDb, tableName, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, jsonKeys),
+                mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride),
             Platform.PostgreSQL => BuildMergeScriptPostgreSql(cmd, schemaOrDb, tableName, updateDescendents, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, jsonKeys),
+                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride),
             Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, tableData, keyColumns,
                 mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, jsonKeys),
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
@@ -524,10 +532,18 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
 
     private static string BuildMergeScriptSqlServer(IDbCommand cmd, string tableSchema, string tableName,
         string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete,
-        bool disableTriggers, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys)
+        bool disableTriggers, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys,
+        string destSchemaOverride = null)
     {
         tableSchema = tableSchema.Trim().Trim('[', ']');
         tableName = tableName.Trim().Trim('[', ']');
+
+        // destSchema is the identifier used in EMITTED destination refs; tableSchema is used
+        // for catalog probes against the source database. They differ only when DataTongs
+        // is extracting in schema-template mode (override = "{{SchemaName}}").
+        var destSchema = string.IsNullOrEmpty(destSchemaOverride)
+            ? tableSchema
+            : destSchemaOverride.Trim().Trim('[', ']');
 
         var unsupportedComments = GetUnsupportedColumnCommentsSqlServer(cmd, tableSchema, tableName);
         var matchColumns = BuildSqlServerMatchColumns(keyColumns);
@@ -538,16 +554,22 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
                              && IdentityColumnInJsonKeysSqlServer(cmd, tableSchema, tableName, jsonKeys);
         var jsonColumns = GetJsonColumnDefinitionsSqlServer(cmd, tableSchema, tableName, jsonKeys);
 
+        // Content-file token: when destination is overridden, the .tabledata file is unqualified
+        // (DataTongs writes Customers.tabledata, not tenant_seed.Customers.tabledata in schema-
+        // template mode), so the token must match by name. Otherwise stays schema-qualified.
+        var contentToken = string.IsNullOrEmpty(destSchemaOverride)
+            ? $"{tableSchema}.{tableName}.tabledata"
+            : $"{tableName}.tabledata";
         var jsonValue = tokenizeScripts
-            ? $"{{{{{tableSchema}.{tableName}.tabledata}}}}"
+            ? $"{{{{{contentToken}}}}}"
             : tableData?.Replace("'", "''");
 
         var mergeSQL = (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\r\n") + $@"
 DECLARE @v_json NVARCHAR(MAX) = '{jsonValue}';
 
-{(disableTriggers ? $"ALTER TABLE [{tableSchema}].[{tableName}] DISABLE TRIGGER ALL;" : "")}
-{(identityInsert ? $"SET IDENTITY_INSERT [{tableSchema}].[{tableName}] ON;" : "")}
-MERGE INTO [{tableSchema}].[{tableName}] AS Target
+{(disableTriggers ? $"ALTER TABLE [{destSchema}].[{tableName}] DISABLE TRIGGER ALL;" : "")}
+{(identityInsert ? $"SET IDENTITY_INSERT [{destSchema}].[{tableName}] ON;" : "")}
+MERGE INTO [{destSchema}].[{tableName}] AS Target
 USING (
   SELECT {fromJsonSelectColumns}
     FROM OPENJSON(@v_json)
@@ -606,7 +628,7 @@ WHEN MATCHED AND ({updateCompare}) THEN
  ";
         }
 
-        mergeSQL += $";\r\n{(identityInsert ? $"SET IDENTITY_INSERT [{tableSchema}].[{tableName}] OFF;\r\n" : "")}{(disableTriggers ? $"ALTER TABLE [{tableSchema}].[{tableName}] ENABLE TRIGGER ALL;\r\n" : "")}";
+        mergeSQL += $";\r\n{(identityInsert ? $"SET IDENTITY_INSERT [{destSchema}].[{tableName}] OFF;\r\n" : "")}{(disableTriggers ? $"ALTER TABLE [{destSchema}].[{tableName}] ENABLE TRIGGER ALL;\r\n" : "")}";
         return mergeSQL;
     }
 
@@ -740,10 +762,18 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
 
     private static string BuildMergeScriptPostgreSql(IDbCommand cmd, string tableSchema, string tableName,
         bool updateDescendents, string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete,
-        bool disableTriggers, bool disableRules, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys)
+        bool disableTriggers, bool disableRules, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys,
+        string destSchemaOverride = null)
     {
         tableSchema = tableSchema.Trim().Trim('"');
         tableName = tableName.Trim().Trim('"');
+
+        // destSchema is the identifier used in EMITTED destination refs; tableSchema is used
+        // for catalog probes against the source database. They differ only when DataTongs is
+        // extracting in schema-template mode (override = "{{SchemaName}}").
+        var destSchema = string.IsNullOrEmpty(destSchemaOverride)
+            ? tableSchema
+            : destSchemaOverride.Trim().Trim('"');
 
         var unsupportedComments = GetUnsupportedColumnCommentsPostgreSql(cmd, tableSchema, tableName);
         var matchColumns = BuildPostgreSqlMatchColumns(keyColumns);
@@ -752,12 +782,19 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
 
         // PostgreSQL does not support DISABLE/ENABLE RULE ALL — each rule must be named individually.
         // Rules cannot be disabled inside PL/pgSQL blocks, so these statements go outside the DO $$ block.
+        // Rule names are looked up in source catalog (pg_rules with tableSchema); the emitted ALTER
+        // TABLE statements use destSchema so the rules disable/enable on the destination at quench.
         var (disableRuleStatements, enableRuleStatements) = disableRules
-            ? GetRuleDisableEnableStatements(cmd, tableSchema, tableName, updateDescendents)
+            ? GetRuleDisableEnableStatements(cmd, tableSchema, tableName, updateDescendents, destSchema)
             : ("", "");
 
+        // Content-file token: see SQL Server method — unqualified when destSchemaOverride is set
+        // so the token matches the unqualified filename DataTongs writes in schema-template mode.
+        var contentToken = string.IsNullOrEmpty(destSchemaOverride)
+            ? $"{tableSchema}.{tableName}.tabledata"
+            : $"{tableName}.tabledata";
         var jsonValue = tokenizeScripts
-            ? $"{{{{{tableSchema}.{tableName}.tabledata}}}}"
+            ? $"{{{{{contentToken}}}}}"
             : tableData?.Replace("'", "''");
 
         var mergeSQL = (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\n")
@@ -767,8 +804,8 @@ DECLARE
   v_json JSON = '{jsonValue}';
   nextval BIGINT;
 BEGIN
-{(disableTriggers ? $"ALTER TABLE \"{tableSchema}\".\"{tableName}\" {(updateDescendents ? "" : "ONLY ")}DISABLE TRIGGER ALL;" : "")}
-MERGE INTO {(updateDescendents ? "" : "ONLY ")}""{tableSchema}"".""{tableName}"" AS ""Target""
+{(disableTriggers ? $"ALTER TABLE \"{destSchema}\".\"{tableName}\" {(updateDescendents ? "" : "ONLY ")}DISABLE TRIGGER ALL;" : "")}
+MERGE INTO {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}"" AS ""Target""
 USING (
     WITH my_tables(arr) AS (VALUES(v_json::JSON))
     SELECT {jsonColumns}
@@ -827,8 +864,8 @@ WHEN MATCHED AND ({updateCompare}) THEN
         }
 
         mergeSQL += $@";
-{(disableTriggers ? $"ALTER TABLE \"{tableSchema}\".\"{tableName}\" {(updateDescendents ? "" : "ONLY ")}ENABLE TRIGGER ALL;" : "")}
-{(!string.IsNullOrEmpty(identAndSeq) ? $"SELECT SETVAL('{identAndSeq.Split("=")[1]}', (SELECT MAX(\"{identAndSeq.Split("=")[0]}\") FROM \"{tableSchema}\".\"{tableName}\")) INTO nextval;" : "")}
+{(disableTriggers ? $"ALTER TABLE \"{destSchema}\".\"{tableName}\" {(updateDescendents ? "" : "ONLY ")}ENABLE TRIGGER ALL;" : "")}
+{(!string.IsNullOrEmpty(identAndSeq) ? $"SELECT SETVAL('{identAndSeq.Split("=")[1]}', (SELECT MAX(\"{identAndSeq.Split("=")[0]}\") FROM \"{destSchema}\".\"{tableName}\")) INTO nextval;" : "")}
 
 END $$ LANGUAGE plpgsql;
 " + (string.IsNullOrEmpty(enableRuleStatements) ? "" : "\n" + enableRuleStatements);
@@ -836,7 +873,7 @@ END $$ LANGUAGE plpgsql;
     }
 
     private static (string DisableStatements, string EnableStatements) GetRuleDisableEnableStatements(
-        IDbCommand cmd, string tableSchema, string tableName, bool updateDescendents)
+        IDbCommand cmd, string tableSchema, string tableName, bool updateDescendents, string destSchema = null)
     {
         cmd.CommandText = $@"
 SELECT rulename FROM pg_rules
@@ -852,11 +889,14 @@ ORDER BY rulename;";
         if (ruleNames.Count == 0)
             return ("", "");
 
+        // Catalog probe uses tableSchema (the source); emitted ALTER TABLE statements use the
+        // destination schema so the rule manipulation lands on the destination table at quench.
+        var emittedSchema = string.IsNullOrEmpty(destSchema) ? tableSchema : destSchema;
         var only = updateDescendents ? "" : "ONLY ";
         var disable = string.Join("\n", ruleNames.Select(r =>
-            $"ALTER TABLE {only}\"{tableSchema}\".\"{tableName}\" DISABLE RULE \"{r}\";"));
+            $"ALTER TABLE {only}\"{emittedSchema}\".\"{tableName}\" DISABLE RULE \"{r}\";"));
         var enable = string.Join("\n", ruleNames.Select(r =>
-            $"ALTER TABLE {only}\"{tableSchema}\".\"{tableName}\" ENABLE RULE \"{r}\";"));
+            $"ALTER TABLE {only}\"{emittedSchema}\".\"{tableName}\" ENABLE RULE \"{r}\";"));
         return (disable, enable);
     }
 

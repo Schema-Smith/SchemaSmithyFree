@@ -751,6 +751,149 @@ public class DataDeliveryProcessorTests
             "Regular-template callers must not need to set SchemaName.");
     }
 
+    // ---------- MergeFilter token substitution (slice 7) ----------
+    //
+    // delivery.MergeFilter is user-supplied text that gets embedded into the merge body's
+    // `WHEN NOT MATCHED BY SOURCE AND ({mergeFilter})` clause and shipped straight to the
+    // database via ExecuteScript — no engine-level token resolution between the helper and
+    // the execute. The slice-3 audit B3 fix only addressed table.Schema; if a schema-template
+    // Table.json's MergeFilter contains {{SchemaName}}, that literal token reaches the
+    // server and produces a SQL parse error. This pair of tests asserts that MergeFilter is
+    // token-substituted with the iteration's resolved schema name BEFORE BuildMergeScript
+    // sees it, mirroring the pattern already applied to table.Schema via GetSchemaOrDb.
+
+    [Test]
+    public void DeliverTables_SchemaTemplate_SubstitutesIterationSchemaIntoMergeFilter()
+    {
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .Returns(ci => $"MERGE INTO [{ci.ArgAt<string>(1)}].[{ci.ArgAt<string>(2)}] " +
+                           $"WHEN NOT MATCHED BY SOURCE AND ({ci.ArgAt<string>(9) ?? "(none)"})");
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "{{SchemaName}}",
+                DataDelivery = new DataDelivery
+                {
+                    MergeType = "Insert/Update/Delete",
+                    ContentFile = "lookups.json",
+                    MergeFilter = "Target.Status = 'Active' AND Target.[Owner] = '{{SchemaName}}'"
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SchemaName = "tenant_acme";
+
+        processor.DeliverTables(context);
+
+        Assert.That(_executedScripts, Has.Count.EqualTo(1));
+        Assert.That(_executedScripts[0], Does.Contain("Target.[Owner] = 'tenant_acme'"),
+            "MergeFilter must have {{SchemaName}} substituted with the iteration's resolved schema.");
+        Assert.That(_executedScripts[0], Does.Not.Contain("{{SchemaName}}"),
+            "Literal {{SchemaName}} must never reach the executed merge script via MergeFilter.");
+
+        _mockHelper.Received().BuildMergeScript(
+            Arg.Any<IDbCommand>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Is<string>(f => f != null && f.Contains("tenant_acme") && !f.Contains("{{SchemaName}}")),
+            Arg.Any<bool>(),
+            Arg.Any<bool>());
+    }
+
+    [Test]
+    public void DeliverTables_RegularTemplate_MergeFilterPassedThroughUnchanged()
+    {
+        // Regression guard: regular templates (SchemaName empty) must not touch MergeFilter.
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .Returns(ci => $"MERGE INTO [{ci.ArgAt<string>(1)}] WHERE ({ci.ArgAt<string>(9) ?? "(none)"})");
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "dbo",
+                DataDelivery = new DataDelivery
+                {
+                    MergeType = "Insert/Update/Delete",
+                    ContentFile = "lookups.json",
+                    MergeFilter = "Target.Status = 'Active'"
+                }
+            }
+        };
+        var context = MakeContext(tables); // SchemaName defaults to ""
+
+        processor.DeliverTables(context);
+
+        Assert.That(_executedScripts[0], Does.Contain("Target.Status = 'Active'"));
+        _mockHelper.Received().BuildMergeScript(
+            Arg.Any<IDbCommand>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Is("Target.Status = 'Active'"),
+            Arg.Any<bool>(),
+            Arg.Any<bool>());
+    }
+
+    [Test]
+    public void DeliverTables_SchemaTemplate_NullMergeFilterStaysNull()
+    {
+        // Defensive guard: when MergeFilter is unset (the common case), the substitution
+        // pass must not produce a non-null empty string or otherwise spuriously activate
+        // the WHEN NOT MATCHED BY SOURCE delete clause.
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "{{SchemaName}}",
+                DataDelivery = new DataDelivery
+                {
+                    MergeType = "Insert/Update",
+                    ContentFile = "lookups.json",
+                    MergeFilter = null
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SchemaName = "tenant_acme";
+
+        processor.DeliverTables(context);
+
+        _mockHelper.Received().BuildMergeScript(
+            Arg.Any<IDbCommand>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Is<string>(f => f == null),
+            Arg.Any<bool>(),
+            Arg.Any<bool>());
+    }
+
     [Test]
     public void DeliverTables_SchemaTemplate_MySqlPlatform_StillReturnsDatabaseName()
     {

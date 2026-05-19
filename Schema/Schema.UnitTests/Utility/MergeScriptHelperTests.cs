@@ -1783,4 +1783,250 @@ public class MergeScriptHelperTests
 
     #endregion
 
+    #region BuildMergeScript - destSchemaOverride (DataTongs schema-template extraction, slice 7)
+
+    // The destSchemaOverride parameter exists for the DataTongs schema-template extraction
+    // path: the caller knows the SOURCE schema (used to query INFORMATION_SCHEMA on the
+    // source database) but wants destination-side refs in the emitted body to carry a
+    // *different* identifier — typically the {{SchemaName}} engine token. Catalog probes
+    // continue to use schemaOrDb so the source metadata lookup still resolves; destination
+    // refs (MERGE INTO, ALTER TABLE, IDENTITY_INSERT, SETVAL, content-file token) use the
+    // override. SchemaQuench's DataDeliveryProcessor leaves the override null and behavior
+    // is identical to today.
+
+    [Test]
+    public void BuildMergeScript_SqlServer_DestSchemaOverride_RewritesDestinationRefs()
+    {
+        // Covers MERGE INTO, ALTER TABLE DISABLE/ENABLE TRIGGER. Identity-insert lives in its
+        // own test below because tokenizeScripts:true sets jsonKeys=null which short-circuits
+        // the IDENTITY-column-in-keys check away — that combination is the realistic schema-
+        // template case but it suppresses IDENTITY_INSERT regardless of override.
+        var cmd = CreateSqlServerMockCommand(
+            jsonSelectCols: "[Id]",
+            needsIdentity: false,
+            jsonColDefs: "           [Id] INT",
+            insertCols: "        [Id]",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, cmd,
+            "tenant_seed", "Customers", "[{\"Id\":1}]", "[Id]",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: true,
+            tokenizeScripts: true, mergeFilter: null,
+            disableRules: false, updateDescendents: true,
+            destSchemaOverride: "{{SchemaName}}");
+
+        Assert.That(result, Does.Contain("MERGE INTO [{{SchemaName}}].[Customers] AS Target"),
+            "MERGE INTO destination must use the override, not the source schema.");
+        Assert.That(result, Does.Contain("ALTER TABLE [{{SchemaName}}].[Customers] DISABLE TRIGGER ALL"));
+        Assert.That(result, Does.Contain("ALTER TABLE [{{SchemaName}}].[Customers] ENABLE TRIGGER ALL"));
+        Assert.That(result, Does.Not.Contain("[tenant_seed].[Customers]"),
+            "Source-schema literal must not appear in any destination ref when override is set.");
+    }
+
+    [Test]
+    public void BuildMergeScript_SqlServer_DestSchemaOverride_IdentityInsertUsesOverride()
+    {
+        // tokenizeScripts:false populates jsonKeys from tableData; an identity key column
+        // present in jsonKeys then enables the IDENTITY_INSERT block. Verify it uses the
+        // override.
+        var cmd = CreateSqlServerMockCommand(
+            jsonSelectCols: "[Id]",
+            needsIdentity: true,
+            jsonColDefs: "           [Id] INT",
+            insertCols: "        [Id]",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, cmd,
+            "tenant_seed", "Customers", "[{\"Id\":1}]", "[Id]",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null,
+            disableRules: false, updateDescendents: true,
+            destSchemaOverride: "{{SchemaName}}");
+
+        Assert.That(result, Does.Contain("SET IDENTITY_INSERT [{{SchemaName}}].[Customers] ON"));
+        Assert.That(result, Does.Contain("SET IDENTITY_INSERT [{{SchemaName}}].[Customers] OFF"));
+        Assert.That(result, Does.Not.Contain("[tenant_seed].[Customers]"));
+    }
+
+    [Test]
+    public void BuildMergeScript_SqlServer_DestSchemaOverride_ContentTokenUnqualified()
+    {
+        // The content-file token must reference the unqualified content filename in
+        // schema-template mode — DataTongs writes the .tabledata file with an unqualified
+        // name (Customers.tabledata), so the token in the merge body must match.
+        var cmd = CreateSqlServerMockCommand(
+            jsonSelectCols: "[Id]",
+            needsIdentity: false,
+            jsonColDefs: "           [Id] INT",
+            insertCols: "        [Id]",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, cmd,
+            "tenant_seed", "Customers", "[]", "[Id]",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null,
+            disableRules: false, updateDescendents: true,
+            destSchemaOverride: "{{SchemaName}}");
+
+        Assert.That(result, Does.Contain("{{Customers.tabledata}}"),
+            "Content-file token must be unqualified (no source schema) when override is set.");
+        Assert.That(result, Does.Not.Contain("{{tenant_seed.Customers.tabledata}}"),
+            "Schema-qualified content-file token must not appear when override is set.");
+    }
+
+    [Test]
+    public void BuildMergeScript_SqlServer_DestSchemaOverride_CatalogQueriesStillUseSourceSchema()
+    {
+        // Catalog probes (GetJsonSelectColumns, NeedsIdentityInsert, GetJsonColumnDefinitions,
+        // GetInsertColumns, GetUpdateColumns) must continue to use the actual source schema —
+        // that's where the table physically exists. Only the EMITTED script body switches to
+        // the override.
+        var cmd = Substitute.For<IDbCommand>();
+        var capturedQueries = new List<string>();
+
+        // Sequence: unsupported(null) -> jsonSelectCols -> needsIdentity -> jsonColDefs -> insertCols.
+        // Capture CommandText inside the Returns delegate so each invocation snapshots the query
+        // that *triggered* it; using When().Do() in addition can race with the dequeue and leak
+        // null values into downstream string concatenations.
+        var sequence = new Queue<object>(new object[] { null, "[Id]", false, "           [Id] INT", "        [Id]" });
+        cmd.ExecuteScalar().Returns(_ =>
+        {
+            capturedQueries.Add(cmd.CommandText);
+            return sequence.Count > 0 ? sequence.Dequeue() : null;
+        });
+
+        MergeScriptHelper.BuildMergeScript(Platform.SqlServer, cmd,
+            "tenant_seed", "Customers", "[]", "[Id]",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null,
+            disableRules: false, updateDescendents: true,
+            destSchemaOverride: "{{SchemaName}}");
+
+        Assert.That(capturedQueries.Any(q => q != null && q.Contains("'tenant_seed'")), Is.True,
+            "Catalog probes must use the SOURCE schema for INFORMATION_SCHEMA lookups, not the override.");
+        Assert.That(capturedQueries.Any(q => q != null && q.Contains("'{{SchemaName}}'")), Is.False,
+            "Catalog probes must not pass the engine token through to source metadata queries.");
+    }
+
+    [Test]
+    public void BuildMergeScript_SqlServer_DestSchemaOverride_NullKeepsTodayBehavior()
+    {
+        // Regression guard: omitting destSchemaOverride or passing null must produce
+        // exactly the same output as before slice 7 (literal source schema everywhere).
+        var cmd = CreateSqlServerMockCommand(
+            jsonSelectCols: "[Id]",
+            needsIdentity: false,
+            jsonColDefs: "           [Id] INT",
+            insertCols: "        [Id]",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, cmd,
+            "dbo", "Users", "[]", "[Id]",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null,
+            disableRules: false, updateDescendents: true,
+            destSchemaOverride: null);
+
+        Assert.That(result, Does.Contain("MERGE INTO [dbo].[Users] AS Target"));
+        Assert.That(result, Does.Contain("{{dbo.Users.tabledata}}"));
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSQL_DestSchemaOverride_RewritesDestinationRefs()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: "id=tenant_seed.customers_id_seq=SYSTEM",
+            jsonColDefs: "(elem ->> 'id')::int4 AS \"id\"",
+            insertCols: "        \"id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "tenant_seed", "customers", "[]", "\"id\"",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: true,
+            tokenizeScripts: true, mergeFilter: null,
+            disableRules: false, updateDescendents: true,
+            destSchemaOverride: "{{SchemaName}}");
+
+        Assert.That(result, Does.Contain("\"{{SchemaName}}\".\"customers\""),
+            "PostgreSQL destination refs must use the override in place of the source schema.");
+        Assert.That(result, Does.Not.Contain("\"tenant_seed\".\"customers\""),
+            "Source-schema literal must not appear in destination refs when override is set.");
+        Assert.That(result, Does.Contain("{{customers.tabledata}}"),
+            "PostgreSQL content-file token must also be unqualified when override is set.");
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSQL_DestSchemaOverride_TriggerAndSetvalUseOverride()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: "id=tenant_seed.customers_id_seq=SYSTEM",
+            jsonColDefs: "(elem ->> 'id')::int4 AS \"id\"",
+            insertCols: "        \"id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "tenant_seed", "customers", "[]", "\"id\"",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: true,
+            tokenizeScripts: false, mergeFilter: null,
+            disableRules: false, updateDescendents: true,
+            destSchemaOverride: "{{SchemaName}}");
+
+        Assert.That(result, Does.Contain("ALTER TABLE \"{{SchemaName}}\".\"customers\""),
+            "PostgreSQL ALTER TABLE (trigger disable/enable) must use the destination override.");
+        // SETVAL block reads MAX(col) from destination table — must use override.
+        Assert.That(result, Does.Contain("FROM \"{{SchemaName}}\".\"customers\""),
+            "SETVAL block FROM clause must use the destination override.");
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSQL_DestSchemaOverride_NullKeepsTodayBehavior()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: null,
+            jsonColDefs: "(elem ->> 'id')::int4 AS \"id\"",
+            insertCols: "        \"id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "public", "test_table", "[]", "\"id\"",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null,
+            disableRules: false, updateDescendents: true,
+            destSchemaOverride: null);
+
+        Assert.That(result, Does.Contain("\"public\".\"test_table\""));
+        Assert.That(result, Does.Contain("{{public.test_table.tabledata}}"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySQL_DestSchemaOverride_IgnoredOrThrows()
+    {
+        // MySQL has no schema-template fan-out (no schema-inside-database concept), so the
+        // override is meaningless on MySQL. Two acceptable behaviors:
+        //   (a) silently ignore the override (the caller upstream is supposed to gate this
+        //       on platform, but defense in depth never hurts), or
+        //   (b) throw an explicit ArgumentException.
+        // We pick (a) for symmetry with MergeScriptHelper's existing tolerance of edge
+        // platform combinations, and to keep the call sites simple. The destination ref
+        // stays on the source database name on MySQL.
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null)
+        });
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable", "[]", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null,
+            disableRules: false, updateDescendents: true,
+            destSchemaOverride: "{{SchemaName}}");
+
+        Assert.That(result, Does.Contain("`testdb`.`testtable`"),
+            "MySQL must keep using the source database name; the override is a no-op.");
+        Assert.That(result, Does.Not.Contain("{{SchemaName}}"),
+            "MySQL output must not leak the engine token into the script body.");
+    }
+
+    #endregion
+
 }
