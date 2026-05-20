@@ -114,21 +114,55 @@ public class ForgeKindlerIntegrationTests
 
             ForgeKindler.KindleTheForge(command, Platform.SqlServer);
 
-            // template_name + schema_name added.
+            // template_name + schema_name added with the correct type, nullability, and default.
+            // The plan's risk mitigation requires verifying these properties — a regression that
+            // produced a nullable column or a missing default would silently break PK extension
+            // and GetCompletedEntriesBySlot filtering.
             command.CommandText = @"
-                SELECT COUNT(*) FROM sys.columns
-                WHERE object_id = OBJECT_ID('SchemaSmith.CompletedMigrationScripts')
-                  AND name IN ('template_name', 'schema_name')";
-            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(2),
-                "Bootstrap must add template_name and schema_name to legacy tables.");
+                SELECT c.name, t.name AS type_name, c.max_length, c.is_nullable, dc.definition
+                  FROM sys.columns c
+                  JOIN sys.types t ON c.user_type_id = t.user_type_id
+                  LEFT JOIN sys.default_constraints dc
+                    ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id
+                 WHERE c.object_id = OBJECT_ID('SchemaSmith.CompletedMigrationScripts')
+                   AND c.name IN ('template_name', 'schema_name')
+                 ORDER BY c.name";
+            using (var reader = command.ExecuteReader())
+            {
+                var rows = new List<(string Name, string Type, int MaxLen, bool Nullable, string DefaultDef)>();
+                while (reader.Read())
+                {
+                    rows.Add((reader.GetString(0), reader.GetString(1), reader.GetInt16(2),
+                        reader.GetBoolean(3), reader.IsDBNull(4) ? null : reader.GetString(4)));
+                }
+                reader.Close();
+                Assert.That(rows, Has.Count.EqualTo(2),
+                    "Bootstrap must add both template_name and schema_name.");
+                foreach (var row in rows)
+                {
+                    Assert.That(row.Type, Is.EqualTo("nvarchar"), $"{row.Name} type");
+                    Assert.That(row.MaxLen, Is.EqualTo(512), $"{row.Name} max_length (NVARCHAR(256) = 512 bytes)");
+                    Assert.That(row.Nullable, Is.False, $"{row.Name} nullability — must be NOT NULL");
+                    Assert.That(row.DefaultDef, Is.Not.Null,
+                        $"{row.Name} must carry a default constraint (DEFAULT '')");
+                    Assert.That(row.DefaultDef, Does.Contain("''"),
+                        $"{row.Name} default must be empty string");
+                }
+            }
 
             // IX_CompletedMigrationScripts_Slot_Scope created (covers GetCompletedEntriesBySlot).
+            // Verify the column list, not just the index name — a regression that created an
+            // index with the right name but wrong columns would pass a name-only assertion.
             command.CommandText = @"
-                SELECT COUNT(*) FROM sys.indexes
-                WHERE name = 'IX_CompletedMigrationScripts_Slot_Scope'
-                  AND object_id = OBJECT_ID('SchemaSmith.CompletedMigrationScripts')";
-            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1),
-                "Bootstrap must create the secondary index from the shared JSON definition.");
+                SELECT STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal)
+                  FROM sys.indexes i
+                  JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+                  JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+                 WHERE i.name = 'IX_CompletedMigrationScripts_Slot_Scope'
+                   AND i.object_id = OBJECT_ID('SchemaSmith.CompletedMigrationScripts')";
+            var indexCols = command.ExecuteScalar() as string;
+            Assert.That(indexCols, Is.EqualTo("ProductName,QuenchSlot,template_name,schema_name"),
+                "Secondary index must lead with the GetCompletedEntriesBySlot filter columns in order.");
         }
         finally
         {

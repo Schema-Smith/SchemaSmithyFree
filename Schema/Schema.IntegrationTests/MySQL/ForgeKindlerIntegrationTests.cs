@@ -175,21 +175,48 @@ public class ForgeKindlerIntegrationTests
 
             ForgeKindler.KindleTheForge(command, Platform.MySQL);
 
+            // Verify column type (VARCHAR(255)), nullability (NOT NULL), default ('').
+            // A regression producing a nullable column or missing default would silently break
+            // PK extension semantics and GetCompletedEntriesBySlot filtering.
             command.CommandText = $@"
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = '{FixtureSetup.MainDb}'
-                  AND TABLE_NAME = 'SchemaSmith_CompletedMigrationScripts'
-                  AND COLUMN_NAME IN ('template_name', 'schema_name')";
-            Assert.That(System.Convert.ToInt64(command.ExecuteScalar()), Is.EqualTo(2),
-                "Bootstrap must add template_name and schema_name to legacy tables.");
+                SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT
+                  FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = '{FixtureSetup.MainDb}'
+                   AND TABLE_NAME = 'SchemaSmith_CompletedMigrationScripts'
+                   AND COLUMN_NAME IN ('template_name', 'schema_name')
+                 ORDER BY COLUMN_NAME";
+            using (var reader = command.ExecuteReader())
+            {
+                var rows = new List<(string Name, string Type, long MaxLen, string Nullable, string Default)>();
+                while (reader.Read())
+                {
+                    rows.Add((reader.GetString(0), reader.GetString(1), reader.GetInt64(2),
+                        reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4)));
+                }
+                reader.Close();
+                Assert.That(rows, Has.Count.EqualTo(2),
+                    "Bootstrap must add both template_name and schema_name.");
+                foreach (var row in rows)
+                {
+                    Assert.That(row.Type, Is.EqualTo("varchar"), $"{row.Name} type");
+                    Assert.That(row.MaxLen, Is.EqualTo(255), $"{row.Name} max length");
+                    Assert.That(row.Nullable, Is.EqualTo("NO"), $"{row.Name} must be NOT NULL");
+                    Assert.That(row.Default, Is.Not.Null, $"{row.Name} must carry a default");
+                    Assert.That(row.Default, Is.EqualTo(""),
+                        $"{row.Name} default must be empty string (information_schema reports it as '')");
+                }
+            }
 
+            // Verify the index exists AND has the expected column list in order.
             command.CommandText = $@"
-                SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = '{FixtureSetup.MainDb}'
-                  AND TABLE_NAME = 'SchemaSmith_CompletedMigrationScripts'
-                  AND INDEX_NAME = 'ix_completedmigrationscripts_slot_scope'";
-            Assert.That(System.Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1),
-                "Bootstrap must create the secondary index from the shared JSON definition.");
+                SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ',')
+                  FROM INFORMATION_SCHEMA.STATISTICS
+                 WHERE TABLE_SCHEMA = '{FixtureSetup.MainDb}'
+                   AND TABLE_NAME = 'SchemaSmith_CompletedMigrationScripts'
+                   AND INDEX_NAME = 'ix_completedmigrationscripts_slot_scope'";
+            var indexCols = command.ExecuteScalar() as string;
+            Assert.That(indexCols, Is.EqualTo("ProductName,QuenchSlot,template_name,schema_name"),
+                "Secondary index must lead with the GetCompletedEntriesBySlot filter columns in order.");
         }
         finally
         {
