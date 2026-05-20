@@ -1000,6 +1000,131 @@ SELECT COUNT(*) FROM sys.views v
         }
     }
 
+    [Test]
+    public void Per_Db_Query_Token_Resolves_Once_Across_All_Iterations_While_Iteration_Token_Resolves_Per_Iteration()
+    {
+        // Post-slice-8 cleanup (Commit B): per-DB query tokens (no {{SchemaName}} reference,
+        // direct or transitive) are cached per (server, database) across schema-template
+        // iterations. A 3-tenant fan-out must execute the per-DB token's body exactly once
+        // (the first iteration; siblings 2 + 3 hit the cache) while the iteration-scoped
+        // token's body executes once per iteration (3 times total). The test product has
+        // two query tokens with side-effect bodies that INSERT into a counter table, so
+        // counter-row counts prove the cache is doing its job.
+        const string cacheProduct = "SchemaTemplatePerDbCacheProduct";
+        var tenants = new[] { "perdbcache_a", "perdbcache_b", "perdbcache_c" };
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            Schema.Checkpointing.FileCheckpointManager.GetFromFactory().DeleteCheckpoints(cacheProduct);
+
+            using (var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
+            {
+                conn.Open();
+                conn.ChangeDatabase(_mainDb);
+                using var cmd = conn.CreateCommand();
+                cmd.CommandTimeout = 0;
+                // Counter table — recreated empty so prior runs in the same fixture lifecycle
+                // don't pollute this run's row counts.
+                cmd.CommandText = @"
+IF OBJECT_ID('dbo.TokenCallCounter', 'U') IS NOT NULL DROP TABLE dbo.TokenCallCounter;
+CREATE TABLE dbo.TokenCallCounter (
+    Id INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_TokenCallCounter PRIMARY KEY,
+    TokenKind NVARCHAR(32) NOT NULL,
+    IterationSchema NVARCHAR(128) NOT NULL);";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = @$"
+IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
+    DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{cacheProduct}';";
+                cmd.ExecuteNonQuery();
+                foreach (var tenant in tenants)
+                {
+                    cmd.CommandText = $"IF SCHEMA_ID('{tenant}') IS NULL EXEC('CREATE SCHEMA [{tenant}]');";
+                    cmd.ExecuteNonQuery();
+                }
+                conn.Close();
+            }
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("SqlServer", cacheProduct);
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // The per-DB token must execute exactly once across all 3 iterations — the first
+                // iteration's resolution populates the cache; iterations 2 + 3 read from it and
+                // skip the connection round-trip (no counter row inserted).
+                var perDbCalls = ScalarCount(
+                    "SELECT COUNT(*) FROM dbo.TokenCallCounter WHERE TokenKind = 'PerDb'");
+                Assert.That(perDbCalls, Is.EqualTo(1),
+                    $"Per-DB query token must execute exactly once across {tenants.Length} iterations (cached). " +
+                    "If this is N, the cache is not engaged and the token is re-running per iteration.");
+
+                // The iteration-scoped token must execute once per iteration (3 times total).
+                var iterCalls = ScalarCount(
+                    "SELECT COUNT(*) FROM dbo.TokenCallCounter WHERE TokenKind = 'Iteration'");
+                Assert.That(iterCalls, Is.EqualTo(tenants.Length),
+                    $"Iteration-scoped query token must execute once per iteration ({tenants.Length} total).");
+
+                // Per-iteration token must carry each tenant's schema in its body — proves caching
+                // didn't accidentally swap iteration-scoped values across iterations.
+                foreach (var tenant in tenants)
+                {
+                    var tenantIterRows = ScalarCount(
+                        $"SELECT COUNT(*) FROM dbo.TokenCallCounter WHERE TokenKind = 'Iteration' AND IterationSchema = N'{tenant}'");
+                    Assert.That(tenantIterRows, Is.EqualTo(1),
+                        $"Iteration token for tenant '{tenant}' must have produced exactly one counter row.");
+                }
+
+                // The procedure body in each tenant schema must carry the per-DB token's
+                // resolved literal — proves the cached value was substituted into the script,
+                // not just shorted out of the connection round-trip.
+                foreach (var tenant in tenants)
+                {
+                    var procBody = ScalarString(
+                        $"SELECT m.definition FROM sys.sql_modules m INNER JOIN sys.objects o ON m.object_id = o.object_id INNER JOIN sys.schemas s ON o.schema_id = s.schema_id WHERE s.name = '{tenant}' AND o.name = 'GetTokens'");
+                    Assert.That(procBody, Does.Contain("perdb_value"),
+                        $"Tenant '{tenant}' procedure must carry the resolved per-DB token literal — cache must merge cached value back into the iteration's substitution list.");
+                    Assert.That(procBody, Does.Contain($"iter_value_{tenant}"),
+                        $"Tenant '{tenant}' procedure must carry its own iteration-scoped token value (proves no cross-iteration leakage).");
+                }
+            }
+            finally
+            {
+                using (var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
+                {
+                    conn.Open();
+                    conn.ChangeDatabase(_mainDb);
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandTimeout = 0;
+                    foreach (var tenant in tenants)
+                    {
+                        cmd.CommandText = $@"
+DECLARE @sql NVARCHAR(MAX) = N'';
+SELECT @sql = @sql + 'DROP PROCEDURE [' + s.name + '].[' + o.name + '];' + CHAR(10)
+  FROM sys.objects o
+  INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
+  WHERE s.name = '{tenant}' AND o.type = 'P';
+IF @sql <> '' EXEC sp_executesql @sql;
+IF SCHEMA_ID('{tenant}') IS NOT NULL EXEC('DROP SCHEMA [{tenant}]');";
+                        cmd.ExecuteNonQuery();
+                    }
+                    cmd.CommandText = @$"
+IF OBJECT_ID('dbo.TokenCallCounter', 'U') IS NOT NULL DROP TABLE dbo.TokenCallCounter;
+IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
+    DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{cacheProduct}';";
+                    cmd.ExecuteNonQuery();
+                    conn.Close();
+                }
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
     // ----- Helpers ---------------------------------------------------------------------------
 
     private void SetupSharedMocks()

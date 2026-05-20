@@ -265,6 +265,10 @@ namespace Schema.Domain
             // the originals.
             if (_tokenScopes != null)
                 clone.ResolveTokenScopes();
+            // _perDbQueryTokenCache is intentionally NOT copied — the clone starts with a fresh,
+            // empty cache. A clone represents a fresh resolution state and its bodies may differ
+            // from the original's, so cached resolved values from the original cannot be
+            // assumed valid against the clone's bodies.
             return clone;
         }
 
@@ -805,5 +809,56 @@ namespace Schema.Domain
             && tokenName != null
             && _tokenScopes.TryGetValue(tokenName, out var s)
             && s == TokenScope.Iteration;
+
+        /// <summary>
+        /// Returns true when the named token resolved to <see cref="TokenScope.PerDb"/> in the
+        /// most recent <see cref="ResolveTokenScopes"/> call — a <c>&lt;*Query*&gt;</c> token
+        /// whose body does NOT (directly or transitively) reference <c>{{SchemaName}}</c>.
+        /// Returns false when the walk has not yet run or the token is unknown. The dispatcher
+        /// uses this to decide whether a query token's resolved value can be cached across
+        /// schema iterations within the same target database.
+        /// </summary>
+        public bool IsPerDb(string tokenName) =>
+            _tokenScopes != null
+            && tokenName != null
+            && _tokenScopes.TryGetValue(tokenName, out var s)
+            && s == TokenScope.PerDb;
+
+        // Per-(server, database) cache of resolved per-DB query token values. Populated on the
+        // first schema-template iteration that resolves a given per-DB token against a given
+        // target database and consulted on every subsequent iteration in the same (server, DB)
+        // pair so the connection round-trip happens once instead of once per iteration. Keyed
+        // top-level by "server|database" (case-insensitive) and inner-level by token name
+        // (also case-insensitive — matches the casing rules of `_tokenScopes` and the token
+        // resolver). Lifetime: tied to this Template instance. Cleared in <see cref="Clone"/>
+        // because a clone represents a fresh resolution state; the cache cannot be safely
+        // carried into a clone whose token bodies may differ.
+        private Dictionary<string, Dictionary<string, string>> _perDbQueryTokenCache;
+
+        /// <summary>
+        /// Returns (or lazily creates) the per-DB query token cache scoped to the supplied
+        /// (server, databaseName) pair. The dispatcher calls this from
+        /// <c>ResolveAndApplyQueryTokens</c> on schema-template iterations to (a) consult cached
+        /// per-DB token values before the connection round-trip and (b) deposit freshly-resolved
+        /// values for future iterations to reuse. Per-DB tokens are safe to cache across
+        /// iterations because their resolution by definition does not depend on the iteration
+        /// schema (no <c>{{SchemaName}}</c> in their body or any token they transitively reach).
+        /// Returns <c>null</c> when <paramref name="server"/> or <paramref name="databaseName"/>
+        /// is null or empty — the caller falls back to no-cache behavior in that case rather
+        /// than synthesizing a global cache that would defeat per-DB isolation.
+        /// </summary>
+        public Dictionary<string, string> GetOrCreatePerDbTokenCache(string server, string databaseName)
+        {
+            if (string.IsNullOrEmpty(server) || string.IsNullOrEmpty(databaseName)) return null;
+            _perDbQueryTokenCache ??= new Dictionary<string, Dictionary<string, string>>(
+                StringComparer.OrdinalIgnoreCase);
+            var key = $"{server}|{databaseName}";
+            if (!_perDbQueryTokenCache.TryGetValue(key, out var cache))
+            {
+                cache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                _perDbQueryTokenCache[key] = cache;
+            }
+            return cache;
+        }
     }
 }

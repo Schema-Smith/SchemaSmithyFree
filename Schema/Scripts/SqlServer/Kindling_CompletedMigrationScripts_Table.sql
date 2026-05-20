@@ -61,3 +61,15 @@ EXEC SchemaSmith.TableQuench @ProductName = 'SchemaQuench', @TableDefinitions = 
     }
   ]
 }', @DropUnknownIndexes = 1, @DropTablesRemovedFromProduct = 0
+
+-- Secondary index for GetCompletedEntriesBySlot lookups. The PK leads with [ScriptPath] but
+-- every migration-tracking lookup filters by (ProductName, QuenchSlot, template_name, schema_name)
+-- and was previously serviced by clustered-index scan. This idempotent NONCLUSTERED index
+-- covers the lookup leading columns. Kept outside TableQuench's @Indexes JSON because the
+-- block is run on every KindleTheForge and the EXISTS guard keeps it cheap to no-op when
+-- already present.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes
+               WHERE name = 'IX_CompletedMigrationScripts_Slot_Scope'
+                 AND object_id = OBJECT_ID('SchemaSmith.CompletedMigrationScripts'))
+    CREATE NONCLUSTERED INDEX IX_CompletedMigrationScripts_Slot_Scope
+    ON SchemaSmith.CompletedMigrationScripts (ProductName, QuenchSlot, template_name, schema_name);

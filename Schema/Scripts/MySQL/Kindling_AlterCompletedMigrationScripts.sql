@@ -46,6 +46,20 @@ BEGIN
                 ADD UNIQUE KEY `uk_script`
                 (`ProductName`, `QuenchSlot`, `ScriptPath`(200), `template_name`(50), `schema_name`(50));
         END IF;
+
+        -- Secondary index for GetCompletedEntriesBySlot lookups. The PK (`Id`) and uk_script
+        -- both miss the (ProductName, QuenchSlot, template_name, schema_name) lookup pattern
+        -- that GetCompletedEntriesBySlot filters by. Adding it here (rather than in the
+        -- table-creation script) means the index DDL runs AFTER the legacy column-add migration
+        -- above, so it never fires against a pre-slice-2 table shape lacking those columns.
+        IF NOT EXISTS (SELECT 1 FROM information_schema.statistics
+                       WHERE table_schema = DATABASE()
+                         AND table_name = 'SchemaSmith_CompletedMigrationScripts'
+                         AND index_name = 'ix_completedmigrationscripts_slot_scope') THEN
+            ALTER TABLE `SchemaSmith_CompletedMigrationScripts`
+                ADD INDEX `ix_completedmigrationscripts_slot_scope`
+                (`ProductName`, `QuenchSlot`, `template_name`(50), `schema_name`(50));
+        END IF;
     END IF;
 END //
 DELIMITER ;

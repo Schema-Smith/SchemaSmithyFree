@@ -16,3 +16,10 @@ CREATE TABLE IF NOT EXISTS `SchemaSmith_CompletedMigrationScripts` (
     `CompletedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY `uk_script` (`ProductName`, `QuenchSlot`, `ScriptPath`(200), `template_name`(50), `schema_name`(50))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- The secondary index ix_completedmigrationscripts_slot_scope on
+-- (ProductName, QuenchSlot, template_name, schema_name) is created in
+-- Kindling_AlterCompletedMigrationScripts.sql AFTER the legacy-table upgrade adds
+-- template_name + schema_name columns. Creating the index here would fail against pre-slice-2
+-- tables that still lack those columns; deferring it puts the DDL behind the same idempotent
+-- column-presence guard the legacy upgrade already uses.

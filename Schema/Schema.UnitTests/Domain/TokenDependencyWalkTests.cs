@@ -190,5 +190,216 @@ namespace Schema.UnitTests.Domain
             Assert.That(ex.Message, Does.Contain("B"));
             Assert.That(ex.Message, Does.Contain("C"));
         }
+
+        // ── IsPerDb accessor (post-slice-8 cleanup, Commit B) ──
+
+        [Test]
+        public void IsPerDb_QueryTokenWithoutSchemaNameReference_ReturnsTrue()
+        {
+            // A query token with no {{SchemaName}} in its body (direct or transitive) is PerDb —
+            // its resolved value depends on the target database but not on the iteration schema,
+            // so the dispatcher can safely cache it across iterations within a single (server, DB).
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens = { ["Edition"] = "<*Query*>SELECT 'enterprise'" }
+            };
+
+            template.ResolveTokenScopes();
+
+            Assert.That(template.IsPerDb("Edition"), Is.True);
+            Assert.That(template.IsIterationScoped("Edition"), Is.False);
+        }
+
+        [Test]
+        public void IsPerDb_QueryTokenThatReachesSchemaName_ReturnsFalse()
+        {
+            // An iteration-scoped query token must NOT be misclassified as PerDb — its resolved
+            // value differs per iteration and caching it would leak one iteration's value into
+            // siblings.
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens = { ["TenantId"] = "<*Query*>SELECT TenantId FROM {{SchemaName}}.Config" }
+            };
+
+            template.ResolveTokenScopes();
+
+            Assert.That(template.IsPerDb("TenantId"), Is.False);
+            Assert.That(template.IsIterationScoped("TenantId"), Is.True);
+        }
+
+        [Test]
+        public void IsPerDb_NonQueryToken_ReturnsFalse()
+        {
+            // Static (PerProduct) tokens are not query tokens; the cache only applies to
+            // <*Query*> tokens that incur a connection round-trip. NonQuery static tokens are
+            // PerProduct and the accessor must NOT return true for them — that would let the
+            // dispatcher try to populate a "cached value" for a token it should never pass to
+            // ResolveQueryTokens in the first place.
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                NonQueryTokens = { ["StaticPrefix"] = "App_" }
+            };
+
+            template.ResolveTokenScopes();
+
+            Assert.That(template.IsPerDb("StaticPrefix"), Is.False);
+        }
+
+        [Test]
+        public void IsPerDb_BeforeResolveCalled_ReturnsFalse()
+        {
+            // Defensive default mirrors IsIterationScoped: pre-resolve the dispatcher must not
+            // see a "true" answer for any token (the scope map hasn't been built yet, so we
+            // don't know the answer — and "don't cache" is the safe default).
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens = { ["Edition"] = "<*Query*>SELECT 'enterprise'" }
+            };
+
+            Assert.That(template.IsPerDb("Edition"), Is.False);
+        }
+
+        [Test]
+        public void IsPerDb_UnknownToken_ReturnsFalse()
+        {
+            // Mirrors IsIterationScoped's behavior on unknowns — the accessor must not assume
+            // PerDb for a name it doesn't know.
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens = { ["Edition"] = "<*Query*>SELECT 'enterprise'" }
+            };
+            template.ResolveTokenScopes();
+
+            Assert.That(template.IsPerDb("Bogus"), Is.False);
+        }
+
+        [Test]
+        public void IsPerDb_NullToken_ReturnsFalse()
+        {
+            // Same null-tolerance contract as IsIterationScoped.
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens = { ["Edition"] = "<*Query*>SELECT 'enterprise'" }
+            };
+            template.ResolveTokenScopes();
+
+            Assert.That(template.IsPerDb(null), Is.False);
+        }
+
+        [Test]
+        public void IsPerDb_LookupIsCaseInsensitive()
+        {
+            // Matches IsIterationScoped's casing contract — keyed by case-insensitive comparer.
+            var template = new Template
+            {
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens = { ["Edition"] = "<*Query*>SELECT 'enterprise'" }
+            };
+
+            template.ResolveTokenScopes();
+
+            Assert.That(template.IsPerDb("Edition"), Is.True);
+            Assert.That(template.IsPerDb("edition"), Is.True);
+            Assert.That(template.IsPerDb("EDITION"), Is.True);
+        }
+
+        // ── GetOrCreatePerDbTokenCache (post-slice-8 cleanup, Commit B) ──
+
+        [Test]
+        public void GetOrCreatePerDbTokenCache_ReturnsSameInstanceForSameServerDbPair()
+        {
+            // Two calls with the same (server, database) must yield the same dictionary instance
+            // so the dispatcher's deposits on call 1 are visible on call 2 (the whole point of
+            // the cache).
+            var template = new Template { Name = "T" };
+
+            var first = template.GetOrCreatePerDbTokenCache("srv-a", "db-a");
+            var second = template.GetOrCreatePerDbTokenCache("srv-a", "db-a");
+
+            Assert.That(first, Is.Not.Null);
+            Assert.That(second, Is.SameAs(first));
+        }
+
+        [Test]
+        public void GetOrCreatePerDbTokenCache_DifferentDatabases_ReturnDifferentInstances()
+        {
+            // Each (server, database) must own a distinct cache — otherwise a per-DB token
+            // resolved against DB-A would leak into DB-B's iterations.
+            var template = new Template { Name = "T" };
+
+            var cacheA = template.GetOrCreatePerDbTokenCache("srv-a", "db-a");
+            var cacheB = template.GetOrCreatePerDbTokenCache("srv-a", "db-b");
+
+            Assert.That(cacheA, Is.Not.SameAs(cacheB));
+        }
+
+        [Test]
+        public void GetOrCreatePerDbTokenCache_DifferentServers_ReturnDifferentInstances()
+        {
+            // Same database name on different servers is two different targets.
+            var template = new Template { Name = "T" };
+
+            var cacheA = template.GetOrCreatePerDbTokenCache("srv-a", "db-a");
+            var cacheB = template.GetOrCreatePerDbTokenCache("srv-b", "db-a");
+
+            Assert.That(cacheA, Is.Not.SameAs(cacheB));
+        }
+
+        [Test]
+        public void GetOrCreatePerDbTokenCache_NullOrEmptyServerOrDatabase_ReturnsNull()
+        {
+            // Defensive default — the dispatcher's fall-back is "no cache" rather than a
+            // synthesized global cache that would defeat per-DB isolation.
+            var template = new Template { Name = "T" };
+
+            Assert.That(template.GetOrCreatePerDbTokenCache(null, "db"), Is.Null);
+            Assert.That(template.GetOrCreatePerDbTokenCache("", "db"), Is.Null);
+            Assert.That(template.GetOrCreatePerDbTokenCache("srv", null), Is.Null);
+            Assert.That(template.GetOrCreatePerDbTokenCache("srv", ""), Is.Null);
+        }
+
+        [Test]
+        public void GetOrCreatePerDbTokenCache_Clone_DoesNotInheritParentEntries()
+        {
+            // A clone represents a fresh resolution state — cached resolved values from the
+            // original must not bleed into the clone, which may carry differently-evaluated
+            // token bodies.
+            var template = new Template
+            {
+                Name = "T",
+                QueryTokens = { ["Edition"] = "<*Query*>SELECT 'enterprise'" }
+            };
+            template.Product = new Product { Name = "P", Platform = Platform.SqlServer };
+            template.ResolveTokenScopes();
+
+            var originalCache = template.GetOrCreatePerDbTokenCache("srv", "db");
+            originalCache["Edition"] = "cached-value-from-original";
+
+            var clone = template.Clone();
+            var cloneCache = clone.GetOrCreatePerDbTokenCache("srv", "db");
+
+            Assert.That(cloneCache, Is.Not.Null);
+            Assert.That(cloneCache, Does.Not.ContainKey("Edition"));
+        }
+
+        [Test]
+        public void GetOrCreatePerDbTokenCache_KeyIsCaseInsensitiveOnServerAndDatabase()
+        {
+            // SQL Server / PG database names are commonly case-insensitive in connection strings;
+            // the dispatcher's (server, databaseName) inputs should not produce sibling cache
+            // entries that differ only by casing.
+            var template = new Template { Name = "T" };
+
+            var lower = template.GetOrCreatePerDbTokenCache("SRV-A", "DB-A");
+            var upper = template.GetOrCreatePerDbTokenCache("srv-a", "db-a");
+
+            Assert.That(upper, Is.SameAs(lower));
+        }
     }
 }

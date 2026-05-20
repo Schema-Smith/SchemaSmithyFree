@@ -1,0 +1,13 @@
+{
+    "Name": "TenantTokens",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "SchemaIdentificationScript": "SELECT s.name FROM sys.schemas s WHERE s.name LIKE 'perdbcache_%'",
+    "AllowParallel": false,
+    "ScriptTokens": {
+        "PerDbToken":      "<*Query*>INSERT INTO dbo.TokenCallCounter (TokenKind, IterationSchema) VALUES ('PerDb', ''); SELECT 'perdb_value'",
+        "IterationToken":  "<*Query*>INSERT INTO dbo.TokenCallCounter (TokenKind, IterationSchema) VALUES ('Iteration', '{{SchemaName}}'); SELECT 'iter_value_{{SchemaName}}'"
+    },
+    "ScriptFolders": [
+        { "FolderPath" : "Procedures", "QuenchSlot" : "Objects" }
+    ]
+}

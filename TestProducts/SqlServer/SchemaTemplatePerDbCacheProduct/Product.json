@@ -1,0 +1,12 @@
+{
+    "Name": "SchemaTemplatePerDbCacheProduct",
+    "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}') THEN 1 ELSE 0 END AS BIT)",
+    "TemplateOrder": [
+        "TenantTokens"
+    ],
+    "ScriptFolders": [],
+    "ScriptTokens": {
+        "MainDB": "TestMain"
+    },
+    "Platform": "MSSQL"
+}

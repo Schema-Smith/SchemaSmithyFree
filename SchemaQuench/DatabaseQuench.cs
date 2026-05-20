@@ -687,10 +687,8 @@ public class DatabaseQuench
 
         // 2. Build the per-iteration QueryTokens dict, substituting {{SchemaName}} into the
         //    bodies of iteration-scoped tokens BEFORE the query runs. Per-DB query tokens
-        //    pass through unchanged; ResolveQueryTokens still executes them against the
-        //    connection, which means they get re-run per iteration too — fan-out cost is
-        //    one execution per query token per work unit. Per-DB caching can be introduced
-        //    later if profiling shows it matters.
+        //    pass through unchanged — their resolved value does not depend on the iteration
+        //    schema, so it can be cached across iterations (step 3 below).
         var iterationQueryTokens = new Dictionary<string, string>(_template.QueryTokens.Count);
         foreach (var kv in _template.QueryTokens)
         {
@@ -700,13 +698,54 @@ public class DatabaseQuench
             iterationQueryTokens[kv.Key] = body;
         }
 
-        // 3. Resolve all query tokens against the live connection. ResolveQueryTokens
+        // 3. Per-DB query token cache (post-slice-8 perf, Commit B): consult the Template's
+        //    per-(server, database) cache and pre-fill any per-DB token whose value has already
+        //    been resolved against this target database in a prior iteration. We pull the
+        //    cached entries OUT of iterationQueryTokens before handing it to ResolveQueryTokens
+        //    because that resolver runs the connection round-trip for every token in the dict;
+        //    leaving cached tokens in would defeat the cache. After resolution, any per-DB
+        //    token that we just resolved (i.e., not already in the cache) is deposited back so
+        //    sibling iterations can reuse it.
+        //
+        //    The cache reduces query-token connection round-trips from O(tokens × tenants) to
+        //    O(tokens + tenants) for the per-DB subset. Iteration-scoped tokens still resolve
+        //    every iteration as before — their resolved value differs per iteration by design.
+        var perDbCache = _template.GetOrCreatePerDbTokenCache(_server, _databaseName);
+        var cachedResolvedValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (perDbCache != null)
+        {
+            // Snapshot the keys before iterating — we mutate iterationQueryTokens inside the loop.
+            foreach (var tokenName in iterationQueryTokens.Keys.ToList())
+            {
+                if (!_template.IsPerDb(tokenName)) continue;
+                if (!perDbCache.TryGetValue(tokenName, out var cachedValue)) continue;
+                cachedResolvedValues[tokenName] = cachedValue;
+                iterationQueryTokens.Remove(tokenName);
+            }
+        }
+
+        // 4. Resolve all REMAINING query tokens against the live connection. ResolveQueryTokens
         //    mutates the supplied dictionary in place, so we hand it our iteration-scoped
         //    copy and leave _template.QueryTokens untouched for the next iteration.
         TokenHelper.ResolveQueryTokens(iterationQueryTokens, iterationNonQueryTokens,
             silentCmd, Path.GetDirectoryName(_template.FilePath), _product.Platform);
 
-        // 4. Apply resolved values to this iteration's cloned scripts.
+        // 5. Deposit newly-resolved per-DB token values into the cache so sibling iterations
+        //    against the same (server, database) skip their round-trips.
+        if (perDbCache != null)
+        {
+            foreach (var kv in iterationQueryTokens)
+            {
+                if (_template.IsPerDb(kv.Key))
+                    perDbCache[kv.Key] = kv.Value;
+            }
+        }
+
+        // 6. Merge cached + freshly-resolved values into a single list for downstream substitution.
+        foreach (var kv in cachedResolvedValues)
+            iterationQueryTokens[kv.Key] = kv.Value;
+
+        // 7. Apply resolved values to this iteration's cloned scripts.
         var tokenList = iterationQueryTokens.ToList();
         ApplyToIteration(_iterationBeforeScripts, tokenList);
         ApplyToIteration(_iterationObjectScripts, tokenList);
