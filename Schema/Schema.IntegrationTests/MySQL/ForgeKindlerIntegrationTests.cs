@@ -146,4 +146,71 @@ public class ForgeKindlerIntegrationTests
         Assert.That(indexCount, Is.EqualTo(1),
             "Re-running KindleTheForge must not produce a duplicate secondary index.");
     }
+
+    [Test]
+    public void KindleTheForge_LegacyCompletedMigrationScripts_BootstrapAddsColumnsAndSecondaryIndex()
+    {
+        // BootstrapTableQuench refactor: pre-slice-2 / pre-Commit-B MySQL table is upgraded
+        // in a single kindling pass via Bootstrap's information_schema-guarded ADD COLUMN +
+        // ADD INDEX. Replaces the now-deleted Kindling_AlterCompletedMigrationScripts.sql.
+        using var freshConnection = DbConnectionFactory.ForPlatform(Platform.MySQL)
+            .GetDbConnection(FixtureSetup.GetMainDbConnectionString());
+        freshConnection.Open();
+        using var command = freshConnection.CreateCommand();
+
+        try
+        {
+            command.CommandText = "DROP TABLE IF EXISTS `SchemaSmith_CompletedMigrationScripts`";
+            command.ExecuteNonQuery();
+            command.CommandText = @"
+                CREATE TABLE `SchemaSmith_CompletedMigrationScripts` (
+                    `Id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `ProductName` VARCHAR(100) NOT NULL,
+                    `QuenchSlot` VARCHAR(50) NOT NULL,
+                    `ScriptPath` VARCHAR(500) NOT NULL,
+                    `CompletedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY `uk_script` (`ProductName`, `QuenchSlot`, `ScriptPath`(255))
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+            command.ExecuteNonQuery();
+
+            ForgeKindler.KindleTheForge(command, Platform.MySQL);
+
+            command.CommandText = $@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = '{FixtureSetup.MainDb}'
+                  AND TABLE_NAME = 'SchemaSmith_CompletedMigrationScripts'
+                  AND COLUMN_NAME IN ('template_name', 'schema_name')";
+            Assert.That(System.Convert.ToInt64(command.ExecuteScalar()), Is.EqualTo(2),
+                "Bootstrap must add template_name and schema_name to legacy tables.");
+
+            command.CommandText = $@"
+                SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = '{FixtureSetup.MainDb}'
+                  AND TABLE_NAME = 'SchemaSmith_CompletedMigrationScripts'
+                  AND INDEX_NAME = 'ix_completedmigrationscripts_slot_scope'";
+            Assert.That(System.Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1),
+                "Bootstrap must create the secondary index from the shared JSON definition.");
+        }
+        finally
+        {
+            command.CommandText = "DROP TABLE IF EXISTS `SchemaSmith_CompletedMigrationScripts`";
+            command.ExecuteNonQuery();
+            ForgeKindler.KindleTheForge(command, Platform.MySQL);
+        }
+    }
+
+    [Test]
+    public void KindleTheForge_FreshInstall_ProductOwnershipAndStatusMessagesExist()
+    {
+        // BootstrapTableQuench creates all three MySQL kindling tables on a fresh install.
+        // Verify ProductOwnership and StatusMessages are present (CompletedMigrationScripts
+        // is covered by KindleTheForge_CreatesCompletedMigrationScriptsTable above).
+        using var command = _connection.CreateCommand();
+        command.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = '{FixtureSetup.MainDb}'
+              AND TABLE_NAME IN ('SchemaSmith_ProductOwnership', 'SchemaSmith_StatusMessages')";
+        Assert.That(System.Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(2),
+            "Both ProductOwnership and StatusMessages must be created on fresh install by Bootstrap.");
+    }
 }

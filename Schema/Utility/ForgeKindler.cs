@@ -2,6 +2,7 @@
 
 using System;
 using System.Data;
+using System.IO;
 using log4net;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -41,6 +42,8 @@ public static class ForgeKindler
     private static void KindleForSqlServer(IDbCommand command)
     {
         KindleOneFile(command, "Kindling_SchemaSmith_Schema.sql", Platform.SqlServer);
+        KindleOneFile(command, "SchemaSmith.BootstrapTableQuench.sql", Platform.SqlServer);
+        KindleOneFile(command, "Kindling_CompletedMigrationScripts_Table.sql", Platform.SqlServer, replaceTableDefToken: true);
         KindleOneFile(command, "SchemaSmith.fn_StripParenWrapping.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.fn_StripBracketWrapping.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.fn_SafeBracketWrap.sql", Platform.SqlServer);
@@ -49,9 +52,8 @@ public static class ForgeKindler
         KindleOneFile(command, "SchemaSmith.ModifiedTableQuench.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.MissingIndexesAndConstraintsQuench.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.ForeignKeyQuench.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.TableQuench.sql", Platform.SqlServer, true);
+        KindleOneFile(command, "SchemaSmith.TableQuench.sql", Platform.SqlServer, replaceParseJsonToken: true);
         KindleOneFile(command, "SchemaSmith.IndexOnlyQuench.sql", Platform.SqlServer);
-        KindleOneFile(command, "Kindling_CompletedMigrationScripts_Table.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.fn_FormatJson.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.GenerateTableJson.sql", Platform.SqlServer);
         KindleOneFile(command, "SchemaSmith.ValidateIndexedViewOwnership.sql", Platform.SqlServer);
@@ -63,6 +65,9 @@ public static class ForgeKindler
     private static void KindleForPostgreSQL(IDbCommand command)
     {
         KindleOneFile(command, "Kindling_SchemaSmith_Schema.sql", Platform.PostgreSQL);
+        KindleOneFile(command, "SchemaSmith.BootstrapTableQuench.sql", Platform.PostgreSQL);
+        KindleOneFile(command, "Kindling_ProductOwnership_Table.sql", Platform.PostgreSQL, replaceTableDefToken: true);
+        KindleOneFile(command, "Kindling_CompletedMigrationScripts_Table.sql", Platform.PostgreSQL, replaceTableDefToken: true);
         KindleOneFile(command, "SchemaSmith.ExecuteOrDebug.sql", Platform.PostgreSQL);
         KindleOneFile(command, "SchemaSmith.QuoteColumnList.sql", Platform.PostgreSQL);
         KindleOneFile(command, "SchemaSmith.QuoteIndexColumnList.sql", Platform.PostgreSQL);
@@ -74,9 +79,7 @@ public static class ForgeKindler
         KindleOneFile(command, "SchemaSmith.ModifiedTableQuench.sql", Platform.PostgreSQL);
         KindleOneFile(command, "SchemaSmith.MissingIndexesAndConstraintsQuench.sql", Platform.PostgreSQL);
         KindleOneFile(command, "SchemaSmith.ForeignKeyQuench.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.TableQuench.sql", Platform.PostgreSQL, true);
-        KindleOneFile(command, "Kindling_ProductOwnership_Table.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "Kindling_CompletedMigrationScripts_Table.sql", Platform.PostgreSQL);
+        KindleOneFile(command, "SchemaSmith.TableQuench.sql", Platform.PostgreSQL, replaceParseJsonToken: true);
         KindleOneFile(command, "SchemaSmith.IndexOnlyQuench.sql", Platform.PostgreSQL);
         KindleOneFile(command, "SchemaSmith.FormatJson.sql", Platform.PostgreSQL);
         KindleOneFile(command, "SchemaSmith.GenerateTableJson.sql", Platform.PostgreSQL);
@@ -88,14 +91,10 @@ public static class ForgeKindler
 
     private static void KindleForMySQL(IDbCommand command)
     {
-        KindleOneFile(command, "Kindling_CompletedMigrationScripts_Table.sql", Platform.MySQL);
-        // Idempotent upgrade path for legacy tables created before the slice-2
-        // schema-templates extension. MySQL's CREATE TABLE IF NOT EXISTS won't add
-        // missing columns to existing tables, so we do explicit ALTERs guarded by
-        // information_schema checks. No-op on tables already at the new shape.
-        KindleOneFile(command, "Kindling_AlterCompletedMigrationScripts.sql", Platform.MySQL);
-        KindleOneFile(command, "Kindling_ProductOwnership_Table.sql", Platform.MySQL);
-        KindleOneFile(command, "Kindling_StatusMessages_Table.sql", Platform.MySQL);
+        KindleOneFile(command, "SchemaSmith_BootstrapTableQuench.sql", Platform.MySQL);
+        KindleOneFile(command, "Kindling_CompletedMigrationScripts_Table.sql", Platform.MySQL, replaceTableDefToken: true);
+        KindleOneFile(command, "Kindling_ProductOwnership_Table.sql", Platform.MySQL, replaceTableDefToken: true);
+        KindleOneFile(command, "Kindling_StatusMessages_Table.sql", Platform.MySQL, replaceTableDefToken: true);
 
         // Clean up orphaned status messages older than 1 hour (from crashed sessions)
         try
@@ -124,8 +123,11 @@ public static class ForgeKindler
 
     /// <summary>
     /// Execute a single SQL script from embedded resources for the specified platform.
+    /// Optionally substitutes {{ParseJson}} with the platform's ParseTableJson script body,
+    /// and / or {{TableDef}} with the sibling .json resource (same base name as the script).
     /// </summary>
-    public static void KindleOneFile(IDbCommand command, string fileName, Platform platform, bool replaceParseJsonToken = false)
+    public static void KindleOneFile(IDbCommand command, string fileName, Platform platform,
+        bool replaceParseJsonToken = false, bool replaceTableDefToken = false)
     {
         try
         {
@@ -135,6 +137,9 @@ public static class ForgeKindler
 
             if (replaceParseJsonToken)
                 script = script.Replace("{{ParseJson}}", GetParseTableJsonScript(platform));
+
+            if (replaceTableDefToken)
+                script = script.Replace("{{TableDef}}", GetSiblingTableDefJson(fileName, platform));
 
             if (platform == Platform.MySQL)
             {
@@ -174,6 +179,23 @@ public static class ForgeKindler
     }
 
     /// <summary>
+    /// Load the sibling .json resource for a kindling _Table.sql script. Convention: the JSON
+    /// file shares the script's base name. For "Kindling_CompletedMigrationScripts_Table.sql"
+    /// the resolver strips the "_Table.sql" suffix and loads "Kindling_CompletedMigrationScripts.json".
+    /// </summary>
+    internal static string GetSiblingTableDefJson(string scriptFileName, Platform platform)
+    {
+        var baseName = Path.GetFileNameWithoutExtension(scriptFileName);
+        const string tableSuffix = "_Table";
+        if (baseName.EndsWith(tableSuffix, StringComparison.Ordinal))
+            baseName = baseName.Substring(0, baseName.Length - tableSuffix.Length);
+        var jsonName = baseName + ".json";
+
+        return ResourceLoader.Load(jsonName, platform)
+            ?? throw new Exception($"Sibling JSON '{jsonName}' not found for kindling script '{scriptFileName}' on platform '{platform}'.");
+    }
+
+    /// <summary>
     /// Returns the list of kindling script names for the specified platform.
     /// Useful for testing and diagnostics.
     /// </summary>
@@ -183,6 +205,8 @@ public static class ForgeKindler
         {
             Platform.SqlServer => [
                 "Kindling_SchemaSmith_Schema.sql",
+                "SchemaSmith.BootstrapTableQuench.sql",
+                "Kindling_CompletedMigrationScripts_Table.sql",
                 "SchemaSmith.fn_StripParenWrapping.sql",
                 "SchemaSmith.fn_StripBracketWrapping.sql",
                 "SchemaSmith.fn_SafeBracketWrap.sql",
@@ -193,7 +217,6 @@ public static class ForgeKindler
                 "SchemaSmith.ForeignKeyQuench.sql",
                 "SchemaSmith.TableQuench.sql",
                 "SchemaSmith.IndexOnlyQuench.sql",
-                "Kindling_CompletedMigrationScripts_Table.sql",
                 "SchemaSmith.fn_FormatJson.sql",
                 "SchemaSmith.GenerateTableJson.sql",
                 "SchemaSmith.ValidateIndexedViewOwnership.sql",
@@ -203,6 +226,9 @@ public static class ForgeKindler
             ],
             Platform.PostgreSQL => [
                 "Kindling_SchemaSmith_Schema.sql",
+                "SchemaSmith.BootstrapTableQuench.sql",
+                "Kindling_ProductOwnership_Table.sql",
+                "Kindling_CompletedMigrationScripts_Table.sql",
                 "SchemaSmith.ExecuteOrDebug.sql",
                 "SchemaSmith.QuoteColumnList.sql",
                 "SchemaSmith.QuoteIndexColumnList.sql",
@@ -215,8 +241,6 @@ public static class ForgeKindler
                 "SchemaSmith.MissingIndexesAndConstraintsQuench.sql",
                 "SchemaSmith.ForeignKeyQuench.sql",
                 "SchemaSmith.TableQuench.sql",
-                "Kindling_ProductOwnership_Table.sql",
-                "Kindling_CompletedMigrationScripts_Table.sql",
                 "SchemaSmith.IndexOnlyQuench.sql",
                 "SchemaSmith.FormatJson.sql",
                 "SchemaSmith.GenerateTableJson.sql",
@@ -226,8 +250,8 @@ public static class ForgeKindler
                 "SchemaSmith.MaterializedViewQuench.sql"
             ],
             Platform.MySQL => [
+                "SchemaSmith_BootstrapTableQuench.sql",
                 "Kindling_CompletedMigrationScripts_Table.sql",
-                "Kindling_AlterCompletedMigrationScripts.sql",
                 "Kindling_ProductOwnership_Table.sql",
                 "Kindling_StatusMessages_Table.sql",
                 "SchemaSmith_QuoteIdentifier.sql",

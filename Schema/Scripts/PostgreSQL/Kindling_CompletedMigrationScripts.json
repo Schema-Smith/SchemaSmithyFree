@@ -1,0 +1,53 @@
+{
+  "Schema": "SchemaSmith",
+  "Name": "CompletedMigrationScripts",
+  "Columns": [
+    {
+      "Name": "ScriptPath",
+      "DataType": "VARCHAR(800)",
+      "Nullable": false
+    },
+    {
+      "Name": "ProductName",
+      "DataType": "VARCHAR(100)",
+      "Nullable": false
+    },
+    {
+      "Name": "QuenchSlot",
+      "DataType": "VARCHAR(30)",
+      "Nullable": false
+    },
+    {
+      "Name": "template_name",
+      "DataType": "VARCHAR(256)",
+      "Nullable": false,
+      "Default": "''''"
+    },
+    {
+      "Name": "schema_name",
+      "DataType": "VARCHAR(256)",
+      "Nullable": false,
+      "Default": "''''"
+    },
+    {
+      "Name": "QuenchDate",
+      "DataType": "TIMESTAMP",
+      "Nullable": false,
+      "Default": "NOW()"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_CompletedMigrationScripts",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "\"ScriptPath\",\"ProductName\",\"QuenchSlot\",template_name,schema_name"
+    },
+    {
+      "Name": "ix_completedmigrationscripts_slot_scope",
+      "PrimaryKey": false,
+      "Unique": false,
+      "IndexColumns": "\"ProductName\",\"QuenchSlot\",template_name,schema_name"
+    }
+  ]
+}

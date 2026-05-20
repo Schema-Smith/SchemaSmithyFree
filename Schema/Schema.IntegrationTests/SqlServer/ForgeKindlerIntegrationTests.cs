@@ -90,4 +90,53 @@ public class ForgeKindlerIntegrationTests
         Assert.That(indexCount, Is.EqualTo(1),
             "Re-running KindleTheForge must not produce a duplicate secondary index.");
     }
+
+    [Test]
+    public void KindleTheForge_LegacyTable_BootstrapAddsTemplateNameSchemaNameAndSecondaryIndex()
+    {
+        // BootstrapTableQuench refactor: a pre-slice-2 / pre-Commit-B table (no template_name,
+        // no schema_name, no IX_CompletedMigrationScripts_Slot_Scope) is upgraded in a single
+        // kindling pass via BootstrapTableQuench's ADD COLUMN + CREATE INDEX guards.
+        using var command = _connection.CreateCommand();
+        try
+        {
+            command.CommandText = @"
+                IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts') IS NOT NULL
+                    DROP TABLE SchemaSmith.CompletedMigrationScripts;
+                CREATE TABLE SchemaSmith.CompletedMigrationScripts (
+                    ScriptPath  VARCHAR(800) NOT NULL,
+                    ProductName VARCHAR(100) NOT NULL,
+                    QuenchSlot  VARCHAR(30)  NOT NULL,
+                    QuenchDate  DATETIME     NOT NULL DEFAULT GETDATE(),
+                    CONSTRAINT PK_CompletedMigrationScripts PRIMARY KEY CLUSTERED (ScriptPath, ProductName, QuenchSlot)
+                );";
+            command.ExecuteNonQuery();
+
+            ForgeKindler.KindleTheForge(command, Platform.SqlServer);
+
+            // template_name + schema_name added.
+            command.CommandText = @"
+                SELECT COUNT(*) FROM sys.columns
+                WHERE object_id = OBJECT_ID('SchemaSmith.CompletedMigrationScripts')
+                  AND name IN ('template_name', 'schema_name')";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(2),
+                "Bootstrap must add template_name and schema_name to legacy tables.");
+
+            // IX_CompletedMigrationScripts_Slot_Scope created (covers GetCompletedEntriesBySlot).
+            command.CommandText = @"
+                SELECT COUNT(*) FROM sys.indexes
+                WHERE name = 'IX_CompletedMigrationScripts_Slot_Scope'
+                  AND object_id = OBJECT_ID('SchemaSmith.CompletedMigrationScripts')";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1),
+                "Bootstrap must create the secondary index from the shared JSON definition.");
+        }
+        finally
+        {
+            // Reset the table to current shape so subsequent fixtures inherit a clean state.
+            command.CommandText = @"IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts') IS NOT NULL
+                                    DROP TABLE SchemaSmith.CompletedMigrationScripts";
+            command.ExecuteNonQuery();
+            ForgeKindler.KindleTheForge(command, Platform.SqlServer);
+        }
+    }
 }

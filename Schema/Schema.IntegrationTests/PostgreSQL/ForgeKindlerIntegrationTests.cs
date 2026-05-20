@@ -110,4 +110,87 @@ public class ForgeKindlerIntegrationTests
         Assert.That(indexCount, Is.EqualTo(1),
             "Re-running KindleTheForge must not produce a duplicate secondary index.");
     }
+
+    [Test]
+    public void KindleTheForge_LegacyCompletedMigrationScripts_BootstrapAddsColumnsAndIndex()
+    {
+        // BootstrapTableQuench refactor: a pre-slice-2 / pre-Commit-B PostgreSQL table is
+        // upgraded in a single kindling pass via Bootstrap's ADD COLUMN IF NOT EXISTS +
+        // CREATE INDEX IF NOT EXISTS guards.
+        using var command = _connection.CreateCommand();
+        try
+        {
+            command.CommandText = @"DROP TABLE IF EXISTS ""SchemaSmith"".""CompletedMigrationScripts""";
+            command.ExecuteNonQuery();
+            command.CommandText = @"
+                CREATE TABLE ""SchemaSmith"".""CompletedMigrationScripts"" (
+                    ""ScriptPath""  VARCHAR(800) NOT NULL,
+                    ""ProductName"" VARCHAR(100) NOT NULL,
+                    ""QuenchSlot""  VARCHAR(30)  NOT NULL,
+                    ""QuenchDate""  TIMESTAMP    NOT NULL DEFAULT NOW(),
+                    CONSTRAINT ""PK_CompletedMigrationScripts"" PRIMARY KEY (""ScriptPath"", ""ProductName"", ""QuenchSlot"")
+                );";
+            command.ExecuteNonQuery();
+
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+
+            command.CommandText = @"
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'SchemaSmith' AND table_name = 'CompletedMigrationScripts'
+                  AND column_name IN ('template_name', 'schema_name')";
+            Assert.That(Convert.ToInt64(command.ExecuteScalar()), Is.EqualTo(2),
+                "Bootstrap must add template_name and schema_name to legacy tables.");
+
+            command.CommandText = @"
+                SELECT COUNT(*) FROM pg_indexes
+                WHERE schemaname = 'SchemaSmith'
+                  AND tablename = 'CompletedMigrationScripts'
+                  AND indexname = 'ix_completedmigrationscripts_slot_scope'";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1),
+                "Bootstrap must create the secondary index from the shared JSON definition.");
+        }
+        finally
+        {
+            command.CommandText = @"DROP TABLE IF EXISTS ""SchemaSmith"".""CompletedMigrationScripts""";
+            command.ExecuteNonQuery();
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+        }
+    }
+
+    [Test]
+    public void KindleTheForge_LegacyProductOwnership_BootstrapAddsTemplateNameColumn()
+    {
+        // PostgreSQL has a second kindling table — ProductOwnership — whose slice-3 audit B1
+        // added a template_name column. The legacy 4-column shape must upgrade via Bootstrap.
+        using var command = _connection.CreateCommand();
+        try
+        {
+            command.CommandText = @"DROP TABLE IF EXISTS ""SchemaSmith"".""ProductOwnership""";
+            command.ExecuteNonQuery();
+            command.CommandText = @"
+                CREATE TABLE ""SchemaSmith"".""ProductOwnership"" (
+                    ""Schema""      VARCHAR(256) NOT NULL,
+                    ""TableName""   VARCHAR(256) NOT NULL,
+                    ""IndexName""   VARCHAR(256) NULL,
+                    ""ProductName"" VARCHAR(100) NOT NULL,
+                    CONSTRAINT ""PK_ProductOwnership"" UNIQUE (""Schema"", ""TableName"", ""IndexName"", ""ProductName"")
+                );";
+            command.ExecuteNonQuery();
+
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+
+            command.CommandText = @"
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'SchemaSmith' AND table_name = 'ProductOwnership'
+                  AND column_name = 'template_name'";
+            Assert.That(Convert.ToInt64(command.ExecuteScalar()), Is.EqualTo(1),
+                "Bootstrap must add template_name to legacy ProductOwnership tables.");
+        }
+        finally
+        {
+            command.CommandText = @"DROP TABLE IF EXISTS ""SchemaSmith"".""ProductOwnership""";
+            command.ExecuteNonQuery();
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+        }
+    }
 }

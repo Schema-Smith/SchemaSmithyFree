@@ -16,6 +16,7 @@ public class ForgeKindlerTests
         var scripts = ForgeKindler.GetKindlingScriptNames(Platform.SqlServer);
         Assert.That(scripts, Is.Not.Empty);
         Assert.That(scripts, Does.Contain("Kindling_SchemaSmith_Schema.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.BootstrapTableQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_StripParenWrapping.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_StripBracketWrapping.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_SafeBracketWrap.sql"));
@@ -36,11 +37,30 @@ public class ForgeKindlerTests
     }
 
     [Test]
+    public void GetKindlingScriptNames_SqlServer_BootstrapAndKindlingTableComeBeforeTableQuench()
+    {
+        // BootstrapTableQuench creates the proc; the kindling table call uses it.
+        // Both must come before TableQuench (which doesn't depend on either) so the
+        // pipeline shape is: schema -> bootstrap proc -> kindling tables -> utility procs.
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.SqlServer);
+        var bootstrapIdx = Array.IndexOf(scripts, "SchemaSmith.BootstrapTableQuench.sql");
+        var kindlingTableIdx = Array.IndexOf(scripts, "Kindling_CompletedMigrationScripts_Table.sql");
+        var tableQuenchIdx = Array.IndexOf(scripts, "SchemaSmith.TableQuench.sql");
+
+        Assert.That(bootstrapIdx, Is.GreaterThanOrEqualTo(0), "BootstrapTableQuench must be in the script list.");
+        Assert.That(bootstrapIdx, Is.LessThan(kindlingTableIdx),
+            "BootstrapTableQuench must be created before the kindling table that uses it.");
+        Assert.That(kindlingTableIdx, Is.LessThan(tableQuenchIdx),
+            "Kindling table must be created via Bootstrap before TableQuench is created.");
+    }
+
+    [Test]
     public void GetKindlingScriptNames_PostgreSQL_ReturnsExpectedScripts()
     {
         var scripts = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         Assert.That(scripts, Is.Not.Empty);
         Assert.That(scripts, Does.Contain("Kindling_SchemaSmith_Schema.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.BootstrapTableQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ExecuteOrDebug.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.QuoteColumnList.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.QuoteIndexColumnList.sql"));
@@ -65,10 +85,26 @@ public class ForgeKindlerTests
     }
 
     [Test]
+    public void GetKindlingScriptNames_PostgreSQL_BootstrapAndKindlingTablesComeBeforeOwnershipProcs()
+    {
+        // ProductOwnership table must be created before ValidateTableOwnership (which reads it).
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
+        var bootstrapIdx = Array.IndexOf(scripts, "SchemaSmith.BootstrapTableQuench.sql");
+        var productOwnershipIdx = Array.IndexOf(scripts, "Kindling_ProductOwnership_Table.sql");
+        var validateOwnershipIdx = Array.IndexOf(scripts, "SchemaSmith.ValidateTableOwnership.sql");
+
+        Assert.That(bootstrapIdx, Is.LessThan(productOwnershipIdx),
+            "BootstrapTableQuench must be created before the ProductOwnership kindling call.");
+        Assert.That(productOwnershipIdx, Is.LessThan(validateOwnershipIdx),
+            "ProductOwnership table must exist before ValidateTableOwnership proc is created.");
+    }
+
+    [Test]
     public void GetKindlingScriptNames_MySQL_ReturnsExpectedScripts()
     {
         var scripts = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
         Assert.That(scripts, Is.Not.Empty);
+        Assert.That(scripts, Does.Contain("SchemaSmith_BootstrapTableQuench.sql"));
         Assert.That(scripts, Does.Contain("Kindling_CompletedMigrationScripts_Table.sql"));
         Assert.That(scripts, Does.Contain("Kindling_ProductOwnership_Table.sql"));
         Assert.That(scripts, Does.Contain("Kindling_StatusMessages_Table.sql"));
@@ -87,15 +123,46 @@ public class ForgeKindlerTests
     }
 
     [Test]
+    public void GetKindlingScriptNames_MySQL_DoesNotContainDeletedAlterScript()
+    {
+        // BootstrapTableQuench's ADD COLUMN IF NOT EXISTS / CREATE INDEX IF NOT EXISTS pattern
+        // subsumed Kindling_AlterCompletedMigrationScripts.sql. The file must be gone from the
+        // ordered kindling script list.
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
+        Assert.That(scripts, Does.Not.Contain("Kindling_AlterCompletedMigrationScripts.sql"),
+            "Kindling_AlterCompletedMigrationScripts.sql was deleted by the BootstrapTableQuench refactor.");
+    }
+
+    [Test]
+    public void GetKindlingScriptNames_MySQL_BootstrapPrecedesAllKindlingTables()
+    {
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
+        var bootstrapIdx = Array.IndexOf(scripts, "SchemaSmith_BootstrapTableQuench.sql");
+        var completedIdx = Array.IndexOf(scripts, "Kindling_CompletedMigrationScripts_Table.sql");
+        var ownershipIdx = Array.IndexOf(scripts, "Kindling_ProductOwnership_Table.sql");
+        var statusIdx = Array.IndexOf(scripts, "Kindling_StatusMessages_Table.sql");
+
+        Assert.That(bootstrapIdx, Is.LessThan(completedIdx),
+            "BootstrapTableQuench must precede CompletedMigrationScripts kindling.");
+        Assert.That(bootstrapIdx, Is.LessThan(ownershipIdx),
+            "BootstrapTableQuench must precede ProductOwnership kindling.");
+        Assert.That(bootstrapIdx, Is.LessThan(statusIdx),
+            "BootstrapTableQuench must precede StatusMessages kindling.");
+    }
+
+    [Test]
     public void GetKindlingScriptNames_AllPlatforms_HaveUniqueScripts()
     {
         var sqlServer = ForgeKindler.GetKindlingScriptNames(Platform.SqlServer);
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        Assert.That(sqlServer.Length, Is.EqualTo(18)); // was 14, adding 4 indexed view scripts
-        Assert.That(postgres.Length, Is.EqualTo(22));
-        Assert.That(mysql.Length, Is.EqualTo(16)); // +1 for Kindling_AlterCompletedMigrationScripts.sql (slice 2)
+        // SqlServer: +1 for BootstrapTableQuench (19 = 18 prior + 1).
+        Assert.That(sqlServer.Length, Is.EqualTo(19));
+        // PostgreSQL: +1 for BootstrapTableQuench (23 = 22 prior + 1).
+        Assert.That(postgres.Length, Is.EqualTo(23));
+        // MySQL: -1 for deleted Alter script, +1 for BootstrapTableQuench (16 = 16 prior - 1 + 1).
+        Assert.That(mysql.Length, Is.EqualTo(16));
     }
 
     [Test]
@@ -124,5 +191,93 @@ public class ForgeKindlerTests
         var ex = Assert.Throws<Exception>(() =>
             ForgeKindler.KindleOneFile(mockCmd, "NotAReal_Script_File.sql", Platform.PostgreSQL));
         Assert.That(ex.Message, Does.Contain("kindling"));
+    }
+
+    [Test]
+    public void GetSiblingTableDefJson_SqlServer_LoadsCompletedMigrationScriptsJson()
+    {
+        // The sibling JSON for Kindling_CompletedMigrationScripts_Table.sql lives next to
+        // it under Schema/Scripts/SqlServer/Kindling_CompletedMigrationScripts.json.
+        var json = ForgeKindler.GetSiblingTableDefJson(
+            "Kindling_CompletedMigrationScripts_Table.sql", Platform.SqlServer);
+        Assert.That(json, Is.Not.Null.And.Not.Empty);
+        Assert.That(json, Does.Contain("\"Schema\""));
+        Assert.That(json, Does.Contain("[CompletedMigrationScripts]"));
+        Assert.That(json, Does.Contain("[IX_CompletedMigrationScripts_Slot_Scope]"),
+            "Secondary index from Commit B must live in the shared JSON.");
+    }
+
+    [Test]
+    public void GetSiblingTableDefJson_PostgreSQL_LoadsCompletedMigrationScriptsJson()
+    {
+        var json = ForgeKindler.GetSiblingTableDefJson(
+            "Kindling_CompletedMigrationScripts_Table.sql", Platform.PostgreSQL);
+        Assert.That(json, Is.Not.Null.And.Not.Empty);
+        Assert.That(json, Does.Contain("CompletedMigrationScripts"));
+        Assert.That(json, Does.Contain("ix_completedmigrationscripts_slot_scope"),
+            "Secondary index from Commit B must live in the shared JSON.");
+    }
+
+    [Test]
+    public void GetSiblingTableDefJson_PostgreSQL_LoadsProductOwnershipJson()
+    {
+        var json = ForgeKindler.GetSiblingTableDefJson(
+            "Kindling_ProductOwnership_Table.sql", Platform.PostgreSQL);
+        Assert.That(json, Is.Not.Null.And.Not.Empty);
+        Assert.That(json, Does.Contain("ProductOwnership"));
+        Assert.That(json, Does.Contain("template_name"),
+            "Slice-3 template_name column must live in the shared JSON.");
+    }
+
+    [Test]
+    public void GetSiblingTableDefJson_MySQL_LoadsAllThreeKindlingJsons()
+    {
+        var completed = ForgeKindler.GetSiblingTableDefJson(
+            "Kindling_CompletedMigrationScripts_Table.sql", Platform.MySQL);
+        Assert.That(completed, Does.Contain("SchemaSmith_CompletedMigrationScripts"));
+        Assert.That(completed, Does.Contain("ix_completedmigrationscripts_slot_scope"),
+            "Commit B's secondary index must live in the shared JSON (not in a deleted Alter script).");
+
+        var ownership = ForgeKindler.GetSiblingTableDefJson(
+            "Kindling_ProductOwnership_Table.sql", Platform.MySQL);
+        Assert.That(ownership, Does.Contain("SchemaSmith_ProductOwnership"));
+
+        var status = ForgeKindler.GetSiblingTableDefJson(
+            "Kindling_StatusMessages_Table.sql", Platform.MySQL);
+        Assert.That(status, Does.Contain("SchemaSmith_StatusMessages"));
+    }
+
+    [Test]
+    public void GetSiblingTableDefJson_ThrowsWhenJsonMissing()
+    {
+        // Any kindling script whose name doesn't match a real sibling JSON resource should
+        // throw (the message names both files so the maintainer can fix it fast).
+        var ex = Assert.Throws<Exception>(() =>
+            ForgeKindler.GetSiblingTableDefJson("Kindling_NoSuchThing_Table.sql", Platform.SqlServer));
+        Assert.That(ex.Message, Does.Contain("Kindling_NoSuchThing.json"));
+    }
+
+    [Test]
+    public void KindleOneFile_WithTableDefToken_PullsContentFromSiblingJsonResource()
+    {
+        // Smoke test: when replaceTableDefToken is true, the loader must substitute the
+        // sibling JSON content. We exercise this by attempting to kindle the real
+        // Kindling_CompletedMigrationScripts_Table.sql against a mock command; the call
+        // builds the SQL string but EXEC fails (no real DB) — we catch the wrapping
+        // exception and assert the JSON content was substituted in.
+        var mockCmd = Substitute.For<IDbCommand>();
+        string capturedSql = null;
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => capturedSql = mockCmd.CommandText);
+
+        ForgeKindler.KindleOneFile(mockCmd, "Kindling_CompletedMigrationScripts_Table.sql",
+            Platform.SqlServer, replaceTableDefToken: true);
+
+        Assert.That(capturedSql, Is.Not.Null);
+        Assert.That(capturedSql, Does.Not.Contain("{{TableDef}}"),
+            "Token must be substituted out of the executed SQL.");
+        Assert.That(capturedSql, Does.Contain("[CompletedMigrationScripts]"),
+            "Substituted SQL must contain the table name from the sibling JSON.");
+        Assert.That(capturedSql, Does.Contain("[IX_CompletedMigrationScripts_Slot_Scope]"),
+            "Substituted SQL must include the Commit-B secondary index name from the JSON.");
     }
 }
