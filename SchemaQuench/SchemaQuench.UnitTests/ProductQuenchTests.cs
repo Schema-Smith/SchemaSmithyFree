@@ -515,7 +515,7 @@ public class ProductQuenchTests
             var template = new Template
             {
                 Name = "Core",
-                Required = true,
+                RequireAtLeastOneTarget = true,
                 Product = quench.LoadedProduct,
                 DatabaseIdentificationScript = "SELECT name FROM sys.databases"
             };
@@ -540,7 +540,7 @@ public class ProductQuenchTests
             var template = new Template
             {
                 Name = "TenantBody",
-                Required = true,
+                RequireAtLeastOneTarget = true,
                 Product = quench.LoadedProduct,
                 DatabaseIdentificationScript = "SELECT name FROM sys.databases",
                 SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
@@ -563,7 +563,7 @@ public class ProductQuenchTests
             var template = new Template
             {
                 Name = "Optional",
-                Required = false,
+                RequireAtLeastOneTarget = false,
                 Product = quench.LoadedProduct,
                 DatabaseIdentificationScript = "SELECT name FROM sys.databases"
             };
@@ -782,8 +782,10 @@ public class ProductQuenchTests
     [Test]
     public void EnumerateWorkUnits_ReservedSchemaName_AbortMode_StopsEnumeration()
     {
-        // With ContinueOnDatabaseFailure=false, a per-DB discovery failure aborts enumeration
-        // for the rest of this server — AppGood is never touched.
+        // With ContinueOnSchemaFailure=false on a schema template, a per-DB discovery failure
+        // aborts enumeration for the rest of this server — AppGood is never touched. (The
+        // per-template-scope contract: schema-template failures, including discovery, honor
+        // ContinueOnSchemaFailure, not ContinueOnDatabaseFailure.)
         WithMinimalSqlServerProductQuench(quench =>
         {
             quench.IdentifiedDatabases["primary"] = new[] { "AppBad", "AppGood" };
@@ -797,7 +799,7 @@ public class ProductQuenchTests
                 Product = quench.LoadedProduct,
                 DatabaseIdentificationScript = "SELECT name FROM sys.databases",
                 SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas",
-                ContinueOnDatabaseFailure = false
+                ContinueOnSchemaFailure = false
             };
 
             var units = quench.EnumerateWorkUnitsForTemplate(template);

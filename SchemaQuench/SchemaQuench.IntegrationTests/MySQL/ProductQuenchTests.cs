@@ -178,7 +178,7 @@ public class ProductQuenchTests
         // Assert
         Assert.That(template, Is.Not.Null);
         Assert.That(template.Name, Is.EqualTo("TestTemplate"));
-        Assert.That(template.Required, Is.True);
+        Assert.That(template.RequireAtLeastOneTarget, Is.True);
     }
 
     [Test]

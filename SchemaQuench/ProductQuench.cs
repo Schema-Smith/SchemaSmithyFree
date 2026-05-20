@@ -39,8 +39,6 @@ public class ProductQuench
     private readonly IReadOnlyList<string> _targetSchemas;
     private readonly ICheckpointing _checkpointing;
     private bool _updateFailed;
-    private bool _dbFailure;
-    private bool _schemaFailure;
     private bool _anyFailure;
 
     /// <summary>
@@ -281,8 +279,7 @@ public class ProductQuench
                 {
                     _checkpointing.MarkStepCompleted(ProductScope, stepName);
                 }
-                else if ((_dbFailure && !template.ContinueOnDatabaseFailure) ||
-                         (_schemaFailure && !template.ContinueOnSchemaFailure))
+                else if (ShouldAbortOnFailure(template))
                 {
                     // Abort mode: BackupLogsAndExit(2) was called. In production, the process
                     // terminates. In tests (mocked exit), we break here to preserve the
@@ -513,8 +510,6 @@ public class ProductQuench
         }
 
         _updateFailed = false;
-        _dbFailure = false;
-        _schemaFailure = false;
 
         // Slice-3 fan-out: enumerate the flat work-unit list across all eligible servers, then
         // dispatch to a single MaxThreads-bounded pool. SQL Server's per-server ServerToQuench
@@ -529,9 +524,9 @@ public class ProductQuench
         // value already known to be in scope.
         //
         // Skip the filter entirely when this template already discovered zero work units —
-        // e.g., a non-Required template whose DatabaseIdentificationScript matched nothing
-        // (the Initialize template in the TenantCRM demo after the database already exists).
-        // Running an empty input through the filter would surface a misleading "filter
+        // e.g., a non-RequireAtLeastOneTarget template whose DatabaseIdentificationScript matched
+        // nothing (the Initialize template in the TenantCRM demo after the database already
+        // exists). Running an empty input through the filter would surface a misleading "filter
         // produced zero results" diagnostic, blaming the user's Target.* values for what is
         // actually an expected pass-through.
         if (workUnits.Count > 0 && (_targetDatabases.Count > 0 || _targetSchemas.Count > 0))
@@ -546,7 +541,6 @@ public class ProductQuench
             {
                 _progressLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
                 _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
-                _dbFailure = true;
                 _updateFailed = true;
                 _anyFailure = true;
                 LogBackup.BackupLogsAndExit("SchemaQuench", 2);
@@ -554,10 +548,12 @@ public class ProductQuench
             }
         }
 
-        if (template.Required && workUnits.Count == 0)
+        if (template.RequireAtLeastOneTarget && workUnits.Count == 0)
         {
-            _progressLog.Error($"No databases found to quench for required template {template.Name}");
-            _dbFailure = true;
+            var targetKind = template.IsSchemaTemplate ? "(database, schema)" : "database";
+            _progressLog.Error(
+                $"No {targetKind} targets discovered for template '{template.Name}' " +
+                $"(RequireAtLeastOneTarget: true)");
             _updateFailed = true;
         }
 
@@ -571,18 +567,31 @@ public class ProductQuench
         _anyFailure = true;
         _progressLog.Error("One or more database quenches FAILED");
 
-        // Route the failure through the policy that governs its KIND — a DB-level failure is only
-        // fatal when ContinueOnDatabaseFailure is false; a schema-level failure is only fatal when
-        // ContinueOnSchemaFailure is false. Mixing the two bits (old single-flag check) caused a
-        // template with ContinueOnSchemaFailure:false + ContinueOnDatabaseFailure:true to abort on
-        // a DB-level failure, and the symmetric cross-policy case was equally wrong.
-        var shouldAbort =
-            (_dbFailure && !template.ContinueOnDatabaseFailure) ||
-            (_schemaFailure && !template.ContinueOnSchemaFailure);
-        if (!shouldAbort) return;
+        // Per-template-scope failure routing: a template's TYPE determines which ContinueOn...
+        // setting governs its failures. Schema templates respect ContinueOnSchemaFailure for
+        // ANY failure inside their processing (discovery, reserved-name rejection, per-iteration
+        // script failure, CREATE SCHEMA failure, deadlock surfaced via dispatcher exception).
+        // Regular templates respect ContinueOnDatabaseFailure for ANY failure inside theirs.
+        // This collapses the prior layered _dbFailure/_schemaFailure bits — one bad tenant
+        // name no longer aborts an entire product run under ContinueOnDatabaseFailure: false
+        // just because its rejection happened during discovery.
+        if (!ShouldAbortOnFailure(template)) return;
 
         LogBackup.BackupLogsAndExit("SchemaQuench", 2);
     }
+
+    /// <summary>
+    /// Returns whether a failure inside this template's processing should abort the product
+    /// run. The relevant ContinueOn... setting is determined by template type: schema templates
+    /// honor <see cref="Template.ContinueOnSchemaFailure"/>; regular templates honor
+    /// <see cref="Template.ContinueOnDatabaseFailure"/>. The other setting is ignored for
+    /// that template type — setting ContinueOnDatabaseFailure on a schema template (or vice
+    /// versa) has no effect on the abort decision.
+    /// </summary>
+    private static bool ShouldAbortOnFailure(Template template) =>
+        template.IsSchemaTemplate
+            ? !template.ContinueOnSchemaFailure
+            : !template.ContinueOnDatabaseFailure;
 
     /// <summary>
     /// Slice-5 selective execution: filters the loaded template list by <c>Target.Templates</c>
@@ -741,15 +750,15 @@ public class ProductQuench
         }
         catch (Exception e)
         {
-            // DB-level failure: unreachable host or bad DatabaseIdentificationScript.
-            // Governed by ContinueOnDatabaseFailure — when false, abort enumeration;
-            // when true, log, trip _updateFailed, and return true so the caller continues
-            // to the next server (no work units were added for this server).
-            _progressLog.Error($"Database enumeration FAILED for template {template.Name} on {server}: {e.Message}");
-            _errorLog.Error($"Database enumeration failed for {server} (template {template.Name}):\r\n{e}");
-            _dbFailure = true;
+            // Database enumeration failure (unreachable host, bad DatabaseIdentificationScript).
+            // Failure scope follows the template's type: schema templates honor
+            // ContinueOnSchemaFailure, regular templates honor ContinueOnDatabaseFailure.
+            // When the relevant continue flag is true, log + trip _updateFailed + return true so
+            // the caller continues to the next server (no work units were added for this server).
+            _progressLog.Error($"[{server}] Database enumeration FAILED for template '{template.Name}': {e.Message}");
+            _errorLog.Error($"[{server}] Database enumeration failed (template '{template.Name}'):\r\n{e}");
             _updateFailed = true;
-            return template.ContinueOnDatabaseFailure;
+            return !ShouldAbortOnFailure(template);
         }
 
         foreach (var db in databases)
@@ -763,17 +772,17 @@ public class ProductQuench
                 }
                 catch (Exception e)
                 {
-                    // DB-level failure: per-DB schema-discovery error (reserved-name guard, bad
-                    // SchemaIdentificationScript, connection failure to this DB). Governed by
-                    // ContinueOnDatabaseFailure — when false, abort; when true, log, trip
-                    // _updateFailed, and continue to the next DB in this server's foreach.
-                    _progressLog.Error($"Schema discovery FAILED for template {template.Name} on {server}.{db}: {e.Message}");
-                    _errorLog.Error($"Schema discovery failed for {server}.{db} (template {template.Name}):\r\n{e}");
-                    _dbFailure = true;
+                    // Per-DB schema-discovery failure inside a schema template (reserved-name
+                    // guard, character-validation guard, bad SchemaIdentificationScript,
+                    // connection failure to this DB). This is a SCHEMA-scope failure because
+                    // it happened inside a schema template's processing — ContinueOnSchemaFailure
+                    // governs whether to abort or continue to the next DB on this server.
+                    _progressLog.Error($"[{server}].[{db}] Schema discovery FAILED for template '{template.Name}': {e.Message}");
+                    _errorLog.Error($"[{server}].[{db}] Schema discovery failed (template '{template.Name}'):\r\n{e}");
                     _updateFailed = true;
-                    if (template.ContinueOnDatabaseFailure)
-                        continue;
-                    return false;
+                    if (ShouldAbortOnFailure(template))
+                        return false;
+                    continue;
                 }
 
                 foreach (var schema in schemas)
@@ -838,11 +847,13 @@ public class ProductQuench
     /// unit's callback constructs a fresh <see cref="DatabaseQuench"/> and invokes
     /// <see cref="DatabaseQuench.Execute"/>; if <see cref="DatabaseQuench.QuenchSuccessful"/> is
     /// false, the callback throws to engage the dispatcher's failure path.
-    /// <c>ContinueOnSchemaFailure</c> drives whether the dispatcher continues to remaining work
-    /// units or aborts after the first failure; per-policy routing (abort vs continue) is decided
-    /// downstream by the <see cref="BackupLogsAndExit"/> vs continue split. If the dispatcher
-    /// surfaces an <see cref="AggregateException"/>, <c>_updateFailed</c> is set to true so the
-    /// exit-code path engages regardless of which mode was active.
+    /// <para>The dispatcher's <c>continueOnFailure</c> mode follows the template's scope-aware
+    /// policy: a schema template honors <see cref="Template.ContinueOnSchemaFailure"/>, a
+    /// regular template honors <see cref="Template.ContinueOnDatabaseFailure"/>. If the
+    /// dispatcher surfaces an <see cref="AggregateException"/>, <c>_updateFailed</c> is set
+    /// to true so the exit-code path engages regardless of which mode was active. Per-policy
+    /// routing (abort vs continue at the product level) is decided downstream in
+    /// <see cref="QuenchTemplate"/> via <see cref="ShouldAbortOnFailure"/>.</para>
     /// <para>Internal+virtual so tests can intercept the dispatch step.</para>
     /// </summary>
     internal virtual void DispatchWorkUnits(Template template, List<WorkUnit> workUnits, bool suppressKindling)
@@ -850,7 +861,7 @@ public class ProductQuench
         var allowParallel = new Dictionary<string, bool> { [template.Name] = template.AllowParallel };
         var dispatcher = new WorkUnitDispatcher(workUnits, _maxThreads, allowParallel,
             unit => RunOneWorkUnit(unit, template, suppressKindling),
-            continueOnFailure: template.IsSchemaTemplate && template.ContinueOnSchemaFailure);
+            continueOnFailure: !ShouldAbortOnFailure(template));
         try
         {
             dispatcher.Run();
@@ -860,7 +871,6 @@ public class ProductQuench
             // AggregateException surfaces from both continue mode (all units attempted, some failed)
             // and abort mode (in-flight drained, remaining skipped). In both cases, trip _updateFailed
             // so QuenchTemplate can apply the correct exit / continue routing.
-            _schemaFailure = true;
             _updateFailed = true;
             _progressLog.Error($"Template '{template.Name}' had {ae.InnerExceptions.Count} failed work unit(s)");
         }

@@ -6,6 +6,14 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **`Template.Required` renamed to `RequireAtLeastOneTarget`.** The old name read as "this template must load" but actually meant "discovery must return ≥1 database (or ≥1 `(database, schema)` pair for schema templates), else fail." The new name is self-describing. Unknown JSON properties are ignored at deserialization, so an unmigrated `Template.json` silently picks up the new property's default (`true`) — which surfaces as an explicit "no targets discovered for template" error rather than a silent behavior change. **Migration:** find-and-replace `"Required":` with `"RequireAtLeastOneTarget":` in every `Template.json` in your schema packages. The change applies to every platform.
+
+### Changed
+
+- **Failure scoping consolidated per template type.** `ContinueOnSchemaFailure` now governs every failure inside a schema template (discovery, reserved-name rejection, per-iteration script failure, `CREATE SCHEMA` failure, dispatcher exceptions). `ContinueOnDatabaseFailure` now governs every failure inside a regular template. Setting `ContinueOnDatabaseFailure` on a schema template has no effect; setting `ContinueOnSchemaFailure` on a regular template has no effect. **Prior behavior:** the two flags layered ambiguously — a schema template's discovery failure (e.g., a reserved name like `dbo` returned by `SchemaIdentificationScript`) was incorrectly classified as a database-level failure and aborted under `ContinueOnDatabaseFailure: false`, even when `ContinueOnSchemaFailure: true` should have let it continue. The new contract is "the template's type determines which flag governs its failures" — no more cross-flag mental gymnastics.
+
 ### Fixed
 
 - **Completed migration script tracking SQL literals** — Product names, quench slots, and script paths are now escaped before being embedded in completed-script tracking SQL. Thanks to @noctelvirei and @zacnaloen.

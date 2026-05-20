@@ -141,14 +141,13 @@ public class FailureIsolationTests
         }
     }
 
-    /// <summary>
-    /// Cross-policy: ContinueOnSchemaFailure false + ContinueOnDatabaseFailure true, and the
-    /// failure is DB-kind (schema discovery throws). Engine must NOT abort — the DB-level
-    /// continue policy governs. The next template (PostFailure) runs. Exit code non-zero.
-    /// </summary>
     [Test]
-    public void ContinueOnSchemaFailure_False_ContinueOnDatabaseFailure_True_DbFailure_ContinuesToNextTemplate()
+    public void Schema_Template_ContinueOnSchemaFailure_False_Discovery_Failure_Aborts()
     {
+        // Schema-template discovery failure (reserved-name guard rejects 'dbo') with
+        // ContinueOnSchemaFailure: false. Under the per-template scope contract, a schema
+        // template's failures — including discovery — are governed by ContinueOnSchemaFailure.
+        // Run must abort and the next template (PostFailure) must NOT run.
         var templateJsonPath = Path.Combine(
             TestHelper.GetTestProductPath("SqlServer", DbFailureProductName),
             "Templates", "TenantBody", "Template.json");
@@ -161,8 +160,6 @@ public class FailureIsolationTests
             FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
                 TestHelper.GetTestProductPath("SqlServer", DbFailureProductName);
 
-            // Add ContinueOnSchemaFailure:false while keeping ContinueOnDatabaseFailure at its
-            // default (true). The failure is DB-kind so the DB policy governs — should NOT abort.
             var modifiedJson = originalJson.Replace(
                 "\"ScriptFolders\": []",
                 "\"ContinueOnSchemaFailure\": false,\r\n    \"ScriptFolders\": []");
@@ -172,11 +169,9 @@ public class FailureIsolationTests
             {
                 RunSchemaQuench();
 
-                // Non-zero exit (DB-level failure recorded).
                 _environment.Received().Exit(2);
 
-                // PostFailure template DID run — DB continue policy allowed continuation.
-                _progressLog.Received(1).Info(Arg.Is<string>(msg =>
+                _progressLog.DidNotReceive().Info(Arg.Is<string>(msg =>
                     msg.Contains("Quenching Template: PostFailure")));
             }
             finally
@@ -189,12 +184,14 @@ public class FailureIsolationTests
     }
 
     /// <summary>
-    /// Cross-policy: ContinueOnSchemaFailure true + ContinueOnDatabaseFailure false, and the
-    /// failure is schema-kind (tenant_boom's Boom.sql RAISERROR). Engine must NOT abort — the
-    /// schema-level continue policy governs. The next template (PostFailure) runs. Exit code non-zero.
+    /// Per-template scope contract: ContinueOnDatabaseFailure has NO EFFECT on schema templates.
+    /// A schema-kind failure (tenant_boom's Boom.sql RAISERROR) with ContinueOnDatabaseFailure:
+    /// false and ContinueOnSchemaFailure: true (default) MUST continue — schema templates honor
+    /// only the schema policy, not the DB one. The next template (PostFailure) runs. Exit code
+    /// non-zero.
     /// </summary>
     [Test]
-    public void ContinueOnSchemaFailure_True_ContinueOnDatabaseFailure_False_SchemaFailure_ContinuesToNextTemplate()
+    public void Schema_Template_ContinueOnDatabaseFailure_Has_No_Effect_When_ContinueOnSchemaFailure_True()
     {
         var templateJsonPath = Path.Combine(
             TestHelper.GetTestProductPath("SqlServer", FailureProductName),
@@ -237,12 +234,13 @@ public class FailureIsolationTests
     }
 
     /// <summary>
-    /// ContinueOnDatabaseFailure: true (default). SchemaIdentificationScript returns a reserved
-    /// name ('dbo'), causing SchemaDiscovery to throw (a DB-level failure). The run logs the
-    /// error but continues to the PostFailure template. Exit code is non-zero.
+    /// ContinueOnSchemaFailure: true (default). Schema template's SchemaIdentificationScript
+    /// returns a reserved name ('dbo'), causing SchemaDiscovery to throw — a schema-scope
+    /// failure (per the new per-template-scope contract). The run logs the error but continues
+    /// to the PostFailure template. Exit code is non-zero.
     /// </summary>
     [Test]
-    public void ContinueOnDatabaseFailure_True_DbDiscoveryFails_ContinuesToNextTemplate()
+    public void Schema_Template_Discovery_Failure_Continues_Under_Default_ContinueOnSchemaFailure()
     {
         lock (FactoryContainer.SharedLockObject)
         {
@@ -275,11 +273,64 @@ public class FailureIsolationTests
     }
 
     /// <summary>
-    /// ContinueOnDatabaseFailure: false. DB-level discovery failure aborts the product run.
-    /// PostFailure template does NOT run.
+    /// Per-template scope contract: ContinueOnDatabaseFailure has NO EFFECT on schema templates,
+    /// even for discovery failures. Schema-template discovery failure with
+    /// ContinueOnDatabaseFailure: false and ContinueOnSchemaFailure: true (default) MUST
+    /// continue — only the schema-scope policy governs. The next template (PostFailure) runs.
+    /// This is the explicit regression test for the prior layered-bits behavior that incorrectly
+    /// let ContinueOnDatabaseFailure abort schema-template discovery failures.
     /// </summary>
     [Test]
-    public void ContinueOnDatabaseFailure_False_DbDiscoveryFails_AbortsRun()
+    public void Schema_Template_Discovery_Failure_Ignores_ContinueOnDatabaseFailure()
+    {
+        var templateJsonPath = Path.Combine(
+            TestHelper.GetTestProductPath("SqlServer", DbFailureProductName),
+            "Templates", "TenantBody", "Template.json");
+        var originalJson = File.ReadAllText(templateJsonPath);
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ClearCheckpointsForProduct(DbFailureProductName);
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("SqlServer", DbFailureProductName);
+
+            // ContinueOnDatabaseFailure: false would have aborted under the prior layered
+            // model. Under the per-template-scope contract, it's ignored on schema templates.
+            var modifiedJson = originalJson.Replace(
+                "\"ScriptFolders\": []",
+                "\"ContinueOnDatabaseFailure\": false,\r\n    \"ScriptFolders\": []");
+            File.WriteAllText(templateJsonPath, modifiedJson);
+
+            try
+            {
+                RunSchemaQuench();
+
+                // Non-zero exit (discovery still fails).
+                _environment.Received().Exit(2);
+
+                // PostFailure template DID run — ContinueOnDatabaseFailure had no effect; the
+                // default ContinueOnSchemaFailure: true governed and let the run continue.
+                _progressLog.Received(1).Info(Arg.Is<string>(msg =>
+                    msg.Contains("Quenching Template: PostFailure")));
+            }
+            finally
+            {
+                File.WriteAllText(templateJsonPath, originalJson);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Schema-template discovery failure with ContinueOnSchemaFailure: false MUST abort the run.
+    /// Replaces the prior layered "ContinueOnDatabaseFailure: false aborts discovery failure"
+    /// test — under the new per-template-scope contract, ContinueOnSchemaFailure is the relevant
+    /// policy because the failure is inside a schema template's processing.
+    /// </summary>
+    [Test]
+    public void Schema_Template_Discovery_Failure_Aborts_Under_ContinueOnSchemaFailure_False()
     {
         var templateJsonPath = Path.Combine(
             TestHelper.GetTestProductPath("SqlServer", DbFailureProductName),
@@ -295,17 +346,15 @@ public class FailureIsolationTests
 
             var modifiedJson = originalJson.Replace(
                 "\"ScriptFolders\": []",
-                "\"ContinueOnDatabaseFailure\": false,\r\n    \"ScriptFolders\": []");
+                "\"ContinueOnSchemaFailure\": false,\r\n    \"ScriptFolders\": []");
             File.WriteAllText(templateJsonPath, modifiedJson);
 
             try
             {
                 RunSchemaQuench();
 
-                // Exit must have been called.
                 _environment.Received().Exit(2);
 
-                // PostFailure template must NOT have run.
                 _progressLog.DidNotReceive().Info(Arg.Is<string>(msg =>
                     msg.Contains("Quenching Template: PostFailure")));
             }

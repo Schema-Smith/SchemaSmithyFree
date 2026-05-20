@@ -4,6 +4,6 @@
   "ScriptFolders": [
     { "FolderPath": "Before Scripts", "QuenchSlot": "Before" }
   ],
-  "Required": false,
+  "RequireAtLeastOneTarget": false,
   "ScriptTokens": {}
 }

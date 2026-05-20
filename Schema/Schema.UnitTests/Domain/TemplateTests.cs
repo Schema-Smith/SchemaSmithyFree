@@ -27,7 +27,7 @@ namespace Schema.UnitTests.Domain
             Assert.That(template.ScriptTokens, Is.Empty);
             Assert.That(template.UpdateFillFactor, Is.True);
             Assert.That(template.BaselineValidationScript, Is.Null);
-            Assert.That(template.Required, Is.True);
+            Assert.That(template.RequireAtLeastOneTarget, Is.True);
             Assert.That(template.Product, Is.Null);
             Assert.That(template.Tables, Is.Not.Null);
             Assert.That(template.Tables, Is.Empty);
@@ -49,7 +49,7 @@ namespace Schema.UnitTests.Domain
                 IndexOnlyTableQuenches = true,
                 UpdateFillFactor = false,
                 BaselineValidationScript = "SELECT 1",
-                Required = false,
+                RequireAtLeastOneTarget = false,
                 ScriptTokens = new Dictionary<string, string> { { "DB", "TestDB" } }
             };
 
@@ -62,7 +62,7 @@ namespace Schema.UnitTests.Domain
             Assert.That(deserialized.IndexOnlyTableQuenches, Is.True);
             Assert.That(deserialized.UpdateFillFactor, Is.False);
             Assert.That(deserialized.BaselineValidationScript, Is.EqualTo("SELECT 1"));
-            Assert.That(deserialized.Required, Is.False);
+            Assert.That(deserialized.RequireAtLeastOneTarget, Is.False);
             Assert.That(deserialized.ScriptTokens["DB"], Is.EqualTo("TestDB"));
         }
 

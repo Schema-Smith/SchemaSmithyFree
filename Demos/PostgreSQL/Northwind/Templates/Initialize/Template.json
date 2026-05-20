@@ -2,6 +2,6 @@
   "Name": "Initialize",
   "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datistemplate = false AND datname = 'TestMain' AND NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '{{NorthwindDb}}')",
   "ScriptFolders": [{"FolderPath": "Before Scripts", "QuenchSlot": "Before"}],
-  "Required": false,
+  "RequireAtLeastOneTarget": false,
   "ScriptTokens": {}
 }

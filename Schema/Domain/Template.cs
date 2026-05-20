@@ -70,9 +70,21 @@ namespace Schema.Domain
         [JsonProperty(Order = 8)]
         public string BaselineValidationScript { get; set; }
 
+        /// <summary>
+        /// When true (default), the template fails the run if discovery returns zero targets —
+        /// zero matching databases for a regular template, or zero matching <c>(database, schema)</c>
+        /// pairs for a schema template. When false, an empty discovery is treated as a no-op for
+        /// this template and the run continues to subsequent templates.
+        /// <para>This property replaces the prior <c>Required</c> field. The rename is a breaking
+        /// change in the v2.1 Schema Templates release; user-authored <c>Template.json</c> files
+        /// that still use <c>Required</c> need to be updated. Unknown JSON properties are ignored
+        /// at deserialization, so an unmigrated file silently picks up the default <c>true</c> —
+        /// which surfaces as a clear "no targets discovered" error rather than a silent
+        /// behavior change. See the CHANGELOG for migration guidance.</para>
+        /// </summary>
         [JsonProperty(Order = 9)]
         [DefaultValue(true)]
-        public bool Required { get; set; } = true;
+        public bool RequireAtLeastOneTarget { get; set; } = true;
 
         [JsonProperty(Order = 10)]
         public bool SkipIfReadOnly { get; set; }
@@ -265,6 +277,7 @@ namespace Schema.Domain
             var schemaPackagePath = Path.GetDirectoryName(product.FilePath) ?? "";
             var templatePath = Path.Combine(schemaPackagePath, "Templates", templateName);
             var templateFilePath = Path.Combine(templatePath, "Template.json");
+
             var template = JsonHelper.TemplateLoad(templateFilePath, product.Platform);
             template.FilePath = templateFilePath;
             template.Product = product;
