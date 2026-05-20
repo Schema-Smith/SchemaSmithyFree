@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -265,10 +266,11 @@ namespace Schema.Domain
             // the originals.
             if (_tokenScopes != null)
                 clone.ResolveTokenScopes();
-            // _perDbQueryTokenCache is intentionally NOT copied — the clone starts with a fresh,
-            // empty cache. A clone represents a fresh resolution state and its bodies may differ
-            // from the original's, so cached resolved values from the original cannot be
-            // assumed valid against the clone's bodies.
+            // _perDbQueryTokenCache is intentionally NOT copied — the clone gets its own fresh
+            // ConcurrentDictionary via that field's initializer when the new Template is constructed
+            // above. A clone represents a fresh resolution state and its token bodies may differ
+            // from the original's, so cached resolved values from the original cannot be assumed
+            // valid against the clone's bodies.
             return clone;
         }
 
@@ -827,13 +829,19 @@ namespace Schema.Domain
         // Per-(server, database) cache of resolved per-DB query token values. Populated on the
         // first schema-template iteration that resolves a given per-DB token against a given
         // target database and consulted on every subsequent iteration in the same (server, DB)
-        // pair so the connection round-trip happens once instead of once per iteration. Keyed
-        // top-level by "server|database" (case-insensitive) and inner-level by token name
-        // (also case-insensitive — matches the casing rules of `_tokenScopes` and the token
-        // resolver). Lifetime: tied to this Template instance. Cleared in <see cref="Clone"/>
-        // because a clone represents a fresh resolution state; the cache cannot be safely
-        // carried into a clone whose token bodies may differ.
-        private Dictionary<string, Dictionary<string, string>> _perDbQueryTokenCache;
+        // pair so the connection round-trip happens once instead of once per iteration. Concurrent
+        // because the WorkUnitDispatcher may run schema-template iterations in parallel
+        // (AllowParallel = true) and multiple iterations against the same (server, DB) all read
+        // and write this cache concurrently — a non-concurrent Dictionary would corrupt under
+        // that load. Keyed top-level by "serverdatabase" (case-insensitive;  cannot
+        // appear in a valid SQL Server / PostgreSQL / MySQL server or database name) and
+        // inner-level by token name (also case-insensitive — matches `_tokenScopes` and the
+        // token resolver). Lifetime: tied to this Template instance. NOT carried into clones —
+        // each clone gets a fresh instance via this field initializer, because a clone represents
+        // a fresh resolution state and the parent's resolved values may not match the clone's
+        // (possibly modified) token bodies.
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _perDbQueryTokenCache =
+            new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Returns (or lazily creates) the per-DB query token cache scoped to the supplied
@@ -846,19 +854,19 @@ namespace Schema.Domain
         /// Returns <c>null</c> when <paramref name="server"/> or <paramref name="databaseName"/>
         /// is null or empty — the caller falls back to no-cache behavior in that case rather
         /// than synthesizing a global cache that would defeat per-DB isolation.
+        /// Thread-safe — the returned inner dictionary is a <see cref="ConcurrentDictionary{TKey,TValue}"/>
+        /// safe for concurrent read/write from parallel work-unit iterations against the same
+        /// (server, database) tuple.
         /// </summary>
-        public Dictionary<string, string> GetOrCreatePerDbTokenCache(string server, string databaseName)
+        public ConcurrentDictionary<string, string> GetOrCreatePerDbTokenCache(string server, string databaseName)
         {
             if (string.IsNullOrEmpty(server) || string.IsNullOrEmpty(databaseName)) return null;
-            _perDbQueryTokenCache ??= new Dictionary<string, Dictionary<string, string>>(
-                StringComparer.OrdinalIgnoreCase);
-            var key = $"{server}|{databaseName}";
-            if (!_perDbQueryTokenCache.TryGetValue(key, out var cache))
-            {
-                cache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                _perDbQueryTokenCache[key] = cache;
-            }
-            return cache;
+            //  (Start of Heading) cannot appear in a valid SQL Server / PostgreSQL / MySQL
+            // identifier, so it's safe as a key separator that won't collide with names containing
+            // typical delimiter characters like '|', '.', or ':'.
+            var key = $"{server}{databaseName}";
+            return _perDbQueryTokenCache.GetOrAdd(key,
+                _ => new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
         }
     }
 }
