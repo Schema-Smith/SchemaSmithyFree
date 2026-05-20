@@ -61,6 +61,21 @@ services:
       quench-northwind:
         condition: service_completed_successfully
 
+  quench-tenantcrm:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${PostGreSQL_USERNAME}
+      - SmithySettings_Target__Password=${PostGreSQL_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./TenantCRM:/metadata
+    depends_on:
+      quench-sakila:
+        condition: service_completed_successfully
+
   demoserver:
     image: postgis/postgis:latest # PostGIS-enabled PostgreSQL for spatial data support
     platform: linux/amd64 # postgis/postgis has no arm64 manifest; force amd64 emulation on macOS arm64
@@ -93,4 +108,6 @@ services:
       quench-northwind:
         condition: service_completed_successfully
       quench-sakila:
+        condition: service_completed_successfully
+      quench-tenantcrm:
         condition: service_completed_successfully

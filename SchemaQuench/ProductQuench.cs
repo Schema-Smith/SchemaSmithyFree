@@ -527,7 +527,14 @@ public class ProductQuench
         // discovered universe. Target.Templates already filtered the template list upstream
         // before we got here, so we skip it on the per-template filter to avoid validating a
         // value already known to be in scope.
-        if (_targetDatabases.Count > 0 || _targetSchemas.Count > 0)
+        //
+        // Skip the filter entirely when this template already discovered zero work units —
+        // e.g., a non-Required template whose DatabaseIdentificationScript matched nothing
+        // (the Initialize template in the TenantCRM demo after the database already exists).
+        // Running an empty input through the filter would surface a misleading "filter
+        // produced zero results" diagnostic, blaming the user's Target.* values for what is
+        // actually an expected pass-through.
+        if (workUnits.Count > 0 && (_targetDatabases.Count > 0 || _targetSchemas.Count > 0))
         {
             var perTemplateFilter = new WorkUnitFilter([], _targetDatabases, _targetSchemas);
             try
