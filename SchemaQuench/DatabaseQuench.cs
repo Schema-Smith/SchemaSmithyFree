@@ -610,7 +610,20 @@ public class DatabaseQuench
         SafeProgressLog($"  Creating schema (CreateSchemaIfMissing=true)");
         command.Parameters.Clear();
         command.CommandText = ddl;
-        command.ExecuteNonQuery();
+        try
+        {
+            command.ExecuteNonQuery();
+        }
+        catch (Exception ex)
+        {
+            // Targeted log line BEFORE the exception bubbles to the per-iteration catch — gives the
+            // user a greppable "CREATE SCHEMA failed for [name]" marker so permission denials and
+            // sibling-iteration race conditions surface as a one-line diagnostic instead of buried
+            // inside a raw SqlException / PostgresException stack.
+            SafeProgressLogError(
+                $"  CREATE SCHEMA failed for [{_schemaName}] — possible permission or race condition: {ex.Message}");
+            throw;
+        }
     }
 
     /// <summary>

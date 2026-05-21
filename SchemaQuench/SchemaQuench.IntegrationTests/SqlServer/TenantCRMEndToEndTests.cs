@@ -139,6 +139,7 @@ public class TenantCRMEndToEndTests
                     AssertFunctionExists(tenant, "GetCustomerLifetimeValue");
                     AssertViewExists(tenant, "ActiveCustomers");
                     AssertTriggerExists(tenant, "Customers_AuditLastModified");
+                    AssertIndexedViewExists(tenant, "vw_ActiveCustomerCount");
                 }
                 AssertIdenticalColumnsAcrossSchemas(InitialTenants, "Customers");
                 AssertIdenticalColumnsAcrossSchemas(InitialTenants, "Activities");
@@ -200,6 +201,14 @@ WHERE fs.name = '{tenant}' AND ft.name = 'Customers' AND fk.name = 'FK_Customers
                         $"Tenant '{tenant}' must have exactly 1 tracked migration after re-quench (no duplicates).");
                 }
 
+                // Slice-3 audit B5: per-tenant indexed views must survive a second quench. Pre-fix,
+                // SchemaSmith.IndexedViewQuench saw sibling tenants' vw_ActiveCustomerCount as
+                // "removed from product" and dropped them; post-fix the existing-views lookup is
+                // scoped to (@TemplateName, @SchemaName). This is the user-visible demo form of
+                // the regression already covered by SchemaTemplateHappyPathTests.
+                foreach (var tenant in InitialTenants)
+                    AssertIndexedViewExists(tenant, "vw_ActiveCustomerCount");
+
                 // ----- Onboard a fourth tenant; selective quench targets only that tenant.
                 OnboardTenant(FourthTenant, "Fourth Co", 1);
 
@@ -219,6 +228,7 @@ WHERE fs.name = '{tenant}' AND ft.name = 'Customers' AND fk.name = 'FK_Customers
                 AssertTableExists(FourthTenant, "Customers");
                 AssertTableExists(FourthTenant, "ActivityTypes");
                 AssertProcedureExists(FourthTenant, "AddCustomer");
+                AssertIndexedViewExists(FourthTenant, "vw_ActiveCustomerCount");
                 AssertMigrationTracked(TenantWorkspaceTemplate, FourthTenant,
                     "Before Scripts/Migration_001_BackfillCountries.sql");
                 Assert.That(ScalarCount($"SELECT COUNT(*) FROM [{FourthTenant}].[ActivityTypes]"),
@@ -406,6 +416,17 @@ EXEC dbo.OnboardTenant
         var count = ScalarCount(
             $"SELECT COUNT(*) FROM sys.triggers tr INNER JOIN sys.tables t ON tr.parent_id = t.object_id INNER JOIN sys.schemas s ON t.schema_id = s.schema_id WHERE s.name = '{schema}' AND tr.name = '{triggerName}'");
         Assert.That(count, Is.EqualTo(1), $"Expected trigger [{schema}].[{triggerName}] to exist after quench.");
+    }
+
+    private void AssertIndexedViewExists(string schema, string viewName)
+    {
+        // Schema-bound indexed view check — IsIndexed = 1 confirms the unique clustered index
+        // landed (without it, an indexed view degrades to a regular view and the iteration would
+        // not have exercised SchemaSmith.IndexedViewQuench at all).
+        var count = ScalarCount(
+            $"SELECT COUNT(*) FROM sys.views v INNER JOIN sys.schemas s ON v.schema_id = s.schema_id WHERE s.name = '{schema}' AND v.name = '{viewName}' AND OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1");
+        Assert.That(count, Is.EqualTo(1),
+            $"Expected schema-bound indexed view [{schema}].[{viewName}] (with unique clustered index) to exist after quench.");
     }
 
     private void AssertIdenticalColumnsAcrossSchemas(IReadOnlyList<string> schemas, string tableName)

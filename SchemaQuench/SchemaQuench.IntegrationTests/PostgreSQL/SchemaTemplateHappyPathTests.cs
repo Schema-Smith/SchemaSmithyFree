@@ -562,6 +562,127 @@ SELECT COUNT(*) FROM information_schema.table_constraints tc
     }
 
     [Test]
+    public void WhatIf_With_Target_Schemas_Filter_Only_Logs_For_Targeted_Tenant_And_Makes_No_State_Changes()
+    {
+        // Post-slice-8 cleanup (Commit C): WhatIf + Target.Schemas composition. A targeted WhatIf
+        // run must produce iteration log output ONLY for the filtered tenant (no [Schema:
+        // tenant_beta] / [Schema: tenant_globex] WhatIf chatter), and must leave every tenant's
+        // state untouched. Pins the read-only-AND-filtered composition on PG.
+        const string targetTenant = "tenant_acme";
+        var siblingTenants = new[] { "tenant_beta", "tenant_globex" };
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(DefaultTenants);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", ProductName);
+
+            try
+            {
+                // First quench: real deploy so all three tenants exist + tracking rows land.
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Snapshot per-tenant state BEFORE the targeted WhatIf.
+                var stateBefore = CaptureWhatIfStateSnapshot();
+
+                _progressLog.ClearReceivedCalls();
+
+                // Second quench: WhatIfONLY + Target.Schemas scoped to a single tenant.
+                config["WhatIfONLY"] = "true";
+                config["Target:Schemas:0"] = targetTenant;
+                RunSchemaQuench();
+
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+                _environment.DidNotReceive().Exit(2);
+                _environment.DidNotReceive().Exit(3);
+
+                // Targeted tenant runs (under WhatIf): Successfully Quenched line appears + a
+                // WhatIf Before-scripts line carries its [Schema:] prefix.
+                _progressLog.Received(1).Info(
+                    $"[{_server}].[{_mainDb}] [Schema: {targetTenant}] Successfully Quenched");
+                _progressLog.Received().Info(Arg.Is<string>(s =>
+                    s.Contains($"[Schema: {targetTenant}]") && s.Contains("[WhatIf] Before database scripts:")));
+
+                // Sibling tenants must produce NO iteration log lines — the filter rules them out.
+                foreach (var sibling in siblingTenants)
+                {
+                    _progressLog.DidNotReceive().Info(
+                        $"[{_server}].[{_mainDb}] [Schema: {sibling}] Successfully Quenched");
+                    _progressLog.DidNotReceive().Info(Arg.Is<string>(s =>
+                        s.Contains($"[Schema: {sibling}]") && s.Contains("[WhatIf]")));
+                    _progressLog.DidNotReceive().Info(Arg.Is<string>(s =>
+                        s.Contains($"[Schema: {sibling}]") && s.Contains("Begin Quench")));
+                }
+
+                // No state change across any tenant.
+                var stateAfter = CaptureWhatIfStateSnapshot();
+                Assert.That(stateAfter, Is.EqualTo(stateBefore),
+                    "WhatIf+Target.Schemas must not modify per-tenant marker, tracking row count, or [ALWAYS] audit row count for any tenant.");
+            }
+            finally
+            {
+                config["WhatIfONLY"] = "false";
+                foreach (var child in config.GetSection("Target:Schemas").GetChildren().ToList())
+                    config[$"Target:Schemas:{child.Key}"] = null;
+                DropTenantSchemas(DefaultTenants);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void DropTablesRemovedFromProduct_With_Schema_Template_Only_Affects_Iterating_Tenant_Not_Siblings()
+    {
+        // Post-slice-8 cleanup (Commit C): the customer-facing form of the slice-3 audit B1 fix.
+        // Deploy 3 tenants, then re-quench with DropTablesRemovedFromProduct=true. Each tenant's
+        // iteration evaluates its OWN schema's owned-by-product tables against the package; the
+        // package still defines customers for every tenant, so every tenant's customers must
+        // SURVIVE the drop pass (a regression here would have caused sibling iterations to see
+        // a different tenant's customers as "removed" and drop them).
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(DefaultTenants);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", ProductName);
+
+            try
+            {
+                // Quench #1: full multi-tenant deploy.
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+                foreach (var tenant in DefaultTenants)
+                    AssertTableExists(tenant, "customers");
+
+                // Quench #2: enable DropTablesRemovedFromProduct.
+                config["DropTablesRemovedFromProduct"] = "true";
+                _progressLog.ClearReceivedCalls();
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                foreach (var tenant in DefaultTenants)
+                {
+                    AssertTableExists(tenant, "customers");
+                    var count = ScalarCount(
+                        $"SELECT COUNT(*) FROM \"{tenant}\".customers WHERE marker = '{tenant}_marker'");
+                    Assert.That(count, Is.EqualTo(1),
+                        $"Tenant '{tenant}': per-iteration customers row must survive the cross-tenant drop pass.");
+                }
+            }
+            finally
+            {
+                config["DropTablesRemovedFromProduct"] = null;
+                DropTenantSchemas(DefaultTenants);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
     public void Tenant_Offboarding_And_Re_Onboarding_Skips_Migrations_On_Return()
     {
         // Design §6.8 scenario D — see SQL Server mirror for the full scenario.

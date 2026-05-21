@@ -755,8 +755,13 @@ public class ProductQuench
             // ContinueOnSchemaFailure, regular templates honor ContinueOnDatabaseFailure.
             // When the relevant continue flag is true, log + trip _updateFailed + return true so
             // the caller continues to the next server (no work units were added for this server).
-            _progressLog.Error($"[{server}] Database enumeration FAILED for template '{template.Name}': {e.Message}");
-            _errorLog.Error($"[{server}] Database enumeration failed (template '{template.Name}'):\r\n{e}");
+            // Schema templates carry an additional "[Schema: <enumeration>]" tag so a user
+            // grepping the logs for "[Schema:" — the per-iteration scope marker — also catches
+            // enumeration-phase failures that prevented any iteration from running. Regular
+            // templates keep the bare "[server]" shape (no schema dimension).
+            var schemaTemplateTag = template.IsSchemaTemplate ? " [Schema: <enumeration>]" : "";
+            _progressLog.Error($"[{server}]{schemaTemplateTag} Database enumeration FAILED for template '{template.Name}': {e.Message}");
+            _errorLog.Error($"[{server}]{schemaTemplateTag} Database enumeration failed (template '{template.Name}'):\r\n{e}");
             _updateFailed = true;
             return !ShouldAbortOnFailure(template);
         }
@@ -777,8 +782,11 @@ public class ProductQuench
                     // connection failure to this DB). This is a SCHEMA-scope failure because
                     // it happened inside a schema template's processing — ContinueOnSchemaFailure
                     // governs whether to abort or continue to the next DB on this server.
-                    _progressLog.Error($"[{server}].[{db}] Schema discovery FAILED for template '{template.Name}': {e.Message}");
-                    _errorLog.Error($"[{server}].[{db}] Schema discovery failed (template '{template.Name}'):\r\n{e}");
+                    // Tagged "[Schema: <enumeration>]" so the same grep that finds per-iteration
+                    // log lines also catches enumeration failures that aborted before any
+                    // tenant schema could be identified.
+                    _progressLog.Error($"[{server}].[{db}] [Schema: <enumeration>] Schema discovery FAILED for template '{template.Name}': {e.Message}");
+                    _errorLog.Error($"[{server}].[{db}] [Schema: <enumeration>] Schema discovery failed (template '{template.Name}'):\r\n{e}");
                     _updateFailed = true;
                     if (ShouldAbortOnFailure(template))
                         return false;

@@ -25,6 +25,10 @@ package; hotfixes can target a single tenant for canary rollout.
 - The canonical onboarding pattern — `public.onboard_tenant` runs `CREATE SCHEMA`
   + `INSERT public.tenants` atomically, pairing with `CreateSchemaIfMissing: false`
   to keep tenant rows and tenant schemas in sync.
+- A per-tenant **materialized view** (`mv_active_customer_count`) — counts
+  customers with activity in the last 30 days, materialized inside each
+  tenant's own schema. Exercises `SchemaSmith.MaterializedViewQuench` and the
+  template+schema-scoped ownership read under the schema-template fan-out.
 - Selective execution scope — deploy a hotfix to a single tenant first with
   `Target.Schemas: ["tenant_acme"]` before rolling it out unrestricted.
 

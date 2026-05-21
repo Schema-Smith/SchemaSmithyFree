@@ -25,6 +25,9 @@ package; hotfixes can target a single tenant for canary rollout.
 - The canonical onboarding pattern — `dbo.OnboardTenant` runs `CREATE SCHEMA` +
   `INSERT dbo.Tenants` atomically, pairing with `CreateSchemaIfMissing: false`
   to keep tenant rows and tenant schemas in sync.
+- A per-tenant **indexed view** (`vw_ActiveCustomerCount`) — a schema-bound
+  aggregate that lives inside each tenant's own schema, exercising
+  `SchemaSmith.IndexedViewQuench` under the schema-template fan-out.
 - Selective execution scope — deploy a hotfix to a single tenant first with
   `Target.Schemas: ["tenant_acme"]` before rolling it out unrestricted.
 

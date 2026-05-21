@@ -146,6 +146,7 @@ public class TenantCRMEndToEndTests
                     AssertFunctionExists(tenant, "get_customer_lifetime_value");
                     AssertViewExists(tenant, "active_customers");
                     AssertTriggerExists(tenant, "customers", "trg_customers_audit_last_modified");
+                    AssertMaterializedViewExists(tenant, "mv_active_customer_count");
                 }
                 AssertIdenticalColumnsAcrossSchemas(InitialTenants, "customers");
                 AssertIdenticalColumnsAcrossSchemas(InitialTenants, "activities");
@@ -205,6 +206,15 @@ WHERE kcu.table_schema = '{tenant}' AND kcu.table_name = 'customers'
                         $"Tenant '{tenant}' must have exactly 1 tracked migration after re-quench (no duplicates).");
                 }
 
+                // Slice-3 audit B1: per-tenant materialized views must survive a second quench.
+                // Pre-fix, ProductOwnership rows were not template+schema scoped on the existing-
+                // views read path, so sibling tenants saw each other's mv_active_customer_count as
+                // "removed from product" and dropped them under parallel iterations. Post-fix the
+                // ownership read is scoped to (template_name, schema). User-visible demo form of
+                // the regression covered by SchemaTemplateHappyPathTests.
+                foreach (var tenant in InitialTenants)
+                    AssertMaterializedViewExists(tenant, "mv_active_customer_count");
+
                 // ----- Onboard a fourth tenant; selective quench targets only that tenant.
                 OnboardTenant(FourthTenant, "Fourth Co", 1);
 
@@ -222,6 +232,7 @@ WHERE kcu.table_schema = '{tenant}' AND kcu.table_name = 'customers'
                 AssertTableExists(FourthTenant, "customers");
                 AssertTableExists(FourthTenant, "activity_types");
                 AssertProcedureExists(FourthTenant, "add_customer");
+                AssertMaterializedViewExists(FourthTenant, "mv_active_customer_count");
                 AssertMigrationTracked(TenantWorkspaceTemplate, FourthTenant,
                     "Before Scripts/Migration_001_BackfillCountries.sql");
                 Assert.That(ScalarCount($"SELECT COUNT(*) FROM \"{FourthTenant}\".activity_types"),
@@ -380,6 +391,16 @@ $$;";
             $"SELECT COUNT(DISTINCT trigger_name) FROM information_schema.triggers WHERE event_object_schema = '{schema}' AND event_object_table = '{tableName}' AND trigger_name = '{triggerName}'");
         Assert.That(count, Is.EqualTo(1),
             $"Expected trigger \"{schema}\".{triggerName} on table {tableName} to exist after quench.");
+    }
+
+    private void AssertMaterializedViewExists(string schema, string mvName)
+    {
+        // pg_matviews lists installed materialized views per schema — the iteration must have
+        // created the per-tenant MV with the right name in the iterating schema.
+        var count = ScalarCount(
+            $"SELECT COUNT(*) FROM pg_matviews WHERE schemaname = '{schema}' AND matviewname = '{mvName}'");
+        Assert.That(count, Is.EqualTo(1),
+            $"Expected materialized view \"{schema}\".{mvName} to exist after quench.");
     }
 
     private void AssertIdenticalColumnsAcrossSchemas(IReadOnlyList<string> schemas, string tableName)
