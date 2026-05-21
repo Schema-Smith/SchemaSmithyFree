@@ -176,6 +176,8 @@ Each template has its own complete folder structure -- `Tables/`, `Procedures/`,
 
 **Multi-tenant in one template.** The `DatabaseIdentificationScript` can return multiple rows. One template, one declaration, every tenant database gets the same schema. Combine with `MaxThreads` in the SchemaQuench settings file and the tenants deploy in parallel up to the configured limit.
 
+**Schema-per-tenant.** If your tenants share one database -- each tenant owning their own schema -- a schema template fans out the same way. Add `SchemaIdentificationScript` to `Template.json` and SchemaQuench runs the full template once per returned schema, with `{{SchemaName}}` available everywhere. The pattern, the field reference, and a full walkthrough of the TenantCRM demo are in [Multi-Tenant Deployments](10-multi-tenant-deployments.md).
+
 ## Secondary server support (SQL Server)
 
 For SQL Server deployments targeting Availability Groups, SchemaQuench can quench to a primary replica plus one or more secondaries in parallel. Configure the secondary list on the target connection:
@@ -348,4 +350,4 @@ For the complete deployment flow including per-platform modular procedures, see 
 
 ---
 
-Tokens, custom properties, `ShouldApplyExpression`, multi-database products, secondary servers, DataTongs, custom script folders, execution slots. That's the toolkit for 95% of what you'll encounter -- and all of it is in Community. For the remaining 5% -- the escape hatches -- the next chapter has you covered. [Edge Cases & Escape Hatches](10-edge-cases.md)
+Tokens, custom properties, `ShouldApplyExpression`, multi-database products, secondary servers, DataTongs, custom script folders, execution slots. That's the toolkit for 95% of what you'll encounter -- and all of it is in Community. When one tenant per database isn't the right shape, the next chapter shows how a single template can fan out across schemas inside one database. [Multi-Tenant Deployments](10-multi-tenant-deployments.md)

@@ -463,6 +463,132 @@ SchemaTongs automatically excludes the platform's system schemas and internal in
 
 ---
 
+## Schema-Template Extraction
+
+You have N tenant schemas hand-replicated inside one database. One is the canonical copy. Instead of maintaining those copies by hand, point SchemaTongs at the canonical schema, give it the name, and it extracts a schema template: unqualified filenames, source-schema references rewritten to `{{SchemaName}}`, and a `Template.json` stub wired for schema-level fan-out. SchemaQuench can then govern every tenant schema from that single template.
+
+Schema-template extraction is supported on **SQL Server and PostgreSQL only**. MySQL has no schema-inside-database concept -- use `DatabaseIdentificationScript` with a database-per-tenant template instead.
+
+### Activation
+
+Two fields on the `Template` section of `SchemaTongs.settings.json`:
+
+```json
+"Template": {
+  "Name": "TenantBody",
+  "SourceSchema": "tenant_acme",
+  "SchemaIdentificationScript": ""
+}
+```
+
+| Field | Type | When set |
+|---|---|---|
+| `Template:SourceSchema` | string | Required. Non-empty value activates schema-template extraction mode. The value is the schema to extract from the source database (e.g. `"tenant_acme"`). |
+| `Template:SchemaIdentificationScript` | string | Optional. Written verbatim into the generated `Template.json`. When blank, SchemaTongs generates a stub that returns the source schema as a single row so you can quench-test the package immediately. |
+
+`Template:SourceSchema` is the switch. When it is empty (the default), SchemaTongs behaves exactly as it always has. When it is non-empty, schema-template mode activates and all transformations in this section apply.
+
+See [Schema Templates](schema-packages.md#schema-templates) for the full `Template.json` property reference.
+
+### Transformations
+
+In schema-template mode, SchemaTongs rewrites extracted content so it is schema-agnostic before it lands on disk.
+
+| Output element | Regular mode | Schema-template mode |
+|---|---|---|
+| **Filename** | `tenant_acme.Customers.json` | `Customers.json` (schema prefix dropped) |
+| **JSON `Schema` field** | Set to source schema | Omitted -- engine fills `{{SchemaName}}` at template load |
+| **FK `RelatedTableSchema`** | Set to actual reference schema | Omitted when it matches the source schema; preserved as-is for cross-schema FKs |
+| **SQL bodies** | Object names emitted as `tenant_acme.Obj` | Source-schema-qualified refs rewritten to `{{SchemaName}}.Obj`; cross-schema refs (`dbo.Countries`, `public.LookupTable`) preserved literally |
+| **Expression fields in JSON** | Emitted as-is | `Default`, `CheckExpression`, `ComputedExpression`, `FilterExpression`, `GenerationExpression`, and similar expression-bearing properties are also rewritten through the same source-schema substitution |
+
+The rewriter handles three identifier forms for the source schema:
+
+- SQL Server: `[tenant_acme].[Customers]`, `tenant_acme.Customers`, `"tenant_acme"."Customers"`
+- PostgreSQL: `"tenant_acme"."Customers"`, `tenant_acme.Customers`
+
+All collapse to `{{SchemaName}}.<name>`, preserving the original quoting style on the object name. References to any other schema are left untouched.
+
+> **Note:** The rewriter masks single-quoted string literals before substitution, so a source-schema name embedded inside a `'...'` literal is preserved verbatim. PostgreSQL dollar-quoted blocks (`$tag$...$tag$`) are not recognized as literals -- content inside them is treated as ordinary SQL and is subject to rewriting. This is a known v1 limitation; the unqualified-identifier audit (below) surfaces affected files for review.
+
+### Unqualified ids
+
+Unqualified identifiers in extracted SQL bodies are left untouched. SchemaTongs cannot safely determine whether `Foo` refers to `tenant_acme.Foo` or to a shared schema without semantic analysis of the full SQL context.
+
+After extraction, SchemaTongs emits one warning listing every `.sql` file containing unqualified object references, along with 1-based line numbers:
+
+```
+The following extracted files contain unqualified object references. Review them
+and add `{{SchemaName}}.` qualification where the reference targets the iteration
+schema. Unqualified references that target a shared schema (built-in functions,
+shared lookup tables) can stay as-is — make that decision deliberately, because
+the deployed engine does not set a default schema per iteration.
+
+  - Procedures/UpdateCustomer.sql: lines 14, 27, 43
+  - Functions/CalculateTotal.sql: lines 8
+```
+
+This is a punch list, not a blocker. References that target a shared schema (`dbo`, `public`, a global lookup) can stay unqualified. References that target the tenant schema need `{{SchemaName}}.` prepended. The decision is yours -- SchemaTongs never auto-prefixes.
+
+### Generated stub
+
+When `Template:SourceSchema` is set and no `Template.json` exists yet at the output path, SchemaTongs creates a ready-to-use schema-template stub. For a SQL Server extraction with `Template.Name = "TenantBody"` and `Template.SourceSchema = "tenant_acme"`:
+
+```json
+{
+  "Name": "TenantBody",
+  "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] = '{{TenantBodyDb}}'",
+  "ScriptFolders": [ ... ],
+  "ScriptTokens": {},
+  "SchemaIdentificationScript": "-- TODO: replace with a query returning the active iteration schemas.\n-- Placeholder uses the seed schema as a single-row example.\nSELECT 'tenant_acme' AS SchemaName"
+}
+```
+
+The stub's `SchemaIdentificationScript` returns the source schema as a single row. This means you can run SchemaQuench immediately against the extracted package -- it deploys back to `tenant_acme` and validates the round-trip -- without writing any discovery SQL. Replace the stub with your real query when you are ready to fan out to all tenants.
+
+The four schema-template fan-out fields -- `RequireAtLeastOneTarget`, `CreateSchemaIfMissing`, `AllowParallel`, and `ContinueOnSchemaFailure` -- are not emitted by the stub because each one matches its default (`true`, `false`, `true`, `true` respectively). The serializer omits default-value properties, and `Template.Load` reads the absent values back as their defaults. To override any of them, add the property explicitly to `Template.json`.
+
+If `Template.json` already exists at the output path, SchemaTongs does not overwrite it. Your edits survive re-extraction.
+
+### ShouldCast flags
+
+Four `ShouldCast` flags are forced off in schema-template extraction mode because the object types they control are database-scoped, not schema-scoped. They cannot fan out per-schema iteration and must live in a regular template earlier in `TemplateOrder`.
+
+**SQL Server:**
+
+| Flag | Forced | Warning message |
+|---|---|---|
+| `ShouldCast:Schemas` | `false` | "schema objects ARE the iteration unit" |
+| `ShouldCast:DDLTriggers` | `false` | "DDL triggers are database-scoped" |
+| `ShouldCast:Catalogs` | `false` | "full-text catalogs are database-scoped" |
+| `ShouldCast:StopLists` | `false` | "full-text stop lists are database-scoped" |
+
+**PostgreSQL:**
+
+| Flag | Forced | Warning message |
+|---|---|---|
+| `ShouldCast:Schemas` | `false` | "schema objects ARE the iteration unit" |
+
+The warning fires when the flag was `true` (or at its default-true value). A quiet skip would be too surprising -- if you have `ShouldCast:Schemas: true` in your config and nothing appears under `Schemas/`, you deserve an explanation.
+
+All other `ShouldCast` flags -- `Tables`, `Views`, `Functions`, `Procedures`, `TableTriggers`, and the PostgreSQL-specific type flags -- are honored in schema-template mode exactly as in regular mode.
+
+### Round-trip
+
+Once a schema template is extracted, re-running SchemaTongs against the same source schema with the same `Template.SourceSchema` setting produces the same output. The extraction is deterministic: the same source objects, same rewriting rules, same filename conventions. This means you can automate re-extraction as part of your schema governance cycle without worrying about drift between runs.
+
+The round-trip property also drives the integration test suite: extract `tenant_seed`, drop and recreate it empty, quench the extracted package with `SchemaIdentificationScript` returning `tenant_seed`, and compare the rebuilt schema to the original structurally. Every CI run exercises this path end to end on both SQL Server and PostgreSQL.
+
+For the end-to-end walkthrough, see [Migrating from manual duplication](../guide/10-multi-tenant-deployments.md#migrating-from-manual-duplication) in the Multi-Tenant Deployments guide.
+
+### Out of scope for v1
+
+- **One schema per run.** `Template.SourceSchema` targets a single schema. To convert multiple canonical schemas, run SchemaTongs once per schema with different `Template.Name` values.
+- **No auto-qualification.** The conservative audit warning is the v1 contract. Unqualified identifiers are flagged for review; SchemaTongs never auto-prefixes them with `{{SchemaName}}.`.
+- **No multi-schema refs.** Stored procedures referencing three or more schemas with conditional logic may need manual review after the rewrite pass. The audit warning surfaces those files.
+
+---
+
 ## Related Documentation
 
 - [Configuration Reference](configuration.md) -- Shared configuration system, CLI switches, settings file format, environment variable mapping

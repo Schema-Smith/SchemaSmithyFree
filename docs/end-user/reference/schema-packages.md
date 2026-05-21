@@ -40,7 +40,7 @@ The `Product.json` file sits at the root of the schema package and is the top-le
 
 **VersionStampScript** -- Executes after deployment completes. Script tokens are resolved first, so you can pass in values like `{{ReleaseVersion}}`. Single batch only -- no `GO` separators (SQL Server), no compound DO blocks (PostgreSQL) -- but a single statement, procedure call, or `CALL` is fine. Product-level runs once on the server connection; template-level runs per database.
 
-**DropUnknownIndexes** -- Enforces index alignment, but only when you're ready. Default `false` for good reason: most teams adopting SchemaSmith inherit environments with years of index drift. Turn this on after capturing every needed index in your repository. See [the adoption approach](../guide/10-edge-cases.md#the-adoption-approach) in the guide for the phased rollout pattern.
+**DropUnknownIndexes** -- Enforces index alignment, but only when you're ready. Default `false` for good reason: most teams adopting SchemaSmith inherit environments with years of index drift. Turn this on after capturing every needed index in your repository. See [the adoption approach](../guide/11-edge-cases.md#the-adoption-approach) in the guide for the phased rollout pattern.
 
 ### Example (SQL Server, Northwind demo)
 
@@ -109,18 +109,22 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 | `UpdateFillFactor` | bool | `true` | No | When `true`, the table quench updates index fill factors to match the JSON definitions. OR'd with table-level and index-level `UpdateFillFactor` settings. |
 | `IndexOnlyTableQuenches` | bool | `false` | No | When `true`, the table quench only manages indexes, statistics, XML/full-text indexes, exclude constraints. Skips table creation, column changes, and foreign key management. Tables that don't exist are silently skipped. |
 | `BaselineValidationScript` | string | | No | SQL validation executed per database before quenching that database. |
-| `Required` | bool | `true` | No | When `true`, deployment fails if `DatabaseIdentificationScript` returns no databases. Catches misconfigured identification scripts that silently skip an entire template. |
+| `RequireAtLeastOneTarget` | bool | `true` | No | When `true`, deployment fails if discovery returns no targets -- zero matching databases for a regular template, or zero matching `(database, schema)` pairs for a schema template. Catches misconfigured identification scripts that silently skip an entire template. Replaces the prior `Required` field (renamed in v2.1). |
 | `SkipIfReadOnly` | bool | `false` | No | When `true`, databases that are read-only are silently skipped instead of failing the quench. Enables Availability Group secondary handling on SQL Server and replica handling on other platforms. |
 | `ScriptFolders` | array | `[]` | No | Optional list of `TemplateFolder` definitions. When empty, the platform's default folder set is used. When non-empty, this array fully replaces the defaults -- so include every folder you want active. See [Custom Script Folders](#custom-script-folders). |
 | `ScriptTokens` | object | `{}` | No | Key-value pairs that override matching product-level tokens for this template. Template tokens take precedence over product tokens with the same key. |
+| `SchemaIdentificationScript` | string | | No | SQL Server / PostgreSQL only. Query returning one column, N rows; each row is a schema name to iterate over. Presence activates schema-template mode. See [Schema Templates](#schema-templates). |
+| `CreateSchemaIfMissing` | bool | `false` | No | Schema templates only. When `true`, the engine creates any discovered schema that doesn't yet exist before running that iteration. See [Schema Templates](#schema-templates). |
+| `AllowParallel` | bool | `true` | No | Schema templates only. When `false`, iterations of this template run serially even when the global thread pool has capacity. See [Schema Templates](#schema-templates). |
+| `ContinueOnSchemaFailure` | bool | `true` | No | Schema templates only. When `false`, the first failing iteration aborts all subsequent iterations for this template. See [Schema Templates](#schema-templates). |
 
 ### Template settings intent
 
 **UpdateFillFactor** -- Three levels (template, table, index) are OR'd together: if any level is true for a given index, its fill factor gets updated. Template defaults to `true` (enforce from the start for new products). For teams managing existing drift, set template-level to `false` and enable per-index or per-table as you verify alignment.
 
-**Required** -- A safety net for misconfigured `DatabaseIdentificationScript` queries. When the script returns zero databases and `Required` is `true` (the default), SchemaQuench aborts immediately rather than silently deploying nothing. Set to `false` only for templates that legitimately target zero databases in some environments.
+**RequireAtLeastOneTarget** -- A safety net for misconfigured `DatabaseIdentificationScript` (and `SchemaIdentificationScript`) queries. When discovery returns zero targets and `RequireAtLeastOneTarget` is `true` (the default), SchemaQuench aborts immediately rather than silently deploying nothing. Set to `false` only for templates that legitimately target zero databases (or zero `(database, schema)` pairs) in some environments.
 
-**SkipIfReadOnly** -- Enables graceful handling of read-only replicas. On SQL Server, this is the Availability Group secondary handling. On PostgreSQL and MySQL, the same flag covers logical/physical replicas exposed as databases. With `SkipIfReadOnly: true`, read-only databases are silently skipped and the deployment continues with the writable primaries. Independent of `Required` -- a template can be required (must find at least one database) while still skipping individual read-only databases within the result set.
+**SkipIfReadOnly** -- Enables graceful handling of read-only replicas. On SQL Server, this is the Availability Group secondary handling. On PostgreSQL and MySQL, the same flag covers logical/physical replicas exposed as databases. With `SkipIfReadOnly: true`, read-only databases are silently skipped and the deployment continues with the writable primaries. Independent of `RequireAtLeastOneTarget` -- a template can require at least one target while still skipping individual read-only databases within the result set.
 
 **IndexOnlyTableQuenches** -- Lets you manage indexes on tables you don't own. Two primary use cases: different indexing on replicated databases (tuned for the consumer's workload, not the producer's), and adding indexes to third-party products where you can't modify the table structure. Scripted objects (procedures, views, functions) still deploy when this flag is on -- so you can deploy custom views and procedures alongside supplementary indexes.
 
@@ -344,6 +348,20 @@ MyProduct/
 
 Table JSON files are named `schema.tablename.json` (e.g., `dbo.Customer.json`, `public.order_lines.json`). For MySQL the `schema` segment is the database/schema name. If a table or schema name contains filesystem-illegal characters, the encoded form is used in the filename (see [Filesystem-Illegal Character Encoding](#filesystem-illegal-character-encoding)).
 
+### File naming
+
+How you name table JSON files depends on whether the template is a regular template or a schema template.
+
+**Regular templates** use schema-prefixed filenames. The prefix tells SchemaQuench which schema the table belongs to: `dbo.Customers.json`, `Sales.Orders.json`, `public.order_lines.json`. No prefix means no schema, which is an error on SQL Server and PostgreSQL.
+
+**Schema templates** use unqualified filenames. The schema is the iteration variable -- SchemaQuench resolves `{{SchemaName}}` at runtime for every iteration, so `Customers.json` deploys into `acme.Customers` for the `acme` tenant, `globex.Customers` for the `globex` tenant, and so on. Filenames with a schema prefix (e.g., `dbo.Customers.json`) inside a schema template's `Tables/` folder are rejected by the engine at load time.
+
+**Cross-schema exception.** A schema-prefix filename inside a schema template's `Tables/` folder means the schema template owns a table in that specific named schema rather than in the iteration schema -- for example, `dbo.SharedConfig.json` inside a `TenantWorkspace/Tables/` folder deploys a single `dbo.SharedConfig` table regardless of which tenant iteration is running. This pattern is legal but unusual; most cross-schema work belongs in the accompanying regular template that runs first in `TemplateOrder`.
+
+The accompanying **Shared** regular template (if present) follows the standard prefix convention: `dbo.Tenants.json`, `public.countries.json`. Its filenames are unchanged by the presence of a schema template in the same product.
+
+For a worked layout showing these conventions side by side, see [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md).
+
 SQL script files can be organized into subdirectories within any script folder. All `.sql` files are discovered recursively and sorted alphabetically by full path.
 
 ---
@@ -559,6 +577,24 @@ Referential integrity lives in the table JSON alongside columns and indexes, not
 | `Extensions` | object | `null` | Custom metadata. |
 
 For composite foreign keys, list all columns in both `Columns` and `RelatedColumns` in matching order.
+
+### FKs in schema templates
+
+In a schema template, `RelatedTableSchema` is optional when the referenced table lives in the same iteration schema. If you omit it, SchemaQuench resolves it to `{{SchemaName}}` at runtime -- so `FK_Orders_Customer` with no `RelatedTableSchema` wires up correctly to `acme.Customers` during the `acme` iteration without any extra configuration.
+
+For foreign keys that cross schema boundaries -- for example, a tenant's `Orders` table referencing `dbo.Countries` on SQL Server or `public.countries` on PostgreSQL -- set `RelatedTableSchema` explicitly to the target schema name. That explicit literal is preserved as-is through every iteration.
+
+```jsonc
+{
+  "Name": "FK_Orders_Country",
+  "Columns": "CountryCode",
+  "RelatedTable": "Countries",
+  "RelatedTableSchema": "[dbo]",
+  "RelatedColumns": "Code"
+}
+```
+
+For a complete cross-schema FK example with both same-iteration and cross-schema references in one table, see the [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md#cross-schema-references) chapter.
 
 ---
 
@@ -898,6 +934,86 @@ Object names can contain characters that are illegal in file paths on Windows, m
 - **Reserved Windows device names** (CON, PRN, AUX, NUL, COM1--COM9, LPT1--LPT9) have their first character percent-encoded.
 
 SchemaQuench decodes these filenames transparently when reading definitions. You generally don't need to worry about encoding unless you're creating JSON files by hand for tables with unusual names.
+
+---
+
+## Schema Templates
+
+Schema templates fan a single declarative template out across multiple schemas inside one database. You write the template once -- tables, procedures, views, migration scripts -- and SchemaQuench runs it once per schema returned by the `SchemaIdentificationScript` query, injecting the active schema name as the `{{SchemaName}}` token at every step. The most common use is multi-tenant SaaS where each tenant owns their own schema, but any pattern that needs the same object shape replicated across schemas works the same way. For a full narrative walkthrough, see [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md).
+
+Schema templates are supported on **SQL Server and PostgreSQL only**. MySQL uses a database-per-tenant model instead -- there is no sub-database schema namespace to fan out across.
+
+### Discovery query
+
+`SchemaIdentificationScript` is the mode switch. When this field is present and non-empty on a `Template.json`, the template becomes a schema template. The value is a SQL query that returns one column and any number of rows; each row is a schema name, and SchemaQuench runs the full template once per returned row.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `SchemaIdentificationScript` | string | not present | Query returning one column, N rows. Each row is a schema name for one iteration. |
+
+The query runs against each target database identified by `DatabaseIdentificationScript`. If both are present, the engine computes the full cross-product: every `(database, schema)` pair runs as an independent iteration. Token replacement applies to the query body before execution, so you can reference `{{ScriptTokens}}` or `<*Query*>` tokens in the discovery query itself.
+
+The active schema name is available to every part of the iteration as `{{SchemaName}}` -- in table `Name` and `Schema` fields, in procedure and view SQL bodies, in migration script filenames, in `VersionStampScript`, and in user-defined script tokens. See [{{SchemaName}}](script-tokens.md#schemaname) in the Script Tokens reference for availability rules and resolution timing.
+
+### Auto-create schemas
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `CreateSchemaIfMissing` | bool | `false` | When `true`, the engine emits `CREATE SCHEMA` for any schema returned by `SchemaIdentificationScript` that does not yet exist on the target database. |
+
+When `false` (the default), an iteration whose schema doesn't exist fails immediately with a clear error. This is the safer behavior: a typo in your discovery query should not silently create schemas in production.
+
+> **Warning:** `CreateSchemaIfMissing: true` requires the deployment user to have `CREATE SCHEMA` permission on SQL Server or `CREATE` on the database on PostgreSQL. The default `false` is intentional fail-fast: if the discovery query returns an unexpected schema name, you want an error, not a new schema.
+
+Set `CreateSchemaIfMissing: true` when you're running a fully automated onboarding pipeline and the deployment user is trusted to create schemas. Many teams prefer to create schemas via an explicit stored procedure (`OnboardTenant`) in the Shared template and leave this `false`.
+
+### AllowParallel
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `AllowParallel` | bool | `true` | When `false`, iterations of this schema template run serially regardless of the global `MaxThreads` setting. |
+
+When `true` (the default), schema iterations can run in parallel up to the `MaxThreads` limit alongside iterations from other templates and databases. Parallel execution is generally safe -- each iteration touches its own schema namespace -- but shared-resource contention is possible in specific scenarios.
+
+> **Note:** Set `AllowParallel: false` when your schema template creates cross-schema foreign keys to tables in dimensions schemas (such as `dbo` or `public`) and you have observed deadlocks under DDL parallelism. The PostgreSQL TenantCRM demo uses `AllowParallel: false` as a conservative baseline for exactly this reason.
+
+### Failure isolation
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `ContinueOnSchemaFailure` | bool | `true` | When `false`, the first failing schema iteration stops the dispatcher: no new iterations start, in-flight iterations drain, and subsequent templates in `TemplateOrder` do not run. |
+
+When `true` (the default), a single schema iteration's failure does not abort the others -- remaining iterations continue and the product run exits non-zero after all iterations have completed or failed. This matches the database-level isolation behavior that most teams already rely on.
+
+Set `ContinueOnSchemaFailure: false` for deployments where any single-tenant failure is a hard stop -- for example, a CI environment where partial deployment is worse than no deployment.
+
+For the execution-flow detail and interaction with `MaxThreads`, see [ContinueOnSchemaFailure](schemaquench.md#continueonschemafailure) in the SchemaQuench reference.
+
+### Complete example
+
+This is the `TenantWorkspace/Template.json` from the SQL Server TenantCRM demo -- a real schema template with all four fields declared:
+
+```json
+{
+  "Name": "TenantWorkspace",
+  "DatabaseIdentificationScript": "SELECT [name] FROM master.sys.databases WHERE [name] = '{{TenantCRMDb}}'",
+  "SchemaIdentificationScript": "SELECT [Name] FROM dbo.Tenants WHERE [Status] = N'Active' ORDER BY [Name]",
+  "RequireAtLeastOneTarget": false,
+  "CreateSchemaIfMissing": false,
+  "AllowParallel": true,
+  "ContinueOnSchemaFailure": true,
+  "VersionStampScript": "PRINT 'TenantCRM TenantWorkspace [{{SchemaName}}] {{ReleaseVersion}}'",
+  "ScriptFolders": [
+    { "FolderPath": "Before Scripts", "QuenchSlot": "Before" },
+    { "FolderPath": "Functions",      "QuenchSlot": "Objects", "ObjectType": "Functions" },
+    { "FolderPath": "Views",          "QuenchSlot": "Objects", "ObjectType": "Views" },
+    { "FolderPath": "Procedures",     "QuenchSlot": "Objects", "ObjectType": "Procedures" },
+    { "FolderPath": "Triggers",       "QuenchSlot": "Objects", "ObjectType": "Triggers" }
+  ]
+}
+```
+
+`RequireAtLeastOneTarget: false` here handles a fresh installation where no tenants have been onboarded yet -- the schema template finds zero rows, treats it as a no-op, and the product run succeeds so the `Initialize` and `Shared` templates still complete. The PostgreSQL TenantCRM demo is identical in structure, with `AllowParallel: false` to serialize iterations in the PostgreSQL DDL lock environment.
 
 ---
 

@@ -163,6 +163,113 @@ That single expression lets the index decide whether to apply itself based on me
 
 ---
 
+## {{SchemaName}}
+
+Schema templates make the active iteration's schema name available everywhere tokens resolve — script bodies, JSON field values, table data references, and dependent token values. Without `{{SchemaName}}`, deploying a product to dozens or hundreds of tenant schemas would require either per-tenant script files or a complex external preprocessing step. With it, a single set of scripts fans out to every schema in one quench, and each iteration sees a fully-qualified, unambiguous version of every object reference it touches.
+
+`{{SchemaName}}` is a built-in token set by the engine at the start of each schema-template iteration. You don't define it in `ScriptTokens` — it appears automatically when the engine is running inside a schema template's iteration context.
+
+### Availability
+
+`{{SchemaName}}` is available inside any iteration of a schema template: a `Template.json` whose `SchemaIdentificationScript` field is set. It resolves in every place tokens normally resolve:
+
+- SQL script files in every slot (Before, Objects / Procedures / Views / Functions, Tables (via engine-generated DDL), BetweenTablesAndKeys, AfterTablesObjects, TableData, After)
+- JSON expression fields: `Default`, `CheckExpression`, `Expression`, `FilterExpression`, `ShouldApplyExpression`
+- `BaselineValidationScript` and `VersionStampScript` on the template
+- User-defined `ScriptTokens` values (see [In token values](#in-token-values) below)
+
+`{{SchemaName}}` is **not available** outside a schema-template iteration:
+
+- In a regular template (`Template.json` without `SchemaIdentificationScript`), `{{SchemaName}}` is unresolved. The engine produces a clear error if it appears in a context where it would need to substitute.
+- In product-level scripts (`Product.json` `BaselineValidationScript`, `VersionStampScript`) — those run at product scope, before and after all template iterations, with no iteration in scope.
+- On MySQL — MySQL has no schema-inside-database concept and schema templates are not supported on that platform. See [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md#mysql----database-per-tenant-only) for the MySQL alternative.
+
+### In script files
+
+The most common use is qualifying every object reference that belongs to the current tenant's schema. From the TenantCRM demo's `AddCustomer.sql`:
+
+```sql
+-- SQL Server
+CREATE OR ALTER PROCEDURE [{{SchemaName}}].[AddCustomer]
+    @CustomerName NVARCHAR(128),
+    @Email NVARCHAR(256) = NULL,
+    @CustomerID INT = NULL OUTPUT
+AS
+BEGIN
+    INSERT INTO [{{SchemaName}}].[Customers] ([CustomerName], [Email])
+    VALUES (@CustomerName, @Email);
+
+    INSERT INTO [dbo].[GlobalAuditLog] ([TenantName], [EventType], [Detail])
+    VALUES (N'{{SchemaName}}', N'CustomerAdded', N'Name=' + @CustomerName);
+END;
+```
+
+```sql
+-- PostgreSQL
+CREATE OR REPLACE PROCEDURE "{{SchemaName}}".add_customer(
+    p_customer_name VARCHAR(128),
+    p_email VARCHAR(256) DEFAULT NULL
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO "{{SchemaName}}".customers (customer_name, email)
+    VALUES (p_customer_name, p_email);
+
+    INSERT INTO public.global_audit_log (tenant_name, event_type, detail)
+    VALUES ('{{SchemaName}}', 'CustomerAdded', 'name=' || p_customer_name);
+END;
+$$;
+```
+
+Notice that `{{SchemaName}}` qualifies the procedure itself, the insert target, and also appears as a plain string value in the `GlobalAuditLog` insert — recording which tenant's schema this event came from. `{{SchemaName}}` substitutes as text before the script executes, so it can play both roles: identifier qualifier and string literal.
+
+Cross-schema references like `[dbo].[GlobalAuditLog]` and `public.global_audit_log` are hard-coded with their literal schema prefix. Shared tables that span tenants are not in the iteration schema, so they stay fully qualified with their actual schema name.
+
+### In table JSON
+
+Tables in a schema template have their `Schema` field defaulted to `{{SchemaName}}` automatically — you don't need to set it. When you omit the schema prefix from the filename (`Customers.json` instead of `dbo.Customers.json`), the engine fills it in for each iteration.
+
+For foreign keys pointing to shared tables in another schema, set `RelatedTableSchema` explicitly:
+
+```json
+{
+  "Name": "[Customers]",
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Customers_Countries]",
+      "Columns": "[CountryCode]",
+      "RelatedTableSchema": "[dbo]",
+      "RelatedTable": "[Countries]",
+      "RelatedColumns": "[Code]"
+    }
+  ]
+}
+```
+
+Without an explicit `RelatedTableSchema`, the engine defaults it to `{{SchemaName}}` — which would incorrectly point the FK at `tenant_acme.Countries` instead of `dbo.Countries`. Explicit cross-schema references are preserved as-is.
+
+For the full `Template.json` field reference and all schema-template fields, see [Schema Templates](schema-packages.md#schema-templates).
+
+### In token values
+
+A user-defined `ScriptTokens` value can itself contain `{{SchemaName}}`. The engine detects this at template load and escalates that token to per-iteration resolution — it cannot be cached at load time or across database deployments because the value differs by schema. See [Token Resolution Order](#token-resolution-order) for how this fits into the three-tier resolution model.
+
+```json
+{
+  "ScriptTokens": {
+    "TenantAuditTable": "{{SchemaName}}.AuditLog"
+  }
+}
+```
+
+Any script that references `{{TenantAuditTable}}` will get the iteration-qualified value for each tenant without needing to write `{{SchemaName}}` in every script.
+
+> **Note:** Using an iteration-scoped token in a product-level script (`Product.json` `VersionStampScript`, `BaselineValidationScript`) is a validation error — those scripts run outside any iteration context and the engine has no schema name to substitute.
+
+For a narrative walkthrough of schema templates end to end — authoring layout, deployment log, tenant onboarding, and cross-schema FK patterns — see [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md).
+
+---
+
 ## Advanced Token Tags
 
 Here's where tokens go from "find and replace" to "deployment-time content engine." A token's *value* in `ScriptTokens` can start with a special tag that tells SchemaSmith to resolve it at deployment time -- by reading a file, by querying the live database, or by embedding a serialized object's JSON. The token name in your scripts stays a plain `{{TokenName}}`; the magic happens in how the value is computed before substitution.
@@ -425,6 +532,26 @@ When the same token name appears in multiple places, the most specific definitio
 6. Cross-template `*_<TemplateName>` tokens are added once all templates have loaded.
 7. Custom property tokens from `Extensions` are merged in per component when the table model is processed.
 8. Advanced tag values (`<*File*>`, `<*Query*>`, etc.) resolve as described above, then the simple `{{TokenName}}` substitution runs against the final token map.
+
+### Resolution timing
+
+Independent of the priority order above, each token also has a *resolution frequency* — how many times the engine computes its value during a deployment run. There are three tiers:
+
+| Tier | When the value is computed | Which tokens |
+|---|---|---|
+| **Per product** | Once, at template load — before any database connection is opened | Fully static tokens: plain string values with no `<*Query*>` tag and no `{{SchemaName}}` reference |
+| **Per database** | Once per target database, just before that database's scripts run | `<*Query*>` tokens whose body does not reference `{{SchemaName}}` directly or transitively |
+| **Per iteration** | Once per schema-template iteration, with the iteration's `{{SchemaName}}` substituted in first | Any token whose body references `{{SchemaName}}` directly or transitively |
+
+The tier matters because a per-product value is computed once and reused everywhere, while a per-iteration value is freshly computed for `tenant_acme`, then again for `tenant_beta`, and so on. Per-database query tokens run against the live server but are cached across the iterations of a single target database — so the connection round-trip happens once per database, not once per tenant.
+
+**The escalation rule:** the engine can only promote a token's resolution tier, never demote it. A `<*Query*>` token without any `{{SchemaName}}` reference could legitimately depend on database-specific state — the absence of `{{SchemaName}}` is not proof that the result is the same for every tenant. Only the *presence* of `{{SchemaName}}` (directly in the token's body, or transitively through a token it references) lets the engine conclude the value must be recomputed per iteration. Any other token keeps its natural tier.
+
+**Transitive escalation:** if token `A`'s body references `{{SchemaName}}` and token `B`'s body references `{{A}}`, then `B` is also per-iteration — even if `B`'s body contains no `{{SchemaName}}` text. The engine walks the token dependency graph at template load and marks every transitively reachable token.
+
+Worked example: a template defines `ScriptTokens.TenantTable: "{{SchemaName}}.Orders"`. At template load, the engine sees `{{SchemaName}}` in the value and marks `TenantTable` as per-iteration. At each schema-template iteration, `{{TenantTable}}` resolves to `tenant_acme.Orders` (or `tenant_beta.Orders`, etc.) before the script runs. The per-product and per-database computation passes never see this token — it sits out until its iteration is active.
+
+> **Note:** An iteration-scoped token used in a product-level script (`Product.json` `BaselineValidationScript` or `VersionStampScript`) is a validation error at template load. Those scripts run outside any iteration, and the engine has no schema name to substitute into the token's value.
 
 ---
 

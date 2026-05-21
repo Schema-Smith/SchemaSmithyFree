@@ -315,4 +315,4 @@ Add what is safe, deploy, verify, repeat. Each iteration brings more of your sch
 
 ---
 
-Power workflows for the common path. Escape hatches for the exceptions. You've got everything you need. If something goes wrong, the next chapter helps you diagnose it. [Troubleshooting](11-troubleshooting.md)
+Power workflows for the common path. Escape hatches for the exceptions. You've got everything you need. If something goes wrong, the next chapter helps you diagnose it. [Troubleshooting](12-troubleshooting.md)

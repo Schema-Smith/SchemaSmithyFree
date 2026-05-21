@@ -61,9 +61,9 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
 | `DeliverData` | bool | `true` | Run the per-table `DataDelivery` step and the `TableData`-slot scripts. Set to `false` to ship a structure-only deployment that leaves reference data untouched -- pairs naturally with `UpdateTables: true` for "deploy schema, skip data" pipelines. |
 | `RunScriptsTwice` | bool | `false` | Run object scripts twice to verify idempotency. A CI/testing tool. |
 | `TrackRunOnceMigrations` | bool | `true` | Track run-once migration scripts. When `false`, all scripts run on every deployment. |
-| `PruneObsoleteMigrationTracking` | bool | `true` | Remove tracking entries for scripts no longer in the package. |
+| `PruneObsoleteMigrationTracking` | bool | `true` | Remove tracking entries for scripts no longer in the package. When `Target` filters are active, prune is restricted to the targeted scope. See [PruneObsoleteMigrationTracking](#pruneobsoletemigrationtracking). |
 | `CheckpointDirectory` | string | `""` | Directory for checkpoint files used by `--ResumeQuench`. When blank, defaults to a per-platform temp location. See [Checkpoint and Resume](#checkpoint-and-resume). |
-| `MaxThreads` | int | `10` | Number of parallel database operations. Range 1--20. |
+| `MaxThreads` | int | `10` | Maximum parallel work units. Covers both database-level and schema-level iterations. Range 1--20. See [MaxThreads](#maxthreads). |
 | `VerboseLogging` | bool | `false` | Include `PRINT` / `RAISE NOTICE` / equivalent informational output from user scripts in logs. |
 | `ScriptTokens` | object | `{}` | Config-level overrides for product script tokens. |
 
@@ -79,7 +79,10 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
     "SecondaryServers": "",
     "ConnectionProperties": {
       "TrustServerCertificate": "True"
-    }
+    },
+    "Templates": [],
+    "Databases": [],
+    "Schemas": []
   },
   "WhatIfONLY": false,
   "SchemaPackagePath": "./MyProduct",
@@ -120,6 +123,90 @@ When a secondary list is configured, SchemaQuench routes each product-level fold
 
 ---
 
+## Target
+
+Selective execution scope narrows a deployment to a subset of the work the product would otherwise perform. The most common use is deploying to a single newly-onboarded tenant without re-running the full product, canary-deploying a hotfix to one tenant to verify it before rolling out, or re-running a single template after a configuration change. Without `Target`, every template runs against every discovered database and schema.
+
+### Filter dimensions
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `Target:Templates` | string array | `[]` | Run only these templates. Empty array means no filter -- all templates run. |
+| `Target:Databases` | string array | `[]` | Run only against these databases. Empty array means no filter -- all discovered databases run. |
+| `Target:Schemas` | string array | `[]` | Run only against these schema names. Empty array means no filter -- all discovered schemas run. Applies only to schema-template iterations; regular-template work units bypass this filter entirely. |
+
+The three dimensions filter AND together. Setting `Target:Templates: ["TenantWorkspace"]` and `Target:Schemas: ["tenant_newco"]` runs only the TenantWorkspace template, and within that template only the iteration where the schema is `tenant_newco`. Unmatched work units are skipped before any database connections open for them.
+
+SchemaQuench validates filter values against the discovered universe before dispatching any work. A value that doesn't match anything in the discovered set fails immediately with a diagnostic that lists the available options, so a typo surfaces as a clear error rather than a silent empty run.
+
+> **Warning:** When `Target` filters are active, `PruneObsoleteMigrationTracking` is restricted to the targeted scope. This is intentional -- pruning tracking rows outside the targeted scope would delete correct records of migrations applied against databases and schemas that you explicitly excluded from this run. See [PruneObsoleteMigrationTracking](#pruneobsoletemigrationtracking) for the full rule.
+
+### Onboarding example
+
+Deploy TenantWorkspace to a newly-onboarded tenant without touching any existing tenants:
+
+```json
+{
+  "Target": {
+    "Server": "production-db",
+    "Templates": ["TenantWorkspace"],
+    "Schemas": ["tenant_newco"]
+  }
+}
+```
+
+With this configuration, SchemaQuench runs `TenantWorkspace` and skips every other template in `TemplateOrder`. Within `TenantWorkspace`, it runs only the `tenant_newco` iteration -- `tenant_acme`, `tenant_beta`, and all other tenants are untouched, and their tracking rows in `CompletedMigrationScripts` are preserved exactly.
+
+For a full narrative walkthrough of tenant onboarding, see [Onboarding a new tenant](../guide/10-multi-tenant-deployments.md#onboarding-a-new-tenant).
+
+---
+
+## MaxThreads
+
+The `MaxThreads` setting controls how many work units run concurrently across the entire product deployment. A work unit is one database iteration for a regular template, or one `(database, schema)` iteration for a schema template. All work unit types share the same pool -- there is no separate budget per template type.
+
+Default: `10`. Range: `1`--`20`.
+
+With schema templates, a single database can contribute many work units -- one per discovered schema. A product with a single `TenantWorkspace` template applied to one database hosting 100 tenant schemas produces 100 work units. At `MaxThreads: 8`, the dispatcher runs up to 8 schema iterations concurrently regardless of how many templates or databases are in scope. If you also have regular-template work units queued alongside schema-template units, they all draw from the same pool.
+
+> **Note:** Templates with `AllowParallel: false` get their own serial queue. At most one of that template's iterations runs at a time, but other templates' parallel-eligible units continue to run concurrently alongside them. See [AllowParallel](schema-packages.md#allowparallel) for the per-template parallel-disable case.
+
+---
+
+## ContinueOnDatabaseFailure
+
+Failure isolation at the database level applies to all templates -- both regular templates and schema templates. When `ContinueOnDatabaseFailure` is `true` (the default), one database's failure does not abort the product run; SchemaQuench logs the failure, continues processing remaining databases, and exits with code 2 after all work units have completed or failed.
+
+When `false`, the first database-level failure aborts subsequent iterations. In-flight work units drain naturally -- SchemaQuench does not cancel active database connections because an incomplete transaction is more hazardous than a completed one. The product run exits with code 2.
+
+`ContinueOnDatabaseFailure` is set in `Template.json`, not in `SchemaQuench.settings.json` -- it is a per-template property, not a global switch. The default is `true`:
+
+```json
+{
+  "Name": "CustomerDB",
+  "DatabaseIdentificationScript": "...",
+  "ContinueOnDatabaseFailure": false
+}
+```
+
+For schema templates, `ContinueOnDatabaseFailure` governs database-level failures during work unit enumeration (a bad `DatabaseIdentificationScript`, an unreachable server). Schema iteration failures inside a schema template are governed separately by `ContinueOnSchemaFailure`. See [ContinueOnSchemaFailure](#continueonschemafailure) for the schema-level analog.
+
+---
+
+## ContinueOnSchemaFailure
+
+Schema templates fan out across multiple schema iterations inside a database. `ContinueOnSchemaFailure` controls what happens when one of those iterations fails. This is a template-level property defined in `Template.json` -- see [Failure isolation](schema-packages.md#failure-isolation) in the Schema Packages reference for the property definition and JSON examples.
+
+When `true` (the default), a single schema iteration's failure does not halt the others. The failed iteration logs an error, the remaining iterations continue, and the product run exits with code 2 after all iterations have completed or failed. This is the appropriate default for production multi-tenant deployments where one tenant's problem should not block every other tenant.
+
+When `false`, the first iteration failure stops the dispatcher: no new iterations start, in-flight iterations drain naturally, and subsequent templates in `TemplateOrder` do not run.
+
+**How failures surface.** Each iteration's log lines carry a `[Schema: <name>]` prefix, so failures are traceable per tenant even in a parallel run. The deployment log will show the per-iteration error line for the failed schema, then continue with remaining iterations (in continue mode) or stop (in abort mode). The exit code is 2 whenever any iteration failed, regardless of mode.
+
+`ContinueOnSchemaFailure` is ignored on regular templates. If set non-default on a regular template, SchemaQuench logs a warning at load time. For database-level failure isolation on any template, use `ContinueOnDatabaseFailure`.
+
+---
+
 ## Deployment Execution Flow
 
 When SchemaQuench runs, the product quench executes these steps in order:
@@ -132,8 +219,9 @@ When SchemaQuench runs, the product quench executes these steps in order:
 6. **Quench each template** -- For each template name in `Product.TemplateOrder`:
    - Loads `Template.json` and merges template-level `ScriptTokens` over the product token set.
    - Executes `DatabaseIdentificationScript` against the administrative database to discover target databases.
-   - Creates a database quench task for each discovered database and runs them in parallel (up to `MaxThreads` concurrent operations).
-   - If any database quench fails, logs the failure and exits with code 2.
+   - For schema templates: executes `SchemaIdentificationScript` against each discovered database to produce one work unit per `(database, schema)` pair. For regular templates: one work unit per discovered database.
+   - Dispatches all work units to a pool of up to `MaxThreads` concurrent workers. Each worker runs the full [database quench sequence](#database-quench-sequence) for its assigned iteration.
+   - If any iteration fails, logs the failure. Failure routing follows the template's `ContinueOnDatabaseFailure` (regular templates) or `ContinueOnSchemaFailure` (schema templates) settings.
 7. **Product After scripts** -- Executes scripts from `After Product` folder(s).
 8. **Stamp product version** -- If `Product.VersionStampScript` is configured, executes it.
 9. **Log completion** -- Logs "Completed quench of {ProductName}".
@@ -144,7 +232,7 @@ After the quench returns, the calling program backs up log files to a numbered d
 
 ## Database Quench Sequence
 
-For each database identified by a template's `DatabaseIdentificationScript`, the database quench runs the following sequence. All steps execute on the identified database.
+For each work unit dispatched by a template -- one identified database for regular templates, one `(database, schema)` pair for schema templates -- the database quench runs the following sequence. All steps execute on the identified database. For schema templates, the active schema name is available throughout as `{{SchemaName}}`.
 
 1. **Kindle the Forge** -- Deploys SchemaSmith helper procedures, functions, and the migration tracking table for the active platform. Skipped if `KindleTheForge` is `false`.
 2. **Validate baseline** -- Executes `Template.BaselineValidationScript` if configured. Aborts if falsy.
@@ -563,6 +651,12 @@ When `false`, existing tracking entries are left alone regardless of what script
 
 This setting is ignored when `TrackRunOnceMigrations` is `false` (no tracking means no pruning).
 
+### With Target scope
+
+When `Target.Templates`, `Target.Databases`, or `Target.Schemas` is set, prune is restricted to the iterations that ran in that deployment. A prune pass only examines tracking rows that match the active `(template, schema_name)` scope for each executed iteration -- it does not touch rows belonging to templates, databases, or schemas that were excluded by the filter.
+
+> **Warning:** This scope restriction is correctness-critical, not a limitation. Without it, a deployment scoped to `tenant_newco` would delete tracking rows for `tenant_acme`, `tenant_beta`, and every other schema that was excluded from the run -- those rows are correct records of migrations already applied against scopes you explicitly chose not to touch. The restriction ensures prune behaves like a scoped operation whose boundary exactly matches the `Target` filter. See [Target](#target) for how the filter is configured.
+
 ---
 
 ## ShouldApplyExpression and Conditional Deployment
@@ -698,6 +792,7 @@ Use `--ResumeQuench` when you specifically expect that a prior run may have left
 
 - [Configuration Reference](configuration.md) -- Shared configuration system, CLI switches, environment variables
 - [Schema Packages Reference](schema-packages.md) -- Package structure, folder layout, execution order
+- [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md) -- Full walkthrough of schema-per-tenant and database-per-tenant patterns
 - [Custom Properties](custom-properties.md) -- The Extensions carrier and how it drives `ShouldApplyExpression`
 - [Script Tokens Reference](script-tokens.md) -- Token replacement, advanced tags, automatic tokens
 - [SchemaTongs Reference](schematongs.md) -- Extraction tool that creates schema packages

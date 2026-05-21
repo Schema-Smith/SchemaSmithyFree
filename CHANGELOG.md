@@ -6,12 +6,20 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ## [Unreleased]
 
+### Added
+
+- **Schema Templates — Multi-Schema Fan-Out.** Templates can now fan out across multiple schemas inside a single database via a new `SchemaIdentificationScript` field, with the active schema available to scripts and JSON as the `{{SchemaName}}` token. Common use: each tenant owns their own schema. New `Template.json` fields: `SchemaIdentificationScript`, `CreateSchemaIfMissing` (default `false`), `AllowParallel` (default `true`), `ContinueOnSchemaFailure` (default `true`). Supported on SQL Server and PostgreSQL. See the [Multi-Tenant Deployments](docs/end-user/guide/10-multi-tenant-deployments.md) chapter and the new `TenantCRM` demo for the end-to-end walkthrough. Originally proposed by Christopher Baker.
+- **`ContinueOnDatabaseFailure` setting.** Failure-isolation parity at the database level on regular templates. Default `true` matches existing behavior.
+- **`Target` — Selective Execution Scope.** New `Target:Templates`, `Target:Databases`, and `Target:Schemas` array filters in `SchemaQuench.settings.json`. Common use: deploy to a single newly-onboarded tenant without re-running the full product. `PruneObsoleteMigrationTracking` is restricted to the targeted scope when `Target` filters are active, so excluded schemas keep their tracking rows untouched.
+- **Schema-Template Extraction in SchemaTongs and DataTongs.** Both tools gain schema-template extraction modes via `Template:SourceSchema` (SchemaTongs) and `Source:Schema` (DataTongs). Source-schema-qualified references in extracted SQL bodies are rewritten to `{{SchemaName}}`; cross-schema references are preserved literally. Lets you cast one canonical hand-replicated schema into a schema template that fans out to the rest.
+
 ### Breaking Changes
 
 - **`Template.Required` renamed to `RequireAtLeastOneTarget`.** The old name read as "this template must load" but actually meant "discovery must return ≥1 database (or ≥1 `(database, schema)` pair for schema templates), else fail." The new name is self-describing. Unknown JSON properties are ignored at deserialization, so an unmigrated `Template.json` silently picks up the new property's default (`true`) — which surfaces as an explicit "no targets discovered for template" error rather than a silent behavior change. **Migration:** find-and-replace `"Required":` with `"RequireAtLeastOneTarget":` in every `Template.json` in your schema packages. The change applies to every platform.
 
 ### Changed
 
+- **Migration tracking table schema.** `SchemaSmith.CompletedMigrationScripts` gains `template_name` and `schema_name` columns. Existing rows are preserved with empty values; reads use a permissive `template_name` match against legacy rows so no previously-completed migrations re-run. Schema migration is idempotent and runs as part of `KindleTheForge`.
 - **Failure scoping consolidated per template type.** `ContinueOnSchemaFailure` now governs every failure inside a schema template (discovery, reserved-name rejection, per-iteration script failure, `CREATE SCHEMA` failure, dispatcher exceptions). `ContinueOnDatabaseFailure` now governs every failure inside a regular template. Setting `ContinueOnDatabaseFailure` on a schema template has no effect; setting `ContinueOnSchemaFailure` on a regular template has no effect. **Prior behavior:** the two flags layered ambiguously — a schema template's discovery failure (e.g., a reserved name like `dbo` returned by `SchemaIdentificationScript`) was incorrectly classified as a database-level failure and aborted under `ContinueOnDatabaseFailure: false`, even when `ContinueOnSchemaFailure: true` should have let it continue. The new contract is "the template's type determines which flag governs its failures" — no more cross-flag mental gymnastics.
 
 ### Fixed

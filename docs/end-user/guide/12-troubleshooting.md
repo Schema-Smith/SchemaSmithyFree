@@ -77,7 +77,7 @@ For the full exit code reference, see [Configuration Reference -- Exit Codes](..
 
 **Cause:** Foreign keys are applied after table modifications. If you need to run data migration scripts between table changes and foreign key creation, the `BetweenTablesAndKeys` migration slot is exactly the right tool for the job.
 
-**Fix:** Declare a custom folder in the `BetweenTablesAndKeys` slot via `Template.ScriptFolders` and put your data fixup or migration scripts there. See [Edge Cases -- Migration Scripts](10-edge-cases.md#migration-scripts) and the [SchemaQuench Reference](../reference/schemaquench.md#database-quench-sequence) for the full sequence.
+**Fix:** Declare a custom folder in the `BetweenTablesAndKeys` slot via `Template.ScriptFolders` and put your data fixup or migration scripts there. See [Edge Cases -- Migration Scripts](11-edge-cases.md#migration-scripts) and the [SchemaQuench Reference](../reference/schemaquench.md#database-quench-sequence) for the full sequence.
 
 ### Validation script returns false
 
@@ -235,7 +235,7 @@ If a key column is nullable, prefix it with `*` to generate NULL-safe comparison
 
 **Symptom:** Certain columns are missing from the generated sync script.
 
-**Cause:** DataTongs automatically excludes columns whose types can't be reliably round-tripped through JSON. The list is platform-specific -- see [Edge Cases -- Complex type handling in DataTongs](10-edge-cases.md#complex-type-handling-in-datatongs).
+**Cause:** DataTongs automatically excludes columns whose types can't be reliably round-tripped through JSON. The list is platform-specific -- see [Edge Cases -- Complex type handling in DataTongs](11-edge-cases.md#complex-type-handling-in-datatongs).
 
 **Fix:** Expected behavior. If you need data from these columns, handle them with custom scripts outside of DataTongs.
 
