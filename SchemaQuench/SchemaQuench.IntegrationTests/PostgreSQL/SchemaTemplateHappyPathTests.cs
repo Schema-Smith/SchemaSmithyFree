@@ -54,7 +54,7 @@ public class SchemaTemplateHappyPathTests
     }
 
     /// <summary>
-    /// The test PG container runs with max_connections=1000 (matches the CI workflow override and
+    /// The test PG container runs with max_connections=2000 (matches the CI workflow override and
     /// the Demos PG compose). Even at that ceiling, the 3-tenant fan-out * multiple per-iteration
     /// command pools + per-test assertion connections accumulates across the suite, so we still
     /// flush the Npgsql pool around each test to bound the count. Every schema-template-era PG
@@ -81,7 +81,7 @@ public class SchemaTemplateHappyPathTests
     {
         // Final pool flush before the next fixture in the test run inherits our state.
         // Without this, ~25 connections per test * N tests accumulate before TIME_WAIT
-        // releases them; max_connections=1000 (CI + Demos compose) leaves headroom only as
+        // releases them; max_connections=2000 (CI + Demos compose) leaves headroom only as
         // long as every PG fixture flushes pools on the same cadence.
         Npgsql.NpgsqlConnection.ClearAllPools();
     }

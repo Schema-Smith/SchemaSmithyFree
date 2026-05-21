@@ -86,9 +86,9 @@ services:
       POSTGRES_USER: ${PostGreSQL_USERNAME}
       POSTGRES_PASSWORD: ${PostGreSQL_PASSWORD}
       PGPASSWORD: ${PostGreSQL_PASSWORD}
-    command: postgres -c max_connections=1000
+    command: postgres -c max_connections=2000
     healthcheck:
-      test: ["CMD-SHELL", "psql -U ${PostGreSQL_USERNAME} -d TestMain -c \"SELECT 1 WHERE (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') >= 1000\" | grep -q 1"]
+      test: ["CMD-SHELL", "psql -U ${PostGreSQL_USERNAME} -d TestMain -c \"SELECT 1 WHERE (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') >= 2000\" | grep -q 1"]
       interval: 5s
       timeout: 3s
       retries: 30
