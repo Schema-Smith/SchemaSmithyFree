@@ -737,6 +737,22 @@ public class ProductUpdateTests
             VALUES ('MigrationScripts/Before/MigrationScript0.sql', '{productName}', 'Before');
         ";
         cmd.ExecuteNonQuery();
+
+        // Also clear ProductOwnership rows for this product so a real quench in this test
+        // starts from a clean ownership slate. Same shape as the PG SchemaTemplateHappyPathTests
+        // DropTenantSchemas fix — a real quench writes ownership rows; without per-test cleanup
+        // a sibling fixture quenching a shared table can hit "tables already owned by another
+        // product". Guarded with IF EXISTS in case a test runs before ForgeKindler has fully set
+        // the table up (defensive — production order has ForgeKindler in FixtureSetup).
+        cmd.CommandText = $@"
+            SET @ddl := (SELECT IF(COUNT(*) > 0,
+                'DELETE FROM `{dbName}`.`SchemaSmith_ProductOwnership` WHERE `ProductName` = ''{productName}''',
+                'SELECT 1')
+                FROM information_schema.tables
+                WHERE table_schema = '{dbName}' AND table_name = 'SchemaSmith_ProductOwnership');
+            PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+        ";
+        cmd.ExecuteNonQuery();
     }
 
     private static readonly List<string> ExpectedScriptLog =
