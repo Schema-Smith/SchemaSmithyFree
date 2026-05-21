@@ -54,13 +54,15 @@ public class SchemaTemplateHappyPathTests
     }
 
     /// <summary>
-    /// The test PG container runs with max_connections=500 (matches the CI workflow override and
+    /// The test PG container runs with max_connections=1000 (matches the CI workflow override and
     /// the Demos PG compose). Even at that ceiling, the 3-tenant fan-out * multiple per-iteration
     /// command pools + per-test assertion connections accumulates across the suite, so we still
-    /// flush the Npgsql pool around each test to bound the count. SetUp + TearDown both fire
-    /// because (a) accumulation from earlier fixtures shouldn't strand the first test in this
-    /// fixture, and (b) the [TearDown] keeps subsequent test fixtures from inheriting our
-    /// accumulated pool.
+    /// flush the Npgsql pool around each test to bound the count. Every schema-template-era PG
+    /// fixture follows this pattern — when a new fixture is added without the flush hooks the
+    /// suite breaches the ceiling and emits 53300 (sorry, too many clients already). SetUp +
+    /// TearDown both fire because (a) accumulation from earlier fixtures shouldn't strand the
+    /// first test in this fixture, and (b) the [TearDown] keeps subsequent test fixtures from
+    /// inheriting our accumulated pool.
     /// </summary>
     [SetUp]
     public void SetUpClearPgPools()
@@ -78,10 +80,9 @@ public class SchemaTemplateHappyPathTests
     public void OneTimeTearDownClearPgPools()
     {
         // Final pool flush before the next fixture in the test run inherits our state.
-        // Without this, ~25 connections per test * 11 tests = ~275 connections accumulate
-        // before TIME_WAIT releases them; with max_connections=500 (CI + Demos compose) the
-        // suite has headroom, but disciplined pool flushing keeps unrelated PG fixtures in
-        // the same run from starving for connections.
+        // Without this, ~25 connections per test * N tests accumulate before TIME_WAIT
+        // releases them; max_connections=1000 (CI + Demos compose) leaves headroom only as
+        // long as every PG fixture flushes pools on the same cadence.
         Npgsql.NpgsqlConnection.ClearAllPools();
     }
 
