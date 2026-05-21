@@ -117,6 +117,7 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 | `CreateSchemaIfMissing` | bool | `false` | No | Schema templates only. When `true`, the engine creates any discovered schema that doesn't yet exist before running that iteration. See [Schema Templates](#schema-templates). |
 | `AllowParallel` | bool | `true` | No | Schema templates only. When `false`, iterations of this template run serially even when the global thread pool has capacity. See [Schema Templates](#schema-templates). |
 | `ContinueOnSchemaFailure` | bool | `true` | No | Schema templates only. When `false`, the first failing iteration aborts all subsequent iterations for this template. See [Schema Templates](#schema-templates). |
+| `ContinueOnDatabaseFailure` | bool | `true` | No | Regular templates only. When `false`, the first failing database iteration aborts all subsequent database iterations for this template. Ignored on schema templates -- failure isolation there is governed by `ContinueOnSchemaFailure`. See [Schema Templates](#schema-templates) for the schema-iteration analog and [SchemaQuench &mdash; ContinueOnDatabaseFailure](schemaquench.md#continueondatabasefailure) for the runtime behavior detail. |
 
 ### Template settings intent
 
@@ -954,6 +955,15 @@ Schema templates are supported on **SQL Server and PostgreSQL only**. MySQL uses
 The query runs against each target database identified by `DatabaseIdentificationScript`. If both are present, the engine computes the full cross-product: every `(database, schema)` pair runs as an independent iteration. Token replacement applies to the query body before execution, so you can reference `{{ScriptTokens}}` or `<*Query*>` tokens in the discovery query itself.
 
 The active schema name is available to every part of the iteration as `{{SchemaName}}` -- in table `Name` and `Schema` fields, in procedure and view SQL bodies, in migration script filenames, in `VersionStampScript`, and in user-defined script tokens. See [{{SchemaName}}](script-tokens.md#schemaname) in the Script Tokens reference for availability rules and resolution timing.
+
+#### Reserved schema names
+
+A small set of platform-built-in schemas can't be used as iteration targets. If your discovery query returns one of these names, the engine fails the iteration with an error naming the offending schema and pointing you at the "shared content lives in a regular template" remediation. The reserved sets are:
+
+- **SQL Server:** `dbo`, `sys`, `INFORMATION_SCHEMA`, `guest`, plus the fixed database roles that double as schemas (`db_owner`, `db_accessadmin`, `db_securityadmin`, `db_ddladmin`, `db_backupoperator`, `db_datareader`, `db_datawriter`, `db_denydatareader`, `db_denydatawriter`).
+- **PostgreSQL:** `public`, `pg_catalog`, `pg_toast`, `information_schema`, plus any schema matching the `pg_temp_*` or `pg_toast_temp_*` wildcards (Postgres uses these for session-scoped temp objects).
+
+Shared content (lookup tables, audit logs, dimension data) belongs in a regular template that runs once per database, not in a schema-template iteration. The reserved-name guard is the engine's way of catching a discovery query that accidentally returns `public` or `dbo` instead of a real tenant schema.
 
 ### Auto-create schemas
 

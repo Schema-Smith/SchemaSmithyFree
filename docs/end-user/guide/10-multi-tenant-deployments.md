@@ -140,7 +140,7 @@ Completed quench of TenantCRM
 
 After the quench, both `tenant_acme` and `tenant_beta` have the full workspace schema: `Customers`, `Contacts`, `Activities`, `ActivityTypes`, `AddCustomer`, `RecordActivity`, `ActiveCustomers`, and the `vw_ActiveCustomerCount` indexed view. The `Migration_001_BackfillCountries` Before-slot script ran once per tenant and was recorded in `SchemaSmith.CompletedMigrationScripts` with the `(TenantWorkspace, tenant_acme)` and `(TenantWorkspace, tenant_beta)` keys. A subsequent quench skips those migrations without any configuration change.
 
-To run the demo hands-on and explore the result -- inspecting the tenant schemas, verifying migration tracking, running the inspect queries -- see the [TenantCRM demo README](../../Demos/SqlServer/TenantCRM/README.md) (SQL Server) or [TenantCRM demo README](../../Demos/PostgreSQL/TenantCRM/README.md) (PostgreSQL).
+To run the demo hands-on and explore the result -- inspecting the tenant schemas, verifying migration tracking, running the inspect queries -- see the [TenantCRM demo README](../../../Demos/SqlServer/TenantCRM/README.md) (SQL Server) or [TenantCRM demo README](../../../Demos/PostgreSQL/TenantCRM/README.md) (PostgreSQL).
 
 ### {{SchemaName}}
 

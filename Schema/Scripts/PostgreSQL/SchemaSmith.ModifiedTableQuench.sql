@@ -17,6 +17,8 @@ BEGIN
       -- so this pass only considers tables owned by the current (template, schema)
       -- iteration. No additional restriction needed here; the predicate already excludes
       -- other templates' tables AND other tenants' tables of the same template.
+      -- Scoping is delegated to upstream ValidateTableOwnership — see the TRANSITIONAL
+      -- (slice 3 audit B1 of schema-templates) markers there for the deletion trigger.
       SELECT STRING_AGG('RAISE NOTICE ''  Table ' || tp."Schema" || '.' || tp."TableName" || ' no longer in product'';' || CHR(10) ||
                         CASE WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE p.proname = 'CustomTableDrop' AND n.nspname = 'SchemaSmith' )
                              THEN 'CALL "SchemaSmith"."CustomTableDrop"(''' || tp."Schema" || ''', ''' || tp."TableName" || ''')'
