@@ -24,6 +24,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ### Fixed
 
+- **`--ConnectionString` override database retargeting** — Per-database operations (schema discovery, per-iteration execution) now retarget the override connection string to the actual target database instead of reusing the override's embedded database (e.g., `master` / `postgres`) for every operation. Thanks to @noctelvirei. — #248
 - **Completed migration script tracking SQL literals** — Product names, quench slots, and script paths are now escaped before being embedded in completed-script tracking SQL. Thanks to @noctelvirei and @zacnaloen.
 - **DataDelivery content file failures** — Declared data delivery files now abort deployment when missing or unreadable instead of logging `SKIPPING` and continuing without delivering the table data. Thanks to @noctelvirei and @zacnaloen.
 - **ZIP package file reads for data delivery and binary tokens** — DataDelivery content files now use the package-aware file wrapper, and ZIP-backed packages can resolve binary file tokens through `ReadAllBytes`. Thanks to @noctelvirei and @zacnaloen.
