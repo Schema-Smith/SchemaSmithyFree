@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using NUnit.Framework;
 using Schema.Domain;
+using Schema.Domain.SqlServer;
 using Schema.Isolators;
 
 namespace SchemaQuench.UnitTests;
@@ -814,6 +815,49 @@ public class ProductQuenchTests
     }
 
     [Test]
+    public void EnumerateWorkUnits_SchemaTemplate_PrimaryDiscoveryFailureInAbortMode_StopsBeforeSecondaryServer()
+    {
+        // Regression guard for #247. With ServerToQuench=Both and ContinueOnSchemaFailure=false
+        // on a schema template, a primary-server schema-discovery failure must abort enumeration
+        // BEFORE secondary's databases are touched. Pre-fix the outer server loop checked
+        // !template.ContinueOnDatabaseFailure (true by default), so primary's abort-mode failure
+        // did NOT break the outer loop and secondary's work units snuck into the dispatched list.
+        // The fix swaps the predicate to ShouldAbortOnFailure(template) so the outer loop honors
+        // the type-aware abort scope (ContinueOnSchemaFailure for schema templates).
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppA" };
+            quench.IdentifiedDatabases["secondary"] = new[] { "AppA" };
+            quench.SchemaDiscoveryFailures[("primary", "AppA")] =
+                new System.InvalidOperationException("reserved schema name 'dbo'");
+            // Secondary's discovery would succeed if reached — proves the fix is enumeration-level,
+            // not "secondary just happened to have nothing to enumerate."
+            quench.SchemaDiscoveryResults[("secondary", "AppA")] = new List<string> { "tenant_x" };
+
+            var template = new SqlServerTemplate
+            {
+                Name = "TenantBody",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas",
+                ContinueOnSchemaFailure = false,
+                ServerToQuench = ServerToQuench.Both
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Is.Empty,
+                    "Primary's discovery failure must abort enumeration before secondary is touched. " +
+                    "Pre-#247-fix this returned 1 unit (secondary.AppA.tenant_x) and let the dispatcher " +
+                    "run schema-template work on secondary despite ContinueOnSchemaFailure=false.");
+                Assert.That(quench.UpdateFailed, Is.True);
+            });
+        }, secondaryServers: "secondary");
+    }
+
+    [Test]
     public void EnumerateWorkUnits_ReservedSchemaName_LaterDb_PreservesEarlierUnits()
     {
         // With ContinueOnDatabaseFailure=true (default): AppGood's unit is produced; AppBad's
@@ -931,7 +975,9 @@ public class ProductQuenchTests
     /// inside the FactoryContainer lock and runs <paramref name="body"/> against the recorded test
     /// double. Keeps every schema-template work-unit test self-contained: build → assert → tear down.
     /// </summary>
-    private static void WithMinimalSqlServerProductQuench(System.Action<RecordingWorkUnitProductQuench> body)
+    private static void WithMinimalSqlServerProductQuench(
+        System.Action<RecordingWorkUnitProductQuench> body,
+        string secondaryServers = null)
     {
         lock (FactoryContainer.SharedLockObject)
         {
@@ -953,13 +999,16 @@ public class ProductQuenchTests
                                                   }
                                                   """);
 
+            var configValues = new Dictionary<string, string>
+            {
+                ["SchemaPackagePath"] = schemaPackagePath,
+                ["Target:Server"] = "primary",
+                ["WhatIfONLY"] = "true"
+            };
+            if (!string.IsNullOrEmpty(secondaryServers))
+                configValues["Target:SecondaryServers"] = secondaryServers;
             var config = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string>
-                {
-                    ["SchemaPackagePath"] = schemaPackagePath,
-                    ["Target:Server"] = "primary",
-                    ["WhatIfONLY"] = "true"
-                })
+                .AddInMemoryCollection(configValues)
                 .Build();
 
             FactoryContainer.Register<IConfigurationRoot>(config);

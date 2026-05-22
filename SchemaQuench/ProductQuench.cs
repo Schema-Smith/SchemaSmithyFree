@@ -677,13 +677,16 @@ public class ProductQuench
         var workUnits = new List<WorkUnit>();
         foreach (var server in serverList)
         {
-            // ContinueOnDatabaseFailure governs per-server enumeration failures (unreachable host,
-            // bad DatabaseIdentificationScript). When false, the first failure breaks out of the
-            // server loop and the template is considered failed. When true, the failure is logged
-            // and the loop continues to the next server (with no work units added for this server).
+            // Per-server enumeration failures (unreachable host, bad DatabaseIdentificationScript,
+            // schema-discovery failure inside a schema template) honor the type-aware abort scope:
+            // schema templates respect ContinueOnSchemaFailure, regular templates respect
+            // ContinueOnDatabaseFailure. When the relevant continue flag is false, the first failure
+            // breaks the outer loop before any further server is touched — fixes #247 where the
+            // pre-fix predicate only checked ContinueOnDatabaseFailure and let secondary-server
+            // work units leak through a primary-server abort-mode failure on a schema template.
             if (!EnumerateWorkUnitsForServer(template, server, workUnits))
             {
-                if (!template.ContinueOnDatabaseFailure)
+                if (ShouldAbortOnFailure(template))
                     break;
             }
         }
