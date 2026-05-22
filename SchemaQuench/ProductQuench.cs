@@ -677,13 +677,6 @@ public class ProductQuench
         var workUnits = new List<WorkUnit>();
         foreach (var server in serverList)
         {
-            // Per-server enumeration failures (unreachable host, bad DatabaseIdentificationScript,
-            // schema-discovery failure inside a schema template) honor the type-aware abort scope:
-            // schema templates respect ContinueOnSchemaFailure, regular templates respect
-            // ContinueOnDatabaseFailure. When the relevant continue flag is false, the first failure
-            // breaks the outer loop before any further server is touched — fixes #247 where the
-            // pre-fix predicate only checked ContinueOnDatabaseFailure and let secondary-server
-            // work units leak through a primary-server abort-mode failure on a schema template.
             if (!EnumerateWorkUnitsForServer(template, server, workUnits))
             {
                 if (ShouldAbortOnFailure(template))
@@ -837,9 +830,6 @@ public class ProductQuench
         string connectionString;
         if (!string.IsNullOrEmpty(connectionStringOverride) && server == _primaryServer)
         {
-            // Retarget the override to the discovered database — schema-template iteration walks
-            // multiple databases per server and the override's embedded DB (commonly master /
-            // postgres) is not the right target for per-database operations. Fix for #248.
             connectionString = ConnectionString.RetargetDatabase(connectionStringOverride, databaseName, _product.Platform);
         }
         else

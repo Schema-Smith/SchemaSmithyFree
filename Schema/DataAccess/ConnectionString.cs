@@ -28,15 +28,8 @@ public static class ConnectionString
 
     /// <summary>
     /// Rebuilds <paramref name="connectionString"/> to target <paramref name="databaseName"/>, preserving
-    /// host, auth, and any other connection options. Uses the platform-specific
-    /// <c>ConnectionStringBuilder</c> so quoting, escaping, and key normalization are handled correctly.
-    /// <para>Returns the input unchanged when <paramref name="connectionString"/> or
-    /// <paramref name="databaseName"/> is null/empty — callers can invoke this unconditionally
-    /// without first checking whether retargeting is needed.</para>
-    /// <para>Used by SchemaQuench schema-template discovery (#248): a user-supplied
-    /// <c>--ConnectionString</c> override embeds whatever DB the operator put in it (commonly an
-    /// admin DB like <c>master</c> / <c>postgres</c>), but per-database operations need to run
-    /// against the discovered target DB, not the override's embedded one.</para>
+    /// host, auth, and any other connection options. Returns the input unchanged when either argument
+    /// is null/empty, so callers can invoke unconditionally.
     /// </summary>
     public static string RetargetDatabase(string connectionString, string databaseName, Platform platform)
     {

@@ -219,12 +219,6 @@ public class DatabaseQuench
 
             try
             {
-                // MySQL: the connection string itself now targets _databaseName (built directly
-                // by ConnectionString.Build or retargeted from --ConnectionString override via
-                // ConnectionString.RetargetDatabase — see #248). The post-open USE statement that
-                // used to live here is now redundant. The reset-to-target routine in ResetDb still
-                // runs after user scripts that issue USE mid-execution; that path is unaffected.
-
                 // Schema-template existence check: run before slot 1 (kindling) so a missing
                 // schema fails fast with a clear error before any DDL is attempted. MySQL schema
                 // templates are rejected at load time (no namespace-inside-database concept);
@@ -1191,9 +1185,6 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
         var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
         var connectionProperties = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
-        // When the override is present, retarget it to _databaseName so per-database operations
-        // run against the right DB instead of whatever DB the operator embedded in the override
-        // (commonly master / postgres). Fix for #248.
         var connectionString = string.IsNullOrEmpty(connectionStringOverride)
             ? ConnectionString.Build(_product.Platform, _server, _databaseName, config["Target:User"], config["Target:Password"], config["Target:Port"], connectionProperties)
             : ConnectionString.RetargetDatabase(connectionStringOverride, _databaseName, _product.Platform);
