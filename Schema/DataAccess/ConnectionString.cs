@@ -4,7 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using MySqlConnector;
+using Npgsql;
 using Schema.Domain;
 
 namespace Schema.DataAccess;
@@ -19,6 +22,32 @@ public static class ConnectionString
             Platform.SqlServer => BuildSqlServer(serverName, dbName, user, password, port, connectionProperties),
             Platform.PostgreSQL => BuildPostgreSql(serverName, dbName, user, password, port, connectionProperties),
             Platform.MySQL => BuildMySql(serverName, dbName, user, password, port, connectionProperties),
+            _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
+        };
+    }
+
+    /// <summary>
+    /// Rebuilds <paramref name="connectionString"/> to target <paramref name="databaseName"/>, preserving
+    /// host, auth, and any other connection options. Uses the platform-specific
+    /// <c>ConnectionStringBuilder</c> so quoting, escaping, and key normalization are handled correctly.
+    /// <para>Returns the input unchanged when <paramref name="connectionString"/> or
+    /// <paramref name="databaseName"/> is null/empty — callers can invoke this unconditionally
+    /// without first checking whether retargeting is needed.</para>
+    /// <para>Used by SchemaQuench schema-template discovery (#248): a user-supplied
+    /// <c>--ConnectionString</c> override embeds whatever DB the operator put in it (commonly an
+    /// admin DB like <c>master</c> / <c>postgres</c>), but per-database operations need to run
+    /// against the discovered target DB, not the override's embedded one.</para>
+    /// </summary>
+    public static string RetargetDatabase(string connectionString, string databaseName, Platform platform)
+    {
+        if (string.IsNullOrEmpty(connectionString)) return connectionString;
+        if (string.IsNullOrEmpty(databaseName)) return connectionString;
+
+        return platform switch
+        {
+            Platform.SqlServer => new SqlConnectionStringBuilder(connectionString) { InitialCatalog = databaseName }.ToString(),
+            Platform.PostgreSQL => new NpgsqlConnectionStringBuilder(connectionString) { Database = databaseName }.ToString(),
+            Platform.MySQL => new MySqlConnectionStringBuilder(connectionString) { Database = databaseName }.ToString(),
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
         };
     }

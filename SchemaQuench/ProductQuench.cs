@@ -837,7 +837,10 @@ public class ProductQuench
         string connectionString;
         if (!string.IsNullOrEmpty(connectionStringOverride) && server == _primaryServer)
         {
-            connectionString = connectionStringOverride;
+            // Retarget the override to the discovered database — schema-template iteration walks
+            // multiple databases per server and the override's embedded DB (commonly master /
+            // postgres) is not the right target for per-database operations. Fix for #248.
+            connectionString = ConnectionString.RetargetDatabase(connectionStringOverride, databaseName, _product.Platform);
         }
         else
         {
