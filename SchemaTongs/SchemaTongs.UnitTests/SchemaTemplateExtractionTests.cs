@@ -1245,6 +1245,124 @@ public class SchemaTemplateExtractionTests
 
     #endregion
 
+    #region #249 — Platform-aware schema-name comparison
+
+    // SQL Server identifiers are case-insensitive by default. A source schema configured as
+    // "tenant_seed" must still match metadata reads that return "Tenant_Seed" (or any other casing).
+    // PostgreSQL stores identifiers in their declared case (quoted-identifier semantics matter),
+    // so case differences are real differences and must be preserved.
+
+    [Test]
+    public void SchemaTemplate_SqlServer_TableExtractedDespiteSchemaNameCaseMismatch()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            var overrides = ShouldCastAllFalse(Platform.SqlServer);
+            overrides["ShouldCast:Tables"] = "true";
+            RegisterConfig(Platform.SqlServer, overrides);
+
+            // Metadata returns the schema with different casing than the config — this is the
+            // realistic case-insensitive SQL Server scenario. Pre-fix the Ordinal compare
+            // skipped the table entirely.
+            var tableListReader = SingleSqlServerTableListReader("Tenant_Seed", "Customers");
+            var jsonReader = SingleColumnReader(
+                "{\"Name\":\"Customers\",\"Schema\":\"Tenant_Seed\",\"Columns\":[],\"ForeignKeys\":[],\"OldName\":\"\"}");
+            _command.ExecuteReader().Returns(tableListReader);
+            _commandJson.ExecuteReader().Returns(jsonReader);
+
+            var tongs = new SchemaTongs(Platform.SqlServer);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            // Table must be extracted despite the casing difference.
+            _fileWrapper.Received().WriteAllText(
+                Arg.Is<string>(s => s.EndsWith("Customers.json")),
+                Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void SchemaTemplate_SqlServer_Fk_SameSchemaCaseMismatch_Stripped()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            var overrides = ShouldCastAllFalse(Platform.SqlServer);
+            overrides["ShouldCast:Tables"] = "true";
+            RegisterConfig(Platform.SqlServer, overrides);
+
+            // FK's RelatedTableSchema casing differs from _sourceSchema. On SQL Server this is the
+            // same schema and the related-table-schema should be stripped (defaults to {{SchemaName}}
+            // at deploy time). Pre-fix the Ordinal compare preserved the literal "Tenant_Seed",
+            // leaving tenant deployments with FKs pointing back at the seed schema.
+            var tableListReader = SingleSqlServerTableListReader(SourceSchema, "Orders");
+            var jsonReader = SingleColumnReader(
+                "{\"Name\":\"Orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
+                "{\"Name\":\"FK_Orders_Customers\",\"Columns\":\"CustomerId\",\"RelatedTable\":\"Customers\",\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"Tenant_Seed\"}]}");
+            _command.ExecuteReader().Returns(tableListReader);
+            _commandJson.ExecuteReader().Returns(jsonReader);
+
+            string capturedJson = null;
+            _fileWrapper.When(f => f.WriteAllText(
+                Arg.Is<string>(s => s.EndsWith("Orders.json")),
+                Arg.Any<string>())).Do(ci => capturedJson = ci.ArgAt<string>(1));
+
+            var tongs = new SchemaTongs(Platform.SqlServer);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            Assert.That(capturedJson, Is.Not.Null);
+            var parsed = JObject.Parse(capturedJson);
+            var fks = (JArray)parsed["ForeignKeys"];
+            Assert.That(fks, Is.Not.Null);
+            Assert.That(fks.Count, Is.EqualTo(1));
+            Assert.That(fks[0]["RelatedTableSchema"], Is.Null,
+                "Case-insensitive SQL Server: 'Tenant_Seed' is the same schema as configured 'tenant_seed' and should be stripped.");
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void SchemaTemplate_PostgreSQL_TableSkippedWhenSchemaCaseMismatch()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            var overrides = ShouldCastAllFalse(Platform.PostgreSQL);
+            overrides["ShouldCast:Tables"] = "true";
+            RegisterConfig(Platform.PostgreSQL, overrides);
+
+            // PG: metadata returns "Tenant_Seed" but config is "tenant_seed". These are DIFFERENT
+            // schemas in PG (quoted-identifier semantics). The table must NOT be extracted.
+            var pgTableListReader = Substitute.For<IDataReader>();
+            var calls = 0;
+            pgTableListReader.Read().Returns(_ => calls++ < 1, _ => false);
+            pgTableListReader["schemaname"].Returns("Tenant_Seed");
+            pgTableListReader["tablename"].Returns("invoices");
+            _command.ExecuteReader().Returns(pgTableListReader);
+
+            string capturedJson = null;
+            _fileWrapper.When(f => f.WriteAllText(
+                Arg.Is<string>(s => s.EndsWith("invoices.json")),
+                Arg.Any<string>())).Do(ci => capturedJson = ci.ArgAt<string>(1));
+
+            var tongs = new SchemaTongs(Platform.PostgreSQL);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            Assert.That(capturedJson, Is.Null,
+                "PostgreSQL must preserve exact-case schema matching — 'Tenant_Seed' is a different schema than configured 'tenant_seed'.");
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    #endregion
+
     #region §7.1 — MySQL refusal
 
     [Test]

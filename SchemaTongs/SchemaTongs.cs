@@ -25,6 +25,7 @@ public class SchemaTongs
 {
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly Platform _platform;
+    private readonly StringComparison _schemaNameComparison;
     private readonly Stopwatch _stopwatch = new();
     private string _productPath = "";
     private string _templatePath = "";
@@ -97,6 +98,9 @@ public class SchemaTongs
     public SchemaTongs(Platform platform)
     {
         _platform = platform;
+        _schemaNameComparison = platform == Platform.SqlServer
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
     }
 
     internal void SetTemplatePath(string path) => _templatePath = path;
@@ -346,7 +350,7 @@ public class SchemaTongs
                 ss.Schema = null;
                 foreach (var fk in ss.ForeignKeys.OfType<SqlServerForeignKey>())
                 {
-                    if (string.Equals(fk.RelatedTableSchema, _sourceSchema, StringComparison.Ordinal))
+                    if (string.Equals(fk.RelatedTableSchema, _sourceSchema, _schemaNameComparison))
                         fk.RelatedTableSchema = null;
                 }
                 foreach (var col in ss.Columns.OfType<SqlServerColumn>())
@@ -363,7 +367,7 @@ public class SchemaTongs
                 pg.Schema = null;
                 foreach (var fk in pg.ForeignKeys.OfType<PostgreSqlForeignKey>())
                 {
-                    if (string.Equals(fk.RelatedTableSchema, _sourceSchema, StringComparison.Ordinal))
+                    if (string.Equals(fk.RelatedTableSchema, _sourceSchema, _schemaNameComparison))
                         fk.RelatedTableSchema = null;
                 }
                 foreach (var col in pg.Columns.OfType<PostgreSqlColumn>())
@@ -412,7 +416,7 @@ public class SchemaTongs
     /// </summary>
     private bool ShouldExtractFromSchema(string schema)
         => !_isSchemaTemplate
-           || string.Equals(schema, _sourceSchema, StringComparison.Ordinal);
+           || string.Equals(schema, _sourceSchema, _schemaNameComparison);
 
     /// <summary>
     /// Returns the appropriate filename for a per-schema object. In schema-template mode the
