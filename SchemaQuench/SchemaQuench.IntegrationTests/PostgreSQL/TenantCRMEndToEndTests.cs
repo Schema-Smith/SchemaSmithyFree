@@ -325,20 +325,8 @@ BEGIN
         DELETE FROM ""SchemaSmith"".""CompletedMigrationScripts"" WHERE ""ProductName"" = '{ProductName}';
     END IF;
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'SchemaSmith' AND table_name = 'ProductOwnership') THEN
-        -- Clear ownership rows for the demo's product AND for any other product that
-        -- previously claimed these tables. TenantCRM's Shared template recreates these
-        -- public-schema tables on every test run, so any pre-existing ownership row
-        -- (from a sibling fixture's SchemaTemplateProduct / SchemaTemplateCreateSchemaProduct
-        -- quench that didn't clean up before this fixture started) is stale and would
-        -- block the deploy with P0001 'tables already owned by another product'.
+        -- Clear the demo product's ownership rows so a fresh run starts clean.
         DELETE FROM ""SchemaSmith"".""ProductOwnership"" WHERE ""ProductName"" = '{ProductName}';
-        DELETE FROM ""SchemaSmith"".""ProductOwnership""
-            WHERE (""Schema"", ""TableName"") IN (
-                ('public', 'tenants'),
-                ('public', 'plans'),
-                ('public', 'countries'),
-                ('public', 'global_audit_log')
-            );
     END IF;
 END;
 $$;";
