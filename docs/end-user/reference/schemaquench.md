@@ -171,6 +171,8 @@ With schema templates, a single database can contribute many work units -- one p
 
 > **Note:** Templates with `AllowParallel: false` get their own serial queue. At most one of that template's iterations runs at a time, but other templates' parallel-eligible units continue to run concurrently alongside them. See [AllowParallel](schema-packages.md#allowparallel) for the per-template parallel-disable case.
 
+> **PostgreSQL `max_connections` sizing:** Each active work unit holds roughly four PG connections at peak (one main quench connection plus per-iteration sub-operations). At default `MaxThreads: 10`, plan for around 45 concurrent connections from SchemaQuench. At the cap `MaxThreads: 20`, plan for around 85. Size `max_connections` on the target as `MaxThreads × 4 + headroom for other apps, admin, and monitoring`. PostgreSQL's default `max_connections=100` covers default `MaxThreads` comfortably; tune the database ceiling proportionally if you raise `MaxThreads` or share the server with heavy workloads.
+
 ---
 
 ## ContinueOnDatabaseFailure
