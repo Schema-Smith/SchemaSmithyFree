@@ -18,10 +18,11 @@ namespace SchemaQuench.IntegrationTests.SqlServer;
 /// Slice-4 CreateSchemaIfMissing integration tests (design §10.4).
 ///
 /// <para>Uses SchemaTemplateProduct with test-setup variants rather than a dedicated fixture.
-/// The discovery script reads dbo.Tenants; for "missing schema" tests we insert a tenant row
-/// without pre-creating the schema, so the engine sees a schema name returned by discovery that
-/// does not exist as a real SQL Server schema. That exercises the CreateSchemaIfMissing path
-/// without altering the fixture at all.</para>
+/// The discovery script reads dbo.SchemaTemplateTenants (or dbo.SchemaTemplateCreateSchemaTenants
+/// for the CreateSchema variant); for "missing schema" tests we insert a tenant row without
+/// pre-creating the schema, so the engine sees a schema name returned by discovery that does not
+/// exist as a real SQL Server schema. That exercises the CreateSchemaIfMissing path without
+/// altering the fixture at all.</para>
 /// </summary>
 [Category("SqlServer")]
 public class SchemaCreationTests
@@ -65,7 +66,7 @@ public class SchemaCreationTests
             // Insert the ghost tenant into the discovery table but do NOT pre-create its schema.
             ResetTrackingAndCreateTenantSchemas(existingTenants);
             // Add ghost tenant row only — no schema creation.
-            ExecuteOnMainDb($"INSERT INTO dbo.Tenants ([Name]) VALUES (N'{missingTenant}');");
+            ExecuteOnMainDb($"INSERT INTO dbo.SchemaTemplateTenants ([Name]) VALUES (N'{missingTenant}');");
 
             FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
                 TestHelper.GetTestProductPath("SqlServer", ProductName);
@@ -124,7 +125,7 @@ public class SchemaCreationTests
             // Pre-create existing tenants normally.
             ResetTrackingAndCreateTenantSchemas(existingTenants);
             // Insert auto tenant row — schema does not exist yet.
-            ExecuteOnMainDb($"INSERT INTO dbo.Tenants ([Name]) VALUES (N'{autoTenant}');");
+            ExecuteOnMainDb($"INSERT INTO dbo.SchemaTemplateCreateSchemaTenants ([Name]) VALUES (N'{autoTenant}');");
 
             // SchemaTemplateCreateSchemaProduct is SchemaTemplateProduct with CreateSchemaIfMissing:true.
             FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
@@ -232,7 +233,8 @@ IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
     DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName IN ('{ProductName}', 'SchemaTemplateCreateSchemaProduct');
 IF OBJECT_ID('SchemaSmith.ProductOwnership', 'U') IS NOT NULL
     DELETE FROM SchemaSmith.ProductOwnership WHERE ProductName IN ('{ProductName}', 'SchemaTemplateCreateSchemaProduct');
-IF OBJECT_ID('dbo.Tenants', 'U') IS NOT NULL DELETE FROM dbo.Tenants;
+IF OBJECT_ID('dbo.SchemaTemplateTenants', 'U') IS NOT NULL DELETE FROM dbo.SchemaTemplateTenants;
+IF OBJECT_ID('dbo.SchemaTemplateCreateSchemaTenants', 'U') IS NOT NULL DELETE FROM dbo.SchemaTemplateCreateSchemaTenants;
 IF OBJECT_ID('dbo.Lookup', 'U') IS NOT NULL DELETE FROM dbo.Lookup;";
         cmd.ExecuteNonQuery();
 
@@ -244,14 +246,21 @@ IF OBJECT_ID('dbo.Lookup', 'U') IS NOT NULL DELETE FROM dbo.Lookup;";
             cmd.ExecuteNonQuery();
         }
 
+        // Seed BOTH renamed tenant tables — tests in this fixture exercise both
+        // SchemaTemplateProduct (reads dbo.SchemaTemplateTenants) and
+        // SchemaTemplateCreateSchemaProduct (reads dbo.SchemaTemplateCreateSchemaTenants).
         cmd.CommandText = @"
-IF OBJECT_ID('dbo.Tenants', 'U') IS NULL
-    CREATE TABLE dbo.Tenants ([Name] NVARCHAR(128) NOT NULL CONSTRAINT PK_Tenants PRIMARY KEY);";
+IF OBJECT_ID('dbo.SchemaTemplateTenants', 'U') IS NULL
+    CREATE TABLE dbo.SchemaTemplateTenants ([Name] NVARCHAR(128) NOT NULL CONSTRAINT PK_SchemaTemplateTenants PRIMARY KEY);
+IF OBJECT_ID('dbo.SchemaTemplateCreateSchemaTenants', 'U') IS NULL
+    CREATE TABLE dbo.SchemaTemplateCreateSchemaTenants ([Name] NVARCHAR(128) NOT NULL CONSTRAINT PK_SchemaTemplateCreateSchemaTenants PRIMARY KEY);";
         cmd.ExecuteNonQuery();
 
         foreach (var tenant in tenants)
         {
-            cmd.CommandText = $"INSERT INTO dbo.Tenants ([Name]) VALUES (N'{tenant}');";
+            cmd.CommandText = $"INSERT INTO dbo.SchemaTemplateTenants ([Name]) VALUES (N'{tenant}');";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = $"INSERT INTO dbo.SchemaTemplateCreateSchemaTenants ([Name]) VALUES (N'{tenant}');";
             cmd.ExecuteNonQuery();
         }
 
@@ -270,7 +279,8 @@ IF OBJECT_ID('dbo.Tenants', 'U') IS NULL
         cmd.CommandText = @$"
 IF OBJECT_ID('dbo.SharedAudit', 'U') IS NOT NULL DROP TABLE dbo.SharedAudit;
 IF OBJECT_ID('dbo.Lookup', 'U') IS NOT NULL DROP TABLE dbo.Lookup;
-IF OBJECT_ID('dbo.Tenants', 'U') IS NOT NULL DROP TABLE dbo.Tenants;
+IF OBJECT_ID('dbo.SchemaTemplateTenants', 'U') IS NOT NULL DROP TABLE dbo.SchemaTemplateTenants;
+IF OBJECT_ID('dbo.SchemaTemplateCreateSchemaTenants', 'U') IS NOT NULL DROP TABLE dbo.SchemaTemplateCreateSchemaTenants;
 IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
     DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName IN ('{ProductName}', 'SchemaTemplateCreateSchemaProduct');
 IF OBJECT_ID('SchemaSmith.ProductOwnership', 'U') IS NOT NULL

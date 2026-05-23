@@ -1,6 +1,6 @@
 {
   "Schema": "[dbo]",
-  "Name": "[Tenants]",
+  "Name": "[SchemaTemplateTenants]",
   "Columns": [
     {
       "Name": "[Name]",
@@ -9,7 +9,7 @@
   ],
   "Indexes": [
     {
-      "Name": "[PK_Tenants]",
+      "Name": "[PK_SchemaTemplateTenants]",
       "PrimaryKey": true,
       "IndexColumns": "[Name]"
     }

@@ -1,7 +1,7 @@
 {
     "Name": "TenantBody",
     "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
-    "SchemaIdentificationScript": "SELECT [Name] FROM dbo.Tenants ORDER BY [Name]",
+    "SchemaIdentificationScript": "SELECT [Name] FROM dbo.SchemaTemplateTenants ORDER BY [Name]",
     "AllowParallel": false,
     "VersionStampScript": "PRINT '{{ReleaseVersion}}'",
     "ScriptTokens": {

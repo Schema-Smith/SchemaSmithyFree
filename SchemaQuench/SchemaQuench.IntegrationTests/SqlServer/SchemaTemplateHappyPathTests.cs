@@ -77,8 +77,8 @@ public class SchemaTemplateHappyPathTests
                 foreach (var tenant in DefaultTenants)
                     _progressLog.Received(1).Info($"[{_server}].[{_mainDb}] [Schema: {tenant}] Successfully Quenched");
 
-                // Shared content present once in dbo: Tenants, Lookup, SharedAudit + seed row.
-                AssertTableExists("dbo", "Tenants");
+                // Shared content present once in dbo: SchemaTemplateTenants, Lookup, SharedAudit + seed row.
+                AssertTableExists("dbo", "SchemaTemplateTenants");
                 AssertTableExists("dbo", "Lookup");
                 AssertTableExists("dbo", "SharedAudit");
                 Assert.That(ScalarCount("SELECT COUNT(*) FROM dbo.Lookup WHERE LookupID = 1 AND Code = N'ALPHA'"),
@@ -179,7 +179,7 @@ public class SchemaTemplateHappyPathTests
 
             // Insert a poisoned 'dbo' tenant row so discovery returns a reserved name.
             // Real product code's reserved-name guard should reject this and abort the template.
-            ExecuteOnMainDb("INSERT INTO dbo.Tenants ([Name]) VALUES (N'dbo')");
+            ExecuteOnMainDb("INSERT INTO dbo.SchemaTemplateTenants ([Name]) VALUES (N'dbo')");
 
             FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
                 TestHelper.GetTestProductPath("SqlServer", ProductName);
@@ -206,7 +206,7 @@ public class SchemaTemplateHappyPathTests
             }
             finally
             {
-                ExecuteOnMainDb("DELETE FROM dbo.Tenants WHERE [Name] = N'dbo'");
+                ExecuteOnMainDb("DELETE FROM dbo.SchemaTemplateTenants WHERE [Name] = N'dbo'");
                 DropTenantSchemas(DefaultTenants);
                 LogFactory.Clear();
                 FactoryContainer.Unregister<IEnvironment>();
@@ -708,7 +708,7 @@ WHERE fs.name = '{tenant}' AND ft.name = 'Orders' AND fk.name = 'FK_Orders_Looku
         // retained (harmless). Re-adding the tenant later finds the rows intact and run-once
         // migrations correctly skip. Concretely:
         //   1. Quench with {acme, beta, globex} — beta's SeedTenantMarker tracked.
-        //   2. Remove beta from dbo.Tenants. Mutate beta's Marker row directly.
+        //   2. Remove beta from dbo.SchemaTemplateTenants. Mutate beta's Marker row directly.
         //   3. Quench again — beta is NOT in discovery → no iteration → no mutation.
         //   4. Re-add beta. Quench again — beta's tracking row still exists → migration
         //      skips → the mutated marker is preserved.
@@ -731,7 +731,7 @@ WHERE fs.name = '{tenant}' AND ft.name = 'Orders' AND fk.name = 'FK_Orders_Looku
                 ExecuteOnMainDb("UPDATE [tenant_beta].[Customers] SET Marker = N'mutated' WHERE CustomerID = 1");
 
                 // Offboard beta from discovery.
-                ExecuteOnMainDb("DELETE FROM dbo.Tenants WHERE [Name] = N'tenant_beta'");
+                ExecuteOnMainDb("DELETE FROM dbo.SchemaTemplateTenants WHERE [Name] = N'tenant_beta'");
 
                 // Quench 2: beta is not in discovery, so no work unit is dispatched for it.
                 _progressLog.ClearReceivedCalls();
@@ -753,7 +753,7 @@ WHERE fs.name = '{tenant}' AND ft.name = 'Orders' AND fk.name = 'FK_Orders_Looku
                 AssertMigrationTracked(TenantBodyTemplate, "tenant_beta", "MigrationScripts/Before/SeedTenantMarker.sql");
 
                 // Re-onboard beta.
-                ExecuteOnMainDb("INSERT INTO dbo.Tenants ([Name]) VALUES (N'tenant_beta')");
+                ExecuteOnMainDb("INSERT INTO dbo.SchemaTemplateTenants ([Name]) VALUES (N'tenant_beta')");
 
                 // Quench 3: beta is back. Its tracking row exists, so SeedTenantMarker must skip.
                 _progressLog.ClearReceivedCalls();
@@ -1318,7 +1318,7 @@ IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
         cmd.CommandText = @$"
 IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
     DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{ProductName}';
-IF OBJECT_ID('dbo.Tenants', 'U') IS NOT NULL DELETE FROM dbo.Tenants;
+IF OBJECT_ID('dbo.SchemaTemplateTenants', 'U') IS NOT NULL DELETE FROM dbo.SchemaTemplateTenants;
 IF OBJECT_ID('dbo.Lookup', 'U') IS NOT NULL DELETE FROM dbo.Lookup;";
         cmd.ExecuteNonQuery();
 
@@ -1332,20 +1332,20 @@ IF OBJECT_ID('dbo.Lookup', 'U') IS NOT NULL DELETE FROM dbo.Lookup;";
             cmd.ExecuteNonQuery();
         }
 
-        // The discovery script reads dbo.Tenants — that table is created by the Shared template, but
+        // The discovery script reads dbo.SchemaTemplateTenants — that table is created by the Shared template, but
         // it must already exist on the FIRST quench (TenantBody's DatabaseIdentificationScript runs
         // before Shared's tables are created if we left this to the fixture only). Create it
         // pre-emptively here so the test bootstraps cleanly; the Shared template's own CREATE-IF-MISSING
         // semantics will tolerate the pre-existing table.
         cmd.CommandText = @"
-IF OBJECT_ID('dbo.Tenants', 'U') IS NULL
-    CREATE TABLE dbo.Tenants ([Name] NVARCHAR(128) NOT NULL CONSTRAINT PK_Tenants PRIMARY KEY);";
+IF OBJECT_ID('dbo.SchemaTemplateTenants', 'U') IS NULL
+    CREATE TABLE dbo.SchemaTemplateTenants ([Name] NVARCHAR(128) NOT NULL CONSTRAINT PK_SchemaTemplateTenants PRIMARY KEY);";
         cmd.ExecuteNonQuery();
 
         // Insert tenant rows.
         foreach (var tenant in tenants)
         {
-            cmd.CommandText = $"INSERT INTO dbo.Tenants ([Name]) VALUES (N'{tenant}');";
+            cmd.CommandText = $"INSERT INTO dbo.SchemaTemplateTenants ([Name]) VALUES (N'{tenant}');";
             cmd.ExecuteNonQuery();
         }
 
@@ -1365,7 +1365,7 @@ IF OBJECT_ID('dbo.Tenants', 'U') IS NULL
         cmd.CommandText = @$"
 IF OBJECT_ID('dbo.SharedAudit', 'U') IS NOT NULL DROP TABLE dbo.SharedAudit;
 IF OBJECT_ID('dbo.Lookup', 'U') IS NOT NULL DROP TABLE dbo.Lookup;
-IF OBJECT_ID('dbo.Tenants', 'U') IS NOT NULL DROP TABLE dbo.Tenants;
+IF OBJECT_ID('dbo.SchemaTemplateTenants', 'U') IS NOT NULL DROP TABLE dbo.SchemaTemplateTenants;
 IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
     DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{ProductName}';";
         cmd.ExecuteNonQuery();

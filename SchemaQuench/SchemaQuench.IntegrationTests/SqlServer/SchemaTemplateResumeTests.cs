@@ -196,7 +196,7 @@ KindleForge
         cmd.CommandText = @$"
 IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
     DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{ProductName}';
-IF OBJECT_ID('dbo.Tenants', 'U') IS NOT NULL DELETE FROM dbo.Tenants;
+IF OBJECT_ID('dbo.SchemaTemplateTenants', 'U') IS NOT NULL DELETE FROM dbo.SchemaTemplateTenants;
 IF OBJECT_ID('dbo.Lookup', 'U') IS NOT NULL DELETE FROM dbo.Lookup;
 IF OBJECT_ID('dbo.SharedAudit', 'U') IS NOT NULL DELETE FROM dbo.SharedAudit;";
         cmd.ExecuteNonQuery();
@@ -210,13 +210,13 @@ IF OBJECT_ID('dbo.SharedAudit', 'U') IS NOT NULL DELETE FROM dbo.SharedAudit;";
         }
 
         cmd.CommandText = @"
-IF OBJECT_ID('dbo.Tenants', 'U') IS NULL
-    CREATE TABLE dbo.Tenants ([Name] NVARCHAR(128) NOT NULL CONSTRAINT PK_Tenants PRIMARY KEY);";
+IF OBJECT_ID('dbo.SchemaTemplateTenants', 'U') IS NULL
+    CREATE TABLE dbo.SchemaTemplateTenants ([Name] NVARCHAR(128) NOT NULL CONSTRAINT PK_SchemaTemplateTenants PRIMARY KEY);";
         cmd.ExecuteNonQuery();
 
         foreach (var tenant in tenants)
         {
-            cmd.CommandText = $"INSERT INTO dbo.Tenants ([Name]) VALUES (N'{tenant}');";
+            cmd.CommandText = $"INSERT INTO dbo.SchemaTemplateTenants ([Name]) VALUES (N'{tenant}');";
             cmd.ExecuteNonQuery();
         }
 
@@ -235,7 +235,7 @@ IF OBJECT_ID('dbo.Tenants', 'U') IS NULL
         cmd.CommandText = @$"
 IF OBJECT_ID('dbo.SharedAudit', 'U') IS NOT NULL DROP TABLE dbo.SharedAudit;
 IF OBJECT_ID('dbo.Lookup', 'U') IS NOT NULL DROP TABLE dbo.Lookup;
-IF OBJECT_ID('dbo.Tenants', 'U') IS NOT NULL DROP TABLE dbo.Tenants;
+IF OBJECT_ID('dbo.SchemaTemplateTenants', 'U') IS NOT NULL DROP TABLE dbo.SchemaTemplateTenants;
 IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts', 'U') IS NOT NULL
     DELETE FROM SchemaSmith.CompletedMigrationScripts WHERE ProductName = '{ProductName}';";
         cmd.ExecuteNonQuery();
