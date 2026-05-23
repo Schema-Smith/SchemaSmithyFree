@@ -243,8 +243,8 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'SchemaSmith' AND table_name = 'ProductOwnership') THEN
         DELETE FROM ""SchemaSmith"".""ProductOwnership"" WHERE ""ProductName"" = '{ProductName}';
     END IF;
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tenants') THEN
-        DELETE FROM public.tenants;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schematemplate_tenants') THEN
+        DELETE FROM public.schematemplate_tenants;
     END IF;
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'lookup') THEN
         DELETE FROM public.lookup;
@@ -262,12 +262,12 @@ $$;";
         }
 
         cmd.CommandText = @"
-CREATE TABLE IF NOT EXISTS public.tenants (name VARCHAR(128) NOT NULL CONSTRAINT pk_tenants PRIMARY KEY);";
+CREATE TABLE IF NOT EXISTS public.schematemplate_tenants (name VARCHAR(128) NOT NULL CONSTRAINT pk_schematemplate_tenants PRIMARY KEY);";
         cmd.ExecuteNonQuery();
 
         foreach (var tenant in tenants)
         {
-            cmd.CommandText = $"INSERT INTO public.tenants (name) VALUES ('{tenant}');";
+            cmd.CommandText = $"INSERT INTO public.schematemplate_tenants (name) VALUES ('{tenant}');";
             cmd.ExecuteNonQuery();
         }
 
@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS public.tenants (name VARCHAR(128) NOT NULL CONSTRAINT
         cmd.CommandText = @$"
 DROP TABLE IF EXISTS public.shared_audit CASCADE;
 DROP TABLE IF EXISTS public.lookup CASCADE;
-DROP TABLE IF EXISTS public.tenants CASCADE;
+DROP TABLE IF EXISTS public.schematemplate_tenants CASCADE;
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'SchemaSmith' AND table_name = 'CompletedMigrationScripts') THEN

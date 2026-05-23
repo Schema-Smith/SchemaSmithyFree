@@ -71,7 +71,7 @@ public class SchemaCreationTests
 
             ResetTrackingAndCreateTenantSchemas(existingTenants);
             // Insert ghost tenant row only — no schema creation.
-            ExecuteOnMainDb($"INSERT INTO public.tenants (name) VALUES ('{missingTenant}');");
+            ExecuteOnMainDb($"INSERT INTO public.schematemplate_tenants (name) VALUES ('{missingTenant}');");
 
             FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
                 TestHelper.GetTestProductPath("PostgreSQL", ProductName);
@@ -122,7 +122,7 @@ public class SchemaCreationTests
             SetupSharedMocks();
 
             ResetTrackingAndCreateTenantSchemas(existingTenants);
-            ExecuteOnMainDb($"INSERT INTO public.tenants (name) VALUES ('{autoTenant}');");
+            ExecuteOnMainDb($"INSERT INTO public.schematemplate_createschema_tenants (name) VALUES ('{autoTenant}');");
 
             FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
                 TestHelper.GetTestProductPath("PostgreSQL", "SchemaTemplateCreateSchemaProduct");
@@ -228,8 +228,11 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'SchemaSmith' AND table_name = 'ProductOwnership') THEN
         DELETE FROM ""SchemaSmith"".""ProductOwnership"" WHERE ""ProductName"" IN ('{ProductName}', 'SchemaTemplateCreateSchemaProduct');
     END IF;
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tenants') THEN
-        DELETE FROM public.tenants;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schematemplate_tenants') THEN
+        DELETE FROM public.schematemplate_tenants;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schematemplate_createschema_tenants') THEN
+        DELETE FROM public.schematemplate_createschema_tenants;
     END IF;
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'lookup') THEN
         DELETE FROM public.lookup;
@@ -246,12 +249,18 @@ $$;";
             cmd.ExecuteNonQuery();
         }
 
-        cmd.CommandText = @"CREATE TABLE IF NOT EXISTS public.tenants (name VARCHAR(128) NOT NULL CONSTRAINT pk_tenants PRIMARY KEY);";
+        // Seed BOTH renamed tenant tables — tests in this fixture exercise both
+        // SchemaTemplateProduct (reads public.schematemplate_tenants) and
+        // SchemaTemplateCreateSchemaProduct (reads public.schematemplate_createschema_tenants).
+        cmd.CommandText = @"CREATE TABLE IF NOT EXISTS public.schematemplate_tenants (name VARCHAR(128) NOT NULL CONSTRAINT pk_schematemplate_tenants PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS public.schematemplate_createschema_tenants (name VARCHAR(128) NOT NULL CONSTRAINT pk_schematemplate_createschema_tenants PRIMARY KEY);";
         cmd.ExecuteNonQuery();
 
         foreach (var tenant in tenants)
         {
-            cmd.CommandText = $"INSERT INTO public.tenants (name) VALUES ('{tenant}');";
+            cmd.CommandText = $"INSERT INTO public.schematemplate_tenants (name) VALUES ('{tenant}');";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = $"INSERT INTO public.schematemplate_createschema_tenants (name) VALUES ('{tenant}');";
             cmd.ExecuteNonQuery();
         }
 
@@ -270,7 +279,8 @@ $$;";
         cmd.CommandText = @$"
 DROP TABLE IF EXISTS public.shared_audit CASCADE;
 DROP TABLE IF EXISTS public.lookup CASCADE;
-DROP TABLE IF EXISTS public.tenants CASCADE;
+DROP TABLE IF EXISTS public.schematemplate_tenants CASCADE;
+DROP TABLE IF EXISTS public.schematemplate_createschema_tenants CASCADE;
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'SchemaSmith' AND table_name = 'CompletedMigrationScripts') THEN

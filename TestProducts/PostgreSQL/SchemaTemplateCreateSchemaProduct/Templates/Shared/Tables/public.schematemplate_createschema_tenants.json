@@ -1,6 +1,6 @@
 {
   "Schema": "public",
-  "Name": "tenants",
+  "Name": "schematemplate_createschema_tenants",
   "Columns": [
     {
       "Name": "name",
@@ -9,7 +9,7 @@
   ],
   "Indexes": [
     {
-      "Name": "pk_tenants",
+      "Name": "pk_schematemplate_createschema_tenants",
       "PrimaryKey": true,
       "IndexColumns": "name"
     }

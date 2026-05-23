@@ -109,8 +109,8 @@ public class SchemaTemplateHappyPathTests
                 foreach (var tenant in DefaultTenants)
                     _progressLog.Received(1).Info($"[{_server}].[{_mainDb}] [Schema: {tenant}] Successfully Quenched");
 
-                // Shared content in public: tenants, lookup, shared_audit + seed row.
-                AssertTableExists("public", "tenants");
+                // Shared content in public: schematemplate_tenants, lookup, shared_audit + seed row.
+                AssertTableExists("public", "schematemplate_tenants");
                 AssertTableExists("public", "lookup");
                 AssertTableExists("public", "shared_audit");
                 Assert.That(ScalarCount("SELECT COUNT(*) FROM public.lookup WHERE lookup_id = 1 AND code = 'ALPHA'"),
@@ -119,7 +119,7 @@ public class SchemaTemplateHappyPathTests
                 // Regression for slice-3 audit B1: Shared template's ProductOwnership rows
                 // must carry template_name = 'Shared' AND survive TenantBody iteration's
                 // FixupTableOwnership prune + ModifiedTableQuench drop pass.
-                foreach (var sharedTable in new[] { "tenants", "lookup", "shared_audit" })
+                foreach (var sharedTable in new[] { "schematemplate_tenants", "lookup", "shared_audit" })
                 {
                     var ownershipCount = ScalarCount(
                         $"SELECT COUNT(*) FROM \"SchemaSmith\".\"ProductOwnership\" WHERE \"ProductName\" = '{ProductName}' AND \"Schema\" = 'public' AND \"TableName\" = '{sharedTable}' AND \"IndexName\" IS NULL AND template_name = '{SharedTemplate}'");
@@ -213,7 +213,7 @@ public class SchemaTemplateHappyPathTests
             ResetTrackingAndCreateTenantSchemas(DefaultTenants);
 
             // Insert a poisoned 'public' tenant row so discovery returns a reserved name.
-            ExecuteOnMainDb("INSERT INTO public.tenants (name) VALUES ('public')");
+            ExecuteOnMainDb("INSERT INTO public.schematemplate_tenants (name) VALUES ('public')");
 
             FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
                 TestHelper.GetTestProductPath("PostgreSQL", ProductName);
@@ -238,7 +238,7 @@ public class SchemaTemplateHappyPathTests
             }
             finally
             {
-                ExecuteOnMainDb("DELETE FROM public.tenants WHERE name = 'public'");
+                ExecuteOnMainDb("DELETE FROM public.schematemplate_tenants WHERE name = 'public'");
                 DropTenantSchemas(DefaultTenants);
                 LogFactory.Clear();
                 FactoryContainer.Unregister<IEnvironment>();
@@ -702,7 +702,7 @@ SELECT COUNT(*) FROM information_schema.table_constraints tc
 
                 ExecuteOnMainDb("UPDATE \"tenant_beta\".customers SET marker = 'mutated' WHERE customer_id = 1");
 
-                ExecuteOnMainDb("DELETE FROM public.tenants WHERE name = 'tenant_beta'");
+                ExecuteOnMainDb("DELETE FROM public.schematemplate_tenants WHERE name = 'tenant_beta'");
 
                 _progressLog.ClearReceivedCalls();
                 RunSchemaQuench();
@@ -718,7 +718,7 @@ SELECT COUNT(*) FROM information_schema.table_constraints tc
 
                 AssertMigrationTracked(TenantBodyTemplate, "tenant_beta", "Before Scripts/SeedTenantMarker.sql");
 
-                ExecuteOnMainDb("INSERT INTO public.tenants (name) VALUES ('tenant_beta')");
+                ExecuteOnMainDb("INSERT INTO public.schematemplate_tenants (name) VALUES ('tenant_beta')");
 
                 _progressLog.ClearReceivedCalls();
                 RunSchemaQuench();
@@ -1002,8 +1002,8 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'SchemaSmith' AND table_name = 'ProductOwnership') THEN
         DELETE FROM ""SchemaSmith"".""ProductOwnership"" WHERE ""ProductName"" = '{ProductName}';
     END IF;
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tenants') THEN
-        DELETE FROM public.tenants;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schematemplate_tenants') THEN
+        DELETE FROM public.schematemplate_tenants;
     END IF;
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'lookup') THEN
         DELETE FROM public.lookup;
@@ -1021,12 +1021,12 @@ $$;";
         }
 
         cmd.CommandText = @"
-CREATE TABLE IF NOT EXISTS public.tenants (name VARCHAR(128) NOT NULL CONSTRAINT pk_tenants PRIMARY KEY);";
+CREATE TABLE IF NOT EXISTS public.schematemplate_tenants (name VARCHAR(128) NOT NULL CONSTRAINT pk_schematemplate_tenants PRIMARY KEY);";
         cmd.ExecuteNonQuery();
 
         foreach (var tenant in tenants)
         {
-            cmd.CommandText = $"INSERT INTO public.tenants (name) VALUES ('{tenant}');";
+            cmd.CommandText = $"INSERT INTO public.schematemplate_tenants (name) VALUES ('{tenant}');";
             cmd.ExecuteNonQuery();
         }
 
@@ -1045,7 +1045,7 @@ CREATE TABLE IF NOT EXISTS public.tenants (name VARCHAR(128) NOT NULL CONSTRAINT
         cmd.CommandText = @$"
 DROP TABLE IF EXISTS public.shared_audit CASCADE;
 DROP TABLE IF EXISTS public.lookup CASCADE;
-DROP TABLE IF EXISTS public.tenants CASCADE;
+DROP TABLE IF EXISTS public.schematemplate_tenants CASCADE;
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'SchemaSmith' AND table_name = 'CompletedMigrationScripts') THEN
