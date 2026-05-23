@@ -2,7 +2,7 @@
     "Name": "TenantBody",
     "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datistemplate = false AND datname = '{{MainDB}}'",
     "SchemaIdentificationScript": "SELECT name FROM public.schematemplate_tenants ORDER BY name",
-    "AllowParallel": false,
+    "AllowParallel": true,
     "VersionStampScript": "DO $$\nBEGIN\nRAISE NOTICE '{{ReleaseVersion}}';\nEND;\n$$;",
     "ScriptTokens": {
         "TenantLabel": "<*Query*>SELECT '{{SchemaName}}_label'"
