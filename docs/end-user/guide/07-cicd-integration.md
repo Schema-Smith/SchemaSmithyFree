@@ -236,7 +236,7 @@ The pattern is the same regardless of platform: store the credential in the plat
 
 **Validate before deploying.** Wire up JSON Schema validation on every PR to catch structural problems without a database. See [Testing and Validation](06-testing-and-validation.md#schema-validation-in-ci) for the exact workflow.
 
-**WhatIf before production.** Non-negotiable. Run WhatIf against a disposable database on every PR that touches schema files. It costs minutes in CI and saves hours of incident response.
+**WhatIf for tricky changes.** Reach for WhatIf when you're validating a complex migration, deploying an unfamiliar package, or working with an unfamiliar target. It costs minutes in CI and surfaces exactly which SQL statement or token would fail before it hits a real database. Once you trust the package and the pipeline, direct deploys are the normal mode.
 
 **Build once, deploy the same artifact.** Zip your schema package, version it, store it. Deploy that same zip to dev, staging, and production. If you rebuild per environment, you're not testing what you're deploying.
 
