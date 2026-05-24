@@ -1,0 +1,47 @@
+# AGENTS.md — Working in this Repo with an AI Coding Assistant
+
+Quick reference for AI coding agents (Claude Code, Cursor, Copilot, Gemini, etc.) working in this repo. For the full human-readable contribution story, read [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Hard rules — agents must follow these without exception
+
+- **Tests first.** Write the failing test before the implementation. PRs without tests for new behavior will be rejected. See CONTRIBUTING.md "Test-Driven Development."
+- **Don't suppress warnings.** `Directory.Build.props` sets `TreatWarningsAsErrors=true`. Fix the underlying issue, never `#pragma warning disable` to silence CI.
+- **OS portability.** Code shipped in the CLI tools runs on Windows, Linux, and macOS, on x64 and ARM64. Watch for hard-coded path separators, case-sensitive filesystems, line-ending assumptions, and culture-dependent string formatting.
+- **Engine parity.** Code that touches SQL Server, PostgreSQL, or MySQL must work on the others where the feature applies. Don't ship single-engine changes without either parity in the same PR or a tracked follow-up issue for the missing engines.
+- **Mock at the right boundary.** Unit tests mock the database (and other dependencies) to stay fast and focused on the unit under test. Integration tests that validate SQL behavior — query plans, type coercion, MERGE semantics, error codes, transaction semantics — MUST run against real engines via Docker; no DB mocking when SQL behavior is the thing being tested. Integration tests for non-DB concerns (file access, deserialization, isolator behavior) can mock the DB to avoid combinatorial runs across all three engines.
+- **Copyright header on new files.** New `.cs` files: `// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.` New `Schema/Scripts/*.sql` files: same text as a `--` comment. Not required on user-facing templates (`TestProducts/`, `Demos/`, anything under `MigrationScripts/` directories).
+
+## Quick reference
+
+- **Build:** `dotnet build SchemaSmith.sln`
+- **Test:** `dotnet test SchemaSmith.sln`
+- **Target framework:** `net10.0` (single target, set in `Directory.Build.props`)
+- **Style:** `.editorconfig` at the repo root encodes naming + formatting rules — let your IDE apply them on save.
+
+## Where things live
+
+- `SchemaQuench/`, `SchemaTongs/`, `DataTongs/` — the three CLI tools.
+- `Schema/` — shared library (domain model, data access, delivery, isolators, embedded scripts). Published as the `SchemaSmith.Schema` NuGet package for downstream consumers.
+- `TestProducts/`, `Demos/` — schema-package fixtures used by integration tests and demos.
+- `docs/end-user/` — user-facing documentation; rendered at schemasmith.com.
+- `packaging/` — release packaging assets.
+
+Each tool project has companion `*.UnitTests` and `*.IntegrationTests` projects (e.g., `SchemaQuench.UnitTests`, `SchemaQuench.IntegrationTests`). Tests live next to the project they test.
+
+## Conventions you'll encounter
+
+- **TDD discipline** — see CONTRIBUTING.md "Test-Driven Development."
+- **Coverage target >85%** — see CONTRIBUTING.md "Code Coverage." Reductions need a stated reason in the PR description.
+- **Conventional commit prefixes** — `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`, `ci`. See CONTRIBUTING.md "Commit Messages."
+- **One concern per PR** — see CONTRIBUTING.md "Pull Request Guidelines."
+- **Self-review checklist** — walk through it before marking a PR ready. See CONTRIBUTING.md "Self-Review Checklist."
+
+## What's NOT here
+
+This file deliberately doesn't duplicate `CONTRIBUTING.md`. For:
+
+- The full code-review philosophy → CONTRIBUTING.md "Code Review"
+- The Definition of Done → CONTRIBUTING.md "Definition of Done"
+- Contributor recognition policy → CONTRIBUTING.md "How Contributors Are Recognized"
+- Security disclosure → [`SECURITY.md`](SECURITY.md)
+- Code of conduct → [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
