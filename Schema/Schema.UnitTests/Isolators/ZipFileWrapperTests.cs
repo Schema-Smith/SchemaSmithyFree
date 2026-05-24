@@ -167,6 +167,17 @@ public class ZipFileWrapperTests
         Assert.That(ex!.Message, Does.Contain("missing.bin"));
     }
 
+    [Test]
+    public void ReadAllBytes_ThrowsFileNotFound_WhenPathIsNullOrEmpty()
+    {
+        _wrapper.SetZipEntries([MockBinaryEntry("file.bin", [1])]);
+        Assert.Multiple(() =>
+        {
+            Assert.Throws<FileNotFoundException>(() => _wrapper.ReadAllBytes(null));
+            Assert.Throws<FileNotFoundException>(() => _wrapper.ReadAllBytes(""));
+        });
+    }
+
     // --- IsValidZipFile ---
 
     [Test]
