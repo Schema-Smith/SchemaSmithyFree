@@ -24,7 +24,7 @@ The CLI tools target:
 
 - **.NET:** `net10.0` (single target, set in `Directory.Build.props`)
 - **IDEs:** Visual Studio 2026 or JetBrains Rider (both with full ReSharper / built-in analyzer support)
-- **Databases tested in CI:** SQL Server (`2022-latest`), PostgreSQL 15+, MySQL 8.x. Should work on any version at compatibility level 130+ (SQL Server) or the documented minimum for the engine.
+- **Databases tested in CI:** SQL Server (`2019-CU27-ubuntu-20.04`), PostgreSQL 15+, MySQL 8.x. Should work on any version at compatibility level 130+ (SQL Server) or the documented minimum for the engine.
 
 ### Running Locally with Docker
 
