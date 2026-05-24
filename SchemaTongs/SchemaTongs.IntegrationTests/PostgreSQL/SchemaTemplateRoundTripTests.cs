@@ -21,7 +21,7 @@ namespace SchemaTongs.IntegrationTests.PostgreSQL;
 /// <para>The round-trip property: build a live PG source DB with a <c>tenant_seed</c>
 /// schema (tables, FKs including one cross-schema to <c>public.countries</c>, a procedure
 /// body referencing both <c>tenant_seed.customers</c> and <c>public.global_audit_log</c>,
-/// and a view) → run SchemaTongs with <c>Template.SourceSchema = "tenant_seed"</c> into a
+/// and a view) → run SchemaTongs with <c>Source.Schema = "tenant_seed"</c> into a
 /// temp directory → drop and recreate the <c>tenant_seed</c> schema empty → run SchemaQuench
 /// against the extracted package (whose stub <c>SchemaIdentificationScript</c> returns
 /// <c>'tenant_seed'</c>) → assert the rebuilt schema is structurally equivalent.</para>
@@ -348,7 +348,7 @@ $$;";
             ["Product:Path"] = _tempProductPath,
             ["Product:Name"] = ProductName,
             ["Template:Name"] = TemplateName,
-            ["Template:SourceSchema"] = SourceSchema,
+            ["Source:Schema"] = SourceSchema,
             ["ShouldCast:Tables"] = "true",
             ["ShouldCast:Views"] = "true",
             ["ShouldCast:Procedures"] = "true",

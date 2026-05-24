@@ -4,6 +4,10 @@
         "User": "", // SQL Server: leave User and Password blank for Windows authentication
         "Password": "",
         "Database": "",
+        "Schema": "", // Mirrors DataTongs Source.Schema for round-trip symmetry. SQL Server / PostgreSQL only —
+                  // when set, activates schema-template extraction mode (see Template.SchemaIdentificationScript).
+                  // On MySQL (where schema = database), Source.Schema is accepted as a fallback for
+                  // Source.Database, but Source.Database is preferred.
         "Port": "", // Optional for all platforms — overrides default port
         "Platform": "", // SqlServer, PostgreSQL, or MySQL
         "ConnectionProperties": {
@@ -21,10 +25,7 @@
     // This becomes the folder name for the template that is exported as well as the template name.
     "Template": {
         "Name": "",
-        "SourceSchema": "", // SQL Server / PostgreSQL only. When set, activates schema-template extraction mode:
-                            // emits unqualified filenames, omits the JSON Schema field, strips same-schema
-                            // RelatedTableSchema, and generates a schema-template Template.json. See docs.
-        "SchemaIdentificationScript": "" // Optional. Used only when SourceSchema is set. Written into the
+        "SchemaIdentificationScript": "" // Optional. Used only when Source.Schema is set. Written into the
                                          // generated Template.json verbatim. When blank, a stub script that
                                          // returns the source schema as a single row is generated so the
                                          // extracted package quench-tests immediately.

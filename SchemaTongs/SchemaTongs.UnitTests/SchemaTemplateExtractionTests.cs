@@ -18,7 +18,7 @@ namespace SchemaTongs.UnitTests;
 
 /// <summary>
 /// Schema-template extraction mode tests (design §7, plan §10.2). When
-/// <c>Template.SourceSchema</c> is non-empty in <c>SchemaTongs.settings.json</c>,
+/// <c>Source.Schema</c> is non-empty in <c>SchemaTongs.settings.json</c>,
 /// SchemaTongs produces a schema-template package: unqualified filenames,
 /// omitted <c>Schema</c> fields, schema-aware <c>RelatedTableSchema</c> stripping,
 /// a <c>Template.json</c> stub with the schema-template fields, and forced-off
@@ -90,7 +90,7 @@ public class SchemaTemplateExtractionTests
             ["Product:Path"] = Path.GetTempPath(),
             ["Product:Name"] = "TestProduct",
             ["Template:Name"] = TemplateName,
-            ["Template:SourceSchema"] = SourceSchema
+            ["Source:Schema"] = SourceSchema
         };
 
         if (overrides != null)
@@ -597,7 +597,7 @@ public class SchemaTemplateExtractionTests
         {
             SetUpMocks();
             var overrides = ShouldCastAllFalse(Platform.SqlServer);
-            overrides["Template:SourceSchema"] = "";   // ← regular mode
+            overrides["Source:Schema"] = "";   // ← regular mode
             overrides["ShouldCast:Tables"] = "true";
             RegisterConfig(Platform.SqlServer, overrides);
 
@@ -1363,27 +1363,20 @@ public class SchemaTemplateExtractionTests
 
     #endregion
 
-    #region §7.1 — MySQL refusal
+    #region §7.1 — MySQL: Source.Schema ignored (not schema-template activation)
 
     [Test]
-    public void SchemaTemplate_MySQL_NonEmptySourceSchema_ThrowsWithGuidance()
+    public void SchemaTemplate_MySQL_SourceSchema_DoesNotActivateTemplateMode()
     {
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
-            // SourceSchema is set by RegisterConfig defaults — schema-template mode active on MySQL.
+            // Source.Schema passes through RegisterConfig defaults. On MySQL, it must not activate schema-template mode (design §2).
             RegisterConfig(Platform.MySQL, ShouldCastAllFalse(Platform.MySQL));
 
             var tongs = new SchemaTongs(Platform.MySQL);
-            var ex = Assert.Throws<Exception>(() => tongs.CastTemplate());
-
-            // Message must be human-readable and tell the user that schema templates aren't
-            // supported on MySQL, pointing at the database-per-tenant pattern.
-            Assert.That(ex!.Message, Does.Contain("MySQL"));
-            Assert.That(ex.Message, Does.Contain("Template.SourceSchema").IgnoreCase
-                .Or.Contain("schema-template").IgnoreCase);
-            Assert.That(ex.Message, Does.Contain("database-per-tenant").IgnoreCase
-                .Or.Contain("DatabaseIdentificationScript"));
+            Assert.DoesNotThrow(() => tongs.CastTemplate(),
+                "MySQL with Source.Schema set must run in regular mode, not throw.");
 
             FactoryContainer.Clear();
             LogFactory.Clear();

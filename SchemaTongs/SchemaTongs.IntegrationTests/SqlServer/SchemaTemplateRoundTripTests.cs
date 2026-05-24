@@ -21,7 +21,7 @@ namespace SchemaTongs.IntegrationTests.SqlServer;
 /// <c>tenant_seed</c> schema (tables, FKs including one cross-schema to <c>dbo.Countries</c>,
 /// a procedure body referencing both <c>tenant_seed.Customers</c> and a cross-schema
 /// <c>dbo.GlobalAuditLog</c>, a view, and a check constraint) → run SchemaTongs with
-/// <c>Template.SourceSchema = "tenant_seed"</c> into a temp directory → drop and recreate
+/// <c>Source.Schema = "tenant_seed"</c> into a temp directory → drop and recreate
 /// the <c>tenant_seed</c> schema empty → run SchemaQuench against the extracted package
 /// (whose stub <c>SchemaIdentificationScript</c> returns <c>'tenant_seed'</c>) → assert
 /// the rebuilt schema is structurally equivalent to the original.</para>
@@ -384,7 +384,7 @@ DROP DATABASE IF EXISTS [{_integrationDb}];";
             ["Product:Path"] = _tempProductPath,
             ["Product:Name"] = ProductName,
             ["Template:Name"] = TemplateName,
-            ["Template:SourceSchema"] = SourceSchema,
+            ["Source:Schema"] = SourceSchema,
             // Cast everything that the round-trip needs, suppress what's irrelevant.
             ["ShouldCast:Tables"] = "true",
             ["ShouldCast:Views"] = "true",

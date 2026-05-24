@@ -21,7 +21,7 @@
 //     SCHEMA side of a <c>schema.object</c> reference are recognised and rewritten.
 //
 // The rewriter is invoked by SchemaTongs when in schema-template mode (i.e. when
-// Template.SourceSchema is non-empty in SchemaTongs.settings.json). The
+// Source.Schema is non-empty in SchemaTongs.settings.json). The
 // SqlBodyRewriterResult struct carries the rewritten body plus a list of 1-based
 // line numbers where unqualified table-like references were detected; the caller
 // aggregates these into the per-file warning emission.

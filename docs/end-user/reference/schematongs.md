@@ -471,22 +471,24 @@ Schema-template extraction is supported on **SQL Server and PostgreSQL only**. M
 
 ### Activation
 
-Two fields on the `Template` section of `SchemaTongs.settings.json`:
+Two settings activate schema-template extraction mode — `Source.Schema` in the `Source` section and `SchemaIdentificationScript` in the `Template` section of `SchemaTongs.settings.json`:
 
 ```json
+"Source": {
+  "Schema": "tenant_acme"
+},
 "Template": {
   "Name": "TenantBody",
-  "SourceSchema": "tenant_acme",
   "SchemaIdentificationScript": ""
 }
 ```
 
 | Field | Type | When set |
 |---|---|---|
-| `Template:SourceSchema` | string | Required. Non-empty value activates schema-template extraction mode. The value is the schema to extract from the source database (e.g. `"tenant_acme"`). |
+| `Source:Schema` | string | Required. Non-empty value activates schema-template extraction mode. The value is the schema to extract from the source database (e.g. `"tenant_acme"`). |
 | `Template:SchemaIdentificationScript` | string | Optional. Written verbatim into the generated `Template.json`. When blank, SchemaTongs generates a stub that returns the source schema as a single row so you can quench-test the package immediately. |
 
-`Template:SourceSchema` is the switch. When it is empty (the default), SchemaTongs behaves exactly as it always has. When it is non-empty, schema-template mode activates and all transformations in this section apply.
+`Source:Schema` is the switch. When it is empty (the default), SchemaTongs behaves exactly as it always has. When it is non-empty, schema-template mode activates and all transformations in this section apply.
 
 See [Schema Templates](schema-packages.md#schema-templates) for the full `Template.json` property reference.
 
@@ -532,7 +534,7 @@ This is a punch list, not a blocker. References that target a shared schema (`db
 
 ### Generated stub
 
-When `Template:SourceSchema` is set and no `Template.json` exists yet at the output path, SchemaTongs creates a ready-to-use schema-template stub. For a SQL Server extraction with `Template.Name = "TenantBody"` and `Template.SourceSchema = "tenant_acme"`:
+When `Source:Schema` is set and no `Template.json` exists yet at the output path, SchemaTongs creates a ready-to-use schema-template stub. For a SQL Server extraction with `Template.Name = "TenantBody"` and `Source.Schema = "tenant_acme"`:
 
 ```json
 {
@@ -575,7 +577,7 @@ All other `ShouldCast` flags -- `Tables`, `Views`, `Functions`, `Procedures`, `T
 
 ### Round-trip
 
-Once a schema template is extracted, re-running SchemaTongs against the same source schema with the same `Template.SourceSchema` setting produces the same output. The extraction is deterministic: the same source objects, same rewriting rules, same filename conventions. This means you can automate re-extraction as part of your schema governance cycle without worrying about drift between runs.
+Once a schema template is extracted, re-running SchemaTongs against the same source schema with the same `Source.Schema` setting produces the same output. The extraction is deterministic: the same source objects, same rewriting rules, same filename conventions. This means you can automate re-extraction as part of your schema governance cycle without worrying about drift between runs.
 
 The round-trip property also drives the integration test suite: extract `tenant_seed`, drop and recreate it empty, quench the extracted package with `SchemaIdentificationScript` returning `tenant_seed`, and compare the rebuilt schema to the original structurally. Every CI run exercises this path end to end on both SQL Server and PostgreSQL.
 
@@ -583,7 +585,7 @@ For the end-to-end walkthrough, see [Migrating from manual duplication](../guide
 
 ### Out of scope for v1
 
-- **One schema per run.** `Template.SourceSchema` targets a single schema. To convert multiple canonical schemas, run SchemaTongs once per schema with different `Template.Name` values.
+- **One schema per run.** `Source.Schema` targets a single schema. To convert multiple canonical schemas, run SchemaTongs once per schema with different `Template.Name` values.
 - **No auto-qualification.** The conservative audit warning is the v1 contract. Unqualified identifiers are flagged for review; SchemaTongs never auto-prefixes them with `{{SchemaName}}.`.
 - **No multi-schema refs.** Stored procedures referencing three or more schemas with conditional logic may need manual review after the rewrite pass. The audit warning surfaces those files.
 

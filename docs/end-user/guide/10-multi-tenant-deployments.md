@@ -295,12 +295,14 @@ Neither pattern is better in the abstract. The four tradeoffs -- license cost, o
 
 If you already have hand-replicated schemas -- a `tenant_acme` schema and a `tenant_beta` schema that were originally created by copying SQL scripts -- SchemaTongs can cast the first one into a schema template and rewrite the cross-schema references for you.
 
-Point SchemaTongs at one of your existing tenant schemas using `Template.SourceSchema`:
+Point SchemaTongs at one of your existing tenant schemas using `Source.Schema`:
 
 ```json
 {
+  "Source": {
+    "Schema": "tenant_acme"
+  },
   "Template": {
-    "SourceSchema": "tenant_acme",
     "SchemaIdentificationScript": "SELECT [Name] FROM dbo.Tenants WHERE [Status] = N'Active'"
   }
 }

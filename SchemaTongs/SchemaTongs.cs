@@ -34,7 +34,7 @@ public class SchemaTongs
     private FolderMappingConfig _folderMappingConfig;
     internal Dictionary<ScriptObjectType, string> ResolvedFolders { get; } = new();
 
-    // Schema-template extraction mode (design §7). Activated by Template.SourceSchema non-empty.
+    // Schema-template extraction mode (design §7). Activated by Source.Schema non-empty.
     private bool _isSchemaTemplate;
     private string _sourceSchema;
     private string _schemaIdentificationScript;
@@ -438,21 +438,13 @@ public class SchemaTongs
         _includeTables = config["ShouldCast:Tables"]?.ToLower() != "false";
         _includeViews = config["ShouldCast:Views"]?.ToLower() != "false";
 
-        // Schema-template extraction mode (design §7.1). Activated by Template.SourceSchema non-empty.
-        _sourceSchema = config["Template:SourceSchema"] ?? "";
+        // Schema-template extraction mode (design §7.1). MySQL excluded — no schema-inside-database concept (design §2).
+        _sourceSchema = _platform != Platform.MySQL ? (config["Source:Schema"] ?? "") : "";
+        var rawSourceSchema = config["Source:Schema"];
+        if (_platform == Platform.MySQL && !string.IsNullOrWhiteSpace(rawSourceSchema))
+            _progressLog.Warn($"MySQL: Source.Schema='{rawSourceSchema}' is set but ignored as schema-template activator — running in regular mode.");
         _schemaIdentificationScript = config["Template:SchemaIdentificationScript"] ?? "";
         _isSchemaTemplate = !string.IsNullOrWhiteSpace(_sourceSchema);
-
-        if (_isSchemaTemplate && _platform == Platform.MySQL)
-        {
-            // MySQL has no schema-inside-database concept (design §2). Refuse to silently produce
-            // a broken package — surface a clear error pointing the user at the database-per-tenant
-            // pattern that DatabaseIdentificationScript already covers.
-            throw new Exception(
-                "Schema-template extraction (Template.SourceSchema) is not supported on MySQL. " +
-                "MySQL has no schema-inside-database concept — use database-per-tenant instead " +
-                "(one DatabaseIdentificationScript-driven template per tenant DB).");
-        }
 
         switch (_platform)
         {

@@ -4,7 +4,7 @@
         "User": "", // SQL Server: leave User and Password blank for Windows authentication
         "Password": "",
         "Database": "",
-        "Schema": "", // SQL Server / PostgreSQL only. When set AND the target template has a SchemaIdentificationScript, DataTongs runs in schema-template mode: merge scripts use unqualified filenames and {{SchemaName}} destination refs.
+        "Schema": "", // SQL Server / PostgreSQL only. When set AND the target template has a SchemaIdentificationScript, DataTongs runs in schema-template mode: merge scripts use unqualified filenames and {{SchemaName}} destination refs. Mirrors SchemaTongs Source.Schema for round-trip symmetry.
         "Port": "", // Optional for all platforms — overrides default port
         "Platform": "", // SqlServer, PostgreSQL, or MySQL
         "ConnectionProperties": {
