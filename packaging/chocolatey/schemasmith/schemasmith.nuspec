@@ -6,10 +6,12 @@
     <title>SchemaSmith</title>
     <authors>SchemaSmith Contributors</authors>
     <owners>SchemaSmith Contributors</owners>
-    <projectUrl>https://github.com/Schema-Smith/SchemaSmith</projectUrl>
+    <projectUrl>https://schemasmith.com/</projectUrl>
     <projectSourceUrl>https://github.com/Schema-Smith/SchemaSmith</projectSourceUrl>
+    <packageSourceUrl>https://github.com/Schema-Smith/SchemaSmith/tree/main/packaging/chocolatey/schemasmith</packageSourceUrl>
     <licenseUrl>https://github.com/Schema-Smith/SchemaSmith/blob/main/LICENSE</licenseUrl>
     <docsUrl>https://schemasmith.com/</docsUrl>
+    <iconUrl>https://schemasmith.com/images/SchemaSmith-logo.png</iconUrl>
     <bugTrackerUrl>https://github.com/Schema-Smith/SchemaSmith/issues</bugTrackerUrl>
     <copyright>© SchemaSmith Contributors. Licensed under the SSCL v2.0</copyright>
     <tags>database schema migration sql-server postgresql mysql cli devops admin</tags>
