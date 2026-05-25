@@ -16,7 +16,8 @@ This document is the rules of the road for contributing. We point at it when we 
 For anything beyond a typo fix or a one-line bug repro, please skim this whole document before opening a PR. It's shorter than the review you'd otherwise get back. Two specific items contributors most often miss:
 
 - **Tests come first.** We practice TDD. PRs that add behavior without tests, or that lower coverage without a documented reason, will be sent back.
-- **Cross-platform is non-negotiable.** Code that ships in the CLI tools must run correctly on Windows, Linux, and macOS, against SQL Server, PostgreSQL, and MySQL where applicable. CI runs the matrix on every push.
+- **OS portability is non-negotiable.** Code that ships in the CLI tools must run correctly on Windows, Linux, and macOS, on x64 and ARM64. CI runs the OS matrix on every push.
+- **Database Platform parity is non-negotiable.** Code that touches a database platform must work on SQL Server, PostgreSQL, and MySQL where the feature applies. CI runs all three platforms on every push.
 
 ## Development Setup
 
@@ -24,7 +25,7 @@ The CLI tools target:
 
 - **.NET:** `net10.0` (single target, set in `Directory.Build.props`)
 - **IDEs:** Visual Studio 2026 or JetBrains Rider (both with full ReSharper / built-in analyzer support)
-- **Databases tested in CI:** SQL Server (`2022-latest`), PostgreSQL 15+, MySQL 8.x. Should work on any version at compatibility level 130+ (SQL Server) or the documented minimum for the engine.
+- **Databases tested in CI:** SQL Server (`2019-CU27-ubuntu-20.04`), PostgreSQL 15+, MySQL 8.x. Should work on any version at compatibility level 130+ (SQL Server) or the documented minimum for the platform.
 
 ### Running Locally with Docker
 
@@ -89,7 +90,7 @@ PRs that add behavior without corresponding tests will be sent back. If you genu
 - **Non-regression:** A PR that reduces overall coverage — even if the result stays above target — needs an explicit, specific reason in the PR description. "I didn't get to it" is not a reason; "this code path requires an isolator we haven't built and I've filed issue #N to track it" is. Coverage drift is how a healthy codebase becomes an unhealthy one over time, so we don't accept reductions silently.
 - **Tooling:** `coverlet.collector` runs as part of `dotnet test`. CI publishes coverage data on every build.
 
-### Cross-Platform Compatibility
+### OS Portability
 
 Code shipped in the CLI tools runs on Windows, Linux, and macOS, on x64 and ARM64. Common pitfalls to avoid:
 
@@ -99,13 +100,17 @@ Code shipped in the CLI tools runs on Windows, Linux, and macOS, on x64 and ARM6
 - Process invocation — `cmd` / `pwsh` aren't available everywhere; prefer pure-.NET implementations or guard with platform checks.
 - Time zones, current-culture string formatting — be explicit about `CultureInfo.InvariantCulture` for any data that touches storage or comparison.
 
-CI runs the test matrix across the supported platforms; treat a CI failure as the contract.
+CI runs the test matrix across the supported operating systems and database platforms; treat a CI failure as the contract.
 
-### Database Behavior — Tested Against Real Engines
+### Database Behavior — Mock at the Right Boundary
 
-We do not mock the database. SQL behavior — query plans, type coercion, transaction semantics, MERGE behavior, error codes — can only be validated against the real engine. The integration tests against live SQL Server, PostgreSQL, and MySQL containers exist for exactly this reason.
+Unit tests should mock the database (and other dependencies) to stay fast and focused on the unit under test. That's the norm and is encouraged — `Schema.UnitTests`, `SchemaQuench.UnitTests`, and friends do exactly this throughout the codebase.
 
-If you find yourself reaching for a mock to avoid spinning up a container, please don't. File an issue if there's a real gap in the integration test infrastructure.
+Integration tests that validate SQL behavior — query plans, type coercion, transaction semantics, MERGE behavior, error codes — MUST run against the real database platforms via the Docker matrix. These behaviors can only be validated against the actual database, which is why the integration tests against live SQL Server, PostgreSQL, and MySQL containers exist.
+
+Integration tests for non-DB concerns (file access, deserialization, isolator behavior) can mock the DB to avoid combinatorial test runs across all three platforms — the goal there is to exercise the non-DB code path without paying the multi-platform cost for behavior that's platform-agnostic anyway.
+
+If you find yourself reaching for a DB mock to avoid spinning up a container in a test that IS about SQL behavior, please don't. File an issue if there's a real gap in the integration test infrastructure.
 
 ### Warnings, Style, and Comments
 
@@ -169,7 +174,7 @@ Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`, `ci`. 
 - **One concern per PR.** A 2,000-line PR mixing a feature, a refactor, and a bug fix is harder to review than three smaller PRs.
 - **Tests in the same PR as the behavior.** Don't promise "tests in a follow-up."
 - **Reference related issues** in the PR description (`Fixes #42`, `Part of #100`).
-- **PR description matters.** Summarize the change and the reasoning, list any user-visible behavior changes, call out anything reviewers should pay extra attention to (security implications, performance considerations, cross-platform concerns, coverage changes).
+- **PR description matters.** Summarize the change and the reasoning, list any user-visible behavior changes, call out anything reviewers should pay extra attention to (security implications, performance considerations, OS portability or Database Platform parity concerns, coverage changes).
 - **CI must be green** before merge. Don't ask for review on a red PR unless you specifically want help diagnosing the failure.
 - **Be prepared to make changes.** Code review is collaborative; pushing back on feedback is fine if you have a reason, but expect a conversation.
 
@@ -185,8 +190,8 @@ Before you click "Ready for review," walk through this list against your own dif
 - [ ] Tests pass locally on `dotnet test SchemaSmith.sln`.
 - [ ] Coverage maintained or improved on touched code (or a documented reason for any reduction).
 - [ ] No new compiler warnings or analyzer hints introduced.
-- [ ] Cross-platform paths, line endings, and case sensitivity considered.
-- [ ] Multi-platform parity considered if the change touches platform-specific code (SQL Server, PostgreSQL, MySQL): does the same behavior need a corresponding implementation on the other engines?
+- [ ] OS portability considered: paths, line endings, case sensitivity, culture-dependent string formatting.
+- [ ] Database Platform parity considered if the change touches database-platform-specific code: does the same behavior need a corresponding implementation on SQL Server, PostgreSQL, and MySQL?
 - [ ] No unused usings, dead code, or commented-out blocks left behind.
 - [ ] Comments explain *why*, not *what*; new identifiers are descriptive enough that the comment isn't needed.
 - [ ] Copyright header on any new `.cs` or `Schema/Scripts/*.sql` files.
@@ -200,10 +205,10 @@ Before you click "Ready for review," walk through this list against your own dif
 When reviewing a PR, we look at:
 
 - **Correctness.** Does the code do what the PR says it does? Are edge cases handled? Are there logic errors hiding behind happy-path tests?
-- **Test rigor.** Do the tests actually exercise the behavior, or do they just call into it? Are failure modes tested, not just success modes? For database-touching code, do the tests run against real engines?
+- **Test rigor.** Do the tests actually exercise the behavior, or do they just call into it? Are failure modes tested, not just success modes? For database-touching code, do the tests run against real database platforms?
 - **Coverage.** Did this PR raise or lower coverage on the touched code? Reductions need a stated reason.
-- **Cross-platform impact.** Will this code behave the same on Windows, Linux, and macOS? Does it work across SQL Server, PostgreSQL, and MySQL where the change is platform-relevant?
-- **Multi-platform parity.** If a feature lands for one engine, what's the story for the other two? Sometimes "we'll do it next" is the right answer with a tracked issue; sometimes it's a sign the design isn't ready.
+- **OS portability.** Will this code behave the same on Windows, Linux, and macOS? Are paths, line endings, and culture-dependent operations handled correctly?
+- **Database Platform parity.** If a feature lands for one database platform, what's the story for the other two? Sometimes "we'll do it next" is the right answer with a tracked issue; sometimes it's a sign the design isn't ready.
 - **Backward compatibility.** Does this change affect a public API surface, package format, or generated SQL shape? If so, is the change additive, deprecating, or breaking? Breaking changes need explicit CHANGELOG entries.
 - **Style and consistency.** Does the code match the surrounding style? `.editorconfig`'s naming rules, brace style, indentation? No suppressed warnings without justification?
 - **Comment hygiene.** Are comments load-bearing (explaining a non-obvious why) or noise (restating the code, referencing the PR/ticket, marking removed code)?

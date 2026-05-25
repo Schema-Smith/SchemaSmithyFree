@@ -20,40 +20,69 @@ body:
     validations:
       required: true
 
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      description: What platform are you running on?
-      options:
-        - Windows (.NET 10)
-        - Linux (.NET 10)
-        - macOS (.NET 10)
-        - Docker
-    validations:
-      required: true
-
   - type: input
     id: version
     attributes:
       label: Version
       description: "Tool version (run with `--version` to check)"
-      placeholder: "e.g., 1.1.8"
+      placeholder: "e.g., 2.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: client-os
+    attributes:
+      label: Client OS / Runtime
+      description: What OS is the CLI running on?
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - Docker
+    validations:
+      required: true
+
+  - type: dropdown
+    id: database-platform
+    attributes:
+      label: Database Platform
+      description: "Primary platform you encountered the bug on. If you've also reproduced it on others, note them in the Description below."
+      options:
+        - SQL Server
+        - PostgreSQL
+        - MySQL
+        - Other
     validations:
       required: true
 
   - type: input
-    id: sql-server-version
+    id: database-version
     attributes:
-      label: SQL Server Version
-      description: "Target SQL Server version and compatibility level if known"
-      placeholder: "e.g., SQL Server 2019, compat level 150"
+      label: Database Version & Edition
+      description: "Target database version and edition"
+      placeholder: "e.g., SQL Server 2019 Standard CU24, or PostgreSQL 16.3"
+    validations:
+      required: true
+
+  - type: input
+    id: database-os
+    attributes:
+      label: Database OS
+      description: "OS the database server runs on (leave blank if same as client)"
+      placeholder: "e.g., Linux container, Windows Server 2022"
+
+  - type: input
+    id: extensions
+    attributes:
+      label: Extensions / Distribution Flavor
+      description: "Anything that distinguishes the engine from a vanilla install (extensions, hosted variants, forks)"
+      placeholder: "e.g., Aurora PostgreSQL, pgvector 0.7, MariaDB 11.4"
 
   - type: textarea
     id: description
     attributes:
       label: Description
-      description: What happened? What did you expect to happen?
+      description: "What happened? What did you expect to happen? If you've reproduced this on multiple platforms or versions, list them here."
     validations:
       required: true
 

@@ -20,6 +20,18 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: database-platform
+    attributes:
+      label: Database Platform
+      description: "Which database platform(s) does this request target? Pick 'All / Cross-platform' for engine-agnostic features."
+      options:
+        - All / Cross-platform
+        - SQL Server
+        - PostgreSQL
+        - MySQL
+        - Other
+
   - type: textarea
     id: problem
     attributes:

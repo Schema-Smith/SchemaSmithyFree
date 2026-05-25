@@ -6,9 +6,11 @@ using System.Text;
 namespace Schema.DataAccess;
 
 /// <summary>
-/// Splits PostgreSQL scripts into individual statements, respecting dollar-quoted blocks.
-/// Both $$ and named tags like $function$ or $body$ are recognized as dollar-quote delimiters.
-/// Semicolons inside dollar-quoted blocks are not treated as statement boundaries.
+/// Splits PostgreSQL scripts into individual statements, respecting dollar-quoted blocks
+/// and -- line comments. Both $$ and named tags like $function$ or $body$ are recognized
+/// as dollar-quote delimiters. Semicolons inside dollar-quoted blocks or inside -- line
+/// comments are not treated as statement boundaries. Comment text is preserved verbatim
+/// in the output statement.
 /// </summary>
 public static class PostgreSqlStatementSplitter
 {
@@ -46,6 +48,18 @@ public static class PostgreSqlStatementSplitter
                         continue;
                     }
                 }
+            }
+
+            // -- line comment outside dollar quotes: append verbatim through end-of-line
+            // so embedded ; is not misread as a statement boundary.
+            if (dollarTag == null && script[i] == '-' && i + 1 < script.Length && script[i + 1] == '-')
+            {
+                while (i < script.Length && script[i] != '\n')
+                {
+                    current.Append(script[i]);
+                    i++;
+                }
+                continue;
             }
 
             // Semicolon outside dollar quotes = statement boundary
