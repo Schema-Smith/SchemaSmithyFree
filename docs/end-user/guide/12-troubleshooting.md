@@ -151,6 +151,86 @@ If using SQL Server Windows authentication, omit `User` and `Password` entirely.
 
 ---
 
+### Many-target deployments
+
+These entries apply to schema-template products (one iteration per tenant schema) and to products that fan out to many databases. Both patterns run many work units in parallel, and the same observability and scoping techniques apply.
+
+#### Log lines interleave
+
+**Symptom:** The progress log is nearly unreadable -- lines from different tenants or databases intermix in timestamp order, so the story of any one deployment is scattered across hundreds of lines.
+
+**Cause:** Each work unit runs in its own thread, and SchemaQuench writes log lines as each step completes. For a schema-template product running 50 tenants at `MaxThreads: 10`, up to 10 tenants are writing lines simultaneously.
+
+**Fix:**
+
+- Filter the progress log to one schema name to isolate that tenant's sequence end-to-end. Every schema-template log line carries a `[Schema: <name>]` prefix; for a many-database fan-out, the prefix is `[server].[database]`. Both formats are greppable without extra tooling.
+- Set `AllowParallel: false` on the template in `Template.json` to serialize execution. When set, at most one iteration of that template runs at a time. Other templates' parallel-eligible work units continue to fill the thread pool, so the overall deployment isn't fully serialized -- only that template's iterations are. This is the right trade-off when you need a clean per-tenant log for debugging, or when your schema template creates cross-schema foreign keys where DDL parallelism causes lock contention.
+
+`AllowParallel` is a schema-template property only. For many-database regular templates, use `MaxThreads: 1` in `SchemaQuench.settings.json` to cap global concurrency for that run. See [MaxThreads](../reference/schemaquench.md#maxthreads) and [AllowParallel](../reference/schema-packages.md#allowparallel) for the full interaction.
+
+> **Note:** Setting `AllowParallel: false` on a production schema-template product with hundreds of tenants turns a 5-minute parallel run into a proportionally longer serial one. Use it for a debugging session, not permanently.
+
+#### WhatIf output is huge
+
+**Symptom:** Running in WhatIf mode against a multi-tenant or many-database product generates thousands of lines of output, making it hard to find the change you're actually looking at.
+
+**Cause:** WhatIf runs the full deployment logic for every work unit -- every tenant schema or every target database -- and logs what would execute for each one. That's the correct behavior when you're auditing an unfamiliar package, but it's more output than you want when you're debugging one tenant's migration.
+
+**Fix:** Scope the run to a single target using the `Target` filters in `SchemaQuench.settings.json`:
+
+```json
+{
+  "Target": {
+    "Templates": ["TenantWorkspace"],
+    "Schemas": ["tenant_acme"]
+  }
+}
+```
+
+`Target.Schemas` applies to schema-template iterations. `Target.Databases` applies to regular-template fan-out. Both filters AND together with `Target.Templates`, and SchemaQuench validates each filter value against the discovered universe before dispatching -- a typo surfaces as a clear diagnostic instead of a silent empty run. See [Target](../reference/schemaquench.md#target) for the full filter reference.
+
+#### Reserved schema name
+
+**Symptom:** The progress log shows an error like `SchemaIdentificationScript for template 'X' returned reserved schema name 'dbo'.` The deployment fails for that iteration.
+
+**Cause:** Your `SchemaIdentificationScript` returned a platform-owned schema name that the engine cannot use as a fan-out target. The engine rejects these names because running the full template DDL against `dbo` or `public` would corrupt shared infrastructure.
+
+**Fix:** Review the query and fix what it returns. The reserved names are listed in [Schema Packages -- Reserved schema names](../reference/schema-packages.md#reserved-schema-names); the short version:
+
+- **SQL Server:** `dbo`, `sys`, `INFORMATION_SCHEMA`, `guest`, and the nine `db_*` fixed database role schemas.
+- **PostgreSQL:** `public`, `pg_catalog`, `pg_toast`, `information_schema`, and any name matching `pg_temp_*` or `pg_toast_temp_*`.
+
+Shared content (lookup tables, audit logs, shared dimension data) belongs in a regular template that runs earlier in `TemplateOrder`, not in a schema-template iteration. The engine's error message points at this pattern directly.
+
+#### Schema not created
+
+**Symptom:** A tenant is in your discovery source (the table or query that `SchemaIdentificationScript` reads from), but no schema was created and no migration scripts ran for that tenant.
+
+**Cause:** There are two distinct situations that look the same from the outside:
+
+1. The schema doesn't exist in the database and `CreateSchemaIfMissing` is `false` (the default). The engine throws `Schema '<name>' does not exist in database '<db>'` and marks that iteration failed. With `ContinueOnSchemaFailure: true` (the default), the remaining tenants continue; the failed tenant's error appears in the progress log prefixed `[Schema: <name>]`.
+
+2. The `SchemaIdentificationScript` returned zero rows for that tenant. Possible causes: the tenant row exists in the source table but with a status that the script filters out, or the query contains a bug that silently drops rows.
+
+**Diagnosis:** Look in the progress log for a `[Schema: <name>]` error line. If none exists, the schema name was never returned by discovery -- run the `SchemaIdentificationScript` directly against the target database and check what it returns. If an error line exists, read it: the message names the schema; remediate by setting `CreateSchemaIfMissing: true`, pre-creating the schema manually, or running an onboarding procedure.
+
+Check `ContinueOnSchemaFailure` on the template: when `true` (the default), a failed iteration does not stop the deployment -- it logs and moves on. The overall exit code will be 2 if any iteration failed. See [ContinueOnSchemaFailure](../reference/schemaquench.md#continueonschemafailure) for the failure-isolation behavior.
+
+#### `{{SchemaName}}` literal
+
+**Symptom:** Deployed SQL contains the literal text `{{SchemaName}}` -- a table named `{{SchemaName}}.Orders` in the database, a stored procedure referencing `{{SchemaName}}.Customers` verbatim, or similar.
+
+**Cause:** The `{{SchemaName}}` token is substituted at iteration time for scripts and table JSON inside the schema template's own folders. It is NOT substituted for:
+
+- **Product-level folders** (`Before Product`, `After Product`). These run outside the per-database loop before any template iterates. They have no schema-name context.
+- **Pre-iteration scripts** that run before the schema-name token is bound. Check which quench slot the affected script lives in.
+
+If a table JSON file has a hard-coded `"Schema": "{{SchemaName}}"`, that's actually the intended value and gets substituted correctly. The failure mode is a script file that ended up in a product-level folder instead of the template's own script folder.
+
+**Diagnosis:** Confirm which folder the script lives in. If it's under `Before Product/` or `After Product/` at the product root, move it to the appropriate folder inside the template directory (e.g., `Templates/TenantWorkspace/Before Scripts/`). If the script should truly run at the product level, it has no schema context by design -- rewrite it without `{{SchemaName}}` and use an explicit schema name or query-driven token instead.
+
+---
+
 ## Common extraction issues (SchemaTongs)
 
 ### Encrypted objects warning (SQL Server)
