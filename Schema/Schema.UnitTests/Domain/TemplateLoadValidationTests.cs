@@ -411,6 +411,26 @@ namespace Schema.UnitTests.Domain
         }
 
         [Test]
+        public void SchemaTemplate_SchemaOnlyFieldsNonDefault_NoWarnings()
+        {
+            var (templateFile, tablesPath) = Paths();
+            var json = @"{
+                ""Name"": ""Main"",
+                ""SchemaIdentificationScript"": ""SELECT schema_name()"",
+                ""AllowParallel"": false,
+                ""ContinueOnSchemaFailure"": false
+            }";
+            _mockFile.Exists(templateFile).Returns(true);
+            _mockFile.ReadAllText(templateFile).Returns(json);
+            _mockDirectory.Exists(tablesPath).Returns(false);
+            _mockDirectory.Exists(Arg.Any<string>()).Returns(false);
+
+            Template.Load("Main", MakeProduct(Platform.SqlServer));
+
+            _mockProgressLog.DidNotReceive().Warn(Arg.Any<string>());
+        }
+
+        [Test]
         public void RegularTemplate_ContinueOnDatabaseFailureFalse_NoWarning()
         {
             // ContinueOnDatabaseFailure applies universally — it's DB-level, not schema-template-specific.
