@@ -128,7 +128,7 @@ EXEC dbo.OnboardTenant
 
 Then re-quench. `TenantWorkspace` discovers both tenants and runs the full
 template iteration for each one — tables, procedures, function, view, trigger,
-the `Migration_001_BackfillCountries.sql` Before-slot migration, and the
+the `Migration_001_BackfillCustomerCountryCode.sql` Before-slot migration, and the
 `ActivityTypes` data delivery.
 
 ## Roll out a hotfix to one tenant first
@@ -151,14 +151,14 @@ to fan out to every tenant.
 ## Observe per-tenant migration tracking
 
 Run the deploy twice. After the first run, `CompletedMigrationScripts` has one
-row per `(TenantWorkspace, tenant)` for `Migration_001_BackfillCountries`. After
+row per `(TenantWorkspace, tenant)` for `Migration_001_BackfillCustomerCountryCode`. After
 the second run, that row still holds and the migration skips silently.
 `ActivityTypes` is delivered via DataDelivery (`Insert` merge type), so a
 re-quench reconciles missing seed rows but leaves any tenant-added rows alone —
 no migration tracking involved. Verify:
 
 ```sql
--- After first quench: 1 row per tenant (Migration_001_BackfillCountries)
+-- After first quench: 1 row per tenant (Migration_001_BackfillCustomerCountryCode)
 SELECT schema_name, COUNT(*) AS MigrationsCompleted
   FROM SchemaSmith.CompletedMigrationScripts
  WHERE ProductName = 'TenantCRM' AND template_name = 'TenantWorkspace'

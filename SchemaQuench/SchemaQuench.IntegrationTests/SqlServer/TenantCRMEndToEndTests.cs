@@ -159,13 +159,13 @@ WHERE fs.name = '{tenant}' AND ft.name = 'Customers' AND fk.name = 'FK_Customers
                         $"Tenant '{tenant}' must have FK_Customers_Countries pointing at dbo.Countries.");
                 }
 
-                // ----- Migration tracking: Migration_001_BackfillCountries per tenant.
+                // ----- Migration tracking: Migration_001_BackfillCustomerCountryCode per tenant.
                 // ActivityTypes is seeded via DataDelivery (MergeType=Insert) — see assertion
                 // immediately below — and is not tracked as a migration.
                 foreach (var tenant in InitialTenants)
                 {
                     AssertMigrationTracked(TenantWorkspaceTemplate, tenant,
-                        "Before Scripts/Migration_001_BackfillCountries.sql");
+                        "Before Scripts/Migration_001_BackfillCustomerCountryCode.sql");
 
                     // DataDelivery should have inserted the 4 default activity types per tenant.
                     Assert.That(ScalarCount($"SELECT COUNT(*) FROM [{tenant}].[ActivityTypes]"),
@@ -230,7 +230,7 @@ WHERE fs.name = '{tenant}' AND ft.name = 'Customers' AND fk.name = 'FK_Customers
                 AssertProcedureExists(FourthTenant, "AddCustomer");
                 AssertIndexedViewExists(FourthTenant, "vw_ActiveCustomerCount");
                 AssertMigrationTracked(TenantWorkspaceTemplate, FourthTenant,
-                    "Before Scripts/Migration_001_BackfillCountries.sql");
+                    "Before Scripts/Migration_001_BackfillCustomerCountryCode.sql");
                 Assert.That(ScalarCount($"SELECT COUNT(*) FROM [{FourthTenant}].[ActivityTypes]"),
                     Is.EqualTo(4), "Fourth tenant should have 4 DataDelivery-seeded activity types.");
 
