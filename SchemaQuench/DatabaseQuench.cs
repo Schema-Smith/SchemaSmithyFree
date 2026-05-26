@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using log4net;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
@@ -931,7 +932,7 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
 
         _debugFileLocation = GetDebugFileName("Quench Missing Tables And Columns");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
-        ExecuteNonQueryHandlingMessages(tableCommand);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
 
@@ -965,7 +966,7 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
 
         _debugFileLocation = GetDebugFileName("Quench Modified Tables");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
-        ExecuteNonQueryHandlingMessages(tableCommand);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
 
@@ -1013,7 +1014,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
 
         _debugFileLocation = GetDebugFileName("Quench Indexes");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
-        ExecuteNonQueryHandlingMessages(tableCommand);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
 
@@ -1045,7 +1046,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
 
         _debugFileLocation = GetDebugFileName("Quench Foreign Keys");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
-        ExecuteNonQueryHandlingMessages(tableCommand);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
 
@@ -1058,7 +1059,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
 
         _debugFileLocation = GetDebugFileName("Quench Materialized Views");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
-        ExecuteNonQueryHandlingMessages(tableCommand);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
 
@@ -1109,7 +1110,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
 
         _debugFileLocation = GetDebugFileName("Quench Indexed Views");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
-        ExecuteNonQueryHandlingMessages(tableCommand);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
 
@@ -1227,7 +1228,55 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
         return connection;
     }
 
-    private void ExecuteNonQueryHandlingMessages(IDbCommand command)
+    // Bounded retry policy for deadlock victims. Internal (not const) so tests can shrink the
+    // delay/attempts. See DeadlockClassifier and the schema-template parallel-iteration deadlock
+    // investigation: parallel iterations of the same template contend on the shared catalog and
+    // one is chosen as the deadlock victim. The convergence procs are idempotent (they recompute
+    // desired-vs-existing on every run), so re-running the victim re-converges cleanly.
+    internal int MaxDeadlockAttempts = 20;
+    internal int DeadlockRetryBaseMs = 100;
+
+    /// <param name="retryOnDeadlock">
+    /// When <c>true</c>, a deadlock-victim failure is retried (bounded, with backoff). Only pass
+    /// <c>true</c> for idempotent convergence procs (table/index/constraint/FK/view quenches) —
+    /// never for run-once migrations or arbitrary user scripts, whose re-execution isn't safe.
+    /// </param>
+    internal void ExecuteNonQueryHandlingMessages(IDbCommand command, bool retryOnDeadlock = false)
+    {
+        var attempt = 0;
+        while (true)
+        {
+            attempt++;
+            try
+            {
+                ExecuteNonQueryOnce(command);
+                return;
+            }
+            catch (Exception ex) when (retryOnDeadlock
+                                       && attempt < MaxDeadlockAttempts
+                                       && DeadlockClassifier.IsDeadlock(ex))
+            {
+                var delayMs = DeadlockBackoffMs(attempt);
+                SafeProgressLog(
+                    $"    Deadlock contention from a parallel iteration; retrying " +
+                    $"(attempt {attempt + 1} of {MaxDeadlockAttempts}){(delayMs > 0 ? $" after {delayMs} ms" : "")}");
+                if (delayMs > 0) Thread.Sleep(delayMs);
+            }
+        }
+    }
+
+    // "Full jitter" exponential backoff (sleep uniformly in [0, capped-exponential]). Full jitter
+    // de-synchronises a thundering herd of sibling iterations that all deadlocked together far
+    // better than fixed-delay-plus-small-jitter — critical when many parallel iterations contend
+    // on the shared catalog, so they don't simply re-collide in lockstep on every retry.
+    private int DeadlockBackoffMs(int attempt)
+    {
+        if (DeadlockRetryBaseMs <= 0) return 0;
+        var capped = Math.Min(DeadlockRetryBaseMs * (1 << Math.Min(attempt - 1, 5)), 2000);
+        return Random.Shared.Next(0, capped + 1);
+    }
+
+    private void ExecuteNonQueryOnce(IDbCommand command)
     {
         _infoMessageException = null;
 
@@ -1552,6 +1601,20 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
         {
             if (err.Class > 10)
             {
+                // Preserve the error number so deadlock detection (1205) keys on the code, not
+                // the locale-dependent message. Errors surfaced here (severity ≤ 16) are never
+                // thrown as SqlException on this connection (FireInfoMessageEventOnUserErrors).
+                _infoMessageException = new SqlServerErrorException(err.Number, err.Message);
+
+                // Deadlock victims (1205) are recoverable: ExecuteNonQueryHandlingMessages retries
+                // the idempotent convergence proc. Don't hard-log them here — otherwise a deadlock
+                // that the retry *recovers* still surfaces as a scary error (and unlike PostgreSQL,
+                // where the deadlock is thrown and caught silently by the retry loop, SQL Server
+                // delivers it through this InfoMessage handler before the retry loop sees it). If
+                // retries exhaust, the propagated exception is logged by the caller's per-iteration
+                // failure handling; the retry loop logs an Info note on each recoverable attempt.
+                if (err.Number == 1205) continue;
+
                 SafeProgressLogError(err.Message);
                 if (!string.IsNullOrWhiteSpace(_debugFileLocation))
                 {
@@ -1563,7 +1626,6 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
                 SafeErrorLogError(err.Message);
                 SafeErrorLogError($"  at Line: {err.LineNumber}");
                 SafeErrorLogError("");
-                _infoMessageException = new Exception(err.Message);
             }
             else if (_product != null)
             {

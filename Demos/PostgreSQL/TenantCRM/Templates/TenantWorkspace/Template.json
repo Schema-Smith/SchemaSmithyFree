@@ -4,7 +4,7 @@
   "SchemaIdentificationScript": "SELECT name FROM public.tenants WHERE status = 'Active' ORDER BY name",
   "RequireAtLeastOneTarget": false,
   "CreateSchemaIfMissing": false,
-  "AllowParallel": false,
+  "AllowParallel": true,
   "ContinueOnSchemaFailure": true,
   "VersionStampScript": "DO $$\nBEGIN\nRAISE NOTICE 'TenantCRM TenantWorkspace [{{SchemaName}}] {{ReleaseVersion}}';\nEND;\n$$;",
   "ScriptFolders": [

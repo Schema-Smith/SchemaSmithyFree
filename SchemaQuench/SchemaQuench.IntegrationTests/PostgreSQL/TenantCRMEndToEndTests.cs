@@ -64,6 +64,92 @@ public class TenantCRMEndToEndTests
     [OneTimeTearDown]
     public void OneTimeTearDownClearPgPools() => Npgsql.NpgsqlConnection.ClearAllPools();
 
+    /// <summary>
+    /// Regression guard for the schema-template parallel-iteration deadlock (PG manifestation 1).
+    /// Many tenant schemas deployed concurrently contend on the shared catalog inside
+    /// <c>MissingIndexesAndConstraintsQuench</c>; one parallel iteration is chosen as the
+    /// deadlock victim ("40P01: deadlock detected"). With the proc-level retry-on-deadlock in
+    /// <c>DatabaseQuench</c>, the victim re-runs the idempotent convergence proc and converges.
+    /// Without that retry, this test fails — it is the guard that lets the demo and test products
+    /// ship with <c>AllowParallel: true</c>. High tenant count makes the race reliable (the
+    /// 3-tenant lifecycle test rarely trips it).
+    /// </summary>
+    [Test]
+    public void Parallel_FanOut_ManyTenants_RecoversFromDeadlock()
+    {
+        const int tenantCount = 6;
+        var loadTenants = Enumerable.Range(0, tenantCount)
+            .Select(i => $"tenant_load_{i:D2}").ToArray();
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetDemoState();
+            DropLoadTenants(loadTenants);
+
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetDemoProductPath("PostgreSQL", ProductName);
+            config["ScriptTokens:TenantCRMDb"] = _mainDb;
+            ClearTargetFilters(config);
+
+            try
+            {
+                // Quench #1: deploy shared infra (onboard_tenant proc + public tables).
+                RunSchemaQuench();
+
+                // Onboard many tenants, then a single quench fans TenantWorkspace out across all
+                // of them in parallel — the contention shape that triggers the catalog deadlock.
+                for (var i = 0; i < tenantCount; i++)
+                    OnboardTenant(loadTenants[i], $"Load Tenant {i}", (i % 3) + 1);
+
+                _progressLog.ClearReceivedCalls();
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+                _environment.DidNotReceive().Exit(2);
+                _environment.DidNotReceive().Exit(3);
+
+                // Every tenant schema must be fully deployed — no iteration lost to an
+                // unrecovered deadlock.
+                foreach (var tenant in loadTenants)
+                {
+                    AssertTableExists(tenant, "customers");
+                    AssertTableExists(tenant, "activities");
+                    _progressLog.Received(1).Info(
+                        $"[{_server}].[{_mainDb}] [Schema: {tenant}] Successfully Quenched");
+                }
+            }
+            finally
+            {
+                DropLoadTenants(loadTenants);
+            }
+        }
+    }
+
+    private void DropLoadTenants(IEnumerable<string> schemas)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 0;
+        foreach (var s in schemas)
+        {
+            cmd.CommandText = $"DROP SCHEMA IF EXISTS \"{s}\" CASCADE;";
+            cmd.ExecuteNonQuery();
+        }
+        // Clear the tenant rows so a re-run starts clean (table may not exist before quench #1).
+        try
+        {
+            cmd.CommandText = "DELETE FROM public.tenants WHERE name LIKE 'tenant_load_%';";
+            cmd.ExecuteNonQuery();
+        }
+        catch
+        {
+            // public.tenants not yet deployed — nothing to clean.
+        }
+        conn.Close();
+    }
+
     [Test]
     public void Full_Lifecycle_Fresh_Deploy_Onboard_Three_Then_Selective_Onboard_Fourth()
     {
@@ -167,13 +253,13 @@ WHERE kcu.table_schema = '{tenant}' AND kcu.table_name = 'customers'
                         $"Tenant '{tenant}' must have fk_customers_countries pointing at public.countries.");
                 }
 
-                // ----- Migration tracking: Migration_001_BackfillCountries per tenant.
+                // ----- Migration tracking: Migration_001_BackfillCustomerCountryCode per tenant.
                 // activity_types is seeded via DataDelivery (MergeType=Insert) — see assertion
                 // immediately below — and is not tracked as a migration.
                 foreach (var tenant in InitialTenants)
                 {
                     AssertMigrationTracked(TenantWorkspaceTemplate, tenant,
-                        "Before Scripts/Migration_001_BackfillCountries.sql");
+                        "Before Scripts/Migration_001_BackfillCustomerCountryCode.sql");
 
                     // DataDelivery should have inserted the 4 default activity types per tenant.
                     Assert.That(ScalarCount($"SELECT COUNT(*) FROM \"{tenant}\".activity_types"),
@@ -234,7 +320,7 @@ WHERE kcu.table_schema = '{tenant}' AND kcu.table_name = 'customers'
                 AssertProcedureExists(FourthTenant, "add_customer");
                 AssertMaterializedViewExists(FourthTenant, "mv_active_customer_count");
                 AssertMigrationTracked(TenantWorkspaceTemplate, FourthTenant,
-                    "Before Scripts/Migration_001_BackfillCountries.sql");
+                    "Before Scripts/Migration_001_BackfillCustomerCountryCode.sql");
                 Assert.That(ScalarCount($"SELECT COUNT(*) FROM \"{FourthTenant}\".activity_types"),
                     Is.EqualTo(4), "Fourth tenant should have 4 DataDelivery-seeded activity types.");
 
