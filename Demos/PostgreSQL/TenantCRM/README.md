@@ -79,11 +79,11 @@ Completed quench of TenantCRM
 The `[Schema: <tenant>]` prefix is the iteration marker — every line that scopes
 to a particular tenant carries it. `Shared` runs once; `TenantWorkspace` runs
 once per row returned by its `SchemaIdentificationScript`. This demo ships with
-`AllowParallel: false` on the PostgreSQL `TenantWorkspace` template (the SQL
-Server demo runs tenants in parallel). Cross-schema FK contention on a
-PostgreSQL shared dimension table can deadlock parallel iterations; serial is
-the safe default for the cross-schema FK pattern. Flip to `true` if your
-tenants don't share a referenced table.
+`AllowParallel: true` on the PostgreSQL `TenantWorkspace` template, so tenants
+deploy concurrently. Under heavy fan-out the engine can momentarily pick one
+iteration as a deadlock victim while it mutates the shared catalog; SchemaSmith
+detects that and retries the affected iteration automatically, so the deploy
+still completes. Set it to `false` if you prefer strictly serial iteration.
 
 Initial deploy creates two empty schemas because `public.tenants` is empty. To
 see real per-tenant work, onboard tenants first (next section) and re-quench.

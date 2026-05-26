@@ -197,16 +197,14 @@ the migration skips.
 > error, for example), the other tenants still deploy. The failed tenant
 > surfaces a per-iteration error; the rest succeed.
 
-> **Warning:** Parallel iteration of `IndexedViewQuench` across many tenant
-> schemas can deadlock at the SQL Server catalog level (`sys.indexes`,
-> `sys.views`, `sys.schemas` contention under concurrent DDL). The demo ships
-> with `AllowParallel: true` because the deadlock surfaces sporadically rather
-> than reliably and parallel iteration is the production-realistic shape — but
-> if you hit `Transaction was deadlocked on lock resources` errors during
-> `IndexedViewQuench` under multi-tenant parallel deploys, set
-> `AllowParallel: false` on `TenantWorkspace/Template.json`. That's the same
-> workaround the PostgreSQL TenantCRM uses for its cross-schema FK contention.
-> Engine-level mitigation is on the v2 follow-up roadmap.
+> **Note:** Parallel iteration of `IndexedViewQuench` across many tenant
+> schemas can momentarily deadlock at the SQL Server catalog level (`sys.indexes`,
+> `sys.views`, `sys.schemas` contention under concurrent DDL). SchemaSmith
+> detects the deadlock victim (`Transaction was deadlocked on lock resources …`)
+> and retries the affected iteration automatically — recovered transparently —
+> so the demo ships with `AllowParallel: true` and parallel iteration is the
+> production-realistic default. Set `AllowParallel: false` on
+> `TenantWorkspace/Template.json` only if you want strictly serial iteration.
 
 ## What's not shown
 
