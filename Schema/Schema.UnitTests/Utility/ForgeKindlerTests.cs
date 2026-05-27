@@ -480,4 +480,22 @@ public class ForgeKindlerTests
         var mockCmd = Substitute.For<IDbCommand>();
         Assert.Throws<ArgumentException>(() => ForgeKindler.AcquireKindleLock(mockCmd, (Platform)99));
     }
+
+    [Test]
+    public void DropSupersededPostgreSqlOverloads_DropsTheFiveAuditedSignatures()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        var executed = new System.Collections.Generic.List<string>();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => executed.Add(mockCmd.CommandText));
+
+        ForgeKindler.DropSupersededPostgreSqlOverloads(mockCmd);
+
+        Assert.That(executed, Has.Count.EqualTo(5));
+        Assert.That(executed, Has.All.StartsWith("DROP PROCEDURE IF EXISTS"));
+        Assert.That(executed.Any(s => s.Contains("\"ValidateTableOwnership\"(varchar, boolean)")));
+        Assert.That(executed.Any(s => s.Contains("\"FixupTableOwnership\"(varchar)")));
+        Assert.That(executed.Any(s => s.Contains("\"ValidateMaterializedViewOwnership\"(varchar, boolean)")));
+        Assert.That(executed.Any(s => s.Contains("\"FixupMaterializedViewOwnership\"(varchar)")));
+        Assert.That(executed.Any(s => s.Contains("\"FixupIndexOwnership\"(varchar)")));
+    }
 }

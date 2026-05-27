@@ -341,6 +341,30 @@ public static class ForgeKindler
         }
     }
 
+    /// <summary>
+    /// Drop the prior signatures of the five PostgreSQL ownership procs that gained
+    /// p_TemplateName/p_SchemaName params in schema-templates. PostgreSQL overloads by signature,
+    /// so CREATE OR REPLACE of the new signature would otherwise ADD a second overload on an
+    /// upgraded database and make every call ambiguous (42725). IF EXISTS makes this a no-op on
+    /// fresh installs. Runs once per stamp change, under the kindle lock — no "doesn't exist" window.
+    /// </summary>
+    internal static void DropSupersededPostgreSqlOverloads(IDbCommand command)
+    {
+        string[] drops =
+        [
+            "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"ValidateTableOwnership\"(varchar, boolean)",
+            "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"FixupTableOwnership\"(varchar)",
+            "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"ValidateMaterializedViewOwnership\"(varchar, boolean)",
+            "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"FixupMaterializedViewOwnership\"(varchar)",
+            "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"FixupIndexOwnership\"(varchar)",
+        ];
+        foreach (var sql in drops)
+        {
+            command.CommandText = sql;
+            command.ExecuteNonQuery();
+        }
+    }
+
     /// <summary>Release the session-scoped kindle lock. Best-effort; failures here must not mask a kindle error.</summary>
     internal static void ReleaseKindleLock(IDbCommand command, Platform platform)
     {
