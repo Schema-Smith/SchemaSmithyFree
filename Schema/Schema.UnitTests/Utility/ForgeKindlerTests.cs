@@ -349,4 +349,30 @@ public class ForgeKindlerTests
         Assert.That(resolved, Does.Contain("Parse Tables from Json"),
             "Resolved TableQuench must contain the ParseJson source body, so a change there changes the hash.");
     }
+
+    [Test]
+    public void ComputeKindleStamp_IsDeterministicAndPlatformSpecific()
+    {
+        var sql1 = ForgeKindler.ComputeKindleStamp(Platform.SqlServer);
+        var sql2 = ForgeKindler.ComputeKindleStamp(Platform.SqlServer);
+        var pg = ForgeKindler.ComputeKindleStamp(Platform.PostgreSQL);
+
+        Assert.That(sql1, Is.EqualTo(sql2), "Same platform must produce the same stamp on repeated calls.");
+        Assert.That(sql1, Has.Length.EqualTo(64), "SHA-256 hex is 64 chars.");
+        Assert.That(sql1, Does.Match("^[0-9a-f]{64}$"), "Stamp must be lowercase hex only (safe to inline in SQL).");
+        Assert.That(sql1, Is.Not.EqualTo(pg), "Different platforms kindle different content -> different stamp.");
+    }
+
+    [Test]
+    public void ComputeKindleStamp_EqualsHashOfConcatenatedResolvedScripts()
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var s in ForgeKindler.GetKindlingScripts(Platform.PostgreSQL))
+            sb.Append(ForgeKindler.ResolveKindleScript(s.FileName, Platform.PostgreSQL, s.ReplaceParseJson, s.ReplaceTableDef));
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var expected = Convert.ToHexString(sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(sb.ToString()))).ToLowerInvariant();
+
+        Assert.That(ForgeKindler.ComputeKindleStamp(Platform.PostgreSQL), Is.EqualTo(expected),
+            "Stamp must be the hash of the resolved kindle scripts concatenated in kindle order.");
+    }
 }

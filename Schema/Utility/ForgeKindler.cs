@@ -4,6 +4,8 @@ using System;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using log4net;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -230,4 +232,22 @@ public static class ForgeKindler
     /// </summary>
     internal static string[] GetKindlingScriptNames(Platform platform)
         => GetKindlingScripts(platform).Select(s => s.FileName).ToArray();
+
+    /// <summary>
+    /// SHA-256 (lowercase hex) of the resolved kindling scripts concatenated in kindle order.
+    /// Takes ONLY platform — by construction it cannot depend on iteration/schema/database scope,
+    /// so the stamp is content-only and identical on every target for a given kindle-content version.
+    /// Any change to a kindled script OR a token source (e.g. ParseTableJsonIntoTempTables.sql)
+    /// changes the resolved text and therefore the stamp -> the next kindle re-runs automatically.
+    /// </summary>
+    public static string ComputeKindleStamp(Platform platform)
+    {
+        var sb = new StringBuilder();
+        foreach (var s in GetKindlingScripts(platform))
+            sb.Append(ResolveKindleScript(s.FileName, platform, s.ReplaceParseJson, s.ReplaceTableDef));
+
+        using var sha = SHA256.Create();
+        var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
 }
