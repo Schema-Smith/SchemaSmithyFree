@@ -38,7 +38,8 @@ public class MigrationTrackingBackwardCompatTests
         {
             _command.CommandText = "DROP TABLE IF EXISTS `SchemaSmith_CompletedMigrationScripts`";
             _command.ExecuteNonQuery();
-            ForgeKindler.KindleTheForge(_command, Platform.MySQL);
+            // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(_command, Platform.MySQL, forceReKindle: true);
         }
         finally
         {
@@ -72,7 +73,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Demo', 'Before', 'Before Scripts/Migration_001.sql')";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.MySQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.MySQL, forceReKindle: true);
 
         _command.CommandText = $@"
             SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
@@ -95,7 +97,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Demo', 'Before', 'Before Scripts/Migration_001.sql')";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.MySQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.MySQL, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT template_name, schema_name FROM `SchemaSmith_CompletedMigrationScripts`
@@ -114,7 +117,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Demo', 'Before', 'Before Scripts/Migration_001.sql')";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.MySQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.MySQL, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT COUNT(*) FROM `SchemaSmith_CompletedMigrationScripts`
@@ -134,7 +138,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Demo', 'Before', 'Before Scripts/Migration_001.sql')";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.MySQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.MySQL, forceReKindle: true);
         Assert.DoesNotThrow(() => ForgeKindler.KindleTheForge(_command, Platform.MySQL));
 
         _command.CommandText = $@"

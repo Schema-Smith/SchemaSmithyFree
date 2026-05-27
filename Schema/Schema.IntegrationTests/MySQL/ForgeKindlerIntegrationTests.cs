@@ -133,7 +133,8 @@ public class ForgeKindlerIntegrationTests
         freshConnection.Open();
         using var command = freshConnection.CreateCommand();
 
-        Assert.DoesNotThrow(() => ForgeKindler.KindleTheForge(command, Platform.MySQL),
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        Assert.DoesNotThrow(() => ForgeKindler.KindleTheForge(command, Platform.MySQL, forceReKindle: true),
             "Repeated KindleTheForge must not throw — the secondary index DDL must be idempotent.");
 
         command.CommandText = $@"
@@ -173,7 +174,8 @@ public class ForgeKindlerIntegrationTests
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
             command.ExecuteNonQuery();
 
-            ForgeKindler.KindleTheForge(command, Platform.MySQL);
+            // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(command, Platform.MySQL, forceReKindle: true);
 
             // Verify column type (VARCHAR(255)), nullability (NOT NULL), default ('').
             // A regression producing a nullable column or missing default would silently break
@@ -222,7 +224,8 @@ public class ForgeKindlerIntegrationTests
         {
             command.CommandText = "DROP TABLE IF EXISTS `SchemaSmith_CompletedMigrationScripts`";
             command.ExecuteNonQuery();
-            ForgeKindler.KindleTheForge(command, Platform.MySQL);
+            // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(command, Platform.MySQL, forceReKindle: true);
         }
     }
 
@@ -239,5 +242,62 @@ public class ForgeKindlerIntegrationTests
               AND TABLE_NAME IN ('SchemaSmith_ProductOwnership', 'SchemaSmith_StatusMessages')";
         Assert.That(System.Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(2),
             "Both ProductOwnership and StatusMessages must be created on fresh install by Bootstrap.");
+    }
+
+    [Test]
+    public void Kindle_FreshDatabase_WritesStamp()
+    {
+        using var command = _connection.CreateCommand();
+        try
+        {
+            command.CommandText = "DROP TABLE IF EXISTS SchemaSmith_KindleStamp";
+            command.ExecuteNonQuery();
+
+            ForgeKindler.KindleTheForge(command, Platform.MySQL); // absent stamp => kindles
+
+            Assert.That(ForgeKindler.ReadStamp(command, Platform.MySQL),
+                Is.EqualTo(ForgeKindler.ComputeKindleStamp(Platform.MySQL)),
+                "A fresh kindle must write the current content stamp.");
+        }
+        finally
+        {
+            ForgeKindler.KindleTheForge(command, Platform.MySQL, forceReKindle: true);
+        }
+    }
+
+    [Test]
+    public void Kindle_SecondRun_IsNoOp_StampUnchanged()
+    {
+        using var command = _connection.CreateCommand();
+        ForgeKindler.KindleTheForge(command, Platform.MySQL, forceReKindle: true); // ensure stamped
+        command.CommandText = "SELECT UpdatedUtc FROM SchemaSmith_KindleStamp";
+        var first = command.ExecuteScalar();
+
+        ForgeKindler.KindleTheForge(command, Platform.MySQL); // stamp matches => skip
+        command.CommandText = "SELECT UpdatedUtc FROM SchemaSmith_KindleStamp";
+        Assert.That(command.ExecuteScalar(), Is.EqualTo(first), "Skip path must not rewrite the stamp.");
+    }
+
+    [Test]
+    public void Kindle_ForceReKindle_RewritesStamp()
+    {
+        using var command = _connection.CreateCommand();
+        ForgeKindler.KindleTheForge(command, Platform.MySQL, forceReKindle: true);
+        command.CommandText = "SELECT COUNT(*) FROM information_schema.routines " +
+                              "WHERE routine_schema = DATABASE() AND routine_name = 'SchemaSmith_TableQuench'";
+        Assert.That(System.Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1),
+            "ForceReKindle must leave the helper procs present.");
+    }
+
+    [Test]
+    public void Kindle_ReleasesGetLock_AfterCompletion()
+    {
+        // After a kindle, the named GET_LOCK must be released (finally path). IS_FREE_LOCK on the same
+        // key must report 1 (free). This also exercises the real MySqlConnector GET_LOCK return path.
+        using var command = _connection.CreateCommand();
+        ForgeKindler.KindleTheForge(command, Platform.MySQL, forceReKindle: true);
+        command.CommandText = "SELECT IS_FREE_LOCK(CONCAT(DATABASE(), ':SchemaSmith_Kindle'))";
+        Assert.That(System.Convert.ToInt64(command.ExecuteScalar()), Is.EqualTo(1),
+            "Kindle must release its GET_LOCK when done.");
     }
 }

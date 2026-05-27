@@ -285,15 +285,30 @@ public static class ForgeKindler
             return pgValue == null || pgValue == DBNull.Value ? null : pgValue.ToString();
         }
 
+        if (platform == Platform.MySQL)
+        {
+            // MySQL validates all table references at parse time — even inside a subquery behind a
+            // WHERE EXISTS guard — so a single-statement existence-gated read raises 1146 on a fresh
+            // install before SchemaSmith_KindleStamp has been created. Use the same two-query pattern
+            // as the PostgreSQL path: confirm existence via information_schema first, then read.
+            command.CommandText =
+                "SELECT COUNT(*) FROM information_schema.tables " +
+                "WHERE table_schema = DATABASE() AND table_name = 'SchemaSmith_KindleStamp'";
+            var mysqlExistsScalar = command.ExecuteScalar();
+            var mysqlExists = mysqlExistsScalar != null && mysqlExistsScalar != DBNull.Value
+                              && Convert.ToInt64(mysqlExistsScalar) > 0;
+            if (!mysqlExists) return null;
+
+            command.CommandText = "SELECT Stamp FROM SchemaSmith_KindleStamp LIMIT 1";
+            var mysqlValue = command.ExecuteScalar();
+            return mysqlValue == null || mysqlValue == DBNull.Value ? null : mysqlValue.ToString();
+        }
+
         command.CommandText = platform switch
         {
             Platform.SqlServer =>
                 "IF OBJECT_ID('[SchemaSmith].[KindleStamp]', 'U') IS NULL SELECT CAST(NULL AS VARCHAR(64)) " +
                 "ELSE SELECT TOP 1 [Stamp] FROM [SchemaSmith].[KindleStamp]",
-            Platform.MySQL =>
-                "SELECT (SELECT Stamp FROM SchemaSmith_KindleStamp LIMIT 1) AS Stamp " +
-                "WHERE EXISTS (SELECT 1 FROM information_schema.tables " +
-                "WHERE table_schema = DATABASE() AND table_name = 'SchemaSmith_KindleStamp')",
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
         };
         var value = command.ExecuteScalar();
