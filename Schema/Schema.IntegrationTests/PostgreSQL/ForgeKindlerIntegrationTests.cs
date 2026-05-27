@@ -1,8 +1,10 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
+using System.Threading.Tasks;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Utility;
@@ -97,7 +99,8 @@ public class ForgeKindlerIntegrationTests
         // EXISTS guard must keep the secondary index creation a no-op when the index already
         // exists. Run KindleTheForge a second time and assert no exception + a unique index.
         using var command = _connection.CreateCommand();
-        Assert.DoesNotThrow(() => ForgeKindler.KindleTheForge(command, Platform.PostgreSQL),
+        // force: the version-gated kindle would otherwise skip after the fixture's initial kindle
+        Assert.DoesNotThrow(() => ForgeKindler.KindleTheForge(command, Platform.PostgreSQL, forceReKindle: true),
             "Repeated KindleTheForge must not throw — the secondary index DDL must be idempotent.");
 
         command.CommandText = @"
@@ -132,7 +135,8 @@ public class ForgeKindlerIntegrationTests
                 );";
             command.ExecuteNonQuery();
 
-            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+            // force: the version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL, forceReKindle: true);
 
             // Verify both column type (VARCHAR(256)), nullability (NOT NULL), and default ('').
             // A regression producing a nullable column or missing default would silently break
@@ -185,7 +189,8 @@ public class ForgeKindlerIntegrationTests
         {
             command.CommandText = @"DROP TABLE IF EXISTS ""SchemaSmith"".""CompletedMigrationScripts""";
             command.ExecuteNonQuery();
-            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+            // force: the version-gated kindle would otherwise skip, leaving the dropped table unrebuilt
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL, forceReKindle: true);
         }
     }
 
@@ -209,7 +214,8 @@ public class ForgeKindlerIntegrationTests
                 );";
             command.ExecuteNonQuery();
 
-            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+            // force: the version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL, forceReKindle: true);
 
             command.CommandText = @"
                 SELECT data_type, character_maximum_length, is_nullable, column_default
@@ -231,7 +237,170 @@ public class ForgeKindlerIntegrationTests
         {
             command.CommandText = @"DROP TABLE IF EXISTS ""SchemaSmith"".""ProductOwnership""";
             command.ExecuteNonQuery();
-            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+            // force: the version-gated kindle would otherwise skip, leaving the dropped table unrebuilt
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL, forceReKindle: true);
         }
+    }
+
+    [Test]
+    public void Kindle_FreshDatabase_WritesStamp()
+    {
+        // Simulate a fresh install by removing the stamp table, then kindle without force.
+        // An absent stamp is indistinguishable from a version mismatch — the gate must kindle.
+        using var command = _connection.CreateCommand();
+        try
+        {
+            command.CommandText = @"DROP TABLE IF EXISTS ""SchemaSmith"".""KindleStamp""";
+            command.ExecuteNonQuery();
+
+            // Absent stamp => no match => kindle runs without needing force.
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+
+            Assert.That(ForgeKindler.ReadStamp(command, Platform.PostgreSQL),
+                Is.EqualTo(ForgeKindler.ComputeKindleStamp(Platform.PostgreSQL)),
+                "A fresh kindle must write the current content stamp.");
+        }
+        finally
+        {
+            // force: the version-gated kindle would otherwise skip, leaving the dropped table unrebuilt
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL, forceReKindle: true);
+        }
+    }
+
+    [Test]
+    public void Kindle_SecondRun_IsNoOp_StampUnchanged()
+    {
+        // If the stamp already matches the current kindle content the gate must skip without
+        // rewriting the stamp row — a no-op second kindle must leave UpdatedUtc untouched.
+        using var command = _connection.CreateCommand();
+        ForgeKindler.KindleTheForge(command, Platform.PostgreSQL, forceReKindle: true); // ensure stamped
+
+        command.CommandText = @"SELECT ""UpdatedUtc"" FROM ""SchemaSmith"".""KindleStamp"" LIMIT 1";
+        var firstWrite = command.ExecuteScalar();
+
+        // stamp matches => skip path — UpdatedUtc must not be rewritten
+        ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+
+        command.CommandText = @"SELECT ""UpdatedUtc"" FROM ""SchemaSmith"".""KindleStamp"" LIMIT 1";
+        var secondWrite = command.ExecuteScalar();
+
+        Assert.That(secondWrite, Is.EqualTo(firstWrite), "Skip path must not rewrite the stamp row.");
+    }
+
+    [Test]
+    public void Kindle_UpgradePath_NaturalStampMismatch_DropsDuplicateOverload()
+    {
+        // Prove the REAL upgrade trigger: a stale stamp + an old overload present -> next
+        // unforced kindle drops the superseded overload and re-stamps, leaving exactly one
+        // overload (no 42725 ambiguity).
+        using var command = _connection.CreateCommand();
+        try
+        {
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL, forceReKindle: true); // current sigs present
+
+            // Hand-create the pre-schema-templates 2-arg overload (the upgrade hazard).
+            command.CommandText =
+                @"CREATE OR REPLACE PROCEDURE ""SchemaSmith"".""ValidateTableOwnership""(p_ProductName varchar, p_WhatIf boolean) " +
+                @"LANGUAGE plpgsql AS $$ BEGIN END; $$;";
+            command.ExecuteNonQuery();
+            Assert.That(CountOverloads(command, "ValidateTableOwnership"), Is.EqualTo(2),
+                "Setup: two overloads of ValidateTableOwnership must exist before the upgrade kindle.");
+
+            // Force a stale stamp so the next UNFORCED kindle detects a mismatch and re-kindles.
+            ForgeKindler.WriteStamp(command, Platform.PostgreSQL, new string('0', 64));
+
+            // Unforced: mismatch detected => drop superseded overload + rekindle + re-stamp.
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL);
+
+            Assert.That(CountOverloads(command, "ValidateTableOwnership"), Is.EqualTo(1),
+                "Re-kindle must drop the superseded 2-arg overload, leaving exactly one (no 42725 ambiguity).");
+            Assert.That(ForgeKindler.ReadStamp(command, Platform.PostgreSQL),
+                Is.EqualTo(ForgeKindler.ComputeKindleStamp(Platform.PostgreSQL)),
+                "Stamp must be refreshed after the upgrade kindle.");
+        }
+        finally
+        {
+            // force: the version-gated kindle would otherwise skip, leaving state inconsistent
+            ForgeKindler.KindleTheForge(command, Platform.PostgreSQL, forceReKindle: true);
+        }
+    }
+
+    [Test]
+    public void Kindle_ParallelFirstArrivals_KindleOnce_NoCollision()
+    {
+        // Clear the stamp so N racing sessions contend to be the first kindler. Each task uses
+        // its OWN connection (the session advisory lock is per-connection). The lock must
+        // serialize them so only one kindles and none collide (no 'tuple concurrently updated').
+        using (var prep = _connection.CreateCommand())
+        {
+            prep.CommandText = @"DROP TABLE IF EXISTS ""SchemaSmith"".""KindleStamp""";
+            prep.ExecuteNonQuery();
+        }
+
+        var errors = new ConcurrentBag<Exception>();
+        try
+        {
+            Parallel.For(0, 8, _ =>
+            {
+                try
+                {
+                    using var c = DbConnectionFactory.ForPlatform(Platform.PostgreSQL)
+                        .GetDbConnection(FixtureSetup.GetMainDbConnectionString());
+                    c.Open();
+                    using var cmd = c.CreateCommand();
+                    ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL);
+                }
+                catch (Exception ex) { errors.Add(ex); }
+            });
+
+            Assert.That(errors, Is.Empty,
+                $"Parallel kindle must not collide. Errors: {string.Join("; ", errors)}");
+
+            using var verify = _connection.CreateCommand();
+            verify.CommandText = @"SELECT COUNT(*) FROM ""SchemaSmith"".""KindleStamp""";
+            Assert.That(Convert.ToInt32(verify.ExecuteScalar()), Is.EqualTo(1),
+                "Exactly one stamp row must exist after parallel kindle.");
+        }
+        finally
+        {
+            // force: the version-gated kindle would otherwise skip, leaving the dropped table unrebuilt
+            using var restore = _connection.CreateCommand();
+            ForgeKindler.KindleTheForge(restore, Platform.PostgreSQL, forceReKindle: true);
+        }
+    }
+
+    [Test]
+    public void Kindle_ReleasesAdvisoryLock_AfterCompletion()
+    {
+        // After a kindle completes, the session advisory lock must be released by the finally
+        // block. A new attempt to acquire the same lock key must succeed immediately.
+        using (var c = _connection.CreateCommand())
+            ForgeKindler.KindleTheForge(c, Platform.PostgreSQL, forceReKindle: true);
+
+        using var check = _connection.CreateCommand();
+        // pg_try_advisory_lock returns true if the lock can be acquired (not already held).
+        // We use the same key expression as AcquireKindleLock.
+        check.CommandText =
+            "SELECT pg_try_advisory_lock(hashtext(current_database() || ':SchemaSmith_Kindle'))";
+        var acquired = check.ExecuteScalar();
+        Assert.That(Convert.ToBoolean(acquired), Is.True,
+            "Kindle must release its session advisory lock on completion; the lock must be acquirable afterwards.");
+
+        // Release immediately so we don't leak it for the remainder of the session.
+        check.CommandText =
+            "SELECT pg_advisory_unlock(hashtext(current_database() || ':SchemaSmith_Kindle'))";
+        check.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Count how many pg_proc entries exist for a given procedure name in the SchemaSmith schema.
+    /// Used to verify overload cleanup during upgrade kindles.
+    /// </summary>
+    private int CountOverloads(IDbCommand cmd, string procName)
+    {
+        cmd.CommandText =
+            "SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace " +
+            $"WHERE n.nspname = 'SchemaSmith' AND p.proname = '{procName}'";
+        return Convert.ToInt32(cmd.ExecuteScalar());
     }
 }

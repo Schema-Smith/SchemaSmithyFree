@@ -258,17 +258,37 @@ public static class ForgeKindler
     /// <summary>
     /// Read the current kindle stamp, or null if the marker table doesn't exist yet (fresh install)
     /// or holds no row. Uses a guard so a missing table returns null rather than raising an error.
+    ///
+    /// PostgreSQL note: the original CASE WHEN to_regclass(...) ELSE (SELECT ... FROM KindleStamp) END
+    /// approach fails at PARSE TIME on a fresh database — PG validates all table references in the
+    /// query text regardless of which CASE branch will execute. We avoid the static table reference
+    /// by querying pg_class/pg_namespace instead, and only issuing the second SELECT when the table
+    /// is confirmed to exist.
     /// </summary>
     internal static string ReadStamp(IDbCommand command, Platform platform)
     {
+        if (platform == Platform.PostgreSQL)
+        {
+            // First: check existence via catalog (no static reference to KindleStamp that PG would
+            // validate at parse time). Returns 1 if the table exists, 0 otherwise.
+            command.CommandText =
+                "SELECT COUNT(*) FROM pg_catalog.pg_class c " +
+                "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace " +
+                "WHERE n.nspname = 'SchemaSmith' AND c.relname = 'KindleStamp' AND c.relkind = 'r'";
+            var exists = Convert.ToInt64(command.ExecuteScalar()) > 0;
+            if (!exists) return null;
+
+            // Table confirmed present — safe to reference it directly.
+            command.CommandText = "SELECT \"Stamp\" FROM \"SchemaSmith\".\"KindleStamp\" LIMIT 1";
+            var pgValue = command.ExecuteScalar();
+            return pgValue == null || pgValue == DBNull.Value ? null : pgValue.ToString();
+        }
+
         command.CommandText = platform switch
         {
             Platform.SqlServer =>
                 "IF OBJECT_ID('[SchemaSmith].[KindleStamp]', 'U') IS NULL SELECT CAST(NULL AS VARCHAR(64)) " +
                 "ELSE SELECT TOP 1 [Stamp] FROM [SchemaSmith].[KindleStamp]",
-            Platform.PostgreSQL =>
-                "SELECT CASE WHEN to_regclass('\"SchemaSmith\".\"KindleStamp\"') IS NULL THEN NULL " +
-                "ELSE (SELECT \"Stamp\" FROM \"SchemaSmith\".\"KindleStamp\" LIMIT 1) END",
             Platform.MySQL =>
                 "SELECT (SELECT Stamp FROM SchemaSmith_KindleStamp LIMIT 1) AS Stamp " +
                 "WHERE EXISTS (SELECT 1 FROM information_schema.tables " +
