@@ -242,8 +242,8 @@ public static class ForgeKindler
         command.CommandText = platform switch
         {
             Platform.SqlServer =>
-                "IF OBJECT_ID('SchemaSmith.KindleStamp', 'U') IS NULL SELECT CAST(NULL AS VARCHAR(64)) " +
-                "ELSE SELECT TOP 1 Stamp FROM SchemaSmith.KindleStamp",
+                "IF OBJECT_ID('[SchemaSmith].[KindleStamp]', 'U') IS NULL SELECT CAST(NULL AS VARCHAR(64)) " +
+                "ELSE SELECT TOP 1 [Stamp] FROM [SchemaSmith].[KindleStamp]",
             Platform.PostgreSQL =>
                 "SELECT CASE WHEN to_regclass('\"SchemaSmith\".\"KindleStamp\"') IS NULL THEN NULL " +
                 "ELSE (SELECT \"Stamp\" FROM \"SchemaSmith\".\"KindleStamp\" LIMIT 1) END",
@@ -263,11 +263,14 @@ public static class ForgeKindler
     /// </summary>
     internal static void WriteStamp(IDbCommand command, Platform platform, string stamp)
     {
+        if (string.IsNullOrEmpty(stamp))
+            throw new ArgumentException("Stamp must be a non-empty SHA-256 hex string.", nameof(stamp));
+
         var (deleteSql, insertSql) = platform switch
         {
             Platform.SqlServer => (
-                "DELETE FROM SchemaSmith.KindleStamp",
-                $"INSERT INTO SchemaSmith.KindleStamp (Stamp, UpdatedUtc) VALUES ('{stamp}', GETUTCDATE())"),
+                "DELETE FROM [SchemaSmith].[KindleStamp]",
+                $"INSERT INTO [SchemaSmith].[KindleStamp] ([Stamp], [UpdatedUtc]) VALUES ('{stamp}', GETUTCDATE())"),
             Platform.PostgreSQL => (
                 "DELETE FROM \"SchemaSmith\".\"KindleStamp\"",
                 $"INSERT INTO \"SchemaSmith\".\"KindleStamp\" (\"Stamp\", \"UpdatedUtc\") VALUES ('{stamp}', NOW())"),

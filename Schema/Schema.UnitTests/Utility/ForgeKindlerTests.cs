@@ -3,6 +3,8 @@
 using System;
 using System.Data;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using NSubstitute;
 using Schema.Domain;
 using Schema.Utility;
@@ -366,11 +368,11 @@ public class ForgeKindlerTests
     [Test]
     public void ComputeKindleStamp_EqualsHashOfConcatenatedResolvedScripts()
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         foreach (var s in ForgeKindler.GetKindlingScripts(Platform.PostgreSQL))
             sb.Append(ForgeKindler.ResolveKindleScript(s.FileName, Platform.PostgreSQL, s.ReplaceParseJson, s.ReplaceTableDef));
-        using var sha = System.Security.Cryptography.SHA256.Create();
-        var expected = Convert.ToHexString(sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(sb.ToString()))).ToLowerInvariant();
+        using var sha = SHA256.Create();
+        var expected = Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()))).ToLowerInvariant();
 
         Assert.That(ForgeKindler.ComputeKindleStamp(Platform.PostgreSQL), Is.EqualTo(expected),
             "Stamp must be the hash of the resolved kindle scripts concatenated in kindle order.");
@@ -409,5 +411,56 @@ public class ForgeKindlerTests
         Assert.That(executed, Has.Count.EqualTo(2));
         Assert.That(executed[0], Does.StartWith("DELETE FROM SchemaSmith_KindleStamp"));
         Assert.That(executed[1], Does.Contain("INSERT INTO SchemaSmith_KindleStamp").And.Contains("'deadbeef'"));
+    }
+
+    [Test]
+    public void WriteStamp_SqlServer_UsesBracketedIdentifiersAndUtcDate()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        var executed = new System.Collections.Generic.List<string>();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => executed.Add(mockCmd.CommandText));
+
+        ForgeKindler.WriteStamp(mockCmd, Platform.SqlServer, "abc");
+
+        Assert.That(executed, Has.Count.EqualTo(2));
+        Assert.That(executed[0], Is.EqualTo("DELETE FROM [SchemaSmith].[KindleStamp]"));
+        Assert.That(executed[1], Does.Contain("INSERT INTO [SchemaSmith].[KindleStamp]")
+            .And.Contain("'abc'").And.Contain("GETUTCDATE()"));
+    }
+
+    [Test]
+    public void WriteStamp_PostgreSQL_UsesQuotedIdentifiersAndNow()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        var executed = new System.Collections.Generic.List<string>();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => executed.Add(mockCmd.CommandText));
+
+        ForgeKindler.WriteStamp(mockCmd, Platform.PostgreSQL, "abc");
+
+        Assert.That(executed, Has.Count.EqualTo(2));
+        Assert.That(executed[0], Is.EqualTo("DELETE FROM \"SchemaSmith\".\"KindleStamp\""));
+        Assert.That(executed[1], Does.Contain("INSERT INTO \"SchemaSmith\".\"KindleStamp\"")
+            .And.Contain("'abc'").And.Contain("NOW()"));
+    }
+
+    [Test]
+    public void WriteStamp_ThrowsForEmptyStamp()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        Assert.Throws<ArgumentException>(() => ForgeKindler.WriteStamp(mockCmd, Platform.SqlServer, ""));
+        Assert.Throws<ArgumentException>(() => ForgeKindler.WriteStamp(mockCmd, Platform.SqlServer, null));
+    }
+
+    [Test]
+    public void ReadStamp_UsesPlatformAppropriateGuardQuery()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        mockCmd.ExecuteScalar().Returns(DBNull.Value);
+
+        ForgeKindler.ReadStamp(mockCmd, Platform.PostgreSQL);
+        Assert.That(mockCmd.CommandText, Does.Contain("to_regclass").And.Contain("\"SchemaSmith\".\"KindleStamp\""));
+
+        ForgeKindler.ReadStamp(mockCmd, Platform.MySQL);
+        Assert.That(mockCmd.CommandText, Does.Contain("information_schema.tables").And.Contain("SchemaSmith_KindleStamp"));
     }
 }
