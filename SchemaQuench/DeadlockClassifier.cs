@@ -12,9 +12,9 @@ namespace SchemaQuench;
 /// locale-independent codes (SQL Server 1205, PostgreSQL <c>40P01</c>) with a message
 /// fallback that also covers MySQL ("Deadlock found …"). Walks the inner-exception chain.
 ///
-/// <para>Used by <see cref="DatabaseQuench"/> to retry idempotent convergence procs whose
-/// only failure is losing a deadlock race against a sibling parallel schema-template
-/// iteration — see the schema-template parallel-iteration deadlock investigation.</para>
+/// <para>Used by <see cref="DatabaseQuench"/> to retry idempotent convergence procs that lose a
+/// transient deadlock race under parallel iteration — defense-in-depth alongside the SQL-level
+/// prevention in the PostgreSQL convergence procs.</para>
 /// </summary>
 internal static class DeadlockClassifier
 {

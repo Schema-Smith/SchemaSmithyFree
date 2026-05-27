@@ -65,17 +65,18 @@ public class TenantCRMEndToEndTests
     public void OneTimeTearDownClearPgPools() => Npgsql.NpgsqlConnection.ClearAllPools();
 
     /// <summary>
-    /// Regression guard for the schema-template parallel-iteration deadlock (PG manifestation 1).
-    /// Many tenant schemas deployed concurrently contend on the shared catalog inside
-    /// <c>MissingIndexesAndConstraintsQuench</c>; one parallel iteration is chosen as the
-    /// deadlock victim ("40P01: deadlock detected"). With the proc-level retry-on-deadlock in
-    /// <c>DatabaseQuench</c>, the victim re-runs the idempotent convergence proc and converges.
-    /// Without that retry, this test fails — it is the guard that lets the demo and test products
-    /// ship with <c>AllowParallel: true</c>. High tenant count makes the race reliable (the
+    /// Regression guard for parallel schema-template fan-out (PG). Many tenant schemas deployed
+    /// concurrently must all converge cleanly. This previously deadlocked inside
+    /// <c>MissingIndexesAndConstraintsQuench</c>: a correlated EXISTS over
+    /// <c>information_schema.columns</c> materialised the whole view and AccessShare-locked every
+    /// table, colliding with siblings creating their own tables ("40P01: deadlock detected"). The
+    /// proc now reads <c>pg_catalog</c> scoped to the named table, preventing the deadlock at the
+    /// source; the <c>DatabaseQuench</c> retry path remains as defense-in-depth. High tenant count
+    /// makes the old race reliable, so this guards against a regression of either layer (the
     /// 3-tenant lifecycle test rarely trips it).
     /// </summary>
     [Test]
-    public void Parallel_FanOut_ManyTenants_RecoversFromDeadlock()
+    public void Parallel_FanOut_ManyTenants_DeploysWithoutDeadlock()
     {
         const int tenantCount = 6;
         var loadTenants = Enumerable.Range(0, tenantCount)

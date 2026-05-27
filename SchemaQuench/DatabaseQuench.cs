@@ -1228,11 +1228,12 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
         return connection;
     }
 
-    // Bounded retry policy for deadlock victims. Internal (not const) so tests can shrink the
-    // delay/attempts. See DeadlockClassifier and the schema-template parallel-iteration deadlock
-    // investigation: parallel iterations of the same template contend on the shared catalog and
-    // one is chosen as the deadlock victim. The convergence procs are idempotent (they recompute
-    // desired-vs-existing on every run), so re-running the victim re-converges cleanly.
+    // Bounded retry policy for deadlock victims — defense-in-depth. Internal (not const) so tests
+    // can shrink the delay/attempts. The PostgreSQL convergence-proc deadlock that originally
+    // motivated this is now prevented at the SQL level (MissingIndexesAndConstraintsQuench reads
+    // pg_catalog instead of materialising information_schema.columns); retry remains to cover
+    // residual cross-iteration contention such as SQL Server IndexedViewQuench. The convergence
+    // procs are idempotent (recompute desired-vs-existing every run), so a victim re-converges cleanly.
     internal int MaxDeadlockAttempts = 20;
     internal int DeadlockRetryBaseMs = 100;
 
@@ -1265,10 +1266,9 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
         }
     }
 
-    // "Full jitter" exponential backoff (sleep uniformly in [0, capped-exponential]). Full jitter
-    // de-synchronises a thundering herd of sibling iterations that all deadlocked together far
-    // better than fixed-delay-plus-small-jitter — critical when many parallel iterations contend
-    // on the shared catalog, so they don't simply re-collide in lockstep on every retry.
+    // "Full jitter" exponential backoff (sleep uniformly in [0, capped-exponential]). If several
+    // iterations do deadlock at once, full jitter de-synchronises them far better than
+    // fixed-delay-plus-small-jitter, so retries don't re-collide in lockstep.
     private int DeadlockBackoffMs(int attempt)
     {
         if (DeadlockRetryBaseMs <= 0) return 0;

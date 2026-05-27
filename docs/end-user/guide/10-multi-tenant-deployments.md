@@ -267,9 +267,9 @@ When a deployment fails at 2am, the first question is which tenant. The `[Schema
 [localhost].[TenantCRM] [Schema: tenant_beta] Successfully Quenched
 ```
 
-With `AllowParallel: true` (SQL Server default), iterations interleave. The log above shows both tenants beginning before either completes. Timestamps on the log lines resolve ambiguity if you need to trace a specific event.
+With `AllowParallel: true` (the default, used by both TenantCRM demos), iterations interleave. The log above shows both tenants beginning before either completes. Timestamps on the log lines resolve ambiguity if you need to trace a specific event.
 
-With `AllowParallel: false` (PostgreSQL TenantCRM default), iterations run serially. The PostgreSQL demo uses this because cross-schema FK constraint creation against a shared table can deadlock when parallel iterations race to apply the same FK. Serial is the safe default for the cross-schema FK pattern; flip to `true` if your tenants don't share referenced tables.
+With `AllowParallel: false`, iterations run serially -- one tenant's lines complete before the next begins. Reach for it when you want to cap concurrent load on a resource-constrained target, or when the template's own migration scripts perform DDL that can't run concurrently. Parallel iteration is otherwise the production-realistic default.
 
 If one tenant's iteration fails and `ContinueOnSchemaFailure: true` is set, the failed tenant surfaces a per-iteration error line and the rest of the tenants continue. The exit code for the quench reflects the failure, but the other tenants are unaffected.
 

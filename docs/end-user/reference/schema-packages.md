@@ -983,9 +983,9 @@ Set `CreateSchemaIfMissing: true` when you're running a fully automated onboardi
 |---|---|---|---|
 | `AllowParallel` | bool | `true` | When `false`, iterations of this schema template run serially regardless of the global `MaxThreads` setting. |
 
-When `true` (the default), schema iterations can run in parallel up to the `MaxThreads` limit alongside iterations from other templates and databases. Parallel execution is generally safe -- each iteration touches its own schema namespace -- but shared-resource contention is possible in specific scenarios.
+When `true` (the default), schema iterations can run in parallel up to the `MaxThreads` limit alongside iterations from other templates and databases. Parallel execution is safe: each iteration touches its own schema namespace and converges independently.
 
-> **Note:** Set `AllowParallel: false` when your schema template creates cross-schema foreign keys to tables in dimensions schemas (such as `dbo` or `public`) and you have observed deadlocks under DDL parallelism. The PostgreSQL TenantCRM demo uses `AllowParallel: false` as a conservative baseline for exactly this reason.
+> **Tip:** Set `AllowParallel: false` to force this template's iterations to run one at a time -- useful to cap concurrent load on a resource-constrained target, or when the template's own migration scripts perform DDL that can't run concurrently. Parallel iteration is otherwise the production-realistic default; both TenantCRM demos ship `AllowParallel: true`.
 
 ### Failure isolation
 
@@ -1023,7 +1023,7 @@ This is the `TenantWorkspace/Template.json` from the SQL Server TenantCRM demo -
 }
 ```
 
-`RequireAtLeastOneTarget: false` here handles a fresh installation where no tenants have been onboarded yet -- the schema template finds zero rows, treats it as a no-op, and the product run succeeds so the `Initialize` and `Shared` templates still complete. The PostgreSQL TenantCRM demo is identical in structure, with `AllowParallel: false` to serialize iterations in the PostgreSQL DDL lock environment.
+`RequireAtLeastOneTarget: false` here handles a fresh installation where no tenants have been onboarded yet -- the schema template finds zero rows, treats it as a no-op, and the product run succeeds so the `Initialize` and `Shared` templates still complete. The PostgreSQL TenantCRM demo is identical in structure and ships `AllowParallel: true`, so tenants deploy concurrently.
 
 ---
 
