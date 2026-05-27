@@ -13,7 +13,7 @@ namespace Schema.Utility;
 /// <summary>
 /// Deploys SchemaSmith helper procedures, functions, and tables to the target database.
 /// This "kindles the forge" - preparing the database for schema extraction and deployment.
-/// Platform-aware: dispatches to the correct kindling scripts based on Platform.
+/// Platform-aware: uses a per-platform descriptor list (GetKindlingScripts) to drive both execution and version-stamping.
 /// </summary>
 public static class ForgeKindler
 {

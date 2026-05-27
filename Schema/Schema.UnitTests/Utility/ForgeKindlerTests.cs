@@ -290,6 +290,20 @@ public class ForgeKindlerTests
     }
 
     [Test]
+    public void GetKindlingScripts_TableQuenchParseJsonFlag_IsSetForPgButNotMySql()
+    {
+        var pg = ForgeKindler.GetKindlingScripts(Platform.PostgreSQL)
+            .Single(s => s.FileName == "SchemaSmith.TableQuench.sql");
+        Assert.That(pg.ReplaceParseJson, Is.True, "PostgreSQL TableQuench embeds the ParseJson body.");
+        Assert.That(pg.ReplaceTableDef, Is.False);
+
+        var mysql = ForgeKindler.GetKindlingScripts(Platform.MySQL)
+            .Single(s => s.FileName == "SchemaSmith_TableQuench.sql");
+        Assert.That(mysql.ReplaceParseJson, Is.False, "MySQL TableQuench has no ParseJson token.");
+        Assert.That(mysql.ReplaceTableDef, Is.False);
+    }
+
+    [Test]
     public void GetKindlingScriptNames_IsDerivedFromDescriptors()
     {
         foreach (var platform in new[] { Platform.SqlServer, Platform.PostgreSQL, Platform.MySQL })

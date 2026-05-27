@@ -7,7 +7,7 @@
       "Nullable": false
     },
     {
-      "Name": "UpdatedAt",
+      "Name": "UpdatedUtc",
       "DataType": "DATETIME",
       "Nullable": false,
       "Default": "CURRENT_TIMESTAMP"
