@@ -24,80 +24,24 @@ public static class ForgeKindler
     /// </summary>
     public static void KindleTheForge(IDbCommand command, Platform platform)
     {
-        switch (platform)
-        {
-            case Platform.SqlServer:
-                KindleForSqlServer(command);
-                break;
-            case Platform.PostgreSQL:
-                KindleForPostgreSQL(command);
-                break;
-            case Platform.MySQL:
-                KindleForMySQL(command);
-                break;
-            default:
-                throw new ArgumentException($"Unsupported platform for kindling: {platform}", nameof(platform));
-        }
+        if (platform is not (Platform.SqlServer or Platform.PostgreSQL or Platform.MySQL))
+            throw new ArgumentException($"Unsupported platform for kindling: {platform}", nameof(platform));
+
+        KindleScripts(command, platform);
+        if (platform == Platform.MySQL)
+            CleanupMySqlStatusMessages(command);
     }
 
-    private static void KindleForSqlServer(IDbCommand command)
+    private static void KindleScripts(IDbCommand command, Platform platform)
     {
-        KindleOneFile(command, "Kindling_SchemaSmith_Schema.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.BootstrapTableQuench.sql", Platform.SqlServer);
-        KindleOneFile(command, "Kindling_CompletedMigrationScripts_Table.sql", Platform.SqlServer, replaceTableDefToken: true);
-        KindleOneFile(command, "SchemaSmith.fn_StripParenWrapping.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.fn_StripBracketWrapping.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.fn_SafeBracketWrap.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.PrintWithNoWait.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.MissingTableAndColumnQuench.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.ModifiedTableQuench.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.MissingIndexesAndConstraintsQuench.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.ForeignKeyQuench.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.TableQuench.sql", Platform.SqlServer, replaceParseJsonToken: true);
-        KindleOneFile(command, "SchemaSmith.IndexOnlyQuench.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.fn_FormatJson.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.GenerateTableJson.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.ValidateIndexedViewOwnership.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.FixupIndexedViewOwnership.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.IndexedViewQuench.sql", Platform.SqlServer);
-        KindleOneFile(command, "SchemaSmith.GenerateIndexedViewJson.sql", Platform.SqlServer);
+        foreach (var s in GetKindlingScripts(platform))
+            KindleOneFile(command, s.FileName, platform, s.ReplaceParseJson, s.ReplaceTableDef);
     }
 
-    private static void KindleForPostgreSQL(IDbCommand command)
+    // MySQL only: clear orphaned status rows from crashed sessions. Operational, not schema
+    // content — runs after the table set is created and is excluded from the version stamp.
+    private static void CleanupMySqlStatusMessages(IDbCommand command)
     {
-        KindleOneFile(command, "Kindling_SchemaSmith_Schema.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.BootstrapTableQuench.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "Kindling_ProductOwnership_Table.sql", Platform.PostgreSQL, replaceTableDefToken: true);
-        KindleOneFile(command, "Kindling_CompletedMigrationScripts_Table.sql", Platform.PostgreSQL, replaceTableDefToken: true);
-        KindleOneFile(command, "SchemaSmith.ExecuteOrDebug.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.QuoteColumnList.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.QuoteIndexColumnList.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.StripParenWrapping.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.ValidateTableOwnership.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.FixupTableOwnership.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.FixupIndexOwnership.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.MissingTableAndColumnQuench.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.ModifiedTableQuench.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.MissingIndexesAndConstraintsQuench.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.ForeignKeyQuench.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.TableQuench.sql", Platform.PostgreSQL, replaceParseJsonToken: true);
-        KindleOneFile(command, "SchemaSmith.IndexOnlyQuench.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.FormatJson.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.GenerateTableJson.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.ValidateMaterializedViewOwnership.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.FixupMaterializedViewOwnership.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.MissingMaterializedViewIndexesQuench.sql", Platform.PostgreSQL);
-        KindleOneFile(command, "SchemaSmith.MaterializedViewQuench.sql", Platform.PostgreSQL);
-    }
-
-    private static void KindleForMySQL(IDbCommand command)
-    {
-        KindleOneFile(command, "SchemaSmith_BootstrapTableQuench.sql", Platform.MySQL);
-        KindleOneFile(command, "Kindling_CompletedMigrationScripts_Table.sql", Platform.MySQL, replaceTableDefToken: true);
-        KindleOneFile(command, "Kindling_ProductOwnership_Table.sql", Platform.MySQL, replaceTableDefToken: true);
-        KindleOneFile(command, "Kindling_StatusMessages_Table.sql", Platform.MySQL, replaceTableDefToken: true);
-
-        // Clean up orphaned status messages older than 1 hour (from crashed sessions)
         try
         {
             command.CommandText = "DELETE FROM SchemaSmith_StatusMessages WHERE CreatedAt < DATE_SUB(NOW(3), INTERVAL 1 HOUR)";
@@ -107,19 +51,6 @@ public static class ForgeKindler
         {
             // Ignore if table doesn't exist yet
         }
-
-        KindleOneFile(command, "SchemaSmith_QuoteIdentifier.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_StripBacktickWrapping.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_SafeBacktickWrap.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_NormalizeIndexColumns.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_GenerateTableJson.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_ParseTableJson.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_MissingTableAndColumnQuench.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_ModifiedTableQuench.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_MissingIndexesAndConstraintsQuench.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_ForeignKeyQuench.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_IndexOnlyQuench.sql", Platform.MySQL);
-        KindleOneFile(command, "SchemaSmith_TableQuench.sql", Platform.MySQL);
     }
 
     /// <summary>
