@@ -92,6 +92,63 @@ public class ForgeKindlerIntegrationTests
     }
 
     [Test]
+    public void Kindle_FreshDatabase_WritesStamp()
+    {
+        // Simulate fresh install by dropping the stamp table, then kindle (absent stamp => kindles).
+        using var command = _connection.CreateCommand();
+        try
+        {
+            command.CommandText = "DROP TABLE IF EXISTS [SchemaSmith].[KindleStamp]";
+            command.ExecuteNonQuery();
+
+            ForgeKindler.KindleTheForge(command, Platform.SqlServer); // absent stamp => kindles
+
+            Assert.That(ForgeKindler.ReadStamp(command, Platform.SqlServer),
+                Is.EqualTo(ForgeKindler.ComputeKindleStamp(Platform.SqlServer)),
+                "A fresh kindle must write the current content stamp.");
+        }
+        finally
+        {
+            ForgeKindler.KindleTheForge(command, Platform.SqlServer, forceReKindle: true);
+        }
+    }
+
+    [Test]
+    public void Kindle_SecondRun_IsNoOp_StampUnchanged()
+    {
+        using var command = _connection.CreateCommand();
+        ForgeKindler.KindleTheForge(command, Platform.SqlServer, forceReKindle: true); // ensure stamped
+        command.CommandText = "SELECT [UpdatedUtc] FROM [SchemaSmith].[KindleStamp]";
+        var first = command.ExecuteScalar();
+
+        ForgeKindler.KindleTheForge(command, Platform.SqlServer); // stamp matches => skip
+        command.CommandText = "SELECT [UpdatedUtc] FROM [SchemaSmith].[KindleStamp]";
+        Assert.That(command.ExecuteScalar(), Is.EqualTo(first), "Skip path must not rewrite the stamp.");
+    }
+
+    [Test]
+    public void Kindle_ForceReKindle_RewritesStampAndProcsRemainValid()
+    {
+        using var command = _connection.CreateCommand();
+        ForgeKindler.KindleTheForge(command, Platform.SqlServer, forceReKindle: true);
+        command.CommandText = "SELECT COUNT(*) FROM sys.procedures WHERE schema_id = SCHEMA_ID('SchemaSmith') AND name = 'TableQuench'";
+        Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1),
+            "ForceReKindle must leave the helper procs valid and present.");
+    }
+
+    [Test]
+    public void Kindle_ReleasesApplock_AfterCompletion()
+    {
+        // After a kindle, the session applock must be released (finally path). APPLOCK_MODE on the
+        // same session must report NoLock once KindleTheForge returns.
+        using var command = _connection.CreateCommand();
+        ForgeKindler.KindleTheForge(command, Platform.SqlServer, forceReKindle: true);
+        command.CommandText = "SELECT APPLOCK_MODE('public', 'SchemaSmith_Kindle', 'Session')";
+        Assert.That(command.ExecuteScalar()?.ToString(), Is.EqualTo("NoLock"),
+            "Kindle must release its session applock when done.");
+    }
+
+    [Test]
     public void KindleTheForge_LegacyTable_BootstrapAddsTemplateNameSchemaNameAndSecondaryIndex()
     {
         // BootstrapTableQuench refactor: a pre-slice-2 / pre-Commit-B table (no template_name,
@@ -112,7 +169,8 @@ public class ForgeKindlerIntegrationTests
                 );";
             command.ExecuteNonQuery();
 
-            ForgeKindler.KindleTheForge(command, Platform.SqlServer);
+            // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(command, Platform.SqlServer, forceReKindle: true);
 
             // template_name + schema_name added with the correct type, nullability, and default.
             // The plan's risk mitigation requires verifying these properties — a regression that
@@ -170,7 +228,8 @@ public class ForgeKindlerIntegrationTests
             command.CommandText = @"IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts') IS NOT NULL
                                     DROP TABLE SchemaSmith.CompletedMigrationScripts";
             command.ExecuteNonQuery();
-            ForgeKindler.KindleTheForge(command, Platform.SqlServer);
+            // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(command, Platform.SqlServer, forceReKindle: true);
         }
     }
 }
