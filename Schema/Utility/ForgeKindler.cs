@@ -23,16 +23,37 @@ public static class ForgeKindler
     private const string KindleLockResource = "SchemaSmith_Kindle";
 
     /// <summary>
-    /// Deploy all SchemaSmith helper objects needed for quench and extraction operations.
+    /// Deploy all SchemaSmith helper objects, version-gated and self-skipping. Acquires a
+    /// session-scoped lock so concurrent first-arrivals serialize; if the in-DB stamp already
+    /// matches the current kindle content (and not forceReKindle), returns without touching the
+    /// helpers. Otherwise drops superseded PG overloads (PG only), re-kindles, and re-stamps.
     /// </summary>
-    public static void KindleTheForge(IDbCommand command, Platform platform)
+    public static void KindleTheForge(IDbCommand command, Platform platform, bool forceReKindle = false)
     {
-        if (platform is not (Platform.SqlServer or Platform.PostgreSQL or Platform.MySQL))
-            throw new ArgumentException($"Unsupported platform for kindling: {platform}", nameof(platform));
+        AcquireKindleLock(command, platform); // throws ArgumentException for unsupported platforms (before the try)
+        try
+        {
+            var expected = ComputeKindleStamp(platform);
+            var current = ReadStamp(command, platform);
+            if (!forceReKindle && string.Equals(current, expected, StringComparison.Ordinal))
+            {
+                Log.Info($"  Kindle stamp current ({expected[..12]}…) — skipping kindle");
+                return;
+            }
 
-        KindleScripts(command, platform);
-        if (platform == Platform.MySQL)
-            CleanupMySqlStatusMessages(command);
+            if (platform == Platform.PostgreSQL)
+                DropSupersededPostgreSqlOverloads(command);
+
+            KindleScripts(command, platform);
+            if (platform == Platform.MySQL)
+                CleanupMySqlStatusMessages(command);
+
+            WriteStamp(command, platform, expected);
+        }
+        finally
+        {
+            ReleaseKindleLock(command, platform);
+        }
     }
 
     private static void KindleScripts(IDbCommand command, Platform platform)

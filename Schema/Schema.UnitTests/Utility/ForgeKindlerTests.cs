@@ -498,4 +498,49 @@ public class ForgeKindlerTests
         Assert.That(executed.Any(s => s.Contains("\"FixupMaterializedViewOwnership\"(varchar)")));
         Assert.That(executed.Any(s => s.Contains("\"FixupIndexOwnership\"(varchar)")));
     }
+
+    [Test]
+    public void KindleTheForge_SkipsKindle_WhenStampMatches()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        var executed = new System.Collections.Generic.List<string>();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => executed.Add(mockCmd.CommandText));
+        mockCmd.ExecuteScalar().Returns(ForgeKindler.ComputeKindleStamp(Platform.SqlServer));
+
+        ForgeKindler.KindleTheForge(mockCmd, Platform.SqlServer);
+
+        Assert.That(executed.Any(s => s.Contains("sp_getapplock")), "Lock must be acquired.");
+        Assert.That(executed.Any(s => s.Contains("CREATE")), Is.False, "Skip path must run no kindling DDL.");
+        Assert.That(executed.Any(s => s.Contains("INSERT INTO [SchemaSmith].[KindleStamp]")), Is.False, "Skip path must not re-stamp.");
+        Assert.That(executed.Any(s => s.Contains("sp_releaseapplock")), "Lock must be released.");
+    }
+
+    [Test]
+    public void KindleTheForge_Kindles_WhenStampMissing()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        var executed = new System.Collections.Generic.List<string>();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => executed.Add(mockCmd.CommandText));
+        mockCmd.ExecuteScalar().Returns(DBNull.Value); // no stamp -> fresh install
+
+        ForgeKindler.KindleTheForge(mockCmd, Platform.SqlServer);
+
+        Assert.That(executed.Any(s => s.Contains("CREATE")), "Kindle path must run kindling DDL.");
+        Assert.That(executed.Any(s => s.Contains("INSERT INTO [SchemaSmith].[KindleStamp]")), "Kindle path must re-stamp.");
+        Assert.That(executed.Any(s => s.Contains("sp_releaseapplock")), "Lock must be released.");
+    }
+
+    [Test]
+    public void KindleTheForge_Rekindles_WhenForceReKindleEvenIfStampMatches()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        var executed = new System.Collections.Generic.List<string>();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => executed.Add(mockCmd.CommandText));
+        mockCmd.ExecuteScalar().Returns(ForgeKindler.ComputeKindleStamp(Platform.SqlServer));
+
+        ForgeKindler.KindleTheForge(mockCmd, Platform.SqlServer, forceReKindle: true);
+
+        Assert.That(executed.Any(s => s.Contains("CREATE")), "Force must kindle even when the stamp matches.");
+        Assert.That(executed.Any(s => s.Contains("INSERT INTO [SchemaSmith].[KindleStamp]")), "Force must re-stamp.");
+    }
 }
