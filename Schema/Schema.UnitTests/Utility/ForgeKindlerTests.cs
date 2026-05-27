@@ -337,4 +337,16 @@ public class ForgeKindlerTests
         Assert.That(capturedSql, Does.Contain("[IX_CompletedMigrationScripts_Slot_Scope]"),
             "Substituted SQL must include the Commit-B secondary index name from the JSON.");
     }
+
+    [Test]
+    public void ResolveKindleScript_TableQuench_EmbedsParseJsonSource()
+    {
+        var resolved = ForgeKindler.ResolveKindleScript(
+            "SchemaSmith.TableQuench.sql", Platform.SqlServer, replaceParseJson: true, replaceTableDef: false);
+
+        Assert.That(resolved, Does.Not.Contain("{{ParseJson}}"), "Token must be substituted out.");
+        // A distinctive line that only exists in ParseTableJsonIntoTempTables.sql:
+        Assert.That(resolved, Does.Contain("Parse Tables from Json"),
+            "Resolved TableQuench must contain the ParseJson source body, so a change there changes the hash.");
+    }
 }

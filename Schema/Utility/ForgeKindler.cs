@@ -54,6 +54,25 @@ public static class ForgeKindler
     }
 
     /// <summary>
+    /// Load a kindling script and apply the two static-resource token substitutions. This is the
+    /// single resolution path — KindleOneFile executes the result, ComputeKindleStamp hashes it.
+    /// IMPORTANT: only {{ParseJson}} and {{TableDef}} (both static resources) are resolved here.
+    /// No runtime/iteration-scoped token (e.g. {{SchemaName}}) is ever substituted in the kindle
+    /// path, which is why the stamp is content-only and identical across databases/schemas.
+    /// </summary>
+    internal static string ResolveKindleScript(string fileName, Platform platform,
+        bool replaceParseJson, bool replaceTableDef)
+    {
+        var script = ResourceLoader.Load(fileName, platform)
+            ?? throw new Exception($"Script '{fileName}' not found for platform '{platform}'.");
+        if (replaceParseJson)
+            script = script.Replace("{{ParseJson}}", GetParseTableJsonScript(platform));
+        if (replaceTableDef)
+            script = script.Replace("{{TableDef}}", GetSiblingTableDefJson(fileName, platform));
+        return script;
+    }
+
+    /// <summary>
     /// Execute a single SQL script from embedded resources for the specified platform.
     /// Optionally substitutes {{ParseJson}} with the platform's ParseTableJson script body,
     /// and / or {{TableDef}} with the sibling .json resource (same base name as the script).
@@ -63,15 +82,7 @@ public static class ForgeKindler
     {
         try
         {
-            var script = ResourceLoader.Load(fileName, platform);
-            if (script == null)
-                throw new Exception($"Script '{fileName}' not found for platform '{platform}'.");
-
-            if (replaceParseJsonToken)
-                script = script.Replace("{{ParseJson}}", GetParseTableJsonScript(platform));
-
-            if (replaceTableDefToken)
-                script = script.Replace("{{TableDef}}", GetSiblingTableDefJson(fileName, platform));
+            var script = ResolveKindleScript(fileName, platform, replaceParseJsonToken, replaceTableDefToken);
 
             if (platform == Platform.MySQL)
             {
