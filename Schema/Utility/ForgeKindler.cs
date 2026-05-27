@@ -355,7 +355,7 @@ public static class ForgeKindler
                     $"SELECT GET_LOCK(CONCAT(DATABASE(), ':{KindleLockResource}'), 60)";
                 var got = command.ExecuteScalar();
                 if (got == null || got == DBNull.Value || Convert.ToInt64(got) != 1)
-                    throw new Exception("Could not acquire the SchemaSmith kindle lock (MySQL GET_LOCK timed out).");
+                    throw new TimeoutException("Could not acquire the SchemaSmith kindle lock (MySQL GET_LOCK timed out).");
                 break;
             default:
                 throw new ArgumentException($"Unsupported platform for kindling: {platform}", nameof(platform));
