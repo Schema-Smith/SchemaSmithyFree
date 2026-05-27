@@ -61,7 +61,7 @@ public class ProductQuench
         _runScriptsTwice = _config["RunScriptsTwice"]?.ToLower() == "true";
         _primaryServer = _config["Target:Server"] ?? "localhost";
         _skipKindling = _config["KindleTheForge"]?.ToLower() == "false";
-        _forceReKindle = _config["ForceReKindle"]?.ToLower() == "true";
+        _forceReKindle = CommandLineParser.ContainsSwitch("ForceReKindle") || _config["ForceReKindle"]?.ToLower() == "true";
         _dropRemovedTables = FormatBooleanFlag(_config["DropTablesRemovedFromProduct"]?.ToLower() != "false");
         _updateTables = _config["UpdateTables"]?.ToLower() != "false";
         _deliverData = _config["DeliverData"]?.ToLower() != "false";
