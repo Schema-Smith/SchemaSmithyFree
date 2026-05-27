@@ -61,6 +61,8 @@ public class ProductQuench
         _runScriptsTwice = _config["RunScriptsTwice"]?.ToLower() == "true";
         _primaryServer = _config["Target:Server"] ?? "localhost";
         _skipKindling = _config["KindleTheForge"]?.ToLower() == "false";
+        // CLI-overridable (unlike the other kindling flags): ForceReKindle is an ad-hoc operational
+        // gesture run on demand, not a sticky pipeline default, so a command-line switch is the natural UX.
         _forceReKindle = CommandLineParser.ContainsSwitch("ForceReKindle") || _config["ForceReKindle"]?.ToLower() == "true";
         _dropRemovedTables = FormatBooleanFlag(_config["DropTablesRemovedFromProduct"]?.ToLower() != "false");
         _updateTables = _config["UpdateTables"]?.ToLower() != "false";
