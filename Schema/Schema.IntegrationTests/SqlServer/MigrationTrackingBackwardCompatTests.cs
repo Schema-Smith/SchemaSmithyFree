@@ -41,7 +41,8 @@ public class MigrationTrackingBackwardCompatTests
         {
             _command.CommandText = "IF OBJECT_ID('SchemaSmith.CompletedMigrationScripts') IS NOT NULL DROP TABLE SchemaSmith.CompletedMigrationScripts";
             _command.ExecuteNonQuery();
-            ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+            // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(_command, Platform.SqlServer, forceReKindle: true);
         }
         finally
         {
@@ -74,7 +75,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.SqlServer, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT name FROM sys.columns
@@ -96,7 +98,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.SqlServer, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT template_name, schema_name FROM SchemaSmith.CompletedMigrationScripts
@@ -116,7 +119,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.SqlServer, forceReKindle: true);
 
         // New-style permissive lookup for the same template at no schema scope.
         _command.CommandText = @"
@@ -139,7 +143,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.SqlServer, forceReKindle: true);
 
         // A new per-tenant lookup for 'tenant_acme'.
         _command.CommandText = @"
@@ -157,7 +162,8 @@ public class MigrationTrackingBackwardCompatTests
     [Test]
     public void NewWrites_PopulateActualTemplateAndSchemaValues()
     {
-        ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.SqlServer, forceReKindle: true);
 
         _command.CommandText = @"
             INSERT INTO SchemaSmith.CompletedMigrationScripts
@@ -181,7 +187,8 @@ public class MigrationTrackingBackwardCompatTests
         // blank-template row AND the row's ScriptPath is in the current template's on-disk
         // script set, an UPDATE claims the row by setting template_name to the current
         // template. Future prune passes can then clean the row up correctly.
-        ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.SqlServer, forceReKindle: true);
         _command.CommandText = @"
             INSERT INTO SchemaSmith.CompletedMigrationScripts
                 ([ScriptPath], [ProductName], [QuenchSlot], [template_name], [schema_name])
@@ -227,7 +234,8 @@ public class MigrationTrackingBackwardCompatTests
         // template_name=''. Both A's and B's permissive SELECTs match it. If A's PruneObsolete
         // step DELETEd permissively on template_name IN ('', 'A'), it would nuke the row B
         // still needs. Strict DELETE on template_name = @template prevents this.
-        ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.SqlServer, forceReKindle: true);
         _command.CommandText = @"
             INSERT INTO SchemaSmith.CompletedMigrationScripts
                 ([ScriptPath], [ProductName], [QuenchSlot], [template_name], [schema_name])
@@ -259,7 +267,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.SqlServer);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.SqlServer, forceReKindle: true);
         Assert.DoesNotThrow(() => ForgeKindler.KindleTheForge(_command, Platform.SqlServer));
 
         _command.CommandText = @"

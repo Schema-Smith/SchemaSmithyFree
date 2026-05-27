@@ -36,7 +36,8 @@ public class MigrationTrackingBackwardCompatTests
         {
             _command.CommandText = "DROP TABLE IF EXISTS \"SchemaSmith\".\"CompletedMigrationScripts\"";
             _command.ExecuteNonQuery();
-            ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+            // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
         }
         finally
         {
@@ -69,7 +70,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT column_name FROM information_schema.columns
@@ -91,7 +93,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT template_name, schema_name FROM ""SchemaSmith"".""CompletedMigrationScripts""
@@ -110,7 +113,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT COUNT(*) FROM ""SchemaSmith"".""CompletedMigrationScripts""
@@ -131,7 +135,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT COUNT(*) FROM ""SchemaSmith"".""CompletedMigrationScripts""
@@ -148,7 +153,8 @@ public class MigrationTrackingBackwardCompatTests
     [Test]
     public void NewWrites_PopulateActualTemplateAndSchemaValues()
     {
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
 
         _command.CommandText = @"
             INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts""
@@ -173,7 +179,8 @@ public class MigrationTrackingBackwardCompatTests
             VALUES ('Before Scripts/Migration_001.sql', 'Demo', 'Before');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
         Assert.DoesNotThrow(() => ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL));
 
         _command.CommandText = @"

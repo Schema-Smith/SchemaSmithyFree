@@ -38,7 +38,8 @@ public class ProductOwnershipBackwardCompatTests
         {
             _command.CommandText = "DROP TABLE IF EXISTS \"SchemaSmith\".\"ProductOwnership\"";
             _command.ExecuteNonQuery();
-            ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+            // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
         }
         finally
         {
@@ -72,7 +73,8 @@ public class ProductOwnershipBackwardCompatTests
             VALUES ('public', 'legacy_table', NULL, 'Demo');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT column_name FROM information_schema.columns
@@ -90,7 +92,8 @@ public class ProductOwnershipBackwardCompatTests
             VALUES ('public', 'legacy_table', NULL, 'Demo');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT template_name FROM ""SchemaSmith"".""ProductOwnership""
@@ -108,7 +111,8 @@ public class ProductOwnershipBackwardCompatTests
             VALUES ('public', 'legacy_table', NULL, 'Demo');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
 
         _command.CommandText = @"
             SELECT COUNT(*) FROM ""SchemaSmith"".""ProductOwnership""
@@ -125,7 +129,8 @@ public class ProductOwnershipBackwardCompatTests
     [Test]
     public void NewWrites_PopulateActualTemplateName()
     {
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
 
         _command.CommandText = @"
             INSERT INTO ""SchemaSmith"".""ProductOwnership""
@@ -149,7 +154,8 @@ public class ProductOwnershipBackwardCompatTests
             VALUES ('public', 'legacy_table', NULL, 'Demo');";
         _command.ExecuteNonQuery();
 
-        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL);
+        // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL, forceReKindle: true);
         Assert.DoesNotThrow(() => ForgeKindler.KindleTheForge(_command, Platform.PostgreSQL));
 
         _command.CommandText = @"
