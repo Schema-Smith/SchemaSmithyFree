@@ -2,6 +2,7 @@
 
 using System;
 using System.Data;
+using System.Linq;
 using NSubstitute;
 using Schema.Domain;
 using Schema.Utility;
@@ -255,6 +256,30 @@ public class ForgeKindlerTests
         var ex = Assert.Throws<Exception>(() =>
             ForgeKindler.GetSiblingTableDefJson("Kindling_NoSuchThing_Table.sql", Platform.SqlServer));
         Assert.That(ex.Message, Does.Contain("Kindling_NoSuchThing.json"));
+    }
+
+    [Test]
+    public void GetKindlingScripts_SqlServer_FlagsTableQuenchForParseJsonSubstitution()
+    {
+        var scripts = ForgeKindler.GetKindlingScripts(Platform.SqlServer);
+        var tableQuench = scripts.Single(s => s.FileName == "SchemaSmith.TableQuench.sql");
+        Assert.That(tableQuench.ReplaceParseJson, Is.True);
+        Assert.That(tableQuench.ReplaceTableDef, Is.False);
+
+        var kindlingTable = scripts.Single(s => s.FileName == "Kindling_CompletedMigrationScripts_Table.sql");
+        Assert.That(kindlingTable.ReplaceTableDef, Is.True);
+        Assert.That(kindlingTable.ReplaceParseJson, Is.False);
+    }
+
+    [Test]
+    public void GetKindlingScriptNames_IsDerivedFromDescriptors()
+    {
+        foreach (var platform in new[] { Platform.SqlServer, Platform.PostgreSQL, Platform.MySQL })
+        {
+            var names = ForgeKindler.GetKindlingScriptNames(platform);
+            var descriptorNames = ForgeKindler.GetKindlingScripts(platform).Select(s => s.FileName).ToArray();
+            Assert.That(names, Is.EqualTo(descriptorNames), $"Names must derive from descriptors for {platform}.");
+        }
     }
 
     [Test]

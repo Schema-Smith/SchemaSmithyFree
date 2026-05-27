@@ -3,6 +3,7 @@
 using System;
 using System.Data;
 using System.IO;
+using System.Linq;
 using log4net;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -196,78 +197,95 @@ public static class ForgeKindler
     }
 
     /// <summary>
-    /// Returns the list of kindling script names for the specified platform.
-    /// Useful for testing and diagnostics.
+    /// One kindling script plus the token-substitution flags it needs. Single source of truth
+    /// for the kindle order — both the executor (KindleScripts) and the version-stamp
+    /// (ComputeKindleStamp) iterate this list, so the deployed text and the hashed text can
+    /// never drift.
     /// </summary>
-    internal static string[] GetKindlingScriptNames(Platform platform)
+    internal readonly record struct KindleScript(string FileName, bool ReplaceParseJson = false, bool ReplaceTableDef = false);
+
+    internal static KindleScript[] GetKindlingScripts(Platform platform)
     {
         return platform switch
         {
-            Platform.SqlServer => [
-                "Kindling_SchemaSmith_Schema.sql",
-                "SchemaSmith.BootstrapTableQuench.sql",
-                "Kindling_CompletedMigrationScripts_Table.sql",
-                "SchemaSmith.fn_StripParenWrapping.sql",
-                "SchemaSmith.fn_StripBracketWrapping.sql",
-                "SchemaSmith.fn_SafeBracketWrap.sql",
-                "SchemaSmith.PrintWithNoWait.sql",
-                "SchemaSmith.MissingTableAndColumnQuench.sql",
-                "SchemaSmith.ModifiedTableQuench.sql",
-                "SchemaSmith.MissingIndexesAndConstraintsQuench.sql",
-                "SchemaSmith.ForeignKeyQuench.sql",
-                "SchemaSmith.TableQuench.sql",
-                "SchemaSmith.IndexOnlyQuench.sql",
-                "SchemaSmith.fn_FormatJson.sql",
-                "SchemaSmith.GenerateTableJson.sql",
-                "SchemaSmith.ValidateIndexedViewOwnership.sql",
-                "SchemaSmith.FixupIndexedViewOwnership.sql",
-                "SchemaSmith.IndexedViewQuench.sql",
-                "SchemaSmith.GenerateIndexedViewJson.sql"
+            Platform.SqlServer =>
+            [
+                new("Kindling_SchemaSmith_Schema.sql"),
+                new("SchemaSmith.BootstrapTableQuench.sql"),
+                new("Kindling_KindleStamp_Table.sql", ReplaceTableDef: true),
+                new("Kindling_CompletedMigrationScripts_Table.sql", ReplaceTableDef: true),
+                new("SchemaSmith.fn_StripParenWrapping.sql"),
+                new("SchemaSmith.fn_StripBracketWrapping.sql"),
+                new("SchemaSmith.fn_SafeBracketWrap.sql"),
+                new("SchemaSmith.PrintWithNoWait.sql"),
+                new("SchemaSmith.MissingTableAndColumnQuench.sql"),
+                new("SchemaSmith.ModifiedTableQuench.sql"),
+                new("SchemaSmith.MissingIndexesAndConstraintsQuench.sql"),
+                new("SchemaSmith.ForeignKeyQuench.sql"),
+                new("SchemaSmith.TableQuench.sql", ReplaceParseJson: true),
+                new("SchemaSmith.IndexOnlyQuench.sql"),
+                new("SchemaSmith.fn_FormatJson.sql"),
+                new("SchemaSmith.GenerateTableJson.sql"),
+                new("SchemaSmith.ValidateIndexedViewOwnership.sql"),
+                new("SchemaSmith.FixupIndexedViewOwnership.sql"),
+                new("SchemaSmith.IndexedViewQuench.sql"),
+                new("SchemaSmith.GenerateIndexedViewJson.sql"),
             ],
-            Platform.PostgreSQL => [
-                "Kindling_SchemaSmith_Schema.sql",
-                "SchemaSmith.BootstrapTableQuench.sql",
-                "Kindling_ProductOwnership_Table.sql",
-                "Kindling_CompletedMigrationScripts_Table.sql",
-                "SchemaSmith.ExecuteOrDebug.sql",
-                "SchemaSmith.QuoteColumnList.sql",
-                "SchemaSmith.QuoteIndexColumnList.sql",
-                "SchemaSmith.StripParenWrapping.sql",
-                "SchemaSmith.ValidateTableOwnership.sql",
-                "SchemaSmith.FixupTableOwnership.sql",
-                "SchemaSmith.FixupIndexOwnership.sql",
-                "SchemaSmith.MissingTableAndColumnQuench.sql",
-                "SchemaSmith.ModifiedTableQuench.sql",
-                "SchemaSmith.MissingIndexesAndConstraintsQuench.sql",
-                "SchemaSmith.ForeignKeyQuench.sql",
-                "SchemaSmith.TableQuench.sql",
-                "SchemaSmith.IndexOnlyQuench.sql",
-                "SchemaSmith.FormatJson.sql",
-                "SchemaSmith.GenerateTableJson.sql",
-                "SchemaSmith.ValidateMaterializedViewOwnership.sql",
-                "SchemaSmith.FixupMaterializedViewOwnership.sql",
-                "SchemaSmith.MissingMaterializedViewIndexesQuench.sql",
-                "SchemaSmith.MaterializedViewQuench.sql"
+            Platform.PostgreSQL =>
+            [
+                new("Kindling_SchemaSmith_Schema.sql"),
+                new("SchemaSmith.BootstrapTableQuench.sql"),
+                new("Kindling_KindleStamp_Table.sql", ReplaceTableDef: true),
+                new("Kindling_ProductOwnership_Table.sql", ReplaceTableDef: true),
+                new("Kindling_CompletedMigrationScripts_Table.sql", ReplaceTableDef: true),
+                new("SchemaSmith.ExecuteOrDebug.sql"),
+                new("SchemaSmith.QuoteColumnList.sql"),
+                new("SchemaSmith.QuoteIndexColumnList.sql"),
+                new("SchemaSmith.StripParenWrapping.sql"),
+                new("SchemaSmith.ValidateTableOwnership.sql"),
+                new("SchemaSmith.FixupTableOwnership.sql"),
+                new("SchemaSmith.FixupIndexOwnership.sql"),
+                new("SchemaSmith.MissingTableAndColumnQuench.sql"),
+                new("SchemaSmith.ModifiedTableQuench.sql"),
+                new("SchemaSmith.MissingIndexesAndConstraintsQuench.sql"),
+                new("SchemaSmith.ForeignKeyQuench.sql"),
+                new("SchemaSmith.TableQuench.sql", ReplaceParseJson: true),
+                new("SchemaSmith.IndexOnlyQuench.sql"),
+                new("SchemaSmith.FormatJson.sql"),
+                new("SchemaSmith.GenerateTableJson.sql"),
+                new("SchemaSmith.ValidateMaterializedViewOwnership.sql"),
+                new("SchemaSmith.FixupMaterializedViewOwnership.sql"),
+                new("SchemaSmith.MissingMaterializedViewIndexesQuench.sql"),
+                new("SchemaSmith.MaterializedViewQuench.sql"),
             ],
-            Platform.MySQL => [
-                "SchemaSmith_BootstrapTableQuench.sql",
-                "Kindling_CompletedMigrationScripts_Table.sql",
-                "Kindling_ProductOwnership_Table.sql",
-                "Kindling_StatusMessages_Table.sql",
-                "SchemaSmith_QuoteIdentifier.sql",
-                "SchemaSmith_StripBacktickWrapping.sql",
-                "SchemaSmith_SafeBacktickWrap.sql",
-                "SchemaSmith_NormalizeIndexColumns.sql",
-                "SchemaSmith_GenerateTableJson.sql",
-                "SchemaSmith_ParseTableJson.sql",
-                "SchemaSmith_MissingTableAndColumnQuench.sql",
-                "SchemaSmith_ModifiedTableQuench.sql",
-                "SchemaSmith_MissingIndexesAndConstraintsQuench.sql",
-                "SchemaSmith_ForeignKeyQuench.sql",
-                "SchemaSmith_IndexOnlyQuench.sql",
-                "SchemaSmith_TableQuench.sql"
+            Platform.MySQL =>
+            [
+                new("SchemaSmith_BootstrapTableQuench.sql"),
+                new("Kindling_KindleStamp_Table.sql", ReplaceTableDef: true),
+                new("Kindling_CompletedMigrationScripts_Table.sql", ReplaceTableDef: true),
+                new("Kindling_ProductOwnership_Table.sql", ReplaceTableDef: true),
+                new("Kindling_StatusMessages_Table.sql", ReplaceTableDef: true),
+                new("SchemaSmith_QuoteIdentifier.sql"),
+                new("SchemaSmith_StripBacktickWrapping.sql"),
+                new("SchemaSmith_SafeBacktickWrap.sql"),
+                new("SchemaSmith_NormalizeIndexColumns.sql"),
+                new("SchemaSmith_GenerateTableJson.sql"),
+                new("SchemaSmith_ParseTableJson.sql"),
+                new("SchemaSmith_MissingTableAndColumnQuench.sql"),
+                new("SchemaSmith_ModifiedTableQuench.sql"),
+                new("SchemaSmith_MissingIndexesAndConstraintsQuench.sql"),
+                new("SchemaSmith_ForeignKeyQuench.sql"),
+                new("SchemaSmith_IndexOnlyQuench.sql"),
+                new("SchemaSmith_TableQuench.sql"),
             ],
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
         };
     }
+
+    /// <summary>
+    /// Returns the list of kindling script names for the specified platform.
+    /// Useful for testing and diagnostics.
+    /// </summary>
+    internal static string[] GetKindlingScriptNames(Platform platform)
+        => GetKindlingScripts(platform).Select(s => s.FileName).ToArray();
 }
