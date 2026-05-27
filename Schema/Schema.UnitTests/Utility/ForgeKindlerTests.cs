@@ -457,8 +457,11 @@ public class ForgeKindlerTests
         var mockCmd = Substitute.For<IDbCommand>();
         mockCmd.ExecuteScalar().Returns(DBNull.Value);
 
+        // PG existence check uses pg_class/pg_namespace (NOT a static KindleStamp reference, which PG
+        // would validate at parse time and fail on a fresh DB). With the table absent (DBNull here),
+        // ReadStamp returns before issuing the second SELECT, so CommandText is the catalog probe.
         ForgeKindler.ReadStamp(mockCmd, Platform.PostgreSQL);
-        Assert.That(mockCmd.CommandText, Does.Contain("to_regclass").And.Contain("\"SchemaSmith\".\"KindleStamp\""));
+        Assert.That(mockCmd.CommandText, Does.Contain("pg_catalog.pg_class").And.Contain("'KindleStamp'").And.Contain("'SchemaSmith'"));
 
         ForgeKindler.ReadStamp(mockCmd, Platform.MySQL);
         Assert.That(mockCmd.CommandText, Does.Contain("information_schema.tables").And.Contain("SchemaSmith_KindleStamp"));

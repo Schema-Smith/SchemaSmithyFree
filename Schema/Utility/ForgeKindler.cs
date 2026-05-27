@@ -275,7 +275,8 @@ public static class ForgeKindler
                 "SELECT COUNT(*) FROM pg_catalog.pg_class c " +
                 "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace " +
                 "WHERE n.nspname = 'SchemaSmith' AND c.relname = 'KindleStamp' AND c.relkind = 'r'";
-            var exists = Convert.ToInt64(command.ExecuteScalar()) > 0;
+            var existsScalar = command.ExecuteScalar();
+            var exists = existsScalar != null && existsScalar != DBNull.Value && Convert.ToInt64(existsScalar) > 0;
             if (!exists) return null;
 
             // Table confirmed present — safe to reference it directly.
