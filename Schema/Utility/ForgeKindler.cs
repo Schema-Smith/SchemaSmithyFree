@@ -234,6 +234,55 @@ public static class ForgeKindler
         => GetKindlingScripts(platform).Select(s => s.FileName).ToArray();
 
     /// <summary>
+    /// Read the current kindle stamp, or null if the marker table doesn't exist yet (fresh install)
+    /// or holds no row. Uses a guard so a missing table returns null rather than raising an error.
+    /// </summary>
+    internal static string ReadStamp(IDbCommand command, Platform platform)
+    {
+        command.CommandText = platform switch
+        {
+            Platform.SqlServer =>
+                "IF OBJECT_ID('SchemaSmith.KindleStamp', 'U') IS NULL SELECT CAST(NULL AS VARCHAR(64)) " +
+                "ELSE SELECT TOP 1 Stamp FROM SchemaSmith.KindleStamp",
+            Platform.PostgreSQL =>
+                "SELECT CASE WHEN to_regclass('\"SchemaSmith\".\"KindleStamp\"') IS NULL THEN NULL " +
+                "ELSE (SELECT \"Stamp\" FROM \"SchemaSmith\".\"KindleStamp\" LIMIT 1) END",
+            Platform.MySQL =>
+                "SELECT (SELECT Stamp FROM SchemaSmith_KindleStamp LIMIT 1) AS Stamp " +
+                "WHERE EXISTS (SELECT 1 FROM information_schema.tables " +
+                "WHERE table_schema = DATABASE() AND table_name = 'SchemaSmith_KindleStamp')",
+            _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
+        };
+        var value = command.ExecuteScalar();
+        return value == null || value == DBNull.Value ? null : value.ToString();
+    }
+
+    /// <summary>
+    /// Replace the single stamp row with the supplied value. Caller holds the kindle lock, so a
+    /// plain DELETE + INSERT is safe (single writer). The stamp is [0-9a-f]{64} — injection-safe to inline.
+    /// </summary>
+    internal static void WriteStamp(IDbCommand command, Platform platform, string stamp)
+    {
+        var (deleteSql, insertSql) = platform switch
+        {
+            Platform.SqlServer => (
+                "DELETE FROM SchemaSmith.KindleStamp",
+                $"INSERT INTO SchemaSmith.KindleStamp (Stamp, UpdatedUtc) VALUES ('{stamp}', GETUTCDATE())"),
+            Platform.PostgreSQL => (
+                "DELETE FROM \"SchemaSmith\".\"KindleStamp\"",
+                $"INSERT INTO \"SchemaSmith\".\"KindleStamp\" (\"Stamp\", \"UpdatedUtc\") VALUES ('{stamp}', NOW())"),
+            Platform.MySQL => (
+                "DELETE FROM SchemaSmith_KindleStamp",
+                $"INSERT INTO SchemaSmith_KindleStamp (Stamp, UpdatedUtc) VALUES ('{stamp}', NOW())"),
+            _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
+        };
+        command.CommandText = deleteSql;
+        command.ExecuteNonQuery();
+        command.CommandText = insertSql;
+        command.ExecuteNonQuery();
+    }
+
+    /// <summary>
     /// SHA-256 (lowercase hex) of the resolved kindling scripts concatenated in kindle order.
     /// Takes ONLY platform — by construction it cannot depend on iteration/schema/database scope,
     /// so the stamp is content-only and identical on every target for a given kindle-content version.

@@ -375,4 +375,39 @@ public class ForgeKindlerTests
         Assert.That(ForgeKindler.ComputeKindleStamp(Platform.PostgreSQL), Is.EqualTo(expected),
             "Stamp must be the hash of the resolved kindle scripts concatenated in kindle order.");
     }
+
+    [Test]
+    public void ReadStamp_SqlServer_ReturnsScalarValue()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        mockCmd.ExecuteScalar().Returns("abc123");
+        var result = ForgeKindler.ReadStamp(mockCmd, Platform.SqlServer);
+        Assert.That(result, Is.EqualTo("abc123"));
+        Assert.That(mockCmd.CommandText, Does.Contain("KindleStamp"));
+    }
+
+    [Test]
+    public void ReadStamp_ReturnsNull_WhenScalarIsDbNullOrNull()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        mockCmd.ExecuteScalar().Returns(DBNull.Value);
+        Assert.That(ForgeKindler.ReadStamp(mockCmd, Platform.PostgreSQL), Is.Null);
+
+        mockCmd.ExecuteScalar().Returns((object)null);
+        Assert.That(ForgeKindler.ReadStamp(mockCmd, Platform.PostgreSQL), Is.Null);
+    }
+
+    [Test]
+    public void WriteStamp_MySQL_IssuesDeleteThenInsertWithStamp()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        var executed = new System.Collections.Generic.List<string>();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => executed.Add(mockCmd.CommandText));
+
+        ForgeKindler.WriteStamp(mockCmd, Platform.MySQL, "deadbeef");
+
+        Assert.That(executed, Has.Count.EqualTo(2));
+        Assert.That(executed[0], Does.StartWith("DELETE FROM SchemaSmith_KindleStamp"));
+        Assert.That(executed[1], Does.Contain("INSERT INTO SchemaSmith_KindleStamp").And.Contains("'deadbeef'"));
+    }
 }
