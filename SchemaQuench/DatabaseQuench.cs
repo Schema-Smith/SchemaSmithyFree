@@ -48,6 +48,7 @@ public class DatabaseQuench
     private readonly string _dropUnknownIndexes;
     private readonly bool _trackRunOnceMigrations;
     private readonly bool _pruneObsoleteMigrationTracking;
+    private readonly bool _forceReKindle;
 
     private string _debugFileLocation = "";
     private Exception _infoMessageException;
@@ -92,7 +93,7 @@ public class DatabaseQuench
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         string schemaName, bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
         bool dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
-        bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true)
+        bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true, bool forceReKindle = false)
     {
         _server = server;
         _product = product;
@@ -109,6 +110,7 @@ public class DatabaseQuench
         _dropUnknownIndexes = FormatBooleanFlag(dropUnknownIndexes);
         _trackRunOnceMigrations = trackRunOnceMigrations;
         _pruneObsoleteMigrationTracking = pruneObsoleteMigrationTracking;
+        _forceReKindle = forceReKindle;
     }
 
     // Convenience overload matching the pre-schema-templates positional signature so existing
@@ -117,10 +119,10 @@ public class DatabaseQuench
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
         bool dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
-        bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true)
+        bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true, bool forceReKindle = false)
         : this(server, product, template, databaseName, "", suppressKindling, whatIfOnly, runScriptsTwice,
             dropRemovedTables, dropUnknownIndexes, updateTables, deliverData, checkpointing,
-            trackRunOnceMigrations, pruneObsoleteMigrationTracking)
+            trackRunOnceMigrations, pruneObsoleteMigrationTracking, forceReKindle)
     {
     }
 
@@ -128,7 +130,7 @@ public class DatabaseQuench
     internal DatabaseQuench(string server, Product product, Template template, string databaseName,
         string schemaName, bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
         string dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
-        bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true)
+        bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true, bool forceReKindle = false)
     {
         _server = server;
         _product = product;
@@ -145,16 +147,17 @@ public class DatabaseQuench
         _checkpointing = checkpointing;
         _trackRunOnceMigrations = trackRunOnceMigrations;
         _pruneObsoleteMigrationTracking = pruneObsoleteMigrationTracking;
+        _forceReKindle = forceReKindle;
     }
 
     // Convenience overload for tests pre-dating the schemaName parameter.
     internal DatabaseQuench(string server, Product product, Template template, string databaseName,
         bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
         string dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
-        bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true)
+        bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true, bool forceReKindle = false)
         : this(server, product, template, databaseName, "", suppressKindling, whatIfOnly, runScriptsTwice,
             dropRemovedTables, dropUnknownIndexes, updateTables, deliverData, checkpointing,
-            trackRunOnceMigrations, pruneObsoleteMigrationTracking)
+            trackRunOnceMigrations, pruneObsoleteMigrationTracking, forceReKindle)
     {
     }
 
@@ -236,7 +239,7 @@ public class DatabaseQuench
                     _checkpointing.Track(DbScope, "KindleForge", () =>
                     {
                         SafeProgressLog("  Kindling the forge");
-                        ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform);
+                        ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform, _forceReKindle);
                     });
                 }
 

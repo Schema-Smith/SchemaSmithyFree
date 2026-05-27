@@ -17,6 +17,7 @@
     "DropTablesRemovedFromProduct": true, // Drop tables not defined in the product
     "UpdateTables": true, // Apply table structure changes (columns, indexes, constraints)
     "KindleTheForge": true, // Install SchemaSmith helper functions/procedures in target database
+    "ForceReKindle": false, // Force re-install of helper objects even when the kindle version is unchanged
     "CheckpointDirectory": "", // Directory for checkpoint files to enable resuming interrupted quenches
     "DeliverData": true, // Execute data delivery (Table Data scripts and merge scripts)
     "VerboseLogging": false, // Include PRINT messages and other informational messages in the logged output from the table updates and other scripts

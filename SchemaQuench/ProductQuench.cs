@@ -29,6 +29,7 @@ public class ProductQuench
     private readonly List<string> _secondaryServers = [];
     private readonly bool _runScriptsTwice;
     private readonly bool _skipKindling;
+    private readonly bool _forceReKindle;
     private readonly string _dropRemovedTables;
     private readonly bool _updateTables;
     private readonly bool _deliverData;
@@ -60,6 +61,7 @@ public class ProductQuench
         _runScriptsTwice = _config["RunScriptsTwice"]?.ToLower() == "true";
         _primaryServer = _config["Target:Server"] ?? "localhost";
         _skipKindling = _config["KindleTheForge"]?.ToLower() == "false";
+        _forceReKindle = _config["ForceReKindle"]?.ToLower() == "true";
         _dropRemovedTables = FormatBooleanFlag(_config["DropTablesRemovedFromProduct"]?.ToLower() != "false");
         _updateTables = _config["UpdateTables"]?.ToLower() != "false";
         _deliverData = _config["DeliverData"]?.ToLower() != "false";
@@ -891,7 +893,7 @@ public class ProductQuench
             suppressKindling, _whatIfOnly, _runScriptsTwice, _dropRemovedTables,
             _product.DropUnknownIndexes,
             _updateTables && template.Tables.Count > 0, _deliverData, _checkpointing,
-            _trackRunOnceMigrations, _pruneObsoleteMigrationTracking);
+            _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _forceReKindle);
         quench.Execute();
         if (!quench.QuenchSuccessful)
         {
