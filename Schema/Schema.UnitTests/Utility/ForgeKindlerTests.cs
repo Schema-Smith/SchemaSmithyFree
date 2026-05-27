@@ -463,4 +463,21 @@ public class ForgeKindlerTests
         ForgeKindler.ReadStamp(mockCmd, Platform.MySQL);
         Assert.That(mockCmd.CommandText, Does.Contain("information_schema.tables").And.Contain("SchemaSmith_KindleStamp"));
     }
+
+    [Test]
+    public void AcquireKindleLock_SqlServer_RequestsSessionExclusiveApplock()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        string captured = null;
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => captured = mockCmd.CommandText);
+        ForgeKindler.AcquireKindleLock(mockCmd, Platform.SqlServer);
+        Assert.That(captured, Does.Contain("sp_getapplock").And.Contains("'Session'").And.Contains("'Exclusive'"));
+    }
+
+    [Test]
+    public void AcquireKindleLock_ThrowsForUnsupportedPlatform()
+    {
+        var mockCmd = Substitute.For<IDbCommand>();
+        Assert.Throws<ArgumentException>(() => ForgeKindler.AcquireKindleLock(mockCmd, (Platform)99));
+    }
 }

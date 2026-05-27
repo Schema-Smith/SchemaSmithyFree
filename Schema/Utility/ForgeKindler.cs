@@ -20,6 +20,7 @@ namespace Schema.Utility;
 public static class ForgeKindler
 {
     private static readonly ILog Log = LogFactory.GetLogger("ProgressLog");
+    private const string KindleLockResource = "SchemaSmith_Kindle";
 
     /// <summary>
     /// Deploy all SchemaSmith helper objects needed for quench and extraction operations.
@@ -301,5 +302,63 @@ public static class ForgeKindler
         using var sha = SHA256.Create();
         var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()));
         return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Acquire a SESSION-scoped lock guarding the whole (multi-statement, autocommit) kindle.
+    /// Session — not transaction — scope is required: the kindle is many autocommit statements and
+    /// MySQL DDL forces an implicit commit, so a transaction-scoped lock would release mid-kindle.
+    /// Key folds in the database name where the lock namespace is broader than one DB (PG advisory
+    /// locks are cluster-global; MySQL GET_LOCK names are server-global). Released in KindleTheForge's
+    /// finally on the same connection.
+    /// </summary>
+    internal static void AcquireKindleLock(IDbCommand command, Platform platform)
+    {
+        switch (platform)
+        {
+            case Platform.SqlServer:
+                command.CommandText =
+                    "DECLARE @r INT; " +
+                    $"EXEC @r = sp_getapplock @Resource = '{KindleLockResource}', " +
+                    "@LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = 60000; " +
+                    "IF @r < 0 THROW 51000, 'Could not acquire the SchemaSmith kindle lock.', 1;";
+                command.ExecuteNonQuery();
+                break;
+            case Platform.PostgreSQL:
+                command.CommandText =
+                    $"SELECT pg_advisory_lock(hashtext(current_database() || ':{KindleLockResource}'))";
+                command.ExecuteNonQuery();
+                break;
+            case Platform.MySQL:
+                command.CommandText =
+                    $"SELECT GET_LOCK(CONCAT(DATABASE(), ':{KindleLockResource}'), 60)";
+                var got = command.ExecuteScalar();
+                if (got == null || got == DBNull.Value || Convert.ToInt64(got) != 1)
+                    throw new Exception("Could not acquire the SchemaSmith kindle lock (MySQL GET_LOCK timed out).");
+                break;
+            default:
+                throw new ArgumentException($"Unsupported platform for kindling: {platform}", nameof(platform));
+        }
+    }
+
+    /// <summary>Release the session-scoped kindle lock. Best-effort; failures here must not mask a kindle error.</summary>
+    internal static void ReleaseKindleLock(IDbCommand command, Platform platform)
+    {
+        try
+        {
+            command.CommandText = platform switch
+            {
+                Platform.SqlServer => $"IF APPLOCK_MODE('public', '{KindleLockResource}', 'Session') <> 'NoLock' " +
+                                      $"EXEC sp_releaseapplock @Resource = '{KindleLockResource}', @LockOwner = 'Session';",
+                Platform.PostgreSQL => $"SELECT pg_advisory_unlock(hashtext(current_database() || ':{KindleLockResource}'))",
+                Platform.MySQL => $"SELECT RELEASE_LOCK(CONCAT(DATABASE(), ':{KindleLockResource}'))",
+                _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
+            };
+            command.ExecuteNonQuery();
+        }
+        catch
+        {
+            // The session ending releases all three lock types anyway; never let release mask a kindle failure.
+        }
     }
 }
