@@ -158,12 +158,30 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        // SqlServer: +1 for BootstrapTableQuench (19 = 18 prior + 1).
-        Assert.That(sqlServer.Length, Is.EqualTo(19));
-        // PostgreSQL: +1 for BootstrapTableQuench (23 = 22 prior + 1).
-        Assert.That(postgres.Length, Is.EqualTo(23));
-        // MySQL: -1 for deleted Alter script, +1 for BootstrapTableQuench (16 = 16 prior - 1 + 1).
-        Assert.That(mysql.Length, Is.EqualTo(16));
+        // SqlServer: 20 = 19 prior + 1 for KindleStamp.
+        Assert.That(sqlServer.Length, Is.EqualTo(20));
+        // PostgreSQL: 24 = 23 prior + 1 for KindleStamp.
+        Assert.That(postgres.Length, Is.EqualTo(24));
+        // MySQL: 17 = 16 prior + 1 for KindleStamp.
+        Assert.That(mysql.Length, Is.EqualTo(17));
+    }
+
+    [Test]
+    public void GetKindlingScripts_KindleStamp_FollowsBootstrapAndCarriesTableDef()
+    {
+        foreach (var platform in new[] { Platform.SqlServer, Platform.PostgreSQL, Platform.MySQL })
+        {
+            var scripts = ForgeKindler.GetKindlingScripts(platform);
+            var names = scripts.Select(s => s.FileName).ToArray();
+            var bootstrapIdx = Array.FindIndex(names, n => n.Contains("BootstrapTableQuench"));
+            var stampIdx = Array.IndexOf(names, "Kindling_KindleStamp_Table.sql");
+
+            Assert.That(stampIdx, Is.GreaterThanOrEqualTo(0), $"KindleStamp must be kindled on {platform}.");
+            Assert.That(bootstrapIdx, Is.LessThan(stampIdx),
+                $"BootstrapTableQuench must precede the KindleStamp table call on {platform}.");
+            Assert.That(scripts[stampIdx].ReplaceTableDef, Is.True,
+                $"KindleStamp table call must substitute its sibling JSON on {platform}.");
+        }
     }
 
     [Test]

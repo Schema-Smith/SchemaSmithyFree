@@ -1,0 +1,16 @@
+{
+  "Name": "SchemaSmith_KindleStamp",
+  "Columns": [
+    {
+      "Name": "Stamp",
+      "DataType": "VARCHAR(64)",
+      "Nullable": false
+    },
+    {
+      "Name": "UpdatedAt",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "CURRENT_TIMESTAMP"
+    }
+  ]
+}

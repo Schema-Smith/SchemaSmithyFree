@@ -1,0 +1,17 @@
+{
+  "Schema": "SchemaSmith",
+  "Name": "KindleStamp",
+  "Columns": [
+    {
+      "Name": "Stamp",
+      "DataType": "VARCHAR(64)",
+      "Nullable": false
+    },
+    {
+      "Name": "UpdatedUtc",
+      "DataType": "TIMESTAMP",
+      "Nullable": false,
+      "Default": "NOW()"
+    }
+  ]
+}
