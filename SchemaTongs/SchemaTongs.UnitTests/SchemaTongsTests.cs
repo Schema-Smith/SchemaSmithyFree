@@ -57,21 +57,7 @@ public class SchemaTongsTests
     /// query-specific values, so those per-test stubs (which replace this one) are
     /// last-installed and therefore win.
     /// </summary>
-    private void StubMySqlKindleGate()
-    {
-        var stamp = ForgeKindler.ComputeKindleStamp(Platform.MySQL);
-        _command.ExecuteScalar().Returns(_ =>
-        {
-            var sql = _command.CommandText ?? string.Empty;
-            if (sql.Contains("GET_LOCK"))
-                return (object)1L;
-            if (sql.Contains("information_schema.tables"))
-                return (object)1L;
-            if (sql.Contains("SchemaSmith_KindleStamp") && sql.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
-                return (object)stamp;
-            return null;
-        });
-    }
+    private void StubMySqlKindleGate() => KindleGateTestHelpers.StubMySqlKindleGate(_command);
 
     private void RegisterConfig(Platform platform, Dictionary<string, string> overrides = null)
     {

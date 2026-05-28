@@ -86,21 +86,7 @@ public class SchemaTemplateExtractionTests
     /// without executing any kindle DDL. Non-MySQL kindle queries fall through to null,
     /// preserving default NSubstitute behaviour for SQL Server and PostgreSQL tests.
     /// </summary>
-    private void StubMySqlKindleGate()
-    {
-        var stamp = ForgeKindler.ComputeKindleStamp(Platform.MySQL);
-        _command.ExecuteScalar().Returns(_ =>
-        {
-            var sql = _command.CommandText ?? string.Empty;
-            if (sql.Contains("GET_LOCK"))
-                return (object)1L;
-            if (sql.Contains("information_schema.tables"))
-                return (object)1L;
-            if (sql.Contains("SchemaSmith_KindleStamp") && sql.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
-                return (object)stamp;
-            return null;
-        });
-    }
+    private void StubMySqlKindleGate() => KindleGateTestHelpers.StubMySqlKindleGate(_command);
 
     private void RegisterConfig(Platform platform, Dictionary<string, string> overrides = null)
     {

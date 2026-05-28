@@ -382,6 +382,11 @@ public static class ForgeKindler
                 command.ExecuteNonQuery();
                 break;
             case Platform.PostgreSQL:
+                // PG advisory locks have no native wait-cap argument (unlike SQL Server's
+                // @LockTimeout=60000 and MySQL's GET_LOCK(...,60)). A wedged holder will block
+                // this acquire indefinitely. Worth a roadmap follow-up to add a try-loop with
+                // backoff; for now the kindle is fast and contention is rare, so the asymmetry is
+                // acceptable. Documented so a future reader doesn't think it's an oversight.
                 command.CommandText =
                     $"SELECT pg_advisory_lock(hashtext(current_database() || ':{KindleLockResource}'))";
                 command.ExecuteNonQuery();

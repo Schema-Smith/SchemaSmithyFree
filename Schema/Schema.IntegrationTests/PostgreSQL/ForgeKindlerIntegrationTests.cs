@@ -373,20 +373,24 @@ public class ForgeKindlerIntegrationTests
     public void Kindle_ReleasesAdvisoryLock_AfterCompletion()
     {
         // After a kindle completes, the session advisory lock must be released by the finally
-        // block. A new attempt to acquire the same lock key must succeed immediately.
+        // block. PG advisory locks are REENTRANT per session — calling pg_try_advisory_lock on
+        // the SAME session that took the lock succeeds even if release didn't fire (the session
+        // already "holds" it). So we must probe from a FRESH connection to actually detect a
+        // missing release; from the original session the test would pass trivially.
         using (var c = _connection.CreateCommand())
             ForgeKindler.KindleTheForge(c, Platform.PostgreSQL, forceReKindle: true);
 
-        using var check = _connection.CreateCommand();
-        // pg_try_advisory_lock returns true if the lock can be acquired (not already held).
-        // We use the same key expression as AcquireKindleLock.
+        using var probeConn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL)
+            .GetDbConnection(FixtureSetup.GetMainDbConnectionString());
+        probeConn.Open();
+        using var check = probeConn.CreateCommand();
         check.CommandText =
             "SELECT pg_try_advisory_lock(hashtext(current_database() || ':SchemaSmith_Kindle'))";
         var acquired = check.ExecuteScalar();
         Assert.That(Convert.ToBoolean(acquired), Is.True,
-            "Kindle must release its session advisory lock on completion; the lock must be acquirable afterwards.");
+            "Kindle must release its session advisory lock on completion; a fresh session must be able to acquire the same key.");
 
-        // Release immediately so we don't leak it for the remainder of the session.
+        // Release on the probe session so we don't leak the lock for any later test.
         check.CommandText =
             "SELECT pg_advisory_unlock(hashtext(current_database() || ':SchemaSmith_Kindle'))";
         check.ExecuteNonQuery();
