@@ -78,6 +78,30 @@ public class SchemaTemplateExtractionTests
             .Do(ci => _writtenTemplateJson = ci.ArgAt<string>(1));
     }
 
+    /// <summary>
+    /// Stub <paramref name="mockCmd"/>.ExecuteScalar() so that KindleTheForge takes the
+    /// skip path on MySQL without touching the DB. Lock-acquire returns 1L (success),
+    /// the KindleStamp existence check returns 1L (table present), and the stamp SELECT
+    /// returns the current computed stamp so the gate detects "already current" and returns
+    /// without executing any kindle DDL. Non-MySQL kindle queries fall through to null,
+    /// preserving default NSubstitute behaviour for SQL Server and PostgreSQL tests.
+    /// </summary>
+    private void StubMySqlKindleGate()
+    {
+        var stamp = ForgeKindler.ComputeKindleStamp(Platform.MySQL);
+        _command.ExecuteScalar().Returns(_ =>
+        {
+            var sql = _command.CommandText ?? string.Empty;
+            if (sql.Contains("GET_LOCK"))
+                return (object)1L;
+            if (sql.Contains("information_schema.tables"))
+                return (object)1L;
+            if (sql.Contains("SchemaSmith_KindleStamp") && sql.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                return (object)stamp;
+            return null;
+        });
+    }
+
     private void RegisterConfig(Platform platform, Dictionary<string, string> overrides = null)
     {
         var configValues = new Dictionary<string, string>
@@ -920,10 +944,17 @@ public class SchemaTemplateExtractionTests
             pgTableListReader["schemaname"].Returns(SourceSchema);
             pgTableListReader["tablename"].Returns("invoices");
             _command.ExecuteReader().Returns(pgTableListReader);
-            _command.ExecuteScalar().Returns(
+            // Discriminate by CommandText: the PG kindle-gate pg_class existence check must return
+            // 0L (table absent → stamp null → DDL runs via ExecuteNonQuery, which is fine for
+            // unit tests). All other ExecuteScalar calls (GenerateTableJSON) return the table JSON.
+            var invoicesJson =
                 "{\"Name\":\"invoices\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"Columns\":[{\"Name\":\"total\",\"DataType\":\"numeric\",\"Nullable\":true," +
-                "\"GenerationExpression\":\"(tenant_seed.fn_calc_total(lines))\",\"Generated\":\"ALWAYS\"}]}");
+                "\"GenerationExpression\":\"(tenant_seed.fn_calc_total(lines))\",\"Generated\":\"ALWAYS\"}]}";
+            _command.ExecuteScalar().Returns(_ =>
+                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                    ? (object)0L
+                    : (object)invoicesJson);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -962,10 +993,14 @@ public class SchemaTemplateExtractionTests
             pgTableListReader["schemaname"].Returns(SourceSchema);
             pgTableListReader["tablename"].Returns("customers");
             _command.ExecuteReader().Returns(pgTableListReader);
-            _command.ExecuteScalar().Returns(
+            var customersJson =
                 "{\"Name\":\"customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"Indexes\":[{\"Name\":\"ix_active\",\"IndexColumns\":\"email\"," +
-                "\"FilterExpression\":\"(tenant_seed.fn_is_active(id))\"}]}");
+                "\"FilterExpression\":\"(tenant_seed.fn_is_active(id))\"}]}";
+            _command.ExecuteScalar().Returns(_ =>
+                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                    ? (object)0L
+                    : (object)customersJson);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1003,10 +1038,14 @@ public class SchemaTemplateExtractionTests
             pgTableListReader["schemaname"].Returns(SourceSchema);
             pgTableListReader["tablename"].Returns("rooms");
             _command.ExecuteReader().Returns(pgTableListReader);
-            _command.ExecuteScalar().Returns(
+            var roomsJson =
                 "{\"Name\":\"rooms\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"ExcludeConstraints\":[{\"Name\":\"no_overlap\",\"ExcludeColumns\":[{\"Column\":\"during\",\"Operator\":\"&&\"}]," +
-                "\"FilterExpression\":\"(tenant_seed.fn_is_bookable(room_id))\"}]}");
+                "\"FilterExpression\":\"(tenant_seed.fn_is_bookable(room_id))\"}]}";
+            _command.ExecuteScalar().Returns(_ =>
+                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                    ? (object)0L
+                    : (object)roomsJson);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1213,10 +1252,14 @@ public class SchemaTemplateExtractionTests
             viewListReader["schemaname"].Returns(SourceSchema);
             viewListReader["matviewname"].Returns("active_customers");
             _command.ExecuteReader().Returns(viewListReader);
-            _command.ExecuteScalar().Returns(
+            var activeCustomersJson =
                 "{\"Name\":\"active_customers\",\"Schema\":\"tenant_seed\",\"Definition\":\"SELECT 1\",\"WithData\":true," +
                 "\"Indexes\":[{\"Name\":\"ix_active\",\"IndexColumns\":\"id\"," +
-                "\"FilterExpression\":\"(tenant_seed.fn_is_active(id))\"}]}");
+                "\"FilterExpression\":\"(tenant_seed.fn_is_active(id))\"}]}";
+            _command.ExecuteScalar().Returns(_ =>
+                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                    ? (object)0L
+                    : (object)activeCustomersJson);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1371,6 +1414,7 @@ public class SchemaTemplateExtractionTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
+            StubMySqlKindleGate();
             // Source.Schema passes through RegisterConfig defaults. On MySQL, it must not activate schema-template mode (design §2).
             RegisterConfig(Platform.MySQL, ShouldCastAllFalse(Platform.MySQL));
 
