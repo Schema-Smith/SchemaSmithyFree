@@ -387,8 +387,7 @@ public static class ForgeKindler
                 command.ExecuteNonQuery();
                 break;
             case Platform.MySQL:
-                command.CommandText =
-                    $"SELECT GET_LOCK(CONCAT(DATABASE(), ':{KindleLockResource}'), 60)";
+                command.CommandText = $"SELECT GET_LOCK('{GetMySqlKindleLockName(command)}', 60)";
                 var got = command.ExecuteScalar();
                 if (got == null || got == DBNull.Value || Convert.ToInt64(got) != 1)
                     throw new TimeoutException("Could not acquire the SchemaSmith kindle lock (MySQL GET_LOCK timed out).");
@@ -432,7 +431,7 @@ public static class ForgeKindler
                 Platform.SqlServer => $"IF APPLOCK_MODE('public', '{KindleLockResource}', 'Session') <> 'NoLock' " +
                                       $"EXEC sp_releaseapplock @Resource = '{KindleLockResource}', @LockOwner = 'Session';",
                 Platform.PostgreSQL => $"SELECT pg_advisory_unlock(hashtext(current_database() || ':{KindleLockResource}'))",
-                Platform.MySQL => $"SELECT RELEASE_LOCK(CONCAT(DATABASE(), ':{KindleLockResource}'))",
+                Platform.MySQL => $"SELECT RELEASE_LOCK('{GetMySqlKindleLockName(command)}')",
                 _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
             };
             command.ExecuteNonQuery();
@@ -441,5 +440,18 @@ public static class ForgeKindler
         {
             // The session ending releases all three lock types anyway; never let release mask a kindle failure.
         }
+    }
+
+    /// <summary>
+    /// MySQL GET_LOCK names are server-global AND capped at 64 characters. Hash the current
+    /// database name into a fixed-length key so long DB names (test DBs with timestamp+guid
+    /// suffixes, or any user with a verbose naming convention) still fit under the cap and stay
+    /// unique per database. Exposed internally so integration tests can probe the same key.
+    /// </summary>
+    internal static string GetMySqlKindleLockName(IDbCommand command)
+    {
+        var dbName = command.Connection?.Database ?? "";
+        var dbHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(dbName)))[..16].ToLowerInvariant();
+        return $"{KindleLockResource}_{dbHash}"; // 19 + 1 + 16 = 36 chars, well under MySQL's 64
     }
 }

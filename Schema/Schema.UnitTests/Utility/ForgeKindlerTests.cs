@@ -485,6 +485,28 @@ public class ForgeKindlerTests
     }
 
     [Test]
+    public void GetMySqlKindleLockName_FitsUnder64Chars_EvenForLongDatabaseNames()
+    {
+        // MySQL GET_LOCK names are capped at 64 chars (error 4163). The hashed key must stay under
+        // the cap for ANY database name — test DBs use timestamp+guid suffixes that easily exceed
+        // it when concatenated naively. Also assert determinism: same DB name -> same key.
+        var longDb = "GenerateTableJson_Test_20260528_072842_2ad48a96_extra_padding_for_safety";
+        var mockCmd = Substitute.For<IDbCommand>();
+        var mockConn = Substitute.For<IDbConnection>();
+        mockConn.Database.Returns(longDb);
+        mockCmd.Connection.Returns(mockConn);
+
+        var name1 = ForgeKindler.GetMySqlKindleLockName(mockCmd);
+        var name2 = ForgeKindler.GetMySqlKindleLockName(mockCmd);
+
+        Assert.That(name1, Has.Length.LessThanOrEqualTo(64),
+            $"MySQL lock name must fit MySQL's 64-char cap. Got {name1.Length}: '{name1}'.");
+        Assert.That(name1, Is.EqualTo(name2), "Hashed key must be deterministic per database name.");
+        Assert.That(name1, Does.StartWith("SchemaSmith_Kindle_"),
+            "Key must keep the SchemaSmith_Kindle_ prefix for diagnosability.");
+    }
+
+    [Test]
     public void DropSupersededPostgreSqlOverloads_DropsTheFiveAuditedSignatures()
     {
         var mockCmd = Substitute.For<IDbCommand>();

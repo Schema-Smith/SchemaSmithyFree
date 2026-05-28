@@ -296,7 +296,9 @@ public class ForgeKindlerIntegrationTests
         // key must report 1 (free). This also exercises the real MySqlConnector GET_LOCK return path.
         using var command = _connection.CreateCommand();
         ForgeKindler.KindleTheForge(command, Platform.MySQL, forceReKindle: true);
-        command.CommandText = "SELECT IS_FREE_LOCK(CONCAT(DATABASE(), ':SchemaSmith_Kindle'))";
+        // Probe with the same hashed key the production code uses (MySQL GET_LOCK names are capped
+        // at 64 chars, so the key is SHA-256-hashed in C# rather than built from DATABASE()).
+        command.CommandText = $"SELECT IS_FREE_LOCK('{ForgeKindler.GetMySqlKindleLockName(command)}')";
         Assert.That(System.Convert.ToInt64(command.ExecuteScalar()), Is.EqualTo(1),
             "Kindle must release its GET_LOCK when done.");
     }
