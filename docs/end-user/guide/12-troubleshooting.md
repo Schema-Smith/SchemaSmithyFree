@@ -58,6 +58,8 @@ For the full exit code reference, see [Configuration Reference -- Exit Codes](..
 { "KindleTheForge": true }
 ```
 
+If `KindleTheForge` is already `true` but the helper objects look wrong (someone manually edited one of the `SchemaSmith.*` procedures, for example), set `ForceReKindle: true` once or pass `--ForceReKindle` to re-install the helpers unconditionally on the next run. Once everything is back to a clean state, return the setting to its default.
+
 ### Dependency failures that don't resolve
 
 **Symptom:** Scripts fail with errors like "Invalid object name", "relation ... does not exist", or "Unknown column" even though the referenced object is in your package. The progress log shows the same scripts failing on every retry pass.

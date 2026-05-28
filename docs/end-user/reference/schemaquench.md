@@ -387,7 +387,7 @@ A data fix should not carry `DataDelivery` blocks or table JSON. If your fix is 
 
 Before SchemaQuench can shape your database, it needs its tools in place. KindleTheForge deploys the SchemaSmith infrastructure to each target database. The infrastructure includes a per-platform set of helper functions, modular table-quench procedures, the indexed view or materialized view procedure where applicable, the reverse-engineering procedures used by SchemaTongs, and the `CompletedMigrationScripts` tracking table.
 
-KindleTheForge runs on every quench to ensure the helper procedures match the version of SchemaQuench being used. In a normal release pipeline, always leave this `true`.
+KindleTheForge runs on every quench, but the install itself is **version-stamped and self-skipping**: SchemaSmith records a content-hash stamp of the helper objects in each target database and the call returns immediately when the stamp matches the current tooling — so a normal deployment pays the install cost only when the tooling actually changes. In a normal release pipeline, always leave this `true`. See [`ForceReKindle`](#forcerekindle) for the override that re-installs unconditionally.
 
 **When to set false:** Partial-package datafix deployments flip this off along with the rest of the datafix profile. See [Partial-Package Deployments (Data Fixes)](#partial-package-deployments-data-fixes) for the full profile and the reasoning behind each flag.
 
@@ -400,6 +400,8 @@ Default `false`. SchemaSmith records a content-hash stamp of the helper procedur
 Set it in `SchemaQuench.settings.json`, or pass `--ForceReKindle` on the command line (presence enables it, no value needed). When both are present the CLI switch wins.
 
 > **Tip:** Forcing a re-kindle is safe to run concurrently. SchemaSmith serializes the helper re-install per database with a session lock, so parallel deployments don't collide even when every one of them is forcing.
+
+> **Tip:** If you can't change the configuration or CLI invocation but still need a re-kindle, dropping the `SchemaSmith.KindleStamp` marker table (or `SchemaSmith_KindleStamp` on MySQL) has the same effect — the gate sees the missing stamp on the next run and re-installs.
 
 ---
 
