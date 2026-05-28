@@ -393,6 +393,16 @@ KindleTheForge runs on every quench to ensure the helper procedures match the ve
 
 ---
 
+## ForceReKindle
+
+Default `false`. SchemaSmith records a content-hash stamp of the helper procedures and tables it installs in each target database. On every subsequent run it compares the stamp to the current tooling and **skips the re-install when nothing has changed**, so a normal deployment pays the helper-install cost only when the tooling actually moves. `ForceReKindle` overrides that skip and re-installs the helper objects unconditionally — handy after a manual edit to the helpers, when diagnosing a deploy problem, or any time you want a known-good baseline regardless of stamp state.
+
+Set it in `SchemaQuench.settings.json`, or pass `--ForceReKindle` on the command line (presence enables it, no value needed). When both are present the CLI switch wins.
+
+> **Tip:** Forcing a re-kindle is safe to run concurrently. SchemaSmith serializes the helper re-install per database with a session lock, so parallel deployments don't collide even when every one of them is forcing.
+
+---
+
 ## Modular Quench Procedures
 
 The table quench is broken into modular stored procedures, each handling a specific aspect of the table schema. The procedures are deployed during the KindleTheForge step and called in sequence during the database quench. Every platform ships its own implementation, but the responsibilities are the same.
