@@ -70,22 +70,41 @@ BEGIN
         CurrentDefinition NVARCHAR(MAX)
     );
 
-    -- TRANSITIONAL (slice 3 audit B5 of schema-templates): @SchemaName non-empty restricts
-    -- the drop-candidate set to the iteration's schema so a multi-tenant TenantBody iteration
-    -- cannot see sibling iterations' indexed views as "removed from product". Regular
-    -- templates pass @SchemaName = '' and the predicate degenerates to today's behavior.
-    INSERT INTO @ExistingViews
-    SELECT s.name, v.name, v.object_id, m.definition
-    FROM sys.views v
-    INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
-    INNER JOIN sys.sql_modules m ON v.object_id = m.object_id
-    WHERE OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1
-    AND (@SchemaName = N'' OR s.name = @SchemaName)
-    AND EXISTS (
-        SELECT 1 FROM sys.extended_properties ep
-        WHERE ep.major_id = v.object_id AND ep.minor_id = 0
-        AND ep.name = 'SchemaSmith_Product' AND CAST(ep.value AS NVARCHAR(200)) = @ProductName
-    );
+    -- @SchemaName = '': regular template, scan-all-schemas (drop-candidate set spans the DB).
+    -- @SchemaName <> '': schema-template iteration, scope to the iteration's schema. The
+    -- IF/ELSE split (not a single filter predicate) is plan-shape critical — a single query
+    -- with `(@SchemaName = N'' OR s.name = @SchemaName)` scans sys.views broadly and S-locks
+    -- sysschobjs rows for sibling-schema views, deadlocking against a sibling iteration's
+    -- CREATE INDEX (Sch-M on the view, U->X on the same sysschobjs row).
+    IF @SchemaName <> N''
+    BEGIN
+        DECLARE @schemaId INT = SCHEMA_ID(@SchemaName);
+        INSERT INTO @ExistingViews
+        SELECT @SchemaName, v.name, v.object_id, m.definition
+        FROM sys.views v
+        INNER JOIN sys.sql_modules m ON v.object_id = m.object_id
+        WHERE v.schema_id = @schemaId
+        AND OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1
+        AND EXISTS (
+            SELECT 1 FROM sys.extended_properties ep
+            WHERE ep.major_id = v.object_id AND ep.minor_id = 0
+            AND ep.name = 'SchemaSmith_Product' AND CAST(ep.value AS NVARCHAR(200)) = @ProductName
+        );
+    END
+    ELSE
+    BEGIN
+        INSERT INTO @ExistingViews
+        SELECT s.name, v.name, v.object_id, m.definition
+        FROM sys.views v
+        INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+        INNER JOIN sys.sql_modules m ON v.object_id = m.object_id
+        WHERE OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1
+        AND EXISTS (
+            SELECT 1 FROM sys.extended_properties ep
+            WHERE ep.major_id = v.object_id AND ep.minor_id = 0
+            AND ep.name = 'SchemaSmith_Product' AND CAST(ep.value AS NVARCHAR(200)) = @ProductName
+        );
+    END;
 
     -- Process removals: views owned by product but not in new schema
     -- (Local cursor variables prefixed with @iv* to avoid colliding with the @SchemaName
