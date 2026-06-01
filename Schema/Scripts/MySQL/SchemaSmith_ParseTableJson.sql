@@ -27,7 +27,13 @@ BEGIN
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Parse table definitions');
 
     -- Parse Tables from JSON
+    -- RowId is the synthetic primary key so the per-row ShouldApply UPDATE below can target
+    -- exactly the source row whose expression evaluated false. Without it, two table entries
+    -- sharing a Name with mutually exclusive ShouldApply would either collide on the natural-key
+    -- PRIMARY KEY (TableName) at INSERT time or silently mark both rows ShouldApply=0 at UPDATE
+    -- time. TableName remains an indexed lookup column but is no longer the uniqueness constraint.
     CREATE TEMPORARY TABLE _SchemaSmith_Tables (
+        RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         TableName VARCHAR(128) NOT NULL,
         Engine VARCHAR(50) DEFAULT 'InnoDB',
         Collation VARCHAR(100) DEFAULT NULL,
@@ -37,7 +43,7 @@ BEGIN
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
         AutoIncrementKeyClause VARCHAR(500) DEFAULT '',
-        PRIMARY KEY (TableName)
+        KEY ix_tables_name (TableName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     -- First, insert all tables from JSON with NewTable = 0 (assume existing)
@@ -94,7 +100,12 @@ BEGIN
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Parse columns');
 
     -- Parse Columns from JSON
+    -- RowId is the synthetic primary key (see _SchemaSmith_Tables above). The natural key
+    -- (TableName, ColumnName) becomes a regular index for lookup performance. Two same-named
+    -- column entries with mutually exclusive ShouldApply expressions can now coexist in
+    -- _SchemaSmith_Columns until ShouldApply DELETE removes the one whose expression evaluates false.
     CREATE TEMPORARY TABLE _SchemaSmith_Columns (
+        RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         TableName VARCHAR(128) NOT NULL,
         ColumnName VARCHAR(128) NOT NULL,
         OrdinalPosition INT NOT NULL DEFAULT 0,
@@ -113,7 +124,7 @@ BEGIN
         DependencyLevel INT DEFAULT 0,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
-        PRIMARY KEY (TableName, ColumnName)
+        KEY ix_columns_table_name (TableName, ColumnName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     INSERT INTO _SchemaSmith_Columns (
@@ -326,7 +337,9 @@ BEGIN
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Parse indexes');
 
     -- Parse Indexes from JSON
+    -- RowId is the synthetic primary key (see _SchemaSmith_Tables above for rationale).
     CREATE TEMPORARY TABLE _SchemaSmith_Indexes (
+        RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         TableName VARCHAR(128) NOT NULL,
         IndexName VARCHAR(128) NOT NULL,
         IsPrimaryKey TINYINT DEFAULT 0,
@@ -336,7 +349,7 @@ BEGIN
         IsVisible TINYINT DEFAULT 1,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
-        PRIMARY KEY (TableName, IndexName)
+        KEY ix_indexes_table_name (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     INSERT INTO _SchemaSmith_Indexes (
@@ -379,7 +392,9 @@ BEGIN
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Parse foreign keys');
 
     -- Parse Foreign Keys from JSON
+    -- RowId is the synthetic primary key (see _SchemaSmith_Tables above for rationale).
     CREATE TEMPORARY TABLE _SchemaSmith_ForeignKeys (
+        RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         TableName VARCHAR(128) NOT NULL,
         KeyName VARCHAR(128) NOT NULL,
         Columns TEXT NOT NULL,
@@ -390,7 +405,7 @@ BEGIN
         UpdateAction VARCHAR(20) DEFAULT 'NO ACTION',
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
-        PRIMARY KEY (TableName, KeyName)
+        KEY ix_fks_table_name (TableName, KeyName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     INSERT INTO _SchemaSmith_ForeignKeys (
@@ -426,13 +441,15 @@ BEGIN
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Parse check constraints');
 
     -- Parse Check Constraints from JSON (MySQL 8.0.16+)
+    -- RowId is the synthetic primary key (see _SchemaSmith_Tables above for rationale).
     CREATE TEMPORARY TABLE _SchemaSmith_CheckConstraints (
+        RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         TableName VARCHAR(128) NOT NULL,
         ConstraintName VARCHAR(128) NOT NULL,
         Expression TEXT NOT NULL,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
-        PRIMARY KEY (TableName, ConstraintName)
+        KEY ix_checks_table_name (TableName, ConstraintName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     INSERT INTO _SchemaSmith_CheckConstraints (TableName, ConstraintName, Expression, ShouldApply, ShouldApplyExpression)
@@ -467,30 +484,40 @@ BEGIN
 
     -- Parse FullText Indexes from JSON
     -- The temp table schema MUST match IndexOnlyQuench's fallback definition exactly
+    -- (IndexOnlyQuench.sql has the same CREATE TEMPORARY TABLE IF NOT EXISTS as a fallback;
+    -- keep them in lockstep when changing either definition). The earlier helper-temp-table
+    -- approach (_SchemaSmith_FTShouldApply) for ShouldApply evaluation was retired so this
+    -- table follows the same RowId + ShouldApply+ShouldApplyExpression pattern as the others.
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FullTextIndexes;
     CREATE TEMPORARY TABLE IF NOT EXISTS _SchemaSmith_FullTextIndexes (
+        RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         TableName VARCHAR(128) NOT NULL,
         IndexName VARCHAR(128) NOT NULL,
         Columns TEXT NOT NULL,
         Parser VARCHAR(128) DEFAULT NULL,
         Comment VARCHAR(255) DEFAULT NULL,
-        PRIMARY KEY (TableName, IndexName)
+        ShouldApply TINYINT DEFAULT 1,
+        ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
+        KEY ix_ft_table_name (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    INSERT INTO _SchemaSmith_FullTextIndexes (TableName, IndexName, Columns, Parser, Comment)
+    INSERT INTO _SchemaSmith_FullTextIndexes (TableName, IndexName, Columns, Parser, Comment, ShouldApply, ShouldApplyExpression)
     SELECT
         SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
         SchemaSmith_SafeBacktickWrap(jt.Name) AS IndexName,
         jt.Columns,
         NULLIF(TRIM(jt.Parser), '') AS Parser,
-        NULLIF(TRIM(jt.Comment), '') AS Comment
+        NULLIF(TRIM(jt.Comment), '') AS Comment,
+        1 AS ShouldApply,
+        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression
     FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
         TableName VARCHAR(128) PATH '$.Name',
         NESTED PATH '$.FullTextIndexes[*]' COLUMNS (
             Name VARCHAR(128) PATH '$.Name',
             Columns TEXT PATH '$.Columns',
             Parser VARCHAR(128) PATH '$.Parser',
-            Comment VARCHAR(255) PATH '$.Comment'
+            Comment VARCHAR(255) PATH '$.Comment',
+            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression'
         )
     )) AS jt
     WHERE jt.Name IS NOT NULL
@@ -507,89 +534,58 @@ BEGIN
     ) ENGINE=InnoDB;
 
     -- Tables: UPDATE ... SET ShouldApply = 0 WHERE NOT (expression)
+    -- Scoped by RowId so each generated UPDATE targets exactly the source row whose expression
+    -- evaluated false (no collateral damage to siblings sharing the natural-key name).
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
-    SELECT CONCAT('UPDATE _SchemaSmith_Tables SET ShouldApply = 0 WHERE TableName = ''',
-                  REPLACE(TableName, '''', ''''''),
-                  ''' AND NOT (', ShouldApplyExpression, ')')
+    SELECT CONCAT('UPDATE _SchemaSmith_Tables SET ShouldApply = 0 WHERE RowId = ',
+                  RowId,
+                  ' AND NOT (', ShouldApplyExpression, ')')
     FROM _SchemaSmith_Tables
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
-    -- Columns: UPDATE ... SET ShouldApply = 0 WHERE NOT (expression)
+    -- Columns: UPDATE ... SET ShouldApply = 0 WHERE NOT (expression) (scoped by RowId)
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
-    SELECT CONCAT('UPDATE _SchemaSmith_Columns SET ShouldApply = 0 WHERE TableName = ''',
-                  REPLACE(TableName, '''', ''''''),
-                  ''' AND ColumnName = ''',
-                  REPLACE(ColumnName, '''', ''''''),
-                  ''' AND NOT (', ShouldApplyExpression, ')')
+    SELECT CONCAT('UPDATE _SchemaSmith_Columns SET ShouldApply = 0 WHERE RowId = ',
+                  RowId,
+                  ' AND NOT (', ShouldApplyExpression, ')')
     FROM _SchemaSmith_Columns
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
-    -- Indexes: UPDATE ... SET ShouldApply = 0 WHERE NOT (expression)
+    -- Indexes: UPDATE ... SET ShouldApply = 0 WHERE NOT (expression) (scoped by RowId)
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
-    SELECT CONCAT('UPDATE _SchemaSmith_Indexes SET ShouldApply = 0 WHERE TableName = ''',
-                  REPLACE(TableName, '''', ''''''),
-                  ''' AND IndexName = ''',
-                  REPLACE(IndexName, '''', ''''''),
-                  ''' AND NOT (', ShouldApplyExpression, ')')
+    SELECT CONCAT('UPDATE _SchemaSmith_Indexes SET ShouldApply = 0 WHERE RowId = ',
+                  RowId,
+                  ' AND NOT (', ShouldApplyExpression, ')')
     FROM _SchemaSmith_Indexes
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
-    -- ForeignKeys: UPDATE ... SET ShouldApply = 0 WHERE NOT (expression)
+    -- ForeignKeys: UPDATE ... SET ShouldApply = 0 WHERE NOT (expression) (scoped by RowId)
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
-    SELECT CONCAT('UPDATE _SchemaSmith_ForeignKeys SET ShouldApply = 0 WHERE TableName = ''',
-                  REPLACE(TableName, '''', ''''''),
-                  ''' AND KeyName = ''',
-                  REPLACE(KeyName, '''', ''''''),
-                  ''' AND NOT (', ShouldApplyExpression, ')')
+    SELECT CONCAT('UPDATE _SchemaSmith_ForeignKeys SET ShouldApply = 0 WHERE RowId = ',
+                  RowId,
+                  ' AND NOT (', ShouldApplyExpression, ')')
     FROM _SchemaSmith_ForeignKeys
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
-    -- CheckConstraints: UPDATE ... SET ShouldApply = 0 WHERE NOT (expression)
+    -- CheckConstraints: UPDATE ... SET ShouldApply = 0 WHERE NOT (expression) (scoped by RowId)
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
-    SELECT CONCAT('UPDATE _SchemaSmith_CheckConstraints SET ShouldApply = 0 WHERE TableName = ''',
-                  REPLACE(TableName, '''', ''''''),
-                  ''' AND ConstraintName = ''',
-                  REPLACE(ConstraintName, '''', ''''''),
-                  ''' AND NOT (', ShouldApplyExpression, ')')
+    SELECT CONCAT('UPDATE _SchemaSmith_CheckConstraints SET ShouldApply = 0 WHERE RowId = ',
+                  RowId,
+                  ' AND NOT (', ShouldApplyExpression, ')')
     FROM _SchemaSmith_CheckConstraints
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
-    -- FullTextIndexes: DELETE ... WHERE NOT (expression)
-    -- _SchemaSmith_FullTextIndexes has no ShouldApply column (must match IndexOnlyQuench fallback schema),
-    -- so we use DELETE instead of UPDATE to remove rows where the expression evaluates to false.
-    -- We need a helper temp table since we parsed ShouldApplyExpression from JSON but didn't store it.
-    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FTShouldApply;
-    CREATE TEMPORARY TABLE _SchemaSmith_FTShouldApply (
-        TableName VARCHAR(128) NOT NULL,
-        IndexName VARCHAR(128) NOT NULL,
-        ShouldApplyExpression VARCHAR(4000) NOT NULL,
-        PRIMARY KEY (TableName, IndexName)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    INSERT INTO _SchemaSmith_FTShouldApply (TableName, IndexName, ShouldApplyExpression)
-    SELECT
-        SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
-        SchemaSmith_SafeBacktickWrap(jt.Name) AS IndexName,
-        TRIM(jt.ShouldApplyExpr) AS ShouldApplyExpression
-    FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
-        TableName VARCHAR(128) PATH '$.Name',
-        NESTED PATH '$.FullTextIndexes[*]' COLUMNS (
-            Name VARCHAR(128) PATH '$.Name',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression'
-        )
-    )) AS jt
-    WHERE jt.Name IS NOT NULL
-    AND jt.ShouldApplyExpr IS NOT NULL AND TRIM(jt.ShouldApplyExpr) <> '';
-
+    -- FullTextIndexes: UPDATE ... SET ShouldApply = 0 WHERE NOT (expression) (scoped by RowId)
+    -- ShouldApply / ShouldApplyExpression now live directly on _SchemaSmith_FullTextIndexes
+    -- (the IndexOnlyQuench fallback schema was updated in lockstep), matching the pattern of
+    -- the other parser temp tables. The earlier _SchemaSmith_FTShouldApply helper table has been
+    -- retired -- it was a workaround for the missing columns and is no longer needed.
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
-    SELECT CONCAT('DELETE FROM _SchemaSmith_FullTextIndexes WHERE TableName = ''',
-                  REPLACE(TableName, '''', ''''''),
-                  ''' AND IndexName = ''',
-                  REPLACE(IndexName, '''', ''''''),
-                  ''' AND NOT (', ShouldApplyExpression, ')')
-    FROM _SchemaSmith_FTShouldApply;
-
-    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FTShouldApply;
+    SELECT CONCAT('UPDATE _SchemaSmith_FullTextIndexes SET ShouldApply = 0 WHERE RowId = ',
+                  RowId,
+                  ' AND NOT (', ShouldApplyExpression, ')')
+    FROM _SchemaSmith_FullTextIndexes
+    WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
     -- Execute each statement via PREPARE/EXECUTE loop
     SET @_ssa_eval_id = 0;
@@ -612,7 +608,20 @@ BEGIN
     DELETE FROM _SchemaSmith_CheckConstraints WHERE ShouldApply = 0;
     DELETE FROM _SchemaSmith_ForeignKeys WHERE ShouldApply = 0;
     DELETE FROM _SchemaSmith_Indexes WHERE ShouldApply = 0;
+    DELETE FROM _SchemaSmith_FullTextIndexes WHERE ShouldApply = 0;
     DELETE FROM _SchemaSmith_Columns WHERE ShouldApply = 0;
+
+    -- Now that ShouldApply has filtered each temp table down to at most one row per natural
+    -- key, promote the natural-key indexes to UNIQUE so MySQL's optimizer can infer functional
+    -- dependency in downstream GROUP BY queries (ONLY_FULL_GROUP_BY mode is the default in 8.0+).
+    -- These indexes existed as regular KEYs during the INSERT/UPDATE phases so two same-named
+    -- rows with mutually exclusive ShouldApplyExpression could coexist until the DELETE pass.
+    ALTER TABLE _SchemaSmith_Tables DROP KEY ix_tables_name, ADD UNIQUE KEY uq_tables_name (TableName);
+    ALTER TABLE _SchemaSmith_Columns DROP KEY ix_columns_table_name, ADD UNIQUE KEY uq_columns_table_name (TableName, ColumnName);
+    ALTER TABLE _SchemaSmith_Indexes DROP KEY ix_indexes_table_name, ADD UNIQUE KEY uq_indexes_table_name (TableName, IndexName);
+    ALTER TABLE _SchemaSmith_ForeignKeys DROP KEY ix_fks_table_name, ADD UNIQUE KEY uq_fks_table_name (TableName, KeyName);
+    ALTER TABLE _SchemaSmith_CheckConstraints DROP KEY ix_checks_table_name, ADD UNIQUE KEY uq_checks_table_name (TableName, ConstraintName);
+    ALTER TABLE _SchemaSmith_FullTextIndexes DROP KEY ix_ft_table_name, ADD UNIQUE KEY uq_ft_table_name (TableName, IndexName);
 
     -- Delete objects belonging to tables that should not apply
     DELETE cc FROM _SchemaSmith_CheckConstraints cc

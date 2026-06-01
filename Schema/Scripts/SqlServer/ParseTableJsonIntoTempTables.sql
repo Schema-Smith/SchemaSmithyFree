@@ -6,7 +6,12 @@
   SET NOCOUNT ON
   RAISERROR('Parse Tables from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #TableDefinitions
-  SELECT [Schema] = SchemaSmith.fn_SafeBracketWrap(ISNULL([Schema], 'dbo')), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL(NULLIF(RTRIM([CompressionType]), ''), 'NONE'), 
+  -- [_RowId] gives each parsed row a unique identifier so the per-row ShouldApply DELETE
+  -- below targets exactly the source row whose expression evaluated false. Without it,
+  -- the DELETE matched on (Schema, Name) and would silently wipe both rows when two
+  -- entries shared a name with mutually exclusive ShouldApply expressions.
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         [Schema] = SchemaSmith.fn_SafeBracketWrap(ISNULL([Schema], 'dbo')), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL(NULLIF(RTRIM([CompressionType]), ''), 'NONE'),
          [IsTemporal] = ISNULL([IsTemporal], 0), [UpdateFillFactor] = ISNULL([UpdateFillFactor], 0),
          [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints],
          [ShouldApplyExpression], [EnableCDC] = ISNULL([EnableCDC], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName])
@@ -30,7 +35,9 @@
       ) t;
   
   -- Identify Tables to skip based on ShouldApply expression
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #TableDefinitions WHERE [Schema] = ''' + [Schema] + ''' AND [Name] = ''' + [Name] + ''' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  -- Scoped by [_RowId] so each generated DELETE targets exactly the source row whose
+  -- expression evaluated false (no collateral damage to siblings with the same Name).
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #TableDefinitions WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #TableDefinitions WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
@@ -43,7 +50,8 @@
   
   RAISERROR('Parse Columns from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #Columns
-  SELECT t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]),
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]),
          -- Canonicalize the JSON DataType so the live-vs-declared comparison
          -- in ModifiedTableQuench (which builds USER_TYPE + DATETIME_PRECISION
          -- as e.g. "DATETIME2(7)") matches a JSON-declared "DATETIME2" without
@@ -103,8 +111,8 @@
       [OldName] NVARCHAR(500) '$.OldName'
       ) c;
 
-  -- Identify Columns to skip based on ShouldApply expression
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Columns WHERE [Schema] = ''' + [Schema] + ''' AND [TableName] = ''' + [TableName] + ''' AND [ColumnName] = ''' + [ColumnName] + ''' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  -- Identify Columns to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Columns WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Columns WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
@@ -117,7 +125,8 @@
 
   RAISERROR('Parse Indexes from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #Indexes
-  SELECT t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(NULLIF(RTRIM(i.[CompressionType]), ''), 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0), 
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(NULLIF(RTRIM(i.[CompressionType]), ''), 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
          i.[FilterExpression], [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
@@ -149,15 +158,16 @@
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
       ) i;
   
-  -- Identify Indexes to skip based on ShouldApply expression
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Indexes WHERE [Schema] = ''' + [Schema] + ''' AND [TableName] = ''' + [TableName] + ''' AND [IndexName] = ''' + [IndexName] + ''' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  -- Identify Indexes to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Indexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Indexes WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
   
   RAISERROR('Parse XML Indexes from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #XmlIndexes
-  SELECT t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), i.[IsPrimary],
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), i.[IsPrimary],
          [Column] = SchemaSmith.fn_SafeBracketWrap(i.[Column]), [PrimaryIndex] = SchemaSmith.fn_SafeBracketWrap(i.[PrimaryIndex]),
          i.[SecondaryIndexType], i.[ShouldApplyExpression]
     INTO #XmlIndexes
@@ -171,15 +181,16 @@
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
       ) i;
 
-  -- Identify XmlIndexes to skip based on ShouldApply expression
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #XmlIndexes WHERE [Schema] = ''' + [Schema] + ''' AND [TableName] = ''' + [TableName] + ''' AND [IndexName] = ''' + [IndexName] + ''' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  -- Identify XmlIndexes to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #XmlIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #XmlIndexes WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
   
   RAISERROR('Parse Foreign Keys from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #ForeignKeys
-  SELECT t.[Schema], t.[Name] AS [TableName], [KeyName] = SchemaSmith.fn_SafeBracketWrap(f.[KeyName]), 
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], [KeyName] = SchemaSmith.fn_SafeBracketWrap(f.[KeyName]),
          [RelatedTableSchema] = SchemaSmith.fn_SafeBracketWrap(ISNULL(f.[RelatedTableSchema], 'dbo')), [RelatedTable] = SchemaSmith.fn_SafeBracketWrap(f.[RelatedTable]), 
          [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
          [RelatedColumns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[RelatedColumns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
@@ -199,15 +210,16 @@
       [UpdateAction] NVARCHAR(20) '$.UpdateAction'
       ) f;
 
-  -- Identify ForeignKeys to skip based on ShouldApply expression
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #ForeignKeys WHERE [Schema] = ''' + [Schema] + ''' AND [TableName] = ''' + [TableName] + ''' AND [KeyName] = ''' + [KeyName] + ''' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  -- Identify ForeignKeys to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #ForeignKeys WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #ForeignKeys WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
   
   RAISERROR('Parse Table Level Check Constraints from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #CheckConstraints
-  SELECT t.[Schema], t.[Name] AS [TableName], c.[ConstraintName], c.[Expression], c.[ShouldApplyExpression]
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], c.[ConstraintName], c.[Expression], c.[ShouldApplyExpression]
     INTO #CheckConstraints
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(CheckConstraints) WITH (
@@ -216,15 +228,16 @@
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
       ) c;
 
-  -- Identify CheckConstraints to skip based on ShouldApply expression
-  SELECT @v_SQL = STRING_AGG('DELETE FROM #CheckConstraints WHERE [Schema] = ''' + [Schema] + ''' AND [TableName] = ''' + [TableName] + ''' AND [ConstraintName] = ''' + [ConstraintName] + ''' AND NOT (' + [ShouldApplyExpression] + ');', CHAR(13) + CHAR(10))
+  -- Identify CheckConstraints to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG('DELETE FROM #CheckConstraints WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');', CHAR(13) + CHAR(10))
     FROM #CheckConstraints WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
   
   RAISERROR('Parse Statistics from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #Statistics
-  SELECT t.[Schema], t.[Name] AS [TableName], [StatisticName] = SchemaSmith.fn_SafeBracketWrap(s.[StatisticName]), [SampleSize] = ISNULL(s.[SampleSize], 0), s.[FilterExpression],
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], [StatisticName] = SchemaSmith.fn_SafeBracketWrap(s.[StatisticName]), [SampleSize] = ISNULL(s.[SampleSize], 0), s.[FilterExpression],
          [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(s.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
          s.[ShouldApplyExpression]
     INTO #Statistics
@@ -237,15 +250,16 @@
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
       ) s;
 
-  -- Identify Statistics to skip based on ShouldApply expression
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Statistics WHERE [Schema] = ''' + [Schema] + ''' AND [TableName] = ''' + [TableName] + ''' AND [StatisticName] = ''' + [StatisticName] + ''' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  -- Identify Statistics to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Statistics WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Statistics WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
   
   RAISERROR('Parse Full Text Indexes from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #FullTextIndexes
-  SELECT t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]), 
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]),
          f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
          [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
          f.[ShouldApplyExpression]
@@ -260,8 +274,8 @@
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
       ) f;
 
-  -- Identify FullTextIndexes to skip based on ShouldApply expression
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #FullTextIndexes WHERE [Schema] = ''' + [Schema] + ''' AND [TableName] = ''' + [TableName] + ''' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  -- Identify FullTextIndexes to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #FullTextIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #FullTextIndexes WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
