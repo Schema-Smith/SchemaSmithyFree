@@ -30,14 +30,18 @@ BEGIN
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'BEGIN IndexOnlyQuench');
 
-    -- Ensure _SchemaSmith_FullTextIndexes exists (ParseTableJson may not create it if there are no fulltext indexes)
+    -- Ensure _SchemaSmith_FullTextIndexes exists (ParseTableJson may not create it if there are no fulltext indexes).
+    -- Keep this fallback schema in lockstep with ParseTableJson's primary definition (see
+    -- SchemaSmith_ParseTableJson.sql) — both use a synthetic RowId so two same-named entries
+    -- with mutually exclusive ShouldApplyExpression can coexist until the ShouldApply DELETE pass.
     CREATE TEMPORARY TABLE IF NOT EXISTS _SchemaSmith_FullTextIndexes (
+        RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
         TableName VARCHAR(128) NOT NULL,
         IndexName VARCHAR(128) NOT NULL,
         Columns TEXT NOT NULL,
         Parser VARCHAR(128) DEFAULT NULL,
         Comment VARCHAR(255) DEFAULT NULL,
-        PRIMARY KEY (TableName, IndexName)
+        KEY ix_ft_table_name (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     -- =========================================================================
