@@ -1,0 +1,97 @@
+name: schemasmith-conditional-sqlserver-demo
+
+# Conditional deployment demo: same schema package deploys against three tenant
+# databases (Tenant_A, Tenant_B, Tenant_C) on one SQL Server 2022 instance. A
+# nonclustered columnstore index on OrderHistory is gated by EXISTS-against-
+# RolloutControl. The initial state has Tenant_A approved ('Ready') and Tenants
+# B and C waiting ('Pending'). One quench run: only Tenant_A picks up the heavy
+# DDL. Flip another tenant's row to 'Ready' and re-run to roll the index out to
+# the next tenant in a later maintenance window.
+
+services:
+  demoserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: Y
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_PID: Developer
+    healthcheck:
+      test:
+        - "CMD"
+        - "/opt/mssql-tools18/bin/sqlcmd"
+        - "-S"
+        - "localhost"
+        - "-U"
+        - "sa"
+        - "-P"
+        - "${MSSQL_SA_PASSWORD}"
+        - "-C"
+        - "-Q"
+        - "SELECT 1"
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    ports:
+      - "1444:1433"
+
+  bootstrap:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        /opt/mssql-tools18/bin/sqlcmd -S demoserver -U sa -P "${MSSQL_SA_PASSWORD}" -C -i /bootstrap/init-tenants.sql
+    volumes:
+      - ./bootstrap:/bootstrap
+    depends_on:
+      demoserver:
+        condition: service_healthy
+
+  quench:
+    build:
+      context: ../../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=sa
+      - SmithySettings_Target__Password=${MSSQL_SA_PASSWORD}
+      - SmithySettings_Target__ConnectionProperties__TrustServerCertificate=True
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Package:/metadata
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
+  verify:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        echo
+        echo '=================================================================='
+        echo '  Verification: same schema package, three tenant databases,'
+        echo '  one rolling rollout pass'
+        echo '=================================================================='
+        echo
+        for TENANT in Tenant_A Tenant_B Tenant_C; do
+          echo "--- $$TENANT ---"
+          /opt/mssql-tools18/bin/sqlcmd -S demoserver -U sa -P "${MSSQL_SA_PASSWORD}" -C -d $$TENANT -Q \
+            "SELECT feature, status FROM dbo.RolloutControl;
+             SELECT name AS index_name, type_desc FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.OrderHistory');"
+        done
+        echo
+        echo 'Single schema package. Three tenant databases. One rollout pass.'
+        echo 'Only Tenant_A (RolloutControl Ready) picked up the NCCI.'
+        echo 'Tenants B and C are intact and waiting for their own window.'
+        echo
+        echo 'To roll the NCCI to the next tenant:'
+        echo '  docker compose exec demoserver /opt/mssql-tools18/bin/sqlcmd \\'
+        echo '    -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -d Tenant_B -Q \\'
+        echo '    "UPDATE dbo.RolloutControl SET status = '"'"'Ready'"'"' WHERE feature = '"'"'OrderHistoryColumnstore'"'"';"'
+        echo '  docker compose run --rm quench'
+        echo
+    depends_on:
+      quench:
+        condition: service_completed_successfully

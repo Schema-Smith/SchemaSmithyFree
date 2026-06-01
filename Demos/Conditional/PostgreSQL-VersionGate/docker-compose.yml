@@ -1,0 +1,109 @@
+name: schemasmith-conditional-pg-demo
+
+# Conditional deployment demo: same schema package deploys against PostgreSQL 15
+# (the SchemaSmith floor) and PostgreSQL 18 (the current major). A virtual
+# generated column on OrderEvents.Status is gated by
+# `current_setting('server_version_num')::int >= 180000` -- it skips on PG15
+# (virtual generated columns landed in PG18) and applies on PG18.
+
+services:
+  pg15:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: conditional_demo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d conditional_demo"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "5415:5432"
+
+  pg18:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: conditional_demo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d conditional_demo"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "5418:5432"
+
+  quench-pg15:
+    build:
+      context: ../../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=pg15
+      - SmithySettings_Target__User=${POSTGRES_USER}
+      - SmithySettings_Target__Password=${POSTGRES_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Package:/metadata
+    depends_on:
+      pg15:
+        condition: service_healthy
+
+  quench-pg18:
+    build:
+      context: ../../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=pg18
+      - SmithySettings_Target__User=${POSTGRES_USER}
+      - SmithySettings_Target__Password=${POSTGRES_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Package:/metadata
+    depends_on:
+      pg18:
+        condition: service_healthy
+
+  verify:
+    image: postgres:18
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        echo
+        echo '=================================================================='
+        echo '  Verification: same schema package, two PostgreSQL versions'
+        echo '=================================================================='
+        echo
+        echo '--- PG15 (server_version_num < 180000): Status column SKIPPED ---'
+        psql -h pg15 -U ${POSTGRES_USER} -d conditional_demo -c "
+          SELECT column_name, data_type, is_generated, generation_expression
+            FROM information_schema.columns
+           WHERE table_name = 'OrderEvents'
+           ORDER BY ordinal_position;
+        "
+        echo
+        echo '--- PG18 (server_version_num >= 180000): Status column APPLIED ---'
+        echo '    attgenerated = "v" confirms the column is truly VIRTUAL'
+        psql -h pg18 -U ${POSTGRES_USER} -d conditional_demo -c "
+          SELECT c.column_name, c.data_type, c.is_generated, c.generation_expression,
+                 a.attgenerated AS gen_marker
+            FROM information_schema.columns c
+            JOIN pg_attribute a
+              ON a.attname = c.column_name
+             AND a.attrelid = (SELECT oid FROM pg_class WHERE relname = c.table_name)
+           WHERE c.table_name = 'OrderEvents'
+           ORDER BY c.ordinal_position;
+        "
+        echo
+        echo 'Single schema package. Two engine versions. Different schemas.'
+        echo 'ShouldApplyExpression in the column JSON did the version gating.'
+        echo
+    depends_on:
+      quench-pg15:
+        condition: service_completed_successfully
+      quench-pg18:
+        condition: service_completed_successfully

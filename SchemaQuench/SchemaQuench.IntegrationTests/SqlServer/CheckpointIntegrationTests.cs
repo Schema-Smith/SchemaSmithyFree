@@ -163,6 +163,72 @@ KindleForge
     }
 
     [Test]
+    public void ShouldResumeSuccessfullyWhenMissingTablesAndColumnsAlreadyCheckpointed()
+    {
+        // Regression test for the checkpoint-resume bug surfaced 2026-06-01: when a prior run
+        // checkpointed `MissingTablesAndColumns` as complete and errored later (or simply went
+        // through full success and is re-running), the next run on a fresh connection found
+        // the step marked done in the checkpoint and skipped re-parsing the table JSON. The
+        // downstream tracked steps (`ModifiedTables`, `IndexesAndConstraints`) then crashed
+        // with `Invalid object name '#Tables'` because the session-scoped temp tables didn't
+        // exist on the new connection. Fix: `MissingTablesAndColumns` is no longer wrapped in
+        // `_checkpointing.Track` — it always runs on every quench (database-idempotent, primes
+        // session state). MySQL has had the equivalent defense (`MySqlTempTablesExist` +
+        // `ParseMySqlTableJson` re-parse) inside `QuenchModifiedTables` /
+        // `QuenchIndexesAndConstraints` from the start.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", "ValidProduct");
+            FactoryContainer.Resolve<IConfigurationRoot>()["CheckpointDirectory"] = _checkpointDir;
+
+            var product = Product.Load();
+            // Pre-write a database checkpoint that claims MissingTablesAndColumns is complete.
+            // Pre-fix, this would cause the next run's `ModifiedTables` step to crash on
+            // `Invalid object name '#Tables'`.
+            var dbCheckpointContent = $@"# SchemaQuench Database Checkpoint
+# Product: {product.Name}
+# Template: Main
+# Server: {_server}
+# Database: {_mainDb}
+# Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+
+[Completed Steps]
+KindleForge
+MissingTablesAndColumns
+
+[Before Scripts]
+
+[Object Scripts]
+
+[After Tables Object Scripts]
+
+[Between Tables And Keys Scripts]
+
+[After Table Scripts]
+
+[Table Data Scripts]
+
+[After Scripts]
+";
+            var dbCheckpointPath = Path.Combine(_checkpointDir,
+                $"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.checkpoint");
+            File.WriteAllText(dbCheckpointPath, dbCheckpointContent);
+
+            RunSchemaQuench();
+
+            // Assert the deploy completed without the `Invalid object name '#Tables'` crash.
+            _errorLog.DidNotReceive().Error(Arg.Is<string>(s => s != null && s.Contains("Invalid object name '#Tables'")));
+            _errorLog.DidNotReceive().Error(Arg.Is<string>(s => s != null && s.Contains("Invalid object name '#Tables'")), Arg.Any<Exception>());
+
+            LogFactory.Clear();
+            FactoryContainer.Unregister<IEnvironment>();
+            FactoryContainer.Unregister<Schema.Checkpointing.ICheckpointing>();
+        }
+    }
+
+    [Test]
     public void ShouldPreserveCheckpointOnFailure()
     {
         // Verifies cleanup is skipped when a quench fails. Pre-writes a representative

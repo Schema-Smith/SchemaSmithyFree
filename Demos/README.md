@@ -11,6 +11,16 @@ Demo database schema packages for SQL Server, PostgreSQL, and MySQL, deployed by
 | Northwind | Done | Done | Done |
 | Sakila | Done | Done | Done |
 
+## Conditional Deployment Demos
+
+Demonstrations of `ShouldApplyExpression` (conditional deployment) on real engine pairs, supporting the *Production Server That Can't Be Upgraded* article (LinkedIn, 2026-06-11). See [`Conditional/`](Conditional/) for the three demos:
+
+- [`Conditional/PostgreSQL-VersionGate`](Conditional/PostgreSQL-VersionGate) — PG15 ↔ PG18, gating a virtual generated column on PG18+
+- [`Conditional/SqlServer-RollingRollout`](Conditional/SqlServer-RollingRollout) — SQL Server 2022 × 3 tenant databases, rolling out a nonclustered columnstore index one tenant per maintenance window via a `RolloutControl` table
+- [`Conditional/MySQL-VersionGate`](Conditional/MySQL-VersionGate) — MySQL 8.0 ↔ MySQL 9, gating a `VECTOR(384)` column on MySQL 9+
+
+These demos use a different docker layout than the products above (engine pairs rather than a single instance) and live in `Conditional/` rather than per-platform subdirectories.
+
 ## Quick Start
 
 Choose a platform and run the matching launcher.

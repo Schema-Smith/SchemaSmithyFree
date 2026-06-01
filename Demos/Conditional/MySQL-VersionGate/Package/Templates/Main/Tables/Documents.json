@@ -1,0 +1,25 @@
+{
+  "Name": "Documents",
+  "Columns": [
+    {
+      "Name": "DocumentId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "Title",
+      "DataType": "VARCHAR(200)"
+    },
+    {
+      "Name": "Body",
+      "DataType": "TEXT",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "IndexColumns": "DocumentId"
+    }
+  ]
+}

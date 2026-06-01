@@ -1,0 +1,31 @@
+{
+  "Schema": "public",
+  "Name": "Customers",
+  "Columns": [
+    {
+      "Name": "CustomerId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "Email",
+      "DataType": "VARCHAR(254)"
+    },
+    {
+      "Name": "DisplayName",
+      "DataType": "VARCHAR(120)",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_customers",
+      "PrimaryKey": true,
+      "IndexColumns": "CustomerId"
+    },
+    {
+      "Name": "uq_customers_email",
+      "Unique": true,
+      "IndexColumns": "Email"
+    }
+  ]
+}
