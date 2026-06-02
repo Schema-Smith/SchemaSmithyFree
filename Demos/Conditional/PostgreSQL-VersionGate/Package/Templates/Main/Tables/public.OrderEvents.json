@@ -1,0 +1,36 @@
+{
+  "Schema": "public",
+  "Name": "OrderEvents",
+  "Columns": [
+    {
+      "Name": "EventId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "OccurredAt",
+      "DataType": "TIMESTAMPTZ",
+      "Default": "now()"
+    },
+    {
+      "Name": "Payload",
+      "DataType": "JSONB",
+      "Nullable": true
+    },
+    {
+      "Name": "Status",
+      "DataType": "TEXT",
+      "Nullable": true,
+      "Generated": "ALWAYS",
+      "GenerationExpression": "(\"Payload\"->>'status')",
+      "Virtual": true,
+      "ShouldApplyExpression": "current_setting('server_version_num')::int >= 180000"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_orderevents",
+      "PrimaryKey": true,
+      "IndexColumns": "EventId"
+    }
+  ]
+}
