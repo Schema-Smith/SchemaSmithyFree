@@ -232,6 +232,79 @@ public class TableQuench_AddMissingItemsTests : BaseTableQuenchTests
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldKeepOneVariantWhenTwoSameNameColumnsHaveMutuallyExclusiveShouldApply()
+    {
+        // Regression test for the silent-divergence bug surfaced 2026-06-01: when a table JSON
+        // contained two same-named column entries with mutually exclusive ShouldApplyExpression,
+        // both rows were silently dropped during JSON parsing and the column never landed. The
+        // generated per-row UPDATE-then-DELETE statements matched on column name only, so any
+        // one row whose expression evaluated false would zero the ShouldApply flag on every row
+        // sharing the name -- including the sibling that was supposed to survive.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        // The variant whose ShouldApplyExpression evaluates true ("true") should survive
+        // with its declared type (INT). The other variant (VARCHAR(50), gated on "false") is skipped.
+        cmd.CommandText = $@"
+            SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyVariantColumn'
+              AND COLUMN_NAME = 'payload'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("int"));
+        conn.Close();
+    }
+
+    [Test]
+    public void TableQuench_ShouldKeepOneVariantWhenTwoSameNameIndexesHaveMutuallyExclusiveShouldApply()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        // The surviving variant indexes col1; the skipped variant targeted col2.
+        cmd.CommandText = $@"
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyVariantIndex'
+              AND INDEX_NAME = 'IDX_Variant'
+            ORDER BY SEQ_IN_INDEX";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("col1"));
+        conn.Close();
+    }
+
+    [Test]
+    public void TableQuench_ShouldKeepOneVariantWhenTwoSameNameFKsHaveMutuallyExclusiveShouldApply()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = $@"
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+            WHERE CONSTRAINT_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyVariantFK'
+              AND CONSTRAINT_NAME = 'FK_AddMyVariantFK_Variant'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("col1"));
+        conn.Close();
+    }
+
+    [Test]
+    public void TableQuench_ShouldKeepOneVariantWhenTwoSameNameCheckConstraintsHaveMutuallyExclusiveShouldApply()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = $@"
+            SELECT CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = '{TestSchema}'
+              AND CONSTRAINT_NAME = 'CHK_AddMyVariantCheck_Variant'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Does.Contain("`col1` > 0"));
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -263,6 +336,14 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyUniqueIndex` (`Id` INT NOT NULL,
 
 -- TableQuench_ShouldAddMissingColumnWithStringDefault
 CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyStringDefault` (`Id` INT NOT NULL);
+-- TableQuench_ShouldKeepOneVariantWhenTwoSameNameColumnsHaveMutuallyExclusiveShouldApply
+CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyVariantColumn` (`Id` INT NOT NULL);
+-- TableQuench_ShouldKeepOneVariantWhenTwoSameNameIndexesHaveMutuallyExclusiveShouldApply
+CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyVariantIndex` (`Id` INT NOT NULL, `col1` INT NOT NULL, `col2` INT NOT NULL);
+-- TableQuench_ShouldKeepOneVariantWhenTwoSameNameFKsHaveMutuallyExclusiveShouldApply
+CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyVariantFK` (`Id` INT NOT NULL PRIMARY KEY, `col1` INT NULL, `col2` INT NULL, KEY ix_variant_col1 (`col1`), KEY ix_variant_col2 (`col2`));
+-- TableQuench_ShouldKeepOneVariantWhenTwoSameNameCheckConstraintsHaveMutuallyExclusiveShouldApply
+CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyVariantCheck` (`Id` INT NOT NULL, `col1` INT NULL);
 
 -- Index Only
 CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyIndexIO` (`Id` INT NOT NULL);
@@ -346,6 +427,74 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyIndexIO` (`Id` INT NOT NULL);
                 ],
                 "Indexes": [
                     { "Name": "IDX_UniqueColumn", "IndexColumns": "UniqueColumn", "Unique": true }
+                ]
+            },
+            {
+                "Name": "AddMyVariantColumn",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "payload", "DataType": "INT", "Nullable": true, "ShouldApplyExpression": "true" },
+                    { "Name": "payload", "DataType": "VARCHAR(50)", "Nullable": true, "ShouldApplyExpression": "false" }
+                ]
+            },
+            {
+                "Name": "AddMyVariantIndex",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "col1", "DataType": "INT", "Nullable": false },
+                    { "Name": "col2", "DataType": "INT", "Nullable": false }
+                ],
+                "Indexes": [
+                    { "Name": "IDX_Variant", "IndexColumns": "col1", "ShouldApplyExpression": "true" },
+                    { "Name": "IDX_Variant", "IndexColumns": "col2", "ShouldApplyExpression": "false" }
+                ]
+            },
+            {
+                "Name": "AddMyVariantFK",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "col1", "DataType": "INT", "Nullable": true },
+                    { "Name": "col2", "DataType": "INT", "Nullable": true }
+                ],
+                "Indexes": [
+                    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "Id" },
+                    { "Name": "ix_variant_col1", "IndexColumns": "col1" },
+                    { "Name": "ix_variant_col2", "IndexColumns": "col2" }
+                ],
+                "ForeignKeys": [
+                    {
+                      "Name": "FK_AddMyVariantFK_Variant",
+                      "Columns": "col1",
+                      "RelatedTable": "AddMyVariantFK",
+                      "RelatedColumns": "Id",
+                      "ShouldApplyExpression": "true"
+                    },
+                    {
+                      "Name": "FK_AddMyVariantFK_Variant",
+                      "Columns": "col2",
+                      "RelatedTable": "AddMyVariantFK",
+                      "RelatedColumns": "Id",
+                      "ShouldApplyExpression": "false"
+                    }
+                ]
+            },
+            {
+                "Name": "AddMyVariantCheck",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "col1", "DataType": "INT", "Nullable": true }
+                ],
+                "CheckConstraints": [
+                    {
+                      "Name": "CHK_AddMyVariantCheck_Variant",
+                      "Expression": "`col1` > 0",
+                      "ShouldApplyExpression": "true"
+                    },
+                    {
+                      "Name": "CHK_AddMyVariantCheck_Variant",
+                      "Expression": "`col1` < 0",
+                      "ShouldApplyExpression": "false"
+                    }
                 ]
             }
             ]

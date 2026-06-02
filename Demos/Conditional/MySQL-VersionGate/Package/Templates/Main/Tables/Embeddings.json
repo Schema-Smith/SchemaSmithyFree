@@ -1,0 +1,42 @@
+{
+  "Name": "Embeddings",
+  "Columns": [
+    {
+      "Name": "EmbeddingId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "DocumentId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "Model",
+      "DataType": "VARCHAR(64)"
+    },
+    {
+      "Name": "Embedding",
+      "DataType": "VECTOR(384)",
+      "Nullable": true,
+      "ShouldApplyExpression": "CAST(SUBSTRING_INDEX(VERSION(), '.', 1) AS UNSIGNED) >= 9"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "IndexColumns": "EmbeddingId"
+    },
+    {
+      "Name": "ix_embeddings_document",
+      "IndexColumns": "DocumentId"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_embeddings_documents",
+      "Columns": "DocumentId",
+      "RelatedTable": "Documents",
+      "RelatedColumns": "DocumentId"
+    }
+  ]
+}

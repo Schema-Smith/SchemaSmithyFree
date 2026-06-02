@@ -203,6 +203,96 @@ SELECT CONVERT(VARCHAR(50), x.[value]) AS [value]
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldKeepOneVariantWhenTwoSameNameColumnsHaveMutuallyExclusiveShouldApply()
+    {
+        // Regression test for the silent-divergence bug surfaced 2026-06-01: when a table JSON
+        // contained two same-named column entries with mutually exclusive ShouldApplyExpression,
+        // both rows were silently dropped during JSON parsing and the column never landed. The
+        // generated per-row DELETE statements matched on column name only, so any one row whose
+        // expression evaluated false would delete every row that shared the name -- including
+        // the sibling that was supposed to survive.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        // The variant whose ShouldApplyExpression evaluates true ("1=1") should survive
+        // with its declared type (INT). The other variant (VARCHAR(50), gated on "0=1") is skipped.
+        cmd.CommandText = @"
+SELECT t.[name]
+  FROM sys.columns c WITH (NOLOCK)
+  JOIN sys.types t WITH (NOLOCK) ON t.user_type_id = c.user_type_id
+ WHERE c.object_id = OBJECT_ID('dbo.AddMyVariantColumn')
+   AND c.[name] = 'payload'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("int"));
+        conn.Close();
+    }
+
+    [Test]
+    public void TableQuench_ShouldKeepOneVariantWhenTwoSameNameIndexesHaveMutuallyExclusiveShouldApply()
+    {
+        // Same-name two-variant pattern for indexes -- the surviving variant should land with
+        // its declared shape, the skipped variant should not appear.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        // The variant whose ShouldApply evaluates true is a non-clustered index on [Col1] alone.
+        // The other variant (also named IDX_Variant) targets [Col2] and is gated false.
+        cmd.CommandText = @"
+SELECT STUFF((
+    SELECT ',' + c.[name]
+      FROM sys.index_columns ic
+      JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+     WHERE ic.object_id = OBJECT_ID('dbo.AddMyVariantIndex')
+       AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.AddMyVariantIndex') AND name = 'IDX_Variant')
+     ORDER BY ic.key_ordinal
+     FOR XML PATH('')
+), 1, 1, '')";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("Col1"));
+        conn.Close();
+    }
+
+    [Test]
+    public void TableQuench_ShouldKeepOneVariantWhenTwoSameNameFKsHaveMutuallyExclusiveShouldApply()
+    {
+        // Same-name two-variant pattern for foreign keys -- the surviving variant should land.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        // The surviving variant references [Col1]; the skipped variant referenced [Col2].
+        cmd.CommandText = @"
+SELECT c.[name]
+  FROM sys.foreign_keys fk
+  JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+  JOIN sys.columns c ON c.object_id = fkc.parent_object_id AND c.column_id = fkc.parent_column_id
+ WHERE fk.[name] = 'FK_AddMyVariantFK_Variant'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("Col1"));
+        conn.Close();
+    }
+
+    [Test]
+    public void TableQuench_ShouldKeepOneVariantWhenTwoSameNameCheckConstraintsHaveMutuallyExclusiveShouldApply()
+    {
+        // Same-name two-variant pattern for check constraints -- the surviving variant should land.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        // The surviving variant's expression checks [Col1]>0; the skipped variant checked [Col1]<0.
+        cmd.CommandText = @"
+SELECT SchemaSmith.fn_StripParenWrapping([definition])
+  FROM sys.check_constraints
+ WHERE [name] = 'CHK_AddMyVariantCheck_Variant'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("[Col1]>(0)"));
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -234,6 +324,14 @@ CREATE TABLE dbo.AddXmlIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, C
 CREATE TABLE dbo.AddClusteredlColumnStoreIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 INT NULL, Column4 VARCHAR(100) NULL, Column5 INT NOT NULL)
 --ShouldAddMissingNonClusteredColumnStoreIndex
 CREATE TABLE dbo.AddNonClusteredlColumnStoreIndex (Column1 INT NOT NULL, Column2 VARCHAR(200) NULL, Column3 INT NULL, Column4 VARCHAR(100) NULL, Column5 INT NOT NULL)
+--TableQuench_ShouldKeepOneVariantWhenTwoSameNameColumnsHaveMutuallyExclusiveShouldApply
+CREATE TABLE dbo.AddMyVariantColumn (Id INT NOT NULL)
+--TableQuench_ShouldKeepOneVariantWhenTwoSameNameIndexesHaveMutuallyExclusiveShouldApply
+CREATE TABLE dbo.AddMyVariantIndex (Id INT NOT NULL, Col1 INT NOT NULL, Col2 INT NOT NULL)
+--TableQuench_ShouldKeepOneVariantWhenTwoSameNameFKsHaveMutuallyExclusiveShouldApply
+CREATE TABLE dbo.AddMyVariantFK (Id INT NOT NULL PRIMARY KEY, Col1 INT NULL, Col2 INT NULL)
+--TableQuench_ShouldKeepOneVariantWhenTwoSameNameCheckConstraintsHaveMutuallyExclusiveShouldApply
+CREATE TABLE dbo.AddMyVariantCheck (Id INT NOT NULL, Col1 INT NULL)
 
 
 --Index Only
@@ -524,6 +622,97 @@ CREATE TABLE dbo.AddMyIndexIO (Id INT NOT NULL)
                       "PrimaryKey": false,
                       "Unique": false,
                       "IncludeColumns": "[Column2],[Column3],[Column4]"
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddMyVariantColumn]",
+                "Columns": [
+                    {
+                      "Name": "[Id]",
+                      "DataType": "INT",
+                      "Nullable": false
+                    },
+                    {
+                      "Name": "[payload]",
+                      "DataType": "INT",
+                      "Nullable": true,
+                      "ShouldApplyExpression": "1=1"
+                    },
+                    {
+                      "Name": "[payload]",
+                      "DataType": "VARCHAR(50)",
+                      "Nullable": true,
+                      "ShouldApplyExpression": "0=1"
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddMyVariantIndex]",
+                "Columns": [
+                    { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+                    { "Name": "[Col1]", "DataType": "INT", "Nullable": false },
+                    { "Name": "[Col2]", "DataType": "INT", "Nullable": false }
+                ],
+                "Indexes": [
+                    {
+                      "Name": "[IDX_Variant]",
+                      "IndexColumns": "[Col1]",
+                      "ShouldApplyExpression": "1=1"
+                    },
+                    {
+                      "Name": "[IDX_Variant]",
+                      "IndexColumns": "[Col2]",
+                      "ShouldApplyExpression": "0=1"
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddMyVariantFK]",
+                "Columns": [
+                    { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+                    { "Name": "[Col1]", "DataType": "INT", "Nullable": true },
+                    { "Name": "[Col2]", "DataType": "INT", "Nullable": true }
+                ],
+                "ForeignKeys": [
+                    {
+                      "Name": "[FK_AddMyVariantFK_Variant]",
+                      "Columns": "[Col1]",
+                      "RelatedTableSchema": "dbo",
+                      "RelatedTable": "[AddMyVariantFK]",
+                      "RelatedColumns": "[Id]",
+                      "ShouldApplyExpression": "1=1"
+                    },
+                    {
+                      "Name": "[FK_AddMyVariantFK_Variant]",
+                      "Columns": "[Col2]",
+                      "RelatedTableSchema": "dbo",
+                      "RelatedTable": "[AddMyVariantFK]",
+                      "RelatedColumns": "[Id]",
+                      "ShouldApplyExpression": "0=1"
+                    }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddMyVariantCheck]",
+                "Columns": [
+                    { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+                    { "Name": "[Col1]", "DataType": "INT", "Nullable": true }
+                ],
+                "CheckConstraints": [
+                    {
+                      "Name": "CHK_AddMyVariantCheck_Variant",
+                      "Expression": "[Col1]>0",
+                      "ShouldApplyExpression": "1=1"
+                    },
+                    {
+                      "Name": "CHK_AddMyVariantCheck_Variant",
+                      "Expression": "[Col1]<0",
+                      "ShouldApplyExpression": "0=1"
                     }
                 ]
             }

@@ -270,9 +270,23 @@ public class DatabaseQuench
                 }
 
                 // Step: Missing tables and columns
+                // Intentionally NOT wrapped in `_checkpointing.Track` — this step parses the
+                // table JSON into session-scoped temp tables (`#Tables` on SQL Server,
+                // `temp_tables` on PG, `_SchemaSmith_Tables` on MySQL) before delegating to
+                // `MissingTableAndColumnQuench`. The temp tables are consumed by the next two
+                // tracked steps (`ModifiedTables`, `IndexesAndConstraints`); they DON'T survive
+                // across connections, so on resume the next session has no temp state.
+                // The action itself is database-idempotent (the engine procs add missing
+                // tables/columns and no-op when they already exist), so always-running it on
+                // resume is safe and cheap. Skip-on-resume would fire `Invalid object name
+                // '#Tables'` (SQL Server) / `relation "temp_tables" does not exist` (PG) on
+                // the next tracked step. MySQL's `QuenchModifiedTables` and
+                // `QuenchIndexesAndConstraints` already defend against the missing-temp-tables
+                // case via `MySqlTempTablesExist` + `ParseMySqlTableJson` re-parse; lifting the
+                // Track wrapper here is the equivalent defense for SQL Server / PG.
                 if (!_template.IndexOnlyTableQuenches && _updateTables)
                 {
-                    _checkpointing.Track(DbScope, "MissingTablesAndColumns", () => QuenchMissingTablesAndColumns(effectiveTableCmd));
+                    QuenchMissingTablesAndColumns(effectiveTableCmd);
                 }
 
                 if (!IsWhatIf)

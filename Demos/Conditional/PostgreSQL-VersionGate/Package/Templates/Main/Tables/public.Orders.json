@@ -1,0 +1,39 @@
+{
+  "Schema": "public",
+  "Name": "Orders",
+  "Columns": [
+    {
+      "Name": "OrderId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "CustomerId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "OrderedAt",
+      "DataType": "TIMESTAMPTZ",
+      "Default": "now()"
+    },
+    {
+      "Name": "TotalCents",
+      "DataType": "BIGINT",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_orders",
+      "PrimaryKey": true,
+      "IndexColumns": "OrderId"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_orders_customers",
+      "Columns": "CustomerId",
+      "RelatedTable": "Customers",
+      "RelatedColumns": "CustomerId"
+    }
+  ]
+}

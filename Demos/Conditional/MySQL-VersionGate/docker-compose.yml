@@ -1,0 +1,103 @@
+name: schemasmith-conditional-mysql-demo
+
+# Conditional deployment demo: same schema package deploys against MySQL 8.0
+# (the SchemaSmith floor) and MySQL 9 (current). An Embeddings.Embedding
+# column declared as VECTOR(384) is gated by
+# `CAST(SUBSTRING_INDEX(VERSION(), '.', 1) AS UNSIGNED) >= 9` -- the VECTOR
+# type landed in MySQL 9, so MySQL 8.0 skips the column entirely and the
+# table lands without it. MySQL 9 applies the full schema.
+
+services:
+  mysql8:
+    image: mysql:8.0
+    # log-bin-trust-function-creators=1 lets a non-SUPER user (the demo user) create the
+    # stored functions SchemaSmith's KindleTheForge installs. Without it, MySQL rejects
+    # CREATE FUNCTION because binary logging is on by default and non-SUPER users could
+    # in principle write non-deterministic functions that desync the binlog.
+    command: --log-bin-trust-function-creators=1
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: conditional_demo
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD} --silent && mysql -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "3308:3306"
+
+  mysql9:
+    image: mysql:9
+    command: --log-bin-trust-function-creators=1
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: conditional_demo
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD} --silent && mysql -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "3309:3306"
+
+  quench-mysql8:
+    build:
+      context: ../../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=mysql8
+      - SmithySettings_Target__User=${MYSQL_USER}
+      - SmithySettings_Target__Password=${MYSQL_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Package:/metadata
+    depends_on:
+      mysql8:
+        condition: service_healthy
+
+  quench-mysql9:
+    build:
+      context: ../../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=mysql9
+      - SmithySettings_Target__User=${MYSQL_USER}
+      - SmithySettings_Target__Password=${MYSQL_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Package:/metadata
+    depends_on:
+      mysql9:
+        condition: service_healthy
+
+  verify:
+    image: mysql:9
+    environment:
+      MYSQL_PWD: ${MYSQL_PASSWORD}
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        echo
+        echo '=================================================================='
+        echo '  Verification: same schema package, two MySQL versions'
+        echo '=================================================================='
+        echo
+        echo '--- MySQL 8.0 (VERSION() major < 9): Embedding column SKIPPED ---'
+        mysql -h mysql8 -u${MYSQL_USER} -D conditional_demo -e "DESCRIBE Embeddings;"
+        echo
+        echo '--- MySQL 9 (VERSION() major >= 9): Embedding column APPLIED as VECTOR(384) ---'
+        mysql -h mysql9 -u${MYSQL_USER} -D conditional_demo -e "DESCRIBE Embeddings;"
+        echo
+        echo 'Single schema package. Two engine versions. Different schemas.'
+        echo 'ShouldApplyExpression in the column JSON did the version gating.'
+        echo
+    depends_on:
+      quench-mysql8:
+        condition: service_completed_successfully
+      quench-mysql9:
+        condition: service_completed_successfully

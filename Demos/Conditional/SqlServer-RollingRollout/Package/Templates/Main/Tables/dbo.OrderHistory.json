@@ -1,0 +1,42 @@
+{
+  "Schema": "dbo",
+  "Name": "OrderHistory",
+  "Columns": [
+    {
+      "Name": "OrderId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "TenantId",
+      "DataType": "INT"
+    },
+    {
+      "Name": "CustomerId",
+      "DataType": "INT"
+    },
+    {
+      "Name": "OrderDate",
+      "DataType": "DATETIME2"
+    },
+    {
+      "Name": "OrderTotal",
+      "DataType": "DECIMAL(18,2)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_OrderHistory",
+      "PrimaryKey": true,
+      "Clustered": true,
+      "IndexColumns": "OrderId"
+    },
+    {
+      "Name": "NCCI_OrderHistory_Analytics",
+      "ColumnStore": true,
+      "Clustered": false,
+      "IncludeColumns": "TenantId, CustomerId, OrderDate, OrderTotal",
+      "CompressionType": "COLUMNSTORE",
+      "ShouldApplyExpression": "EXISTS (SELECT 1 FROM dbo.RolloutControl WHERE feature = 'OrderHistoryColumnstore' AND status = 'Ready')"
+    }
+  ]
+}

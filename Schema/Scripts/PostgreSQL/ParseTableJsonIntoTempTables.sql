@@ -4,9 +4,14 @@
 
     DROP TABLE IF EXISTS temp_tables;
 
+    -- "_RowId" gives each parsed row a unique identifier so the per-row ShouldApply DELETE
+    -- below targets exactly the source row whose expression evaluated false. Without it,
+    -- the DELETE matched on ("Schema", "Name") and would silently wipe both rows when two
+    -- entries shared a name with mutually exclusive ShouldApply expressions.
     CREATE TEMPORARY TABLE temp_tables AS
     WITH my_tables(arr) AS (VALUES(table_json::JSON))
-    SELECT elem ->> 'Schema' AS "Schema",
+    SELECT ROW_NUMBER() OVER () AS "_RowId",
+           elem ->> 'Schema' AS "Schema",
            elem ->> 'Name' AS "Name",
            COALESCE(elem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
            COALESCE(elem ->> 'OldName', '') AS "OldName",
@@ -18,7 +23,8 @@
            COALESCE(NULLIF((elem ->> 'FillFactor')::INT2, 0), 100) AS "FillFactor"
     FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem;
 
-    SELECT STRING_AGG('DELETE FROM temp_tables WHERE "Schema" = ''' || "Schema" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    -- ShouldApply scoped by "_RowId" so each generated DELETE targets exactly the source row.
+    SELECT STRING_AGG('DELETE FROM temp_tables WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
       INTO sql_script
       FROM temp_tables
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -27,7 +33,8 @@
     DROP TABLE IF EXISTS temp_columns;
     CREATE TEMPORARY TABLE temp_columns AS
     WITH my_tables(arr) AS (VALUES(table_json::JSON))
-    SELECT elem ->> 'Schema' AS "TableSchema",
+    SELECT ROW_NUMBER() OVER () AS "_RowId",
+           elem ->> 'Schema' AS "TableSchema",
            elem ->> 'Name' AS "TableName",
            celem ->> 'Name' AS "Name",
            COALESCE(celem ->> 'DataType', '') AS "DataType",
@@ -64,7 +71,7 @@
                              WHEN "DataType" ILIKE 'bpchar%' THEN REGEXP_REPLACE("DataType", 'bpchar', 'CHAR', 'i')
                              ELSE "DataType" END;
 
-    SELECT STRING_AGG('DELETE FROM temp_columns WHERE "TableSchema" = ''' || "TableSchema" || ''' AND "TableName" = ''' || "TableName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_columns WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
       INTO sql_script
       FROM temp_columns
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -73,7 +80,8 @@
     DROP TABLE IF EXISTS temp_indexes;
     CREATE TEMPORARY TABLE temp_indexes AS
     WITH my_tables(arr) AS (VALUES(table_json::JSON))
-    SELECT elem ->> 'Schema' AS "TableSchema",
+    SELECT ROW_NUMBER() OVER () AS "_RowId",
+           elem ->> 'Schema' AS "TableSchema",
            elem ->> 'Name' AS "TableName",
            celem ->> 'Name' AS "Name",
            COALESCE((celem ->> 'PrimaryKey')::BOOLEAN, false) AS "PrimaryKey",
@@ -102,7 +110,7 @@
                         AND t."Name" = "TableName"
                         AND t."UpdateFillFactor" = true);
 
-    SELECT STRING_AGG('DELETE FROM temp_indexes WHERE "TableSchema" = ''' || "TableSchema" || ''' AND "TableName" = ''' || "TableName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_indexes WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
       INTO sql_script
       FROM temp_indexes
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -111,7 +119,8 @@
     DROP TABLE IF EXISTS temp_checks;
     CREATE TEMPORARY TABLE temp_checks AS
     WITH my_tables(arr) AS (VALUES(table_json::JSON))
-    SELECT elem ->> 'Schema' AS "TableSchema",
+    SELECT ROW_NUMBER() OVER () AS "_RowId",
+           elem ->> 'Schema' AS "TableSchema",
            elem ->> 'Name' AS "TableName",
            celem ->> 'Name' AS "Name",
            COALESCE(celem ->> 'Expression', '') AS "Expression",
@@ -121,7 +130,7 @@
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'CheckConstraints')::JSON) AS celem(value);
 
-    SELECT STRING_AGG('DELETE FROM temp_checks WHERE "TableSchema" = ''' || "TableSchema" || ''' AND "TableName" = ''' || "TableName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_checks WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
       INTO sql_script
       FROM temp_checks
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -130,7 +139,8 @@
     DROP TABLE IF EXISTS temp_fks;
     CREATE TEMPORARY TABLE temp_fks AS
     WITH my_tables(arr) AS (VALUES(table_json::JSON))
-    SELECT elem ->> 'Schema' AS "TableSchema",
+    SELECT ROW_NUMBER() OVER () AS "_RowId",
+           elem ->> 'Schema' AS "TableSchema",
            elem ->> 'Name' AS "TableName",
            celem ->> 'Name' AS "Name",
            celem ->> 'Columns' AS "Columns",
@@ -146,7 +156,7 @@
     FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'ForeignKeys')::JSON) AS celem(value);
 
-    SELECT STRING_AGG('DELETE FROM temp_fks WHERE "TableSchema" = ''' || "TableSchema" || ''' AND "TableName" = ''' || "TableName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_fks WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
       INTO sql_script
       FROM temp_fks
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -155,7 +165,8 @@
     DROP TABLE IF EXISTS temp_statistics;
     CREATE TEMPORARY TABLE temp_statistics AS
     WITH my_tables(arr) AS (VALUES(table_json::JSON))
-    SELECT elem ->> 'Schema' AS "TableSchema",
+    SELECT ROW_NUMBER() OVER () AS "_RowId",
+           elem ->> 'Schema' AS "TableSchema",
            elem ->> 'Name' AS "TableName",
            celem ->> 'Name' AS "Name",
            COALESCE(celem ->> 'Kind', '') AS "Kind",
@@ -164,7 +175,7 @@
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Statistics')::JSON) AS celem(value);
 
-    SELECT STRING_AGG('DELETE FROM temp_statistics WHERE "TableSchema" = ''' || "TableSchema" || ''' AND "TableName" = ''' || "TableName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_statistics WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
       INTO sql_script
       FROM temp_statistics
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -173,7 +184,8 @@
     DROP TABLE IF EXISTS temp_excludes;
     CREATE TEMPORARY TABLE temp_excludes AS
     WITH my_tables(arr) AS (VALUES(table_json::JSON))
-    SELECT elem ->> 'Schema' AS "TableSchema",
+    SELECT ROW_NUMBER() OVER () AS "_RowId",
+           elem ->> 'Schema' AS "TableSchema",
            elem ->> 'Name' AS "TableName",
            celem ->> 'Name' AS "Name",
            (celem ->> 'ExcludeColumns')::JSON AS "ExcludeColumns",
@@ -185,7 +197,7 @@
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'ExcludeConstraints')::JSON) AS celem(value);
 
-    SELECT STRING_AGG('DELETE FROM temp_excludes WHERE "TableSchema" = ''' || "TableSchema" || ''' AND "TableName" = ''' || "TableName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_excludes WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
       INTO sql_script
       FROM temp_excludes
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
