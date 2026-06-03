@@ -16,14 +16,10 @@ using System.Linq;
 namespace SchemaQuench.IntegrationTests.PostgreSQL;
 
 /// <summary>
-/// Slice-2 (#257) TemplateTargets enumeration-override integration tests for PostgreSQL.
-/// Mirrors the SQL Server fixture — overriding <c>TenantBody.Schemas</c> via
-/// <c>Target.TemplateTargets</c> must REPLACE the per-DB SchemaDiscovery result so the
-/// per-iteration deployment runs only against the overridden schemas, the source-disclosure
-/// log line surfaces the override origin, and downstream tracking matches a discovery-driven
-/// run on the same tenant set.
-/// <para><c>CreateIfMissing: true</c> provisioning is out of scope for this slice and lands
-/// in slice 3 (schema axis). Tests in this file pre-create the schemas before quenching.</para>
+/// Slice-2/3 (#257) TemplateTargets integration tests for PostgreSQL — mirrors the SQL Server
+/// fixture. Slice 2 covers the existing-tenants enumeration-override happy path; slice 3 adds
+/// the provisioning (<c>CreateIfMissing: true</c>) and skip-missing (<c>CreateIfMissing: false</c>)
+/// paths. Database-axis provisioning lands in slice 4.
 /// </summary>
 [Category("PostgreSQL")]
 public class TemplateTargetsHappyPathTests
@@ -108,6 +104,116 @@ public class TemplateTargetsHappyPathTests
                 ClearTemplateTargets(config);
                 ClearTargetFilters(config);
                 DropTenantSchemas(DefaultTenants);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void OverrideWithCreateIfMissing_ProvisionsMissingSchemasAndDeploys()
+    {
+        // CreateIfMissing: true — override lists one existing tenant + one schema NOT yet created.
+        // SchemaProvisioner emits CREATE SCHEMA IF NOT EXISTS for the missing one, then per-iteration
+        // deployment runs against both.
+        const string existingTenant = "tenant_acme";
+        const string newTenant = "tenant_newly_created";
+        var overrideSchemas = new[] { existingTenant, newTenant };
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(new[] { existingTenant });
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+
+            config["Target:TemplateTargets:TenantBody:Schemas:0"] = overrideSchemas[0];
+            config["Target:TemplateTargets:TenantBody:Schemas:1"] = overrideSchemas[1];
+            config["Target:TemplateTargets:TenantBody:CreateIfMissing"] = "true";
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                foreach (var tenant in overrideSchemas)
+                    _progressLog.Received(1).Info(
+                        $"[{_server}].[{_mainDb}] [Schema: {tenant}] Successfully Quenched");
+
+                _progressLog.Received().Info(Arg.Is<string>(s =>
+                    s.Contains($"Creating schema \"{newTenant}\"") &&
+                    s.Contains("CreateIfMissing: true")));
+
+                Assert.That(SchemaExists(newTenant), Is.True,
+                    "CreateIfMissing: true must provision missing override entries.");
+
+                foreach (var tenant in overrideSchemas)
+                    AssertMigrationTracked(TenantBodyTemplate, tenant,
+                        "Before Scripts/SeedTenantMarker.sql");
+            }
+            finally
+            {
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTenantSchemas(new[] { existingTenant, newTenant });
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void OverrideWithoutCreateIfMissing_SkipsMissingSchemasWithInfoLog()
+    {
+        // CreateIfMissing: false (default) — missing override entries are SKIPPED with an info log.
+        // The schema is NOT created (negative control).
+        const string existingTenant = "tenant_acme";
+        const string missingTenant = "tenant_skipped";
+        var overrideSchemas = new[] { existingTenant, missingTenant };
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(new[] { existingTenant });
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+
+            config["Target:TemplateTargets:TenantBody:Schemas:0"] = overrideSchemas[0];
+            config["Target:TemplateTargets:TenantBody:Schemas:1"] = overrideSchemas[1];
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                _progressLog.Received(1).Info(
+                    $"[{_server}].[{_mainDb}] [Schema: {existingTenant}] Successfully Quenched");
+
+                _progressLog.DidNotReceive().Info(
+                    $"[{_server}].[{_mainDb}] [Schema: {missingTenant}] Successfully Quenched");
+
+                _progressLog.Received().Info(Arg.Is<string>(s =>
+                    s.Contains($"Schema '{missingTenant}'") &&
+                    s.Contains("TemplateTargets CreateIfMissing is false") &&
+                    s.Contains("skipping this iteration")));
+
+                Assert.That(SchemaExists(missingTenant), Is.False,
+                    "Skip-missing must NOT provision the schema.");
+
+                AssertMigrationTracked(TenantBodyTemplate, existingTenant,
+                    "Before Scripts/SeedTenantMarker.sql");
+                AssertMigrationNotTracked(TenantBodyTemplate, missingTenant,
+                    "Before Scripts/SeedTenantMarker.sql");
+            }
+            finally
+            {
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTenantSchemas(new[] { existingTenant, missingTenant });
                 LogFactory.Clear();
                 FactoryContainer.Unregister<IEnvironment>();
             }
@@ -267,5 +373,21 @@ $$;";
         var result = cmd.ExecuteScalar();
         conn.Close();
         return Convert.ToInt32(result);
+    }
+
+    private bool SchemaExists(string schemaName)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = @name";
+        var p = cmd.CreateParameter();
+        p.ParameterName = "@name";
+        p.Value = schemaName;
+        cmd.Parameters.Add(p);
+        var result = cmd.ExecuteScalar();
+        conn.Close();
+        return Convert.ToInt32(result) > 0;
     }
 }

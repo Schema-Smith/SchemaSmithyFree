@@ -16,14 +16,14 @@ using System.Linq;
 namespace SchemaQuench.IntegrationTests.SqlServer;
 
 /// <summary>
-/// Slice-2 (#257) TemplateTargets enumeration-override integration tests for SQL Server.
-/// Verifies the existing-tenants happy path: a <c>Target.TemplateTargets.TenantBody.Schemas</c>
+/// Slice-2/3 (#257) TemplateTargets integration tests for SQL Server.
+/// <para>Slice 2 verifies the existing-tenants happy path: a <c>Target.TemplateTargets.TenantBody.Schemas</c>
 /// override REPLACES the per-DB SchemaDiscovery result so the per-iteration deployment runs
 /// only against the overridden schemas, the source-disclosure log line surfaces the override
-/// origin, and downstream tracking matches a discovery-driven run on the same tenant set.
-/// <para><c>CreateIfMissing: true</c> provisioning is out of scope for this slice and lands
-/// in slice 3 (schema axis) / slice 4 (database axis). Tests in this file pre-create the
-/// schemas before quenching.</para>
+/// origin, and downstream tracking matches a discovery-driven run on the same tenant set.</para>
+/// <para>Slice 3 adds the provisioning + skip-missing paths: <c>CreateIfMissing: true</c> provisions
+/// missing schemas via per-engine idempotent DDL; <c>CreateIfMissing: false</c> (default) skips
+/// missing entries with an info log. Database-axis provisioning lands in slice 4.</para>
 /// </summary>
 [Category("SqlServer")]
 public class TemplateTargetsHappyPathTests
@@ -107,6 +107,130 @@ public class TemplateTargetsHappyPathTests
                 ClearTemplateTargets(config);
                 ClearTargetFilters(config);
                 DropTenantSchemas(DefaultTenants);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void OverrideWithCreateIfMissing_ProvisionsMissingSchemasAndDeploys()
+    {
+        // CreateIfMissing: true — override lists one existing tenant + one schema NOT yet created
+        // on the target. SchemaProvisioner emits idempotent CREATE SCHEMA for the missing one,
+        // then per-iteration deployment runs against both. Both end up with template content
+        // and a provisioning log line surfaces for the created schema.
+        const string existingTenant = "tenant_acme";
+        const string newTenant = "tenant_newly_created";
+        var overrideSchemas = new[] { existingTenant, newTenant };
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            // Pre-create only the existing tenant. The new tenant's schema does NOT exist yet.
+            ResetTrackingAndCreateTenantSchemas(new[] { existingTenant });
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+
+            config["Target:TemplateTargets:TenantBody:Schemas:0"] = overrideSchemas[0];
+            config["Target:TemplateTargets:TenantBody:Schemas:1"] = overrideSchemas[1];
+            config["Target:TemplateTargets:TenantBody:CreateIfMissing"] = "true";
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Both tenants completed their iteration (the missing one was provisioned first).
+                foreach (var tenant in overrideSchemas)
+                    _progressLog.Received(1).Info(
+                        $"[{_server}].[{_mainDb}] [Schema: {tenant}] Successfully Quenched");
+
+                // Provisioning log line surfaced for the new tenant.
+                _progressLog.Received().Info(Arg.Is<string>(s =>
+                    s.Contains($"Creating schema [{newTenant}]") &&
+                    s.Contains("CreateIfMissing: true")));
+
+                // The new tenant's schema now exists on the target.
+                Assert.That(SchemaExists(newTenant), Is.True,
+                    "CreateIfMissing: true must provision missing override entries.");
+
+                // Both tenants have migration tracking rows.
+                foreach (var tenant in overrideSchemas)
+                    AssertMigrationTracked(TenantBodyTemplate, tenant,
+                        "MigrationScripts/Before/SeedTenantMarker.sql");
+            }
+            finally
+            {
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTenantSchemas(new[] { existingTenant, newTenant });
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void OverrideWithoutCreateIfMissing_SkipsMissingSchemasWithInfoLog()
+    {
+        // CreateIfMissing: false (default) — override lists one existing tenant + one missing tenant.
+        // The missing one is SKIPPED with an info log naming it; the existing one deploys normally.
+        // The missing schema is NOT created (the negative-control: the engine must not silently
+        // upgrade a skip-missing override into a create).
+        const string existingTenant = "tenant_acme";
+        const string missingTenant = "tenant_skipped";
+        var overrideSchemas = new[] { existingTenant, missingTenant };
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(new[] { existingTenant });
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+
+            config["Target:TemplateTargets:TenantBody:Schemas:0"] = overrideSchemas[0];
+            config["Target:TemplateTargets:TenantBody:Schemas:1"] = overrideSchemas[1];
+            // CreateIfMissing intentionally absent — defaults to false.
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Existing tenant completed.
+                _progressLog.Received(1).Info(
+                    $"[{_server}].[{_mainDb}] [Schema: {existingTenant}] Successfully Quenched");
+
+                // Missing tenant did NOT complete (skip-missing — the unit short-circuits).
+                _progressLog.DidNotReceive().Info(
+                    $"[{_server}].[{_mainDb}] [Schema: {missingTenant}] Successfully Quenched");
+
+                // Skip log line names the missing schema + the CreateIfMissing-is-false reason.
+                _progressLog.Received().Info(Arg.Is<string>(s =>
+                    s.Contains($"Schema '{missingTenant}'") &&
+                    s.Contains("TemplateTargets CreateIfMissing is false") &&
+                    s.Contains("skipping this iteration")));
+
+                // Missing schema must NOT have been created (negative control).
+                Assert.That(SchemaExists(missingTenant), Is.False,
+                    "Skip-missing must NOT provision the schema.");
+
+                // Migration tracking exists for the existing tenant, NOT for the skipped one.
+                AssertMigrationTracked(TenantBodyTemplate, existingTenant,
+                    "MigrationScripts/Before/SeedTenantMarker.sql");
+                AssertMigrationNotTracked(TenantBodyTemplate, missingTenant,
+                    "MigrationScripts/Before/SeedTenantMarker.sql");
+            }
+            finally
+            {
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTenantSchemas(new[] { existingTenant, missingTenant });
                 LogFactory.Clear();
                 FactoryContainer.Unregister<IEnvironment>();
             }
@@ -274,5 +398,21 @@ IF SCHEMA_ID('{tenant}') IS NOT NULL EXEC('DROP SCHEMA [{tenant}]');";
         var result = cmd.ExecuteScalar();
         conn.Close();
         return Convert.ToInt32(result);
+    }
+
+    private bool SchemaExists(string schemaName)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM sys.schemas WHERE name = @name";
+        var p = cmd.CreateParameter();
+        p.ParameterName = "@name";
+        p.Value = schemaName;
+        cmd.Parameters.Add(p);
+        var result = cmd.ExecuteScalar();
+        conn.Close();
+        return Convert.ToInt32(result) > 0;
     }
 }

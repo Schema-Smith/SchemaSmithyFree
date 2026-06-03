@@ -1329,6 +1329,116 @@ public class ProductQuenchTests
 
     #endregion
 
+    #region TemplateTargets Provisioning Flags (Slice 3 — Issue #257)
+
+    [Test]
+    public void EnumerateWorkUnitsForTemplate_SchemaOverride_CarriesSchemaFromOverrideTrue()
+    {
+        // Slice-3 flag: SchemaFromOverride is set true on every unit whose schema came from a
+        // TemplateTargets:<T>:Schemas override. Drives the override-vs-discovery branch in
+        // DatabaseQuench.EnsureSchemaExists — discovery-sourced units keep today's strict
+        // template-level CreateSchemaIfMissing behavior.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "ordering_b" };
+
+            var template = new Template
+            {
+                Name = "TenantSchema",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.That(units.All(u => u.SchemaFromOverride), Is.True);
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:TenantSchema:Schemas:0"] = "acme"
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnitsForTemplate_SchemaOverrideWithCreateIfMissing_CarriesProvisionFlag()
+    {
+        // CreateIfMissing: true on the override surfaces as ProvisionSchemaIfMissing = true on
+        // every unit. DatabaseQuench delegates to SchemaProvisioner on units carrying this flag
+        // when their schema is missing on target.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "ordering_b" };
+
+            var template = new Template
+            {
+                Name = "TenantSchema",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.That(units.All(u => u.ProvisionSchemaIfMissing), Is.True);
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:TenantSchema:Schemas:0"] = "acme",
+            ["Target:TemplateTargets:TenantSchema:CreateIfMissing"] = "true"
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnitsForTemplate_SchemaOverrideWithoutCreateIfMissing_LeavesProvisionFlagFalse()
+    {
+        // CreateIfMissing absent / false (default) → ProvisionSchemaIfMissing stays false.
+        // Override-sourced units with this combo SKIP missing schemas (no error, no provisioning).
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "ordering_b" };
+
+            var template = new Template
+            {
+                Name = "TenantSchema",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.That(units.All(u => u.SchemaFromOverride && !u.ProvisionSchemaIfMissing), Is.True);
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:TenantSchema:Schemas:0"] = "acme"
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnitsForTemplate_NoOverride_BothProvisioningFlagsFalse()
+    {
+        // Discovery-sourced units never carry the slice-3 override flags — today's behavior
+        // is preserved bit-for-bit.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "ordering_b" };
+            quench.SchemaDiscoveryResults[("primary", "ordering_b")] = new List<string> { "acme" };
+
+            var template = new Template
+            {
+                Name = "TenantSchema",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.That(units.All(u => !u.SchemaFromOverride && !u.ProvisionSchemaIfMissing), Is.True);
+        });
+    }
+
+    #endregion
+
     #region Schema-Template Work-Unit Enumeration (Slice 3) — helpers shared with slice 2
 
     /// <summary>

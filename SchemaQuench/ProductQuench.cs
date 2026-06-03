@@ -886,7 +886,13 @@ public class ProductQuench
                     workUnits.Add(new WorkUnit(server, db, template.Name, schema)
                     {
                         DatabaseSource = databaseSource,
-                        SchemaSource = schemaSource
+                        SchemaSource = schemaSource,
+                        // Slice-3 (#257): carry the override origin + provisioning flag onto the
+                        // unit so per-iteration deployment can branch on (a) override-vs-discovery
+                        // and (b) CreateIfMissing for the skip-missing path. Discovery-sourced
+                        // units keep both fields at default — today's behavior is preserved.
+                        SchemaFromOverride = schemasOverride,
+                        ProvisionSchemaIfMissing = schemasOverride && overrideEntry!.CreateIfMissing
                     });
             }
             else
@@ -1011,7 +1017,14 @@ public class ProductQuench
             suppressKindling, _whatIfOnly, _runScriptsTwice, _dropRemovedTables,
             _product.DropUnknownIndexes,
             _updateTables && template.Tables.Count > 0, _deliverData, _checkpointing,
-            _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _forceReKindle);
+            _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _forceReKindle)
+        {
+            // Slice-3 (#257): carry the override-origin signals through so EnsureSchemaExists
+            // can branch on TemplateTargets-driven provisioning + skip-missing. Default values on
+            // the WorkUnit (false / false) preserve existing behavior for discovery-sourced units.
+            SchemaFromOverride = unit.SchemaFromOverride,
+            ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing
+        };
         quench.Execute();
         if (!quench.QuenchSuccessful)
         {

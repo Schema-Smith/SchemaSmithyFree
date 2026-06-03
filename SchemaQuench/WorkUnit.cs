@@ -47,4 +47,25 @@ public sealed record WorkUnit(
     /// stay unaffected.
     /// </summary>
     public string SchemaSource { get; init; } = "";
+
+    /// <summary>
+    /// True when this unit's <see cref="SchemaName"/> came from a
+    /// <c>TemplateTargets:&lt;Name&gt;:Schemas</c> override (#257). Used by per-iteration
+    /// deployment to distinguish override-sourced units (which honor
+    /// <see cref="ProvisionSchemaIfMissing"/> for the skip-missing path) from
+    /// discovery-sourced units (which keep today's strict <c>CreateSchemaIfMissing</c>
+    /// behavior). Default false so non-override units keep current behavior unchanged.
+    /// </summary>
+    public bool SchemaFromOverride { get; init; }
+
+    /// <summary>
+    /// True when an override declared <c>CreateIfMissing: true</c> for this unit's template
+    /// (#257). Per-iteration deployment provisions a missing schema via
+    /// <see cref="SchemaProvisioner.EnsureSchemaExists(System.Data.IDbCommand, string, Schema.Domain.Platform, bool, System.Action{string})"/>
+    /// before running deployment work. When false (the default), missing schemas on
+    /// override-sourced units are SKIPPED with an info log; missing schemas on
+    /// discovery-sourced units continue to honor the template-level
+    /// <c>CreateSchemaIfMissing</c> contract.
+    /// </summary>
+    public bool ProvisionSchemaIfMissing { get; init; }
 }
