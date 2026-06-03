@@ -434,4 +434,35 @@ public class RepositoryHelperTests
         var product = JsonConvert.DeserializeObject<Product>(writtenProductJson);
         Assert.That(product.TemplateOrder, Is.EqualTo(new[] { "Shared", "TenantSchema" }));
     }
+
+    [Test]
+    public void UpdateOrInitRepository_ExistingEntryWithMissingTemplateJson_TreatedAsRegular()
+    {
+        // ClassifyTemplateEntry fallback: when an existing TemplateOrder entry has no
+        // Template.json on disk (e.g., fresh clone before extraction), the helper returns
+        // false and treats it as a regular template rather than throwing or corrupting the
+        // order. Here MysteryTemplate's Template.json is absent; adding a regular Shared
+        // template should produce [MysteryTemplate, Shared] — both in the regular bucket,
+        // relative order preserved.
+        SetupProductFile(new Product
+        {
+            Name = "P",
+            Platform = Platform.SqlServer,
+            TemplateOrder = new List<string> { "MysteryTemplate" }
+        });
+        // Deliberately no SetupTemplateFile("MysteryTemplate", ...) — IFile.Exists returns
+        // false for its Template.json, exercising the missing-file fallback path.
+
+        var writtenProductJson = "";
+        _file.When(f => f.WriteAllText(FakeProductFile, Arg.Any<string>()))
+            .Do(ci => writtenProductJson = ci.ArgAt<string>(1));
+
+        Assert.DoesNotThrow(() =>
+            RepositoryHelper.UpdateOrInitRepository(
+                FakeProductPath, productName: "P", templateName: "Shared", dbName: "db",
+                platform: Platform.SqlServer, isSchemaTemplate: false));
+
+        var product = JsonConvert.DeserializeObject<Product>(writtenProductJson);
+        Assert.That(product.TemplateOrder, Is.EqualTo(new[] { "MysteryTemplate", "Shared" }));
+    }
 }
