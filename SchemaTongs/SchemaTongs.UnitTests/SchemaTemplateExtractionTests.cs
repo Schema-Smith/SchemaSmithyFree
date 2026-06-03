@@ -1542,4 +1542,102 @@ public class SchemaTemplateExtractionTests
     }
 
     #endregion
+
+    #region Round-2 combined fix: bracket-wrapped FK null (#256) + inverted TemplateOrder partition (#258)
+
+    [Test]
+    public void Round2_CombinedFix_BracketWrappedFkAndInvertedTemplateOrder_BothRepairedInOneRun()
+    {
+        // Exercises both round-2 fixes in a single test:
+        //   #256 — bracket-delimited RelatedTableSchema matching the source schema is nulled.
+        //   #258 — TemplateOrder stable-partitions so regular templates precede schema-templates
+        //           even when the Product.json was written with the schema-template first.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+
+            // --- Part 1: partition fix (#258) ---
+            // Product.json already has "TenantSchema" (schema-template) as the only entry —
+            // the inverted-order shape from the reviewer scenario.
+            const string partitionProductPath = @"C:\fake\partition-test";
+            var partitionProductFile = Path.Combine(partitionProductPath, "Product.json");
+            var tenantSchemaTemplateFile = Path.Combine(partitionProductPath, "Templates", "TenantSchema", "Template.json");
+            var tenantSchemaTemplate = new Template
+            {
+                Name = "TenantSchema",
+                SchemaIdentificationScript = "SELECT 'tenant_seed' AS SchemaName"
+            };
+
+            // Register the file/directory mocks so RepositoryHelper picks up _fileWrapper
+            // instead of creating a real FileWrapper. RegisterConfig is not called for Part 1
+            // since we're testing UpdateOrInitRepository directly.
+            FactoryContainer.Register<IFile>(_fileWrapper);
+            FactoryContainer.Register<IDirectory>(_directoryWrapper);
+
+            _fileWrapper.Exists(Arg.Is<string>(s => s == partitionProductFile)).Returns(true);
+            _fileWrapper.ReadAllText(Arg.Is<string>(s => s == partitionProductFile)).Returns(
+                JsonHelper.Serialize(new Product
+                {
+                    Name = "TestProduct",
+                    Platform = Platform.SqlServer,
+                    TemplateOrder = new List<string> { "TenantSchema" }
+                }));
+            _fileWrapper.Exists(Arg.Is<string>(s => s == tenantSchemaTemplateFile)).Returns(true);
+            _fileWrapper.ReadAllText(Arg.Is<string>(s => s == tenantSchemaTemplateFile)).Returns(JsonHelper.Serialize(tenantSchemaTemplate));
+
+            string writtenProductJson = null;
+            _fileWrapper.When(f => f.WriteAllText(
+                Arg.Is<string>(s => s == partitionProductFile), Arg.Any<string>()))
+                .Do(ci => writtenProductJson = ci.ArgAt<string>(1));
+
+            RepositoryHelper.UpdateOrInitRepository(
+                partitionProductPath, productName: "TestProduct", templateName: "Shared", dbName: "shared_db",
+                platform: Platform.SqlServer, isSchemaTemplate: false);
+
+            Assert.That(writtenProductJson, Is.Not.Null, "Product.json should have been written");
+            var writtenProduct = Newtonsoft.Json.JsonConvert.DeserializeObject<Product>(writtenProductJson);
+            Assert.That(writtenProduct.TemplateOrder, Is.EqualTo(new[] { "Shared", "TenantSchema" }),
+                "#258: regular template must be placed before schema-template regardless of prior TemplateOrder");
+
+            // --- Part 2: bracket-wrapped FK schema null (#256) ---
+            // Fresh SchemaTongs run in schema-template mode; table extraction returns a bracket-
+            // delimited RelatedTableSchema that matches the source schema — must be stripped.
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+            SetUpMocks();
+
+            var overrides = ShouldCastAllFalse(Platform.SqlServer);
+            overrides["ShouldCast:Tables"] = "true";
+            RegisterConfig(Platform.SqlServer, overrides);
+
+            var tableListReader = SingleSqlServerTableListReader(SourceSchema, "Orders");
+            var jsonReader = SingleColumnReader(
+                "{\"Name\":\"Orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
+                "{\"Name\":\"FK_Orders_Customers\",\"Columns\":\"CustomerId\",\"RelatedTable\":\"Customers\"," +
+                "\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"[tenant_seed]\"}]}");
+            _command.ExecuteReader().Returns(tableListReader);
+            _commandJson.ExecuteReader().Returns(jsonReader);
+
+            string capturedTableJson = null;
+            _fileWrapper.When(f => f.WriteAllText(
+                Arg.Is<string>(s => s.EndsWith("Orders.json")),
+                Arg.Any<string>())).Do(ci => capturedTableJson = ci.ArgAt<string>(1));
+
+            var tongs = new SchemaTongs(Platform.SqlServer);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            Assert.That(capturedTableJson, Is.Not.Null, "Orders.json should have been written");
+            var parsedTable = JObject.Parse(capturedTableJson);
+            var fks = (JArray)parsedTable["ForeignKeys"];
+            Assert.That(fks, Is.Not.Null);
+            Assert.That(fks.Count, Is.EqualTo(1));
+            Assert.That(fks[0]["RelatedTableSchema"], Is.Null,
+                "#256: bracket-delimited same-source RelatedTableSchema must be stripped");
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    #endregion
 }

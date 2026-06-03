@@ -65,4 +65,22 @@ public class IdentifierTests
         Assert.That(Identifier.Unwrap(null, Platform.SqlServer), Is.Null);
         Assert.That(Identifier.Unwrap("", Platform.PostgreSQL), Is.EqualTo(""));
     }
+
+    [Test]
+    public void Unwrap_PostgreSQL_QuoteWrappedSourceSchemaAndFkSchema_BothReduceToSameValue()
+    {
+        // Edge case: source schema configured as "tenant_seed" (with literal double quotes),
+        // and FK RelatedTableSchema = "\"tenant_seed\"" (also quote-wrapped). Both sides must
+        // unwrap to the bare identifier so the same-source comparison succeeds and the FK is
+        // nulled. Tests the equivalence property: two differently-delimited forms of the same
+        // name reduce to the same value after Unwrap.
+        const string configuredWithQuotes = "\"tenant_seed\"";
+        const string fkSchemaWithQuotes = "\"tenant_seed\"";
+        var unwrappedConfig = Identifier.Unwrap(configuredWithQuotes, Platform.PostgreSQL);
+        var unwrappedFk = Identifier.Unwrap(fkSchemaWithQuotes, Platform.PostgreSQL);
+        Assert.That(unwrappedConfig, Is.EqualTo("tenant_seed"));
+        Assert.That(unwrappedFk, Is.EqualTo("tenant_seed"));
+        Assert.That(unwrappedConfig, Is.EqualTo(unwrappedFk),
+            "Quote-wrapped source schema config and FK schema must unwrap to the same bare value");
+    }
 }

@@ -315,13 +315,13 @@ public class RepositoryHelperTests
     private void SetupProductFile(Product product)
     {
         _file.Exists(FakeProductFile).Returns(true);
-        _file.ReadAllText(FakeProductFile).Returns(JsonConvert.SerializeObject(product));
+        _file.ReadAllText(FakeProductFile).Returns(JsonHelper.Serialize(product));
     }
 
     private void SetupTemplateFile(string templateName, Template template)
     {
         _file.Exists(FakeTemplateFile(templateName)).Returns(true);
-        _file.ReadAllText(FakeTemplateFile(templateName)).Returns(JsonConvert.SerializeObject(template));
+        _file.ReadAllText(FakeTemplateFile(templateName)).Returns(JsonHelper.Serialize(template));
     }
 
     [Test]
