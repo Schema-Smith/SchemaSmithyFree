@@ -369,6 +369,98 @@ public class ProductQuenchTests
 
     #endregion
 
+    #region ReadTemplateTargets (Slice 2 — Issue #257)
+
+    [Test]
+    public void ReadTemplateTargets_ParsesAllAxesAndCreateIfMissing()
+    {
+        // Per-template override map mirrors the same .NET config array-keys shape as
+        // Target.Templates / Target.Databases / Target.Schemas, scoped one level deeper under the
+        // template name. CreateIfMissing is a bool with default false when absent. PerTenantDB
+        // intentionally omits CreateIfMissing in this fixture to exercise the default-false path.
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["Target:TemplateTargets:TenantSchema:Schemas:0"] = "acme",
+                ["Target:TemplateTargets:TenantSchema:Schemas:1"] = "globex",
+                ["Target:TemplateTargets:TenantSchema:CreateIfMissing"] = "true",
+                ["Target:TemplateTargets:PerTenantDB:Databases:0"] = "tenant_a",
+                ["Target:TemplateTargets:PerTenantDB:Databases:1"] = "tenant_b"
+            }!)
+            .Build();
+
+        var targets = ProductQuench.ReadTemplateTargets(config);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(targets.Keys, Is.EquivalentTo(new[] { "TenantSchema", "PerTenantDB" }));
+            Assert.That(targets["TenantSchema"].Schemas, Is.EqualTo(new[] { "acme", "globex" }));
+            Assert.That(targets["TenantSchema"].Databases, Is.Empty);
+            Assert.That(targets["TenantSchema"].CreateIfMissing, Is.True);
+            Assert.That(targets["PerTenantDB"].Databases, Is.EqualTo(new[] { "tenant_a", "tenant_b" }));
+            Assert.That(targets["PerTenantDB"].Schemas, Is.Empty);
+            Assert.That(targets["PerTenantDB"].CreateIfMissing, Is.False);
+        });
+    }
+
+    [Test]
+    public void ReadTemplateTargets_AbsentSection_ReturnsEmpty()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>())
+            .Build();
+
+        Assert.That(ProductQuench.ReadTemplateTargets(config), Is.Empty);
+    }
+
+    [Test]
+    public void ReadTemplateTargets_KeyLookupIsCaseInsensitive()
+    {
+        // Validators + override consumers all match template names with OrdinalIgnoreCase.
+        // The dictionary returned by ReadTemplateTargets carries that comparer so a settings
+        // file that mixes "TenantSchema" / "tenantschema" / "TENANTSCHEMA" still resolves to
+        // the same per-template entry.
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["Target:TemplateTargets:TenantSchema:Schemas:0"] = "acme"
+            }!)
+            .Build();
+
+        var targets = ProductQuench.ReadTemplateTargets(config);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(targets.ContainsKey("TenantSchema"), Is.True);
+            Assert.That(targets.ContainsKey("tenantschema"), Is.True);
+            Assert.That(targets.ContainsKey("TENANTSCHEMA"), Is.True);
+        });
+    }
+
+    [Test]
+    public void ReadTemplateTargets_WhitespaceOnlyEntries_AreFiltered()
+    {
+        // Stray null / whitespace slots (e.g., a test that nulled "Target:TemplateTargets:T:Schemas:1"
+        // mid-run) must not survive into the override list — they would surface as misleading
+        // unknown-name errors downstream when the validator compares the override against the
+        // discovered universe.
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["Target:TemplateTargets:TenantSchema:Schemas:0"] = "  acme  ",
+                ["Target:TemplateTargets:TenantSchema:Schemas:1"] = "",
+                ["Target:TemplateTargets:TenantSchema:Schemas:2"] = "   ",
+                ["Target:TemplateTargets:TenantSchema:Schemas:3"] = "globex"
+            }!)
+            .Build();
+
+        var targets = ProductQuench.ReadTemplateTargets(config);
+
+        Assert.That(targets["TenantSchema"].Schemas, Is.EqualTo(new[] { "acme", "globex" }));
+    }
+
+    #endregion
+
     #region Schema-Template Work-Unit Enumeration (Slice 3)
 
     [Test]
@@ -970,6 +1062,275 @@ public class ProductQuenchTests
         });
     }
 
+    #endregion
+
+    #region TemplateTargets Enumeration Override (Slice 2 — Issue #257)
+
+    [Test]
+    public void EnumerateWorkUnitsForTemplate_OverrideReplacesSchemaDiscovery()
+    {
+        // Schemas override + no Databases override: database discovery still runs via the
+        // DatabaseIdentificationScript, but the per-DB SchemaDiscovery call is bypassed.
+        // Assertion: DiscoverSchemas was NOT called even once.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "ordering_b" };
+            // Intentionally populate SchemaDiscoveryResults so a regression that accidentally
+            // calls DiscoverSchemas would produce wrong-shape units rather than empties.
+            quench.SchemaDiscoveryResults[("primary", "ordering_b")] = new List<string> { "should_be_ignored" };
+
+            var template = new Template
+            {
+                Name = "TenantSchema",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units.Select(u => (u.DatabaseName, u.SchemaName)),
+                    Is.EquivalentTo(new[] { ("ordering_b", "acme"), ("ordering_b", "globex") }));
+                Assert.That(quench.DiscoverSchemasCallCount, Is.Zero,
+                    "Override REPLACES SchemaDiscovery — the discovery surface must not be touched.");
+                Assert.That(units.All(u => u.SchemaSource == "TemplateTargets:TenantSchema:Schemas"), Is.True);
+                Assert.That(units.All(u => u.DatabaseSource == "DatabaseIdentificationScript"), Is.True);
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:TenantSchema:Schemas:0"] = "acme",
+            ["Target:TemplateTargets:TenantSchema:Schemas:1"] = "globex"
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnitsForTemplate_OverrideProducesCrossProductForBothAxes()
+    {
+        // Both axes overridden: cross-product (2 × 2 = 4 units). Neither DiscoverSchemas nor
+        // any database-discovery GetCommand should fire — GetCommandCallCount stays zero.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            // Populate discovery sources so a regression that accidentally calls them would
+            // produce different DB/schema names than the override.
+            quench.IdentifiedDatabases["primary"] = new[] { "wrong_db" };
+            quench.SchemaDiscoveryResults[("primary", "ring1")] = new List<string> { "wrong_schema" };
+
+            var template = new Template
+            {
+                Name = "TenantStack",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units.Select(u => (u.DatabaseName, u.SchemaName)), Is.EquivalentTo(new[]
+                {
+                    ("ring1", "alpha"), ("ring1", "beta"),
+                    ("ring2", "alpha"), ("ring2", "beta")
+                }));
+                Assert.That(quench.GetCommandCallCount, Is.Zero,
+                    "Both axes overridden — no server connection should be opened for discovery.");
+                Assert.That(quench.DiscoverSchemasCallCount, Is.Zero,
+                    "Schema override REPLACES SchemaDiscovery.");
+                Assert.That(units.All(u => u.DatabaseSource == "TemplateTargets:TenantStack:Databases"), Is.True);
+                Assert.That(units.All(u => u.SchemaSource == "TemplateTargets:TenantStack:Schemas"), Is.True);
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:TenantStack:Databases:0"] = "ring1",
+            ["Target:TemplateTargets:TenantStack:Databases:1"] = "ring2",
+            ["Target:TemplateTargets:TenantStack:Schemas:0"] = "alpha",
+            ["Target:TemplateTargets:TenantStack:Schemas:1"] = "beta"
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnitsForTemplate_NoOverride_UsesIdentificationScripts()
+    {
+        // No TemplateTargets entry: existing identification-script behavior is preserved bit-for-bit.
+        // DatabaseSource / SchemaSource reflect that.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "ordering_b" };
+            quench.SchemaDiscoveryResults[("primary", "ordering_b")] = new List<string> { "acme", "globex" };
+
+            var template = new Template
+            {
+                Name = "TenantSchema",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Has.Count.EqualTo(2));
+                Assert.That(quench.DiscoverSchemasCallCount, Is.EqualTo(1),
+                    "No override → SchemaDiscovery must run once per (server, db).");
+                Assert.That(units.All(u => u.DatabaseSource == "DatabaseIdentificationScript"), Is.True);
+                Assert.That(units.All(u => u.SchemaSource == "SchemaIdentificationScript"), Is.True);
+            });
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnitsForTemplate_NoOverride_RegularTemplate_SourceMatchesRegular()
+    {
+        // Regular (non-schema) template: SchemaSource carries the "(regular template)" sentinel
+        // so a log reader can disambiguate "no schema fan-out" from "schema fan-out via script."
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppA", "AppB" };
+
+            var template = new Template
+            {
+                Name = "Core",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Has.Count.EqualTo(2));
+                Assert.That(units.All(u => u.SchemaName == ""), Is.True);
+                Assert.That(units.All(u => u.DatabaseSource == "DatabaseIdentificationScript"), Is.True);
+                Assert.That(units.All(u => u.SchemaSource == "(regular template)"), Is.True);
+            });
+        });
+    }
+
+    [Test]
+    public void DispatchWorkUnits_EmitsSourceDisclosureLogPerUnit()
+    {
+        // The dispatch log line must include both axes' sources in a grep-friendly form so an
+        // operator can search e.g. "source: db=TemplateTargets:" or "source: schema=SchemaIdent..."
+        // to see exactly how each unit was selected.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var template = new Template
+            {
+                Name = "TenantSchema",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var workUnits = new List<WorkUnit>
+            {
+                new("primary", "ordering_b", template.Name, "acme")
+                {
+                    DatabaseSource = "DatabaseIdentificationScript",
+                    SchemaSource = "TemplateTargets:TenantSchema:Schemas"
+                },
+                new("primary", "AppA", "Core", "")
+                {
+                    DatabaseSource = "TemplateTargets:Core:Databases",
+                    SchemaSource = "(regular template)"
+                }
+            };
+
+            // LogWorkUnitSources is factored out of DispatchWorkUnits specifically so the log
+            // format is testable without spinning up the dispatcher itself — invoking it directly
+            // exercises the production code path that DispatchWorkUnits delegates to.
+            quench.ProgressLogLines.Clear();
+            quench.LogWorkUnitSources(workUnits);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s =>
+                    s.Contains("[primary].[ordering_b]") &&
+                    s.Contains("[Schema: acme]") &&
+                    s.Contains("source: db=DatabaseIdentificationScript") &&
+                    s.Contains("schema=TemplateTargets:TenantSchema:Schemas")));
+                Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s =>
+                    s.Contains("[primary].[AppA]") &&
+                    !s.Contains("[Schema:") &&
+                    s.Contains("source: db=TemplateTargets:Core:Databases") &&
+                    s.Contains("schema=(regular template)")));
+            });
+        });
+    }
+
+    [Test]
+    public void QuenchProduct_ValidatorRejectsBadConfig_AbortsBeforeAnyEnumeration()
+    {
+        // Pre-flight validator failure (e.g., TemplateTargets entry naming an unknown template)
+        // must abort the run before EnumerateWorkUnitsForTemplate is reached. The recording
+        // quench's DiscoverSchemasCallCount staying at zero is the proof that no per-template
+        // discovery happened.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "AppA" };
+
+            var ex = Assert.Throws<TemplateTargetValidationException>(
+                () => quench.QuenchProduct(suppressKindlingForTesting: true));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(ex!.Message, Does.Contain("FooBar"),
+                    "The diagnostic must name the offending entry.");
+                Assert.That(quench.DiscoverSchemasCallCount, Is.Zero,
+                    "Validator must abort before any template enumeration runs.");
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:FooBar:Schemas:0"] = "x"
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnitsForTemplate_DatabasesOverrideOnly_SchemaDiscoveryStillRuns()
+    {
+        // Each axis decides independently: Databases overridden, Schemas not. The override
+        // supplies the databases; SchemaDiscovery still runs per overridden DB.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            // The discovery script source should not produce these names — that proves the
+            // override took effect.
+            quench.IdentifiedDatabases["primary"] = new[] { "wrong_db" };
+            quench.SchemaDiscoveryResults[("primary", "tenant_a")] = new List<string> { "s1" };
+            quench.SchemaDiscoveryResults[("primary", "tenant_b")] = new List<string> { "s2" };
+
+            var template = new Template
+            {
+                Name = "PerTenantDB",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                SchemaIdentificationScript = "SELECT schema_name FROM sys.schemas"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units.Select(u => (u.DatabaseName, u.SchemaName)),
+                    Is.EquivalentTo(new[] { ("tenant_a", "s1"), ("tenant_b", "s2") }));
+                Assert.That(units.All(u => u.DatabaseSource == "TemplateTargets:PerTenantDB:Databases"), Is.True);
+                Assert.That(units.All(u => u.SchemaSource == "SchemaIdentificationScript"), Is.True);
+                Assert.That(quench.DiscoverSchemasCallCount, Is.EqualTo(2),
+                    "Schema-axis discovery runs once per overridden DB (no schema override).");
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:PerTenantDB:Databases:0"] = "tenant_a",
+            ["Target:TemplateTargets:PerTenantDB:Databases:1"] = "tenant_b"
+        });
+    }
+
+    #endregion
+
+    #region Schema-Template Work-Unit Enumeration (Slice 3) — helpers shared with slice 2
+
     /// <summary>
     /// Hand-builds a minimal SQL Server ProductQuench (no real connections, no Product.json on disk)
     /// inside the FactoryContainer lock and runs <paramref name="body"/> against the recorded test
@@ -977,7 +1338,8 @@ public class ProductQuenchTests
     /// </summary>
     private static void WithMinimalSqlServerProductQuench(
         System.Action<RecordingWorkUnitProductQuench> body,
-        string secondaryServers = null)
+        string secondaryServers = null,
+        IReadOnlyDictionary<string, string> extraConfig = null)
     {
         lock (FactoryContainer.SharedLockObject)
         {
@@ -1007,6 +1369,9 @@ public class ProductQuenchTests
             };
             if (!string.IsNullOrEmpty(secondaryServers))
                 configValues["Target:SecondaryServers"] = secondaryServers;
+            if (extraConfig != null)
+                foreach (var (k, v) in extraConfig)
+                    configValues[k] = v;
             var config = new ConfigurationBuilder()
                 .AddInMemoryCollection(configValues)
                 .Build();
@@ -1062,6 +1427,12 @@ public class ProductQuenchTests
         public List<string> ProgressLogLines { get; }
         public bool LogBackupCalled { get; private set; }
 
+        // Call tracking for the override-vs-discovery slice-2 tests. Production code that bypasses
+        // discovery via TemplateTargets must NOT touch these surfaces — assertions on the recorded
+        // counts catch a regression that accidentally re-invokes discovery after applying the override.
+        public int GetCommandCallCount { get; private set; }
+        public int DiscoverSchemasCallCount { get; private set; }
+
         public RecordingWorkUnitProductQuench(List<string> progressLogLines)
         {
             ProgressLogLines = progressLogLines;
@@ -1069,6 +1440,7 @@ public class ProductQuenchTests
 
         internal override IDbCommand GetCommand(string server)
         {
+            GetCommandCallCount++;
             if (FailGetCommandFor.Contains(server))
                 throw new System.Exception($"Unable to connect to {server} (simulated)");
             var dbs = IdentifiedDatabases.TryGetValue(server, out var list) ? list : System.Array.Empty<string>();
@@ -1077,6 +1449,7 @@ public class ProductQuenchTests
 
         internal override List<string> DiscoverSchemas(string server, string databaseName, Template template)
         {
+            DiscoverSchemasCallCount++;
             if (SchemaDiscoveryFailures.TryGetValue((server, databaseName), out var ex))
                 throw ex;
             return SchemaDiscoveryResults.TryGetValue((server, databaseName), out var list)

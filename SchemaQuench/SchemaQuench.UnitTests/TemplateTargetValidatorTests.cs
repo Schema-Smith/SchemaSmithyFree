@@ -130,6 +130,13 @@ public class TemplateTargetValidatorTests
     [Test]
     public void ValidConfig_DoesNotThrow()
     {
+        // Locks in the validator's OrdinalIgnoreCase choice across both lookup surfaces:
+        //  - the templates-by-name lookup uses StringComparer.OrdinalIgnoreCase, so the targets
+        //    dict key "TenantSchema" matches the in-memory Template "TenantSchema" verbatim;
+        //  - the Target.Templates filter membership check also uses OrdinalIgnoreCase, so a
+        //    lowercase filter entry "tenantschema" still passes rule 2 against the canonical
+        //    "TenantSchema" target key. A refactor to case-sensitive `Contains` would fail this
+        //    test on the filter-membership check.
         var templates = new List<Template>
         {
             RegularTemplate("Shared"),
@@ -141,9 +148,10 @@ public class TemplateTargetValidatorTests
             ["TenantSchema"] = new() { Schemas = new() { "acme", "globex" }, CreateIfMissing = true },
             ["PerTenantDB"] = new() { Databases = new() { "tenant_a" } }
         };
+        var targetTemplatesFilter = new List<string> { "tenantschema", "PerTenantDB" };
 
         Assert.DoesNotThrow(() =>
-            TemplateTargetValidator.Validate(targets, templates, new List<string>()));
+            TemplateTargetValidator.Validate(targets, templates, targetTemplatesFilter));
     }
 
     // Rule 6 (filter outside override universe) is tested at the WorkUnitFilter boundary

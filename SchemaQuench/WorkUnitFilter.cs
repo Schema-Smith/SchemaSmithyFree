@@ -50,8 +50,14 @@ internal sealed class WorkUnitFilter
         ValidateFilterValues(discovered);
         WarnIfSchemaFilterUnusable(discovered, warn);
 
+        // Template-name matching is case-insensitive across the validator + filter trio
+        // (#257 slice-2 casing sweep). Database / schema name comparisons are LEFT case-sensitive
+        // because engine-defined casing rules differ across SQL Server (CI default), MySQL
+        // (lower-case-folded on Linux, server-config-dependent on Windows), and PostgreSQL
+        // (case-sensitive when unquoted, lowercased when bareword) — unifying those at this layer
+        // would mask real engine differences rather than smooth them out.
         var filtered = discovered
-            .Where(u => _templates.Count == 0 || _templates.Contains(u.TemplateName))
+            .Where(u => _templates.Count == 0 || _templates.Contains(u.TemplateName, StringComparer.OrdinalIgnoreCase))
             .Where(u => _databases.Count == 0 || _databases.Contains(u.DatabaseName))
             .Where(u => _schemas.Count == 0 || string.IsNullOrEmpty(u.SchemaName) || _schemas.Contains(u.SchemaName))
             .ToList();
@@ -75,7 +81,12 @@ internal sealed class WorkUnitFilter
             .ToList();
 
         var details = new List<string>();
-        AppendUnknownDetail(details, "Target.Templates", _templates, discoveredTemplates);
+        // Templates use OrdinalIgnoreCase across the validator + filter trio (#257 slice-2 casing
+        // sweep). Databases and Schemas keep default ordinal comparison — engine-defined casing
+        // rules differ across SQL Server / MySQL / PostgreSQL, so unifying at this layer would
+        // mask real engine differences rather than smooth them out.
+        AppendUnknownDetail(details, "Target.Templates", _templates, discoveredTemplates,
+            StringComparer.OrdinalIgnoreCase);
         AppendUnknownDetail(details, "Target.Databases", _databases, discoveredDatabases);
         // Schema-name validation only fires when at least one schema-template unit was
         // discovered. Otherwise Target.Schemas is a no-op (regular-template units bypass it)
@@ -90,10 +101,12 @@ internal sealed class WorkUnitFilter
     }
 
     private static void AppendUnknownDetail(List<string> details, string dimensionName,
-        IReadOnlyList<string> filter, IReadOnlyList<string> discovered)
+        IReadOnlyList<string> filter, IReadOnlyList<string> discovered,
+        StringComparer comparer = null)
     {
         if (filter.Count == 0) return;
-        var missing = filter.Where(v => !discovered.Contains(v)).ToList();
+        comparer ??= StringComparer.Ordinal;
+        var missing = filter.Where(v => !discovered.Contains(v, comparer)).ToList();
         if (missing.Count == 0) return;
         details.Add(
             $"{dimensionName} value(s) not discovered: [{string.Join(",", missing)}]. " +

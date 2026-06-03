@@ -31,6 +31,43 @@ public class WorkUnitFilterTests
     ];
 
     [Test]
+    public void TemplateNameMatching_IsCaseInsensitive()
+    {
+        // #257 slice-2 casing sweep: template-name comparisons across the validator + filter trio
+        // are OrdinalIgnoreCase. A lowercase Target.Templates filter value still matches the
+        // canonical "TenantBody" template name discovered by EnumerateWorkUnitsForTemplate.
+        var filter = new WorkUnitFilter(["tenantbody"], [], []);
+
+        var result = filter.Apply(AllSixUnits(), warn: _ => { });
+
+        Assert.That(result.All(u => u.TemplateName == "TenantBody"), Is.True);
+        Assert.That(result, Has.Count.EqualTo(4));
+    }
+
+    [Test]
+    public void Rule6_FilterOutsideOverrideUniverse_FailsWithUnknownValueDiagnostic()
+    {
+        // #257 design §5 rule 6: when TemplateTargets has replaced the discovered universe with
+        // a config-driven override (e.g., Schemas=[acme,globex]), a Target.Schemas filter value
+        // not in that override universe must surface a precise "value not discovered" diagnostic.
+        // The override has REPLACED discovery — the override list IS the discovered universe at
+        // this layer, so the existing rule-6 unknown-value path naturally catches the mismatch
+        // without any extra filter logic.
+        var overrideUnits = new List<WorkUnit>
+        {
+            new("primary", "appdb", "TenantSchema", "acme"),
+            new("primary", "appdb", "TenantSchema", "globex")
+        };
+        var filter = new WorkUnitFilter([], [], ["acme", "tenant_not_in_override"]);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => filter.Apply(overrideUnits, warn: _ => { }));
+
+        Assert.That(ex!.Message,
+            Does.Contain("tenant_not_in_override")
+            .And.Contain("acme,globex"));
+    }
+
+    [Test]
     public void EmptyFilters_AllUnitsPassThrough()
     {
         var filter = new WorkUnitFilter(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());

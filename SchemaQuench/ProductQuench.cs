@@ -38,6 +38,7 @@ public class ProductQuench
     private readonly IReadOnlyList<string> _targetTemplates;
     private readonly IReadOnlyList<string> _targetDatabases;
     private readonly IReadOnlyList<string> _targetSchemas;
+    private readonly IReadOnlyDictionary<string, TemplateTarget> _templateTargets;
     private readonly ICheckpointing _checkpointing;
     private bool _updateFailed;
     private bool _anyFailure;
@@ -72,6 +73,7 @@ public class ProductQuench
         _targetTemplates = ReadFilterArray("Target:Templates");
         _targetDatabases = ReadFilterArray("Target:Databases");
         _targetSchemas = ReadFilterArray("Target:Schemas");
+        _templateTargets = ReadTemplateTargets(_config);
         _checkpointing = FileCheckpointManager.GetFromFactory();
 
         // Secondary servers are SqlServer-only (Availability Groups)
@@ -106,6 +108,41 @@ public class ProductQuench
     }
 
     private IReadOnlyList<string> ReadFilterArray(string sectionKey) => ReadFilterArray(_config, sectionKey);
+
+    /// <summary>
+    /// Reads <c>Target.TemplateTargets</c> from configuration into the per-template override map.
+    /// Each template name becomes a dictionary key (case-insensitive) carrying the parsed
+    /// <see cref="TemplateTarget.Databases"/> / <see cref="TemplateTarget.Schemas"/> lists and
+    /// the <see cref="TemplateTarget.CreateIfMissing"/> flag. Missing section returns an empty
+    /// dictionary so callers can do an unconditional lookup without null-guarding. Whitespace-only
+    /// values inside the Databases / Schemas arrays are dropped and surviving values are trimmed
+    /// (mirrors the discipline applied by <see cref="ReadFilterArray(IConfiguration, string)"/>).
+    /// </summary>
+    internal static IReadOnlyDictionary<string, TemplateTarget> ReadTemplateTargets(IConfiguration config)
+    {
+        var result = new Dictionary<string, TemplateTarget>(StringComparer.OrdinalIgnoreCase);
+        var section = config.GetSection("Target:TemplateTargets");
+        foreach (var child in section.GetChildren())
+        {
+            var templateName = child.Key;
+            var target = new TemplateTarget
+            {
+                Databases = child.GetSection("Databases").GetChildren()
+                    .Select(c => c.Value)
+                    .Where(v => !string.IsNullOrWhiteSpace(v))
+                    .Select(v => v!.Trim())
+                    .ToList(),
+                Schemas = child.GetSection("Schemas").GetChildren()
+                    .Select(c => c.Value)
+                    .Where(v => !string.IsNullOrWhiteSpace(v))
+                    .Select(v => v!.Trim())
+                    .ToList(),
+                CreateIfMissing = bool.TryParse(child["CreateIfMissing"], out var c) && c
+            };
+            result[templateName] = target;
+        }
+        return result;
+    }
 
     /// <summary>
     /// Returns the init database name used for server-level connections per platform.
@@ -257,6 +294,16 @@ public class ProductQuench
 
             var templates = LoadTemplates();
             var suppressKindling = suppressKindlingForTesting || _skipKindling;
+
+            // TemplateTargets pre-flight (#257 design §5 rules 1-5): validate Target.TemplateTargets
+            // against the loaded template list AND the active Target.Templates filter BEFORE any
+            // identification scripts run. Rule 2 (filter-excluded template) is checked against the
+            // RAW _targetTemplates filter list — not the filtered set — so a config that targets a
+            // template the filter would exclude surfaces a precise diagnostic instead of a misleading
+            // "unknown template" later. Throwing here aborts the run with the user-facing message
+            // bubbled up; the existing finally clause around QuenchProduct's command disposes the
+            // primary-server connection.
+            TemplateTargetValidator.Validate(_templateTargets, templates, _targetTemplates);
 
             // Slice-5 selective execution (§9.3): filter the templates list by Target.Templates
             // before enumeration; the excluded templates' DatabaseIdentificationScripts never run
@@ -618,7 +665,13 @@ public class ProductQuench
         if (_targetTemplates.Count == 0) return true;
 
         var loadedNames = templates.Select(t => t.Name).ToList();
-        var missing = _targetTemplates.Where(t => !loadedNames.Contains(t)).ToList();
+        // Template-name matching is case-insensitive across the trio (validator,
+        // TryFilterTemplatesByTarget, WorkUnitFilter) — see #257 slice-2 casing sweep. Template
+        // names are .NET-style identifiers from Product.json and live independent of the engine's
+        // own database/schema casing rules, so OrdinalIgnoreCase is the right choice here.
+        var missing = _targetTemplates
+            .Where(t => !loadedNames.Contains(t, StringComparer.OrdinalIgnoreCase))
+            .ToList();
         if (missing.Count > 0)
         {
             var message =
@@ -631,7 +684,7 @@ public class ProductQuench
             return false;
         }
 
-        inScope = templates.Where(t => _targetTemplates.Contains(t.Name)).ToList();
+        inScope = templates.Where(t => _targetTemplates.Contains(t.Name, StringComparer.OrdinalIgnoreCase)).ToList();
         _progressLog.Info($"[Target] Resolved {inScope.Count} of {templates.Count} loaded template(s) in scope.");
         return true;
     }
@@ -729,76 +782,120 @@ public class ProductQuench
     /// </summary>
     private bool EnumerateWorkUnitsForServer(Template template, string server, List<WorkUnit> workUnits)
     {
-        _progressLog.Info($"Locate Databases To Quench ({server})");
+        // TemplateTargets override (#257): when an entry exists for this template, the matching
+        // axis (Databases / Schemas) REPLACES the corresponding identification-script result. Each
+        // axis decides independently — an entry may override one axis and leave the other to
+        // discovery. The override is applied at this enumeration boundary so downstream dispatch /
+        // checkpointing / per-iteration substitution treat override-sourced units identically to
+        // discovery-sourced ones.
+        _templateTargets.TryGetValue(template.Name, out var overrideEntry);
+        var databasesOverride = overrideEntry is { Databases.Count: > 0 };
+        var schemasOverride = overrideEntry is { Schemas.Count: > 0 };
+
         List<string> databases;
-        try
+        string databaseSource;
+        if (databasesOverride)
         {
-            using var command = GetCommand(server);
+            databases = new List<string>(overrideEntry!.Databases);
+            databaseSource = $"TemplateTargets:{template.Name}:Databases";
+            _progressLog.Info(
+                $"[{server}] Template '{template.Name}' Databases sourced from " +
+                $"TemplateTargets ({databases.Count} entr{(databases.Count == 1 ? "y" : "ies")}); " +
+                $"DatabaseIdentificationScript bypassed.");
+        }
+        else
+        {
+            _progressLog.Info($"Locate Databases To Quench ({server})");
             try
             {
-                command.CommandText = template.DatabaseIdentificationScript;
-                databases = new List<string>();
-                using var reader = command.ExecuteReader();
-                while (reader.Read())
-                    databases.Add($"{reader[0]}");
+                using var command = GetCommand(server);
+                try
+                {
+                    command.CommandText = template.DatabaseIdentificationScript;
+                    databases = new List<string>();
+                    using var reader = command.ExecuteReader();
+                    while (reader.Read())
+                        databases.Add($"{reader[0]}");
+                }
+                finally
+                {
+                    command.Connection?.Close();
+                    command.Connection?.Dispose();
+                }
             }
-            finally
+            catch (Exception e)
             {
-                command.Connection?.Close();
-                command.Connection?.Dispose();
+                // Database enumeration failure (unreachable host, bad DatabaseIdentificationScript).
+                // Failure scope follows the template's type: schema templates honor
+                // ContinueOnSchemaFailure, regular templates honor ContinueOnDatabaseFailure.
+                // When the relevant continue flag is true, log + trip _updateFailed + return true so
+                // the caller continues to the next server (no work units were added for this server).
+                // Schema templates carry an additional "[Schema: <enumeration>]" tag so a user
+                // grepping the logs for "[Schema:" — the per-iteration scope marker — also catches
+                // enumeration-phase failures that prevented any iteration from running. Regular
+                // templates keep the bare "[server]" shape (no schema dimension).
+                var schemaTemplateTag = template.IsSchemaTemplate ? " [Schema: <enumeration>]" : "";
+                _progressLog.Error($"[{server}]{schemaTemplateTag} Database enumeration FAILED for template '{template.Name}': {e.Message}");
+                _errorLog.Error($"[{server}]{schemaTemplateTag} Database enumeration failed (template '{template.Name}'):\r\n{e}");
+                _updateFailed = true;
+                return !ShouldAbortOnFailure(template);
             }
+            databaseSource = "DatabaseIdentificationScript";
         }
-        catch (Exception e)
-        {
-            // Database enumeration failure (unreachable host, bad DatabaseIdentificationScript).
-            // Failure scope follows the template's type: schema templates honor
-            // ContinueOnSchemaFailure, regular templates honor ContinueOnDatabaseFailure.
-            // When the relevant continue flag is true, log + trip _updateFailed + return true so
-            // the caller continues to the next server (no work units were added for this server).
-            // Schema templates carry an additional "[Schema: <enumeration>]" tag so a user
-            // grepping the logs for "[Schema:" — the per-iteration scope marker — also catches
-            // enumeration-phase failures that prevented any iteration from running. Regular
-            // templates keep the bare "[server]" shape (no schema dimension).
-            var schemaTemplateTag = template.IsSchemaTemplate ? " [Schema: <enumeration>]" : "";
-            _progressLog.Error($"[{server}]{schemaTemplateTag} Database enumeration FAILED for template '{template.Name}': {e.Message}");
-            _errorLog.Error($"[{server}]{schemaTemplateTag} Database enumeration failed (template '{template.Name}'):\r\n{e}");
-            _updateFailed = true;
-            return !ShouldAbortOnFailure(template);
-        }
+
+        var schemaOverrideSource = $"TemplateTargets:{template.Name}:Schemas";
 
         foreach (var db in databases)
         {
             if (template.IsSchemaTemplate)
             {
                 List<string> schemas;
-                try
+                string schemaSource;
+                if (schemasOverride)
                 {
-                    schemas = DiscoverSchemas(server, db, template);
+                    schemas = new List<string>(overrideEntry!.Schemas);
+                    schemaSource = schemaOverrideSource;
                 }
-                catch (Exception e)
+                else
                 {
-                    // Per-DB schema-discovery failure inside a schema template (reserved-name
-                    // guard, character-validation guard, bad SchemaIdentificationScript,
-                    // connection failure to this DB). This is a SCHEMA-scope failure because
-                    // it happened inside a schema template's processing — ContinueOnSchemaFailure
-                    // governs whether to abort or continue to the next DB on this server.
-                    // Tagged "[Schema: <enumeration>]" so the same grep that finds per-iteration
-                    // log lines also catches enumeration failures that aborted before any
-                    // tenant schema could be identified.
-                    _progressLog.Error($"[{server}].[{db}] [Schema: <enumeration>] Schema discovery FAILED for template '{template.Name}': {e.Message}");
-                    _errorLog.Error($"[{server}].[{db}] [Schema: <enumeration>] Schema discovery failed (template '{template.Name}'):\r\n{e}");
-                    _updateFailed = true;
-                    if (ShouldAbortOnFailure(template))
-                        return false;
-                    continue;
+                    try
+                    {
+                        schemas = DiscoverSchemas(server, db, template);
+                    }
+                    catch (Exception e)
+                    {
+                        // Per-DB schema-discovery failure inside a schema template (reserved-name
+                        // guard, character-validation guard, bad SchemaIdentificationScript,
+                        // connection failure to this DB). This is a SCHEMA-scope failure because
+                        // it happened inside a schema template's processing — ContinueOnSchemaFailure
+                        // governs whether to abort or continue to the next DB on this server.
+                        // Tagged "[Schema: <enumeration>]" so the same grep that finds per-iteration
+                        // log lines also catches enumeration failures that aborted before any
+                        // tenant schema could be identified.
+                        _progressLog.Error($"[{server}].[{db}] [Schema: <enumeration>] Schema discovery FAILED for template '{template.Name}': {e.Message}");
+                        _errorLog.Error($"[{server}].[{db}] [Schema: <enumeration>] Schema discovery failed (template '{template.Name}'):\r\n{e}");
+                        _updateFailed = true;
+                        if (ShouldAbortOnFailure(template))
+                            return false;
+                        continue;
+                    }
+                    schemaSource = "SchemaIdentificationScript";
                 }
 
                 foreach (var schema in schemas)
-                    workUnits.Add(new WorkUnit(server, db, template.Name, schema));
+                    workUnits.Add(new WorkUnit(server, db, template.Name, schema)
+                    {
+                        DatabaseSource = databaseSource,
+                        SchemaSource = schemaSource
+                    });
             }
             else
             {
-                workUnits.Add(new WorkUnit(server, db, template.Name, ""));
+                workUnits.Add(new WorkUnit(server, db, template.Name, "")
+                {
+                    DatabaseSource = databaseSource,
+                    SchemaSource = "(regular template)"
+                });
             }
         }
 
@@ -866,6 +963,8 @@ public class ProductQuench
     /// </summary>
     internal virtual void DispatchWorkUnits(Template template, List<WorkUnit> workUnits, bool suppressKindling)
     {
+        LogWorkUnitSources(workUnits);
+
         var allowParallel = new Dictionary<string, bool> { [template.Name] = template.AllowParallel };
         var dispatcher = new WorkUnitDispatcher(workUnits, _maxThreads, allowParallel,
             unit => RunOneWorkUnit(unit, template, suppressKindling),
@@ -882,6 +981,23 @@ public class ProductQuench
             _updateFailed = true;
             _progressLog.Error($"Template '{template.Name}' had {ae.InnerExceptions.Count} failed work unit(s)");
         }
+    }
+
+    /// <summary>
+    /// Per-work-unit source disclosure (#257 design §9): emit one log line per unit naming the
+    /// source of both axes (script vs TemplateTargets override). The format is greppable both
+    /// per <c>[server].[db]</c> and per <c>source:</c> tag so a reader can scan a large log for
+    /// "which units came from a config override?" in one pass. Factored out of
+    /// <see cref="DispatchWorkUnits"/> so the log format is testable without spinning up the
+    /// dispatcher itself.
+    /// </summary>
+    internal void LogWorkUnitSources(IReadOnlyList<WorkUnit> workUnits)
+    {
+        foreach (var unit in workUnits)
+            _progressLog.Info(
+                $"[{unit.Server}].[{unit.DatabaseName}]" +
+                $"{(string.IsNullOrEmpty(unit.SchemaName) ? "" : $" [Schema: {unit.SchemaName}]")} " +
+                $"Dispatching work unit (source: db={unit.DatabaseSource}, schema={unit.SchemaSource})");
     }
 
     /// <summary>
