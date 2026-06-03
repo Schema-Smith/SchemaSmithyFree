@@ -1,0 +1,8 @@
+{
+    "Name": "Body",
+    "DatabaseIdentificationScript": "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'placeholder-never-matches'",
+    "VersionStampScript": "SELECT '{{ReleaseVersion}}' AS Version",
+    "ScriptFolders": [
+        { "FolderPath": "MigrationScripts/Before", "QuenchSlot": "Before" }
+    ]
+}

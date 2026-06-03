@@ -174,6 +174,120 @@ public class TemplateTargetsHappyPathTests
     }
 
     [Test]
+    public void DatabaseOverrideWithCreateIfMissing_ProvisionsMissingDbAndDeploys()
+    {
+        // Slice 4 (#257): Databases override + CreateIfMissing: true → admin-DB connection to
+        // master, CREATE DATABASE for the missing target, then quench inside it. We use the
+        // Shared template (no schema-axis) and limit Target.Templates to it so TenantBody (which
+        // assumes a tenant-table seeded in the original MainDB) doesn't try to run against the
+        // transient DB.
+        //
+        // Kindling must run for this test: the freshly-provisioned DB has no SchemaSmith
+        // helpers; the rest of the deployment pipeline depends on them (e.g.,
+        // SchemaSmith.fn_SafeBracketWrap inside MissingTableAndColumnQuench). Invoke
+        // Program.Main with no positional args so KindleTheForge runs end-to-end.
+        var transientDb = MakeTransientDbName("ttdb_create");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ClearCheckpointsForProduct();
+            DropTransientDb(transientDb);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+
+            // Scope to the Shared template — the Shared template's DatabaseIdentificationScript
+            // returns MainDB only; the override REPLACES that with our transient DB.
+            config["Target:Templates:0"] = "Shared";
+            config["Target:TemplateTargets:Shared:Databases:0"] = transientDb;
+            config["Target:TemplateTargets:Shared:CreateIfMissing"] = "true";
+
+            try
+            {
+                RunSchemaQuenchWithKindling();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Provisioning log line surfaced for the new DB on the admin connection. The
+                // line shape is the provisioner's per-engine quoted-form: "Creating database
+                // [X] (CreateIfMissing: true)" on SQL Server.
+                _progressLog.Received().Info(Arg.Is<string>(s =>
+                    s.Contains($"Creating database [{transientDb}]") &&
+                    s.Contains("CreateIfMissing: true")));
+
+                // The transient DB now exists and has the Shared template content deployed.
+                Assert.That(DatabaseExists(transientDb), Is.True,
+                    "CreateIfMissing: true must provision the missing DB.");
+                Assert.That(TableExistsInDb(transientDb, "dbo", "Lookup"), Is.True,
+                    "Shared template deployment must have run inside the newly-provisioned DB.");
+            }
+            finally
+            {
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTransientDb(transientDb);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void DatabaseOverrideWithoutCreateIfMissing_SkipsMissingDbWithInfoLog()
+    {
+        // Slice 4 (#257): CreateIfMissing: false (default) → missing DBs are SKIPPED with an
+        // info log; no admin-DB CREATE DATABASE issued; no work units run for that DB. Mix one
+        // existing DB (MainDb) with one missing DB so the work-unit list isn't empty (which
+        // would trip RequireAtLeastOneTarget: true — the default).
+        var missingDb = MakeTransientDbName("ttdb_skip");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ClearCheckpointsForProduct();
+            DropTransientDb(missingDb);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+
+            config["Target:Templates:0"] = "Shared";
+            config["Target:TemplateTargets:Shared:Databases:0"] = _mainDb;
+            config["Target:TemplateTargets:Shared:Databases:1"] = missingDb;
+            // CreateIfMissing intentionally absent — defaults to false.
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Skip log line names the missing DB + the CreateIfMissing-is-false reason.
+                _progressLog.Received().Info(Arg.Is<string>(s =>
+                    s.Contains($"Database '{missingDb}'") &&
+                    s.Contains("CreateIfMissing is false") &&
+                    s.Contains("skipping all iterations for this server-database pair")));
+
+                // The missing DB must NOT have been created (negative control).
+                Assert.That(DatabaseExists(missingDb), Is.False,
+                    "Skip-missing must NOT provision the database.");
+
+                // The existing DB (MainDb) DID deploy its template content.
+                _progressLog.Received(1).Info(
+                    $"[{_server}].[{_mainDb}] Successfully Quenched");
+            }
+            finally
+            {
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTransientDb(missingDb);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
     public void OverrideWithoutCreateIfMissing_SkipsMissingSchemasWithInfoLog()
     {
         // CreateIfMissing: false (default) — override lists one existing tenant + one missing tenant.
@@ -250,6 +364,10 @@ public class TemplateTargetsHappyPathTests
     }
 
     private static void RunSchemaQuench() => Program.Main(["SkipKindlingForge"]);
+
+    // Slice 4 (#257) DB-axis tests provisioning new DBs need full kindling — the freshly-
+    // provisioned DB has no SchemaSmith helpers, and downstream deployment depends on them.
+    private static void RunSchemaQuenchWithKindling() => Program.Main(System.Array.Empty<string>());
 
     private static void ClearTargetFilters(IConfigurationRoot config)
     {
@@ -414,5 +532,68 @@ IF SCHEMA_ID('{tenant}') IS NOT NULL EXEC('DROP SCHEMA [{tenant}]');";
         var result = cmd.ExecuteScalar();
         conn.Close();
         return Convert.ToInt32(result) > 0;
+    }
+
+    // ----- Slice 4 helpers (DB-axis) ----------------------------------------------------------
+
+    private static string MakeTransientDbName(string prefix)
+    {
+        // Keep the name short + unique. Tests use these as the override target for DB-axis
+        // provisioning; teardown drops them so CI doesn't leak DBs across runs.
+        var unique = Guid.NewGuid().ToString("N").Substring(0, 8);
+        return $"{prefix}_{unique}";
+    }
+
+    private bool DatabaseExists(string databaseName)
+    {
+        // Connect to master (the constructor's connection string already targets master).
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM sys.databases WHERE name = @name";
+        var p = cmd.CreateParameter();
+        p.ParameterName = "@name";
+        p.Value = databaseName;
+        cmd.Parameters.Add(p);
+        var result = cmd.ExecuteScalar();
+        conn.Close();
+        return Convert.ToInt32(result) > 0;
+    }
+
+    private bool TableExistsInDb(string databaseName, string schemaName, string tableName)
+    {
+        if (!DatabaseExists(databaseName)) return false;
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(databaseName);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT COUNT(*) FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id " +
+                          $"WHERE s.name = '{schemaName}' AND t.name = '{tableName}'";
+        var result = cmd.ExecuteScalar();
+        conn.Close();
+        return Convert.ToInt32(result) > 0;
+    }
+
+    private void DropTransientDb(string databaseName)
+    {
+        try
+        {
+            using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandTimeout = 0;
+            cmd.CommandText = $@"
+IF DB_ID('{databaseName}') IS NOT NULL
+BEGIN
+    ALTER DATABASE [{databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE [{databaseName}];
+END";
+            cmd.ExecuteNonQuery();
+            conn.Close();
+        }
+        catch
+        {
+            // Best-effort cleanup — a missing or already-dropped DB is fine.
+        }
     }
 }

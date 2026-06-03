@@ -125,6 +125,7 @@ public class ProductQuench
         foreach (var child in section.GetChildren())
         {
             var templateName = child.Key;
+            var createIfMissingRaw = child["CreateIfMissing"];
             var target = new TemplateTarget
             {
                 Databases = child.GetSection("Databases").GetChildren()
@@ -137,8 +138,19 @@ public class ProductQuench
                     .Where(v => !string.IsNullOrWhiteSpace(v))
                     .Select(v => v!.Trim())
                     .ToList(),
-                CreateIfMissing = bool.TryParse(child["CreateIfMissing"], out var c) && c
+                CreateIfMissing = bool.TryParse(createIfMissingRaw, out var c) && c
             };
+            // Skip entries that are entirely empty AND have no explicit CreateIfMissing setting.
+            // The .NET in-memory configuration provider retains a previously-set key path even
+            // after its values are nulled (e.g., when an integration-test fixture clears state
+            // between tests), so a phantom `Foo: {}` can appear in iteration after cleanup. A
+            // user could never reach this state through real config editing — they'd set at
+            // least one child — so dropping the phantom here keeps the validator's rule-3
+            // diagnostic precise (a real "TemplateTargets entry must declare at least one of
+            // Databases or Schemas" trips only on user-authored empty entries, not on test
+            // cleanup residue).
+            if (target.HasNoTargets && string.IsNullOrWhiteSpace(createIfMissingRaw))
+                continue;
             result[templateName] = target;
         }
         return result;
@@ -847,6 +859,16 @@ public class ProductQuench
 
         foreach (var db in databases)
         {
+            // Slice-4 (#257) DB-axis provisioning + skip-missing pre-dispatch pass: when the DB
+            // came from a TemplateTargets:<T>:Databases override, check whether the database
+            // exists on the server BEFORE running schema discovery (which assumes the DB exists)
+            // or enqueueing any work units. Branching:
+            //   CreateIfMissing: true  → provision via admin connection (idempotent).
+            //   CreateIfMissing: false → emit skip log; DO NOT add work units for this (server, db).
+            // Discovery-sourced DBs bypass this entirely — today's behavior is preserved.
+            if (databasesOverride && !DatabaseAxisProvisioningGate(server, db, template, overrideEntry!))
+                continue;
+
             if (template.IsSchemaTemplate)
             {
                 List<string> schemas;
@@ -892,7 +914,14 @@ public class ProductQuench
                         // and (b) CreateIfMissing for the skip-missing path. Discovery-sourced
                         // units keep both fields at default — today's behavior is preserved.
                         SchemaFromOverride = schemasOverride,
-                        ProvisionSchemaIfMissing = schemasOverride && overrideEntry!.CreateIfMissing
+                        ProvisionSchemaIfMissing = schemasOverride && overrideEntry!.CreateIfMissing,
+                        // Slice-4 (#257): mirror the same origin disclosure for the DB axis.
+                        // ProvisionDatabaseIfMissing is informational at the work-unit level — the
+                        // actual provisioning happened in DatabaseAxisProvisioningGate above; the
+                        // flag surfaces in logs and tests to disambiguate "this unit's DB came from
+                        // override + CreateIfMissing flow" from "discovery-sourced unit."
+                        DatabaseFromOverride = databasesOverride,
+                        ProvisionDatabaseIfMissing = databasesOverride && overrideEntry!.CreateIfMissing
                     });
             }
             else
@@ -900,12 +929,153 @@ public class ProductQuench
                 workUnits.Add(new WorkUnit(server, db, template.Name, "")
                 {
                     DatabaseSource = databaseSource,
-                    SchemaSource = "(regular template)"
+                    SchemaSource = "(regular template)",
+                    // Slice-4 (#257): mirror the same origin disclosure for the DB axis (regular templates).
+                    DatabaseFromOverride = databasesOverride,
+                    ProvisionDatabaseIfMissing = databasesOverride && overrideEntry!.CreateIfMissing
                 });
             }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Slice-4 (#257) DB-axis provisioning gate. Called once per (server, db) pair when the DB
+    /// came from a <c>TemplateTargets:&lt;T&gt;:Databases</c> override. Checks whether the
+    /// database exists on <paramref name="server"/>; if missing, branches on
+    /// <c>CreateIfMissing</c>:
+    /// <list type="bullet">
+    ///   <item><term>true</term><description>Provisions the DB via admin connection (idempotent).</description></item>
+    ///   <item><term>false</term><description>Emits a skip log and returns <c>false</c> so the caller
+    ///   short-circuits without adding any work units for this DB.</description></item>
+    /// </list>
+    /// Returns <c>true</c> when the DB exists (either pre-existing or just provisioned) and the
+    /// caller should proceed with schema discovery / work-unit enqueueing; <c>false</c> when the
+    /// DB is missing and skip-missing applies.
+    /// <para>
+    /// Internal+virtual so tests can override the entire decision flow without standing up a
+    /// live admin connection. Production code uses the default implementation here, which
+    /// composes the admin connection via <see cref="ConnectionString.RetargetDatabase"/> and
+    /// delegates to <see cref="SchemaProvisioner.EnsureDatabaseExists"/>.
+    /// </para>
+    /// </summary>
+    internal virtual bool DatabaseAxisProvisioningGate(string server, string databaseName,
+        Template template, TemplateTarget overrideEntry)
+    {
+        bool exists;
+        try
+        {
+            exists = DatabaseExistsOnServer(server, databaseName);
+        }
+        catch (Exception e)
+        {
+            // Admin-connection failure here is a server-level failure (e.g., login denied to
+            // master/postgres/information_schema). Surface a clear diagnostic and route through
+            // the DB-failure path — the template's continue policy decides whether to abort.
+            _progressLog.Error(
+                $"[{server}] Database existence check FAILED for '{databaseName}' (template '{template.Name}'): {e.Message}");
+            _errorLog.Error(
+                $"[{server}] Database existence check failed for '{databaseName}' (template '{template.Name}'):\r\n{e}");
+            _updateFailed = true;
+            return false;
+        }
+
+        if (exists) return true;
+
+        if (overrideEntry.CreateIfMissing)
+        {
+            // Per-create log line surfaces from the provisioner (slice 3 / slice 4 contract:
+            // ONE log line per create, branched by WhatIf inside the provisioner). The gate
+            // owns ONLY the skip-missing and existence-check-failure logs — no pre-provision
+            // chatter that would double-log every real CREATE DATABASE.
+            try
+            {
+                ProvisionDatabaseViaAdminConnection(server, databaseName);
+            }
+            catch (TemplateTargetProvisioningException ex)
+            {
+                // Provisioning permission denial — the underlying engine exception is preserved
+                // as InnerException. Surface the wrapper's diagnostic to ops and route through
+                // the DB-failure path so the template's continue policy applies.
+                _progressLog.Error(
+                    $"[{server}] Database provisioning FAILED for '{databaseName}' (template '{template.Name}'): {ex.Message}");
+                _errorLog.Error(
+                    $"[{server}] Database provisioning failed for '{databaseName}' (template '{template.Name}'):\r\n{ex}");
+                _updateFailed = true;
+                return false;
+            }
+            return true;
+        }
+
+        // Skip-missing on the DB axis. Mirror the schema-axis log shape so a grep for
+        // "CreateIfMissing is false" catches both axes. The "[server]" prefix already names
+        // the server identity, so the message body says "this database" rather than repeating
+        // the server name.
+        _progressLog.Info(
+            $"[{server}] Database '{databaseName}' does not exist and " +
+            $"TemplateTargets CreateIfMissing is false — skipping all iterations for this server-database pair.");
+        return false;
+    }
+
+    /// <summary>
+    /// Checks whether <paramref name="databaseName"/> exists on <paramref name="server"/> via an
+    /// admin-database connection (per-engine: <c>master</c> / <c>postgres</c> /
+    /// <c>information_schema</c>). Internal+virtual so tests can stub the existence answer
+    /// without standing up a live connection. Production code uses
+    /// <see cref="ConnectionString.RetargetDatabase"/> to compose the admin connection from
+    /// the user's target connection settings (slice 4, #257).
+    /// </summary>
+    internal virtual bool DatabaseExistsOnServer(string server, string databaseName)
+    {
+        using var command = GetCommand(server);  // GetCommand already targets the platform's init DB
+        try
+        {
+            command.Parameters.Clear();
+            command.CommandText = _product.Platform switch
+            {
+                Platform.SqlServer => "SELECT COUNT(*) FROM sys.databases WHERE name = @name",
+                Platform.PostgreSQL => "SELECT COUNT(*) FROM pg_database WHERE datname = @name",
+                Platform.MySQL => "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = @name",
+                _ => throw new ArgumentOutOfRangeException(nameof(databaseName))
+            };
+            var param = command.CreateParameter();
+            param.ParameterName = "@name";
+            param.Value = databaseName;
+            param.DbType = DbType.String;
+            command.Parameters.Add(param);
+            var result = command.ExecuteScalar();
+            command.Parameters.Clear();
+            return ScalarToBool(result);
+        }
+        finally
+        {
+            command.Connection?.Close();
+            command.Connection?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Provisions <paramref name="databaseName"/> on <paramref name="server"/> via an
+    /// admin-database connection. The admin DB is the engine's init DB (<c>master</c> /
+    /// <c>postgres</c> / <c>information_schema</c>); <see cref="GetCommand"/> already targets it.
+    /// The DDL itself is delegated to <see cref="SchemaProvisioner.EnsureDatabaseExists"/> so the
+    /// per-engine quoting / escaping / IF-NOT-EXISTS gates stay testable in isolation.
+    /// Internal+virtual so tests can override the provisioning step.
+    /// </summary>
+    internal virtual void ProvisionDatabaseViaAdminConnection(string server, string databaseName)
+    {
+        using var command = GetCommand(server);
+        try
+        {
+            new SchemaProvisioner().EnsureDatabaseExists(command, databaseName, _product.Platform,
+                IsWhatIfOnly, _progressLog.Info);
+        }
+        finally
+        {
+            command.Connection?.Close();
+            command.Connection?.Dispose();
+        }
     }
 
     /// <summary>

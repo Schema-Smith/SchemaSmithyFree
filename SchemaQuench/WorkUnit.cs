@@ -68,4 +68,25 @@ public sealed record WorkUnit(
     /// <c>CreateSchemaIfMissing</c> contract.
     /// </summary>
     public bool ProvisionSchemaIfMissing { get; init; }
+
+    /// <summary>
+    /// True when this unit's <see cref="DatabaseName"/> came from a
+    /// <c>TemplateTargets:&lt;Name&gt;:Databases</c> override (#257 slice 4). Drives the
+    /// pre-dispatch database-existence check + provisioning / skip-missing decision in
+    /// <see cref="ProductQuench.EnumerateWorkUnitsForServer"/>. Discovery-sourced units
+    /// (default false) bypass the DB-axis pre-dispatch pass entirely — today's behavior
+    /// is preserved bit-for-bit.
+    /// </summary>
+    public bool DatabaseFromOverride { get; init; }
+
+    /// <summary>
+    /// True when an override declared <c>CreateIfMissing: true</c> on a template carrying a
+    /// <c>Databases</c> override (#257 slice 4). When set, the pre-dispatch DB-existence pass
+    /// provisions a missing database via
+    /// <see cref="SchemaProvisioner.EnsureDatabaseExists(System.Data.IDbCommand, string, Schema.Domain.Platform, bool, System.Action{string})"/>
+    /// before the per-database iteration's connection opens. When false (the default), missing
+    /// databases on override-sourced units are SKIPPED with an info log — the work unit is
+    /// removed from the dispatch queue.
+    /// </summary>
+    public bool ProvisionDatabaseIfMissing { get; init; }
 }

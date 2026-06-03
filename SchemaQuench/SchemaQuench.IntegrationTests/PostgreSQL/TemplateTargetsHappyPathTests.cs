@@ -165,6 +165,108 @@ public class TemplateTargetsHappyPathTests
     }
 
     [Test]
+    public void DatabaseOverrideWithCreateIfMissing_ProvisionsMissingDbAndDeploys()
+    {
+        // Slice 4 (#257): Databases override + CreateIfMissing: true → admin-DB connection to
+        // postgres, CREATE DATABASE for the missing target (explicit existence check first,
+        // since PG has no IF NOT EXISTS variant), then quench inside it. Kindling must run for
+        // this test: the freshly-provisioned DB has no SchemaSmith helpers, and downstream
+        // deployment depends on them.
+        var transientDb = MakeTransientDbName("ttdb_create");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ClearCheckpointsForProduct();
+            DropTransientDb(transientDb);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+
+            config["Target:Templates:0"] = "Shared";
+            config["Target:TemplateTargets:Shared:Databases:0"] = transientDb;
+            config["Target:TemplateTargets:Shared:CreateIfMissing"] = "true";
+
+            try
+            {
+                RunSchemaQuenchWithKindling();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // PG provisioner log line uses the engine's quoted-form: "Creating database
+                // "X" (CreateIfMissing: true)".
+                _progressLog.Received().Info(Arg.Is<string>(s =>
+                    s.Contains($"Creating database \"{transientDb}\"") &&
+                    s.Contains("CreateIfMissing: true")));
+
+                Assert.That(DatabaseExists(transientDb), Is.True,
+                    "CreateIfMissing: true must provision the missing DB.");
+                Assert.That(TableExistsInDb(transientDb, "public", "lookup"), Is.True,
+                    "Shared template deployment must have run inside the newly-provisioned DB.");
+            }
+            finally
+            {
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTransientDb(transientDb);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void DatabaseOverrideWithoutCreateIfMissing_SkipsMissingDbWithInfoLog()
+    {
+        // Slice 4 (#257): missing DB + CreateIfMissing: false → SKIP with info log; no CREATE.
+        // Mix one existing DB (MainDb) + one missing DB so the work-unit list isn't empty
+        // (which would trip RequireAtLeastOneTarget: true — the template default).
+        var missingDb = MakeTransientDbName("ttdb_skip");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ClearCheckpointsForProduct();
+            DropTransientDb(missingDb);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+
+            config["Target:Templates:0"] = "Shared";
+            config["Target:TemplateTargets:Shared:Databases:0"] = _mainDb;
+            config["Target:TemplateTargets:Shared:Databases:1"] = missingDb;
+            // CreateIfMissing absent — defaults false.
+
+            try
+            {
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                _progressLog.Received().Info(Arg.Is<string>(s =>
+                    s.Contains($"Database '{missingDb}'") &&
+                    s.Contains("CreateIfMissing is false") &&
+                    s.Contains("skipping all iterations for this server-database pair")));
+
+                Assert.That(DatabaseExists(missingDb), Is.False,
+                    "Skip-missing must NOT provision the database.");
+
+                // The existing DB (MainDb) DID deploy its template content.
+                _progressLog.Received(1).Info(
+                    $"[{_server}].[{_mainDb}] Successfully Quenched");
+            }
+            finally
+            {
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTransientDb(missingDb);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
     public void OverrideWithoutCreateIfMissing_SkipsMissingSchemasWithInfoLog()
     {
         // CreateIfMissing: false (default) — missing override entries are SKIPPED with an info log.
@@ -233,6 +335,10 @@ public class TemplateTargetsHappyPathTests
     }
 
     private static void RunSchemaQuench() => Program.Main(["SkipKindlingForge"]);
+
+    // Slice 4 (#257) DB-axis tests provisioning new DBs need full kindling — the freshly-
+    // provisioned DB has no SchemaSmith helpers, and downstream deployment depends on them.
+    private static void RunSchemaQuenchWithKindling() => Program.Main(System.Array.Empty<string>());
 
     private static void ClearTargetFilters(IConfigurationRoot config)
     {
@@ -389,5 +495,71 @@ $$;";
         var result = cmd.ExecuteScalar();
         conn.Close();
         return Convert.ToInt32(result) > 0;
+    }
+
+    // ----- Slice 4 helpers (DB-axis) ----------------------------------------------------------
+
+    private static string MakeTransientDbName(string prefix)
+    {
+        // Lowercase per PG convention; otherwise PG folds-or-quotes the name and the test diverges
+        // from the override-supplied identifier. Tests use these as the override target for DB-axis
+        // provisioning; teardown drops them so CI doesn't leak DBs across runs.
+        var unique = Guid.NewGuid().ToString("N").Substring(0, 8);
+        return $"{prefix}_{unique}".ToLowerInvariant();
+    }
+
+    private bool DatabaseExists(string databaseName)
+    {
+        // Connect to the postgres admin DB. The constructor's _connectionString already targets it.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM pg_database WHERE datname = @name";
+        var p = cmd.CreateParameter();
+        p.ParameterName = "@name";
+        p.Value = databaseName;
+        cmd.Parameters.Add(p);
+        var result = cmd.ExecuteScalar();
+        conn.Close();
+        return Convert.ToInt32(result) > 0;
+    }
+
+    private bool TableExistsInDb(string databaseName, string schemaName, string tableName)
+    {
+        if (!DatabaseExists(databaseName)) return false;
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(databaseName);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT COUNT(*) FROM information_schema.tables " +
+                          $"WHERE table_schema = '{schemaName}' AND table_name = '{tableName}'";
+        var result = cmd.ExecuteScalar();
+        conn.Close();
+        return Convert.ToInt32(result) > 0;
+    }
+
+    private void DropTransientDb(string databaseName)
+    {
+        try
+        {
+            // Terminate other connections first; PG refuses DROP DATABASE if there are active sessions.
+            Npgsql.NpgsqlConnection.ClearAllPools();
+            using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandTimeout = 0;
+            cmd.CommandText = $@"
+SELECT pg_terminate_backend(pid)
+  FROM pg_stat_activity
+  WHERE datname = '{databaseName}' AND pid <> pg_backend_pid();";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = $"DROP DATABASE IF EXISTS \"{databaseName}\";";
+            cmd.ExecuteNonQuery();
+            conn.Close();
+        }
+        catch
+        {
+            // Best-effort cleanup — a missing or already-dropped DB is fine.
+        }
     }
 }

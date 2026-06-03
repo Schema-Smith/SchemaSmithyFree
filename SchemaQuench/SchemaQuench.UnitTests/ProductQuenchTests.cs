@@ -1116,6 +1116,11 @@ public class ProductQuenchTests
             // produce different DB/schema names than the override.
             quench.IdentifiedDatabases["primary"] = new[] { "wrong_db" };
             quench.SchemaDiscoveryResults[("primary", "ring1")] = new List<string> { "wrong_schema" };
+            // Slice-4 (#257): the DB-axis gate now checks existence for override-sourced DBs.
+            // Mark the overridden DBs as existing so this slice-2 test continues to exercise
+            // the pure enumeration-override path (no CreateIfMissing branch involved).
+            quench.ExistingDatabases.Add(("primary", "ring1"));
+            quench.ExistingDatabases.Add(("primary", "ring2"));
 
             var template = new Template
             {
@@ -1300,6 +1305,11 @@ public class ProductQuenchTests
             quench.IdentifiedDatabases["primary"] = new[] { "wrong_db" };
             quench.SchemaDiscoveryResults[("primary", "tenant_a")] = new List<string> { "s1" };
             quench.SchemaDiscoveryResults[("primary", "tenant_b")] = new List<string> { "s2" };
+            // Slice-4 (#257): DB-axis gate requires existence for override-sourced DBs. Mark
+            // both as existing so this slice-2 test exercises the pure enumeration-override path
+            // (no CreateIfMissing branch involved).
+            quench.ExistingDatabases.Add(("primary", "tenant_a"));
+            quench.ExistingDatabases.Add(("primary", "tenant_b"));
 
             var template = new Template
             {
@@ -1439,6 +1449,223 @@ public class ProductQuenchTests
 
     #endregion
 
+    #region TemplateTargets DB-Axis Provisioning (Slice 4 — Issue #257)
+
+    [Test]
+    public void EnumerateWorkUnits_DatabaseOverrideWithCreateIfMissing_ProvisionsMissingDbsBeforeDispatch()
+    {
+        // Two DBs in the override, only one pre-exists. CreateIfMissing: true → the missing one
+        // is provisioned through the admin connection BEFORE any per-DB work units are enqueued.
+        // Both DBs end up in the work-unit list afterwards.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            // Only tenant_a exists on the server today. tenant_b does NOT — and the override
+            // says CreateIfMissing: true, so the gate must provision it.
+            quench.ExistingDatabases.Add(("primary", "tenant_a"));
+
+            var template = new Template
+            {
+                Name = "PerTenantDB",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units.Select(u => u.DatabaseName), Is.EquivalentTo(new[] { "tenant_a", "tenant_b" }));
+                Assert.That(quench.ProvisionedDatabases, Is.EquivalentTo(new[] { ("primary", "tenant_b") }),
+                    "CreateIfMissing: true must provision the missing DB before adding its work units.");
+                Assert.That(units.All(u => u.DatabaseFromOverride), Is.True);
+                Assert.That(units.All(u => u.ProvisionDatabaseIfMissing), Is.True);
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:PerTenantDB:Databases:0"] = "tenant_a",
+            ["Target:TemplateTargets:PerTenantDB:Databases:1"] = "tenant_b",
+            ["Target:TemplateTargets:PerTenantDB:CreateIfMissing"] = "true"
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_DatabaseOverrideWithoutCreateIfMissing_SkipsMissingDbsAndOmitsWorkUnits()
+    {
+        // CreateIfMissing: false (default) — missing DBs are SKIPPED with an info log and their
+        // work units are NOT enqueued. Existing DBs deploy normally.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            // tenant_a exists; tenant_skipped does NOT. CreateIfMissing absent → defaults false.
+            quench.ExistingDatabases.Add(("primary", "tenant_a"));
+
+            var template = new Template
+            {
+                Name = "PerTenantDB",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units.Select(u => u.DatabaseName), Is.EquivalentTo(new[] { "tenant_a" }),
+                    "Skip-missing must REMOVE work units for missing DBs from the enumeration.");
+                Assert.That(quench.ProvisionedDatabases, Is.Empty,
+                    "CreateIfMissing: false must NOT silently upgrade to a provision.");
+                // Skip log line names the missing DB + the CreateIfMissing-is-false reason.
+                Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s =>
+                    s.Contains("Database 'tenant_skipped'") &&
+                    s.Contains("CreateIfMissing is false") &&
+                    s.Contains("skipping all iterations for this server-database pair")));
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:PerTenantDB:Databases:0"] = "tenant_a",
+            ["Target:TemplateTargets:PerTenantDB:Databases:1"] = "tenant_skipped"
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_DatabaseOverride_DiscoveryDbs_BypassDbAxisGate()
+    {
+        // Discovery-sourced DBs (no Databases override) must NOT go through the DB-axis gate
+        // — DatabaseExistsOnServer must not be called, and no skip log fires for the discovered
+        // DBs (the engine assumes whatever the identification script returned IS reachable).
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = new[] { "ordering_b" };
+
+            var template = new Template
+            {
+                Name = "Core",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Has.Count.EqualTo(1));
+                Assert.That(units[0].DatabaseFromOverride, Is.False,
+                    "Discovery-sourced units must carry DatabaseFromOverride = false.");
+                Assert.That(units[0].ProvisionDatabaseIfMissing, Is.False);
+                Assert.That(quench.ProvisionedDatabases, Is.Empty,
+                    "Discovery-sourced DBs must bypass the DB-axis gate entirely.");
+            });
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_DatabaseOverride_ProvisioningFailure_TripsUpdateFailed()
+    {
+        // Permission denial during CREATE DATABASE bubbles up as TemplateTargetProvisioningException;
+        // the gate must log the actionable diagnostic + trip _updateFailed + omit the failing DB's
+        // work units. Other DBs in the override still deploy.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.ExistingDatabases.Add(("primary", "tenant_a"));
+            // tenant_b is missing AND the simulated admin user lacks CREATE DATABASE permission.
+            quench.ProvisioningFailures.Add(("primary", "tenant_b"));
+
+            var template = new Template
+            {
+                Name = "PerTenantDB",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                ContinueOnDatabaseFailure = true   // see one DB succeed even when its sibling errors
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units.Select(u => u.DatabaseName), Is.EquivalentTo(new[] { "tenant_a" }),
+                    "The DB whose provisioning failed must not produce work units.");
+                Assert.That(quench.UpdateFailed, Is.True,
+                    "Provisioning failure must trip _updateFailed so the exit-code path engages.");
+                Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s =>
+                    s.Contains("Database provisioning FAILED") &&
+                    s.Contains("tenant_b") &&
+                    s.Contains("CREATE DATABASE permission")));
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:PerTenantDB:Databases:0"] = "tenant_a",
+            ["Target:TemplateTargets:PerTenantDB:Databases:1"] = "tenant_b",
+            ["Target:TemplateTargets:PerTenantDB:CreateIfMissing"] = "true"
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_DatabaseOverride_ExistenceCheckFailure_TripsUpdateFailed()
+    {
+        // Admin-connection failure during the existence check (e.g., login denied to master) is
+        // a server-level failure: surface a clear diagnostic, trip _updateFailed, omit the DB.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.ExistenceCheckFailures.Add(("primary", "tenant_b"));
+
+            var template = new Template
+            {
+                Name = "PerTenantDB",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                ContinueOnDatabaseFailure = true
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Is.Empty);
+                Assert.That(quench.UpdateFailed, Is.True);
+                Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s =>
+                    s.Contains("Database existence check FAILED") &&
+                    s.Contains("tenant_b")));
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:PerTenantDB:Databases:0"] = "tenant_b"
+        });
+    }
+
+    [Test]
+    public void EnumerateWorkUnits_DatabaseOverride_PreExistingDb_DoesNotProvision()
+    {
+        // Idempotent path: when the DB already exists, the gate must return true without
+        // provisioning — the existence check covers it. CreateIfMissing: true on a pre-existing
+        // DB is a no-op.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.ExistingDatabases.Add(("primary", "tenant_a"));
+
+            var template = new Template
+            {
+                Name = "PerTenantDB",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units, Has.Count.EqualTo(1));
+                Assert.That(units[0].DatabaseName, Is.EqualTo("tenant_a"));
+                Assert.That(quench.ProvisionedDatabases, Is.Empty,
+                    "Pre-existing DB must NOT trigger provisioning even with CreateIfMissing: true.");
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:PerTenantDB:Databases:0"] = "tenant_a",
+            ["Target:TemplateTargets:PerTenantDB:CreateIfMissing"] = "true"
+        });
+    }
+
+    #endregion
+
     #region Schema-Template Work-Unit Enumeration (Slice 3) — helpers shared with slice 2
 
     /// <summary>
@@ -1537,6 +1764,14 @@ public class ProductQuenchTests
         public List<string> ProgressLogLines { get; }
         public bool LogBackupCalled { get; private set; }
 
+        // Slice-4 (#257) DB-axis seams. ExistingDatabases is the in-memory truth set for the
+        // DatabaseExistsOnServer check; ProvisionedDatabases records what production code asked
+        // to provision so tests assert on the call without standing up an admin connection.
+        public HashSet<(string Server, string Db)> ExistingDatabases { get; } = new();
+        public List<(string Server, string Db)> ProvisionedDatabases { get; } = new();
+        public HashSet<(string Server, string Db)> ProvisioningFailures { get; } = new();
+        public HashSet<(string Server, string Db)> ExistenceCheckFailures { get; } = new();
+
         // Call tracking for the override-vs-discovery slice-2 tests. Production code that bypasses
         // discovery via TemplateTargets must NOT touch these surfaces — assertions on the recorded
         // counts catch a regression that accidentally re-invokes discovery after applying the override.
@@ -1565,6 +1800,28 @@ public class ProductQuenchTests
             return SchemaDiscoveryResults.TryGetValue((server, databaseName), out var list)
                 ? new List<string>(list)
                 : new List<string>();
+        }
+
+        // Slice-4 (#257) DB-axis existence + provisioning seams. Tests populate ExistingDatabases
+        // to control whether DatabaseAxisProvisioningGate sees the DB as present; provisioning
+        // failures are simulated by adding to ProvisioningFailures.
+        internal override bool DatabaseExistsOnServer(string server, string databaseName)
+        {
+            if (ExistenceCheckFailures.Contains((server, databaseName)))
+                throw new System.Exception($"Existence check failed for [{server}].[{databaseName}] (simulated)");
+            return ExistingDatabases.Contains((server, databaseName));
+        }
+
+        internal override void ProvisionDatabaseViaAdminConnection(string server, string databaseName)
+        {
+            if (ProvisioningFailures.Contains((server, databaseName)))
+                throw new TemplateTargetProvisioningException(
+                    $"Failed to provision database '{databaseName}'. CREATE DATABASE permission denied (simulated)",
+                    new System.Exception("simulated"));
+            ProvisionedDatabases.Add((server, databaseName));
+            // Make the gate see the DB as existing immediately after provisioning so the caller
+            // proceeds with schema discovery / work-unit enqueueing.
+            ExistingDatabases.Add((server, databaseName));
         }
 
         // Capture, don't dispatch. Slice-3 enumeration tests only need to assert on the work
