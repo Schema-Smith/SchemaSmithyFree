@@ -30,7 +30,9 @@ public static class RepositoryHelper
     /// Initializes or updates a Product.json and adds missing schema files for the given platform.
     /// Schema files are only added if they don't already exist. Use WriteSchemaFiles for merge behavior.
     /// </summary>
-    public static void UpdateOrInitRepository(string productPath, string productName, string templateName, string dbName, Platform platform)
+    public static void UpdateOrInitRepository(
+        string productPath, string productName, string templateName, string dbName, Platform platform,
+        bool isSchemaTemplate = false)
     {
         var file = FileWrapper.GetFromFactory();
         var directory = DirectoryWrapper.GetFromFactory();
@@ -56,7 +58,37 @@ public static class RepositoryHelper
             product.ScriptTokens.Add($"{templateName}Db", dbName);
         if (product.TemplateOrder.All(t => !t.EqualsIgnoringCase(templateName)))
             product.TemplateOrder.Add(templateName);
+
+        // Schema-template entries must run AFTER any regular templates they depend on
+        // (issue #258). Stable-partition the order: regular templates first, schema-
+        // templates last, preserving relative order within each group. Detection reads
+        // each Template.json's SchemaIdentificationScript (Template.IsSchemaTemplate);
+        // the just-added entry's Template.json may not exist yet at this point on the
+        // SchemaTongs call path, so the caller-supplied isSchemaTemplate wins for it.
+        product.TemplateOrder = product.TemplateOrder
+            .OrderBy(t => ClassifyTemplateEntry(productPath, t, templateName, isSchemaTemplate, file) ? 1 : 0)
+            .ToList();
+
         JsonHelper.Write(productFile, product);
+    }
+
+    private static bool ClassifyTemplateEntry(string productPath, string templateNameToCheck,
+        string justAddedName, bool justAddedIsSchemaTemplate, IFile file)
+    {
+        if (templateNameToCheck.EqualsIgnoringCase(justAddedName))
+            return justAddedIsSchemaTemplate;
+
+        var templateFile = Path.Combine(productPath, "Templates", templateNameToCheck, "Template.json");
+        if (!file.Exists(templateFile)) return false; // missing Template.json — treat as regular (leaves position alone)
+        try
+        {
+            var template = JsonHelper.Load<Template>(templateFile);
+            return template?.IsSchemaTemplate ?? false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>

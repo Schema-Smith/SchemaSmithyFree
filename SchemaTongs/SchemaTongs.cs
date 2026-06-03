@@ -242,7 +242,8 @@ public class SchemaTongs
         var productFile = Path.Combine(_productPath, "Product.json");
         var productIsNew = !FileWrapper.GetFromFactory().Exists(productFile);
 
-        RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb, _platform);
+        RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb, _platform,
+            isSchemaTemplate: _isSchemaTemplate);
 
         ApplyCheckConstraintStyle(productFile, productIsNew, configStyle);
 

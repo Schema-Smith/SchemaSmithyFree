@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using System.IO;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NSubstitute;
 using Schema.Domain;
@@ -301,5 +302,136 @@ public class RepositoryHelperTests
         // Should have the full generated schema with Name, ValidationScript, etc.
         Assert.That(schema["properties"]?["Name"], Is.Not.Null);
         Assert.That(schema["properties"]?["ValidationScript"], Is.Not.Null);
+    }
+
+    // --- TemplateOrder stable-partition tests (issue #258) ---
+
+    private static string FakeProductPath => Path.Combine("fake", "product");
+    private static string FakeProductFile => Path.Combine("fake", "product", "Product.json");
+
+    private static string FakeTemplateFile(string templateName)
+        => Path.Combine("fake", "product", "Templates", templateName, "Template.json");
+
+    private void SetupProductFile(Product product)
+    {
+        _file.Exists(FakeProductFile).Returns(true);
+        _file.ReadAllText(FakeProductFile).Returns(JsonConvert.SerializeObject(product));
+    }
+
+    private void SetupTemplateFile(string templateName, Template template)
+    {
+        _file.Exists(FakeTemplateFile(templateName)).Returns(true);
+        _file.ReadAllText(FakeTemplateFile(templateName)).Returns(JsonConvert.SerializeObject(template));
+    }
+
+    [Test]
+    public void UpdateOrInitRepository_AddingRegularTemplate_AfterSchemaTemplate_PlacesRegularFirst()
+    {
+        // Issue #258 — reviewer scenario: schema-template extracted first, regular
+        // template extracted second. Expect TemplateOrder = [Regular, SchemaTemplate].
+        SetupProductFile(new Product
+        {
+            Name = "P",
+            Platform = Platform.SqlServer,
+            TemplateOrder = new List<string> { "TenantSchema" }
+        });
+        SetupTemplateFile("TenantSchema", new Template
+        {
+            Name = "TenantSchema",
+            SchemaIdentificationScript = "SELECT 'tenant_a' AS SchemaName"
+        });
+
+        var writtenProductJson = "";
+        _file.When(f => f.WriteAllText(FakeProductFile, Arg.Any<string>()))
+            .Do(ci => writtenProductJson = ci.ArgAt<string>(1));
+
+        RepositoryHelper.UpdateOrInitRepository(
+            FakeProductPath, productName: "P", templateName: "Shared", dbName: "db",
+            platform: Platform.SqlServer, isSchemaTemplate: false);
+
+        var product = JsonConvert.DeserializeObject<Product>(writtenProductJson);
+        Assert.That(product.TemplateOrder, Is.EqualTo(new[] { "Shared", "TenantSchema" }));
+    }
+
+    [Test]
+    public void UpdateOrInitRepository_AddingSchemaTemplate_AfterRegularTemplate_PreservesRegularFirst()
+    {
+        SetupProductFile(new Product
+        {
+            Name = "P",
+            Platform = Platform.SqlServer,
+            TemplateOrder = new List<string> { "Shared" }
+        });
+        SetupTemplateFile("Shared", new Template { Name = "Shared" });
+
+        var writtenProductJson = "";
+        _file.When(f => f.WriteAllText(FakeProductFile, Arg.Any<string>()))
+            .Do(ci => writtenProductJson = ci.ArgAt<string>(1));
+
+        RepositoryHelper.UpdateOrInitRepository(
+            FakeProductPath, productName: "P", templateName: "TenantSchema", dbName: "db",
+            platform: Platform.SqlServer, isSchemaTemplate: true);
+
+        var product = JsonConvert.DeserializeObject<Product>(writtenProductJson);
+        Assert.That(product.TemplateOrder, Is.EqualTo(new[] { "Shared", "TenantSchema" }));
+    }
+
+    [Test]
+    public void UpdateOrInitRepository_MultipleRegularAndSchemaTemplates_PreservesRelativeOrderWithinGroups()
+    {
+        // Stable partition, not alphabetical sort.
+        SetupProductFile(new Product
+        {
+            Name = "P",
+            Platform = Platform.SqlServer,
+            TemplateOrder = new List<string> { "TenantBeta", "SharedA", "TenantAlpha", "SharedB" }
+        });
+        SetupTemplateFile("TenantBeta", new Template { Name = "TenantBeta", SchemaIdentificationScript = "SELECT 'x'" });
+        SetupTemplateFile("SharedA", new Template { Name = "SharedA" });
+        SetupTemplateFile("TenantAlpha", new Template { Name = "TenantAlpha", SchemaIdentificationScript = "SELECT 'y'" });
+        SetupTemplateFile("SharedB", new Template { Name = "SharedB" });
+
+        var writtenProductJson = "";
+        _file.When(f => f.WriteAllText(FakeProductFile, Arg.Any<string>()))
+            .Do(ci => writtenProductJson = ci.ArgAt<string>(1));
+
+        // Re-running extraction for SharedA should partition without alphabetizing.
+        RepositoryHelper.UpdateOrInitRepository(
+            FakeProductPath, productName: "P", templateName: "SharedA", dbName: "db",
+            platform: Platform.SqlServer, isSchemaTemplate: false);
+
+        var product = JsonConvert.DeserializeObject<Product>(writtenProductJson);
+        Assert.That(product.TemplateOrder, Is.EqualTo(new[] { "SharedA", "SharedB", "TenantBeta", "TenantAlpha" }));
+    }
+
+    [Test]
+    public void UpdateOrInitRepository_AlreadyCorrectOrder_NoChurn()
+    {
+        // Idempotency: a re-run with everything already partitioned correctly
+        // returns the same order and does not duplicate the existing entry.
+        SetupProductFile(new Product
+        {
+            Name = "P",
+            Platform = Platform.SqlServer,
+            TemplateOrder = new List<string> { "Shared", "TenantSchema" },
+            ScriptTokens = new Dictionary<string, string> { { "SharedDb", "db" } }
+        });
+        SetupTemplateFile("Shared", new Template { Name = "Shared" });
+        SetupTemplateFile("TenantSchema", new Template
+        {
+            Name = "TenantSchema",
+            SchemaIdentificationScript = "SELECT 'x'"
+        });
+
+        var writtenProductJson = "";
+        _file.When(f => f.WriteAllText(FakeProductFile, Arg.Any<string>()))
+            .Do(ci => writtenProductJson = ci.ArgAt<string>(1));
+
+        RepositoryHelper.UpdateOrInitRepository(
+            FakeProductPath, productName: "P", templateName: "Shared", dbName: "db",
+            platform: Platform.SqlServer, isSchemaTemplate: false);
+
+        var product = JsonConvert.DeserializeObject<Product>(writtenProductJson);
+        Assert.That(product.TemplateOrder, Is.EqualTo(new[] { "Shared", "TenantSchema" }));
     }
 }
