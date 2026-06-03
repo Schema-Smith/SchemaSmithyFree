@@ -18,8 +18,7 @@ public static class Identifier
     /// <paramref name="value"/>. Bracket-quoted SQL Server identifiers (<c>[name]</c>),
     /// double-quoted PostgreSQL identifiers (<c>"name"</c>), and backtick-quoted MySQL
     /// identifiers (<c>`name`</c>) are unwrapped; embedded delimiter escape sequences
-    /// (<c>]]</c>, <c>""</c>, <c>``</c>) are collapsed. Values without matched outer
-    /// delimiters are returned as-is.
+    /// (<c>]]</c>, <c>""</c>, <c>``</c>) are collapsed.
     /// </summary>
     public static string Unwrap(string value, Platform platform)
     {
