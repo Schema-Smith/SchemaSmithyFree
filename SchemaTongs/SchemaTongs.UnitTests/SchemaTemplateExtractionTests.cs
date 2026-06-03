@@ -361,6 +361,134 @@ public class SchemaTemplateExtractionTests
         }
     }
 
+    [Test]
+    public void SchemaTemplate_SqlServer_Fk_SameSchema_BracketWrapped_RelatedSchemaIsNulled()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            var overrides = ShouldCastAllFalse(Platform.SqlServer);
+            overrides["ShouldCast:Tables"] = "true";
+            RegisterConfig(Platform.SqlServer, overrides);
+
+            // Reviewer scenario from #256: extraction produces bracket-delimited
+            // RelatedTableSchema; the configured source schema is the bare name.
+            // The scrub must recognize them as equivalent and null the related schema.
+            var tableListReader = SingleSqlServerTableListReader(SourceSchema, "Orders");
+            var jsonReader = SingleColumnReader(
+                "{\"Name\":\"Orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
+                "{\"Name\":\"FK_Orders_Customers\",\"Columns\":\"CustomerId\",\"RelatedTable\":\"Customers\",\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"[tenant_seed]\"}]}");
+            _command.ExecuteReader().Returns(tableListReader);
+            _commandJson.ExecuteReader().Returns(jsonReader);
+
+            string capturedJson = null;
+            _fileWrapper.When(f => f.WriteAllText(
+                Arg.Is<string>(s => s.EndsWith("Orders.json")),
+                Arg.Any<string>())).Do(ci => capturedJson = ci.ArgAt<string>(1));
+
+            var tongs = new SchemaTongs(Platform.SqlServer);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            Assert.That(capturedJson, Is.Not.Null);
+            var parsed = JObject.Parse(capturedJson);
+            var fks = (JArray)parsed["ForeignKeys"];
+            Assert.That(fks, Is.Not.Null);
+            Assert.That(fks.Count, Is.EqualTo(1));
+            Assert.That(fks[0]["RelatedTableSchema"], Is.Null,
+                "Bracket-delimited same-source RelatedTableSchema should be stripped (#256)");
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void SchemaTemplate_SqlServer_Fk_CrossSchema_BracketWrapped_RelatedSchemaPreserved()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            var overrides = ShouldCastAllFalse(Platform.SqlServer);
+            overrides["ShouldCast:Tables"] = "true";
+            RegisterConfig(Platform.SqlServer, overrides);
+
+            // Companion to the bug fix: bracket-delimited FK schema that is NOT the
+            // source schema stays as-is (it's a real cross-schema reference).
+            var tableListReader = SingleSqlServerTableListReader(SourceSchema, "Customers");
+            var jsonReader = SingleColumnReader(
+                "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
+                "{\"Name\":\"FK_Customers_Country\",\"Columns\":\"CountryId\",\"RelatedTable\":\"Countries\",\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"[other_schema]\"}]}");
+            _command.ExecuteReader().Returns(tableListReader);
+            _commandJson.ExecuteReader().Returns(jsonReader);
+
+            string capturedJson = null;
+            _fileWrapper.When(f => f.WriteAllText(
+                Arg.Is<string>(s => s.EndsWith("Customers.json")),
+                Arg.Any<string>())).Do(ci => capturedJson = ci.ArgAt<string>(1));
+
+            var tongs = new SchemaTongs(Platform.SqlServer);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            Assert.That(capturedJson, Is.Not.Null);
+            var parsed = JObject.Parse(capturedJson);
+            var fks = (JArray)parsed["ForeignKeys"];
+            Assert.That(fks, Is.Not.Null);
+            Assert.That(fks.Count, Is.EqualTo(1));
+            Assert.That(fks[0]["RelatedTableSchema"]?.ToString(), Is.EqualTo("[other_schema]"),
+                "Bracket-delimited cross-schema RelatedTableSchema must be preserved verbatim");
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void SchemaTemplate_PostgreSQL_Fk_SameSchema_QuoteWrapped_RelatedSchemaIsNulled()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            var overrides = ShouldCastAllFalse(Platform.PostgreSQL);
+            overrides["ShouldCast:Tables"] = "true";
+            RegisterConfig(Platform.PostgreSQL, overrides);
+
+            // PG equivalent of the #256 bug shape: extraction-emitted quoted identifier
+            // should match the bare configured source schema.
+            var pgTableListReader = Substitute.For<IDataReader>();
+            var calls = 0;
+            pgTableListReader.Read().Returns(_ => calls++ < 1, _ => false);
+            pgTableListReader["schemaname"].Returns(SourceSchema);
+            pgTableListReader["tablename"].Returns("orders");
+            _command.ExecuteReader().Returns(pgTableListReader);
+            var ordersJson =
+                "{\"Name\":\"orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
+                "{\"Name\":\"fk_orders_customers\",\"Columns\":\"customer_id\",\"RelatedTable\":\"customers\",\"RelatedColumns\":\"id\",\"RelatedTableSchema\":\"\\\"tenant_seed\\\"\"}]}";
+            _command.ExecuteScalar().Returns(_ =>
+                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                    ? (object)0L
+                    : (object)ordersJson);
+
+            string capturedJson = null;
+            _fileWrapper.When(f => f.WriteAllText(
+                Arg.Is<string>(s => s.EndsWith("orders.json")),
+                Arg.Any<string>())).Do(ci => capturedJson = ci.ArgAt<string>(1));
+
+            var tongs = new SchemaTongs(Platform.PostgreSQL);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            Assert.That(capturedJson, Is.Not.Null);
+            var parsed = JObject.Parse(capturedJson);
+            var fks = (JArray)parsed["ForeignKeys"];
+            Assert.That(fks, Is.Not.Null);
+            Assert.That(fks.Count, Is.EqualTo(1));
+            Assert.That(fks[0]["RelatedTableSchema"], Is.Null,
+                "Double-quote-delimited same-source RelatedTableSchema should be stripped (#256)");
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
     #endregion
 
     #region §10.2 — Template.json generation

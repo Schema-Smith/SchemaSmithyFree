@@ -350,7 +350,10 @@ public class SchemaTongs
                 ss.Schema = null;
                 foreach (var fk in ss.ForeignKeys.OfType<SqlServerForeignKey>())
                 {
-                    if (string.Equals(fk.RelatedTableSchema, _sourceSchema, _schemaNameComparison))
+                    if (string.Equals(
+                            Identifier.Unwrap(fk.RelatedTableSchema, _platform),
+                            Identifier.Unwrap(_sourceSchema, _platform),
+                            _schemaNameComparison))
                         fk.RelatedTableSchema = null;
                 }
                 foreach (var col in ss.Columns.OfType<SqlServerColumn>())
@@ -367,7 +370,10 @@ public class SchemaTongs
                 pg.Schema = null;
                 foreach (var fk in pg.ForeignKeys.OfType<PostgreSqlForeignKey>())
                 {
-                    if (string.Equals(fk.RelatedTableSchema, _sourceSchema, _schemaNameComparison))
+                    if (string.Equals(
+                            Identifier.Unwrap(fk.RelatedTableSchema, _platform),
+                            Identifier.Unwrap(_sourceSchema, _platform),
+                            _schemaNameComparison))
                         fk.RelatedTableSchema = null;
                 }
                 foreach (var col in pg.Columns.OfType<PostgreSqlColumn>())
@@ -416,7 +422,10 @@ public class SchemaTongs
     /// </summary>
     private bool ShouldExtractFromSchema(string schema)
         => !_isSchemaTemplate
-           || string.Equals(schema, _sourceSchema, _schemaNameComparison);
+           || string.Equals(
+                  Identifier.Unwrap(schema, _platform),
+                  Identifier.Unwrap(_sourceSchema, _platform),
+                  _schemaNameComparison);
 
     /// <summary>
     /// Returns the appropriate filename for a per-schema object. In schema-template mode the
