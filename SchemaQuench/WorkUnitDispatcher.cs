@@ -42,7 +42,7 @@ namespace SchemaQuench;
 /// <para><b>Choice rationale (vs <c>TaskQueueManager&lt;T&gt;</c>).</b> The codebase already
 /// has <c>Schema.Utility.TaskQueueManager&lt;T&gt;</c>, which is used elsewhere for plain
 /// bounded-concurrency work (e.g., table token resolution in <c>Template.cs</c> and database
-/// fan-out in <c>ProductQuench.EnumerateWorkUnitsForServer</c>). It was considered for this
+/// fan-out in <c>ProductQuench.EnumerateAndProvisionWorkUnitsForServer</c>). It was considered for this
 /// dispatcher and rejected because (a) it silently swallows worker exceptions (no fail-loud path),
 /// and (b) it has no notion of per-template serial sub-queues. Wrapping it to add both behaviors
 /// would be more code than implementing the focused dispatcher directly, and would obscure the

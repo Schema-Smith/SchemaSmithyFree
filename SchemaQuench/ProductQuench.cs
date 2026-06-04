@@ -125,7 +125,8 @@ public class ProductQuench
         foreach (var child in section.GetChildren())
         {
             var templateName = child.Key;
-            var createIfMissingRaw = child["CreateIfMissing"];
+            var createIfMissingSection = child.GetSection("CreateIfMissing");
+            var createIfMissingRaw = createIfMissingSection.Value;
             var target = new TemplateTarget
             {
                 Databases = child.GetSection("Databases").GetChildren()
@@ -140,16 +141,16 @@ public class ProductQuench
                     .ToList(),
                 CreateIfMissing = bool.TryParse(createIfMissingRaw, out var c) && c
             };
-            // Skip entries that are entirely empty AND have no explicit CreateIfMissing setting.
-            // The .NET in-memory configuration provider retains a previously-set key path even
-            // after its values are nulled (e.g., when an integration-test fixture clears state
-            // between tests), so a phantom `Foo: {}` can appear in iteration after cleanup. A
-            // user could never reach this state through real config editing — they'd set at
-            // least one child — so dropping the phantom here keeps the validator's rule-3
-            // diagnostic precise (a real "TemplateTargets entry must declare at least one of
-            // Databases or Schemas" trips only on user-authored empty entries, not on test
-            // cleanup residue).
-            if (target.HasNoTargets && string.IsNullOrWhiteSpace(createIfMissingRaw))
+            // Skip entries that are entirely empty AND have no explicit CreateIfMissing key.
+            // .NET configuration providers retain a previously-set key path even after the
+            // values are nulled (the in-memory provider used by Microsoft.Extensions.Configuration
+            // can leave phantom entries after a test fixture clears state), so iteration may
+            // surface a `Foo: {}` after cleanup. Detect "key genuinely absent" — distinct from
+            // "key present with empty value" — so a user-authored `CreateIfMissing: ""` reaches
+            // the validator and trips rule 3 instead of being silently swallowed by this skip.
+            var createIfMissingKeyPresent =
+                createIfMissingSection.Value != null || createIfMissingSection.GetChildren().Any();
+            if (target.HasNoTargets && !createIfMissingKeyPresent)
                 continue;
             result[templateName] = target;
         }
@@ -258,6 +259,62 @@ public class ProductQuench
         command.CommandTimeout = 0;
 
         return command;
+    }
+
+    /// <summary>
+    /// Opens an admin-database command against <paramref name="server"/> for DB-axis provisioning
+    /// (slice 4, #257). When a <c>--ConnectionString</c> override is in effect AND the server is
+    /// the primary server, the override is re-targeted to the platform's init database
+    /// (<c>master</c> / <c>postgres</c> / <c>information_schema</c>) via
+    /// <see cref="ConnectionString.RetargetDatabase"/> — distinct from <see cref="GetCommand"/>,
+    /// which honors the override's <c>Database=</c> verbatim. This matters because
+    /// <see cref="DatabaseExistsOnServer"/> and <see cref="ProvisionDatabaseViaAdminConnection"/>
+    /// MUST run against the admin DB: PostgreSQL's <c>CREATE DATABASE</c> cannot run inside a
+    /// transaction AND cannot target a non-admin DB; SQL Server / MySQL happen to tolerate the
+    /// override's target DB but the admin-DB target is the correct contract across all engines.
+    /// </summary>
+    internal virtual IDbCommand GetCommandForAdminDb(string server)
+    {
+        var connectionString = ComposeAdminDbConnectionString(server);
+        var factory = DbConnectionFactory.ForPlatform(_product.Platform);
+        var connection = factory.GetDbConnection(connectionString);
+        try
+        {
+            connection.Open();
+        }
+        catch (Exception e)
+        {
+            throw new Exception($"Unable to connect to {server}{(!string.IsNullOrWhiteSpace(_config["Target:User"]) ? $" with user {_config["Target:User"]}" : "")}", e);
+        }
+        var command = connection.CreateCommand();
+        command.CommandTimeout = 0;
+
+        return command;
+    }
+
+    /// <summary>
+    /// Composes the admin-database connection string used by <see cref="GetCommandForAdminDb"/>.
+    /// Split out as an internal virtual seam so tests can verify the re-target logic — the
+    /// <c>--ConnectionString</c> override path AND the configured-target path — without standing
+    /// up a live DB connection.
+    /// </summary>
+    internal virtual string ComposeAdminDbConnectionString(string server)
+    {
+        var initDb = GetInitDatabase(_product.Platform);
+        var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
+        if (!string.IsNullOrEmpty(connectionStringOverride) && server == _primaryServer)
+        {
+            if (_product.Platform == Platform.MySQL &&
+                !connectionStringOverride.Contains("AllowUserVariables", StringComparison.OrdinalIgnoreCase))
+            {
+                LogFactory.GetLogger("ProgressLog").Warn("Connection string override for MySQL does not contain AllowUserVariables=true. " +
+                                                         "This is required for SchemaSmith stored procedures that use PREPARE/EXECUTE.");
+            }
+            return ConnectionString.RetargetDatabase(connectionStringOverride, initDb, _product.Platform);
+        }
+        var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        return ConnectionString.Build(_product.Platform, server, initDb,
+            _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
     }
 
     public void QuenchProduct(bool suppressKindlingForTesting = false)
@@ -746,7 +803,7 @@ public class ProductQuench
         var workUnits = new List<WorkUnit>();
         foreach (var server in serverList)
         {
-            if (!EnumerateWorkUnitsForServer(template, server, workUnits))
+            if (!EnumerateAndProvisionWorkUnitsForServer(template, server, workUnits))
             {
                 if (ShouldAbortOnFailure(template))
                     break;
@@ -791,8 +848,17 @@ public class ProductQuench
     /// whatever work units were already appended (for server-level failures). Returns
     /// <c>true</c> when enumeration completed for this server; <c>false</c> when a failure
     /// occurred and <c>ContinueOnDatabaseFailure</c> is false.</para>
+    /// <para>
+    /// DB-axis side-effect contract (#257 slice 4): when a <c>TemplateTargets</c> entry with
+    /// <c>CreateIfMissing: true</c> references a missing database, this method invokes
+    /// <see cref="SchemaProvisioner.EnsureDatabaseExists"/> against the admin connection
+    /// (composed via <see cref="GetCommandForAdminDb"/>) BEFORE enqueueing any work units for
+    /// that database. When <c>CreateIfMissing: false</c> and the database is missing, all
+    /// work units targeting it are dropped from the queue and an info log line names the
+    /// skipped database. The name reflects this dual responsibility (enumerate + provision).
+    /// </para>
     /// </summary>
-    private bool EnumerateWorkUnitsForServer(Template template, string server, List<WorkUnit> workUnits)
+    private bool EnumerateAndProvisionWorkUnitsForServer(Template template, string server, List<WorkUnit> workUnits)
     {
         // TemplateTargets override (#257): when an entry exists for this template, the matching
         // axis (Databases / Schemas) REPLACES the corresponding identification-script result. Each
@@ -956,8 +1022,10 @@ public class ProductQuench
     /// <para>
     /// Internal+virtual so tests can override the entire decision flow without standing up a
     /// live admin connection. Production code uses the default implementation here, which
-    /// composes the admin connection via <see cref="ConnectionString.RetargetDatabase"/> and
-    /// delegates to <see cref="SchemaProvisioner.EnsureDatabaseExists"/>.
+    /// composes the admin connection via <see cref="GetCommandForAdminDb"/> (which itself
+    /// re-targets a <c>--ConnectionString</c> override through
+    /// <see cref="ConnectionString.RetargetDatabase"/> when active) and delegates to
+    /// <see cref="SchemaProvisioner.EnsureDatabaseExists"/>.
     /// </para>
     /// </summary>
     internal virtual bool DatabaseAxisProvisioningGate(string server, string databaseName,
@@ -993,11 +1061,16 @@ public class ProductQuench
             {
                 ProvisionDatabaseViaAdminConnection(server, databaseName);
             }
-            catch (TemplateTargetProvisioningException ex)
+            catch (Exception ex)
             {
-                // Provisioning permission denial — the underlying engine exception is preserved
-                // as InnerException. Surface the wrapper's diagnostic to ops and route through
-                // the DB-failure path so the template's continue policy applies.
+                // Catch-all is intentional (#257 batch A I4). The most likely failure is a
+                // TemplateTargetProvisioningException wrapping a CREATE DATABASE permission denial,
+                // but admin-connection blips (login denied to master, transient network failure)
+                // surface directly from GetCommandForAdminDb without going through the provisioner's
+                // wrapper. Both shapes are "treat as continue-on-failure" events — consistent with
+                // how the per-DB iteration loop handles failures under ContinueOnDatabaseFailure.
+                // The underlying engine exception is preserved as ex (and as InnerException when
+                // the wrapper applies).
                 _progressLog.Error(
                     $"[{server}] Database provisioning FAILED for '{databaseName}' (template '{template.Name}'): {ex.Message}");
                 _errorLog.Error(
@@ -1022,13 +1095,16 @@ public class ProductQuench
     /// Checks whether <paramref name="databaseName"/> exists on <paramref name="server"/> via an
     /// admin-database connection (per-engine: <c>master</c> / <c>postgres</c> /
     /// <c>information_schema</c>). Internal+virtual so tests can stub the existence answer
-    /// without standing up a live connection. Production code uses
-    /// <see cref="ConnectionString.RetargetDatabase"/> to compose the admin connection from
-    /// the user's target connection settings (slice 4, #257).
+    /// without standing up a live connection. Production code routes through
+    /// <see cref="GetCommandForAdminDb"/>, which uses
+    /// <see cref="ConnectionString.RetargetDatabase"/> to compose the admin connection when a
+    /// <c>--ConnectionString</c> override is active (slice 4, #257). PostgreSQL in particular
+    /// REQUIRES the admin DB as the connection target — its <c>CREATE DATABASE</c> cannot run
+    /// against a non-admin DB.
     /// </summary>
     internal virtual bool DatabaseExistsOnServer(string server, string databaseName)
     {
-        using var command = GetCommand(server);  // GetCommand already targets the platform's init DB
+        using var command = GetCommandForAdminDb(server);  // targets the platform's init DB even with --ConnectionString override
         try
         {
             command.Parameters.Clear();
@@ -1058,14 +1134,17 @@ public class ProductQuench
     /// <summary>
     /// Provisions <paramref name="databaseName"/> on <paramref name="server"/> via an
     /// admin-database connection. The admin DB is the engine's init DB (<c>master</c> /
-    /// <c>postgres</c> / <c>information_schema</c>); <see cref="GetCommand"/> already targets it.
-    /// The DDL itself is delegated to <see cref="SchemaProvisioner.EnsureDatabaseExists"/> so the
-    /// per-engine quoting / escaping / IF-NOT-EXISTS gates stay testable in isolation.
-    /// Internal+virtual so tests can override the provisioning step.
+    /// <c>postgres</c> / <c>information_schema</c>); <see cref="GetCommandForAdminDb"/> composes
+    /// the connection via <see cref="ConnectionString.RetargetDatabase"/> when a
+    /// <c>--ConnectionString</c> override is in effect so the admin DB is the connection target
+    /// regardless of where the override pointed. The DDL itself is delegated to
+    /// <see cref="SchemaProvisioner.EnsureDatabaseExists"/> so the per-engine quoting / escaping /
+    /// IF-NOT-EXISTS gates stay testable in isolation. Internal+virtual so tests can override
+    /// the provisioning step.
     /// </summary>
     internal virtual void ProvisionDatabaseViaAdminConnection(string server, string databaseName)
     {
-        using var command = GetCommand(server);
+        using var command = GetCommandForAdminDb(server);
         try
         {
             new SchemaProvisioner().EnsureDatabaseExists(command, databaseName, _product.Platform,

@@ -679,6 +679,15 @@ public class DatabaseQuench
         var ddl = _product.Platform == Platform.SqlServer
             ? $"CREATE SCHEMA [{_schemaName}]"
             : $"CREATE SCHEMA \"{_schemaName}\"";
+        if (IsWhatIf)
+        {
+            // Pre-existing CreateSchemaIfMissing path (not the TemplateTargets-driven one — that
+            // routes through SchemaProvisioner which has its own WhatIf branch). The legacy log
+            // line shape "(CreateSchemaIfMissing=true)" is preserved for back-compat with existing
+            // tests / log parsers; only the [WhatIf] prefix is added.
+            SafeProgressLog($"  [WhatIf] Would create schema (CreateSchemaIfMissing=true)");
+            return;
+        }
         SafeProgressLog($"  Creating schema (CreateSchemaIfMissing=true)");
         command.Parameters.Clear();
         command.CommandText = ddl;

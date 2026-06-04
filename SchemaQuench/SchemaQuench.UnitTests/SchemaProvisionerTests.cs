@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using Npgsql;
 using NSubstitute;
 using NUnit.Framework;
 using Schema.Domain;
@@ -269,6 +270,50 @@ public class SchemaProvisionerTests
         provisioner.EnsureDatabaseExists(command, "weird`name", Platform.MySQL, isWhatIf: false, log: _ => { });
 
         Assert.That(executed[0], Is.EqualTo("CREATE DATABASE IF NOT EXISTS `weird``name`"));
+    }
+
+    [Test]
+    public void EnsureDatabaseExists_PostgreSQL_RaceLoser_ReturnsWithoutThrowing()
+    {
+        // Under concurrent parallel quenches the existence check + CREATE DATABASE on PG is a
+        // check-then-act race. The losing concurrent quench sees pg_database COUNT(*) = 0 from
+        // its check, then hits SqlState 42P04 ("database already exists") when its CREATE runs
+        // after the race-winner's CREATE commits. The race-loser path is BENIGN — the database
+        // exists; the idempotency contract is preserved — and must NOT re-wrap as a misleading
+        // "must have CREATE DATABASE permission" diagnostic via the generic outer catch.
+        var executedScalar = new List<string>();
+        var executedNonQuery = new List<string>();
+        var command = Substitute.For<IDbCommand>();
+        // ExecuteScalar returns 0 (DB doesn't exist when WE check) so the CREATE branch fires.
+        command.ExecuteScalar().Returns(_ =>
+        {
+            executedScalar.Add(command.CommandText);
+            return (object)0L;
+        });
+        // The CREATE throws SqlState 42P04 (race-loser).
+        var raceLoserEx = new PostgresException(
+            "database \"tenant_acme\" already exists", "ERROR", "ERROR", "42P04");
+        command.When(c => c.ExecuteNonQuery())
+            .Do(_ =>
+            {
+                executedNonQuery.Add(command.CommandText);
+                throw raceLoserEx;
+            });
+
+        var provisioner = new SchemaProvisioner();
+        // Must NOT throw — the race-loser is treated as a successful idempotent return.
+        Assert.DoesNotThrow(() =>
+            provisioner.EnsureDatabaseExists(command, "tenant_acme", Platform.PostgreSQL, isWhatIf: false,
+                log: _ => { }));
+
+        Assert.Multiple(() =>
+        {
+            // The CREATE DATABASE was attempted (we're testing the race-loser, not the
+            // already-exists short-circuit).
+            Assert.That(executedNonQuery, Has.Some.EqualTo("CREATE DATABASE \"tenant_acme\""),
+                "The race-loser test must exercise the CREATE path that throws 42P04, not the " +
+                "pre-existence short-circuit (which would never hit the new catch at all).");
+        });
     }
 
     [Test]

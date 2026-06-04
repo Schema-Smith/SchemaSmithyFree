@@ -199,6 +199,60 @@ public class SchemaCreationTests
         }
     }
 
+    /// <summary>
+    /// WhatIf + CreateSchemaIfMissing: true + missing schema → the engine must render the
+    /// "Would create schema" log line and NOT issue real CREATE SCHEMA DDL (#257 batch A I2).
+    /// Prior to the fix, the pre-existing CreateSchemaIfMissing path executed CREATE SCHEMA
+    /// unconditionally — WhatIf was silently broken for the legacy onboarding path.
+    /// </summary>
+    [Test]
+    public void CreateSchemaIfMissing_True_WhatIf_MissingSchema_LogsWouldCreateAndDoesNotExecute()
+    {
+        const string ghostTenant = "tenant_whatif_ghost";
+        var existingTenants = new[] { "tenant_acme" };
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(existingTenants);
+            ExecuteOnMainDb($"INSERT INTO dbo.SchemaTemplateCreateSchemaTenants ([Name]) VALUES (N'{ghostTenant}');");
+
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", "SchemaTemplateCreateSchemaProduct");
+            config["WhatIfONLY"] = "true";
+
+            try
+            {
+                RunSchemaQuench();
+
+                _environment.DidNotReceive().Exit(2);
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // WhatIf log line surfaces using the legacy CreateSchemaIfMissing path's shape
+                // (preserved for back-compat with existing log parsers / tests).
+                _progressLog.Received().Info(Arg.Is<string>(msg =>
+                    msg.Contains("[WhatIf]") && msg.Contains("Would create schema")
+                    && msg.Contains("CreateSchemaIfMissing=true")));
+
+                // Real CREATE was NOT logged.
+                _progressLog.DidNotReceive().Info(Arg.Is<string>(msg =>
+                    msg.Contains("Creating schema") && !msg.Contains("[WhatIf]")
+                    && msg.Contains("CreateSchemaIfMissing=true")));
+
+                // The schema does NOT exist on the server — WhatIf must not have applied DDL.
+                Assert.That(SchemaExists(ghostTenant), Is.False,
+                    "WhatIf + CreateSchemaIfMissing: true must NOT actually create the schema.");
+            }
+            finally
+            {
+                config["WhatIfONLY"] = null;
+                DropTenantSchemas(new List<string>(existingTenants) { ghostTenant });
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
     // ----- Helpers ---------------------------------------------------------------------------
 
     private void SetupSharedMocks()

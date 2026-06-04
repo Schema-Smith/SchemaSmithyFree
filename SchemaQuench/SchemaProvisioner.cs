@@ -2,6 +2,7 @@
 
 using System;
 using System.Data;
+using Npgsql;
 using Schema.Domain;
 
 namespace SchemaQuench;
@@ -167,7 +168,19 @@ public class SchemaProvisioner
                     log($"  Creating database \"{databaseName}\" (CreateIfMissing: true)");
                     adminCommand.Parameters.Clear();
                     adminCommand.CommandText = $"CREATE DATABASE \"{quoted}\"";
-                    adminCommand.ExecuteNonQuery();
+                    try
+                    {
+                        adminCommand.ExecuteNonQuery();
+                    }
+                    catch (PostgresException ex) when (ex.SqlState == "42P04")
+                    {
+                        // Race-loser path: another concurrent quench created the database between
+                        // our pg_database existence check and our CREATE DATABASE. PG raises
+                        // SqlState 42P04 ("database already exists"). The idempotency contract is
+                        // preserved — the database now exists; treat as success rather than letting
+                        // the outer catch re-wrap as a misleading "CREATE DATABASE permission" error.
+                        return;
+                    }
                     break;
                 }
                 case Platform.MySQL:

@@ -438,6 +438,41 @@ public class ProductQuenchTests
     }
 
     [Test]
+    public void ReadTemplateTargets_EmptyCreateIfMissingValue_SurvivesAsPhantomSurvivor_ForValidator()
+    {
+        // I6 (#257 batch A): the phantom-entry skip in ReadTemplateTargets exists to defend
+        // against in-memory provider residue (key path still present after a fixture nulls the
+        // values mid-run — distinct from the user-authored config a real run would carry). The
+        // skip must only fire when the CreateIfMissing KEY is genuinely absent — NOT when its
+        // value is empty. A user writing `CreateIfMissing: ""` in JSON should reach the
+        // validator and trip rule 3 ("entry must declare at least one of Databases or Schemas"),
+        // not be silently dropped as test residue.
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                // Entry has empty Databases / Schemas AND an explicit empty CreateIfMissing.
+                // This shape MUST survive into the validator's input — the entry expresses
+                // user intent (the empty CreateIfMissing key was deliberately set), even
+                // though it's invalid per rule 3.
+                ["Target:TemplateTargets:Tenant:CreateIfMissing"] = ""
+            }!)
+            .Build();
+
+        var targets = ProductQuench.ReadTemplateTargets(config);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(targets.Keys, Does.Contain("Tenant"),
+                "User-authored entry with empty CreateIfMissing value must NOT be silently dropped " +
+                "by the phantom-entry skip — the skip is for test-residue empty entries, not " +
+                "user-authored invalid ones.");
+            Assert.That(targets["Tenant"].HasNoTargets, Is.True);
+            // CreateIfMissing parses to default false when the raw value is empty.
+            Assert.That(targets["Tenant"].CreateIfMissing, Is.False);
+        });
+    }
+
+    [Test]
     public void ReadTemplateTargets_WhitespaceOnlyEntries_AreFiltered()
     {
         // Stray null / whitespace slots (e.g., a test that nulled "Target:TemplateTargets:T:Schemas:1"
@@ -1599,6 +1634,48 @@ public class ProductQuenchTests
     }
 
     [Test]
+    public void EnumerateWorkUnits_DatabaseOverride_GenericProvisioningException_TripsUpdateFailed()
+    {
+        // I4 (#257 batch A): the gate's provisioning catch must accept ANY exception, not just
+        // TemplateTargetProvisioningException. Admin-connection failures during the actual
+        // ProvisionDatabaseViaAdminConnection call (e.g., login denied, transient network blip)
+        // surface as plain Exception types that the previous narrow catch let propagate up to
+        // EnumerateAndProvisionWorkUnitsForServer's caller. The widened catch routes them
+        // through the same continue-on-failure diagnostic.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            // Pre-existing existence check works (tenant_a) so we isolate the provisioning failure.
+            quench.ExistingDatabases.Add(("primary", "tenant_a"));
+            quench.GenericProvisioningFailures.Add(("primary", "tenant_b"));
+
+            var template = new Template
+            {
+                Name = "PerTenantDB",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases",
+                ContinueOnDatabaseFailure = true
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(units.Select(u => u.DatabaseName), Is.EquivalentTo(new[] { "tenant_a" }),
+                    "The DB whose provisioning hit a generic exception must not produce work units.");
+                Assert.That(quench.UpdateFailed, Is.True);
+                Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s =>
+                    s.Contains("Database provisioning FAILED") &&
+                    s.Contains("tenant_b")));
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            ["Target:TemplateTargets:PerTenantDB:Databases:0"] = "tenant_a",
+            ["Target:TemplateTargets:PerTenantDB:Databases:1"] = "tenant_b",
+            ["Target:TemplateTargets:PerTenantDB:CreateIfMissing"] = "true"
+        });
+    }
+
+    [Test]
     public void EnumerateWorkUnits_DatabaseOverride_ExistenceCheckFailure_TripsUpdateFailed()
     {
         // Admin-connection failure during the existence check (e.g., login denied to master) is
@@ -1628,6 +1705,116 @@ public class ProductQuenchTests
         }, extraConfig: new Dictionary<string, string>
         {
             ["Target:TemplateTargets:PerTenantDB:Databases:0"] = "tenant_b"
+        });
+    }
+
+    [Test]
+    public void ComposeAdminDbConnectionString_OverrideOnPrimary_RetargetsToInitDb()
+    {
+        // C1 (#257 batch A): when --ConnectionString is supplied AND the server is the primary,
+        // GetCommandForAdminDb must re-target the override to the platform's init DB rather than
+        // honoring the override's Database= verbatim. PG in particular REQUIRES the admin DB
+        // (postgres) — CREATE DATABASE cannot target a non-admin DB and cannot run inside a
+        // transaction. SQL Server / MySQL tolerated the prior broken behavior, but the correct
+        // contract is to retarget on every engine.
+        //
+        // Set the IEnvironment.CommandLine to inject --ConnectionString=...; CommandLineParser
+        // reads from EnvironmentWrapper.GetFromFactory().CommandLine.
+        var env = Substitute.For<IEnvironment>();
+        env.CommandLine.Returns(
+            "schemaquench.exe --ConnectionString=\"Server=primary;Database=tenant_a;User Id=sa;Password=secret\"");
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var built = quench.InvokeComposeAdminDbConnectionString("primary");
+
+            Assert.That(built, Does.Contain("Initial Catalog=master")
+                    .Or.Contain("Database=master"),
+                $"Override must be re-targeted to 'master' (SQL Server init DB), not the override's " +
+                $"original Database=tenant_a target. Got: {built}");
+            Assert.That(built, Does.Not.Contain("=tenant_a"),
+                "Original override's Database=tenant_a must be replaced.");
+        }, environment: env);
+    }
+
+    [Test]
+    public void ComposeAdminDbConnectionString_NoOverride_BuildsFromConfig()
+    {
+        // Belt-and-suspenders: when no --ConnectionString is in effect, the configured-target
+        // path must build the connection string from Target:Server / User / Password / Port /
+        // ConnectionProperties and point at the platform's init DB.
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var built = quench.InvokeComposeAdminDbConnectionString("primary");
+
+            Assert.That(built, Does.Contain("primary").And.Contain("master"),
+                $"Configured-target path must target the platform init DB (master). Got: {built}");
+        });
+    }
+
+    [Test]
+    public void ComposeAdminDbConnectionString_OverrideOnSecondary_DoesNotApplyOverride()
+    {
+        // The override branch is gated on (server == primary). A secondary server must NOT
+        // inherit the override — secondaries get their connection from Target:* config.
+        var env = Substitute.For<IEnvironment>();
+        env.CommandLine.Returns(
+            "schemaquench.exe --ConnectionString=\"Server=primary;Database=tenant_a;User Id=sa;Password=secret\"");
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var built = quench.InvokeComposeAdminDbConnectionString("secondary");
+
+            // Secondary did not inherit the override's User Id=sa marker; it came from the configured
+            // path which has no User/Password set in this minimal harness.
+            Assert.That(built, Does.Not.Contain("User Id=sa"),
+                $"Override must not bleed to secondary servers. Got: {built}");
+        }, secondaryServers: "secondary", environment: env);
+    }
+
+    [Test]
+    public void DatabaseAxisProvisioningGate_WhatIfMissingDb_LogsWouldCreateAndEnqueuesUnits()
+    {
+        // I5 (#257 batch A): provisioner-isolation WhatIf test exists in SchemaProvisionerTests;
+        // this is the gate / ProductQuench boundary equivalent — when WhatIf is active and a
+        // Databases-override target is missing AND CreateIfMissing: true, the gate must engage
+        // the WhatIf path (no real DDL) AND still enqueue the work units so the dispatcher
+        // honors WhatIf for the rest of the deployment too (consistent with WhatIf's "describe
+        // what would happen" contract).
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            // tenant_phantom does NOT exist on target — populate nothing in ExistingDatabases
+            // for ("primary", "tenant_phantom").
+
+            var template = new Template
+            {
+                Name = "PerTenantDB",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+
+            var units = quench.EnumerateWorkUnitsForTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                // WhatIf log line emitted in the per-engine-quoted form.
+                Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s =>
+                    s.Contains("[WhatIf] Would create database") &&
+                    s.Contains("tenant_phantom")),
+                    "Gate must engage SchemaProvisioner's WhatIf branch when WhatIfONLY is true.");
+                // Work units still enqueued — WhatIf == "describe what would happen", including
+                // the deployment that would land inside the just-provisioned DB.
+                Assert.That(units, Has.Some.Matches<WorkUnit>(u =>
+                    u.DatabaseName == "tenant_phantom" && u.ProvisionDatabaseIfMissing));
+                // The "real" creation log line did NOT fire.
+                Assert.That(quench.ProgressLogLines, Has.None.Matches<string>(s =>
+                    s.Contains("  Creating database") && !s.Contains("[WhatIf]")));
+            });
+        }, extraConfig: new Dictionary<string, string>
+        {
+            // WhatIfONLY is already "true" in the base helper config — make it explicit here so
+            // future readers see the gate intent.
+            ["WhatIfONLY"] = "true",
+            ["Target:TemplateTargets:PerTenantDB:Databases:0"] = "tenant_phantom",
+            ["Target:TemplateTargets:PerTenantDB:CreateIfMissing"] = "true"
         });
     }
 
@@ -1676,7 +1863,8 @@ public class ProductQuenchTests
     private static void WithMinimalSqlServerProductQuench(
         System.Action<RecordingWorkUnitProductQuench> body,
         string secondaryServers = null,
-        IReadOnlyDictionary<string, string> extraConfig = null)
+        IReadOnlyDictionary<string, string> extraConfig = null,
+        IEnvironment environment = null)
     {
         lock (FactoryContainer.SharedLockObject)
         {
@@ -1720,8 +1908,10 @@ public class ProductQuenchTests
             // CRITICAL: prevent LogBackup.BackupLogsAndExit's Environment.Exit(n) from killing the
             // test host. The QuenchTemplate failure paths route through BackupLogsAndExit, which
             // calls Environment.Exit unless IEnvironment is mocked. Without this substitute the
-            // first required-empty test brings down the whole nunit host.
-            FactoryContainer.Register<IEnvironment>(Substitute.For<IEnvironment>());
+            // first required-empty test brings down the whole nunit host. Tests can pass a
+            // pre-configured environment (e.g., to inject --ConnectionString into CommandLine)
+            // via the optional environment parameter.
+            FactoryContainer.Register<IEnvironment>(environment ?? Substitute.For<IEnvironment>());
 
             // Substitute a capture-friendly logger BEFORE constructing ProductQuench so its
             // _progressLog field (captured in the constructor) points at the fake.
@@ -1770,6 +1960,11 @@ public class ProductQuenchTests
         public HashSet<(string Server, string Db)> ExistingDatabases { get; } = new();
         public List<(string Server, string Db)> ProvisionedDatabases { get; } = new();
         public HashSet<(string Server, string Db)> ProvisioningFailures { get; } = new();
+        // I4 (#257 batch A): simulates a non-wrapped exception bubbling up from
+        // ProvisionDatabaseViaAdminConnection (e.g., admin-connection login denial) — distinct
+        // from ProvisioningFailures, which throws the wrapped TemplateTargetProvisioningException
+        // path that the original narrow catch already handled.
+        public HashSet<(string Server, string Db)> GenericProvisioningFailures { get; } = new();
         public HashSet<(string Server, string Db)> ExistenceCheckFailures { get; } = new();
 
         // Call tracking for the override-vs-discovery slice-2 tests. Production code that bypasses
@@ -1818,9 +2013,25 @@ public class ProductQuenchTests
                 throw new TemplateTargetProvisioningException(
                     $"Failed to provision database '{databaseName}'. CREATE DATABASE permission denied (simulated)",
                     new System.Exception("simulated"));
+            if (GenericProvisioningFailures.Contains((server, databaseName)))
+                throw new System.Exception(
+                    $"Unable to connect to {server} with user simulated (simulated admin-connection failure)");
+            // Mirror the SchemaProvisioner's per-engine WhatIf vs real-create log shape so tests
+            // can assert on the gate's WhatIf engagement at the production-equivalent boundary.
+            // SQL Server quoting is the only case the recorder runs through; other engines flow
+            // through the same gate but their tests live in the integration suite.
+            if (IsWhatIfOnly)
+                Schema.Utility.LogFactory.GetLogger("ProgressLog").Info(
+                    $"  [WhatIf] Would create database [{databaseName}] (CreateIfMissing: true)");
+            else
+                Schema.Utility.LogFactory.GetLogger("ProgressLog").Info(
+                    $"  Creating database [{databaseName}] (CreateIfMissing: true)");
             ProvisionedDatabases.Add((server, databaseName));
             // Make the gate see the DB as existing immediately after provisioning so the caller
-            // proceeds with schema discovery / work-unit enqueueing.
+            // proceeds with schema discovery / work-unit enqueueing. Under WhatIf in production,
+            // the DB stays missing on the server; but the gate uses the post-provision return as
+            // a signal to enqueue work units (the dispatcher won't execute real DDL under WhatIf
+            // either), so the same "DB-exists-from-now-on" recording is correct for both paths.
             ExistingDatabases.Add((server, databaseName));
         }
 
@@ -1873,6 +2084,16 @@ public class ProductQuenchTests
             var method = typeof(ProductQuench).GetMethod("LogSchemaTemplateFieldsIfSet",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             method!.Invoke(this, new object[] { template });
+        }
+
+        // C1 (#257 batch A): expose the admin-DB connection-string composition for direct
+        // assertion. ComposeAdminDbConnectionString is internal virtual on the base — production
+        // code calls it from GetCommandForAdminDb; tests reach it through this thin invoker.
+        public string InvokeComposeAdminDbConnectionString(string server)
+        {
+            var method = typeof(ProductQuench).GetMethod("ComposeAdminDbConnectionString",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            return (string)method!.Invoke(this, new object[] { server })!;
         }
 
         private static IDbCommand MakeReaderCommand(string[] rows)

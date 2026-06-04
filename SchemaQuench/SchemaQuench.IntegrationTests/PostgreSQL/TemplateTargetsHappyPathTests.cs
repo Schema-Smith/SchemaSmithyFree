@@ -11,7 +11,6 @@ using Schema.Utility;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Linq;
 
 namespace SchemaQuench.IntegrationTests.PostgreSQL;
 
@@ -340,31 +339,11 @@ public class TemplateTargetsHappyPathTests
     // provisioned DB has no SchemaSmith helpers, and downstream deployment depends on them.
     private static void RunSchemaQuenchWithKindling() => Program.Main(System.Array.Empty<string>());
 
-    private static void ClearTargetFilters(IConfigurationRoot config)
-    {
-        foreach (var dim in new[] { "Templates", "Databases", "Schemas" })
-            foreach (var child in config.GetSection($"Target:{dim}").GetChildren().ToList())
-                config[$"Target:{dim}:{child.Key}"] = null;
-    }
+    private static void ClearTargetFilters(IConfigurationRoot config) =>
+        TemplateTargetsTestSupport.ClearTargetFilters(config);
 
-    private static void ClearTemplateTargets(IConfigurationRoot config)
-    {
-        foreach (var templateEntry in config.GetSection("Target:TemplateTargets").GetChildren().ToList())
-        {
-            foreach (var axisEntry in templateEntry.GetChildren().ToList())
-            {
-                if (axisEntry.Key is "Databases" or "Schemas")
-                {
-                    foreach (var item in axisEntry.GetChildren().ToList())
-                        config[$"Target:TemplateTargets:{templateEntry.Key}:{axisEntry.Key}:{item.Key}"] = null;
-                }
-                else
-                {
-                    config[$"Target:TemplateTargets:{templateEntry.Key}:{axisEntry.Key}"] = null;
-                }
-            }
-        }
-    }
+    private static void ClearTemplateTargets(IConfigurationRoot config) =>
+        TemplateTargetsTestSupport.ClearTemplateTargets(config);
 
     private static void ClearCheckpointsForProduct()
     {

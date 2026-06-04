@@ -73,7 +73,7 @@ public sealed record WorkUnit(
     /// True when this unit's <see cref="DatabaseName"/> came from a
     /// <c>TemplateTargets:&lt;Name&gt;:Databases</c> override (#257 slice 4). Drives the
     /// pre-dispatch database-existence check + provisioning / skip-missing decision in
-    /// <see cref="ProductQuench.EnumerateWorkUnitsForServer"/>. Discovery-sourced units
+    /// <see cref="ProductQuench.EnumerateAndProvisionWorkUnitsForServer"/>. Discovery-sourced units
     /// (default false) bypass the DB-axis pre-dispatch pass entirely — today's behavior
     /// is preserved bit-for-bit.
     /// </summary>

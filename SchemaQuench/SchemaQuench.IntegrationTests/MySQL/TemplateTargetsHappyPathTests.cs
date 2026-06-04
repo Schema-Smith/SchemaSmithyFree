@@ -9,9 +9,7 @@ using Schema.IntegrationTests;
 using Schema.Isolators;
 using Schema.Utility;
 using System;
-using System.Collections.Generic;
 using System.Data;
-using System.Linq;
 
 namespace SchemaQuench.IntegrationTests.MySQL;
 
@@ -38,8 +36,12 @@ public class TemplateTargetsHappyPathTests
     {
         var config = FactoryContainer.Resolve<IConfigurationRoot>();
         var connProps = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
-        // MySQL admin DB is information_schema per ProductQuench.GetInitDatabase. The provisioner
-        // uses this connection string (retargeted via RetargetDatabase) for CREATE DATABASE.
+        // MySQL admin DB is information_schema per ProductQuench.GetInitDatabase. ProductQuench
+        // composes the admin command via GetCommandForAdminDb, which re-targets a
+        // --ConnectionString override through ConnectionString.RetargetDatabase when active so
+        // CREATE DATABASE runs against information_schema regardless of the override's Database=
+        // setting. These tests don't exercise the override path; they build their own admin
+        // connection string here for setup/assertions.
         _connectionString = ConnectionString.Build(Platform.MySQL, config["Target:Server"], "information_schema",
             config["Target:User"], config["Target:Password"], config["Target:Port"], connProps);
         _server = config["Target:Server"];
@@ -212,31 +214,11 @@ public class TemplateTargetsHappyPathTests
     // MainDb; tests touching new DBs don't have that luxury.)
     private static void RunSchemaQuench() => Program.Main(System.Array.Empty<string>());
 
-    private static void ClearTargetFilters(IConfigurationRoot config)
-    {
-        foreach (var dim in new[] { "Templates", "Databases", "Schemas" })
-            foreach (var child in config.GetSection($"Target:{dim}").GetChildren().ToList())
-                config[$"Target:{dim}:{child.Key}"] = null;
-    }
+    private static void ClearTargetFilters(IConfigurationRoot config) =>
+        TemplateTargetsTestSupport.ClearTargetFilters(config);
 
-    private static void ClearTemplateTargets(IConfigurationRoot config)
-    {
-        foreach (var templateEntry in config.GetSection("Target:TemplateTargets").GetChildren().ToList())
-        {
-            foreach (var axisEntry in templateEntry.GetChildren().ToList())
-            {
-                if (axisEntry.Key is "Databases" or "Schemas")
-                {
-                    foreach (var item in axisEntry.GetChildren().ToList())
-                        config[$"Target:TemplateTargets:{templateEntry.Key}:{axisEntry.Key}:{item.Key}"] = null;
-                }
-                else
-                {
-                    config[$"Target:TemplateTargets:{templateEntry.Key}:{axisEntry.Key}"] = null;
-                }
-            }
-        }
-    }
+    private static void ClearTemplateTargets(IConfigurationRoot config) =>
+        TemplateTargetsTestSupport.ClearTemplateTargets(config);
 
     private static void ClearCheckpointsForProduct()
     {
