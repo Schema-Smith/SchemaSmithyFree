@@ -50,12 +50,12 @@ internal sealed class WorkUnitFilter
         ValidateFilterValues(discovered);
         WarnIfSchemaFilterUnusable(discovered, warn);
 
-        // Template-name matching is case-insensitive across the validator + filter trio
-        // (#257 slice-2 casing sweep). Database / schema name comparisons are LEFT case-sensitive
-        // because engine-defined casing rules differ across SQL Server (CI default), MySQL
-        // (lower-case-folded on Linux, server-config-dependent on Windows), and PostgreSQL
-        // (case-sensitive when unquoted, lowercased when bareword) — unifying those at this layer
-        // would mask real engine differences rather than smooth them out.
+        // Template-name matching is case-insensitive across the validator + filter trio.
+        // Database / schema name comparisons are LEFT case-sensitive because engine-defined
+        // casing rules differ across SQL Server (CI default), MySQL (lower-case-folded on Linux,
+        // server-config-dependent on Windows), and PostgreSQL (case-sensitive when unquoted,
+        // lowercased when bareword) — unifying those at this layer would mask real engine
+        // differences rather than smooth them out.
         var filtered = discovered
             .Where(u => _templates.Count == 0 || _templates.Contains(u.TemplateName, StringComparer.OrdinalIgnoreCase))
             .Where(u => _databases.Count == 0 || _databases.Contains(u.DatabaseName))
@@ -81,10 +81,10 @@ internal sealed class WorkUnitFilter
             .ToList();
 
         var details = new List<string>();
-        // Templates use OrdinalIgnoreCase across the validator + filter trio (#257 slice-2 casing
-        // sweep). Databases and Schemas keep default ordinal comparison — engine-defined casing
-        // rules differ across SQL Server / MySQL / PostgreSQL, so unifying at this layer would
-        // mask real engine differences rather than smooth them out.
+        // Templates use OrdinalIgnoreCase across the validator + filter trio. Databases and
+        // Schemas keep default ordinal comparison — engine-defined casing rules differ across
+        // SQL Server / MySQL / PostgreSQL, so unifying at this layer would mask real engine
+        // differences rather than smooth them out.
         AppendUnknownDetail(details, "Target.Templates", _templates, discoveredTemplates,
             StringComparer.OrdinalIgnoreCase);
         AppendUnknownDetail(details, "Target.Databases", _databases, discoveredDatabases);

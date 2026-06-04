@@ -15,10 +15,10 @@ using System.Data;
 namespace SchemaQuench.IntegrationTests.PostgreSQL;
 
 /// <summary>
-/// Slice-2/3 (#257) TemplateTargets integration tests for PostgreSQL — mirrors the SQL Server
-/// fixture. Slice 2 covers the existing-tenants enumeration-override happy path; slice 3 adds
-/// the provisioning (<c>CreateIfMissing: true</c>) and skip-missing (<c>CreateIfMissing: false</c>)
-/// paths. Database-axis provisioning lands in slice 4.
+/// TemplateTargets integration tests for PostgreSQL — mirrors the SQL Server fixture. Covers the
+/// existing-tenants enumeration-override happy path, the provisioning (<c>CreateIfMissing: true</c>)
+/// and skip-missing (<c>CreateIfMissing: false</c>) paths on the schema axis, and the database-axis
+/// provisioning + skip-missing variants.
 /// </summary>
 [Category("PostgreSQL")]
 public class TemplateTargetsHappyPathTests
@@ -166,11 +166,11 @@ public class TemplateTargetsHappyPathTests
     [Test]
     public void DatabaseOverrideWithCreateIfMissing_ProvisionsMissingDbAndDeploys()
     {
-        // Slice 4 (#257): Databases override + CreateIfMissing: true → admin-DB connection to
-        // postgres, CREATE DATABASE for the missing target (explicit existence check first,
-        // since PG has no IF NOT EXISTS variant), then quench inside it. Kindling must run for
-        // this test: the freshly-provisioned DB has no SchemaSmith helpers, and downstream
-        // deployment depends on them.
+        // Databases override + CreateIfMissing: true → admin-DB connection to postgres,
+        // CREATE DATABASE for the missing target (explicit existence check first, since PG has
+        // no IF NOT EXISTS variant), then quench inside it. Kindling must run for this test: the
+        // freshly-provisioned DB has no SchemaSmith helpers, and downstream deployment depends
+        // on them.
         var transientDb = MakeTransientDbName("ttdb_create");
 
         lock (FactoryContainer.SharedLockObject)
@@ -217,9 +217,9 @@ public class TemplateTargetsHappyPathTests
     [Test]
     public void DatabaseOverrideWithoutCreateIfMissing_SkipsMissingDbWithInfoLog()
     {
-        // Slice 4 (#257): missing DB + CreateIfMissing: false → SKIP with info log; no CREATE.
-        // Mix one existing DB (MainDb) + one missing DB so the work-unit list isn't empty
-        // (which would trip RequireAtLeastOneTarget: true — the template default).
+        // Missing DB + CreateIfMissing: false → SKIP with info log; no CREATE. Mix one existing
+        // DB (MainDb) + one missing DB so the work-unit list isn't empty (which would trip
+        // RequireAtLeastOneTarget: true — the template default).
         var missingDb = MakeTransientDbName("ttdb_skip");
 
         lock (FactoryContainer.SharedLockObject)
@@ -335,8 +335,8 @@ public class TemplateTargetsHappyPathTests
 
     private static void RunSchemaQuench() => Program.Main(["SkipKindlingForge"]);
 
-    // Slice 4 (#257) DB-axis tests provisioning new DBs need full kindling — the freshly-
-    // provisioned DB has no SchemaSmith helpers, and downstream deployment depends on them.
+    // DB-axis tests provisioning new DBs need full kindling — the freshly-provisioned DB has
+    // no SchemaSmith helpers, and downstream deployment depends on them.
     private static void RunSchemaQuenchWithKindling() => Program.Main(System.Array.Empty<string>());
 
     private static void ClearTargetFilters(IConfigurationRoot config) =>

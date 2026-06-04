@@ -291,6 +291,75 @@ Both patterns deploy from the same schema package format. The choice is a databa
 
 Neither pattern is better in the abstract. The four tradeoffs -- license cost, operational isolation, backup granularity, blast radius -- usually pick the winner before you consult any other factor.
 
+## Region-rotated tenant rosters
+
+Once the per-tenant shape is governed by a schema template, the next operational question is which tenants live where. A single SaaS product often runs in several regions -- US-East, EU-West, APAC -- with a different tenant list in each. The same canonical package should ship to all of them; what should differ is the per-region tenant roster.
+
+This is what `Target.TemplateTargets` is for. The package stays one source of truth. Each region's SchemaQuench settings file declares which tenants belong on that target, and SchemaQuench reconciles existence -- optionally provisioning what's missing -- before deploying. New tenants onboard by editing the settings file and re-running the same package.
+
+### The package shape
+
+Author the template the way you would for a normal schema-per-tenant fan-out, but use the validator-recommended placeholder script that returns no rows. The placeholder marks the template as schema-fan-out without depending on a per-region tenant table:
+
+```json
+{
+  "Name": "TenantWorkspace",
+  "SchemaIdentificationScript": "SELECT 'CONFIG-DRIVEN' AS SchemaName WHERE 1=0"
+}
+```
+
+The placeholder is the signal that the universe lives in settings, not in a discovery query. Everything else in the template -- tables, procedures, views, migration scripts -- looks identical to the schema-template authoring shown earlier in this chapter.
+
+### Per-region settings
+
+In Region A's `SchemaQuench.settings.json`, declare the regional tenant roster under `Target.TemplateTargets`:
+
+```json
+{
+  "Target": {
+    "TemplateTargets": {
+      "TenantWorkspace": {
+        "Schemas": ["tenant_acme", "tenant_globex", "tenant_initech"],
+        "CreateIfMissing": true
+      }
+    }
+  }
+}
+```
+
+`CreateIfMissing: true` says: provision any schema in this list that doesn't yet exist on the target. The package and the settings together declare the desired state; SchemaQuench reconciles it.
+
+### First run
+
+The first SchemaQuench run against a fresh Region A target finds zero of the three schemas. With `CreateIfMissing: true`, SchemaQuench issues idempotent `CREATE SCHEMA` DDL for each missing schema (`CREATE SCHEMA IF NOT EXISTS "tenant_acme"` on PostgreSQL, the `sys.schemas`-guarded `EXEC('CREATE SCHEMA [tenant_acme]')` pattern on SQL Server) and then deploys the full template into each one. A single quench creates the rosters AND populates them.
+
+### Subsequent runs
+
+The next run finds all three schemas already present. SchemaQuench skips the create step (the DDL is idempotent regardless) and deploys the template's current shape into each tenant. The same package that brought a fresh region online now keeps every existing tenant's schema synchronized with the latest model -- no separate "provisioning script" pipeline, no second tool, no manual reconciliation.
+
+### Adding a tenant
+
+A new tenant signs up in Region A. Edit the Region A settings file:
+
+```json
+{
+  "Target": {
+    "TemplateTargets": {
+      "TenantWorkspace": {
+        "Schemas": ["tenant_acme", "tenant_globex", "tenant_initech", "tenant_newco"],
+        "CreateIfMissing": true
+      }
+    }
+  }
+}
+```
+
+Commit the change to source control. The next CI deployment finds the three existing schemas already populated and one missing -- `tenant_newco` -- provisions it, deploys the full template into it, and continues. Onboarding is a one-line edit and a normal deployment. Nothing about the package itself changed.
+
+Other regions are unaffected. Their settings files declare their own rosters; their own deployments reconcile only against their own targets. The same package, fanned out everywhere, with environment-owned membership.
+
+> **Tip:** The pattern composes with the database axis too. `TemplateTargets.<template>.Databases` declares per-template database fan-out the same way; with `CreateIfMissing: true`, SchemaQuench provisions missing databases (using the engine's admin connection) before deploying. Pure-database-fan-out templates that don't need schema iteration -- such as a per-tenant shared-services bundle -- can use just `Databases`, and database-per-tenant deployments on MySQL use this exclusively.
+
 ## Migrating from manual duplication
 
 If you already have hand-replicated schemas -- a `tenant_acme` schema and a `tenant_beta` schema that were originally created by copying SQL scripts -- SchemaTongs can cast the first one into a schema template and rewrite the cross-schema references for you.

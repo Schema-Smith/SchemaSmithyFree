@@ -15,14 +15,12 @@ using System.Data;
 namespace SchemaQuench.IntegrationTests.SqlServer;
 
 /// <summary>
-/// Slice-2/3 (#257) TemplateTargets integration tests for SQL Server.
-/// <para>Slice 2 verifies the existing-tenants happy path: a <c>Target.TemplateTargets.TenantBody.Schemas</c>
-/// override REPLACES the per-DB SchemaDiscovery result so the per-iteration deployment runs
-/// only against the overridden schemas, the source-disclosure log line surfaces the override
-/// origin, and downstream tracking matches a discovery-driven run on the same tenant set.</para>
-/// <para>Slice 3 adds the provisioning + skip-missing paths: <c>CreateIfMissing: true</c> provisions
-/// missing schemas via per-engine idempotent DDL; <c>CreateIfMissing: false</c> (default) skips
-/// missing entries with an info log. Database-axis provisioning lands in slice 4.</para>
+/// TemplateTargets integration tests for SQL Server. Covers the existing-tenants happy path
+/// (override REPLACES SchemaDiscovery, source-disclosure log surfaces override origin, downstream
+/// tracking matches a discovery-driven run on the same tenant set), the provisioning +
+/// skip-missing paths (<c>CreateIfMissing: true</c> provisions missing schemas via per-engine
+/// idempotent DDL; <c>CreateIfMissing: false</c> default skips missing entries with an info log),
+/// and the database-axis provisioning + skip-missing variants.
 /// </summary>
 [Category("SqlServer")]
 public class TemplateTargetsHappyPathTests
@@ -175,9 +173,9 @@ public class TemplateTargetsHappyPathTests
     [Test]
     public void DatabaseOverrideWithCreateIfMissing_ProvisionsMissingDbAndDeploys()
     {
-        // Slice 4 (#257): Databases override + CreateIfMissing: true → admin-DB connection to
-        // master, CREATE DATABASE for the missing target, then quench inside it. We use the
-        // Shared template (no schema-axis) and limit Target.Templates to it so TenantBody (which
+        // Databases override + CreateIfMissing: true → admin-DB connection to master,
+        // CREATE DATABASE for the missing target, then quench inside it. We use the Shared
+        // template (no schema-axis) and limit Target.Templates to it so TenantBody (which
         // assumes a tenant-table seeded in the original MainDB) doesn't try to run against the
         // transient DB.
         //
@@ -235,10 +233,10 @@ public class TemplateTargetsHappyPathTests
     [Test]
     public void DatabaseOverrideWithoutCreateIfMissing_SkipsMissingDbWithInfoLog()
     {
-        // Slice 4 (#257): CreateIfMissing: false (default) → missing DBs are SKIPPED with an
-        // info log; no admin-DB CREATE DATABASE issued; no work units run for that DB. Mix one
-        // existing DB (MainDb) with one missing DB so the work-unit list isn't empty (which
-        // would trip RequireAtLeastOneTarget: true — the default).
+        // CreateIfMissing: false (default) → missing DBs are SKIPPED with an info log; no
+        // admin-DB CREATE DATABASE issued; no work units run for that DB. Mix one existing DB
+        // (MainDb) with one missing DB so the work-unit list isn't empty (which would trip
+        // RequireAtLeastOneTarget: true — the default).
         var missingDb = MakeTransientDbName("ttdb_skip");
 
         lock (FactoryContainer.SharedLockObject)
@@ -364,8 +362,8 @@ public class TemplateTargetsHappyPathTests
 
     private static void RunSchemaQuench() => Program.Main(["SkipKindlingForge"]);
 
-    // Slice 4 (#257) DB-axis tests provisioning new DBs need full kindling — the freshly-
-    // provisioned DB has no SchemaSmith helpers, and downstream deployment depends on them.
+    // DB-axis tests provisioning new DBs need full kindling — the freshly-provisioned DB has
+    // no SchemaSmith helpers, and downstream deployment depends on them.
     private static void RunSchemaQuenchWithKindling() => Program.Main(System.Array.Empty<string>());
 
     private static void ClearTargetFilters(IConfigurationRoot config) =>

@@ -33,9 +33,9 @@ public class WorkUnitFilterTests
     [Test]
     public void TemplateNameMatching_IsCaseInsensitive()
     {
-        // #257 slice-2 casing sweep: template-name comparisons across the validator + filter trio
-        // are OrdinalIgnoreCase. A lowercase Target.Templates filter value still matches the
-        // canonical "TenantBody" template name discovered by EnumerateWorkUnitsForTemplate.
+        // Template-name comparisons across the validator + filter trio are OrdinalIgnoreCase.
+        // A lowercase Target.Templates filter value still matches the canonical "TenantBody"
+        // template name discovered by EnumerateWorkUnitsForTemplate.
         var filter = new WorkUnitFilter(["tenantbody"], [], []);
 
         var result = filter.Apply(AllSixUnits(), warn: _ => { });

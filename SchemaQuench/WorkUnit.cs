@@ -32,7 +32,7 @@ public sealed record WorkUnit(
     /// <summary>
     /// Discloses how <see cref="DatabaseName"/> was obtained — either the user-facing
     /// <c>DatabaseIdentificationScript</c> result or a config-driven
-    /// <c>TemplateTargets:&lt;TemplateName&gt;:Databases</c> override (#257). Surfaces in the
+    /// <c>TemplateTargets:&lt;TemplateName&gt;:Databases</c> override. Surfaces in the
     /// per-unit dispatch log so a reader can see at a glance whether discovery or a config
     /// override produced this unit. Default empty so existing call sites and tests that don't
     /// care about the disclosure stay unaffected.
@@ -42,7 +42,7 @@ public sealed record WorkUnit(
     /// <summary>
     /// Discloses how <see cref="SchemaName"/> was obtained — either the
     /// <c>SchemaIdentificationScript</c> result, a <c>TemplateTargets:&lt;Name&gt;:Schemas</c>
-    /// override (#257), or the regular-template sentinel for non-schema templates.
+    /// override, or the regular-template sentinel for non-schema templates.
     /// Default empty so existing call sites and tests that don't care about the disclosure
     /// stay unaffected.
     /// </summary>
@@ -50,7 +50,7 @@ public sealed record WorkUnit(
 
     /// <summary>
     /// True when this unit's <see cref="SchemaName"/> came from a
-    /// <c>TemplateTargets:&lt;Name&gt;:Schemas</c> override (#257). Used by per-iteration
+    /// <c>TemplateTargets:&lt;Name&gt;:Schemas</c> override. Used by per-iteration
     /// deployment to distinguish override-sourced units (which honor
     /// <see cref="ProvisionSchemaIfMissing"/> for the skip-missing path) from
     /// discovery-sourced units (which keep today's strict <c>CreateSchemaIfMissing</c>
@@ -59,8 +59,8 @@ public sealed record WorkUnit(
     public bool SchemaFromOverride { get; init; }
 
     /// <summary>
-    /// True when an override declared <c>CreateIfMissing: true</c> for this unit's template
-    /// (#257). Per-iteration deployment provisions a missing schema via
+    /// True when an override declared <c>CreateIfMissing: true</c> for this unit's template.
+    /// Per-iteration deployment provisions a missing schema via
     /// <see cref="SchemaProvisioner.EnsureSchemaExists(System.Data.IDbCommand, string, Schema.Domain.Platform, bool, System.Action{string})"/>
     /// before running deployment work. When false (the default), missing schemas on
     /// override-sourced units are SKIPPED with an info log; missing schemas on
@@ -71,7 +71,7 @@ public sealed record WorkUnit(
 
     /// <summary>
     /// True when this unit's <see cref="DatabaseName"/> came from a
-    /// <c>TemplateTargets:&lt;Name&gt;:Databases</c> override (#257 slice 4). Drives the
+    /// <c>TemplateTargets:&lt;Name&gt;:Databases</c> override. Drives the
     /// pre-dispatch database-existence check + provisioning / skip-missing decision in
     /// <see cref="ProductQuench.EnumerateAndProvisionWorkUnitsForServer"/>. Discovery-sourced units
     /// (default false) bypass the DB-axis pre-dispatch pass entirely — today's behavior
@@ -81,7 +81,7 @@ public sealed record WorkUnit(
 
     /// <summary>
     /// True when an override declared <c>CreateIfMissing: true</c> on a template carrying a
-    /// <c>Databases</c> override (#257 slice 4). When set, the pre-dispatch DB-existence pass
+    /// <c>Databases</c> override. When set, the pre-dispatch DB-existence pass
     /// provisions a missing database via
     /// <see cref="SchemaProvisioner.EnsureDatabaseExists(System.Data.IDbCommand, string, Schema.Domain.Platform, bool, System.Action{string})"/>
     /// before the per-database iteration's connection opens. When false (the default), missing

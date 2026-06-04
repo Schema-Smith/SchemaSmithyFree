@@ -14,11 +14,11 @@ using System.Data;
 namespace SchemaQuench.IntegrationTests.MySQL;
 
 /// <summary>
-/// Slice-4 (#257) TemplateTargets integration tests for MySQL — database-axis only. MySQL has
-/// no schema/database distinction, so the schema axis is excluded entirely; the database axis
-/// is its sole provisioning surface (design §6). Tests cover the same three behaviors that
-/// SQL Server + PostgreSQL get on the DB axis: pure enumeration override (existing DB),
-/// <c>CreateIfMissing: true</c> provisioning, and <c>CreateIfMissing: false</c> skip-missing.
+/// TemplateTargets integration tests for MySQL — database-axis only. MySQL has no schema/database
+/// distinction, so the schema axis is excluded entirely; the database axis is its sole provisioning
+/// surface. Tests cover the same three behaviors that SQL Server + PostgreSQL get on the DB axis:
+/// pure enumeration override (existing DB), <c>CreateIfMissing: true</c> provisioning, and
+/// <c>CreateIfMissing: false</c> skip-missing.
 /// </summary>
 [Category("MySQL")]
 public class TemplateTargetsHappyPathTests
@@ -51,8 +51,9 @@ public class TemplateTargetsHappyPathTests
     public void DatabaseOverrideExistingDb_ReplacesIdentificationScript()
     {
         // Pure enumeration override on the DB axis: existing DB → no provisioning, deployment
-        // runs against it. The DatabaseIdentificationScript in TemplateTargetsDbAxisProduct
-        // returns no rows ("placeholder-never-matches"), so the override IS the universe.
+        // runs against it. The DatabaseIdentificationScript in TemplateTargetsDbAxisProduct uses
+        // the validator-recommended CONFIG-DRIVEN placeholder (returns no rows) so the override
+        // IS the universe.
         var existingDb = MakeTransientDbName("ttdb_exists");
 
         lock (FactoryContainer.SharedLockObject)
@@ -207,11 +208,11 @@ public class TemplateTargetsHappyPathTests
         LogFactory.Register("ProgressLog", _progressLog);
     }
 
-    // Slice 4 (#257) DB-axis tests deploy into either freshly-provisioned or test-managed DBs
-    // that have no SchemaSmith helpers; the rest of the deployment pipeline depends on them.
-    // Run with full kindling so the test target gets the helpers before the rest of the work
-    // runs. (Other MySQL integration tests skip kindling because their fixture pre-kindles
-    // MainDb; tests touching new DBs don't have that luxury.)
+    // DB-axis tests deploy into either freshly-provisioned or test-managed DBs that have no
+    // SchemaSmith helpers; the rest of the deployment pipeline depends on them. Run with full
+    // kindling so the test target gets the helpers before the rest of the work runs. (Other
+    // MySQL integration tests skip kindling because their fixture pre-kindles MainDb; tests
+    // touching new DBs don't have that luxury.)
     private static void RunSchemaQuench() => Program.Main(System.Array.Empty<string>());
 
     private static void ClearTargetFilters(IConfigurationRoot config) =>

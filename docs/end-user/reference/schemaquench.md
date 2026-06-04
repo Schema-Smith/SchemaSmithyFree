@@ -161,6 +161,66 @@ For a full narrative walkthrough of tenant onboarding, see [Onboarding a new ten
 
 ---
 
+## TemplateTargets
+
+`Target.TemplateTargets` lets the deployment system OWN the universe a schema template fans out across, instead of asking the target server to enumerate it. A template's `DatabaseIdentificationScript` / `SchemaIdentificationScript` still defines the package's contract -- this block replaces the script's result at runtime for one named template, per environment. The pattern unlocks single-canonical-package deployments where each environment's settings file declares which tenants belong on that target, and SchemaQuench reconciles existence (optionally provisioning what's missing) before deploying.
+
+```json
+{
+  "Target": {
+    "TemplateTargets": {
+      "TenantBody": {
+        "Databases": ["tenant_acme", "tenant_globex"],
+        "Schemas":   ["acme", "globex"],
+        "CreateIfMissing": true
+      },
+      "Shared": {
+        "Databases": ["tenant_acme"]
+      }
+    }
+  }
+}
+```
+
+Each key under `TemplateTargets` is a template name as declared in `Product.json.TemplateOrder`. The value is an object with three optional properties.
+
+### Databases
+
+String array. Replaces the result of the named template's `DatabaseIdentificationScript` for this run. When set, the listed databases ARE the universe -- the discovery script does not run. The template must declare a `DatabaseIdentificationScript` in its `Template.json`; if you don't need real discovery, the recommended marker is `"SELECT 'CONFIG-DRIVEN' AS DatabaseName WHERE 1=0"` -- a placeholder that returns no rows and signals "this template is database-fan-out, the universe lives in settings."
+
+### Schemas
+
+String array. Replaces the result of the named template's `SchemaIdentificationScript` for this run. Same shape, same recommended placeholder: `"SELECT 'CONFIG-DRIVEN' AS SchemaName WHERE 1=0"`. When both axes are overridden on a schema template, the cross-product becomes the work-unit set: two databases × two schemas = four iterations.
+
+> **MySQL:** The schema axis does not apply -- MySQL has no schema-inside-database concept. `TemplateTargets.<template>.Schemas` is rejected on MySQL templates by the same validation that rejects `SchemaIdentificationScript` on MySQL. Use the database axis instead; multi-tenant on MySQL is database-per-tenant.
+
+### CreateIfMissing
+
+Boolean. Default `false`. Controls what happens when an entry in `Databases` or `Schemas` doesn't exist on the target server:
+
+| State | `CreateIfMissing: true` | `CreateIfMissing: false` (default) |
+|---|---|---|
+| Target exists | Deploy normally | Deploy normally |
+| Target missing | Provision (DDL), then deploy | Skip with info log, no error |
+
+When `true`, SchemaQuench issues idempotent per-engine DDL (`CREATE SCHEMA IF NOT EXISTS` on PostgreSQL, the `sys.schemas`-guarded `EXEC('CREATE SCHEMA …')` pattern on SQL Server, `CREATE DATABASE IF NOT EXISTS` on MySQL) before deploying into the new target. Database provisioning runs against the engine's admin database (`master` / `postgres` / `information_schema`) by re-targeting the connection -- the credential the user supplied to SchemaQuench must carry `CREATE DATABASE` privilege there. When `false` and a target is missing, the engine emits an info log naming the skipped target and continues with the rest of the override list; no work units run for the missing target, no error.
+
+> **Warning:** Provisioning requires elevated privileges. `CreateIfMissing: true` on the database axis needs `CREATE DATABASE` on the engine's admin database; on the schema axis it needs `CREATE SCHEMA` on the target database. A permission denial surfaces an actionable diagnostic naming the missing privilege, but the deployment fails fast at that target. If your deployment account is intentionally low-privilege, leave `CreateIfMissing: false` and provision externally; SchemaQuench will pick the targets up as soon as they exist.
+
+### Validation
+
+`TemplateTargets` is validated against the loaded product before any deployment work runs. Six rules fail fast with a precise diagnostic naming the offending entry: unknown template name, template excluded by `Target.Templates`, empty entry (no `Databases` and no `Schemas`), `Schemas` declared without a `SchemaIdentificationScript` on the template, `Databases` declared without a `DatabaseIdentificationScript`, and filter values composing with `Target.Databases` / `Target.Schemas` to produce an empty universe. A misconfiguration cannot reach a deployment connection.
+
+### Filter composition
+
+`TemplateTargets` replaces the SOURCE of a template's fan-out universe; `Target.Templates` / `Target.Databases` / `Target.Schemas` still filter the result. The override produces the universe, then the filters narrow it. See [Target](#target) for the filter semantics -- composition is straightforward: `Target.Databases` keeps only entries that match its allow-list (whether those entries came from discovery or an override), and the same applies for `Target.Schemas`.
+
+> **Tip:** For users who don't need declarative provisioning and are happy letting discovery scripts return the live universe, the existing `DatabaseIdentificationScript` / `SchemaIdentificationScript` (which can interpolate query-tokens, read tenant tables, or query system catalogs) remains the right tool. Reach for `TemplateTargets` when the deployment system needs to OWN the universe declaratively -- typically when one canonical package ships to multiple environments with per-environment tenant rosters.
+
+For a worked end-to-end example -- single canonical package, per-region settings files, first-run provisioning, subsequent-run idempotent refresh, onboarding a new tenant -- see [Region-rotated tenant rosters](../guide/10-multi-tenant-deployments.md#region-rotated-tenant-rosters).
+
+---
+
 ## MaxThreads
 
 The `MaxThreads` setting controls how many work units run concurrently across the entire product deployment. A work unit is one database iteration for a regular template, or one `(database, schema)` iteration for a schema template. All work unit types share the same pool -- there is no separate budget per template type.

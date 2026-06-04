@@ -440,13 +440,13 @@ public class ProductQuenchTests
     [Test]
     public void ReadTemplateTargets_EmptyCreateIfMissingValue_SurvivesAsPhantomSurvivor_ForValidator()
     {
-        // I6 (#257 batch A): the phantom-entry skip in ReadTemplateTargets exists to defend
-        // against in-memory provider residue (key path still present after a fixture nulls the
-        // values mid-run — distinct from the user-authored config a real run would carry). The
-        // skip must only fire when the CreateIfMissing KEY is genuinely absent — NOT when its
-        // value is empty. A user writing `CreateIfMissing: ""` in JSON should reach the
-        // validator and trip rule 3 ("entry must declare at least one of Databases or Schemas"),
-        // not be silently dropped as test residue.
+        // The phantom-entry skip in ReadTemplateTargets exists to defend against in-memory
+        // provider residue (key path still present after a fixture nulls the values mid-run —
+        // distinct from the user-authored config a real run would carry). The skip must only
+        // fire when the CreateIfMissing KEY is genuinely absent — NOT when its value is empty.
+        // A user writing `CreateIfMissing: ""` in JSON should reach the validator and trip rule
+        // 3 ("entry must declare at least one of Databases or Schemas"), not be silently dropped
+        // as test residue.
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string>
             {
@@ -1151,9 +1151,9 @@ public class ProductQuenchTests
             // produce different DB/schema names than the override.
             quench.IdentifiedDatabases["primary"] = new[] { "wrong_db" };
             quench.SchemaDiscoveryResults[("primary", "ring1")] = new List<string> { "wrong_schema" };
-            // Slice-4 (#257): the DB-axis gate now checks existence for override-sourced DBs.
-            // Mark the overridden DBs as existing so this slice-2 test continues to exercise
-            // the pure enumeration-override path (no CreateIfMissing branch involved).
+            // The DB-axis gate checks existence for override-sourced DBs. Mark the overridden
+            // DBs as existing so this test exercises the pure enumeration-override path with no
+            // CreateIfMissing branch involved.
             quench.ExistingDatabases.Add(("primary", "ring1"));
             quench.ExistingDatabases.Add(("primary", "ring2"));
 
@@ -1340,9 +1340,9 @@ public class ProductQuenchTests
             quench.IdentifiedDatabases["primary"] = new[] { "wrong_db" };
             quench.SchemaDiscoveryResults[("primary", "tenant_a")] = new List<string> { "s1" };
             quench.SchemaDiscoveryResults[("primary", "tenant_b")] = new List<string> { "s2" };
-            // Slice-4 (#257): DB-axis gate requires existence for override-sourced DBs. Mark
-            // both as existing so this slice-2 test exercises the pure enumeration-override path
-            // (no CreateIfMissing branch involved).
+            // DB-axis gate requires existence for override-sourced DBs. Mark both as existing
+            // so this test exercises the pure enumeration-override path with no CreateIfMissing
+            // branch involved.
             quench.ExistingDatabases.Add(("primary", "tenant_a"));
             quench.ExistingDatabases.Add(("primary", "tenant_b"));
 
@@ -1379,7 +1379,7 @@ public class ProductQuenchTests
     [Test]
     public void EnumerateWorkUnitsForTemplate_SchemaOverride_CarriesSchemaFromOverrideTrue()
     {
-        // Slice-3 flag: SchemaFromOverride is set true on every unit whose schema came from a
+        // SchemaFromOverride is set true on every unit whose schema came from a
         // TemplateTargets:<T>:Schemas override. Drives the override-vs-discovery branch in
         // DatabaseQuench.EnsureSchemaExists — discovery-sourced units keep today's strict
         // template-level CreateSchemaIfMissing behavior.
@@ -1636,12 +1636,11 @@ public class ProductQuenchTests
     [Test]
     public void EnumerateWorkUnits_DatabaseOverride_GenericProvisioningException_TripsUpdateFailed()
     {
-        // I4 (#257 batch A): the gate's provisioning catch must accept ANY exception, not just
+        // The gate's provisioning catch must accept ANY exception, not just
         // TemplateTargetProvisioningException. Admin-connection failures during the actual
         // ProvisionDatabaseViaAdminConnection call (e.g., login denied, transient network blip)
-        // surface as plain Exception types that the previous narrow catch let propagate up to
-        // EnumerateAndProvisionWorkUnitsForServer's caller. The widened catch routes them
-        // through the same continue-on-failure diagnostic.
+        // surface as plain Exception types; the catch routes them through the same
+        // continue-on-failure diagnostic as the wrapped provisioning failures.
         WithMinimalSqlServerProductQuench(quench =>
         {
             // Pre-existing existence check works (tenant_a) so we isolate the provisioning failure.
@@ -1711,12 +1710,12 @@ public class ProductQuenchTests
     [Test]
     public void ComposeAdminDbConnectionString_OverrideOnPrimary_RetargetsToInitDb()
     {
-        // C1 (#257 batch A): when --ConnectionString is supplied AND the server is the primary,
-        // GetCommandForAdminDb must re-target the override to the platform's init DB rather than
-        // honoring the override's Database= verbatim. PG in particular REQUIRES the admin DB
-        // (postgres) — CREATE DATABASE cannot target a non-admin DB and cannot run inside a
-        // transaction. SQL Server / MySQL tolerated the prior broken behavior, but the correct
-        // contract is to retarget on every engine.
+        // When --ConnectionString is supplied AND the server is the primary, GetCommandForAdminDb
+        // must re-target the override to the platform's init DB rather than honoring the
+        // override's Database= verbatim. PG in particular REQUIRES the admin DB (postgres) —
+        // CREATE DATABASE cannot target a non-admin DB and cannot run inside a transaction.
+        // SQL Server / MySQL tolerated the prior broken behavior, but the correct contract is
+        // to retarget on every engine.
         //
         // Set the IEnvironment.CommandLine to inject --ConnectionString=...; CommandLineParser
         // reads from EnvironmentWrapper.GetFromFactory().CommandLine.
@@ -1773,12 +1772,11 @@ public class ProductQuenchTests
     [Test]
     public void DatabaseAxisProvisioningGate_WhatIfMissingDb_LogsWouldCreateAndEnqueuesUnits()
     {
-        // I5 (#257 batch A): provisioner-isolation WhatIf test exists in SchemaProvisionerTests;
-        // this is the gate / ProductQuench boundary equivalent — when WhatIf is active and a
-        // Databases-override target is missing AND CreateIfMissing: true, the gate must engage
-        // the WhatIf path (no real DDL) AND still enqueue the work units so the dispatcher
-        // honors WhatIf for the rest of the deployment too (consistent with WhatIf's "describe
-        // what would happen" contract).
+        // Provisioner-isolation WhatIf test exists in SchemaProvisionerTests; this is the gate /
+        // ProductQuench boundary equivalent — when WhatIf is active and a Databases-override
+        // target is missing AND CreateIfMissing: true, the gate must engage the WhatIf path (no
+        // real DDL) AND still enqueue the work units so the dispatcher honors WhatIf for the rest
+        // of the deployment too (consistent with WhatIf's "describe what would happen" contract).
         WithMinimalSqlServerProductQuench(quench =>
         {
             // tenant_phantom does NOT exist on target — populate nothing in ExistingDatabases
@@ -1954,20 +1952,20 @@ public class ProductQuenchTests
         public List<string> ProgressLogLines { get; }
         public bool LogBackupCalled { get; private set; }
 
-        // Slice-4 (#257) DB-axis seams. ExistingDatabases is the in-memory truth set for the
+        // DB-axis seams. ExistingDatabases is the in-memory truth set for the
         // DatabaseExistsOnServer check; ProvisionedDatabases records what production code asked
         // to provision so tests assert on the call without standing up an admin connection.
         public HashSet<(string Server, string Db)> ExistingDatabases { get; } = new();
         public List<(string Server, string Db)> ProvisionedDatabases { get; } = new();
         public HashSet<(string Server, string Db)> ProvisioningFailures { get; } = new();
-        // I4 (#257 batch A): simulates a non-wrapped exception bubbling up from
-        // ProvisionDatabaseViaAdminConnection (e.g., admin-connection login denial) — distinct
-        // from ProvisioningFailures, which throws the wrapped TemplateTargetProvisioningException
-        // path that the original narrow catch already handled.
+        // Simulates a non-wrapped exception bubbling up from ProvisionDatabaseViaAdminConnection
+        // (e.g., admin-connection login denial) — distinct from ProvisioningFailures, which throws
+        // the wrapped TemplateTargetProvisioningException path that the original narrow catch
+        // already handled.
         public HashSet<(string Server, string Db)> GenericProvisioningFailures { get; } = new();
         public HashSet<(string Server, string Db)> ExistenceCheckFailures { get; } = new();
 
-        // Call tracking for the override-vs-discovery slice-2 tests. Production code that bypasses
+        // Call tracking for the override-vs-discovery tests. Production code that bypasses
         // discovery via TemplateTargets must NOT touch these surfaces — assertions on the recorded
         // counts catch a regression that accidentally re-invokes discovery after applying the override.
         public int GetCommandCallCount { get; private set; }
@@ -1997,9 +1995,9 @@ public class ProductQuenchTests
                 : new List<string>();
         }
 
-        // Slice-4 (#257) DB-axis existence + provisioning seams. Tests populate ExistingDatabases
-        // to control whether DatabaseAxisProvisioningGate sees the DB as present; provisioning
-        // failures are simulated by adding to ProvisioningFailures.
+        // DB-axis existence + provisioning seams. Tests populate ExistingDatabases to control
+        // whether DatabaseAxisProvisioningGate sees the DB as present; provisioning failures are
+        // simulated by adding to ProvisioningFailures.
         internal override bool DatabaseExistsOnServer(string server, string databaseName)
         {
             if (ExistenceCheckFailures.Contains((server, databaseName)))
@@ -2086,9 +2084,9 @@ public class ProductQuenchTests
             method!.Invoke(this, new object[] { template });
         }
 
-        // C1 (#257 batch A): expose the admin-DB connection-string composition for direct
-        // assertion. ComposeAdminDbConnectionString is internal virtual on the base — production
-        // code calls it from GetCommandForAdminDb; tests reach it through this thin invoker.
+        // Expose the admin-DB connection-string composition for direct assertion.
+        // ComposeAdminDbConnectionString is internal virtual on the base — production code
+        // calls it from GetCommandForAdminDb; tests reach it through this thin invoker.
         public string InvokeComposeAdminDbConnectionString(string server)
         {
             var method = typeof(ProductQuench).GetMethod("ComposeAdminDbConnectionString",

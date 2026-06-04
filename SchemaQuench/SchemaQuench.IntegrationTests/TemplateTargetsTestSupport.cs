@@ -8,14 +8,14 @@ namespace SchemaQuench.IntegrationTests;
 
 /// <summary>
 /// Shared integration-test helpers for <c>Target.TemplateTargets</c> / <c>Target.*</c> filter
-/// cleanup (#257 batch A I8). The three engine-specific TemplateTargets fixtures previously each
-/// carried near-identical local copies of <c>ClearTargetFilters</c> + <c>ClearTemplateTargets</c>,
-/// both of which nulled leaf values but left the underlying key paths in the configuration
-/// provider's data dictionary. That residue surfaced as phantom entries in <see cref="IConfiguration.GetChildren"/>
-/// on subsequent tests in the same fixture, forcing production code to compensate with a
+/// cleanup. The three engine-specific TemplateTargets fixtures previously each carried near-identical
+/// local copies of <c>ClearTargetFilters</c> + <c>ClearTemplateTargets</c>, both of which nulled
+/// leaf values but left the underlying key paths in the configuration provider's data dictionary.
+/// That residue surfaced as phantom entries in <see cref="IConfiguration.GetChildren"/> on
+/// subsequent tests in the same fixture, forcing production code to compensate with a
 /// "phantom-entry skip" in <c>ReadTemplateTargets</c>. Lifting + correcting the cleanup here lets
-/// the production-side skip narrow safely to "key genuinely absent" (I6) without silently
-/// swallowing user-authored empty values.
+/// the production-side skip narrow safely to "key genuinely absent" without silently swallowing
+/// user-authored empty values.
 /// <para>
 /// Implementation note: <see cref="ConfigurationProvider.Data"/> is protected, so reflective access
 /// is used to remove keys outright (not just null them). This works against any provider that

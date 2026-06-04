@@ -11,9 +11,9 @@ using Schema.Domain;
 namespace SchemaQuench.UnitTests;
 
 /// <summary>
-/// Slice-3 (#257) unit tests for <see cref="SchemaProvisioner"/>. The provisioner emits per-engine
-/// idempotent CREATE SCHEMA DDL (design §6); existence checking and the broader skip-missing flow
-/// live in <see cref="DatabaseQuench"/>. Tests assert on the SQL text + WhatIf behavior + the
+/// Unit tests for <see cref="SchemaProvisioner"/>. The provisioner emits per-engine idempotent
+/// CREATE SCHEMA DDL; existence checking and the broader skip-missing flow live in
+/// <see cref="DatabaseQuench"/>. Tests assert on the SQL text + WhatIf behavior + the
 /// MySQL-not-supported guard.
 /// </summary>
 [TestFixture]

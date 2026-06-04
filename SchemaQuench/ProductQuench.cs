@@ -262,9 +262,9 @@ public class ProductQuench
     }
 
     /// <summary>
-    /// Opens an admin-database command against <paramref name="server"/> for DB-axis provisioning
-    /// (slice 4, #257). When a <c>--ConnectionString</c> override is in effect AND the server is
-    /// the primary server, the override is re-targeted to the platform's init database
+    /// Opens an admin-database command against <paramref name="server"/> for DB-axis provisioning.
+    /// When a <c>--ConnectionString</c> override is in effect AND the server is the primary server,
+    /// the override is re-targeted to the platform's init database
     /// (<c>master</c> / <c>postgres</c> / <c>information_schema</c>) via
     /// <see cref="ConnectionString.RetargetDatabase"/> — distinct from <see cref="GetCommand"/>,
     /// which honors the override's <c>Database=</c> verbatim. This matters because
@@ -364,14 +364,14 @@ public class ProductQuench
             var templates = LoadTemplates();
             var suppressKindling = suppressKindlingForTesting || _skipKindling;
 
-            // TemplateTargets pre-flight (#257 design §5 rules 1-5): validate Target.TemplateTargets
-            // against the loaded template list AND the active Target.Templates filter BEFORE any
-            // identification scripts run. Rule 2 (filter-excluded template) is checked against the
-            // RAW _targetTemplates filter list — not the filtered set — so a config that targets a
-            // template the filter would exclude surfaces a precise diagnostic instead of a misleading
-            // "unknown template" later. Throwing here aborts the run with the user-facing message
-            // bubbled up; the existing finally clause around QuenchProduct's command disposes the
-            // primary-server connection.
+            // TemplateTargets pre-flight: validate Target.TemplateTargets against the loaded
+            // template list AND the active Target.Templates filter BEFORE any identification
+            // scripts run. Rule 2 (filter-excluded template) is checked against the RAW
+            // _targetTemplates filter list — not the filtered set — so a config that targets a
+            // template the filter would exclude surfaces a precise diagnostic instead of a
+            // misleading "unknown template" later. Throwing here aborts the run with the
+            // user-facing message bubbled up; the existing finally clause around QuenchProduct's
+            // command disposes the primary-server connection.
             TemplateTargetValidator.Validate(_templateTargets, templates, _targetTemplates);
 
             // Slice-5 selective execution (§9.3): filter the templates list by Target.Templates
@@ -735,9 +735,9 @@ public class ProductQuench
 
         var loadedNames = templates.Select(t => t.Name).ToList();
         // Template-name matching is case-insensitive across the trio (validator,
-        // TryFilterTemplatesByTarget, WorkUnitFilter) — see #257 slice-2 casing sweep. Template
-        // names are .NET-style identifiers from Product.json and live independent of the engine's
-        // own database/schema casing rules, so OrdinalIgnoreCase is the right choice here.
+        // TryFilterTemplatesByTarget, WorkUnitFilter). Template names are .NET-style identifiers
+        // from Product.json and live independent of the engine's own database/schema casing
+        // rules, so OrdinalIgnoreCase is the right choice here.
         var missing = _targetTemplates
             .Where(t => !loadedNames.Contains(t, StringComparer.OrdinalIgnoreCase))
             .ToList();
@@ -849,7 +849,7 @@ public class ProductQuench
     /// <c>true</c> when enumeration completed for this server; <c>false</c> when a failure
     /// occurred and <c>ContinueOnDatabaseFailure</c> is false.</para>
     /// <para>
-    /// DB-axis side-effect contract (#257 slice 4): when a <c>TemplateTargets</c> entry with
+    /// DB-axis side-effect contract: when a <c>TemplateTargets</c> entry with
     /// <c>CreateIfMissing: true</c> references a missing database, this method invokes
     /// <see cref="SchemaProvisioner.EnsureDatabaseExists"/> against the admin connection
     /// (composed via <see cref="GetCommandForAdminDb"/>) BEFORE enqueueing any work units for
@@ -860,7 +860,7 @@ public class ProductQuench
     /// </summary>
     private bool EnumerateAndProvisionWorkUnitsForServer(Template template, string server, List<WorkUnit> workUnits)
     {
-        // TemplateTargets override (#257): when an entry exists for this template, the matching
+        // TemplateTargets override: when an entry exists for this template, the matching
         // axis (Databases / Schemas) REPLACES the corresponding identification-script result. Each
         // axis decides independently — an entry may override one axis and leave the other to
         // discovery. The override is applied at this enumeration boundary so downstream dispatch /
@@ -925,13 +925,12 @@ public class ProductQuench
 
         foreach (var db in databases)
         {
-            // Slice-4 (#257) DB-axis provisioning + skip-missing pre-dispatch pass: when the DB
-            // came from a TemplateTargets:<T>:Databases override, check whether the database
-            // exists on the server BEFORE running schema discovery (which assumes the DB exists)
-            // or enqueueing any work units. Branching:
-            //   CreateIfMissing: true  → provision via admin connection (idempotent).
-            //   CreateIfMissing: false → emit skip log; DO NOT add work units for this (server, db).
-            // Discovery-sourced DBs bypass this entirely — today's behavior is preserved.
+            // DB-axis provisioning + skip-missing pre-dispatch pass: when the DB came from a
+            // TemplateTargets:<T>:Databases override, check whether the database exists on the
+            // server BEFORE running schema discovery (which assumes the DB exists) or enqueueing
+            // any work units. CreateIfMissing: true → provision via admin connection (idempotent);
+            // CreateIfMissing: false → emit skip log; DO NOT add work units for this (server, db).
+            // Discovery-sourced DBs bypass this entirely.
             if (databasesOverride && !DatabaseAxisProvisioningGate(server, db, template, overrideEntry!))
                 continue;
 
@@ -975,17 +974,14 @@ public class ProductQuench
                     {
                         DatabaseSource = databaseSource,
                         SchemaSource = schemaSource,
-                        // Slice-3 (#257): carry the override origin + provisioning flag onto the
-                        // unit so per-iteration deployment can branch on (a) override-vs-discovery
-                        // and (b) CreateIfMissing for the skip-missing path. Discovery-sourced
-                        // units keep both fields at default — today's behavior is preserved.
+                        // Carry the override origin + provisioning flag onto the unit so per-
+                        // iteration deployment can branch on override-vs-discovery and on
+                        // CreateIfMissing for the skip-missing path. ProvisionDatabaseIfMissing
+                        // is informational at the unit level — the actual provisioning happened
+                        // in DatabaseAxisProvisioningGate above; the flag surfaces in logs and
+                        // tests to disambiguate override-driven units from discovery-sourced ones.
                         SchemaFromOverride = schemasOverride,
                         ProvisionSchemaIfMissing = schemasOverride && overrideEntry!.CreateIfMissing,
-                        // Slice-4 (#257): mirror the same origin disclosure for the DB axis.
-                        // ProvisionDatabaseIfMissing is informational at the work-unit level — the
-                        // actual provisioning happened in DatabaseAxisProvisioningGate above; the
-                        // flag surfaces in logs and tests to disambiguate "this unit's DB came from
-                        // override + CreateIfMissing flow" from "discovery-sourced unit."
                         DatabaseFromOverride = databasesOverride,
                         ProvisionDatabaseIfMissing = databasesOverride && overrideEntry!.CreateIfMissing
                     });
@@ -996,7 +992,6 @@ public class ProductQuench
                 {
                     DatabaseSource = databaseSource,
                     SchemaSource = "(regular template)",
-                    // Slice-4 (#257): mirror the same origin disclosure for the DB axis (regular templates).
                     DatabaseFromOverride = databasesOverride,
                     ProvisionDatabaseIfMissing = databasesOverride && overrideEntry!.CreateIfMissing
                 });
@@ -1007,10 +1002,9 @@ public class ProductQuench
     }
 
     /// <summary>
-    /// Slice-4 (#257) DB-axis provisioning gate. Called once per (server, db) pair when the DB
-    /// came from a <c>TemplateTargets:&lt;T&gt;:Databases</c> override. Checks whether the
-    /// database exists on <paramref name="server"/>; if missing, branches on
-    /// <c>CreateIfMissing</c>:
+    /// DB-axis provisioning gate. Called once per (server, db) pair when the DB came from a
+    /// <c>TemplateTargets:&lt;T&gt;:Databases</c> override. Checks whether the database exists
+    /// on <paramref name="server"/>; if missing, branches on <c>CreateIfMissing</c>:
     /// <list type="bullet">
     ///   <item><term>true</term><description>Provisions the DB via admin connection (idempotent).</description></item>
     ///   <item><term>false</term><description>Emits a skip log and returns <c>false</c> so the caller
@@ -1063,7 +1057,7 @@ public class ProductQuench
             }
             catch (Exception ex)
             {
-                // Catch-all is intentional (#257 batch A I4). The most likely failure is a
+                // Catch-all is intentional. The most likely failure is a
                 // TemplateTargetProvisioningException wrapping a CREATE DATABASE permission denial,
                 // but admin-connection blips (login denied to master, transient network failure)
                 // surface directly from GetCommandForAdminDb without going through the provisioner's
@@ -1098,7 +1092,7 @@ public class ProductQuench
     /// without standing up a live connection. Production code routes through
     /// <see cref="GetCommandForAdminDb"/>, which uses
     /// <see cref="ConnectionString.RetargetDatabase"/> to compose the admin connection when a
-    /// <c>--ConnectionString</c> override is active (slice 4, #257). PostgreSQL in particular
+    /// <c>--ConnectionString</c> override is active. PostgreSQL in particular
     /// REQUIRES the admin DB as the connection target — its <c>CREATE DATABASE</c> cannot run
     /// against a non-admin DB.
     /// </summary>
@@ -1239,7 +1233,7 @@ public class ProductQuench
     }
 
     /// <summary>
-    /// Per-work-unit source disclosure (#257 design §9): emit one log line per unit naming the
+    /// Per-work-unit source disclosure: emit one log line per unit naming the
     /// source of both axes (script vs TemplateTargets override). The format is greppable both
     /// per <c>[server].[db]</c> and per <c>source:</c> tag so a reader can scan a large log for
     /// "which units came from a config override?" in one pass. Factored out of
@@ -1268,9 +1262,9 @@ public class ProductQuench
             _updateTables && template.Tables.Count > 0, _deliverData, _checkpointing,
             _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _forceReKindle)
         {
-            // Slice-3 (#257): carry the override-origin signals through so EnsureSchemaExists
-            // can branch on TemplateTargets-driven provisioning + skip-missing. Default values on
-            // the WorkUnit (false / false) preserve existing behavior for discovery-sourced units.
+            // Carry the override-origin signals through so EnsureSchemaExists can branch on
+            // TemplateTargets-driven provisioning + skip-missing. Defaults preserve existing
+            // behavior for discovery-sourced units.
             SchemaFromOverride = unit.SchemaFromOverride,
             ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing
         };

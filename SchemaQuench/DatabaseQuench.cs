@@ -31,7 +31,7 @@ public class DatabaseQuench
     public bool QuenchSuccessful { get; private set; }
 
     /// <summary>
-    /// Slice-3 (#257) override-origin signal. True when this iteration's schema came from a
+    /// Override-origin signal. True when this iteration's schema came from a
     /// <c>TemplateTargets:&lt;Template&gt;:Schemas</c> override. Drives the
     /// skip-missing branch in <see cref="EnsureSchemaExists(System.Data.IDbCommand)"/>:
     /// override-sourced units honor the work-unit-level <see cref="ProvisionSchemaIfMissing"/>
@@ -42,7 +42,7 @@ public class DatabaseQuench
     public bool SchemaFromOverride { get; init; }
 
     /// <summary>
-    /// Slice-3 (#257) work-unit-level provisioning flag, mirrored from
+    /// Work-unit-level provisioning flag, mirrored from
     /// <c>TemplateTargets.&lt;Template&gt;.CreateIfMissing</c>. When true on an
     /// override-sourced unit, a missing schema is provisioned via
     /// <see cref="SchemaProvisioner.EnsureSchemaExists"/>; when false, a missing schema is
@@ -52,7 +52,7 @@ public class DatabaseQuench
     public bool ProvisionSchemaIfMissing { get; init; }
 
     /// <summary>
-    /// Slice-3 (#257) sentinel toggled by <see cref="EnsureSchemaExists(System.Data.IDbCommand)"/>
+    /// Sentinel toggled by <see cref="EnsureSchemaExists(System.Data.IDbCommand)"/>
     /// when an override-sourced iteration's schema is missing and provisioning is disabled.
     /// <see cref="Execute"/> short-circuits the rest of the per-iteration work and marks the
     /// unit successful so the dispatcher records a benign skip rather than a failure.
@@ -258,11 +258,11 @@ public class DatabaseQuench
                 // the empty-schemaName guard handles MySQL and regular templates both.
                 EnsureSchemaExists(command);
 
-                // Slice-3 (#257) skip-missing short-circuit: when an override-sourced iteration's
-                // schema is missing and CreateIfMissing is false, EnsureSchemaExists has logged
-                // the skip and toggled _skipMissingSchema. Mark the unit successful and bail —
-                // the dispatcher records a benign skip rather than running deployment work
-                // against a non-existent target.
+                // Skip-missing short-circuit: when an override-sourced iteration's schema is
+                // missing and CreateIfMissing is false, EnsureSchemaExists has logged the skip
+                // and toggled _skipMissingSchema. Mark the unit successful and bail — the
+                // dispatcher records a benign skip rather than running deployment work against
+                // a non-existent target.
                 if (_skipMissingSchema)
                 {
                     QuenchSuccessful = true;
@@ -647,13 +647,13 @@ public class DatabaseQuench
         if (SchemaExists(command))
             return;  // already exists — skip
 
-        // Slice-3 (#257): override-sourced units honor the work-unit-level provisioning flag.
-        // CreateIfMissing: true → provision via SchemaProvisioner (idempotent IF-NOT-EXISTS DDL).
-        // CreateIfMissing: false (default) → SKIP the iteration silently with an info log. The
-        // _skipMissingSchema sentinel signals Execute() to short-circuit cleanly so the dispatcher
-        // records a benign skip rather than treating an explicitly-declared "deploy to this list
-        // if present" as a hard failure. Discovery-sourced units (SchemaFromOverride == false)
-        // bypass this branch and keep today's strict CreateSchemaIfMissing contract below.
+        // Override-sourced units honor the work-unit-level provisioning flag. CreateIfMissing: true
+        // → provision via SchemaProvisioner (idempotent IF-NOT-EXISTS DDL). CreateIfMissing: false
+        // (default) → SKIP the iteration silently with an info log. The _skipMissingSchema sentinel
+        // signals Execute() to short-circuit cleanly so the dispatcher records a benign skip rather
+        // than treating an explicitly-declared "deploy to this list if present" as a hard failure.
+        // Discovery-sourced units bypass this branch and keep the strict CreateSchemaIfMissing
+        // contract below.
         if (SchemaFromOverride)
         {
             if (ProvisionSchemaIfMissing)
@@ -676,42 +676,15 @@ public class DatabaseQuench
                 "(3) Call a Shared-template helper procedure (e.g., dbo.OnboardTenant) " +
                 "that runs CREATE SCHEMA + INSERT atomically — see the TenantCRM demo.");
 
-        var ddl = _product.Platform == Platform.SqlServer
-            ? $"CREATE SCHEMA [{_schemaName}]"
-            : $"CREATE SCHEMA \"{_schemaName}\"";
-        if (IsWhatIf)
-        {
-            // Pre-existing CreateSchemaIfMissing path (not the TemplateTargets-driven one — that
-            // routes through SchemaProvisioner which has its own WhatIf branch). The legacy log
-            // line shape "(CreateSchemaIfMissing=true)" is preserved for back-compat with existing
-            // tests / log parsers; only the [WhatIf] prefix is added.
-            SafeProgressLog($"  [WhatIf] Would create schema (CreateSchemaIfMissing=true)");
-            return;
-        }
-        SafeProgressLog($"  Creating schema (CreateSchemaIfMissing=true)");
-        command.Parameters.Clear();
-        command.CommandText = ddl;
-        try
-        {
-            command.ExecuteNonQuery();
-        }
-        catch (Exception ex)
-        {
-            // Targeted log line BEFORE the exception bubbles to the per-iteration catch — gives the
-            // user a greppable "CREATE SCHEMA failed for [name]" marker so permission denials and
-            // sibling-iteration race conditions surface as a one-line diagnostic instead of buried
-            // inside a raw SqlException / PostgresException stack.
-            SafeProgressLogError(
-                $"  CREATE SCHEMA failed for [{_schemaName}] — possible permission or race condition: {ex.Message}");
-            throw;
-        }
+        ProvisionSchemaViaProvisioner(command);
     }
 
     /// <summary>
-    /// Slice-3 (#257): delegates idempotent CREATE SCHEMA DDL to <see cref="SchemaProvisioner"/>
-    /// for override-sourced units with <c>CreateIfMissing: true</c>. The provisioner emits per-engine
-    /// IF-NOT-EXISTS DDL safe against the parallel-quench race; under WhatIf the DDL renders through
-    /// the progress log without touching the database.
+    /// Delegates idempotent CREATE SCHEMA DDL to <see cref="SchemaProvisioner"/>. Used by both
+    /// the TemplateTargets override path (<c>SchemaFromOverride</c> + <c>ProvisionSchemaIfMissing</c>)
+    /// and the legacy <c>Template.CreateSchemaIfMissing: true</c> path so both share one DDL surface
+    /// and one WhatIf branch. Under WhatIf the DDL renders through the progress log without touching
+    /// the database.
     /// </summary>
     private void ProvisionSchemaViaProvisioner(IDbCommand command)
     {
@@ -723,11 +696,8 @@ public class DatabaseQuench
         }
         catch (Exception ex)
         {
-            // Mirror the targeted diagnostic from the template-level CREATE SCHEMA path so a
-            // permission denial or race against a sibling iteration surfaces as a one-line
-            // marker before the raw engine exception bubbles to the per-iteration catch.
             SafeProgressLogError(
-                $"  CREATE SCHEMA failed for [{_schemaName}] (TemplateTargets CreateIfMissing: true) " +
+                $"  CREATE SCHEMA failed for [{_schemaName}] (CreateIfMissing: true) " +
                 $"— possible permission or race condition: {ex.Message}");
             throw;
         }

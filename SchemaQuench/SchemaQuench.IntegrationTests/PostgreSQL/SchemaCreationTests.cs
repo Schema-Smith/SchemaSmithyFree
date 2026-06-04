@@ -135,7 +135,7 @@ public class SchemaCreationTests
                 _progressLog.DidNotReceive().Error(Arg.Any<string>());
 
                 _progressLog.Received().Info(Arg.Is<string>(msg =>
-                    msg.Contains("Creating schema") && msg.Contains("CreateSchemaIfMissing=true")));
+                    msg.Contains($"Creating schema \"{autoTenant}\"") && msg.Contains("(CreateIfMissing: true)")));
 
                 _progressLog.Received(1).Info($"[{_server}].[{_mainDb}] [Schema: {autoTenant}] Successfully Quenched");
 
@@ -176,7 +176,7 @@ public class SchemaCreationTests
                 _progressLog.DidNotReceive().Error(Arg.Any<string>());
 
                 _progressLog.DidNotReceive().Info(Arg.Is<string>(msg =>
-                    msg.Contains("Creating schema") && msg.Contains("CreateSchemaIfMissing=true")));
+                    msg.Contains("Creating schema") && msg.Contains("(CreateIfMissing: true)")));
 
                 foreach (var tenant in existingTenants)
                     _progressLog.Received(1).Info($"[{_server}].[{_mainDb}] [Schema: {tenant}] Successfully Quenched");
