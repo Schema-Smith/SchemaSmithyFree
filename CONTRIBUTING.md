@@ -118,6 +118,14 @@ Integration tests for non-DB concerns (file access, deserialization, isolator be
 
 If you find yourself reaching for a DB mock to avoid spinning up a container in a test that IS about SQL behavior, please don't. File an issue if there's a real gap in the integration test infrastructure.
 
+### Test at the Right Boundary
+
+When a capability surfaces through a specific call site, put its test at the layer where the capability lives — not at the call site that happened to exercise it. If `TableQuench` provides primary-key extension as a capability that any caller can depend on, the test belongs in `TableQuench`'s own test suite, not in the test file for whatever feature first needed it.
+
+The question to ask yourself: *if someone else calls into this same code tomorrow with a different shape of input, does my test cover them?* If not, the test is sitting too high — push it down to the capability's own layer, where it protects every caller. Often a test file already exists at that layer; extend it rather than starting a fresh one at the call site.
+
+This is distinct from *mocking* at the right boundary (above): that's about whether a test uses a real database; this is about which layer owns the test.
+
 ### Warnings, Style, and Comments
 
 - **Treat warnings as errors.** `Directory.Build.props` sets `TreatWarningsAsErrors=true`. Don't suppress warnings to make the build green — fix the underlying issue, or discuss in the PR if a suppression is genuinely the right call.
@@ -193,6 +201,7 @@ Code review is the moment we apply the standards in this document. The checklist
 Before you click "Ready for review," walk through this list against your own diff:
 
 - [ ] Tests added or updated, and they exercise the new behavior — not just call into it.
+- [ ] Tests live at the layer where the capability lives, not just at the call site that exercised it.
 - [ ] Tests pass locally on `dotnet test SchemaSmith.sln`.
 - [ ] Coverage maintained or improved on touched code (or a documented reason for any reduction).
 - [ ] No new compiler warnings or analyzer hints introduced.
