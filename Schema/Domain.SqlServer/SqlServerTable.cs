@@ -41,6 +41,11 @@ namespace Schema.Domain.SqlServer
                 statistic.ShouldApplyExpression = TableTokenReplace(statistic.ShouldApplyExpression, scriptTokens);
                 statistic.FilterExpression = TableTokenReplace(statistic.FilterExpression, scriptTokens);
             }
+            foreach (var fullTextIndex in FullTextIndex)
+            {
+                var scriptTokens = tableTokens.Concat(GetCustomTokens(fullTextIndex.Extensions)).ToList();
+                fullTextIndex.ShouldApplyExpression = TableTokenReplace(fullTextIndex.ShouldApplyExpression, scriptTokens);
+            }
         }
 
         [JsonProperty(Order = 100)]
@@ -59,7 +64,11 @@ namespace Schema.Domain.SqlServer
         public List<Statistic> Statistics { get; set; } = [];
 
         [JsonProperty(Order = 105)]
-        public FullTextIndex FullTextIndex { get; set; }
+        [JsonConverter(typeof(FullTextIndexListJsonConverter))]
+        [SchemaProperty(SingleOrArray = true)]
+        public List<FullTextIndex> FullTextIndex { get; set; } = [];
+
+        public bool ShouldSerializeFullTextIndex() => FullTextIndex is { Count: > 0 };
 
         [JsonProperty(Order = 106)]
         public bool UpdateFillFactor { get; set; }

@@ -141,7 +141,7 @@
         },
         "MergeType": {
           "type": "string",
-          "pattern": "None|Insert|Insert/Update|Insert/Update/Delete"
+          "pattern": "Insert|Insert/Update|Insert/Update/Delete"
         },
         "MatchColumns": {
           "type": "string"
@@ -150,6 +150,12 @@
           "type": "string"
         },
         "MergeDisableTriggers": {
+          "type": "boolean"
+        },
+        "MergeDisableRules": {
+          "type": "boolean"
+        },
+        "MergeUpdateDescendents": {
           "type": "boolean"
         }
       },
@@ -232,33 +238,70 @@
       }
     },
     "FullTextIndex": {
-      "type": "object",
-      "properties": {
-        "FullTextCatalog": {
-          "type": "string"
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "FullTextCatalog": {
+              "type": "string"
+            },
+            "KeyIndex": {
+              "type": "string"
+            },
+            "ChangeTracking": {
+              "type": "string"
+            },
+            "StopList": {
+              "type": "string"
+            },
+            "Columns": {
+              "type": "string"
+            },
+            "ShouldApplyExpression": {
+              "type": "string"
+            },
+            "Extensions": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "FullTextCatalog",
+            "KeyIndex",
+            "Columns"
+          ]
         },
-        "KeyIndex": {
-          "type": "string"
-        },
-        "ChangeTracking": {
-          "type": "string"
-        },
-        "StopList": {
-          "type": "string"
-        },
-        "Columns": {
-          "type": "string"
-        },
-        "ShouldApplyExpression": {
-          "type": "string"
-        },
-        "Extensions": {}
-      },
-      "additionalProperties": false,
-      "required": [
-        "FullTextCatalog",
-        "KeyIndex",
-        "Columns"
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "FullTextCatalog": {
+                "type": "string"
+              },
+              "KeyIndex": {
+                "type": "string"
+              },
+              "ChangeTracking": {
+                "type": "string"
+              },
+              "StopList": {
+                "type": "string"
+              },
+              "Columns": {
+                "type": "string"
+              },
+              "ShouldApplyExpression": {
+                "type": "string"
+              },
+              "Extensions": {}
+            },
+            "additionalProperties": false,
+            "required": [
+              "FullTextCatalog",
+              "KeyIndex",
+              "Columns"
+            ]
+          }
+        }
       ]
     },
     "UpdateFillFactor": {

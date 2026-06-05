@@ -15,5 +15,6 @@ namespace Schema.Domain
         public string Description { get; set; }
         public bool Deprecated { get; set; }
         public bool Required { get; set; }
+        public bool SingleOrArray { get; set; }
     }
 }

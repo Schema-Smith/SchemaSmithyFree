@@ -41,9 +41,13 @@ public static class SchemaGenerator
         {
             var propSchema = MapType(prop.PropertyType);
             ApplyConstraints(prop, propSchema);
-            properties[GetPropertyName(prop)] = propSchema;
 
             var schemaAttr = prop.GetCustomAttribute<SchemaPropertyAttribute>();
+            if (schemaAttr is { SingleOrArray: true } && propSchema["items"] is JObject itemSchema)
+                propSchema = new JObject { ["oneOf"] = new JArray(itemSchema.DeepClone(), propSchema) };
+
+            properties[GetPropertyName(prop)] = propSchema;
+
             if (schemaAttr is { Required: true })
                 required.Add(GetPropertyName(prop));
         }
