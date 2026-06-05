@@ -167,4 +167,87 @@ public class ImportTableHelperTests
 
         Assert.That(newCol.Extensions?["IsKey"]?.Value<bool>(), Is.True);
     }
+
+    [Test]
+    public void PreserveCustomProperties_MultiVariantFullTextIndex_SurvivesReimportWholesale()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "[Docs]",
+            FullTextIndex =
+            [
+                new Schema.Domain.SqlServer.FullTextIndex { FullTextCatalog = "[A]", KeyIndex = "[PK]", Columns = "[T]", ShouldApplyExpression = "DB_NAME() = 'East'" },
+                new Schema.Domain.SqlServer.FullTextIndex { FullTextCatalog = "[B]", KeyIndex = "[PK]", Columns = "[T]", ShouldApplyExpression = "DB_NAME() = 'West'" }
+            ]
+        };
+        var reimported = new SqlServerTable
+        {
+            Name = "[Docs]",
+            FullTextIndex = [new Schema.Domain.SqlServer.FullTextIndex { FullTextCatalog = "[A]", KeyIndex = "[PK]", Columns = "[T]" }]
+        };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.FullTextIndex, Has.Count.EqualTo(2));
+        Assert.That(reimported.FullTextIndex[1].ShouldApplyExpression, Is.EqualTo("DB_NAME() = 'West'"));
+    }
+
+    [Test]
+    public void PreserveCustomProperties_SingleFullTextIndex_CarriesShouldApplyExpressionOntoReimport()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "[Docs]",
+            FullTextIndex = [new Schema.Domain.SqlServer.FullTextIndex { FullTextCatalog = "[OldCatalog]", KeyIndex = "[PK]", Columns = "[T]", ShouldApplyExpression = "1 = 1" }]
+        };
+        var reimported = new SqlServerTable
+        {
+            Name = "[Docs]",
+            FullTextIndex = [new Schema.Domain.SqlServer.FullTextIndex { FullTextCatalog = "[NewCatalog]", KeyIndex = "[PK]", Columns = "[T]" }]
+        };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.FullTextIndex[0].ShouldApplyExpression, Is.EqualTo("1 = 1"));
+        Assert.That(reimported.FullTextIndex[0].FullTextCatalog, Is.EqualTo("[NewCatalog]"));
+    }
+
+    [Test]
+    public void PreserveCustomProperties_GatedSingleFullTextIndex_SurvivesReimportWhenGatedOutOnSource()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "[Docs]",
+            FullTextIndex = [new Schema.Domain.SqlServer.FullTextIndex { FullTextCatalog = "[FtCatalog]", KeyIndex = "[PK]", Columns = "[T]", ShouldApplyExpression = "DB_NAME() = 'Prod'" }]
+        };
+        var reimported = new SqlServerTable
+        {
+            Name = "[Docs]",
+            FullTextIndex = []
+        };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.FullTextIndex, Has.Count.EqualTo(1));
+        Assert.That(reimported.FullTextIndex[0].ShouldApplyExpression, Is.EqualTo("DB_NAME() = 'Prod'"));
+    }
+
+    [Test]
+    public void PreserveCustomProperties_UngatedSingleFullTextIndex_NotResurrectedWhenAbsentOnSource()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "[Docs]",
+            FullTextIndex = [new Schema.Domain.SqlServer.FullTextIndex { FullTextCatalog = "[FtCatalog]", KeyIndex = "[PK]", Columns = "[T]" }]
+        };
+        var reimported = new SqlServerTable
+        {
+            Name = "[Docs]",
+            FullTextIndex = []
+        };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.FullTextIndex, Is.Empty);
+    }
 }

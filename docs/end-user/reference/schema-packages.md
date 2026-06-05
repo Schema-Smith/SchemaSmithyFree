@@ -400,7 +400,7 @@ Each platform's table definition extends the shared properties with engine-speci
 | `IsTemporal` | bool | `false` | When `true`, SchemaQuench manages the table as system-versioned temporal: emits `ALTER TABLE ... SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = <Schema>.<Name>_Hist))` and protects the period columns (`ValidFrom` / `ValidTo`) from drop detection. When toggled back to `false`, SchemaQuench emits `SET (SYSTEM_VERSIONING = OFF)`. The history table itself (`<Name>_Hist` in the same schema) is not auto-created -- declare it as a sibling table JSON in your package or rely on a Before script that creates it before the `IsTemporal=true` table is quenched. |
 | `XmlIndexes` | array | `[]` | XML index definitions. See [XML Indexes (SQL Server)](#xml-indexes-sql-server). |
 | `Statistics` | array | `[]` | Custom statistics definitions. See [Statistics (SQL Server)](#statistics-sql-server). |
-| `FullTextIndex` | object | `null` | Single full-text index on the table. See [Full-Text Index (SQL Server)](#full-text-index-sql-server). |
+| `FullTextIndex` | object or array | `null` | Full-text index on the table -- a single definition, or an array of conditional variants. See [Full-Text Index (SQL Server)](#full-text-index-sql-server). |
 | `UpdateFillFactor` | bool | `false` | When `true`, index fill factors on this table are updated to match JSON definitions during quench. |
 | `EnableCDC` | bool | `false` | When `true`, the table is enabled for change data capture. |
 
@@ -726,7 +726,7 @@ Custom statistics definitions in the `Statistics` array. SQL Server uses traditi
 
 ## Full-Text Index (SQL Server)
 
-A single `FullTextIndex` object (not an array) on the table. Only one full-text index is allowed per SQL Server table.
+SQL Server allows one full-text index per table. Declare it as a single `FullTextIndex` object -- or as an **array of conditional variants** when different targets need different definitions, such as a different full-text catalog per region. At deploy time, each variant's `ShouldApplyExpression` runs against the target and the matching variant deploys.
 
 | Property | Type | Description |
 |---|---|---|
@@ -735,7 +735,33 @@ A single `FullTextIndex` object (not an array) on the table. Only one full-text 
 | `ChangeTracking` | string | `"OFF"`, `"MANUAL"`, or `"AUTO"`. |
 | `StopList` | string | Name of a full-text stop list. |
 | `Columns` | string | Column specification for the full-text index. |
+| `ShouldApplyExpression` | string | Boolean SQL expression evaluated on the target; the index (or variant) applies only when it is true. |
 | `Extensions` | object | Custom metadata. |
+
+**Variant rules:**
+
+- **One match per target.** With more than one variant, *every* variant must declare a `ShouldApplyExpression`, and those expressions must be mutually exclusive on any given target. Two variants matching the same target fails the deployment with a clear error.
+- **No match means none.** When no variant matches a target, the table behaves as if no full-text index were declared there -- any existing full-text index is removed.
+- **No-op when unchanged.** When the deployed index already matches the selected variant, re-deployment performs no full-text work: no drop, no repopulation.
+
+> **Note:** When no variant matches a target, an existing full-text index on that table is dropped -- the absence of a match is treated as "no full-text index here," not "leave it alone."
+
+```json
+"FullTextIndex": [
+  {
+    "FullTextCatalog": "[Catalog_ProdEast]",
+    "KeyIndex": "[PK_Documents]",
+    "Columns": "[Title],[Body]",
+    "ShouldApplyExpression": "EXISTS (SELECT 1 FROM dbo.RegionConfig WHERE Region = 'East')"
+  },
+  {
+    "FullTextCatalog": "[Catalog_ProdWest]",
+    "KeyIndex": "[PK_Documents]",
+    "Columns": "[Title],[Body]",
+    "ShouldApplyExpression": "EXISTS (SELECT 1 FROM dbo.RegionConfig WHERE Region = 'West')"
+  }
+]
+```
 
 ---
 

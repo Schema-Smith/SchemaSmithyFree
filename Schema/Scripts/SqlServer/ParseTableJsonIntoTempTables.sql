@@ -334,3 +334,13 @@
     FROM #FullTextIndexes WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
+
+  -- A table with 2+ surviving variants cannot be honored: SQL Server allows ONE full-text index per table
+  IF EXISTS (SELECT 1 FROM #FullTextIndexes WITH (NOLOCK) GROUP BY [Schema], [TableName] HAVING COUNT(*) > 1)
+  BEGIN
+    DECLARE @v_FTDupTable NVARCHAR(1010) =
+      (SELECT TOP 1 [Schema] + '.' + [TableName] FROM #FullTextIndexes WITH (NOLOCK) GROUP BY [Schema], [TableName] HAVING COUNT(*) > 1 ORDER BY [Schema], [TableName]);
+    DECLARE @v_FTDupMsg NVARCHAR(2000) = 'Multiple full-text index variants matched on this target for table ' + @v_FTDupTable +
+      '. SQL Server allows one full-text index per table — ShouldApplyExpressions must be mutually exclusive.';
+    THROW 51000, @v_FTDupMsg, 1;
+  END

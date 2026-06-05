@@ -158,13 +158,13 @@ CREATE FULLTEXT INDEX ON dbo.TestFullTextIndex (MyString) KEY INDEX PK_TestFullT
         Assert.That(result.Name, Is.EqualTo("[TestFullTextIndex]"));
         Assert.That(result.Columns, Is.Not.Null);
         Assert.That(result.Columns, Has.Count.EqualTo(3));
-        Assert.That(result.FullTextIndex, Is.Not.Null);
+        Assert.That(result.FullTextIndex, Has.Count.EqualTo(1));
 
-        Assert.That(result.FullTextIndex.Columns, Is.EqualTo("[MyString]"));
-        Assert.That(result.FullTextIndex.KeyIndex, Is.EqualTo("[PK_TestFullTextIndex]"));
-        Assert.That(result.FullTextIndex.ChangeTracking, Is.EqualTo("AUTO"));
-        Assert.That(result.FullTextIndex.StopList, Is.EqualTo("[SL_Test]"));
-        Assert.That(result.FullTextIndex.FullTextCatalog, Is.EqualTo("[FT_Catalog]"));
+        Assert.That(result.FullTextIndex[0].Columns, Is.EqualTo("[MyString]"));
+        Assert.That(result.FullTextIndex[0].KeyIndex, Is.EqualTo("[PK_TestFullTextIndex]"));
+        Assert.That(result.FullTextIndex[0].ChangeTracking, Is.EqualTo("AUTO"));
+        Assert.That(result.FullTextIndex[0].StopList, Is.EqualTo("[SL_Test]"));
+        Assert.That(result.FullTextIndex[0].FullTextCatalog, Is.EqualTo("[FT_Catalog]"));
 
         conn.Close();
     }
@@ -398,7 +398,7 @@ EXEC sys.sp_addextendedproperty 'Description', 'An integer column', 'SCHEMA', [d
         Assert.That(result.Indexes, Has.Count.EqualTo(0));
         Assert.That(result.Statistics, Is.Not.Null);
         Assert.That(result.Statistics, Has.Count.EqualTo(0));
-        Assert.That(result.FullTextIndex, Is.Null);
+        Assert.That(result.FullTextIndex, Is.Not.Null.And.Empty);
         Assert.That(result.XmlIndexes, Is.Not.Null);
         Assert.That(result.XmlIndexes, Has.Count.EqualTo(0));
         Assert.That(result.UpdateFillFactor, Is.False);

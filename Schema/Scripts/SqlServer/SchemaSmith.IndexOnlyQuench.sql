@@ -113,9 +113,11 @@ BEGIN TRY
   
   RAISERROR('Parse Full Text Indexes from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #FullTextIndexes
-  SELECT t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]), 
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]),
          f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
-         [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '')
+         [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
+         f.[ShouldApplyExpression]
     INTO #FullTextIndexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON([FullTextIndex]) WITH (
@@ -123,9 +125,26 @@ BEGIN TRY
       [FullTextCatalog] NVARCHAR(500) '$.FullTextCatalog',
       [KeyIndex] NVARCHAR(500) '$.KeyIndex',
       [ChangeTracking] NVARCHAR(500) '$.ChangeTracking',
-      [StopList] NVARCHAR(500) '$.StopList'
+      [StopList] NVARCHAR(500) '$.StopList',
+      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
       ) f;
-  
+
+  -- Identify FullTextIndexes to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #FullTextIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #FullTextIndexes WITH (NOLOCK)
+    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  EXEC(@v_SQL)
+
+  -- A table with 2+ surviving variants cannot be honored: SQL Server allows ONE full-text index per table
+  IF EXISTS (SELECT 1 FROM #FullTextIndexes WITH (NOLOCK) GROUP BY [Schema], [TableName] HAVING COUNT(*) > 1)
+  BEGIN
+    DECLARE @v_FTDupTable NVARCHAR(1010) =
+      (SELECT TOP 1 [Schema] + '.' + [TableName] FROM #FullTextIndexes WITH (NOLOCK) GROUP BY [Schema], [TableName] HAVING COUNT(*) > 1 ORDER BY [Schema], [TableName]);
+    DECLARE @v_FTDupMsg NVARCHAR(2000) = 'Multiple full-text index variants matched on this target for table ' + @v_FTDupTable +
+      '. SQL Server allows one full-text index per table — ShouldApplyExpressions must be mutually exclusive.';
+    THROW 51000, @v_FTDupMsg, 1;
+  END
+
   -- Handle index compression changes
   RAISERROR('Fixup Index Compression', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering index compression for ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ' TO ' + i.[CompressionType] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +

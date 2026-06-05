@@ -1930,7 +1930,7 @@ SELECT t.schemaname, t.tablename
             _progressLog.Info($"    Casting {tableFile}");
             if (FileWrapper.GetFromFactory().Exists(tableFile) || FileWrapper.GetFromFactory().Exists(oldTableFile))
             {
-                var original = JsonHelper.Load<Table>(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile);
+                var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile, _platform);
                 ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
             }
             ScrubSchemaForTemplate(tableObj, tableFile);
@@ -2500,7 +2500,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                     if (FileWrapper.GetFromFactory().Exists(filename) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
                     {
                         var originalPath = FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile;
-                        var original = JsonHelper.Load<Table>(originalPath);
+                        var original = JsonHelper.TableLoad(originalPath, _platform);
                         ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
                     }
 
@@ -2633,7 +2633,7 @@ SELECT cc.name AS [Name],
                 var oldTableFile = ResolveOutputPath(tableDir, EncodeObjectFileName(tableSchema, tableObj.OldName.Trim('"'), ".json"));
                 if (FileWrapper.GetFromFactory().Exists(filename) || FileWrapper.GetFromFactory().Exists(oldTableFile))
                 {
-                    var original = JsonHelper.Load<Table>(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile);
+                    var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile, _platform);
                     ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
                 }
                 // Schema-template mode: strip the platform Schema field and any same-source RelatedTableSchema

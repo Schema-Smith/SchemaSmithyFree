@@ -121,7 +121,7 @@ See [Custom Properties](../reference/custom-properties.md) for the full mechanis
 
 ## Conditional deployment with ShouldApplyExpression
 
-`ShouldApplyExpression` is how you declare "this thing only exists in certain places." It lives on tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views -- every structural component. Before deploying any component with a `ShouldApplyExpression`, SchemaQuench resolves the tokens, runs the expression against the target database, and skips the component if the result is falsy.
+`ShouldApplyExpression` is how you declare "this thing only exists in certain places." It lives on tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views, full-text indexes -- every structural component. Before deploying any component with a `ShouldApplyExpression`, SchemaQuench resolves the tokens, runs the expression against the target database, and skips the component if the result is falsy.
 
 ```json
 {
@@ -143,6 +143,8 @@ This column exists on on-prem SQL Server but not Azure SQL Database. One table d
 ```
 
 An index that only exists on tables whose database name ends with `_replica`. Trivial to declare, impossible to get wrong, reviewable in the PR diff.
+
+Full-text indexes (SQL Server) take this one step further: declare an **array** of full-text variants on a table -- each with its own catalog and a `ShouldApplyExpression` -- and each target deploys only the variant that matches it. One schema package, region-specific full-text catalogs, no per-environment package forks.
 
 ## Multi-database products
 

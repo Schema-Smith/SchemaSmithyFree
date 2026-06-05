@@ -42,6 +42,16 @@ public static class ImportTableHelper
         {
             CopyComponentDynamicProperties(ssOriginal.XmlIndexes, ssNew.XmlIndexes);
             CopyComponentDynamicProperties(ssOriginal.Statistics, ssNew.Statistics);
+            // FT variants are hand-authored conditional config the extractor cannot see; no Name to match on,
+            // so multi-variant declarations survive wholesale, and a gated single variant absent on this target
+            // survives too — absence is the gate's doing, not a drop.
+            if (ssOriginal.FullTextIndex is { Count: > 1 })
+                ssNew.FullTextIndex = ssOriginal.FullTextIndex;
+            else if (ssOriginal.FullTextIndex is { Count: 1 } && ssNew.FullTextIndex is { Count: 1 })
+                CopyDynamicProperties(ssOriginal.FullTextIndex[0], ssNew.FullTextIndex[0]);
+            else if (ssOriginal.FullTextIndex is { Count: 1 } && ssNew.FullTextIndex is { Count: 0 }
+                     && !string.IsNullOrWhiteSpace(ssOriginal.FullTextIndex[0].ShouldApplyExpression))
+                ssNew.FullTextIndex = ssOriginal.FullTextIndex;
         }
 
         if (original is PostgreSqlTable pgOriginal2 && tableObj is PostgreSqlTable pgNew2)
