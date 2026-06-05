@@ -196,6 +196,58 @@ public class TableQuench_FullTextIndexTests
     }
 
     [Test]
+    public void ShouldSelectGatedFullTextVariant()
+    {
+        var variantTableName = $"{_testTableName}_v";
+        using var command = _connection.CreateCommand();
+
+        // Create the variant table (SetUp only creates _testTableName)
+        command.CommandText = $@"
+            CREATE TABLE `{_testDb}`.`{variantTableName}` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `content` TEXT
+            )";
+        command.ExecuteNonQuery();
+
+        try
+        {
+            var tableJson = $@"[{{
+                ""Name"": ""`{variantTableName}`"",
+                ""Columns"": [
+                    {{""Name"": ""`id`"", ""DataType"": ""INT"", ""Nullable"": false, ""AutoIncrement"": true}},
+                    {{""Name"": ""`content`"", ""DataType"": ""TEXT""}}
+                ],
+                ""Indexes"": [
+                    {{""Name"": ""`PRIMARY`"", ""IndexColumns"": ""`id`"", ""PrimaryKey"": true}}
+                ],
+                ""FullTextIndexes"": [
+                    {{""Name"": ""ft_variant"", ""Columns"": ""content"", ""ShouldApplyExpression"": ""1 = 1""}},
+                    {{""Name"": ""ft_variant"", ""Columns"": ""content"", ""Parser"": ""ngram"", ""ShouldApplyExpression"": ""1 = 0""}}
+                ]
+            }}]";
+
+            command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_testDb}', '{tableJson.Replace("'", "''")}')";
+            command.ExecuteNonQuery();
+
+            command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+            command.ExecuteNonQuery();
+
+            // Exactly one FULLTEXT index — the gated-true (non-ngram) variant was selected
+            command.CommandText = $@"
+                SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{variantTableName}'
+                  AND INDEX_TYPE = 'FULLTEXT'";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1),
+                "Exactly one FULLTEXT index should be deployed — the variant with ShouldApplyExpression '1 = 1'");
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{variantTableName}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
     public void ShouldTrackFullTextIndexInProductOwnership()
     {
         // Arrange
