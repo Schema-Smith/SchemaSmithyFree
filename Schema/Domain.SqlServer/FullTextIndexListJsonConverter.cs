@@ -21,6 +21,9 @@ namespace Schema.Domain.SqlServer
                 ? token.ToObject<List<FullTextIndex>>(serializer) ?? []
                 : [token.ToObject<FullTextIndex>(serializer)];
 
+            if (variants.Any(v => v == null))
+                throw new JsonSerializationException("FullTextIndex variant entries cannot be null.");
+
             if (variants.Count > 1 && variants.Any(v => string.IsNullOrWhiteSpace(v.ShouldApplyExpression)))
                 throw new JsonSerializationException(
                     "Multiple FullTextIndex variants require a ShouldApplyExpression on every variant. " +
@@ -31,10 +34,11 @@ namespace Schema.Domain.SqlServer
 
         public override void WriteJson(JsonWriter writer, List<FullTextIndex> value, JsonSerializer serializer)
         {
-            if (value is { Count: 1 })
+            if (value == null) { writer.WriteNull(); return; }
+            if (value.Count == 1)
                 serializer.Serialize(writer, value[0]);
             else
-                serializer.Serialize(writer, (value ?? []).ToArray());
+                serializer.Serialize(writer, value.ToArray());
         }
     }
 }

@@ -1,5 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System.Collections.Generic;
+using System.IO;
 using Newtonsoft.Json;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
@@ -123,6 +125,24 @@ namespace Schema.UnitTests.Domain.SqlServer
             var table = new SqlServerTable { Name = "[Docs]" };
             var json = JsonConvert.SerializeObject(table);
             Assert.That(json, Does.Not.Contain("FullTextIndex"));
+        }
+
+        [Test]
+        public void FullTextIndex_NullVariantEntry_ThrowsAtLoad()
+        {
+            var json = "{ \"Name\": \"[Docs]\", \"FullTextIndex\": [ null, { \"FullTextCatalog\": \"[FT]\", \"KeyIndex\": \"[PK]\", \"Columns\": \"[T]\", \"ShouldApplyExpression\": \"1 = 1\" } ] }";
+            var ex = Assert.Throws<JsonSerializationException>(() => JsonConvert.DeserializeObject<SqlServerTable>(json));
+            Assert.That(ex.Message, Does.Contain("cannot be null"));
+        }
+
+        [Test]
+        public void FullTextIndex_NullList_WritesJsonNull()
+        {
+            var converter = new FullTextIndexListJsonConverter();
+            var sw = new StringWriter();
+            using var writer = new JsonTextWriter(sw);
+            converter.WriteJson(writer, null, JsonSerializer.CreateDefault());
+            Assert.That(sw.ToString(), Is.EqualTo("null"));
         }
     }
 }
