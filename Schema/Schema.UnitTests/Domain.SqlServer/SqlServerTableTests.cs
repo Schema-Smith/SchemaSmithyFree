@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
@@ -99,6 +100,19 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(table.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
             Assert.That(table.DataDelivery.MatchColumns, Is.EqualTo("Id"));
             Assert.That(table.DataDelivery.MergeDisableTriggers, Is.True);
+        }
+
+        [Test]
+        public void ResolveScriptTokens_ReplacesTokensInFullTextIndexShouldApplyExpression()
+        {
+            var table = new SqlServerTable
+            {
+                Name = "[Docs]",
+                FullTextIndex = [new FullTextIndex { FullTextCatalog = "[FT]", KeyIndex = "[PK]", Columns = "[T]",
+                                                     ShouldApplyExpression = "DB_NAME() = '{{TargetDb}}'" }]
+            };
+            table.ResolveScriptTokensInTableComponentScripts([new KeyValuePair<string, string>("TargetDb", "East")]);
+            Assert.That(table.FullTextIndex[0].ShouldApplyExpression, Is.EqualTo("DB_NAME() = 'East'"));
         }
 
         [Test]

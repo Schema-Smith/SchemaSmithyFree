@@ -41,6 +41,11 @@ namespace Schema.Domain.SqlServer
                 statistic.ShouldApplyExpression = TableTokenReplace(statistic.ShouldApplyExpression, scriptTokens);
                 statistic.FilterExpression = TableTokenReplace(statistic.FilterExpression, scriptTokens);
             }
+            foreach (var fullTextIndex in FullTextIndex)
+            {
+                var scriptTokens = tableTokens.Concat(GetCustomTokens(fullTextIndex.Extensions)).ToList();
+                fullTextIndex.ShouldApplyExpression = TableTokenReplace(fullTextIndex.ShouldApplyExpression, scriptTokens);
+            }
         }
 
         [JsonProperty(Order = 100)]
