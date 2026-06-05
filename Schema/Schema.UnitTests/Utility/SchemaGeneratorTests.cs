@@ -374,4 +374,16 @@ public class SchemaGeneratorTests
         Assert.That(dataDelivery["properties"]?["MergeType"]?["pattern"]?.ToString(),
             Is.EqualTo("Insert|Insert/Update|Insert/Update/Delete"));
     }
+
+    [Test]
+    public void ShouldGenerateSingleOrArraySchemaForSqlServerFullTextIndex()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(SqlServerTable));
+        var ft = (schema["properties"] as JObject)?["FullTextIndex"];
+        var oneOf = ft?["oneOf"] as JArray;
+        Assert.That(oneOf, Is.Not.Null, "FullTextIndex schema should accept single object OR array");
+        Assert.That(oneOf, Has.Count.EqualTo(2));
+        Assert.That(oneOf[0]?["type"]?.ToString(), Is.EqualTo("object"));
+        Assert.That(oneOf[1]?["type"]?.ToString(), Is.EqualTo("array"));
+    }
 }
