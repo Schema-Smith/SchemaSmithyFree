@@ -66,5 +66,63 @@ namespace Schema.UnitTests.Domain.SqlServer
 
             Assert.That(json, Does.Not.Contain("ShouldApplyExpression"));
         }
+
+        [Test]
+        public void FullTextIndex_SingleObjectJson_DeserializesAsOneElementList()
+        {
+            var json = "{ \"Name\": \"[Docs]\", \"FullTextIndex\": { \"FullTextCatalog\": \"[FT_Catalog]\", \"KeyIndex\": \"[PK_Docs]\", \"Columns\": \"[Title]\" } }";
+            var table = JsonConvert.DeserializeObject<SqlServerTable>(json);
+            Assert.That(table.FullTextIndex, Has.Count.EqualTo(1));
+            Assert.That(table.FullTextIndex[0].FullTextCatalog, Is.EqualTo("[FT_Catalog]"));
+        }
+
+        [Test]
+        public void FullTextIndex_ArrayJson_DeserializesAsVariantList()
+        {
+            var json = "{ \"Name\": \"[Docs]\", \"FullTextIndex\": [ { \"FullTextCatalog\": \"[FT_Catalog]\", \"KeyIndex\": \"[PK_Docs]\", \"Columns\": \"[Title]\", \"ShouldApplyExpression\": \"DB_NAME() = 'East'\" }, { \"FullTextCatalog\": \"[FT_Catalog2]\", \"KeyIndex\": \"[PK_Docs]\", \"Columns\": \"[Title]\", \"ShouldApplyExpression\": \"DB_NAME() = 'West'\" } ] }";
+            var table = JsonConvert.DeserializeObject<SqlServerTable>(json);
+            Assert.That(table.FullTextIndex, Has.Count.EqualTo(2));
+            Assert.That(table.FullTextIndex[1].FullTextCatalog, Is.EqualTo("[FT_Catalog2]"));
+        }
+
+        [Test]
+        public void FullTextIndex_MultipleVariantsMissingExpressions_ThrowsAtLoad()
+        {
+            var json = "{ \"Name\": \"[Docs]\", \"FullTextIndex\": [ { \"FullTextCatalog\": \"[FT_Catalog]\", \"KeyIndex\": \"[PK_Docs]\", \"Columns\": \"[Title]\", \"ShouldApplyExpression\": \"DB_NAME() = 'East'\" }, { \"FullTextCatalog\": \"[FT_Catalog2]\", \"KeyIndex\": \"[PK_Docs]\", \"Columns\": \"[Title]\" } ] }";
+            var ex = Assert.Throws<JsonSerializationException>(() => JsonConvert.DeserializeObject<SqlServerTable>(json));
+            Assert.That(ex.Message, Does.Contain("ShouldApplyExpression on every variant"));
+        }
+
+        [Test]
+        public void FullTextIndex_SingleVariant_SerializesAsBareObject()
+        {
+            var table = new SqlServerTable { Name = "[Docs]", FullTextIndex = [new FullTextIndex { FullTextCatalog = "[FT]", KeyIndex = "[PK]", Columns = "[Title]" }] };
+            var json = JsonConvert.SerializeObject(table);
+            Assert.That(json, Does.Contain("\"FullTextIndex\":{"));
+        }
+
+        [Test]
+        public void FullTextIndex_TwoVariants_SerializeAsArray()
+        {
+            var table = new SqlServerTable
+            {
+                Name = "[Docs]",
+                FullTextIndex =
+                [
+                    new FullTextIndex { FullTextCatalog = "[A]", KeyIndex = "[PK]", Columns = "[T]", ShouldApplyExpression = "1 = 1" },
+                    new FullTextIndex { FullTextCatalog = "[B]", KeyIndex = "[PK]", Columns = "[T]", ShouldApplyExpression = "1 = 0" }
+                ]
+            };
+            var json = JsonConvert.SerializeObject(table);
+            Assert.That(json, Does.Contain("\"FullTextIndex\":["));
+        }
+
+        [Test]
+        public void FullTextIndex_EmptyList_OmittedFromJson()
+        {
+            var table = new SqlServerTable { Name = "[Docs]" };
+            var json = JsonConvert.SerializeObject(table);
+            Assert.That(json, Does.Not.Contain("FullTextIndex"));
+        }
     }
 }

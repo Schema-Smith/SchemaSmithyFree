@@ -59,7 +59,11 @@ namespace Schema.Domain.SqlServer
         public List<Statistic> Statistics { get; set; } = [];
 
         [JsonProperty(Order = 105)]
-        public FullTextIndex FullTextIndex { get; set; }
+        [JsonConverter(typeof(FullTextIndexListJsonConverter))]
+        [SchemaProperty(SingleOrArray = true)]
+        public List<FullTextIndex> FullTextIndex { get; set; } = [];
+
+        public bool ShouldSerializeFullTextIndex() => FullTextIndex is { Count: > 0 };
 
         [JsonProperty(Order = 106)]
         public bool UpdateFillFactor { get; set; }

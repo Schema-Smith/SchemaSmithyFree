@@ -32,7 +32,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(table.IsTemporal, Is.False);
             Assert.That(table.XmlIndexes, Is.Not.Null.And.Empty);
             Assert.That(table.Statistics, Is.Not.Null.And.Empty);
-            Assert.That(table.FullTextIndex, Is.Null);
+            Assert.That(table.FullTextIndex, Is.Not.Null.And.Empty);
             Assert.That(table.UpdateFillFactor, Is.False);
             Assert.That(table.EnableCDC, Is.False);
         }
@@ -48,12 +48,12 @@ namespace Schema.UnitTests.Domain.SqlServer
                 IsTemporal = true,
                 UpdateFillFactor = true,
                 EnableCDC = true,
-                FullTextIndex = new FullTextIndex
+                FullTextIndex = [new FullTextIndex
                 {
                     FullTextCatalog = "FTC_Customer",
                     KeyIndex = "PK_Customer",
                     Columns = "Name, Description"
-                }
+                }]
             };
 
             table.XmlIndexes.Add(new XmlIndex { Name = "IX_XML_Data", Column = "XmlData", IsPrimary = true });
@@ -67,8 +67,8 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(deserialized.CompressionType, Is.EqualTo("PAGE"));
             Assert.That(deserialized.IsTemporal, Is.True);
             Assert.That(deserialized.EnableCDC, Is.True);
-            Assert.That(deserialized.FullTextIndex, Is.Not.Null);
-            Assert.That(deserialized.FullTextIndex.FullTextCatalog, Is.EqualTo("FTC_Customer"));
+            Assert.That(deserialized.FullTextIndex, Has.Count.EqualTo(1));
+            Assert.That(deserialized.FullTextIndex[0].FullTextCatalog, Is.EqualTo("FTC_Customer"));
             Assert.That(deserialized.XmlIndexes, Has.Count.EqualTo(1));
             Assert.That(deserialized.XmlIndexes[0].Name, Is.EqualTo("IX_XML_Data"));
             Assert.That(deserialized.Statistics, Has.Count.EqualTo(1));
