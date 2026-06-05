@@ -23,7 +23,8 @@ public class IndexOnlyQuench_FullTextVariantTests : BaseTableQuenchTests
 
     private static void CreateTestTable(DbCommand cmd, string tableName)
     {
-        cmd.CommandText = $"CREATE TABLE dbo.{tableName} (Id INT NOT NULL, Title VARCHAR(200) NULL); " +
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}; " +
+                          $"CREATE TABLE dbo.{tableName} (Id INT NOT NULL, Title VARCHAR(200) NULL); " +
                           $"CREATE UNIQUE INDEX UDX_{tableName} ON dbo.{tableName} (Id);";
         cmd.ExecuteNonQuery();
     }
@@ -123,7 +124,8 @@ SELECT c.[name] FROM sys.fulltext_indexes fi WITH (NOLOCK)
         using var cmd = (DbCommand)conn.CreateCommand();
 
         CreateTestTable(cmd, tableName);
-        cmd.CommandText = "CREATE TABLE dbo.FtVariant_SwitchGate (ActiveCatalog VARCHAR(50)); " +
+        cmd.CommandText = "DROP TABLE IF EXISTS dbo.FtVariant_SwitchGate; " +
+                          "CREATE TABLE dbo.FtVariant_SwitchGate (ActiveCatalog VARCHAR(50)); " +
                           "INSERT INTO dbo.FtVariant_SwitchGate (ActiveCatalog) VALUES ('FT_Catalog');";
         cmd.ExecuteNonQuery();
 
