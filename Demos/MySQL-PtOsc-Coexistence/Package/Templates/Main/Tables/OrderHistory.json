@@ -1,0 +1,37 @@
+{
+  "Name": "OrderHistory",
+  "Columns": [
+    {
+      "Name": "id",
+      "DataType": "BIGINT",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "customer_id",
+      "DataType": "INT"
+    },
+    {
+      "Name": "order_date",
+      "DataType": "DATETIME"
+    },
+    {
+      "Name": "total_cents",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "status",
+      "DataType": "VARCHAR(16)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "IndexColumns": "id"
+    },
+    {
+      "Name": "ix_orderhistory_customer",
+      "IndexColumns": "customer_id"
+    }
+  ]
+}

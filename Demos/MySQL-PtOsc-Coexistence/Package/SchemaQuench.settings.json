@@ -1,0 +1,19 @@
+{
+    "Target": {
+        "Server": "mysql9",
+        "User": "demo_user",
+        "Password": "demo_password",
+        "Port": "",
+        "ConnectionProperties": {}
+    },
+    "MaxThreads": 10,
+    "WhatIfONLY": false,
+    "SchemaPackagePath": "/metadata",
+    "RunScriptsTwice": false,
+    "DropTablesRemovedFromProduct": true,
+    "UpdateTables": true,
+    "KindleTheForge": true,
+    "DeliverData": true,
+    "VerboseLogging": false,
+    "ScriptTokens": {}
+}

@@ -1,0 +1,80 @@
+name: schemasmith-mysql-ptosc-demo
+
+# pt-online-schema-change coexistence demo: SchemaSmith manages the schema
+# definition (what tables exist, what columns they have, what indexes are
+# declared) while pt-online-schema-change handles DDL that MySQL cannot run
+# online without locking a large table. The two tools operate at different
+# layers and hand off cleanly — SchemaSmith declares intent, pt-osc executes
+# the heavy DDL. This demo packages the initial-state deploy and a working
+# pt-osc environment so the handoff can be exercised directly.
+
+services:
+  mysql9:
+    image: mysql:9
+    # log-bin-trust-function-creators=1 lets a non-SUPER user (the demo user) create the
+    # stored functions SchemaSmith's KindleTheForge installs. Without it, MySQL rejects
+    # CREATE FUNCTION because binary logging is on by default and non-SUPER users could
+    # in principle write non-deterministic functions that desync the binlog.
+    command: --log-bin-trust-function-creators=1
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ptosc_demo
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD} --silent && mysql -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "3309:3306"
+
+  ptosc:
+    image: perconalab/percona-toolkit:latest
+    # Long-running sidecar — exec into this container to run pt-online-schema-change
+    # commands against the mysql9 service on the shared demo network.
+    entrypoint: ["tail", "-f", "/dev/null"]
+    depends_on:
+      mysql9:
+        condition: service_healthy
+
+  quench:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=mysql9
+      - SmithySettings_Target__User=${MYSQL_USER}
+      - SmithySettings_Target__Password=${MYSQL_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Package:/metadata
+    depends_on:
+      mysql9:
+        condition: service_healthy
+
+  verify:
+    image: mysql:9
+    environment:
+      MYSQL_PWD: ${MYSQL_PASSWORD}
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        echo
+        echo '=================================================================='
+        echo '  Verification: initial schema deployed by SchemaSmith'
+        echo '=================================================================='
+        echo
+        echo '--- OrderHistory table structure ---'
+        mysql -h mysql9 -u${MYSQL_USER} -D ptosc_demo -e "DESCRIBE OrderHistory;"
+        echo
+        echo '--- OrderHistory indexes ---'
+        mysql -h mysql9 -u${MYSQL_USER} -D ptosc_demo -e "SHOW INDEX FROM OrderHistory;"
+        echo
+        echo 'Initial state ready. Load synthetic data, then run pt-osc against mysql9:3306.'
+        echo 'See README for the handoff walkthrough.'
+        echo
+    depends_on:
+      quench:
+        condition: service_completed_successfully
