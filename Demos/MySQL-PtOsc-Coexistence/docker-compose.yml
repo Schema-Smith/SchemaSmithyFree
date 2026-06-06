@@ -28,12 +28,16 @@ services:
       retries: 30
     ports:
       - "3309:3306"
+    volumes:
+      - ./mysql-init:/docker-entrypoint-initdb.d:ro
 
   ptosc:
     image: perconalab/percona-toolkit:latest
     # Long-running sidecar — exec into this container to run pt-online-schema-change
     # commands against the mysql9 service on the shared demo network.
     entrypoint: ["tail", "-f", "/dev/null"]
+    volumes:
+      - ./ptosc-config/.my.cnf:/root/.my.cnf:ro
     depends_on:
       mysql9:
         condition: service_healthy
