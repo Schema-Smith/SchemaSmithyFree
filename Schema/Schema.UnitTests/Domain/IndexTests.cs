@@ -45,5 +45,14 @@ namespace Schema.UnitTests.Domain
             Assert.That(deserialized.ShouldApplyExpression, Is.EqualTo("SELECT 1"));
         }
 
+        [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var index = new Index { Name = "IX_Test", IndexColumns = "Col1", ShouldApplyExpression = "1=1", VariantName = "EU region" };
+            var json = JsonConvert.SerializeObject(index);
+            var deserialized = JsonConvert.DeserializeObject<Index>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
+
     }
 }

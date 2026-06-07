@@ -90,5 +90,14 @@ namespace Schema.UnitTests.Domain
             Assert.That(deserialized.CheckConstraints[0].Expression, Is.EqualTo("LEN(Name) > 0"));
         }
 
+        [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var table = new Table { Name = "Orders", ShouldApplyExpression = "1=1", VariantName = "EU region" };
+            var json = JsonConvert.SerializeObject(table);
+            var deserialized = JsonConvert.DeserializeObject<Table>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
+
     }
 }

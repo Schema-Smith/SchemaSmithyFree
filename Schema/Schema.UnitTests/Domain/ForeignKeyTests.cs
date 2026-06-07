@@ -48,5 +48,14 @@ namespace Schema.UnitTests.Domain
             Assert.That(deserialized.ShouldApplyExpression, Is.EqualTo("SELECT 1"));
         }
 
+        [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var fk = new ForeignKey { Name = "FK_Test", Columns = "Col1", RelatedTable = "Other", RelatedColumns = "Id", ShouldApplyExpression = "1=1", VariantName = "EU region" };
+            var json = JsonConvert.SerializeObject(fk);
+            var deserialized = JsonConvert.DeserializeObject<ForeignKey>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
+
     }
 }
