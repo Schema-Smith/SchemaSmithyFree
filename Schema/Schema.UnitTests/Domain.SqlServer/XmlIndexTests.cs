@@ -73,5 +73,14 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(deserialized.PrimaryIndex, Is.EqualTo("IX_XML_Config"));
             Assert.That(deserialized.SecondaryIndexType, Is.EqualTo("VALUE"));
         }
+
+        [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var xi = new XmlIndex { Name = "IX_XML_Config", Column = "ConfigXml", ShouldApplyExpression = "1=1", VariantName = "EU region" };
+            var json = JsonConvert.SerializeObject(xi);
+            var deserialized = JsonConvert.DeserializeObject<XmlIndex>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
     }
 }

@@ -133,5 +133,14 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.Throws<ArgumentException>(() =>
                 PlatformDeserializer.DeserializeIndexedView("{}", Platform.PostgreSQL));
         }
+
+        [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var view = new SqlServerIndexedView { Name = "[vTest]", Definition = "SELECT 1 AS Col1", ShouldApplyExpression = "1=1", VariantName = "EU region" };
+            var json = JsonConvert.SerializeObject(view);
+            var deserialized = JsonConvert.DeserializeObject<SqlServerIndexedView>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
     }
 }
