@@ -98,6 +98,8 @@ public static class SchemaGenerator
         if (!string.IsNullOrEmpty(attr.Pattern)) propSchema["pattern"] = attr.Pattern;
         if (!double.IsNaN(attr.Minimum)) propSchema["minimum"] = attr.Minimum;
         if (!double.IsNaN(attr.Maximum)) propSchema["maximum"] = attr.Maximum;
+        if (attr.MaxLength >= 0) propSchema["maxLength"] = attr.MaxLength;
+        if (!string.IsNullOrEmpty(attr.Description)) propSchema["description"] = attr.Description;
     }
 
     private static IEnumerable<PropertyInfo> GetSortedProperties(Type type)
