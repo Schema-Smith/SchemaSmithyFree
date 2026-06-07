@@ -1,0 +1,12 @@
+{
+  "Name": "PtOscDemo",
+  "ValidationScript": "SELECT TRUE",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {
+    "DemoDb": "ptosc_demo"
+  },
+  "ScriptFolders": [],
+  "Platform": "MySQL"
+}
