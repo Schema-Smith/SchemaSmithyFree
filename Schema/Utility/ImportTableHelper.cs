@@ -93,6 +93,7 @@ public static class ImportTableHelper
             current.Extensions = original.Extensions.DeepClone();
 
         ((dynamic)current).ShouldApplyExpression = ((dynamic)original).ShouldApplyExpression ?? "";
+        ((dynamic)current).VariantName = ((dynamic)original).VariantName ?? "";
         if (copyOldName)
             ((dynamic)current).OldName = ((dynamic)original).OldName ?? "";
     }

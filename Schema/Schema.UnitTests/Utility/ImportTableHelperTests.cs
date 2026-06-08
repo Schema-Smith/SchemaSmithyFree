@@ -250,4 +250,17 @@ public class ImportTableHelperTests
 
         Assert.That(reimported.FullTextIndex, Is.Empty);
     }
+
+    [Test]
+    public void PreserveDataDeliveryAndCustomProperties_CopiesVariantName()
+    {
+        var originalCol = new Column { Name = "payload", ShouldApplyExpression = "1=1", VariantName = "Modern engines" };
+        var original = new SqlServerTable { Name = "Orders", Columns = { originalCol } };
+        var newCol = new Column { Name = "payload" };
+        var newTable = new SqlServerTable { Name = "Orders", Columns = { newCol } };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+
+        Assert.That(newCol.VariantName, Is.EqualTo("Modern engines"));
+    }
 }
