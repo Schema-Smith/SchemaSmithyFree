@@ -16,21 +16,24 @@ BEGIN
         ViewSchema NVARCHAR(200),
         ViewName NVARCHAR(200),
         Definition NVARCHAR(MAX),
-        IndexJson NVARCHAR(MAX)
+        IndexJson NVARCHAR(MAX),
+        VariantName NVARCHAR(128)
     );
 
-    INSERT INTO @Views (ViewSchema, ViewName, Definition, IndexJson)
+    INSERT INTO @Views (ViewSchema, ViewName, Definition, IndexJson, VariantName)
     SELECT
         [SchemaSmith].[fn_StripBracketWrapping](v.[Schema]),
         [SchemaSmith].[fn_StripBracketWrapping](v.[Name]),
         v.[Definition],
-        v.[Indexes]
+        v.[Indexes],
+        v.[VariantName]
     FROM OPENJSON(@IndexedViewSchema)
     WITH (
         [Schema] NVARCHAR(200) '$.Schema',
         [Name] NVARCHAR(200) '$.Name',
         [Definition] NVARCHAR(MAX) '$.Definition',
-        [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON
+        [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON,
+        [VariantName] NVARCHAR(128) '$.VariantName'
     ) v;
 
     -- Validate ownership: fail if any requested views are owned by a different product
@@ -109,15 +112,15 @@ BEGIN
     DEALLOCATE remove_cursor;
 
     -- Process new and changed views
-    DECLARE @defn NVARCHAR(MAX), @indexJson NVARCHAR(MAX);
+    DECLARE @defn NVARCHAR(MAX), @indexJson NVARCHAR(MAX), @variantName NVARCHAR(128);
     DECLARE @existingDef NVARCHAR(MAX), @existingObjectId INT;
     DECLARE @needsRecreate BIT, @needsIndexUpdate BIT;
 
     DECLARE view_cursor CURSOR LOCAL FAST_FORWARD FOR
-        SELECT v.ViewSchema, v.ViewName, v.Definition, v.IndexJson FROM @Views v;
+        SELECT v.ViewSchema, v.ViewName, v.Definition, v.IndexJson, v.VariantName FROM @Views v;
 
     OPEN view_cursor;
-    FETCH NEXT FROM view_cursor INTO @schemaName, @viewName, @defn, @indexJson;
+    FETCH NEXT FROM view_cursor INTO @schemaName, @viewName, @defn, @indexJson, @variantName;
     WHILE @@FETCH_STATUS = 0
     BEGIN
         SET @needsRecreate = 0;
@@ -178,7 +181,7 @@ BEGIN
         IF @needsRecreate = 1
         BEGIN
             SET @sql = 'CREATE VIEW ' + QUOTENAME(@schemaName) + '.' + QUOTENAME(@viewName) + ' WITH SCHEMABINDING AS ' + @defn;
-            SET @msg = N'Creating indexed view ' + @schemaName + N'.' + @viewName;
+            SET @msg = N'Creating indexed view ' + @schemaName + N'.' + @viewName + CASE WHEN ISNULL(@variantName, N'') <> N'' THEN N' (variant: ' + @variantName + N')' ELSE N'' END;
             EXEC [SchemaSmith].[PrintWithNoWait] @msg;
             IF @WhatIf = 0 EXEC sp_executesql @sql;
 
@@ -390,7 +393,7 @@ BEGIN
             DEALLOCATE idx_cursor;
         END;
 
-        FETCH NEXT FROM view_cursor INTO @schemaName, @viewName, @defn, @indexJson;
+        FETCH NEXT FROM view_cursor INTO @schemaName, @viewName, @defn, @indexJson, @variantName;
     END;
     CLOSE view_cursor;
     DEALLOCATE view_cursor;

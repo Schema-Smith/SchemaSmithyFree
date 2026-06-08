@@ -237,6 +237,46 @@ SELECT c.[name] FROM sys.fulltext_indexes fi WITH (NOLOCK)
         conn.Close();
     }
 
+    [Test]
+    public void IndexOnly_CreatingIndex_EchoesVariantNameInOperationMessage()
+    {
+        const string tableName = "IxVariant_Log";
+        var messages = new System.Collections.Generic.List<string>();
+        using var conn = (SqlConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.InfoMessage += (_, e) => { foreach (SqlError err in e.Errors) messages.Add(err.Message); };
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = (DbCommand)conn.CreateCommand();
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}; CREATE TABLE dbo.{tableName} (Id INT NOT NULL, Title VARCHAR(200) NULL);";
+        cmd.ExecuteNonQuery();
+        try
+        {
+            var json = $$"""
+                [{
+                    "Schema": "[dbo]",
+                    "Name": "[{{tableName}}]",
+                    "Indexes": [ { "Name": "[IX_{{tableName}}]", "IndexColumns": "[Id]", "VariantName": "Modern engines" } ]
+                }]
+                """;
+            cmd.CommandTimeout = 300;
+            cmd.CommandText = "EXEC SchemaSmith.IndexOnlyQuench @ProductName = @p, @TableDefinitions = @t, @WhatIf = 0";
+            cmd.Parameters.Clear();
+            var p = cmd.CreateParameter(); p.ParameterName = "@p"; p.Value = _productName; cmd.Parameters.Add(p);
+            var t = cmd.CreateParameter(); t.ParameterName = "@t"; t.Value = json; cmd.Parameters.Add(t);
+            cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+
+            Assert.That(messages, Has.Some.Contains("(variant: Modern engines)"));
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
     private static string TwoVariantJson(string tableName, string matchDbName, string nonMatchDbName) =>
         GatedTwoVariantJson(tableName, $"DB_NAME() = '{matchDbName}'", $"DB_NAME() = '{nonMatchDbName}'");
 

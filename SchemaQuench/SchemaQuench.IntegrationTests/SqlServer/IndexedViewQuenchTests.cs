@@ -473,6 +473,27 @@ WHERE s.name = 'Test' AND v.name = 'vTestSummary2'";
         conn.Close();
     }
 
+    [Test]
+    public void CreatingView_EchoesVariantNameInOperationMessage()
+    {
+        var messages = new System.Collections.Generic.List<string>();
+        using var conn = (Microsoft.Data.SqlClient.SqlConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.InfoMessage += (_, e) => { foreach (Microsoft.Data.SqlClient.SqlError err in e.Errors) messages.Add(err.Message); };
+        conn.Open();
+        conn.ChangeDatabase(_ivTestDb);
+        using var cmd = conn.CreateCommand();
+
+        EnsureViewDropped(cmd);
+
+        var json = @"[{""Schema"":""[Test]"",""Name"":""[vTestSummary]"",""VariantName"":""Modern engines"",""Definition"":""SELECT Id, Name, COUNT_BIG(*) AS Cnt, SUM(Amount) AS TotalAmount FROM Test.SourceTable GROUP BY Id, Name"",""Indexes"":[{""Name"":""[IX_vTestSummary_Id]"",""Unique"":true,""Clustered"":true,""IndexColumns"":""[Id]""}]}]";
+        RunIndexedViewQuench(cmd, json);
+
+        Assert.That(messages, Has.Some.Contains("(variant: Modern engines)"));
+
+        EnsureViewDropped(cmd);
+        conn.Close();
+    }
+
     /// <summary>
     /// Ensures vTestSummary exists with the standard two-index definition.
     /// Idempotent — safe to call whether the view exists or not.
