@@ -70,9 +70,26 @@ public static class ImportTableHelper
     {
         if (originalComponents == null || newComponents == null) return;
 
+        // An authored variant set (2+ same-named entries gated by mutually exclusive expressions)
+        // survives wholesale: extraction can only ever see the one deployed winner, so the
+        // original group is the truth worth keeping.
+        var variantGroups = originalComponents
+            .GroupBy(c => GetTrimmedName(c), System.StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Key != "" && g.Count() > 1)
+            .ToList();
+        foreach (var group in variantGroups)
+        {
+            var insertAt = newComponents.FindIndex(x => GetTrimmedName(x).Equals(group.Key, System.StringComparison.OrdinalIgnoreCase));
+            newComponents.RemoveAll(x => GetTrimmedName(x).Equals(group.Key, System.StringComparison.OrdinalIgnoreCase));
+            newComponents.InsertRange(insertAt < 0 ? newComponents.Count : insertAt, group);
+        }
+        var variantNames = new HashSet<string>(variantGroups.Select(g => g.Key), System.StringComparer.OrdinalIgnoreCase);
+
         foreach (var originalComponent in originalComponents)
         {
             var originalName = GetTrimmedName(originalComponent);
+            if (variantNames.Contains(originalName)) continue;
+
             var match = newComponents.FirstOrDefault(x => GetTrimmedName(x).Equals(originalName, System.StringComparison.OrdinalIgnoreCase));
 
             if (match == null && copyOldName)
