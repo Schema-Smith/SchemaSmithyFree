@@ -10,7 +10,7 @@ DECLARE
 BEGIN
   RAISE NOTICE 'Add New Computed Columns';
   SELECT STRING_AGG('RAISE NOTICE ''  Add new computed columns to ' || tt."Schema" || '.' || tt."Name" || ' (' ||
-                    (SELECT STRING_AGG(tc."Name", ', ')
+                    (SELECT STRING_AGG(tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END, ', ')
                      FROM temp_columns tc
                      WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                        AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
@@ -33,8 +33,8 @@ BEGIN
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
   RAISE NOTICE 'Add Missing Indexes'; -- Includes Primary Keys and Unique Constraints
-  SELECT STRING_AGG('RAISE NOTICE ''  Add missing ' || CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey" THEN 'Constraint ' ELSE 'Index ' END || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."Name" || ''';' || CHR(10) ||
-                    CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey" 
+  SELECT STRING_AGG('RAISE NOTICE ''  Add missing ' || CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey" THEN 'Constraint ' ELSE 'Index ' END || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."Name" || CASE WHEN COALESCE(ti."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(ti."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
+                    CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey"
                          THEN 'ALTER TABLE "' || ti."TableSchema" || '"."' || ti."TableName" || '" ADD CONSTRAINT "' || ti."Name" || '" ' ||
                               CASE WHEN ti."PrimaryKey" THEN 'PRIMARY KEY ' ELSE 'UNIQUE ' END ||
                               '(' || "SchemaSmith"."QuoteIndexColumnList"(ti."IndexColumns") || ')' ||
@@ -84,8 +84,8 @@ BEGIN
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
   RAISE NOTICE 'Add Missing Statistics';
-  SELECT STRING_AGG('RAISE NOTICE ''  Add missing statistics ' || ts."TableSchema" || '.' || ts."TableName" || '.' || ts."Name" || ''';' || CHR(10) ||
-                    'CREATE STATISTICS "' || ts."TableSchema" || '"."' || ts."Name" || '"' || 
+  SELECT STRING_AGG('RAISE NOTICE ''  Add missing statistics ' || ts."TableSchema" || '.' || ts."TableName" || '.' || ts."Name" || CASE WHEN COALESCE(ts."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(ts."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
+                    'CREATE STATISTICS "' || ts."TableSchema" || '"."' || ts."Name" || '"' ||
                     CASE WHEN NULLIF(TRIM(ts."Kind"), '') IS NOT NULL THEN ' (' || ts."Kind" ||')' ELSE '' END ||
                     ' ON ' || "SchemaSmith"."QuoteIndexColumnList"(ts."StatisticsColumns") ||
                     ' FROM "' || ts."TableSchema" || '"."' || ts."TableName" || '";', CHR(10))
@@ -101,7 +101,7 @@ BEGIN
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
   RAISE NOTICE 'Add Missing Exclude Constraints';
-  SELECT STRING_AGG('RAISE NOTICE ''  Add missing exclude constraint ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || ''';' || CHR(10) ||
+  SELECT STRING_AGG('RAISE NOTICE ''  Add missing exclude constraint ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ADD CONSTRAINT "' || tc."Name" || '" EXCLUDE' || 
                     CASE WHEN NULLIF(TRIM(tc."AccessMethod"), '') IS NOT NULL THEN ' USING ' || tc."AccessMethod" ELSE '' END ||
                     ' (' || (SELECT STRING_AGG("SchemaSmith"."QuoteIndexColumnList"((celem ->> 'Column')::TEXT) || ' WITH ' || (celem ->> 'Operator')::TEXT, ',')
@@ -122,7 +122,7 @@ BEGIN
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
   RAISE NOTICE 'Add Missing Defaults';
-  SELECT STRING_AGG('RAISE NOTICE ''  Add missing default for ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || ''';' || CHR(10) ||
+  SELECT STRING_AGG('RAISE NOTICE ''  Add missing default for ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ALTER COLUMN "' || tc."Name" || '" SET DEFAULT ' || tc."Default" ||';', CHR(10))
     INTO sql_script
     FROM temp_columns tc
@@ -131,7 +131,7 @@ BEGIN
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
   RAISE NOTICE 'Add Missing Check Constraints';
-  SELECT STRING_AGG('RAISE NOTICE ''  Add missing check constraint ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || ''';' || CHR(10) ||
+  SELECT STRING_AGG('RAISE NOTICE ''  Add missing check constraint ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ADD CONSTRAINT "' || tc."Name" || '" CHECK (' || tc."Expression" || ')' ||
                     CASE WHEN tc."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
                     CASE WHEN tc."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END || ';', CHR(10))

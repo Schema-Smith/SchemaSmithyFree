@@ -197,6 +197,46 @@ SELECT pg_get_constraintdef(con.oid, true)
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldEchoVariantNameInOperationMessages()
+    {
+        var messages = new System.Collections.Generic.List<string>();
+        using var conn = (Npgsql.NpgsqlConnection)DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Notice += (_, e) => messages.Add(e.Notice.MessageText);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"CREATE TABLE ""AddMissingItemsTests"".""VariantLogTest"" (""Id"" INT NOT NULL, ""col1"" INT NOT NULL, ""col2"" INT NOT NULL);";
+        cmd.ExecuteNonQuery();
+        var json = """
+            [{
+                "Schema": "AddMissingItemsTests",
+                "Name": "VariantLogTest",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "col1", "DataType": "INT", "Nullable": false },
+                    { "Name": "col2", "DataType": "INT", "Nullable": false }
+                ],
+                "Indexes": [
+                    { "Name": "IDX_VariantLog", "IndexColumns": "col1", "ShouldApplyExpression": "1=1", "VariantName": "Modern engines" },
+                    { "Name": "IDX_VariantLog", "IndexColumns": "col2", "ShouldApplyExpression": "0=1", "VariantName": "Legacy engines" }
+                ]
+            }]
+            """;
+        try
+        {
+            RunTableQuenchProc(cmd, json);
+            Assert.That(messages, Has.Some.Contains("(variant: Modern engines)"));
+            Assert.That(messages, Has.None.Contains("Legacy engines"));
+        }
+        finally
+        {
+            cmd.CommandText = @"DROP TABLE IF EXISTS ""AddMissingItemsTests"".""VariantLogTest""";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {

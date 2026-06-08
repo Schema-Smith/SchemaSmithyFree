@@ -14,6 +14,7 @@
            elem ->> 'Schema' AS "Schema",
            elem ->> 'Name' AS "Name",
            COALESCE(elem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+           COALESCE(elem ->> 'VariantName', '') AS "VariantName",
            COALESCE(elem ->> 'OldName', '') AS "OldName",
            COALESCE((elem ->> 'RowLevelSecurity')::BOOLEAN, false) AS "RowLevelSecurity",
            COALESCE((elem ->> 'ForceRowLevelSecurity')::BOOLEAN, false) AS "ForceRowLevelSecurity",
@@ -47,6 +48,7 @@
            COALESCE(celem ->> 'Storage', '') AS "Storage",
            COALESCE(celem ->> 'Compression', '') AS "Compression",
            COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+           COALESCE(celem ->> 'VariantName', '') AS "VariantName",
            COALESCE(celem ->> 'OldName', '') AS "OldName"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Columns')::JSON) AS celem(value);
@@ -96,6 +98,7 @@
            COALESCE((celem ->> 'InitiallyDeferred')::BOOLEAN, false) AS "InitiallyDeferred",
            COALESCE((celem ->> 'NullsNotDistinct')::BOOLEAN, false) AS "NullsNotDistinct",
            COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+           COALESCE(celem ->> 'VariantName', '') AS "VariantName",
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((celem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
            COALESCE(NULLIF((celem ->> 'FillFactor')::INT2, 0), 90) AS "FillFactor"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
@@ -126,7 +129,8 @@
            COALESCE(celem ->> 'Expression', '') AS "Expression",
            COALESCE((celem ->> 'Deferrable')::BOOLEAN, false) AS "Deferrable",
            COALESCE((celem ->> 'InitiallyDeferred')::BOOLEAN, false) AS "InitiallyDeferred",
-           COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression"
+           COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+           COALESCE(celem ->> 'VariantName', '') AS "VariantName"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'CheckConstraints')::JSON) AS celem(value);
 
@@ -148,6 +152,7 @@
            celem ->> 'RelatedTable' AS "RelatedTable",
            celem ->> 'RelatedColumns' AS "RelatedColumns",
            COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+           COALESCE(celem ->> 'VariantName', '') AS "VariantName",
            COALESCE(celem ->> 'DeleteAction', '') AS "DeleteAction",
            COALESCE(celem ->> 'UpdateAction', '') AS "UpdateAction",
            COALESCE((celem ->> 'Deferrable')::BOOLEAN, false) AS "Deferrable",
@@ -171,7 +176,8 @@
            celem ->> 'Name' AS "Name",
            COALESCE(celem ->> 'Kind', '') AS "Kind",
            COALESCE(celem ->> 'StatisticsColumns', '') AS "StatisticsColumns",
-           COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression"
+           COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+           COALESCE(celem ->> 'VariantName', '') AS "VariantName"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Statistics')::JSON) AS celem(value);
 
@@ -193,7 +199,8 @@
            COALESCE(celem ->> 'FilterExpression', '') AS "FilterExpression",
            COALESCE((celem ->> 'Deferrable')::BOOLEAN, false) AS "Deferrable",
            COALESCE((celem ->> 'InitiallyDeferred')::BOOLEAN, false) AS "InitiallyDeferred",
-           COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression"
+           COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+           COALESCE(celem ->> 'VariantName', '') AS "VariantName"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'ExcludeConstraints')::JSON) AS celem(value);
 
