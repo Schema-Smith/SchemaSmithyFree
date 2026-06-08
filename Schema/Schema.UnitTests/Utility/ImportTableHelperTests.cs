@@ -367,4 +367,52 @@ public class ImportTableHelperTests
         Assert.That(reimported.Columns.Where(c => c.Name.Trim('[', ']', '"', '`') == "payload").Select(c => c.VariantName),
                     Is.EquivalentTo(new[] { "Modern", "Legacy" }));
     }
+
+    [Test]
+    public void PreserveCustomProperties_GatedComponent_SurvivesReimportWhenGatedOutOnSource()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "Orders",
+            Indexes = [new Index { Name = "IX_Modern", IndexColumns = "JsonCol", ShouldApplyExpression = "1=0", VariantName = "Modern engines" }]
+        };
+        var reimported = new SqlServerTable { Name = "Orders", Indexes = [] };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.Indexes, Has.Count.EqualTo(1));
+        Assert.That(reimported.Indexes[0].VariantName, Is.EqualTo("Modern engines"));
+    }
+
+    [Test]
+    public void PreserveCustomProperties_UngatedComponent_NotResurrectedWhenAbsentOnSource()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "Orders",
+            Indexes = [new Index { Name = "IX_Dropped", IndexColumns = "OldCol" }]
+        };
+        var reimported = new SqlServerTable { Name = "Orders", Indexes = [] };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.Indexes, Is.Empty);
+    }
+
+    [Test]
+    public void PreserveCustomProperties_RenamedComponent_StillMatchesByOldNameBeforeGatedSurvival()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "Orders",
+            Columns = [new Column { Name = "NewName", OldName = "OldName", ShouldApplyExpression = "1=1" }]
+        };
+        var newCol = new Column { Name = "OldName" };
+        var reimported = new SqlServerTable { Name = "Orders", Columns = { newCol } };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.Columns, Has.Count.EqualTo(1));
+        Assert.That(newCol.ShouldApplyExpression, Is.EqualTo("1=1"));
+    }
 }

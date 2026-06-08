@@ -99,6 +99,14 @@ public static class ImportTableHelper
                     match = newComponents.FirstOrDefault(x => GetTrimmedName(x).Equals(originalOldName, System.StringComparison.OrdinalIgnoreCase));
             }
 
+            // A gated component absent from this extraction is the gate's doing, not a drop —
+            // the authored declaration is still truth. Ungated absentees are real deletions.
+            if (match == null && !string.IsNullOrWhiteSpace(GetShouldApplyExpression(originalComponent)))
+            {
+                newComponents.Add(originalComponent);
+                continue;
+            }
+
             CopyDynamicProperties(originalComponent, match, copyOldName);
         }
     }
@@ -132,6 +140,11 @@ public static class ImportTableHelper
         {
             return "";
         }
+    }
+
+    private static string GetShouldApplyExpression(DynamicBase obj)
+    {
+        return ((dynamic)obj).ShouldApplyExpression as string ?? "";
     }
 
     private static string TrimAllQuotes(string value)
