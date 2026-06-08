@@ -293,6 +293,37 @@ SELECT SchemaSmith.fn_StripParenWrapping([definition])
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldEchoVariantNameInOperationMessages()
+    {
+        var messages = new System.Collections.Generic.List<string>();
+        using var conn = (Microsoft.Data.SqlClient.SqlConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.InfoMessage += (_, e) => { foreach (Microsoft.Data.SqlClient.SqlError err in e.Errors) messages.Add(err.Message); };
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        const string json = @"[{
+            ""Name"": ""[VariantLogTest]"",
+            ""CompressionType"": ""NONE"",
+            ""Columns"": [ { ""Name"": ""[Id]"", ""DataType"": ""INT"", ""Nullable"": false } ],
+            ""Indexes"": [
+                { ""Name"": ""[IX_VariantLog]"", ""IndexColumns"": ""[Id]"", ""ShouldApplyExpression"": ""1=1"", ""VariantName"": ""Modern engines"" },
+                { ""Name"": ""[IX_VariantLog]"", ""IndexColumns"": ""[Id]"", ""Unique"": true, ""ShouldApplyExpression"": ""1=0"", ""VariantName"": ""Legacy engines"" }
+            ]
+        }]";
+        try
+        {
+            RunTableQuenchProc(cmd, json);
+            Assert.That(messages, Has.Some.Contains("(variant: Modern engines)"));
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE IF EXISTS dbo.VariantLogTest";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
