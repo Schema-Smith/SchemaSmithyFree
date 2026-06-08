@@ -316,4 +316,55 @@ public class ImportTableHelperTests
         Assert.That(reimported.Indexes, Has.Count.EqualTo(3));
         Assert.That(reimported.Indexes.Single(i => i.Name == "IX_Plain").IndexColumns, Is.EqualTo("OrderDate, Status"));
     }
+
+    [Test]
+    public void PreserveCustomProperties_MultiVariantGroup_AbsentFromExtraction_SurvivesWholesale()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "Orders",
+            Indexes =
+            [
+                new Index { Name = "IX_Gated", IndexColumns = "RegionId", ShouldApplyExpression = "DB_NAME() = 'East'", VariantName = "East" },
+                new Index { Name = "IX_Gated", IndexColumns = "RegionId, Zone", ShouldApplyExpression = "DB_NAME() = 'West'", VariantName = "West" }
+            ]
+        };
+        var reimported = new SqlServerTable { Name = "Orders", Indexes = [] };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.Indexes, Has.Count.EqualTo(2));
+        Assert.That(reimported.Indexes.Select(i => i.VariantName), Is.EquivalentTo(new[] { "East", "West" }));
+    }
+
+    [Test]
+    public void PreserveCustomProperties_MultiVariantColumnGroup_PreservedMidListWithCopyOldName()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "Orders",
+            Columns =
+            [
+                new Column { Name = "Id", DataType = "INT" },
+                new Column { Name = "payload", DataType = "JSON", ShouldApplyExpression = "1=1", VariantName = "Modern" },
+                new Column { Name = "payload", DataType = "NVARCHAR(MAX)", ShouldApplyExpression = "1=0", VariantName = "Legacy" }
+            ]
+        };
+        var reimported = new SqlServerTable
+        {
+            Name = "Orders",
+            Columns =
+            [
+                new Column { Name = "Id", DataType = "INT" },
+                new Column { Name = "payload", DataType = "JSON" }
+            ]
+        };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.Columns, Has.Count.EqualTo(3));
+        Assert.That(reimported.Columns[0].Name.Trim('[', ']', '"', '`'), Is.EqualTo("Id"));
+        Assert.That(reimported.Columns.Where(c => c.Name.Trim('[', ']', '"', '`') == "payload").Select(c => c.VariantName),
+                    Is.EquivalentTo(new[] { "Modern", "Legacy" }));
+    }
 }
