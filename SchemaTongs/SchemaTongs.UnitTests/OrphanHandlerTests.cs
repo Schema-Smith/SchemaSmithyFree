@@ -227,6 +227,74 @@ public class OrphanHandlerTests
     }
 
     [Test]
+    public void ProcessOrphans_DetectDeleteAndCleanup_GatedTableFile_NotDeleted()
+    {
+        var tablesPath = Path.Combine("C:", "pkg", "template", "Tables");
+        var gatedFile = Path.Combine(tablesPath, "dbo.Gated.json");
+
+        var index = CreateIndexWithOrphans(tablesPath, [gatedFile], []);
+
+        _file.Exists(gatedFile).Returns(true);
+        _file.ReadAllText(gatedFile).Returns("{\"Name\":\"Gated\",\"ShouldApplyExpression\":\"1=0\"}");
+
+        var folderIndexes = new Dictionary<string, ExtractionFileIndex> { ["Tables"] = index };
+        var fullyExtracted = new HashSet<string> { "Tables" };
+        var folderObjectTypes = new Dictionary<string, ScriptObjectType> { ["Tables"] = ScriptObjectType.None };
+
+        var handler = new OrphanHandler();
+        handler.ProcessOrphans(folderIndexes, Platform.SqlServer, OrphanHandlingMode.DetectDeleteAndCleanup,
+            fullyExtracted, "C:\\logs", folderObjectTypes);
+
+        _file.DidNotReceive().Delete(gatedFile);
+    }
+
+    [Test]
+    public void ProcessOrphans_DetectDeleteAndCleanup_PlainTableFile_IsDeleted()
+    {
+        var tablesPath = Path.Combine("C:", "pkg", "template", "Tables");
+        var plainFile = Path.Combine(tablesPath, "dbo.Plain.json");
+
+        var index = CreateIndexWithOrphans(tablesPath, [plainFile], []);
+
+        _file.Exists(plainFile).Returns(true);
+        _file.ReadAllText(plainFile).Returns("{\"Name\":\"Plain\"}");
+
+        var folderIndexes = new Dictionary<string, ExtractionFileIndex> { ["Tables"] = index };
+        var fullyExtracted = new HashSet<string> { "Tables" };
+        var folderObjectTypes = new Dictionary<string, ScriptObjectType> { ["Tables"] = ScriptObjectType.None };
+
+        var handler = new OrphanHandler();
+        handler.ProcessOrphans(folderIndexes, Platform.SqlServer, OrphanHandlingMode.DetectDeleteAndCleanup,
+            fullyExtracted, "C:\\logs", folderObjectTypes);
+
+        _file.Received().Delete(plainFile);
+    }
+
+    [Test]
+    public void ProcessOrphans_DetectDeleteAndCleanup_GatedFileInNonTablesFolder_StillDeleted()
+    {
+        var viewsPath = Path.Combine("C:", "pkg", "template", "Views");
+        var orphanFile = Path.Combine(viewsPath, "dbo.OldView.sql");
+
+        var index = CreateIndexWithOrphans(viewsPath, [orphanFile], []);
+
+        // Even if a non-Tables orphan happened to carry a gating expression in its bytes,
+        // the suppression is scoped to the Tables folder only.
+        _file.Exists(orphanFile).Returns(true);
+        _file.ReadAllText(orphanFile).Returns("{\"Name\":\"OldView\",\"ShouldApplyExpression\":\"1=0\"}");
+
+        var folderIndexes = new Dictionary<string, ExtractionFileIndex> { ["Views"] = index };
+        var fullyExtracted = new HashSet<string> { "Views" };
+        var folderObjectTypes = new Dictionary<string, ScriptObjectType> { ["Views"] = ScriptObjectType.Views };
+
+        var handler = new OrphanHandler();
+        handler.ProcessOrphans(folderIndexes, Platform.SqlServer, OrphanHandlingMode.DetectDeleteAndCleanup,
+            fullyExtracted, "C:\\logs", folderObjectTypes);
+
+        _file.Received().Delete(orphanFile);
+    }
+
+    [Test]
     public void ProcessOrphans_JsonFolder_Tables_GeneratesDropTableScript()
     {
         var tablesPath = Path.Combine("C:", "pkg", "template", "Tables");

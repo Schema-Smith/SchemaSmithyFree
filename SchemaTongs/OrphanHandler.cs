@@ -30,6 +30,12 @@ public class OrphanHandler
             if (!fullyExtractedFolders.Contains(folderName)) continue;
 
             var orphans = index.GetOrphans();
+
+            // A gated table absent from this source is the ShouldApplyExpression's doing,
+            // not a removal — its declaration file is not an orphan.
+            if (folderName == "Tables")
+                orphans = orphans.Where(path => !IsGatedTableFile(path, platform)).ToList();
+
             if (orphans.Count > 0)
                 allOrphans[folderName] = orphans;
         }
@@ -105,6 +111,19 @@ public class OrphanHandler
             var dropCount = fileNames.Count(f =>
                 CleanupScriptGenerator.GenerateDropStatement(f, objectType, platform, folderName) != null);
             _log.Info($"Generated {scriptFileName} with {dropCount} DROP statement(s).");
+        }
+    }
+
+    private static bool IsGatedTableFile(string path, Platform platform)
+    {
+        try
+        {
+            var table = JsonHelper.TableLoad(path, platform);
+            return !string.IsNullOrWhiteSpace(table?.ShouldApplyExpression);
+        }
+        catch
+        {
+            return false; // unreadable file: treat as a normal orphan
         }
     }
 
