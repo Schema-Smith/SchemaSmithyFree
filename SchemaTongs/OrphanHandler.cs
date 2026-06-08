@@ -34,7 +34,12 @@ public class OrphanHandler
             // A gated table absent from this source is the ShouldApplyExpression's doing,
             // not a removal — its declaration file is not an orphan.
             if (folderName == "Tables")
+            {
+                var gatedCount = orphans.Count(path => IsGatedTableFile(path, platform));
                 orphans = orphans.Where(path => !IsGatedTableFile(path, platform)).ToList();
+                if (gatedCount > 0)
+                    _log.Info($"  Retained {gatedCount} gated table declaration file(s) (ShouldApplyExpression gated them off this source; not treated as orphans)");
+            }
 
             if (orphans.Count > 0)
                 allOrphans[folderName] = orphans;

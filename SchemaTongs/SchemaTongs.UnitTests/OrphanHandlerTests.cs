@@ -249,6 +249,28 @@ public class OrphanHandlerTests
     }
 
     [Test]
+    public void ProcessOrphans_GatedTableFile_LogsRetainedCount()
+    {
+        var tablesPath = Path.Combine("C:", "pkg", "template", "Tables");
+        var gatedFile = Path.Combine(tablesPath, "dbo.Gated.json");
+
+        var index = CreateIndexWithOrphans(tablesPath, [gatedFile], []);
+
+        _file.Exists(gatedFile).Returns(true);
+        _file.ReadAllText(gatedFile).Returns("{\"Name\":\"Gated\",\"ShouldApplyExpression\":\"1=0\"}");
+
+        var folderIndexes = new Dictionary<string, ExtractionFileIndex> { ["Tables"] = index };
+        var fullyExtracted = new HashSet<string> { "Tables" };
+        var folderObjectTypes = new Dictionary<string, ScriptObjectType> { ["Tables"] = ScriptObjectType.None };
+
+        var handler = new OrphanHandler();
+        handler.ProcessOrphans(folderIndexes, Platform.SqlServer, OrphanHandlingMode.Detect,
+            fullyExtracted, "C:\\logs", folderObjectTypes);
+
+        _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Retained 1 gated table declaration file(s)")));
+    }
+
+    [Test]
     public void ProcessOrphans_DetectDeleteAndCleanup_PlainTableFile_IsDeleted()
     {
         var tablesPath = Path.Combine("C:", "pkg", "template", "Tables");
