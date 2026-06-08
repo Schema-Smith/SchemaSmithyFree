@@ -69,6 +69,21 @@ namespace Schema.UnitTests.Domain.PostgreSQL
         }
 
         [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var obj = new ExcludeConstraint
+            {
+                Name = "ex_no_overlap",
+                ExcludeColumns = [new ExcludeConstraint.ExcludeColumn { Column = "period", Operator = "&&" }],
+                ShouldApplyExpression = "1=1",
+                VariantName = "EU region"
+            };
+            var json = JsonConvert.SerializeObject(obj);
+            var deserialized = JsonConvert.DeserializeObject<ExcludeConstraint>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
+
+        [Test]
         public void ExcludeColumn_DefaultValues()
         {
             var col = new ExcludeConstraint.ExcludeColumn();

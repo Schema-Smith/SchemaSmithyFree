@@ -81,6 +81,15 @@ namespace Schema.UnitTests.Domain.PostgreSQL
         }
 
         [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var obj = new PostgreSqlMaterializedView { Name = "mv_test", Definition = "SELECT 1", ShouldApplyExpression = "1=1", VariantName = "EU region" };
+            var json = JsonConvert.SerializeObject(obj);
+            var deserialized = JsonConvert.DeserializeObject<PostgreSqlMaterializedView>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
+
+        [Test]
         public void CustomProperties_SurviveRoundTrip()
         {
             var view = new PostgreSqlMaterializedView { Name = "test" };
