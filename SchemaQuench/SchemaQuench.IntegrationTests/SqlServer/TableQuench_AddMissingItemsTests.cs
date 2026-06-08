@@ -308,13 +308,14 @@ SELECT SchemaSmith.fn_StripParenWrapping([definition])
             ""Columns"": [ { ""Name"": ""[Id]"", ""DataType"": ""INT"", ""Nullable"": false } ],
             ""Indexes"": [
                 { ""Name"": ""[IX_VariantLog]"", ""IndexColumns"": ""[Id]"", ""ShouldApplyExpression"": ""1=1"", ""VariantName"": ""Modern engines"" },
-                { ""Name"": ""[IX_VariantLog]"", ""IndexColumns"": ""[Id]"", ""Unique"": true, ""ShouldApplyExpression"": ""1=0"", ""VariantName"": ""Legacy engines"" }
+                { ""Name"": ""[IX_VariantLog_Legacy]"", ""IndexColumns"": ""[Id]"", ""Unique"": true, ""ShouldApplyExpression"": ""1=0"", ""VariantName"": ""Legacy engines"" }
             ]
         }]";
         try
         {
             RunTableQuenchProc(cmd, json);
             Assert.That(messages, Has.Some.Contains("(variant: Modern engines)"));
+            Assert.That(messages, Has.None.Contains("Legacy engines"));
         }
         finally
         {
