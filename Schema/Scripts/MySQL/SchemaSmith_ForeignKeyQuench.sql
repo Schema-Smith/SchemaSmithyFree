@@ -168,12 +168,14 @@ BEGIN
             DECLARE v_FKDone INT DEFAULT FALSE;
             DECLARE v_FKTable VARCHAR(128);
             DECLARE v_FKName VARCHAR(128);
+            DECLARE v_FKVariant VARCHAR(128);
             DECLARE v_FKSql TEXT;
 
             DECLARE cur_MissingForeignKeys CURSOR FOR
                 SELECT
                     f.TableName,
                     f.KeyName,
+                    f.VariantName,
                     CONCAT(
                         'ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', f.TableName,
                         ' ADD CONSTRAINT ', f.KeyName,
@@ -203,12 +205,13 @@ BEGIN
             OPEN cur_MissingForeignKeys;
 
             create_fks_loop: LOOP
-                FETCH cur_MissingForeignKeys INTO v_FKTable, v_FKName, v_FKSql;
+                FETCH cur_MissingForeignKeys INTO v_FKTable, v_FKName, v_FKVariant, v_FKSql;
                 IF v_FKDone THEN
                     LEAVE create_fks_loop;
                 END IF;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create FK: ', v_FKTable, '.', v_FKName));
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create FK: ', v_FKTable, '.', v_FKName,
+                    CASE WHEN COALESCE(v_FKVariant, '') <> '' THEN CONCAT(' (variant: ', v_FKVariant, ')') ELSE '' END));
                 SET @exec_sql = v_FKSql;
                 PREPARE stmt FROM @exec_sql;
                 EXECUTE stmt;

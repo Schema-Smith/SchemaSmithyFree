@@ -27,6 +27,7 @@ BEGIN
     DECLARE v_Sql TEXT;
     DECLARE v_TableName VARCHAR(128);
     DECLARE v_IndexName VARCHAR(128);
+    DECLARE v_Variant VARCHAR(128);
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'BEGIN IndexOnlyQuench');
 
@@ -41,6 +42,7 @@ BEGIN
         Columns TEXT NOT NULL,
         Parser VARCHAR(128) DEFAULT NULL,
         Comment VARCHAR(255) DEFAULT NULL,
+        VariantName VARCHAR(128) DEFAULT NULL,
         KEY ix_ft_table_name (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -422,6 +424,7 @@ BEGIN
             SELECT
                 i.TableName,
                 i.IndexName,
+                i.VariantName,
                 CONCAT(
                     'CREATE ',
                     CASE WHEN UPPER(i.IndexType) = 'SPATIAL' THEN 'SPATIAL '
@@ -487,12 +490,13 @@ BEGIN
             OPEN cur_MissingIndexes;
 
             create_indexes_loop: LOOP
-                FETCH cur_MissingIndexes INTO v_TableName, v_IndexName, v_Sql;
+                FETCH cur_MissingIndexes INTO v_TableName, v_IndexName, v_Variant, v_Sql;
                 IF v_Done THEN
                     LEAVE create_indexes_loop;
                 END IF;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create index: ', v_TableName, '.', v_IndexName));
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create index: ', v_TableName, '.', v_IndexName,
+                    CASE WHEN COALESCE(v_Variant, '') <> '' THEN CONCAT(' (variant: ', v_Variant, ')') ELSE '' END));
                 SET @exec_sql = v_Sql;
                 PREPARE stmt FROM @exec_sql;
                 EXECUTE stmt;
@@ -576,12 +580,14 @@ BEGIN
         DECLARE v_FTDone INT DEFAULT FALSE;
         DECLARE v_FTTable VARCHAR(128);
         DECLARE v_FTIndex VARCHAR(128);
+        DECLARE v_FTVariant VARCHAR(128);
         DECLARE v_FTSql TEXT;
 
         DECLARE cur_MissingFullText CURSOR FOR
             SELECT
                 ft.TableName,
                 ft.IndexName,
+                ft.VariantName,
                 CONCAT(
                     'CREATE FULLTEXT INDEX ', ft.IndexName,
                     ' ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', ft.TableName,
@@ -631,12 +637,13 @@ BEGIN
             OPEN cur_MissingFullText;
 
             create_fulltext_loop: LOOP
-                FETCH cur_MissingFullText INTO v_FTTable, v_FTIndex, v_FTSql;
+                FETCH cur_MissingFullText INTO v_FTTable, v_FTIndex, v_FTVariant, v_FTSql;
                 IF v_FTDone THEN
                     LEAVE create_fulltext_loop;
                 END IF;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create fulltext index: ', v_FTTable, '.', v_FTIndex));
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create fulltext index: ', v_FTTable, '.', v_FTIndex,
+                    CASE WHEN COALESCE(v_FTVariant, '') <> '' THEN CONCAT(' (variant: ', v_FTVariant, ')') ELSE '' END));
                 SET @exec_sql = v_FTSql;
                 PREPARE stmt FROM @exec_sql;
                 EXECUTE stmt;

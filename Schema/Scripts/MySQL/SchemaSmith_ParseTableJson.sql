@@ -42,6 +42,7 @@ BEGIN
         NewTable TINYINT DEFAULT 0,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
+        VariantName VARCHAR(128) DEFAULT NULL,
         AutoIncrementKeyClause VARCHAR(500) DEFAULT '',
         KEY ix_tables_name (TableName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -50,7 +51,7 @@ BEGIN
     -- The NOT EXISTS check against INFORMATION_SCHEMA is done separately via UPDATE
     -- to avoid a MySQL optimizer issue where correlated subqueries with function calls
     -- inside JSON_TABLE context don't re-evaluate correctly for all rows.
-    INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, NewTable, ShouldApply, ShouldApplyExpression)
+    INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, NewTable, ShouldApply, ShouldApplyExpression, VariantName)
     SELECT
         SchemaSmith_SafeBacktickWrap(jt.Name) AS TableName,
         COALESCE(NULLIF(TRIM(jt.Engine), ''), 'InnoDB') AS Engine,
@@ -59,14 +60,16 @@ BEGIN
         NULLIF(TRIM(jt.RowFormat), '') AS RowFormat,
         0 AS NewTable,
         1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression
+        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
+        NULLIF(TRIM(jt.VariantName), '') AS VariantName
     FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
         Name VARCHAR(128) PATH '$.Name',
         Engine VARCHAR(50) PATH '$.Engine',
         Collation VARCHAR(100) PATH '$.Collation',
         OldName VARCHAR(128) PATH '$.OldName',
         RowFormat VARCHAR(20) PATH '$.RowFormat',
-        ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression'
+        ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
+        VariantName VARCHAR(128) PATH '$.VariantName'
     )) AS jt
     WHERE jt.Name IS NOT NULL;
 
@@ -124,13 +127,14 @@ BEGIN
         DependencyLevel INT DEFAULT 0,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
+        VariantName VARCHAR(128) DEFAULT NULL,
         KEY ix_columns_table_name (TableName, ColumnName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     INSERT INTO _SchemaSmith_Columns (
         TableName, ColumnName, OrdinalPosition, DataType, IsNullable, DefaultValue,
         IsAutoIncrement, GeneratedExpression, GeneratedType,
-        CharacterSet, Collation, CheckExpression, OldName, NewColumn, ShouldApply, ShouldApplyExpression
+        CharacterSet, Collation, CheckExpression, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
     )
     SELECT
         SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
@@ -148,7 +152,8 @@ BEGIN
         SchemaSmith_SafeBacktickWrap(jt.OldName) AS OldName,
         0 AS NewColumn,
         1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression
+        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
+        NULLIF(TRIM(jt.VariantName), '') AS VariantName
     FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
         TableName VARCHAR(128) PATH '$.Name',
         NESTED PATH '$.Columns[*]' COLUMNS (
@@ -164,7 +169,8 @@ BEGIN
             ColumnCollation VARCHAR(100) PATH '$.Collation',
             CheckExpression TEXT PATH '$.CheckExpression',
             OldName VARCHAR(128) PATH '$.OldName',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression'
+            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
+            VariantName VARCHAR(128) PATH '$.VariantName'
         )
     )) AS jt
     WHERE jt.ColumnName IS NOT NULL
@@ -349,11 +355,12 @@ BEGIN
         IsVisible TINYINT DEFAULT 1,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
+        VariantName VARCHAR(128) DEFAULT NULL,
         KEY ix_indexes_table_name (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     INSERT INTO _SchemaSmith_Indexes (
-        TableName, IndexName, IsPrimaryKey, IsUnique, IndexType, IndexColumns, IsVisible, ShouldApply, ShouldApplyExpression
+        TableName, IndexName, IsPrimaryKey, IsUnique, IndexType, IndexColumns, IsVisible, ShouldApply, ShouldApplyExpression, VariantName
     )
     SELECT
         SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
@@ -364,7 +371,8 @@ BEGIN
         jt.IndexColumns,
         COALESCE(jt.Visible, 1) AS IsVisible,
         1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression
+        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
+        NULLIF(TRIM(jt.VariantName), '') AS VariantName
     FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
         TableName VARCHAR(128) PATH '$.Name',
         NESTED PATH '$.Indexes[*]' COLUMNS (
@@ -374,7 +382,8 @@ BEGIN
             IndexType VARCHAR(20) PATH '$.IndexType',
             IndexColumns TEXT PATH '$.IndexColumns',
             Visible TINYINT PATH '$.Visible',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression'
+            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
+            VariantName VARCHAR(128) PATH '$.VariantName'
         )
     )) AS jt
     WHERE jt.IndexName IS NOT NULL
@@ -405,11 +414,12 @@ BEGIN
         UpdateAction VARCHAR(20) DEFAULT 'NO ACTION',
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
+        VariantName VARCHAR(128) DEFAULT NULL,
         KEY ix_fks_table_name (TableName, KeyName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     INSERT INTO _SchemaSmith_ForeignKeys (
-        TableName, KeyName, Columns, RelatedTableSchema, RelatedTable, RelatedColumns, DeleteAction, UpdateAction, ShouldApply, ShouldApplyExpression
+        TableName, KeyName, Columns, RelatedTableSchema, RelatedTable, RelatedColumns, DeleteAction, UpdateAction, ShouldApply, ShouldApplyExpression, VariantName
     )
     SELECT
         SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
@@ -421,7 +431,8 @@ BEGIN
         COALESCE(NULLIF(TRIM(jt.DeleteAction), ''), 'NO ACTION') AS DeleteAction,
         COALESCE(NULLIF(TRIM(jt.UpdateAction), ''), 'NO ACTION') AS UpdateAction,
         1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression
+        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
+        NULLIF(TRIM(jt.VariantName), '') AS VariantName
     FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
         TableName VARCHAR(128) PATH '$.Name',
         NESTED PATH '$.ForeignKeys[*]' COLUMNS (
@@ -432,7 +443,8 @@ BEGIN
             RelatedColumns TEXT PATH '$.RelatedColumns',
             DeleteAction VARCHAR(20) PATH '$.DeleteAction',
             UpdateAction VARCHAR(20) PATH '$.UpdateAction',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression'
+            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
+            VariantName VARCHAR(128) PATH '$.VariantName'
         )
     )) AS jt
     WHERE jt.KeyName IS NOT NULL
@@ -449,10 +461,11 @@ BEGIN
         Expression TEXT NOT NULL,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
+        VariantName VARCHAR(128) DEFAULT NULL,
         KEY ix_checks_table_name (TableName, ConstraintName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    INSERT INTO _SchemaSmith_CheckConstraints (TableName, ConstraintName, Expression, ShouldApply, ShouldApplyExpression)
+    INSERT INTO _SchemaSmith_CheckConstraints (TableName, ConstraintName, Expression, ShouldApply, ShouldApplyExpression, VariantName)
     SELECT
         SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
         SchemaSmith_SafeBacktickWrap(jt.ConstraintName) AS ConstraintName,
@@ -463,13 +476,15 @@ BEGIN
             REGEXP_REPLACE(jt.Expression, '_utf8mb4|_utf8|_latin1|_binary', ''),
             '\\''', '''') AS Expression,
         1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression
+        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
+        NULLIF(TRIM(jt.VariantName), '') AS VariantName
     FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
         TableName VARCHAR(128) PATH '$.Name',
         NESTED PATH '$.CheckConstraints[*]' COLUMNS (
             ConstraintName VARCHAR(128) PATH '$.Name',
             Expression TEXT PATH '$.Expression',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression'
+            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
+            VariantName VARCHAR(128) PATH '$.VariantName'
         )
     )) AS jt
     WHERE jt.ConstraintName IS NOT NULL
@@ -498,10 +513,11 @@ BEGIN
         Comment VARCHAR(255) DEFAULT NULL,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
+        VariantName VARCHAR(128) DEFAULT NULL,
         KEY ix_ft_table_name (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    INSERT INTO _SchemaSmith_FullTextIndexes (TableName, IndexName, Columns, Parser, Comment, ShouldApply, ShouldApplyExpression)
+    INSERT INTO _SchemaSmith_FullTextIndexes (TableName, IndexName, Columns, Parser, Comment, ShouldApply, ShouldApplyExpression, VariantName)
     SELECT
         SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
         SchemaSmith_SafeBacktickWrap(jt.Name) AS IndexName,
@@ -509,7 +525,8 @@ BEGIN
         NULLIF(TRIM(jt.Parser), '') AS Parser,
         NULLIF(TRIM(jt.Comment), '') AS Comment,
         1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression
+        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
+        NULLIF(TRIM(jt.VariantName), '') AS VariantName
     FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
         TableName VARCHAR(128) PATH '$.Name',
         NESTED PATH '$.FullTextIndexes[*]' COLUMNS (
@@ -517,7 +534,8 @@ BEGIN
             Columns TEXT PATH '$.Columns',
             Parser VARCHAR(128) PATH '$.Parser',
             Comment VARCHAR(255) PATH '$.Comment',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression'
+            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
+            VariantName VARCHAR(128) PATH '$.VariantName'
         )
     )) AS jt
     WHERE jt.Name IS NOT NULL
