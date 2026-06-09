@@ -64,5 +64,14 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(json, Does.Not.Contain("FilterExpression"));
             Assert.That(json, Does.Not.Contain("ShouldApplyExpression"));
         }
+
+        [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var stat = new Statistic { Name = "ST_Test", Columns = "Col1", ShouldApplyExpression = "1=1", VariantName = "EU region" };
+            var json = JsonConvert.SerializeObject(stat);
+            var deserialized = JsonConvert.DeserializeObject<Statistic>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
     }
 }

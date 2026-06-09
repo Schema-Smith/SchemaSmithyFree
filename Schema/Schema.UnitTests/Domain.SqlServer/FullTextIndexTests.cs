@@ -46,7 +46,8 @@ namespace Schema.UnitTests.Domain.SqlServer
                 ChangeTracking = "MANUAL",
                 StopList = "MyStopList",
                 Columns = "Title, Body",
-                ShouldApplyExpression = "SELECT 1"
+                ShouldApplyExpression = "SELECT 1",
+                VariantName = "East catalog"
             };
 
             var json = JsonConvert.SerializeObject(fti);
@@ -58,6 +59,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(deserialized.StopList, Is.EqualTo("MyStopList"));
             Assert.That(deserialized.Columns, Is.EqualTo("Title, Body"));
             Assert.That(deserialized.ShouldApplyExpression, Is.EqualTo("SELECT 1"));
+            Assert.That(deserialized.VariantName, Is.EqualTo("East catalog"));
         }
 
         [Test]
@@ -143,6 +145,18 @@ namespace Schema.UnitTests.Domain.SqlServer
             using var writer = new JsonTextWriter(sw);
             converter.WriteJson(writer, null, JsonSerializer.CreateDefault());
             Assert.That(sw.ToString(), Is.EqualTo("null"));
+        }
+
+        [Test]
+        public void FullTextIndex_VariantArrayJson_RoundTripsVariantNames()
+        {
+            var json = @"[{""FullTextCatalog"":""A"",""KeyIndex"":""PK"",""Columns"":""T"",""ShouldApplyExpression"":""DB_NAME() = 'East'"",""VariantName"":""East""},
+                          {""FullTextCatalog"":""B"",""KeyIndex"":""PK"",""Columns"":""T"",""ShouldApplyExpression"":""DB_NAME() = 'West'"",""VariantName"":""West""}]";
+            var table = JsonConvert.DeserializeObject<SqlServerTable>($@"{{""Name"":""Docs"",""FullTextIndex"":{json}}}");
+            Assert.That(table.FullTextIndex[0].VariantName, Is.EqualTo("East"));
+            Assert.That(table.FullTextIndex[1].VariantName, Is.EqualTo("West"));
+            var serialized = JsonConvert.SerializeObject(table);
+            Assert.That(serialized, Does.Contain(@"""VariantName"":""West"""));
         }
     }
 }

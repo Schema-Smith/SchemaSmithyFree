@@ -12,6 +12,7 @@ namespace Schema.Domain
         public double Maximum { get; set; } = double.NaN;
         public double MultipleOf { get; set; } = double.NaN;
         public string Format { get; set; }
+        public int MaxLength { get; set; } = -1;
         public string Description { get; set; }
         public bool Deprecated { get; set; }
         public bool Required { get; set; }

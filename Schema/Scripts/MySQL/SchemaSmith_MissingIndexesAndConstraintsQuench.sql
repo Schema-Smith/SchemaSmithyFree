@@ -38,7 +38,8 @@ BEGIN
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Add missing generated columns');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-        SELECT CONNECTION_ID(), CONCAT('  Add generated column: ', c.TableName, '.', c.ColumnName)
+        SELECT CONNECTION_ID(), CONCAT('  Add generated column: ', c.TableName, '.', c.ColumnName,
+            CASE WHEN COALESCE(c.VariantName, '') <> '' THEN CONCAT(' (variant: ', c.VariantName, ')') ELSE '' END)
         FROM _SchemaSmith_Columns c
         INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
         WHERE c.GeneratedExpression IS NOT NULL
@@ -49,9 +50,11 @@ BEGIN
         BEGIN
             DECLARE v_GenDone INT DEFAULT FALSE;
             DECLARE v_GenSql TEXT;
+            DECLARE v_GenVariant VARCHAR(128);
 
             DECLARE cur_GeneratedColumns CURSOR FOR
                 SELECT
+                    c.VariantName,
                     CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
                            ' ADD COLUMN ', c.ColumnScript) AS AlterTableStatement
                 FROM _SchemaSmith_Columns c
@@ -68,12 +71,13 @@ BEGIN
             OPEN cur_GeneratedColumns;
 
             gen_cols_loop: LOOP
-                FETCH cur_GeneratedColumns INTO v_GenSql;
+                FETCH cur_GeneratedColumns INTO v_GenVariant, v_GenSql;
                 IF v_GenDone THEN
                     LEAVE gen_cols_loop;
                 END IF;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Add generated column: ', v_GenSql));
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Add generated column: ', v_GenSql,
+                    CASE WHEN COALESCE(v_GenVariant, '') <> '' THEN CONCAT(' (variant: ', v_GenVariant, ')') ELSE '' END));
                 SET @exec_sql = v_GenSql;
                 PREPARE stmt FROM @exec_sql;
                 EXECUTE stmt;
@@ -318,12 +322,14 @@ BEGIN
             DECLARE v_CreateDone INT DEFAULT FALSE;
             DECLARE v_CreateTable VARCHAR(128);
             DECLARE v_CreateIndex VARCHAR(128);
+            DECLARE v_CreateVariant VARCHAR(128);
             DECLARE v_CreateSql TEXT;
 
             DECLARE cur_MissingIndexes CURSOR FOR
                 SELECT
                     i.TableName,
                     i.IndexName,
+                    i.VariantName,
                     CONCAT(
                         'CREATE ',
                         CASE WHEN UPPER(i.IndexType) = 'SPATIAL' THEN 'SPATIAL '
@@ -358,12 +364,13 @@ BEGIN
             OPEN cur_MissingIndexes;
 
             create_indexes_loop: LOOP
-                FETCH cur_MissingIndexes INTO v_CreateTable, v_CreateIndex, v_CreateSql;
+                FETCH cur_MissingIndexes INTO v_CreateTable, v_CreateIndex, v_CreateVariant, v_CreateSql;
                 IF v_CreateDone THEN
                     LEAVE create_indexes_loop;
                 END IF;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create index: ', v_CreateTable, '.', v_CreateIndex));
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create index: ', v_CreateTable, '.', v_CreateIndex,
+                    CASE WHEN COALESCE(v_CreateVariant, '') <> '' THEN CONCAT(' (variant: ', v_CreateVariant, ')') ELSE '' END));
                 SET @exec_sql = v_CreateSql;
                 PREPARE stmt FROM @exec_sql;
                 EXECUTE stmt;
@@ -396,12 +403,14 @@ BEGIN
             DECLARE v_CheckDone INT DEFAULT FALSE;
             DECLARE v_CheckTable VARCHAR(128);
             DECLARE v_CheckName VARCHAR(128);
+            DECLARE v_CheckVariant VARCHAR(128);
             DECLARE v_CheckSql TEXT;
 
             DECLARE cur_MissingCheckConstraints CURSOR FOR
                 SELECT
                     c.TableName,
                     c.ConstraintName,
+                    c.VariantName,
                     CONCAT(
                         'ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
                         ' ADD CONSTRAINT ', c.ConstraintName,
@@ -423,12 +432,13 @@ BEGIN
             OPEN cur_MissingCheckConstraints;
 
             create_checks_loop: LOOP
-                FETCH cur_MissingCheckConstraints INTO v_CheckTable, v_CheckName, v_CheckSql;
+                FETCH cur_MissingCheckConstraints INTO v_CheckTable, v_CheckName, v_CheckVariant, v_CheckSql;
                 IF v_CheckDone THEN
                     LEAVE create_checks_loop;
                 END IF;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create check constraint: ', v_CheckTable, '.', v_CheckName));
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create check constraint: ', v_CheckTable, '.', v_CheckName,
+                    CASE WHEN COALESCE(v_CheckVariant, '') <> '' THEN CONCAT(' (variant: ', v_CheckVariant, ')') ELSE '' END));
                 SET @exec_sql = v_CheckSql;
                 PREPARE stmt FROM @exec_sql;
                 EXECUTE stmt;

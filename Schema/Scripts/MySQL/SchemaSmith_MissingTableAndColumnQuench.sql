@@ -25,11 +25,14 @@ BEGIN
     DECLARE v_Done INT DEFAULT FALSE;
     DECLARE v_Sql TEXT;
     DECLARE v_StatusTableName VARCHAR(128);
+    DECLARE v_StatusVariant VARCHAR(128);
+    DECLARE v_NewColVariant VARCHAR(128);
 
     -- Cursor for CREATE TABLE statements (non-generated columns only, ordered by OrdinalPosition)
     DECLARE cur_NewTables CURSOR FOR
         SELECT
             t.TableName,
+            t.VariantName,
             CONCAT(
                 'CREATE TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', t.TableName, ' (',
                 GROUP_CONCAT(c.ColumnScript ORDER BY c.OrdinalPosition SEPARATOR ', '),
@@ -49,11 +52,12 @@ BEGIN
         INNER JOIN _SchemaSmith_Columns c ON c.TableName = t.TableName
         WHERE t.NewTable = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
-        GROUP BY t.TableName, t.Engine, t.RowFormat;
+        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat;
 
     -- Cursor for non-generated columns on EXISTING tables
     DECLARE cur_NewColumns CURSOR FOR
         SELECT
+            c.VariantName,
             CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
                    ' ADD COLUMN ', c.ColumnScript) AS AlterTableStatement
         FROM _SchemaSmith_Columns c
@@ -78,7 +82,7 @@ BEGIN
         OPEN cur_NewTables;
 
         whatif_tables_loop: LOOP
-            FETCH cur_NewTables INTO v_StatusTableName, v_Sql;
+            FETCH cur_NewTables INTO v_StatusTableName, v_StatusVariant, v_Sql;
             IF v_Done THEN
                 LEAVE whatif_tables_loop;
             END IF;
@@ -94,7 +98,7 @@ BEGIN
         OPEN cur_NewColumns;
 
         whatif_new_cols_loop: LOOP
-            FETCH cur_NewColumns INTO v_Sql;
+            FETCH cur_NewColumns INTO v_NewColVariant, v_Sql;
             IF v_Done THEN
                 LEAVE whatif_new_cols_loop;
             END IF;
@@ -111,12 +115,13 @@ BEGIN
         OPEN cur_NewTables;
 
         create_tables_loop: LOOP
-            FETCH cur_NewTables INTO v_StatusTableName, v_Sql;
+            FETCH cur_NewTables INTO v_StatusTableName, v_StatusVariant, v_Sql;
             IF v_Done THEN
                 LEAVE create_tables_loop;
             END IF;
 
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create table ', v_StatusTableName));
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create table ', v_StatusTableName,
+                CASE WHEN COALESCE(v_StatusVariant, '') <> '' THEN CONCAT(' (variant: ', v_StatusVariant, ')') ELSE '' END));
             SET @exec_sql = v_Sql;
             PREPARE stmt FROM @exec_sql;
             EXECUTE stmt;
@@ -131,12 +136,13 @@ BEGIN
         OPEN cur_NewColumns;
 
         add_columns_loop: LOOP
-            FETCH cur_NewColumns INTO v_Sql;
+            FETCH cur_NewColumns INTO v_NewColVariant, v_Sql;
             IF v_Done THEN
                 LEAVE add_columns_loop;
             END IF;
 
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Add column: ', v_Sql));
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Add column: ', v_Sql,
+                CASE WHEN COALESCE(v_NewColVariant, '') <> '' THEN CONCAT(' (variant: ', v_NewColVariant, ')') ELSE '' END));
             SET @exec_sql = v_Sql;
             PREPARE stmt FROM @exec_sql;
             EXECUTE stmt;

@@ -60,5 +60,14 @@ namespace Schema.UnitTests.Domain
             Assert.That(json, Does.Not.Contain("OldName"));
         }
 
+        [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var column = new Column { Name = "RegionCode", DataType = "char(2)", ShouldApplyExpression = "1=1", VariantName = "EU region" };
+            var json = JsonConvert.SerializeObject(column);
+            var deserialized = JsonConvert.DeserializeObject<Column>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
+
     }
 }

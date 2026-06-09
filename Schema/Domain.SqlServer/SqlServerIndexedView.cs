@@ -25,6 +25,12 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 4)]
         public string ShouldApplyExpression { get; set; }
 
+        // Labels a conditional variant: the intent behind its ShouldApplyExpression,
+        // echoed in quench log messages when the variant applies.
+        [SchemaProperty(MaxLength = 128, Description = "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied.")]
+        [JsonProperty(Order = 5)]
+        public string VariantName { get; set; }
+
         [JsonProperty(Order = 10)]
         public List<SqlServerIndex> Indexes { get; set; } = [];
     }

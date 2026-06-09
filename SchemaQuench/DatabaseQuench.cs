@@ -1164,27 +1164,11 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
                 throw new Exception($"Indexed view {iv.Schema}.{iv.Name} requires a unique clustered index");
         }
 
-        // Filter out indexed views where ShouldApplyExpression evaluated to false
-        var applicableViews = _template.IndexedViews
-            .Where(iv => string.IsNullOrEmpty(iv.ShouldApplyExpression) || iv.ShouldApplyExpression != "false")
-            .ToList();
-        if (applicableViews.Count == 0) return;
-
-        // I10: Route through the iteration-aware schema string. When PrepareIterationContent
-        // has already substituted {{SchemaName}}, prefer that value (mirrors the table /
-        // materialized-view pattern). When the filter removed views, fall back to a fresh
-        // serialization of the filtered subset and apply iteration substitution manually.
-        string viewSchema;
-        if (applicableViews.Count == _template.IndexedViews.Count)
-        {
-            viewSchema = IterationIndexedViewSchema;
-        }
-        else
-        {
-            viewSchema = JArray.FromObject(applicableViews).ToString();
-            if (!string.IsNullOrEmpty(_schemaName))
-                viewSchema = viewSchema.Replace("{{SchemaName}}", _schemaName);
-        }
+        // Pass ALL indexed views to the proc; ShouldApplyExpression is evaluated per-target
+        // server-side (mirroring PostgreSQL materialized views), so no C# pre-filtering.
+        // Route through the iteration-aware schema string so {{SchemaName}} substitution
+        // (schema templates) is already applied; for regular templates it's the full set verbatim.
+        var viewSchema = IterationIndexedViewSchema;
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         // B5 fix: thread @TemplateName + @SchemaName so the existing-views lookup in the proc
         // is scoped to the iteration's schema. Regular templates pass @SchemaName = '' and the

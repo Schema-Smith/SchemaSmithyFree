@@ -146,6 +146,45 @@ An index that only exists on tables whose database name ends with `_replica`. Tr
 
 Full-text indexes (SQL Server) take this one step further: declare an **array** of full-text variants on a table -- each with its own catalog and a `ShouldApplyExpression` -- and each target deploys only the variant that matches it. One schema package, region-specific full-text catalogs, no per-environment package forks.
 
+### Naming your variants
+
+When a component carries several same-named variants gated by mutually exclusive expressions, give each one a `VariantName`. The expression says *when* a variant applies; the name says *why* it exists -- and that name is how a human (or a downstream tool) tells two complex, SQL-gated variants apart at a glance.
+
+```json
+"Indexes": [
+  {
+    "Name": "[IX_Orders_Region]",
+    "VariantName": "Modern engines",
+    "IndexColumns": "[Region]",
+    "FilterExpression": "[Region] IS NOT NULL",
+    "ShouldApplyExpression": "SELECT CASE WHEN SERVERPROPERTY('ProductMajorVersion') >= 16 THEN 1 ELSE 0 END"
+  },
+  {
+    "Name": "[IX_Orders_Region]",
+    "VariantName": "Legacy engines",
+    "IndexColumns": "[Region]",
+    "ShouldApplyExpression": "SELECT CASE WHEN SERVERPROPERTY('ProductMajorVersion') >= 16 THEN 0 ELSE 1 END"
+  }
+]
+```
+
+Both variants share a name and target the same column, but only one matches any given server. When the matching variant deploys, its name rides along in the log:
+
+```
+  Creating index dbo.Orders.IX_Orders_Region (variant: Modern engines)
+```
+
+The same `(variant: ...)` suffix appears in WhatIf output, so a dry run tells you exactly which variant *would* be applied to each target -- before you commit to it. `VariantName` is metadata only: it has no effect on what gets deployed, it just makes the deployment legible. It's an optional label, up to 128 characters, and it round-trips through SchemaTongs re-extraction alongside the rest of the variant set.
+
+### Conditional deployment: whole table vs. within a table
+
+`ShouldApplyExpression` works at two levels, and it helps to keep them straight:
+
+- **Within a table.** Columns, indexes, foreign keys, check constraints, statistics, and the other components inside a table file can each declare conditional variants -- same name, mutually exclusive expressions -- and the matching one is chosen per target. These variant sets are fully preserved when SchemaTongs re-extracts the table.
+- **The whole table.** A table-level `ShouldApplyExpression` gates the entire table present-or-absent on a given target, and that gating round-trips through extraction too.
+
+**Recommendation:** to vary a table's *structure* by target, prefer component-level variants inside a single table file (or give the structurally different tables distinct names). Two separate same-named whole-table variant files will deploy correctly, but SchemaTongs normalizes a table to one file per name on extraction, so a multi-file same-named-table layout isn't reproduced when you re-extract.
+
 ## Multi-database products
 
 Some applications span more than one database -- a main transactional database plus a reporting database, or a primary database plus an audit log. SchemaSmith handles this as a single product with multiple templates. One quench, all databases updated.

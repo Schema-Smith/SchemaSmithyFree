@@ -36,7 +36,8 @@ BEGIN
          COALESCE((elem ->> 'WithData')::BOOLEAN, true) AS "WithData",
          COALESCE(elem ->> 'Tablespace', '') AS "Tablespace",
          COALESCE(elem ->> 'AccessMethod', 'heap') AS "AccessMethod",
-         COALESCE(elem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression"
+         COALESCE(elem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+         COALESCE(elem ->> 'VariantName', '') AS "VariantName"
   FROM my_views, JSON_ARRAY_ELEMENTS(arr) AS elem;
 
   -- Evaluate ShouldApplyExpression: remove views whose expression evaluates to false
@@ -140,7 +141,7 @@ BEGIN
   RAISE NOTICE 'Materialized View Diff — Create Missing';
   sql_script = '';
   SELECT STRING_AGG(
-    'RAISE NOTICE ''  Creating materialized view ' || t."Schema" || '.' || t."Name" || ''';' || CHR(10) ||
+    'RAISE NOTICE ''  Creating materialized view ' || t."Schema" || '.' || t."Name" || CASE WHEN COALESCE(t."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(t."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
     'CREATE MATERIALIZED VIEW "' || t."Schema" || '"."' || t."Name" || '"'
     || CASE WHEN NULLIF(t."AccessMethod", '') IS NOT NULL AND t."AccessMethod" != 'heap' THEN ' USING ' || t."AccessMethod" ELSE '' END
     || CASE WHEN NULLIF(t."Tablespace", '') IS NOT NULL THEN ' TABLESPACE ' || t."Tablespace" ELSE '' END

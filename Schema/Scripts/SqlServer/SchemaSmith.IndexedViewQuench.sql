@@ -22,26 +22,72 @@ BEGIN
     SET NOCOUNT ON;
 
     -- Parse indexed views from JSON using OPENJSON WITH for NVARCHAR(MAX) support
+    -- [_RowId] gives each parsed view a unique identifier so the per-target ShouldApply
+    -- DELETE below targets exactly the source row whose expression evaluated false. Without
+    -- it, the DELETE matched on (Schema, Name) and would silently wipe both rows when two
+    -- same-named variants had mutually exclusive ShouldApply expressions.
     DECLARE @Views TABLE (
+        [_RowId] INT,
         ViewSchema NVARCHAR(200),
         ViewName NVARCHAR(200),
         Definition NVARCHAR(MAX),
-        IndexJson NVARCHAR(MAX)
+        IndexJson NVARCHAR(MAX),
+        VariantName NVARCHAR(128),
+        ShouldApplyExpression NVARCHAR(MAX)
     );
 
-    INSERT INTO @Views (ViewSchema, ViewName, Definition, IndexJson)
+    INSERT INTO @Views ([_RowId], ViewSchema, ViewName, Definition, IndexJson, VariantName, ShouldApplyExpression)
     SELECT
+        ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
         [SchemaSmith].[fn_StripBracketWrapping](v.[Schema]),
         [SchemaSmith].[fn_StripBracketWrapping](v.[Name]),
         v.[Definition],
-        v.[Indexes]
+        v.[Indexes],
+        v.[VariantName],
+        v.[ShouldApplyExpression]
     FROM OPENJSON(@IndexedViewSchema)
     WITH (
         [Schema] NVARCHAR(200) '$.Schema',
         [Name] NVARCHAR(200) '$.Name',
         [Definition] NVARCHAR(MAX) '$.Definition',
-        [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON
+        [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON,
+        [VariantName] NVARCHAR(128) '$.VariantName',
+        [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
     ) v;
+
+    -- Evaluate ShouldApplyExpression per-target: remove views whose expression is false.
+    -- Scoped by [_RowId] so each generated DELETE targets exactly the source row whose
+    -- expression evaluated false (no collateral damage to siblings with the same Name).
+    -- The expression is embedded as live SQL (not a string literal), mirroring
+    -- ParseTableJsonIntoTempTables.
+    -- @Views is a table variable, not visible to the child batch EXEC() spawns, so the
+    -- gate DELETEs are built and run against a temp table populated from @Views, then
+    -- survivors are reconciled back. Building the aggregate gate SQL directly against
+    -- #ViewGate avoids a fragile string REPLACE that a ShouldApplyExpression could corrupt.
+    DROP TABLE IF EXISTS #ViewGate;
+    SELECT * INTO #ViewGate FROM @Views;
+    DECLARE @gateSql NVARCHAR(MAX);
+    SELECT @gateSql = STRING_AGG(CAST('DELETE FROM #ViewGate WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + ShouldApplyExpression + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #ViewGate
+    WHERE RTRIM(ISNULL(ShouldApplyExpression, '')) <> '';
+    IF @gateSql IS NOT NULL
+    BEGIN
+        EXEC(@gateSql);
+        DELETE FROM @Views WHERE [_RowId] NOT IN (SELECT [_RowId] FROM #ViewGate);
+    END;
+    DROP TABLE IF EXISTS #ViewGate;
+
+    -- A view name with 2+ surviving variants cannot be honored: SQL Server allows ONE view
+    -- per (schema, name). ShouldApplyExpressions for same-named variants must be mutually
+    -- exclusive on any given target. (Mirrors the FullTextIndex mutual-exclusivity guard.)
+    IF EXISTS (SELECT 1 FROM @Views GROUP BY ViewSchema, ViewName HAVING COUNT(*) > 1)
+    BEGIN
+        DECLARE @v_IvDupView NVARCHAR(1010) =
+            (SELECT TOP 1 ViewSchema + '.' + ViewName FROM @Views GROUP BY ViewSchema, ViewName HAVING COUNT(*) > 1 ORDER BY ViewSchema, ViewName);
+        DECLARE @v_IvDupMsg NVARCHAR(2000) = 'Multiple indexed view variants matched on this target for view ' + @v_IvDupView +
+            '. SQL Server allows one view per name — ShouldApplyExpressions must be mutually exclusive.';
+        THROW 51000, @v_IvDupMsg, 1;
+    END;
 
     -- Validate ownership: fail if any requested views are owned by a different product
     -- (mirrors PostgreSQL ValidateMaterializedViewOwnership pattern)
@@ -145,15 +191,15 @@ BEGIN
     DEALLOCATE remove_cursor;
 
     -- Process new and changed views
-    DECLARE @defn NVARCHAR(MAX), @indexJson NVARCHAR(MAX);
+    DECLARE @defn NVARCHAR(MAX), @indexJson NVARCHAR(MAX), @variantName NVARCHAR(128);
     DECLARE @existingDef NVARCHAR(MAX), @existingObjectId INT;
     DECLARE @needsRecreate BIT, @needsIndexUpdate BIT;
 
     DECLARE view_cursor CURSOR LOCAL FAST_FORWARD FOR
-        SELECT v.ViewSchema, v.ViewName, v.Definition, v.IndexJson FROM @Views v;
+        SELECT v.ViewSchema, v.ViewName, v.Definition, v.IndexJson, v.VariantName FROM @Views v;
 
     OPEN view_cursor;
-    FETCH NEXT FROM view_cursor INTO @ivSchema, @ivName, @defn, @indexJson;
+    FETCH NEXT FROM view_cursor INTO @ivSchema, @ivName, @defn, @indexJson, @variantName;
     WHILE @@FETCH_STATUS = 0
     BEGIN
         SET @needsRecreate = 0;
@@ -214,7 +260,7 @@ BEGIN
         IF @needsRecreate = 1
         BEGIN
             SET @sql = 'CREATE VIEW ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName) + ' WITH SCHEMABINDING AS ' + @defn;
-            SET @msg = N'Creating indexed view ' + @ivSchema + N'.' + @ivName;
+            SET @msg = N'Creating indexed view ' + @ivSchema + N'.' + @ivName + CASE WHEN ISNULL(@variantName, N'') <> N'' THEN N' (variant: ' + @variantName + N')' ELSE N'' END;
             EXEC [SchemaSmith].[PrintWithNoWait] @msg;
             IF @WhatIf = 0 EXEC sp_executesql @sql;
 
@@ -426,7 +472,7 @@ BEGIN
             DEALLOCATE idx_cursor;
         END;
 
-        FETCH NEXT FROM view_cursor INTO @ivSchema, @ivName, @defn, @indexJson;
+        FETCH NEXT FROM view_cursor INTO @ivSchema, @ivName, @defn, @indexJson, @variantName;
     END;
     CLOSE view_cursor;
     DEALLOCATE view_cursor;

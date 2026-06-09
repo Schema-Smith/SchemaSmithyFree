@@ -842,42 +842,58 @@ public class DatabaseQuenchTests
     }
 
     [Test]
-    public void QuenchIndexedViews_AllFilteredByShouldApply_ReturnsWithoutExecuting()
+    public void QuenchIndexedViews_WithDeclaredViews_InvokesProcForServerSideEvaluation()
     {
+        RegisterMockFileWrapper();
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
-        var template = new Template { Name = "T" };
+        var template = new Template
+        {
+            Name = "T",
+            // Production: Template.Load serializes the in-memory views into IndexedViewSchema;
+            // QuenchIndexedViews feeds the proc from that (iteration-aware) string. A view gated
+            // ShouldApplyExpression = "false" is NOT filtered in C# — it is passed through and
+            // evaluated per-target server-side (mirroring materialized views).
+            IndexedViewSchema = "[{\"Schema\":\"dbo\",\"Name\":\"[vw_Test]\",\"Definition\":\"SELECT 1\",\"ShouldApplyExpression\":\"false\"}]"
+        };
         template.IndexedViews.Add(new SqlServerIndexedView
         {
             Name = "[vw_Test]",
             Schema = "dbo",
             Definition = "SELECT 1",
             ShouldApplyExpression = "false",
-            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true }]
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
             false, "0", false, "0", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
-
-        // Should not throw and should not call ExecuteNonQuery
         quench.QuenchIndexedViews(mockCmd);
-        mockCmd.DidNotReceive().ExecuteNonQuery();
+
+        // ShouldApplyExpression is no longer filtered in C#; the view is still passed to the
+        // proc, which evaluates ShouldApply per-target server-side (mirroring materialized views).
+        Assert.That(mockCmd.CommandText, Does.Contain("EXEC [SchemaSmith].[IndexedViewQuench]"));
+        Assert.That(mockCmd.CommandText, Does.Contain("[vw_Test]"));
+        mockCmd.Received(1).ExecuteNonQuery();
     }
 
     [Test]
-    public void QuenchIndexedViews_NoIndexedViews_ReturnsWithoutExecuting()
+    public void QuenchIndexedViews_NoIndexedViews_InvokesProc()
     {
+        RegisterMockFileWrapper();
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
-        // No indexed views added
+        // No indexed views added — like materialized views, the proc is still invoked
+        // (server-side handles the empty set); no C# early-return.
 
         var quench = new DatabaseQuench("srv", product, template, "db",
             false, "0", false, "0", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexedViews(mockCmd);
-        mockCmd.DidNotReceive().ExecuteNonQuery();
+
+        Assert.That(mockCmd.CommandText, Does.Contain("EXEC [SchemaSmith].[IndexedViewQuench]"));
+        mockCmd.Received(1).ExecuteNonQuery();
     }
 
     [Test]
@@ -1040,16 +1056,23 @@ public class DatabaseQuenchTests
     }
 
     [Test]
-    public void QuenchIndexedViews_SchemaTemplate_PreservesShouldApplyFilter()
+    public void QuenchIndexedViews_SchemaTemplate_PassesAllVariantsForServerSideEvaluation()
     {
-        // Per-call ShouldApplyExpression filter must still fire after the iteration-schema
-        // substitution — the filtered-out view should not appear in the substituted payload.
+        // ShouldApplyExpression is no longer filtered in C# — every variant is passed to the
+        // proc (with {{SchemaName}} substituted for the iteration) and evaluated per-target
+        // server-side, mirroring materialized views. A "false"-gated view is still in the
+        // payload; the proc skips it at deploy time.
         RegisterMockFileWrapper();
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template
         {
             Name = "TenantBody",
-            SchemaIdentificationScript = "SELECT 'tenant_a'"
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            // In production, Template.Load serializes the views into IndexedViewSchema after
+            // SchemaDefaultResolver fills {{SchemaName}}; PrepareIterationContent substitutes it
+            // per iteration. The pre-baked JSON exercises that same path.
+            IndexedViewSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"[vw_Active]\",\"Definition\":\"SELECT 1\"}," +
+                                "{\"Schema\":\"{{SchemaName}}\",\"Name\":\"[vw_Excluded]\",\"Definition\":\"SELECT 1\",\"ShouldApplyExpression\":\"false\"}]"
         };
         template.IndexedViews.Add(new SqlServerIndexedView
         {
@@ -1074,8 +1097,11 @@ public class DatabaseQuenchTests
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexedViews(mockCmd);
 
+        // Both variants reach the proc (no client-side filter); the iteration schema is substituted.
         Assert.That(mockCmd.CommandText, Does.Contain("[vw_Active]"));
-        Assert.That(mockCmd.CommandText, Does.Not.Contain("[vw_Excluded]"));
+        Assert.That(mockCmd.CommandText, Does.Contain("[vw_Excluded]"));
+        Assert.That(mockCmd.CommandText, Does.Contain("tenant_a"));
+        Assert.That(mockCmd.CommandText, Does.Not.Contain("{{SchemaName}}"));
     }
 
     // Slice-3 audit B5: QuenchIndexedViews threads @TemplateName + @SchemaName so the

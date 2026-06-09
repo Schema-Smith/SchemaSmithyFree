@@ -447,7 +447,7 @@ BEGIN
 
     RAISE NOTICE 'Add New Physical Columns Switched From Generated';
     SELECT STRING_AGG('RAISE NOTICE ''  Add new physical columns to ' || tt."Schema" || '.' || tt."Name" || ' (' ||
-                      (SELECT STRING_AGG(tc."Name", ', ')
+                      (SELECT STRING_AGG(tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END, ', ')
                          FROM temp_columns tc
                          WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                            AND (COALESCE(tc."Generated", 'NEVER') = 'NEVER' OR COALESCE(tc."Generated", '') LIKE 'GENERATED%IDENTITY%')

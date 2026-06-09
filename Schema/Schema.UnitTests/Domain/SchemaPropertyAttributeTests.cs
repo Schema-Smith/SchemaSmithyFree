@@ -21,6 +21,7 @@ namespace Schema.UnitTests.Domain
             Assert.That(attr.Description, Is.Null);
             Assert.That(attr.Deprecated, Is.False);
             Assert.That(attr.Required, Is.False);
+            Assert.That(attr.MaxLength, Is.EqualTo(-1));
         }
 
         [Test]
@@ -35,7 +36,8 @@ namespace Schema.UnitTests.Domain
                 Format = "date-time",
                 Description = "A test property",
                 Deprecated = true,
-                Required = true
+                Required = true,
+                MaxLength = 128
             };
 
             Assert.That(attr.Pattern, Is.EqualTo("^[a-z]+$"));
@@ -46,6 +48,7 @@ namespace Schema.UnitTests.Domain
             Assert.That(attr.Description, Is.EqualTo("A test property"));
             Assert.That(attr.Deprecated, Is.True);
             Assert.That(attr.Required, Is.True);
+            Assert.That(attr.MaxLength, Is.EqualTo(128));
         }
 
         [Test]

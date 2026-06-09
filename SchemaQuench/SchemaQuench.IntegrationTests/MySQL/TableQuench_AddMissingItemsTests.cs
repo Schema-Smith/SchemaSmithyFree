@@ -305,6 +305,58 @@ public class TableQuench_AddMissingItemsTests : BaseTableQuenchTests
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldEchoVariantNameInOperationMessages()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        cmd.CommandText = $"CREATE TABLE IF NOT EXISTS `{TestSchema}`.`VariantLogTest` (`Id` INT NOT NULL, `col1` INT NOT NULL, `col2` INT NOT NULL)";
+        cmd.ExecuteNonQuery();
+
+        var json = """
+            [
+            {
+                "Name": "VariantLogTest",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "col1", "DataType": "INT", "Nullable": false },
+                    { "Name": "col2", "DataType": "INT", "Nullable": false }
+                ],
+                "Indexes": [
+                    { "Name": "IDX_VariantLog", "IndexColumns": "col1", "ShouldApplyExpression": "1=1", "VariantName": "Modern engines" },
+                    { "Name": "IDX_VariantLog", "IndexColumns": "col2", "ShouldApplyExpression": "1=0", "VariantName": "Legacy engines" }
+                ]
+            }
+            ]
+            """;
+
+        try
+        {
+            cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ParseTableJson('{TestSchema}', '{json.Replace("'", "''")}')";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0)";
+            cmd.ExecuteNonQuery();
+
+            // SchemaSmith_StatusMessages is keyed by CONNECTION_ID(); query on the SAME connection.
+            cmd.CommandText = "SELECT COUNT(*) FROM SchemaSmith_StatusMessages WHERE SessionId = CONNECTION_ID() AND Message LIKE '%(variant: Modern engines)%'";
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThanOrEqualTo(1));
+
+            cmd.CommandText = "SELECT COUNT(*) FROM SchemaSmith_StatusMessages WHERE SessionId = CONNECTION_ID() AND Message LIKE '%Legacy engines%'";
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(0));
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS `{TestSchema}`.`VariantLogTest`";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = "DELETE FROM SchemaSmith_StatusMessages WHERE SessionId = CONNECTION_ID()";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
