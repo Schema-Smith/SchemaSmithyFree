@@ -27,6 +27,11 @@
           "OldName": {
             "type": "string"
           },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -58,6 +63,11 @@
           },
           "ShouldApplyExpression": {
             "type": "string"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
           "Extensions": {}
         },
@@ -96,6 +106,11 @@
           "ShouldApplyExpression": {
             "type": "string"
           },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -121,6 +136,11 @@
           "ShouldApplyExpression": {
             "type": "string"
           },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -141,7 +161,7 @@
         },
         "MergeType": {
           "type": "string",
-          "pattern": "None|Insert|Insert/Update|Insert/Update/Delete"
+          "pattern": "Insert|Insert/Update|Insert/Update/Delete"
         },
         "MatchColumns": {
           "type": "string"
@@ -160,6 +180,11 @@
         }
       },
       "additionalProperties": false
+    },
+    "VariantName": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
     },
     "OldName": {
       "type": "string"
@@ -183,6 +208,11 @@
           },
           "ShouldApplyExpression": {
             "type": "string"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
           "Extensions": {}
         },
@@ -234,6 +264,11 @@
           },
           "InitiallyDeferred": {
             "type": "boolean"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
           "Extensions": {}
         },

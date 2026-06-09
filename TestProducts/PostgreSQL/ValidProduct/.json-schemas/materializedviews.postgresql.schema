@@ -22,6 +22,11 @@
     "ShouldApplyExpression": {
       "type": "string"
     },
+    "VariantName": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+    },
     "Indexes": {
       "type": "array",
       "items": {
@@ -44,6 +49,11 @@
           },
           "ShouldApplyExpression": {
             "type": "string"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
           "FilterExpression": {
             "type": "string"
