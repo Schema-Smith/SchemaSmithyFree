@@ -753,8 +753,9 @@ public class DatabaseQuenchTests
     }
 
     [Test]
-    public void QuenchIndexedViews_AllFilteredByShouldApply_ReturnsWithoutExecuting()
+    public void QuenchIndexedViews_WithDeclaredViews_InvokesProcForServerSideEvaluation()
     {
+        RegisterMockFileWrapper();
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
         template.IndexedViews.Add(new SqlServerIndexedView
@@ -763,32 +764,39 @@ public class DatabaseQuenchTests
             Schema = "dbo",
             Definition = "SELECT 1",
             ShouldApplyExpression = "false",
-            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true }]
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
             false, "0", false, "0", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
-
-        // Should not throw and should not call ExecuteNonQuery
         quench.QuenchIndexedViews(mockCmd);
-        mockCmd.DidNotReceive().ExecuteNonQuery();
+
+        // ShouldApplyExpression is no longer filtered in C#; the view is still passed to the
+        // proc, which evaluates ShouldApply per-target server-side (mirroring materialized views).
+        Assert.That(mockCmd.CommandText, Does.Contain("EXEC [SchemaSmith].[IndexedViewQuench]"));
+        Assert.That(mockCmd.CommandText, Does.Contain("[vw_Test]"));
+        mockCmd.Received(1).ExecuteNonQuery();
     }
 
     [Test]
-    public void QuenchIndexedViews_NoIndexedViews_ReturnsWithoutExecuting()
+    public void QuenchIndexedViews_NoIndexedViews_InvokesProc()
     {
+        RegisterMockFileWrapper();
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
-        // No indexed views added
+        // No indexed views added — like materialized views, the proc is still invoked
+        // (server-side handles the empty set); no C# early-return.
 
         var quench = new DatabaseQuench("srv", product, template, "db",
             false, "0", false, "0", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexedViews(mockCmd);
-        mockCmd.DidNotReceive().ExecuteNonQuery();
+
+        Assert.That(mockCmd.CommandText, Does.Contain("EXEC [SchemaSmith].[IndexedViewQuench]"));
+        mockCmd.Received(1).ExecuteNonQuery();
     }
 
     [Test]
