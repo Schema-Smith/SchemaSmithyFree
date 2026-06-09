@@ -839,6 +839,37 @@ WHERE s.name = 'Test' AND v.name = 'vTestSummary'";
     }
 
     [Test]
+    public void ShouldApplyExpression_SameNamedVariants_BothSurviving_FailsWithMutuallyExclusiveError()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_ivTestDb);
+        using var cmd = conn.CreateCommand();
+
+        EnsureViewDropped(cmd);
+
+        // Two same-named variants whose ShouldApplyExpressions both evaluate true on this target.
+        // SQL Server allows one view per (schema, name), so both surviving the gate is unhonorable
+        // and the quench must fail with the mutual-exclusivity THROW (51000).
+        var json = @"[
+{""Schema"":""[Test]"",""Name"":""[vTestSummary]"",""VariantName"":""A"",""ShouldApplyExpression"":""1 = 1"",""Definition"":""SELECT Id, Name, COUNT_BIG(*) AS Cnt, SUM(Amount) AS TotalAmount FROM Test.SourceTable GROUP BY Id, Name"",""Indexes"":[{""Name"":""[IX_vTestSummary_Id]"",""Unique"":true,""Clustered"":true,""IndexColumns"":""[Id]""}]},
+{""Schema"":""[Test]"",""Name"":""[vTestSummary]"",""VariantName"":""B"",""ShouldApplyExpression"":""1 = 1"",""Definition"":""SELECT Id, Name, COUNT_BIG(*) AS Cnt, SUM(Amount) AS TotalAmount FROM Test.SourceTable WHERE Amount > 0 GROUP BY Id, Name"",""Indexes"":[{""Name"":""[IX_vTestSummary_Id]"",""Unique"":true,""Clustered"":true,""IndexColumns"":""[Id]""}]}]";
+
+        var ex = Assert.Throws<Microsoft.Data.SqlClient.SqlException>(() => RunIndexedViewQuench(cmd, json));
+        Assert.That(ex!.Message, Does.Contain("mutually exclusive"));
+
+        // No view should have been created.
+        cmd.CommandText = @"
+SELECT COUNT(*) FROM sys.views v
+INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE s.name = 'Test' AND v.name = 'vTestSummary'";
+        Assert.That((int)cmd.ExecuteScalar()!, Is.EqualTo(0), "No view should be created when both variants survive the gate");
+
+        EnsureViewDropped(cmd);
+        conn.Close();
+    }
+
+    [Test]
     public void IndexDiff_RemoveIndex_OtherIndexesSurvive()
     {
         using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);

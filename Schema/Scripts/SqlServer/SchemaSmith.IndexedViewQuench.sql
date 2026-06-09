@@ -50,22 +50,22 @@ BEGIN
     -- expression evaluated false (no collateral damage to siblings with the same Name).
     -- The expression is embedded as live SQL (not a string literal), mirroring
     -- ParseTableJsonIntoTempTables.
+    -- @Views is a table variable, not visible to the child batch EXEC() spawns, so the
+    -- gate DELETEs are built and run against a temp table populated from @Views, then
+    -- survivors are reconciled back. Building the aggregate gate SQL directly against
+    -- #ViewGate avoids a fragile string REPLACE that a ShouldApplyExpression could corrupt.
+    DROP TABLE IF EXISTS #ViewGate;
+    SELECT * INTO #ViewGate FROM @Views;
     DECLARE @gateSql NVARCHAR(MAX);
-    SELECT @gateSql = STRING_AGG(CAST('DELETE FROM @Views WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + ShouldApplyExpression + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM @Views
+    SELECT @gateSql = STRING_AGG(CAST('DELETE FROM #ViewGate WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + ShouldApplyExpression + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #ViewGate
     WHERE RTRIM(ISNULL(ShouldApplyExpression, '')) <> '';
     IF @gateSql IS NOT NULL
     BEGIN
-        -- @Views is a table variable, not visible to the child batch EXEC() spawns, so the
-        -- gate DELETEs run against a temp table populated from @Views, then survivors are
-        -- copied back.
-        DROP TABLE IF EXISTS #ViewGate;
-        SELECT * INTO #ViewGate FROM @Views;
-        SET @gateSql = REPLACE(@gateSql, 'DELETE FROM @Views', 'DELETE FROM #ViewGate');
         EXEC(@gateSql);
         DELETE FROM @Views WHERE [_RowId] NOT IN (SELECT [_RowId] FROM #ViewGate);
-        DROP TABLE IF EXISTS #ViewGate;
     END;
+    DROP TABLE IF EXISTS #ViewGate;
 
     -- A view name with 2+ surviving variants cannot be honored: SQL Server allows ONE view
     -- per (schema, name). ShouldApplyExpressions for same-named variants must be mutually
