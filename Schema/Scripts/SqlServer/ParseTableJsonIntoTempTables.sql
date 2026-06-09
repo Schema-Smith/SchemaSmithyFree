@@ -14,7 +14,7 @@
          [Schema] = SchemaSmith.fn_SafeBracketWrap(ISNULL([Schema], 'dbo')), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL(NULLIF(RTRIM([CompressionType]), ''), 'NONE'),
          [IsTemporal] = ISNULL([IsTemporal], 0), [UpdateFillFactor] = ISNULL([UpdateFillFactor], 0),
          [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints],
-         [ShouldApplyExpression], [EnableCDC] = ISNULL([EnableCDC], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName])
+         [ShouldApplyExpression], [VariantName], [EnableCDC] = ISNULL([EnableCDC], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName])
     INTO #TableDefinitions
     FROM OPENJSON(@TableDefinitions) WITH (
       [Schema] NVARCHAR(500) '$.Schema',
@@ -31,6 +31,7 @@
       [ForeignKeys] NVARCHAR(MAX) '$.ForeignKeys' AS JSON,
       [CheckConstraints] NVARCHAR(MAX) '$.CheckConstraints' AS JSON,
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
+      [VariantName] NVARCHAR(128) '$.VariantName',
       [EnableCDC] BIT '$.EnableCDC'
       ) t;
   
@@ -43,7 +44,7 @@
   EXEC(@v_SQL)
 
   DROP TABLE IF EXISTS #Tables
-  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [UpdateFillFactor], [EnableCDC], [OldName],
+  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable
     INTO #Tables
     FROM #TableDefinitions WITH (NOLOCK);
@@ -90,7 +91,7 @@
                    CASE WHEN ISNULL(Nullable, 0) = 1 THEN ' NULL' ELSE ' NOT NULL' END +
                    CASE WHEN RTRIM(ISNULL([Default], '')) <> '' THEN ' DEFAULT ' + [Default] ELSE '' END
               END AS [ColumnScript],
-         c.[ShouldApplyExpression]
+         c.[ShouldApplyExpression], c.[VariantName]
     INTO #Columns
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(Columns) WITH (
@@ -108,6 +109,7 @@
       [EncryptionKey] NVARCHAR(500) '$.EncryptionKey',
       [EncryptionAlgorithm] NVARCHAR(500) '$.EncryptionAlgorithm',
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
+      [VariantName] NVARCHAR(128) '$.VariantName',
       [OldName] NVARCHAR(500) '$.OldName'
       ) c;
 
@@ -139,7 +141,7 @@
          [IncludeColumns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') WITHIN GROUP (ORDER BY SchemaSmith.fn_SafeBracketWrap([value]))
                                FROM STRING_SPLIT(i.[IncludeColumns], ',') 
                                WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
-         i.[ShouldApplyExpression]
+         i.[ShouldApplyExpression], i.[VariantName]
     INTO #Indexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(Indexes) WITH (
@@ -155,7 +157,8 @@
       [IndexColumns] NVARCHAR(MAX) '$.IndexColumns',
       [IncludeColumns] NVARCHAR(MAX) '$.IncludeColumns',
       [UpdateFillFactor] BIT '$.UpdateFillFactor',
-      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
+      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
+      [VariantName] NVARCHAR(128) '$.VariantName'
       ) i;
   
   -- Identify Indexes to skip based on ShouldApply expression (scoped by [_RowId])
@@ -169,7 +172,7 @@
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), i.[IsPrimary],
          [Column] = SchemaSmith.fn_SafeBracketWrap(i.[Column]), [PrimaryIndex] = SchemaSmith.fn_SafeBracketWrap(i.[PrimaryIndex]),
-         i.[SecondaryIndexType], i.[ShouldApplyExpression]
+         i.[SecondaryIndexType], i.[ShouldApplyExpression], i.[VariantName]
     INTO #XmlIndexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(XmlIndexes) WITH (
@@ -178,7 +181,8 @@
       [Column] NVARCHAR(500) '$.Column',
       [PrimaryIndex] NVARCHAR(500) '$.PrimaryIndex',
 	  [SecondaryIndexType] NVARCHAR(500) '$.SecondaryIndexType',
-      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
+      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
+      [VariantName] NVARCHAR(128) '$.VariantName'
       ) i;
 
   -- Identify XmlIndexes to skip based on ShouldApply expression (scoped by [_RowId])
@@ -196,7 +200,7 @@
          [RelatedColumns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[RelatedColumns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
          [DeleteAction] = ISNULL(NULLIF(RTRIM([DeleteAction]), ''), 'NO ACTION'),
          [UpdateAction] = ISNULL(NULLIF(RTRIM([UpdateAction]), ''), 'NO ACTION'),
-         f.[ShouldApplyExpression]
+         f.[ShouldApplyExpression], f.[VariantName]
     INTO #ForeignKeys
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(ForeignKeys) WITH (
@@ -206,6 +210,7 @@
       [RelatedTable] NVARCHAR(500) '$.RelatedTable',
       [RelatedColumns] NVARCHAR(MAX) '$.RelatedColumns',
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
+      [VariantName] NVARCHAR(128) '$.VariantName',
       [DeleteAction] NVARCHAR(20) '$.DeleteAction',
       [UpdateAction] NVARCHAR(20) '$.UpdateAction'
       ) f;
@@ -219,13 +224,14 @@
   RAISERROR('Parse Table Level Check Constraints from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #CheckConstraints
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
-         t.[Schema], t.[Name] AS [TableName], c.[ConstraintName], c.[Expression], c.[ShouldApplyExpression]
+         t.[Schema], t.[Name] AS [TableName], c.[ConstraintName], c.[Expression], c.[ShouldApplyExpression], c.[VariantName]
     INTO #CheckConstraints
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(CheckConstraints) WITH (
       [ConstraintName] NVARCHAR(500) '$.Name',
       [Expression] NVARCHAR(MAX) '$.Expression',
-      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
+      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
+      [VariantName] NVARCHAR(128) '$.VariantName'
       ) c;
 
   -- Identify CheckConstraints to skip based on ShouldApply expression (scoped by [_RowId])
@@ -239,7 +245,7 @@
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [StatisticName] = SchemaSmith.fn_SafeBracketWrap(s.[StatisticName]), [SampleSize] = ISNULL(s.[SampleSize], 0), s.[FilterExpression],
          [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(s.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
-         s.[ShouldApplyExpression]
+         s.[ShouldApplyExpression], s.[VariantName]
     INTO #Statistics
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON([Statistics]) WITH (
@@ -247,7 +253,8 @@
       [SampleSize] TINYINT '$.SampleSize',
       [FilterExpression] NVARCHAR(MAX) '$.FilterExpression',
       [Columns] NVARCHAR(MAX) '$.Columns',
-      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
+      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
+      [VariantName] NVARCHAR(128) '$.VariantName'
       ) s;
 
   -- Identify Statistics to skip based on ShouldApply expression (scoped by [_RowId])
@@ -262,7 +269,7 @@
          t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]),
          f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
          [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
-         f.[ShouldApplyExpression]
+         f.[ShouldApplyExpression], f.[VariantName]
     INTO #FullTextIndexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON([FullTextIndex]) WITH (
@@ -271,7 +278,8 @@
       [KeyIndex] NVARCHAR(500) '$.KeyIndex',
       [ChangeTracking] NVARCHAR(500) '$.ChangeTracking',
       [StopList] NVARCHAR(500) '$.StopList',
-      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
+      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
+      [VariantName] NVARCHAR(128) '$.VariantName'
       ) f;
 
   -- Identify FullTextIndexes to skip based on ShouldApply expression (scoped by [_RowId])

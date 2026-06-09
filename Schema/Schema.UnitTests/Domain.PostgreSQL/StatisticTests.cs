@@ -53,6 +53,15 @@ namespace Schema.UnitTests.Domain.PostgreSQL
         }
 
         [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var obj = new Statistic { Name = "ST_Test", StatisticsColumns = "col1, col2", ShouldApplyExpression = "1=1", VariantName = "EU region" };
+            var json = JsonConvert.SerializeObject(obj);
+            var deserialized = JsonConvert.DeserializeObject<Statistic>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
+
+        [Test]
         public void DifferentFromSqlServerStatistic()
         {
             // PostgreSQL Statistic has Kind and StatisticsColumns

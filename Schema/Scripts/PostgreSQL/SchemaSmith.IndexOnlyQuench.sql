@@ -51,6 +51,7 @@ BEGIN
            COALESCE((celem ->> 'InitiallyDeferred')::BOOLEAN, false) AS "InitiallyDeferred",
            COALESCE((celem ->> 'NullsNotDistinct')::BOOLEAN, false) AS "NullsNotDistinct",
            COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+           COALESCE(celem ->> 'VariantName', '') AS "VariantName",
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((celem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
            COALESCE(NULLIF((celem ->> 'FillFactor')::INT2, 0), 90) AS "FillFactor"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
@@ -80,7 +81,8 @@ BEGIN
            celem ->> 'Name' AS "Name",
            COALESCE(celem ->> 'Kind', '') AS "Kind",
            COALESCE(celem ->> 'StatisticsColumns', '') AS "StatisticsColumns",
-           COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression"
+           COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+           COALESCE(celem ->> 'VariantName', '') AS "VariantName"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Statistics')::JSON) AS celem(value);
 
@@ -221,7 +223,7 @@ BEGIN
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Add Missing Indexes'; -- Includes Primary Keys and Unique Constraints
-    SELECT STRING_AGG('RAISE NOTICE ''  Add missing ' || CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey" THEN 'Constraint ' ELSE 'Index ' END || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."Name" || ''';' || CHR(10) ||
+    SELECT STRING_AGG('RAISE NOTICE ''  Add missing ' || CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey" THEN 'Constraint ' ELSE 'Index ' END || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."Name" || CASE WHEN COALESCE(ti."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(ti."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                       CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey"
                            THEN 'ALTER TABLE "' || ti."TableSchema" || '"."' || ti."TableName" || '" ADD CONSTRAINT "' || ti."Name" || '" ' ||
                                 CASE WHEN ti."PrimaryKey" 
@@ -277,8 +279,8 @@ BEGIN
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
   RAISE NOTICE 'Add Missing Statistics';
-  SELECT STRING_AGG('RAISE NOTICE ''  Add missing statistics ' || ts."TableSchema" || '.' || ts."TableName" || '.' || ts."Name" || ''';' || CHR(10) ||
-                    'CREATE STATISTICS "' || ts."TableSchema" || '"."' || ts."Name" || '"' || 
+  SELECT STRING_AGG('RAISE NOTICE ''  Add missing statistics ' || ts."TableSchema" || '.' || ts."TableName" || '.' || ts."Name" || CASE WHEN COALESCE(ts."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(ts."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
+                    'CREATE STATISTICS "' || ts."TableSchema" || '"."' || ts."Name" || '"' ||
                     CASE WHEN NULLIF(TRIM(ts."Kind"), '') IS NOT NULL THEN ' (' || ts."Kind" ||')' ELSE '' END ||
                     ' ON ' || "SchemaSmith"."QuoteIndexColumnList"(ts."StatisticsColumns") ||
                     ' FROM "' || ts."TableSchema" || '"."' || ts."TableName" || '";', CHR(10))

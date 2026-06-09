@@ -39,7 +39,7 @@ BEGIN
   END IF;
   
   RAISE NOTICE 'Add New Tables';
-  SELECT STRING_AGG('RAISE NOTICE ''  Create new table ' || tt."Schema" || '.' || tt."Name" || ''';' || CHR(10) ||
+  SELECT STRING_AGG('RAISE NOTICE ''  Create new table ' || tt."Schema" || '.' || tt."Name" || CASE WHEN COALESCE(tt."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tt."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     'CREATE TABLE "' || tt."Schema" || '"."' || tt."Name" || '" (' ||
                     (SELECT STRING_AGG('"' || tc."Name" || '" ' || tc."DataType" ||
                             CASE WHEN COALESCE(tc."Collation", '') != '' THEN ' COLLATE "' || tc."Collation" || '"' ELSE '' END ||
@@ -56,7 +56,7 @@ BEGIN
 
   RAISE NOTICE 'Add New Physical Columns';
   SELECT STRING_AGG('RAISE NOTICE ''  Add new physical columns to ' || tt."Schema" || '.' || tt."Name" || ' (' ||
-                    (SELECT STRING_AGG(tc."Name", ', ')
+                    (SELECT STRING_AGG(tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END, ', ')
                        FROM temp_columns tc
                        WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                          AND (COALESCE(tc."Generated", 'NEVER') = 'NEVER' OR COALESCE(tc."Generated", '') LIKE 'GENERATED%IDENTITY%')

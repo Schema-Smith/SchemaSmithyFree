@@ -360,6 +360,7 @@ Every table definition file declares exactly one table. The shared properties be
 | `ForeignKeys` | array | `[]` | No | Foreign key definitions. See [Foreign Keys](#foreign-keys). |
 | `CheckConstraints` | array | `[]` | No | Table-level check constraint definitions. See [Check Constraints](#check-constraints). |
 | `ShouldApplyExpression` | string | | No | SQL expression evaluated at quench time. If it returns false (or `0`), the entire table is skipped on this database. Tokens are resolved before evaluation. See [Conditional Application](#conditional-application). |
+| `VariantName` | string | | No | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `OldName` | string | `""` | No | Previous table name. When set, the table is renamed during quench. Clear after the rename has been deployed everywhere. |
 | `DataDelivery` | object | `null` | No | Declarative data delivery configuration for this table. See [DataDelivery](#datadelivery). |
 | `Extensions` | object | `null` | No | Open metadata bag. See [Custom Properties](custom-properties.md). |
@@ -468,6 +469,7 @@ Every entry in the `Columns` array defines one column. The shared shape is small
 | `Nullable` | bool | `false` | Whether the column allows NULL. |
 | `Default` | string | | Default constraint expression -- e.g., `"getdate()"` (SQL Server), `"now()"` (PostgreSQL), `"CURRENT_TIMESTAMP"` (MySQL). |
 | `ShouldApplyExpression` | string | | Conditional inclusion. See [Conditional Application](#conditional-application). |
+| `VariantName` | string | | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `OldName` | string | `""` | Previous column name for rename detection. Clear after the rename has deployed everywhere. |
 | `Extensions` | object | `null` | Custom metadata for this column. See [Custom Properties](custom-properties.md). |
 
@@ -513,6 +515,7 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 | `IncludeColumns` | string | | Comma-separated INCLUDE/covering columns where supported. |
 | `FilterExpression` | string | | Filtered/partial index WHERE clause. |
 | `ShouldApplyExpression` | string | | Conditional inclusion. See [Conditional Application](#conditional-application). |
+| `VariantName` | string | | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | `null` | Custom metadata. See [Custom Properties](custom-properties.md). |
 
 ### SQL Server index extras
@@ -556,6 +559,7 @@ Referential integrity lives in the table JSON alongside columns and indexes, not
 | `DeleteAction` | string | `null` | `"NO ACTION"`, `"CASCADE"`, `"SET NULL"`, `"SET DEFAULT"`, or `"RESTRICT"` where supported. |
 | `UpdateAction` | string | `null` | Same values as `DeleteAction`. |
 | `ShouldApplyExpression` | string | | Conditional inclusion. |
+| `VariantName` | string | | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | `null` | Custom metadata. |
 
 For composite foreign keys, list all columns in both `Columns` and `RelatedColumns` in matching order.
@@ -646,6 +650,7 @@ Table-level check constraints in the `CheckConstraints` array. Used when `CheckC
 | `Name` | string | | Constraint name. |
 | `Expression` | string | | Boolean SQL expression. |
 | `ShouldApplyExpression` | string | | Conditional inclusion. |
+| `VariantName` | string | | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | `null` | Custom metadata. |
 
 When `CheckConstraintStyle` is `"ColumnLevel"` (the default), single-column check constraints are written as `CheckExpression` on the column instead. Multi-column constraints always use the `CheckConstraints` array.
@@ -664,6 +669,7 @@ XML index definitions in the `XmlIndexes` array. A primary XML index must be cre
 | `PrimaryIndex` | string | Name of the primary XML index. Required for secondary indexes. |
 | `SecondaryIndexType` | string | `"VALUE"`, `"PATH"`, or `"PROPERTY"`. Required for secondary indexes. |
 | `ShouldApplyExpression` | string | Conditional inclusion. |
+| `VariantName` | string | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | Custom metadata. |
 
 ---
@@ -681,6 +687,7 @@ Custom statistics definitions in the `Statistics` array. SQL Server uses traditi
 | `SampleSize` | byte (0--100) | Sampling percentage. `0` means default sampling. |
 | `FilterExpression` | string | Filtered statistics WHERE clause. |
 | `ShouldApplyExpression` | string | Conditional inclusion. |
+| `VariantName` | string | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | Custom metadata. |
 
 **PostgreSQL extended statistics** include kinds like `ndistinct`, `dependencies`, and `mcv`. The PostgreSQL statistic object adds `Kinds` and `Schema` fields.
@@ -699,6 +706,7 @@ SQL Server allows one full-text index per table. Declare it as a single `FullTex
 | `StopList` | string | Name of a full-text stop list. |
 | `Columns` | string | Column specification for the full-text index. |
 | `ShouldApplyExpression` | string | Boolean SQL expression evaluated on the target; the index (or variant) applies only when it is true. |
+| `VariantName` | string | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | Custom metadata. |
 
 **Variant rules:**
@@ -739,6 +747,7 @@ MySQL allows **multiple** full-text indexes per table, so the property is `FullT
 | `Parser` | string | Optional parser name (e.g., `"ngram"`). |
 | `Comment` | string | Index comment. |
 | `ShouldApplyExpression` | string | Conditional inclusion. |
+| `VariantName` | string | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | Custom metadata. |
 
 ---
@@ -754,6 +763,7 @@ PostgreSQL exclusion constraints are declared in the `ExcludeConstraints` array.
 | `ExcludeColumns` | array | One or more `{ "Column", "Operator" }` pairs. |
 | `FilterExpression` | string | Optional WHERE clause. |
 | `ShouldApplyExpression` | string | Conditional inclusion. |
+| `VariantName` | string | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Deferrable` | bool | Whether the constraint is deferrable. |
 | `InitiallyDeferred` | bool | Whether the constraint defers by default. |
 | `Extensions` | object | Custom metadata. |
@@ -784,6 +794,7 @@ Indexed views are defined as JSON files in the `Indexed Views/` directory of eac
 | `Definition` | string | The complete view definition SQL (the SELECT statement). |
 | `Indexes` | array | Indexes on the view. An indexed view must have a unique clustered index. |
 | `ShouldApplyExpression` | string | Conditional inclusion. |
+| `VariantName` | string | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | Custom metadata. |
 
 ### Example
@@ -820,6 +831,7 @@ Materialized views live in the `Materialized Views/` directory of each template.
 | `AccessMethod` | string | `null` | Storage access method. |
 | `Indexes` | array | `[]` | Indexes on the materialized view (uses the PostgreSQL index shape). |
 | `ShouldApplyExpression` | string | | Conditional inclusion. |
+| `VariantName` | string | | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | | Custom metadata. |
 
 ### Example

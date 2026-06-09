@@ -56,6 +56,15 @@ namespace Schema.UnitTests.Domain.MySQL
         }
 
         [Test]
+        public void JsonRoundTrip_PreservesVariantName()
+        {
+            var obj = new FullTextIndex { Name = "ft_test", Columns = "col1", ShouldApplyExpression = "1=1", VariantName = "EU region" };
+            var json = JsonConvert.SerializeObject(obj);
+            var deserialized = JsonConvert.DeserializeObject<FullTextIndex>(json);
+            Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
+        }
+
+        [Test]
         public void DifferentFromSqlServerFullTextIndex()
         {
             // MySQL FullTextIndex has Name, Columns, Parser, Comment

@@ -357,6 +357,34 @@ public class SchemaGeneratorTests
         [SchemaProperty(Minimum = 0, Maximum = 100)] public byte FillFactor { get; set; }
     }
 
+    private class ConstrainedLabelClass
+    {
+        [SchemaProperty(MaxLength = 128, Description = "A short label.")]
+        public string Label { get; set; }
+    }
+
+    [Test]
+    public void ShouldEmitMaxLengthConstraint()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(ConstrainedLabelClass));
+        Assert.That(schema["properties"]?["Label"]?["maxLength"]?.Value<int>(), Is.EqualTo(128));
+    }
+
+    [Test]
+    public void ShouldEmitDescription()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(ConstrainedLabelClass));
+        Assert.That(schema["properties"]?["Label"]?["description"]?.ToString(), Is.EqualTo("A short label."));
+    }
+
+    [Test]
+    public void ShouldOmitMaxLengthAndDescriptionWhenUnset()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(SimpleStringClass));
+        Assert.That(schema["properties"]?["Name"]?["maxLength"], Is.Null);
+        Assert.That(schema["properties"]?["Name"]?["description"], Is.Null);
+    }
+
     [JsonConverter(typeof(StringEnumConverter))]
     private enum TestStringEnum { ValueA, ValueB, ValueC }
 
