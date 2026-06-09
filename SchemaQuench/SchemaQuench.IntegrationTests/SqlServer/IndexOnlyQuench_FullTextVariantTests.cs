@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
 using System.Data.Common;
 using System.Text;
 using Microsoft.Data.SqlClient;
@@ -234,6 +235,147 @@ SELECT c.[name] FROM sys.fulltext_indexes fi WITH (NOLOCK)
             """{ "FullTextCatalog": "[FT_Catalog]", "KeyIndex": "[UDX_FtVariant_GatedOut]", "Columns": "[Title]", "ChangeTracking": "OFF", "ShouldApplyExpression": "1 = 0" }""");
 
         Assert.That(DeployedCatalog(cmd, tableName), Is.Null);
+        conn.Close();
+    }
+
+    private static bool IndexExists(DbCommand cmd, string tableName, string indexName)
+    {
+        cmd.CommandText = $@"
+SELECT COUNT(*) FROM sys.indexes WITH (NOLOCK)
+  WHERE [object_id] = OBJECT_ID('dbo.{tableName}') AND [name] = '{indexName}'";
+        return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+    }
+
+    private static bool StatisticExists(DbCommand cmd, string tableName, string statisticName)
+    {
+        cmd.CommandText = $@"
+SELECT COUNT(*) FROM sys.stats WITH (NOLOCK)
+  WHERE [object_id] = OBJECT_ID('dbo.{tableName}') AND [name] = '{statisticName}'";
+        return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+    }
+
+    private void RunIndexOnlyQuenchJson(DbCommand cmd, string json)
+    {
+        cmd.CommandTimeout = 300;
+        cmd.CommandText = "EXEC SchemaSmith.IndexOnlyQuench @ProductName = @p, @TableDefinitions = @t, @WhatIf = 0";
+        cmd.Parameters.Clear();
+        var p = cmd.CreateParameter(); p.ParameterName = "@p"; p.Value = _productName; cmd.Parameters.Add(p);
+        var t = cmd.CreateParameter(); t.ParameterName = "@t"; t.Value = json; cmd.Parameters.Add(t);
+        cmd.ExecuteNonQuery();
+        cmd.Parameters.Clear();
+    }
+
+    [Test]
+    public void IndexOnly_RegularIndex_HonorsShouldApplyExpression()
+    {
+        const string tableName = "IxGate_Regular";
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = (DbCommand)conn.CreateCommand();
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}; CREATE TABLE dbo.{tableName} (Id INT NOT NULL, Title VARCHAR(200) NULL);";
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+            [{
+                "Schema": "[dbo]",
+                "Name": "[{{tableName}}]",
+                "Indexes": [
+                    { "Name": "[IX_Skip]", "IndexColumns": "[Id]", "ShouldApplyExpression": "1 = 0" },
+                    { "Name": "[IX_Keep]", "IndexColumns": "[Title]", "ShouldApplyExpression": "1 = 1" }
+                ]
+            }]
+            """;
+        RunIndexOnlyQuenchJson(cmd, json);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(IndexExists(cmd, tableName, "IX_Skip"), Is.False, "gated-out index (1=0) must not be created");
+            Assert.That(IndexExists(cmd, tableName, "IX_Keep"), Is.True, "gated-in index (1=1) must be created");
+        });
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    [Test]
+    public void IndexOnly_XmlIndex_HonorsShouldApplyExpression()
+    {
+        const string tableName = "IxGate_Xml";
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = (DbCommand)conn.CreateCommand();
+
+        cmd.CommandText = $@"
+DROP TABLE IF EXISTS dbo.{tableName};
+CREATE TABLE dbo.{tableName} (Id INT NOT NULL CONSTRAINT PK_{tableName} PRIMARY KEY CLUSTERED, Data XML NULL);";
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+            [{
+                "Schema": "[dbo]",
+                "Name": "[{{tableName}}]",
+                "XmlIndexes": [
+                    { "Name": "[XI_Skip]", "Column": "[Data]", "IsPrimary": true, "ShouldApplyExpression": "1 = 0" }
+                ]
+            }]
+            """;
+        RunIndexOnlyQuenchJson(cmd, json);
+
+        Assert.That(IndexExists(cmd, tableName, "XI_Skip"), Is.False, "gated-out XML index (1=0) must not be created");
+
+        var jsonKeep = $$"""
+            [{
+                "Schema": "[dbo]",
+                "Name": "[{{tableName}}]",
+                "XmlIndexes": [
+                    { "Name": "[XI_Keep]", "Column": "[Data]", "IsPrimary": true, "ShouldApplyExpression": "1 = 1" }
+                ]
+            }]
+            """;
+        RunIndexOnlyQuenchJson(cmd, jsonKeep);
+        Assert.That(IndexExists(cmd, tableName, "XI_Keep"), Is.True, "gated-in XML index (1=1) must be created");
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    [Test]
+    public void IndexOnly_Statistic_HonorsShouldApplyExpression()
+    {
+        const string tableName = "IxGate_Stat";
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = (DbCommand)conn.CreateCommand();
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}; CREATE TABLE dbo.{tableName} (Id INT NOT NULL, Title VARCHAR(200) NULL);";
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+            [{
+                "Schema": "[dbo]",
+                "Name": "[{{tableName}}]",
+                "Statistics": [
+                    { "Name": "[ST_Skip]", "Columns": "[Id]", "ShouldApplyExpression": "1 = 0" },
+                    { "Name": "[ST_Keep]", "Columns": "[Title]", "ShouldApplyExpression": "1 = 1" }
+                ]
+            }]
+            """;
+        RunIndexOnlyQuenchJson(cmd, json);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(StatisticExists(cmd, tableName, "ST_Skip"), Is.False, "gated-out statistic (1=0) must not be created");
+            Assert.That(StatisticExists(cmd, tableName, "ST_Keep"), Is.True, "gated-in statistic (1=1) must be created");
+        });
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}";
+        cmd.ExecuteNonQuery();
         conn.Close();
     }
 

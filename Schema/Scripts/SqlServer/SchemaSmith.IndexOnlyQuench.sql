@@ -36,7 +36,8 @@ BEGIN TRY
 
   RAISERROR('Parse Indexes from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #Indexes
-  SELECT t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(i.[CompressionType], 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0), 
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(i.[CompressionType], 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
          i.[FilterExpression], [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
@@ -49,7 +50,7 @@ BEGIN TRY
          [IncludeColumns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY SchemaSmith.fn_SafeBracketWrap([value]))
                                FROM STRING_SPLIT(i.[IncludeColumns], ',') 
                                WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
-         i.[VariantName]
+         i.[ShouldApplyExpression], i.[VariantName]
     INTO #Indexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(Indexes) WITH (
@@ -65,14 +66,22 @@ BEGIN TRY
       [IndexColumns] NVARCHAR(MAX) '$.IndexColumns',
       [IncludeColumns] NVARCHAR(MAX) '$.IncludeColumns',
       [UpdateFillFactor] BIT '$.UpdateFillFactor',
+      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
       [VariantName] NVARCHAR(128) '$.VariantName'
       ) i;
-  
+
+  -- Identify Indexes to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Indexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #Indexes WITH (NOLOCK)
+    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  EXEC(@v_SQL)
+
   RAISERROR('Parse XML Indexes from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #XmlIndexes
-  SELECT t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), i.[IsPrimary],
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), i.[IsPrimary],
          [Column] = SchemaSmith.fn_SafeBracketWrap(i.[Column]), [PrimaryIndex] = SchemaSmith.fn_SafeBracketWrap(i.[PrimaryIndex]),
-         i.[SecondaryIndexType], i.[VariantName]
+         i.[SecondaryIndexType], i.[ShouldApplyExpression], i.[VariantName]
     INTO #XmlIndexes
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON(XmlIndexes) WITH (
@@ -81,14 +90,22 @@ BEGIN TRY
       [Column] NVARCHAR(500) '$.Column',
       [PrimaryIndex] NVARCHAR(500) '$.PrimaryIndex',
 	  [SecondaryIndexType] NVARCHAR(500) '$.SecondaryIndexType',
+      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
       [VariantName] NVARCHAR(128) '$.VariantName'
       ) i;
-  
+
+  -- Identify XmlIndexes to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #XmlIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #XmlIndexes WITH (NOLOCK)
+    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  EXEC(@v_SQL)
+
   RAISERROR('Parse Statistics from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #Statistics
-  SELECT t.[Schema], t.[Name] AS [TableName], [StatisticName] = SchemaSmith.fn_SafeBracketWrap(s.[StatisticName]), [SampleSize] = ISNULL(s.[SampleSize], 0), s.[FilterExpression],
+  SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
+         t.[Schema], t.[Name] AS [TableName], [StatisticName] = SchemaSmith.fn_SafeBracketWrap(s.[StatisticName]), [SampleSize] = ISNULL(s.[SampleSize], 0), s.[FilterExpression],
          [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(s.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
-         s.[VariantName]
+         s.[ShouldApplyExpression], s.[VariantName]
     INTO #Statistics
     FROM #TableDefinitions t WITH (NOLOCK)
     CROSS APPLY OPENJSON([Statistics]) WITH (
@@ -96,9 +113,16 @@ BEGIN TRY
       [SampleSize] TINYINT '$.SampleSize',
       [FilterExpression] NVARCHAR(MAX) '$.FilterExpression',
       [Columns] NVARCHAR(MAX) '$.Columns',
+      [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
       [VariantName] NVARCHAR(128) '$.VariantName'
       ) s;
-  
+
+  -- Identify Statistics to skip based on ShouldApply expression (scoped by [_RowId])
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Statistics WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #Statistics WITH (NOLOCK)
+    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  EXEC(@v_SQL)
+
   RAISERROR('Parse Full Text Indexes from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #FullTextIndexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
