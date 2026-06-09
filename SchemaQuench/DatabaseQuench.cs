@@ -698,13 +698,9 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}')
                 throw new Exception($"Indexed view {iv.Schema}.{iv.Name} requires a unique clustered index");
         }
 
-        // Filter out indexed views where ShouldApplyExpression evaluated to false
-        var applicableViews = _template.IndexedViews
-            .Where(iv => string.IsNullOrEmpty(iv.ShouldApplyExpression) || iv.ShouldApplyExpression != "false")
-            .ToList();
-        if (applicableViews.Count == 0) return;
-
-        var viewSchema = JArray.FromObject(applicableViews).ToString();
+        // Pass ALL indexed views to the proc; ShouldApplyExpression is evaluated per-target
+        // server-side (mirroring PostgreSQL materialized views), so no C# pre-filtering.
+        var viewSchema = JArray.FromObject(_template.IndexedViews).ToString();
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         tableCommand.CommandText = $@"EXEC [SchemaSmith].[IndexedViewQuench] @ProductName = '{_product.Name.Replace("'", "''")}', @IndexedViewSchema = '{viewSchema.Replace("'", "''")}', @WhatIf = {_whatIfOnly}, @UpdateFillFactor = {updateFillFactor};";
 

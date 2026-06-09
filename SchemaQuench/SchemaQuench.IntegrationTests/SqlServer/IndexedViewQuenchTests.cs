@@ -750,6 +750,94 @@ WHERE s.name = 'Test' AND v.name = 'vTestSummary' AND i.name = 'IX_vTestSummary_
         conn.Close();
     }
 
+    // --- ShouldApplyExpression Gating Tests ---
+
+    [Test]
+    public void ShouldApplyExpression_False_ViewNotCreated()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_ivTestDb);
+        using var cmd = conn.CreateCommand();
+
+        EnsureViewDropped(cmd);
+
+        // A real expression evaluating false on the target must gate the view out — the
+        // old C# filter only treated the literal string "false" as a gate, so "1 = 0"
+        // would wrongly deploy.
+        var json = @"[{""Schema"":""[Test]"",""Name"":""[vTestSummary]"",""ShouldApplyExpression"":""1 = 0"",""Definition"":""SELECT Id, Name, COUNT_BIG(*) AS Cnt, SUM(Amount) AS TotalAmount FROM Test.SourceTable GROUP BY Id, Name"",""Indexes"":[{""Name"":""[IX_vTestSummary_Id]"",""Unique"":true,""Clustered"":true,""IndexColumns"":""[Id]""}]}]";
+        RunIndexedViewQuench(cmd, json);
+
+        cmd.CommandText = @"
+SELECT COUNT(*) FROM sys.views v
+INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE s.name = 'Test' AND v.name = 'vTestSummary'";
+        Assert.That((int)cmd.ExecuteScalar()!, Is.EqualTo(0), "Indexed view gated by a false ShouldApplyExpression should NOT be created");
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldApplyExpression_True_ViewCreated()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_ivTestDb);
+        using var cmd = conn.CreateCommand();
+
+        EnsureViewDropped(cmd);
+
+        var json = @"[{""Schema"":""[Test]"",""Name"":""[vTestSummary]"",""ShouldApplyExpression"":""1 = 1"",""Definition"":""SELECT Id, Name, COUNT_BIG(*) AS Cnt, SUM(Amount) AS TotalAmount FROM Test.SourceTable GROUP BY Id, Name"",""Indexes"":[{""Name"":""[IX_vTestSummary_Id]"",""Unique"":true,""Clustered"":true,""IndexColumns"":""[Id]""}]}]";
+        RunIndexedViewQuench(cmd, json);
+
+        cmd.CommandText = @"
+SELECT COUNT(*) FROM sys.views v
+INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE s.name = 'Test' AND v.name = 'vTestSummary'
+AND OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1";
+        Assert.That((int)cmd.ExecuteScalar()!, Is.EqualTo(1), "Indexed view with a true ShouldApplyExpression should be created");
+
+        EnsureViewDropped(cmd);
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldApplyExpression_SameNamedVariants_MatchingOneCreated()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_ivTestDb);
+        using var cmd = conn.CreateCommand();
+
+        EnsureViewDropped(cmd);
+
+        // Two same-named variants with mutually exclusive expressions: the matching one
+        // (1 = 1, with a WHERE clause) must be created; the other (1 = 0) must be gated out.
+        var json = @"[
+{""Schema"":""[Test]"",""Name"":""[vTestSummary]"",""VariantName"":""Legacy"",""ShouldApplyExpression"":""1 = 0"",""Definition"":""SELECT Id, Name, COUNT_BIG(*) AS Cnt, SUM(Amount) AS TotalAmount FROM Test.SourceTable GROUP BY Id, Name"",""Indexes"":[{""Name"":""[IX_vTestSummary_Id]"",""Unique"":true,""Clustered"":true,""IndexColumns"":""[Id]""}]},
+{""Schema"":""[Test]"",""Name"":""[vTestSummary]"",""VariantName"":""Modern"",""ShouldApplyExpression"":""1 = 1"",""Definition"":""SELECT Id, Name, COUNT_BIG(*) AS Cnt, SUM(Amount) AS TotalAmount FROM Test.SourceTable WHERE Amount > 0 GROUP BY Id, Name"",""Indexes"":[{""Name"":""[IX_vTestSummary_Id]"",""Unique"":true,""Clustered"":true,""IndexColumns"":""[Id]""}]}]";
+        RunIndexedViewQuench(cmd, json);
+
+        // The view should exist and be the Modern variant (has the WHERE clause)
+        cmd.CommandText = @"
+SELECT COUNT(*) FROM sys.views v
+INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE s.name = 'Test' AND v.name = 'vTestSummary'
+AND OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1";
+        Assert.That((int)cmd.ExecuteScalar()!, Is.EqualTo(1), "The matching variant should be created");
+
+        cmd.CommandText = @"
+SELECT m.definition FROM sys.sql_modules m
+INNER JOIN sys.views v ON m.object_id = v.object_id
+INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE s.name = 'Test' AND v.name = 'vTestSummary'";
+        var definition = cmd.ExecuteScalar()?.ToString() ?? "";
+        Assert.That(definition.ToUpperInvariant(), Does.Contain("WHERE"), "The Modern variant (with WHERE clause) should be the one created");
+
+        EnsureViewDropped(cmd);
+        conn.Close();
+    }
+
     [Test]
     public void IndexDiff_RemoveIndex_OtherIndexesSurvive()
     {

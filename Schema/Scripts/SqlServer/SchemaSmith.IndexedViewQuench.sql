@@ -12,29 +12,72 @@ BEGIN
     SET NOCOUNT ON;
 
     -- Parse indexed views from JSON using OPENJSON WITH for NVARCHAR(MAX) support
+    -- [_RowId] gives each parsed view a unique identifier so the per-target ShouldApply
+    -- DELETE below targets exactly the source row whose expression evaluated false. Without
+    -- it, the DELETE matched on (Schema, Name) and would silently wipe both rows when two
+    -- same-named variants had mutually exclusive ShouldApply expressions.
     DECLARE @Views TABLE (
+        [_RowId] INT,
         ViewSchema NVARCHAR(200),
         ViewName NVARCHAR(200),
         Definition NVARCHAR(MAX),
         IndexJson NVARCHAR(MAX),
-        VariantName NVARCHAR(128)
+        VariantName NVARCHAR(128),
+        ShouldApplyExpression NVARCHAR(MAX)
     );
 
-    INSERT INTO @Views (ViewSchema, ViewName, Definition, IndexJson, VariantName)
+    INSERT INTO @Views ([_RowId], ViewSchema, ViewName, Definition, IndexJson, VariantName, ShouldApplyExpression)
     SELECT
+        ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
         [SchemaSmith].[fn_StripBracketWrapping](v.[Schema]),
         [SchemaSmith].[fn_StripBracketWrapping](v.[Name]),
         v.[Definition],
         v.[Indexes],
-        v.[VariantName]
+        v.[VariantName],
+        v.[ShouldApplyExpression]
     FROM OPENJSON(@IndexedViewSchema)
     WITH (
         [Schema] NVARCHAR(200) '$.Schema',
         [Name] NVARCHAR(200) '$.Name',
         [Definition] NVARCHAR(MAX) '$.Definition',
         [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON,
-        [VariantName] NVARCHAR(128) '$.VariantName'
+        [VariantName] NVARCHAR(128) '$.VariantName',
+        [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression'
     ) v;
+
+    -- Evaluate ShouldApplyExpression per-target: remove views whose expression is false.
+    -- Scoped by [_RowId] so each generated DELETE targets exactly the source row whose
+    -- expression evaluated false (no collateral damage to siblings with the same Name).
+    -- The expression is embedded as live SQL (not a string literal), mirroring
+    -- ParseTableJsonIntoTempTables.
+    DECLARE @gateSql NVARCHAR(MAX);
+    SELECT @gateSql = STRING_AGG(CAST('DELETE FROM @Views WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + ShouldApplyExpression + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM @Views
+    WHERE RTRIM(ISNULL(ShouldApplyExpression, '')) <> '';
+    IF @gateSql IS NOT NULL
+    BEGIN
+        -- @Views is a table variable, not visible to the child batch EXEC() spawns, so the
+        -- gate DELETEs run against a temp table populated from @Views, then survivors are
+        -- copied back.
+        DROP TABLE IF EXISTS #ViewGate;
+        SELECT * INTO #ViewGate FROM @Views;
+        SET @gateSql = REPLACE(@gateSql, 'DELETE FROM @Views', 'DELETE FROM #ViewGate');
+        EXEC(@gateSql);
+        DELETE FROM @Views WHERE [_RowId] NOT IN (SELECT [_RowId] FROM #ViewGate);
+        DROP TABLE IF EXISTS #ViewGate;
+    END;
+
+    -- A view name with 2+ surviving variants cannot be honored: SQL Server allows ONE view
+    -- per (schema, name). ShouldApplyExpressions for same-named variants must be mutually
+    -- exclusive on any given target. (Mirrors the FullTextIndex mutual-exclusivity guard.)
+    IF EXISTS (SELECT 1 FROM @Views GROUP BY ViewSchema, ViewName HAVING COUNT(*) > 1)
+    BEGIN
+        DECLARE @v_IvDupView NVARCHAR(1010) =
+            (SELECT TOP 1 ViewSchema + '.' + ViewName FROM @Views GROUP BY ViewSchema, ViewName HAVING COUNT(*) > 1 ORDER BY ViewSchema, ViewName);
+        DECLARE @v_IvDupMsg NVARCHAR(2000) = 'Multiple indexed view variants matched on this target for view ' + @v_IvDupView +
+            '. SQL Server allows one view per name — ShouldApplyExpressions must be mutually exclusive.';
+        THROW 51000, @v_IvDupMsg, 1;
+    END;
 
     -- Validate ownership: fail if any requested views are owned by a different product
     -- (mirrors PostgreSQL ValidateMaterializedViewOwnership pattern)
