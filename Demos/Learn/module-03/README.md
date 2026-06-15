@@ -61,11 +61,12 @@ schemaquench --ConfigFile:whatif.settings.json
 Expected (SQL Server shown):
 
 ```
-[localhost,11433].[learn]   [WhatIf] Quenching modified tables
 [localhost,11433].[learn]       ALTER TABLE [dbo].[Widget] ADD [Price] DECIMAL(10,2) NULL;
 [localhost,11433].[learn]       ALTER TABLE [dbo].[Widget] ALTER COLUMN [Name] NVARCHAR(200) NOT NULL;
 [localhost,11433].[learn] Successfully Quenched
 ```
+
+(These print among the run's `[WhatIf]` marker lines; WhatIf applies none of them.)
 
 PostgreSQL prints `ADD "Price" NUMERIC(10,2)` and `ALTER COLUMN "Name" SET DATA TYPE VARCHAR(200)`;
 MySQL prints `ADD COLUMN \`Price\` DECIMAL(10,2) NULL` and `MODIFY COLUMN \`Name\` VARCHAR(200) NOT NULL`.
