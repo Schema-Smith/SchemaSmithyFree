@@ -29,11 +29,15 @@ minute and run it again — SQL Server in particular takes a little while on fir
 
 ## Connection details (throwaway — sandbox only)
 
-| Engine     | Host        | Port    | User       | Password         | Database       |
-| ---------- | ----------- | ------- | ---------- | ---------------- | -------------- |
-| SQL Server | `localhost` | `11433` | `sa`       | `Learn!Passw0rd` | created in labs |
-| PostgreSQL | `localhost` | `15432` | `postgres` | `Learn!Passw0rd` | `learn`        |
-| MySQL      | `localhost` | `13306` | `root`     | `Learn!Passw0rd` | `learn`        |
+| Engine     | Host        | Port    | User       | Password         | Database |
+| ---------- | ----------- | ------- | ---------- | ---------------- | -------- |
+| SQL Server | `localhost` | `11433` | `sa`       | `Learn!Passw0rd` | `learn`  |
+| PostgreSQL | `localhost` | `15432` | `postgres` | `Learn!Passw0rd` | `learn`  |
+| MySQL      | `localhost` | `13306` | `root`     | `Learn!Passw0rd` | `learn`  |
+
+All three engines come up with a `learn` database ready to go. PostgreSQL and MySQL create it from
+environment variables; SQL Server's image can't, so a one-shot `sqlserver-init` service creates it
+once the engine is healthy, then exits.
 
 These credentials are intentionally simple and public. The sandbox is disposable — **never reuse
 them anywhere real.** The ports are offset (`11433` / `15432` / `13306`) so the sandbox won't collide

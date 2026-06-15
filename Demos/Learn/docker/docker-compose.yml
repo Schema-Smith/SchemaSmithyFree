@@ -23,6 +23,27 @@ services:
       retries: 30
       start_period: 40s
 
+  # One-shot: create the `learn` database on SQL Server so all three engines
+  # have it ready (PostgreSQL and MySQL auto-create theirs via env vars; SQL
+  # Server's image does not). Runs once after SQL Server is healthy, then exits.
+  sqlserver-init:
+    image: mcr.microsoft.com/mssql-tools
+    container_name: learn-sqlserver-init
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        for i in $$(seq 1 40); do
+          /opt/mssql-tools/bin/sqlcmd -S sqlserver -U sa -P 'Learn!Passw0rd' -Q "IF DB_ID('learn') IS NULL CREATE DATABASE learn" && exit 0
+          echo "waiting for SQL Server to accept the sa login... ($$i)"
+          sleep 3
+        done
+        echo "init: gave up waiting for SQL Server" >&2; exit 1
+
   postgres:
     image: postgres:16
     container_name: learn-postgres
