@@ -93,8 +93,9 @@ PRs that add behavior without corresponding tests will be sent back. If you genu
 ### Code Coverage
 
 - **Target:** >85% line coverage, aiming close to 100% on new code.
-- **Non-regression:** A PR that reduces overall coverage — even if the result stays above target — needs an explicit, specific reason in the PR description. "I didn't get to it" is not a reason; "this code path requires an isolator we haven't built and I've filed issue #N to track it" is. Coverage drift is how a healthy codebase becomes an unhealthy one over time, so we don't accept reductions silently.
-- **Tooling:** `coverlet.collector` runs as part of `dotnet test`. CI publishes coverage data on every build.
+- **Tooling:** `coverlet` collects line coverage during `dotnet test` (configured by `coverage.runsettings`). CI runs collection in every test job — unit and all three database engines — merges the results, and **fails the build** if any project or the solution total falls below its line-coverage threshold. The merged report and a per-project summary are published on every CI run.
+- **Thresholds (line %):** DataTongs 92, Schema 92, SchemaQuench 88, SchemaTongs 88, solution 90. These protect the current level rather than the bare 85% floor and are a ratchet — raised over time toward the observed baseline, never lowered to make a red gate green. The fix for a failing gate is added tests.
+- **Non-regression:** A PR that reduces coverage — even if the result stays above target — needs an explicit, specific reason in the PR description. "I didn't get to it" is not a reason; "this code path requires an isolator we haven't built and I've filed issue #N to track it" is. **Lowering a gate threshold, or widening the coverage exclusions to drop code out of the denominator, is a flagged review event** — call it out and investigate; it is never an invisible part of getting CI green.
 
 ### OS Portability
 
@@ -221,7 +222,7 @@ When reviewing a PR, we look at:
 
 - **Correctness.** Does the code do what the PR says it does? Are edge cases handled? Are there logic errors hiding behind happy-path tests?
 - **Test rigor.** Do the tests actually exercise the behavior, or do they just call into it? Are failure modes tested, not just success modes? For database-touching code, do the tests run against real database platforms?
-- **Coverage.** Did this PR raise or lower coverage on the touched code? Reductions need a stated reason.
+- **Coverage.** Did this PR raise or lower coverage on the touched code? Reductions need a stated reason. Watch specifically for changes to the coverage gate thresholds or the `coverage.runsettings` exclusions — a lowered threshold or a widened exclusion must be flagged and investigated, not approved silently.
 - **OS portability.** Will this code behave the same on Windows, Linux, and macOS? Are paths, line endings, and culture-dependent operations handled correctly?
 - **Database Platform parity.** If a feature lands for one database platform, what's the story for the other two? Sometimes "we'll do it next" is the right answer with a tracked issue; sometimes it's a sign the design isn't ready.
 - **Backward compatibility.** Does this change affect a public API surface, package format, or generated SQL shape? If so, is the change additive, deprecating, or breaking? Breaking changes need explicit CHANGELOG entries.
