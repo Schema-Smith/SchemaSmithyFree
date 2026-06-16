@@ -1,0 +1,49 @@
+{
+  "Name": "playlist_track",
+  "Columns": [
+    {
+      "Name": "playlist_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "track_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_playlist_track",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "playlist_id,track_id",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_playlist_track_playlist",
+      "Columns": "playlist_id",
+      "RelatedTable": "playlist",
+      "RelatedColumns": "playlist_id",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "fk_playlist_track_track",
+      "Columns": "track_id",
+      "RelatedTable": "track",
+      "RelatedColumns": "track_id",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": ""
+}

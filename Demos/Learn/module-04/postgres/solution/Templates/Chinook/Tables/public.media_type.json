@@ -1,0 +1,31 @@
+{
+  "Name": "media_type",
+  "Columns": [
+    {
+      "Name": "media_type_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "name",
+      "DataType": "varchar(120)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_media_type",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "media_type_id",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": ""
+}

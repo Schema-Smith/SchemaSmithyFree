@@ -1,0 +1,31 @@
+{
+  "Name": "genre",
+  "Columns": [
+    {
+      "Name": "genre_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "name",
+      "DataType": "varchar(120)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_genre",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "genre_id",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": ""
+}

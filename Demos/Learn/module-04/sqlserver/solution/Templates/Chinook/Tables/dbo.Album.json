@@ -1,0 +1,67 @@
+{
+  "Name": "[Album]",
+  "Columns": [
+    {
+      "Name": "[AlbumId]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[ArtistId]",
+      "DataType": "INT",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Title]",
+      "DataType": "NVARCHAR(160)",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_Album_ArtistId]",
+      "IndexColumns": "[ArtistId]",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[PK_Album]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[AlbumId]",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Album_Artist]",
+      "Columns": "[ArtistId]",
+      "RelatedTable": "[Artist]",
+      "RelatedColumns": "[ArtistId]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": []
+}

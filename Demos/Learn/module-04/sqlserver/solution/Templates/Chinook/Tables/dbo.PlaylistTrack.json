@@ -1,0 +1,61 @@
+{
+  "Name": "[PlaylistTrack]",
+  "Columns": [
+    {
+      "Name": "[PlaylistId]",
+      "DataType": "INT",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[TrackId]",
+      "DataType": "INT",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_PlaylistTrack]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[PlaylistId],[TrackId]",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_PlaylistTrack_Playlist]",
+      "Columns": "[PlaylistId]",
+      "RelatedTable": "[Playlist]",
+      "RelatedColumns": "[PlaylistId]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[FK_PlaylistTrack_Track]",
+      "Columns": "[TrackId]",
+      "RelatedTable": "[Track]",
+      "RelatedColumns": "[TrackId]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": []
+}

@@ -1,0 +1,31 @@
+{
+  "Name": "artist",
+  "Columns": [
+    {
+      "Name": "artist_id",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "name",
+      "DataType": "varchar(120)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_artist",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "artist_id",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": ""
+}
