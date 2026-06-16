@@ -334,4 +334,4 @@ jobs:
         run: cat coverage-merged/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check coverage thresholds
-        run: python3 scripts/check-coverage-thresholds.py coverage-merged/Cobertura.xml --report-only
+        run: python3 scripts/check-coverage-thresholds.py coverage-merged/Cobertura.xml

@@ -17,10 +17,10 @@ import xml.etree.ElementTree as ET
 THRESHOLDS = {
     "DataTongs": 92.0,
     "Schema": 92.0,
-    "SchemaQuench": 88.0,
-    "SchemaTongs": 88.0,
+    "SchemaQuench": 91.0,
+    "SchemaTongs": 90.0,
 }
-SOLUTION_THRESHOLD = 90.0
+SOLUTION_THRESHOLD = 91.0
 
 
 def main(path, report_only):

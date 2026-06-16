@@ -94,7 +94,7 @@ PRs that add behavior without corresponding tests will be sent back. If you genu
 
 - **Target:** >85% line coverage, aiming close to 100% on new code.
 - **Tooling:** `coverlet` collects line coverage during `dotnet test` (configured by `coverage.runsettings`). CI runs collection in every test job — unit and all three database engines — merges the results, and **fails the build** if any project or the solution total falls below its line-coverage threshold. The merged report and a per-project summary are published on every CI run.
-- **Thresholds (line %):** DataTongs 92, Schema 92, SchemaQuench 88, SchemaTongs 88, solution 90. These protect the current level rather than the bare 85% floor and are a ratchet — raised over time toward the observed baseline, never lowered to make a red gate green. The fix for a failing gate is added tests.
+- **Thresholds (line %):** DataTongs 92, Schema 92, SchemaQuench 91, SchemaTongs 90, solution 91. These protect the current level rather than the bare 85% floor and are a ratchet — raised over time toward the observed baseline, never lowered to make a red gate green. The fix for a failing gate is added tests.
 - **Non-regression:** A PR that reduces coverage — even if the result stays above target — needs an explicit, specific reason in the PR description. "I didn't get to it" is not a reason; "this code path requires an isolator we haven't built and I've filed issue #N to track it" is. **Lowering a gate threshold, or widening the coverage exclusions to drop code out of the denominator, is a flagged review event** — call it out and investigate; it is never an invisible part of getting CI green.
 
 ### OS Portability
