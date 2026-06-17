@@ -1,0 +1,138 @@
+{
+  "Name": "[Track]",
+  "Columns": [
+    {
+      "Name": "[AlbumId]",
+      "DataType": "INT",
+      "Nullable": true,
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Composer]",
+      "DataType": "NVARCHAR(220)",
+      "Nullable": true,
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[GenreId]",
+      "DataType": "INT",
+      "Nullable": true,
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[MediaTypeId]",
+      "DataType": "INT",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Milliseconds]",
+      "DataType": "INT",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Name]",
+      "DataType": "NVARCHAR(200)",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[TrackId]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[UnitPrice]",
+      "DataType": "DECIMAL(10, 2)",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[IX_Track_AlbumId]",
+      "IndexColumns": "[AlbumId]",
+      "CompressionType": "NONE"
+    },
+    {
+      "Name": "[PK_Track]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[TrackId]",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "[FK_Track_Album]",
+      "Columns": "[AlbumId]",
+      "RelatedTable": "[Album]",
+      "RelatedColumns": "[AlbumId]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[FK_Track_Genre]",
+      "Columns": "[GenreId]",
+      "RelatedTable": "[Genre]",
+      "RelatedColumns": "[GenreId]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": "[dbo]"
+    },
+    {
+      "Name": "[FK_Track_MediaType]",
+      "Columns": "[MediaTypeId]",
+      "RelatedTable": "[MediaType]",
+      "RelatedColumns": "[MediaTypeId]",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": "[dbo]"
+    }
+  ],
+  "CheckConstraints": [],
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": []
+}

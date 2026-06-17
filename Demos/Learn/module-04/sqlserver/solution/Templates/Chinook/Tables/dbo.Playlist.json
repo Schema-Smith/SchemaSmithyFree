@@ -1,0 +1,43 @@
+{
+  "Name": "[Playlist]",
+  "Columns": [
+    {
+      "Name": "[Name]",
+      "DataType": "NVARCHAR(120)",
+      "Nullable": true,
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[PlaylistId]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Playlist]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[PlaylistId]",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": []
+}

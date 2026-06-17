@@ -1,0 +1,12 @@
+{
+  "Schema": "public",
+  "Name": "Widget",
+  "Columns": [
+    { "Name": "WidgetId", "DataType": "BIGINT" },
+    { "Name": "Name", "DataType": "VARCHAR(100)" },
+    { "Name": "Quantity", "DataType": "INT", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "pk_widget", "PrimaryKey": true, "IndexColumns": "WidgetId" }
+  ]
+}

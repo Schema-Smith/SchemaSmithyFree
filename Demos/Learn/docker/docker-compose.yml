@@ -1,0 +1,76 @@
+name: schemasmith-learn-sandbox
+
+# A throwaway three-engine sandbox for the Learn course labs.
+# Stands up empty SQL Server, PostgreSQL, and MySQL engines; the learner
+# installs the SchemaSmith CLI and runs it against these by hand.
+# Engine versions and the MySQL function-trust flag mirror the demos under
+# Demos/{SqlServer,PostgreSQL,MySQL}; ports are offset to avoid collisions.
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: learn-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Learn!Passw0rd"
+      MSSQL_PID: "Developer"
+    ports:
+      - "11433:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q 'SQL Server is now ready for client connections' /var/opt/mssql/log/errorlog 2>/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  # One-shot: create the `learn` database on SQL Server so all three engines
+  # have it ready (PostgreSQL and MySQL auto-create theirs via env vars; SQL
+  # Server's image does not). Runs once after SQL Server is healthy, then exits.
+  sqlserver-init:
+    image: mcr.microsoft.com/mssql-tools
+    container_name: learn-sqlserver-init
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        for i in $$(seq 1 40); do
+          /opt/mssql-tools/bin/sqlcmd -S sqlserver -U sa -P 'Learn!Passw0rd' -Q "IF DB_ID('learn') IS NULL CREATE DATABASE learn" && exit 0
+          echo "waiting for SQL Server to accept the sa login... ($$i)"
+          sleep 3
+        done
+        echo "init: gave up waiting for SQL Server" >&2; exit 1
+
+  postgres:
+    image: postgres:16
+    container_name: learn-postgres
+    environment:
+      POSTGRES_PASSWORD: "Learn!Passw0rd"
+      POSTGRES_DB: "learn"
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d learn"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  mysql:
+    image: mysql:8.0
+    container_name: learn-mysql
+    command: --log-bin-trust-function-creators=1
+    environment:
+      MYSQL_ROOT_PASSWORD: "Learn!Passw0rd"
+      MYSQL_DATABASE: "learn"
+    ports:
+      - "13306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s

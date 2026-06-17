@@ -1,0 +1,13 @@
+{
+  "Schema": "dbo",
+  "Name": "Widget",
+  "Columns": [
+    { "Name": "WidgetId", "DataType": "BIGINT" },
+    { "Name": "Name", "DataType": "NVARCHAR(200)" },
+    { "Name": "Quantity", "DataType": "INT", "Nullable": true },
+    { "Name": "Price", "DataType": "DECIMAL(10,2)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "PK_Widget", "PrimaryKey": true, "Clustered": true, "IndexColumns": "WidgetId" }
+  ]
+}

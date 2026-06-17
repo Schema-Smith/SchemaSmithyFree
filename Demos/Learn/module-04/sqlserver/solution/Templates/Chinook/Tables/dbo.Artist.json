@@ -1,0 +1,43 @@
+{
+  "Name": "[Artist]",
+  "Columns": [
+    {
+      "Name": "[ArtistId]",
+      "DataType": "INT IDENTITY(1, 1)",
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Name]",
+      "DataType": "NVARCHAR(120)",
+      "Nullable": true,
+      "OldName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Artist]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[ArtistId]",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": []
+}

@@ -1,0 +1,13 @@
+{
+  "Source": {
+    "Server": "localhost,11433",
+    "User": "sa",
+    "Password": "Learn!Passw0rd",
+    "Database": "chinook",
+    "Platform": "SqlServer",
+    "ConnectionProperties": { "TrustServerCertificate": "True" }
+  },
+  "Product": { "Path": "./Extracted", "Name": "Chinook" },
+  "Template": { "Name": "Chinook" },
+  "ShouldCast": { "Tables": true }
+}
