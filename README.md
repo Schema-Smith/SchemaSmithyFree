@@ -116,6 +116,14 @@ See [Demos/README.md](Demos/README.md) for the per-platform layout, credentials,
 
 SchemaSmith Community Edition is licensed under [SSCL v2.0](LICENSE). Use it freely to manage databases for your own products and services — SQL Server, PostgreSQL, or MySQL — with no restrictions on organization size, revenue, database size, or environment count. Not permitted: redistributing SchemaSmith as a standalone product, bundling it as a component of another product marketed to third parties, or offering it as a hosted or managed service. See the [LICENSE](LICENSE) for the full terms.
 
+## Contributors
+
+External contributors:
+
+- [@noctelvirei](https://github.com/noctelvirei) / [@zacnaloen](https://github.com/zacnaloen)
+
+For the full list see the [GitHub contributors page](https://github.com/Schema-Smith/SchemaSmith/graphs/contributors), and [CONTRIBUTING.md](CONTRIBUTING.md) for how to get involved.
+
 ## Additional Resources
 
 - [End-User Documentation](docs/end-user/README.md) — guide chapters and reference docs

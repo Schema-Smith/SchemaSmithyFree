@@ -628,4 +628,310 @@ public class DataDeliveryProcessorTests
         Assert.That(delivery, Is.Not.Null);
         Assert.That(delivery, Is.InstanceOf<IDataDelivery>());
     }
+
+    // ---------- Schema-template token substitution (slice-3 audit B3) ----------
+    //
+    // Schema-template tables carry table.Schema = "{{SchemaName}}" (set by slice-1's
+    // SchemaDefaultResolver). DataDeliveryProcessor must substitute the iteration's
+    // resolved schema name (DataDeliveryContext.SchemaName) before passing it to the
+    // metadata catalog probes and MERGE-script builder; otherwise the literal token
+    // becomes the schema name in catalog queries (returning empty result sets) and
+    // in the emitted MERGE INTO clause.
+
+    [Test]
+    public void DeliverTables_SchemaTemplate_SubstitutesIterationSchemaIntoMergeScript()
+    {
+        // Override the default mock to surface the resolved schema name in the emitted
+        // script so the assertion below checks both the call argument AND that no token
+        // literal can sneak into a downstream-rendered script.
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .Returns(ci => $"MERGE INTO [{ci.ArgAt<string>(1)}].[{ci.ArgAt<string>(2)}] AS Target");
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "{{SchemaName}}",
+                DataDelivery = new DataDelivery { MergeType = "Insert/Update", ContentFile = "lookups.json" }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SchemaName = "tenant_acme";
+
+        processor.DeliverTables(context);
+
+        // The processor must pass the resolved iteration schema ("tenant_acme") in place
+        // of the literal "{{SchemaName}}" to the IMergeScriptHelper.
+        Assert.That(_executedScripts, Has.Count.EqualTo(1));
+        Assert.That(_executedScripts[0], Does.Contain("[tenant_acme].[Lookups]"),
+            "Schema-template iteration must substitute {{SchemaName}} before emit.");
+        Assert.That(_executedScripts[0], Does.Not.Contain("{{SchemaName}}"),
+            "Literal {{SchemaName}} must never appear in an emitted merge script.");
+        _mockHelper.Received().BuildMergeScript(
+            Arg.Any<IDbCommand>(),
+            Arg.Is("tenant_acme"),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>());
+    }
+
+    [Test]
+    public void DeliverTables_SchemaTemplate_SubstitutesIterationSchemaIntoKeyColumnsLookup()
+    {
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "{{SchemaName}}",
+                // No MatchColumns -> processor falls back to GetKeyColumns, which probes catalog.
+                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "lookups.json" }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SchemaName = "tenant_beta";
+
+        processor.DeliverTables(context);
+
+        // GetKeyColumns runs a catalog query — if {{SchemaName}} reaches it as a literal,
+        // the query returns no rows and the merge is silently broken.
+        _mockHelper.Received().GetKeyColumns(
+            Arg.Any<IDbCommand>(),
+            Arg.Is("tenant_beta"),
+            Arg.Is("Lookups"));
+    }
+
+    [Test]
+    public void DeliverTables_RegularTemplate_DefaultSchemaName_UnchangedBehavior()
+    {
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+            }
+        };
+        var context = MakeContext(tables); // SchemaName defaults to ""
+
+        processor.DeliverTables(context);
+
+        Assert.That(_executedScripts, Has.Count.EqualTo(1));
+        _mockHelper.Received().BuildMergeScript(
+            Arg.Any<IDbCommand>(),
+            Arg.Is("dbo"),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>());
+    }
+
+    [Test]
+    public void DataDeliveryContext_SchemaName_DefaultsToEmptyString()
+    {
+        var ctx = new DataDeliveryContext();
+        Assert.That(ctx.SchemaName, Is.EqualTo(string.Empty),
+            "Regular-template callers must not need to set SchemaName.");
+    }
+
+    // ---------- MergeFilter token substitution (slice 7) ----------
+    //
+    // delivery.MergeFilter is user-supplied text that gets embedded into the merge body's
+    // `WHEN NOT MATCHED BY SOURCE AND ({mergeFilter})` clause and shipped straight to the
+    // database via ExecuteScript — no engine-level token resolution between the helper and
+    // the execute. The slice-3 audit B3 fix only addressed table.Schema; if a schema-template
+    // Table.json's MergeFilter contains {{SchemaName}}, that literal token reaches the
+    // server and produces a SQL parse error. This pair of tests asserts that MergeFilter is
+    // token-substituted with the iteration's resolved schema name BEFORE BuildMergeScript
+    // sees it, mirroring the pattern already applied to table.Schema via GetSchemaOrDb.
+
+    [Test]
+    public void DeliverTables_SchemaTemplate_SubstitutesIterationSchemaIntoMergeFilter()
+    {
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .Returns(ci => $"MERGE INTO [{ci.ArgAt<string>(1)}].[{ci.ArgAt<string>(2)}] " +
+                           $"WHEN NOT MATCHED BY SOURCE AND ({ci.ArgAt<string>(9) ?? "(none)"})");
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "{{SchemaName}}",
+                DataDelivery = new DataDelivery
+                {
+                    MergeType = "Insert/Update/Delete",
+                    ContentFile = "lookups.json",
+                    MergeFilter = "Target.Status = 'Active' AND Target.[Owner] = '{{SchemaName}}'"
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SchemaName = "tenant_acme";
+
+        processor.DeliverTables(context);
+
+        Assert.That(_executedScripts, Has.Count.EqualTo(1));
+        Assert.That(_executedScripts[0], Does.Contain("Target.[Owner] = 'tenant_acme'"),
+            "MergeFilter must have {{SchemaName}} substituted with the iteration's resolved schema.");
+        Assert.That(_executedScripts[0], Does.Not.Contain("{{SchemaName}}"),
+            "Literal {{SchemaName}} must never reach the executed merge script via MergeFilter.");
+
+        _mockHelper.Received().BuildMergeScript(
+            Arg.Any<IDbCommand>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Is<string>(f => f != null && f.Contains("tenant_acme") && !f.Contains("{{SchemaName}}")),
+            Arg.Any<bool>(),
+            Arg.Any<bool>());
+    }
+
+    [Test]
+    public void DeliverTables_RegularTemplate_MergeFilterPassedThroughUnchanged()
+    {
+        // Regression guard: regular templates (SchemaName empty) must not touch MergeFilter.
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .Returns(ci => $"MERGE INTO [{ci.ArgAt<string>(1)}] WHERE ({ci.ArgAt<string>(9) ?? "(none)"})");
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "dbo",
+                DataDelivery = new DataDelivery
+                {
+                    MergeType = "Insert/Update/Delete",
+                    ContentFile = "lookups.json",
+                    MergeFilter = "Target.Status = 'Active'"
+                }
+            }
+        };
+        var context = MakeContext(tables); // SchemaName defaults to ""
+
+        processor.DeliverTables(context);
+
+        Assert.That(_executedScripts[0], Does.Contain("Target.Status = 'Active'"));
+        _mockHelper.Received().BuildMergeScript(
+            Arg.Any<IDbCommand>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Is("Target.Status = 'Active'"),
+            Arg.Any<bool>(),
+            Arg.Any<bool>());
+    }
+
+    [Test]
+    public void DeliverTables_SchemaTemplate_NullMergeFilterStaysNull()
+    {
+        // Defensive guard: when MergeFilter is unset (the common case), the substitution
+        // pass must not produce a non-null empty string or otherwise spuriously activate
+        // the WHEN NOT MATCHED BY SOURCE delete clause.
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "{{SchemaName}}",
+                DataDelivery = new DataDelivery
+                {
+                    MergeType = "Insert/Update",
+                    ContentFile = "lookups.json",
+                    MergeFilter = null
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SchemaName = "tenant_acme";
+
+        processor.DeliverTables(context);
+
+        _mockHelper.Received().BuildMergeScript(
+            Arg.Any<IDbCommand>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Is<string>(f => f == null),
+            Arg.Any<bool>(),
+            Arg.Any<bool>());
+    }
+
+    [Test]
+    public void DeliverTables_SchemaTemplate_MySqlPlatform_StillReturnsDatabaseName()
+    {
+        // MySQL has no schema concept — GetSchemaOrDb returns DatabaseName regardless.
+        // Even if a (theoretical) schema-template path set Schema = {{SchemaName}}, MySQL
+        // must continue to ignore it and use the database name.
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(false);
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "{{SchemaName}}",
+                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+            }
+        };
+        var context = MakeContext(tables);
+        context.Platform = "MySQL";
+        context.DatabaseName = "tenants_db";
+        context.SchemaName = "tenant_acme";
+
+        processor.DeliverTables(context);
+
+        _mockHelper.Received().BuildMergeScript(
+            Arg.Any<IDbCommand>(),
+            Arg.Is("tenants_db"),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<bool>());
+    }
 }

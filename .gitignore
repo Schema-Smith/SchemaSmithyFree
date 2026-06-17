@@ -70,3 +70,7 @@ packaging/chocolatey/schemasmith/tools/*.exe
 packaging/chocolatey/schemasmith/tools/*.dll
 packaging/chocolatey/schemasmith/tools/*.json
 packaging/chocolatey/schemasmith/tools/*.nupkg
+
+# Python (coverage gate check script)
+__pycache__/
+*.pyc

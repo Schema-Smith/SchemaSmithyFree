@@ -76,9 +76,9 @@ A **template** targets a specific database (or set of databases). It lives in a 
 }
 ```
 
-The `DatabaseIdentificationScript` is the key mechanism -- it returns the names of databases this template should be applied to. In the simple case above, it targets a single database. But the script can return multiple rows, which means one template can deploy the same schema to many databases at once. That's a powerful pattern for multi-tenant systems where each tenant has a separate database -- one template, one declaration, every tenant converges to the same state.
+Templates come in two flavors, and both work through the same execution pipeline. A **regular template** fans out across databases: `DatabaseIdentificationScript` returns one row per database, and SchemaQuench runs the full template against each returned database. A **schema template** fans out across schemas inside a single database: `SchemaIdentificationScript` returns one row per schema, and SchemaQuench runs the full template against each returned schema with the active schema name available as `{{SchemaName}}` everywhere it's needed. One declaration, many iterations, one quench. The [Multi-Tenant Deployments](10-multi-tenant-deployments.md) chapter walks through both patterns end to end with a working demo.
 
-Each platform has its own idiom for this script:
+Each platform has its own idiom for the database identification script:
 
 - **SQL Server:** `SELECT [Name] FROM master.sys.databases WHERE [Name] = '{{MyDb}}'`
 - **PostgreSQL:** `SELECT datname FROM pg_database WHERE datname = '{{MyDb}}'`
@@ -176,7 +176,7 @@ SchemaQuench follows a clear sequence when quenching a schema package to a datab
 3. **Compute the delta** -- determine what needs to be created, altered, or dropped to make the database match the declaration.
 4. **Apply changes in execution slots** -- run the computed changes in a controlled order.
 
-The execution slots give you precise control over ordering when it matters. Within a single template, changes execute in this sequence:
+The execution slots give you precise control over ordering when it matters. SchemaQuench runs each template once per iteration -- where an iteration is one matched database for a regular template, or one matched schema inside a database for a schema template. The slot sequence is the same either way. Within a single iteration, changes execute in this sequence:
 
 1. Programmable objects (schemas, types, functions, views, procedures) -- with dependency retry
 2. New tables and columns created

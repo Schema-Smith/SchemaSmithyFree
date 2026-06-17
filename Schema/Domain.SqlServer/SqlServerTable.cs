@@ -48,8 +48,11 @@ namespace Schema.Domain.SqlServer
             }
         }
 
-        [JsonProperty(Order = 100)]
-        public string Schema { get; set; } = "dbo";
+        // Default resolution moved to SchemaDefaultResolver (called from Template.Load) so schema
+        // templates can default to "{{SchemaName}}" instead of "dbo". Regular templates still see
+        // "dbo" post-load; bare-constructor instances see null until the resolver runs.
+        [JsonProperty(Order = 100, NullValueHandling = NullValueHandling.Ignore)]
+        public string Schema { get; set; }
 
         [JsonProperty(Order = 101)]
         public string CompressionType { get; set; } = "NONE";

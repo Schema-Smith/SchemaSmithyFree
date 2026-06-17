@@ -1,0 +1,40 @@
+{
+  "Name": "orders",
+  "Columns": [
+    {
+      "Name": "order_id",
+      "DataType": "INTEGER"
+    },
+    {
+      "Name": "customer_id",
+      "DataType": "INTEGER"
+    },
+    {
+      "Name": "lookup_id",
+      "DataType": "INTEGER",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_orders",
+      "PrimaryKey": true,
+      "IndexColumns": "order_id"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_orders_customers",
+      "Columns": "customer_id",
+      "RelatedTable": "customers",
+      "RelatedColumns": "customer_id"
+    },
+    {
+      "Name": "fk_orders_lookup",
+      "Columns": "lookup_id",
+      "RelatedTableSchema": "public",
+      "RelatedTable": "lookup",
+      "RelatedColumns": "lookup_id"
+    }
+  ]
+}

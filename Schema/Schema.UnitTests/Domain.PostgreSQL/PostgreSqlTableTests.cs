@@ -27,7 +27,10 @@ namespace Schema.UnitTests.Domain.PostgreSQL
         {
             var table = new PostgreSqlTable();
 
-            Assert.That(table.Schema, Is.EqualTo("public"));
+            // Slice 1 (Schema Templates): bare-constructor Schema is null; the load-time
+            // SchemaDefaultResolver fills it (with "public" for regular templates, "{{SchemaName}}"
+            // for schema templates). See PostgreSqlTableDefaultingTests for the resolved-state contract.
+            Assert.That(table.Schema, Is.Null);
             Assert.That(table.Statistics, Is.Not.Null.And.Empty);
             Assert.That(table.ExcludeConstraints, Is.Not.Null.And.Empty);
             Assert.That(table.DataDelivery, Is.Null);

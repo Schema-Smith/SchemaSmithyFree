@@ -11,6 +11,12 @@ This document is the rules of the road for contributing. We point at it when we 
 - **Submit code** — Fix bugs, add features, improve docs. For non-trivial changes, open an issue first so we can align on direction before you invest implementation time.
 - **Improve docs** — The [documentation site](https://schemasmith.com/), in-repo `docs/` directory, README, and CHANGELOG are all fair game.
 
+## AI-Assisted Contributions
+
+AI-assisted PRs are welcome — many of us use AI tooling in our own workflow. The standards in this document apply regardless of how the patch was authored: tests come first, the same review bar applies, the contributor owns the PR and is responsible for understanding the code they're submitting, defending design choices in review, and addressing follow-up issues.
+
+If you use AI tooling with its own GitHub identity, both your handle and the tool's handle may appear in the commit history. Both are credited in CHANGELOG attribution (see *How Contributors Are Recognized* below); the welcome line for first-time contributors fires on whichever handle opens the PR.
+
 ## Before You Start
 
 For anything beyond a typo fix or a one-line bug repro, please skim this whole document before opening a PR. It's shorter than the review you'd otherwise get back. Two specific items contributors most often miss:
@@ -87,8 +93,9 @@ PRs that add behavior without corresponding tests will be sent back. If you genu
 ### Code Coverage
 
 - **Target:** >85% line coverage, aiming close to 100% on new code.
-- **Non-regression:** A PR that reduces overall coverage — even if the result stays above target — needs an explicit, specific reason in the PR description. "I didn't get to it" is not a reason; "this code path requires an isolator we haven't built and I've filed issue #N to track it" is. Coverage drift is how a healthy codebase becomes an unhealthy one over time, so we don't accept reductions silently.
-- **Tooling:** `coverlet.collector` runs as part of `dotnet test`. CI publishes coverage data on every build.
+- **Tooling:** `coverlet` collects line coverage during `dotnet test` (configured by `coverage.runsettings`). CI runs collection in every test job — unit and all three database engines — merges the results, and **fails the build** if any project or the solution total falls below its line-coverage threshold. The merged report and a per-project summary are published on every CI run.
+- **Thresholds (line %):** DataTongs 92, Schema 92, SchemaQuench 91, SchemaTongs 90, solution 91. These protect the current level rather than the bare 85% floor and are a ratchet — raised over time toward the observed baseline, never lowered to make a red gate green. The fix for a failing gate is added tests.
+- **Non-regression:** A PR that reduces coverage — even if the result stays above target — needs an explicit, specific reason in the PR description. "I didn't get to it" is not a reason; "this code path requires an isolator we haven't built and I've filed issue #N to track it" is. **Lowering a gate threshold, or widening the coverage exclusions to drop product code out of the denominator, is a flagged review event** — call it out and investigate; it is never an invisible part of getting CI green. Legitimate exclusions are test assemblies and compiler plumbing only; excluding product code in any form (new `<Exclude>` patterns, `GeneratedCodeAttribute`, or `[ExcludeFromCodeCoverage]` on real code) counts the same as lowering the number.
 
 ### OS Portability
 
@@ -111,6 +118,14 @@ Integration tests that validate SQL behavior — query plans, type coercion, tra
 Integration tests for non-DB concerns (file access, deserialization, isolator behavior) can mock the DB to avoid combinatorial test runs across all three platforms — the goal there is to exercise the non-DB code path without paying the multi-platform cost for behavior that's platform-agnostic anyway.
 
 If you find yourself reaching for a DB mock to avoid spinning up a container in a test that IS about SQL behavior, please don't. File an issue if there's a real gap in the integration test infrastructure.
+
+### Test at the Right Boundary
+
+When a capability surfaces through a specific call site, put its test at the layer where the capability lives — not at the call site that happened to exercise it. If `TableQuench` provides primary-key extension as a capability that any caller can depend on, the test belongs in `TableQuench`'s own test suite, not in the test file for whatever feature first needed it.
+
+The question to ask yourself: *if someone else calls into this same code tomorrow with a different shape of input, does my test cover them?* If not, the test is sitting too high — push it down to the capability's own layer, where it protects every caller. Often a test file already exists at that layer; extend it rather than starting a fresh one at the call site.
+
+This is distinct from *mocking* at the right boundary (above): that's about whether a test uses a real database; this is about which layer owns the test.
 
 ### Warnings, Style, and Comments
 
@@ -187,6 +202,7 @@ Code review is the moment we apply the standards in this document. The checklist
 Before you click "Ready for review," walk through this list against your own diff:
 
 - [ ] Tests added or updated, and they exercise the new behavior — not just call into it.
+- [ ] Tests live at the layer where the capability lives, not just at the call site that exercised it.
 - [ ] Tests pass locally on `dotnet test SchemaSmith.sln`.
 - [ ] Coverage maintained or improved on touched code (or a documented reason for any reduction).
 - [ ] No new compiler warnings or analyzer hints introduced.
@@ -206,7 +222,7 @@ When reviewing a PR, we look at:
 
 - **Correctness.** Does the code do what the PR says it does? Are edge cases handled? Are there logic errors hiding behind happy-path tests?
 - **Test rigor.** Do the tests actually exercise the behavior, or do they just call into it? Are failure modes tested, not just success modes? For database-touching code, do the tests run against real database platforms?
-- **Coverage.** Did this PR raise or lower coverage on the touched code? Reductions need a stated reason.
+- **Coverage.** Did this PR raise or lower coverage on the touched code? Reductions need a stated reason. Watch specifically for changes to the coverage gate thresholds or the `coverage.runsettings` exclusions. The only legitimate exclusions are test assemblies and compiler-generated plumbing — anything that drops *product* code out of the denominator (a new assembly or namespace in `<Exclude>`, adding `GeneratedCodeAttribute` to `ExcludeByAttribute`, or `[ExcludeFromCodeCoverage]` on real code) games the gate exactly like lowering the threshold and must be flagged and investigated, not approved silently.
 - **OS portability.** Will this code behave the same on Windows, Linux, and macOS? Are paths, line endings, and culture-dependent operations handled correctly?
 - **Database Platform parity.** If a feature lands for one database platform, what's the story for the other two? Sometimes "we'll do it next" is the right answer with a tracked issue; sometimes it's a sign the design isn't ready.
 - **Backward compatibility.** Does this change affect a public API surface, package format, or generated SQL shape? If so, is the change additive, deprecating, or breaking? Breaking changes need explicit CHANGELOG entries.
@@ -230,6 +246,18 @@ A PR is ready to merge when:
 5. README is updated if the build process, project structure, or getting-started experience changed.
 6. Self-review checklist (above) is complete.
 7. Reviewer feedback has been addressed.
+
+## How Contributors Are Recognized
+
+Contributors are credited in three places:
+
+- **CHANGELOG entries** — user-visible PRs (anything that generates a CHANGELOG entry) carry a `Thanks to @handle` line crediting all contributor handles that appear in the PR. Doc-only and non-released-tooling PRs that don't generate CHANGELOG entries are still credited via the README contributors section and the auto-generated GitHub contributors page.
+- **First-PR welcome** — the first PR a new contributor opens carries an extra welcome line in its CHANGELOG entry (when one exists), or via the README contributors update otherwise.
+- **README contributors section** — a running list of external contributors with links to their GitHub profiles, alongside [GitHub's auto-generated contributors page](https://github.com/Schema-Smith/SchemaSmith/graphs/contributors).
+
+For substantial design contributions or beta-testing partnerships, we may credit the contributor by real name in the relevant release notes or feature callout — with explicit consent, separate from the routine handle-credit above.
+
+Maintainer commits don't get per-entry CHANGELOG credit; maintainer authorship is established via project ownership and git history.
 
 ## Community & Communication
 

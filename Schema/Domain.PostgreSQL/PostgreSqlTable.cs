@@ -43,8 +43,11 @@ namespace Schema.Domain.PostgreSQL
             }
         }
 
-        [JsonProperty(Order = 100)]
-        public string Schema { get; set; } = "public";
+        // Default resolution moved to SchemaDefaultResolver (called from Template.Load) so schema
+        // templates can default to "{{SchemaName}}" instead of "public". Regular templates still
+        // see "public" post-load; bare-constructor instances see null until the resolver runs.
+        [JsonProperty(Order = 100, NullValueHandling = NullValueHandling.Ignore)]
+        public string Schema { get; set; }
 
         [JsonProperty(Order = 101)]
         public List<Statistic> Statistics { get; set; } = [];

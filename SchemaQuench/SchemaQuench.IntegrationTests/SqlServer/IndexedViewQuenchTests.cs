@@ -2,7 +2,6 @@
 
 using System;
 using System.Data;
-using System.Threading;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Utility;
@@ -11,7 +10,6 @@ namespace SchemaQuench.IntegrationTests.SqlServer;
 
 [Category("SqlServer")]
 [TestFixture]
-[NonParallelizable]
 public class IndexedViewQuenchTests
 {
     private readonly string _productName = "IvQuenchTests";
@@ -519,21 +517,7 @@ WHERE s.name = 'Test' AND v.name = 'vTestSummary2'";
     @IndexedViewSchema = '{indexedViewJson.Replace("'", "''")}',
     @WhatIf = 0,
     @UpdateFillFactor = 0";
-        var retry = true;
-        var tries = 0;
-        while (retry && tries++ < 10)
-        {
-            try
-            {
-                cmd.ExecuteNonQuery();
-                retry = false;
-            }
-            catch (Exception e)
-            {
-                if (!e.Message.Contains("deadlock", StringComparison.OrdinalIgnoreCase)) throw;
-                Thread.Sleep(1000);
-            }
-        }
+        cmd.ExecuteNonQuery();
     }
 
     private static string ViewDefinitionWithTwoIndexes()

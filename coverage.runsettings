@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <!-- Exclude test assemblies from the denominator. Schema.IntegrationTests is a shared
+               support library referenced by the other integration projects, so coverlet counts it
+               as a measured assembly unless excluded here — this exclusion is load-bearing. -->
+          <Exclude>[*.UnitTests]*,[*.IntegrationTests]*</Exclude>
+          <!-- Source-generated code ([GeneratedCode]) is KEPT in coverage on purpose: it acts on
+               real inputs/outputs and exercising it has caught real bugs. Only compiler plumbing
+               ([CompilerGenerated]: async state machines, lambdas) and explicit opt-outs are
+               excluded. Do NOT add GeneratedCodeAttribute here. -->
+          <ExcludeByAttribute>CompilerGeneratedAttribute,ExcludeFromCodeCoverage</ExcludeByAttribute>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

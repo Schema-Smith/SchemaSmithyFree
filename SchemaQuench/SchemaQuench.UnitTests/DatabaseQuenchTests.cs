@@ -305,10 +305,15 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "0", false, "0", "0", false, false, null);
 
-        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql");
+        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("SchemaSmith.CompletedMigrationScripts"));
         Assert.That(sql, Does.Contain("[ProductName]"));
         Assert.That(sql, Does.Contain("[QuenchSlot]"));
+        // DELETE is STRICT on template_name (no permissive IN) so a prune in template A
+        // can't shadow-delete a legacy blank-template row that template B still needs.
+        Assert.That(sql, Does.Contain("[template_name] = 'T'"));
+        Assert.That(sql, Does.Not.Contain("[template_name] IN"));
+        Assert.That(sql, Does.Contain("[schema_name] = ''"));
     }
 
     [Test]
@@ -318,9 +323,12 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "false", false, "false", "false", false, false, null);
 
-        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql");
+        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("\"SchemaSmith\".\"CompletedMigrationScripts\""));
         Assert.That(sql, Does.Contain("\"ProductName\""));
+        Assert.That(sql, Does.Contain("template_name = 'T'"));
+        Assert.That(sql, Does.Not.Contain("template_name IN"));
+        Assert.That(sql, Does.Contain("schema_name = ''"));
     }
 
     [Test]
@@ -330,9 +338,12 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "0", false, "0", "0", false, false, null);
 
-        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql");
+        var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("`SchemaSmith_CompletedMigrationScripts`"));
         Assert.That(sql, Does.Contain("`ProductName`"));
+        Assert.That(sql, Does.Contain("`template_name` = 'T'"));
+        Assert.That(sql, Does.Not.Contain("`template_name` IN"));
+        Assert.That(sql, Does.Contain("`schema_name` = ''"));
     }
 
     [Test]
@@ -342,8 +353,10 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "0", false, "0", "0", false, false, null);
 
-        var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before");
+        var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before", "T", "");
         Assert.That(sql, Does.Contain("WITH (NOLOCK)"));
+        Assert.That(sql, Does.Contain("[template_name] IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("[schema_name] = ''"));
     }
 
     [Test]
@@ -353,9 +366,11 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "false", false, "false", "false", false, false, null);
 
-        var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before");
+        var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before", "T", "tenant_acme");
         Assert.That(sql, Does.Not.Contain("NOLOCK"));
         Assert.That(sql, Does.Contain("\"SchemaSmith\".\"CompletedMigrationScripts\""));
+        Assert.That(sql, Does.Contain("template_name IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("schema_name = 'tenant_acme'"));
     }
 
     [Test]
@@ -365,9 +380,11 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "0", false, "0", "0", false, false, null);
 
-        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before");
+        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before", "TenantBody", "tenant_acme");
         Assert.That(sql, Does.Contain("INSERT SchemaSmith.CompletedMigrationScripts"));
         Assert.That(sql, Does.Contain("path/script.sql"));
+        Assert.That(sql, Does.Contain("'TenantBody'"));
+        Assert.That(sql, Does.Contain("'tenant_acme'"));
     }
 
     [Test]
@@ -377,8 +394,10 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "false", false, "false", "false", false, false, null);
 
-        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before");
+        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before", "TenantBody", "tenant_acme");
         Assert.That(sql, Does.Contain("INSERT INTO \"SchemaSmith\".\"CompletedMigrationScripts\""));
+        Assert.That(sql, Does.Contain("template_name"));
+        Assert.That(sql, Does.Contain("schema_name"));
     }
 
     [Test]
@@ -388,8 +407,78 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, "0", false, "0", "0", false, false, null);
 
-        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before");
+        var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before", "T", "");
         Assert.That(sql, Does.Contain("INSERT INTO `SchemaSmith_CompletedMigrationScripts`"));
+        Assert.That(sql, Does.Contain("`template_name`"));
+        Assert.That(sql, Does.Contain("`schema_name`"));
+    }
+
+    [Test]
+    public void GetClaimLegacyTrackingRowsSql_SqlServer_BracketedPredicateAndInList()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var sql = quench.GetClaimLegacyTrackingRowsSql("MyProduct", "Before", "Main", "",
+            new[] { "scripts/a.sql", "scripts/b.sql" });
+
+        Assert.That(sql, Does.Contain("UPDATE SchemaSmith.CompletedMigrationScripts"));
+        Assert.That(sql, Does.Contain("SET [template_name] = 'Main'"));
+        Assert.That(sql, Does.Contain("[template_name] = ''"));    // only legacy rows
+        Assert.That(sql, Does.Contain("[schema_name] = ''"));
+        Assert.That(sql, Does.Contain("[ScriptPath] IN ('scripts/a.sql','scripts/b.sql')"));
+    }
+
+    [Test]
+    public void GetClaimLegacyTrackingRowsSql_PostgreSQL_QuotedPredicateAndInList()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
+        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
+            false, "false", false, "false", "false", false, false, null);
+
+        var sql = quench.GetClaimLegacyTrackingRowsSql("MyProduct", "Before", "Main", "",
+            new[] { "scripts/a.sql", "scripts/b.sql" });
+
+        Assert.That(sql, Does.Contain("UPDATE \"SchemaSmith\".\"CompletedMigrationScripts\""));
+        Assert.That(sql, Does.Contain("SET template_name = 'Main'"));
+        Assert.That(sql, Does.Contain("template_name = ''"));
+        Assert.That(sql, Does.Contain("schema_name = ''"));
+        Assert.That(sql, Does.Contain("\"ScriptPath\" IN ('scripts/a.sql','scripts/b.sql')"));
+    }
+
+    [Test]
+    public void GetClaimLegacyTrackingRowsSql_MySQL_BacktickedPredicateAndInList()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.MySQL };
+        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var sql = quench.GetClaimLegacyTrackingRowsSql("MyProduct", "Before", "Main", "",
+            new[] { "scripts/a.sql", "scripts/b.sql" });
+
+        Assert.That(sql, Does.Contain("UPDATE `SchemaSmith_CompletedMigrationScripts`"));
+        Assert.That(sql, Does.Contain("SET `template_name` = 'Main'"));
+        Assert.That(sql, Does.Contain("`template_name` = ''"));
+        Assert.That(sql, Does.Contain("`schema_name` = ''"));
+        Assert.That(sql, Does.Contain("`ScriptPath` IN ('scripts/a.sql','scripts/b.sql')"));
+    }
+
+    [Test]
+    public void GetClaimLegacyTrackingRowsSql_EscapesSingleQuotesInLiteralValues()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var sql = quench.GetClaimLegacyTrackingRowsSql("O'Brien", "Before's", "Tem'plate", "schem'a",
+            new[] { "scripts/O'Brien.sql" });
+
+        Assert.That(sql, Does.Contain("O''Brien"));
+        Assert.That(sql, Does.Contain("Before''s"));
+        Assert.That(sql, Does.Contain("Tem''plate"));
+        Assert.That(sql, Does.Contain("schem''a"));
+        Assert.That(sql, Does.Contain("scripts/O''Brien.sql"));
     }
 
     [TestCase(Platform.SqlServer)]
@@ -402,15 +491,15 @@ public class DatabaseQuenchTests
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
             false, falseValue, false, falseValue, falseValue, false, false, null);
 
-        var selectSql = quench.GetSelectCompletedScriptsSql("O'Brien", "Before's");
-        var deleteSql = quench.GetDeleteCompletedScriptSql("O'Brien", "Before's", "scripts/O'Brien.sql");
-        var insertSql = quench.GetInsertCompletedScriptSql("scripts/O'Brien.sql", "O'Brien", "Before's");
+        var selectSql = quench.GetSelectCompletedScriptsSql("O'Brien", "Before's", "Tem'plate", "schem'a");
+        var deleteSql = quench.GetDeleteCompletedScriptSql("O'Brien", "Before's", "scripts/O'Brien.sql", "Tem'plate", "schem'a");
+        var insertSql = quench.GetInsertCompletedScriptSql("scripts/O'Brien.sql", "O'Brien", "Before's", "Tem'plate", "schem'a");
 
         Assert.Multiple(() =>
         {
-            Assert.That(selectSql, Does.Contain("O''Brien").And.Contain("Before''s"));
-            Assert.That(deleteSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("scripts/O''Brien.sql"));
-            Assert.That(insertSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("scripts/O''Brien.sql"));
+            Assert.That(selectSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("Tem''plate").And.Contain("schem''a"));
+            Assert.That(deleteSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("scripts/O''Brien.sql").And.Contain("Tem''plate").And.Contain("schem''a"));
+            Assert.That(insertSql, Does.Contain("O''Brien").And.Contain("Before''s").And.Contain("scripts/O''Brien.sql").And.Contain("Tem''plate").And.Contain("schem''a"));
         });
     }
 
@@ -757,7 +846,15 @@ public class DatabaseQuenchTests
     {
         RegisterMockFileWrapper();
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
-        var template = new Template { Name = "T" };
+        var template = new Template
+        {
+            Name = "T",
+            // Production: Template.Load serializes the in-memory views into IndexedViewSchema;
+            // QuenchIndexedViews feeds the proc from that (iteration-aware) string. A view gated
+            // ShouldApplyExpression = "false" is NOT filtered in C# — it is passed through and
+            // evaluated per-target server-side (mirroring materialized views).
+            IndexedViewSchema = "[{\"Schema\":\"dbo\",\"Name\":\"[vw_Test]\",\"Definition\":\"SELECT 1\",\"ShouldApplyExpression\":\"false\"}]"
+        };
         template.IndexedViews.Add(new SqlServerIndexedView
         {
             Name = "[vw_Test]",
@@ -873,6 +970,220 @@ public class DatabaseQuenchTests
         Assert.That(mockCmd.CommandText, Does.Contain("Test''s Product"));
     }
 
+    // I10: QuenchIndexedViews routes through _iterationIndexedViewSchema mirroring the
+    // pattern for tables and materialized views. PrepareIterationContent populates the
+    // field for schema-template iterations; regular templates fall through to the
+    // template's own IndexedViewSchema.
+    [Test]
+    public void PrepareIterationContent_SchemaTemplate_PopulatesIterationIndexedViewSchema()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            IndexedViewSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"vw_Orders\"}]"
+        };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Orders]",
+            Schema = "{{SchemaName}}",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", "0", false, false, null);
+
+        quench.PrepareIterationContent();
+
+        Assert.That(quench.IterationIndexedViewSchema, Does.Contain("\"Schema\":\"tenant_a\""));
+        Assert.That(quench.IterationIndexedViewSchema, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_RegularTemplate_IterationIndexedViewSchema_FallsThroughToTemplate()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "Core",
+            IndexedViewSchema = "[{\"Schema\":\"dbo\",\"Name\":\"vw_Stuff\"}]"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        quench.PrepareIterationContent();
+
+        Assert.That(quench.IterationIndexedViewSchema,
+            Is.EqualTo("[{\"Schema\":\"dbo\",\"Name\":\"vw_Stuff\"}]"));
+    }
+
+    [Test]
+    public void QuenchIndexedViews_SchemaTemplate_UsesSubstitutedIterationSchema()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            // In production, InstanceLoad serializes the in-memory views into
+            // IndexedViewSchema after SchemaDefaultResolver fills the {{SchemaName}} token.
+            // The test sets the pre-baked JSON to exercise the same path PrepareIterationContent
+            // sees in the real load flow.
+            IndexedViewSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"[vw_Orders]\"}]"
+        };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Orders]",
+            Schema = "{{SchemaName}}",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexedViews(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("tenant_a"));
+        Assert.That(mockCmd.CommandText, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    [Test]
+    public void QuenchIndexedViews_SchemaTemplate_PassesAllVariantsForServerSideEvaluation()
+    {
+        // ShouldApplyExpression is no longer filtered in C# — every variant is passed to the
+        // proc (with {{SchemaName}} substituted for the iteration) and evaluated per-target
+        // server-side, mirroring materialized views. A "false"-gated view is still in the
+        // payload; the proc skips it at deploy time.
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            // In production, Template.Load serializes the views into IndexedViewSchema after
+            // SchemaDefaultResolver fills {{SchemaName}}; PrepareIterationContent substitutes it
+            // per iteration. The pre-baked JSON exercises that same path.
+            IndexedViewSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"[vw_Active]\",\"Definition\":\"SELECT 1\"}," +
+                                "{\"Schema\":\"{{SchemaName}}\",\"Name\":\"[vw_Excluded]\",\"Definition\":\"SELECT 1\",\"ShouldApplyExpression\":\"false\"}]"
+        };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Active]",
+            Schema = "{{SchemaName}}",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Excluded]",
+            Schema = "{{SchemaName}}",
+            Definition = "SELECT 1",
+            ShouldApplyExpression = "false",
+            Indexes = [new SqlServerIndex { Name = "[IX_2]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexedViews(mockCmd);
+
+        // Both variants reach the proc (no client-side filter); the iteration schema is substituted.
+        Assert.That(mockCmd.CommandText, Does.Contain("[vw_Active]"));
+        Assert.That(mockCmd.CommandText, Does.Contain("[vw_Excluded]"));
+        Assert.That(mockCmd.CommandText, Does.Contain("tenant_a"));
+        Assert.That(mockCmd.CommandText, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    // Slice-3 audit B5: QuenchIndexedViews threads @TemplateName + @SchemaName so the
+    // existing-views drop-candidate lookup in the proc is scoped per (template, schema).
+    // Regular templates pass @SchemaName = '' and the proc falls through to today's
+    // all-schemas behavior.
+    [Test]
+    public void QuenchIndexedViews_SchemaTemplate_ThreadsTemplateNameAndSchemaName()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_acme'"
+        };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Orders]",
+            Schema = "{{SchemaName}}",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_acme",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexedViews(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@TemplateName = N'TenantBody'"));
+        Assert.That(mockCmd.CommandText, Does.Contain("@SchemaName = N'tenant_acme'"));
+    }
+
+    [Test]
+    public void QuenchIndexedViews_RegularTemplate_PassesEmptyTemplateAndSchemaName()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "Core" };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Orders]",
+            Schema = "dbo",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexedViews(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@TemplateName = N'Core'"));
+        Assert.That(mockCmd.CommandText, Does.Contain("@SchemaName = N''"));
+    }
+
+    [Test]
+    public void QuenchIndexedViews_TemplateNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "Tenant's Body" };
+        template.IndexedViews.Add(new SqlServerIndexedView
+        {
+            Name = "[vw_Orders]",
+            Schema = "dbo",
+            Definition = "SELECT 1",
+            Indexes = [new SqlServerIndex { Name = "[IX_1]", Unique = true, Clustered = true, IndexColumns = "Col1" }]
+        });
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexedViews(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@TemplateName = N'Tenant''s Body'"));
+    }
+
     #endregion
 
     #region QuenchMaterializedViews Tests
@@ -910,6 +1221,348 @@ public class DatabaseQuenchTests
         quench.QuenchMaterializedViews(mockCmd);
 
         Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    #endregion
+
+    #region Schema-Template (Slice 3) — Constructor + DbScope + Log Prefix
+
+    [Test]
+    public void Constructor_SchemaName_DefaultsToEmptyString()
+    {
+        // Forwarding constructor (no schemaName arg) leaves SchemaName empty for regular templates.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.SchemaName, Is.EqualTo(""));
+    }
+
+    [Test]
+    public void Constructor_SchemaName_PreservedFromExplicitArgument()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_acme",
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.SchemaName, Is.EqualTo("tenant_acme"));
+    }
+
+    [Test]
+    public void Constructor_SchemaName_NullCoercedToEmpty()
+    {
+        // Tracking-table column convention (slice 2) uses '' rather than NULL for regular-template rows.
+        // The ctor coerces null to empty so DbScope.SchemaName never carries a null downstream.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db", null,
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.SchemaName, Is.EqualTo(""));
+    }
+
+    [Test]
+    public void Constructor_InternalSchemaName_PreservedFromExplicitArgument()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_globex",
+            false, "false", false, "false", "false", false, false, null);
+
+        Assert.That(quench.SchemaName, Is.EqualTo("tenant_globex"));
+    }
+
+    [Test]
+    public void DbScope_SchemaName_FlowsFromConstructor()
+    {
+        // DbScope is private; the SchemaName surfaces in the SQL that touches the tracking table —
+        // observe via the SQL emitters that route DbScope.SchemaName into the WHERE clause.
+        var product = new Product { Name = "MyProduct", Platform = Platform.SqlServer };
+        var template = new Template { Name = "TenantBody" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd", "tenant_acme",
+            false, "0", false, "0", false, false, false, null);
+
+        var sql = quench.GetSelectCompletedScriptsSql(
+            quench.ProductName, "Before", "TenantBody", quench.SchemaName);
+
+        Assert.That(sql, Does.Contain("[schema_name] = 'tenant_acme'"));
+        Assert.That(sql, Does.Contain("[template_name] IN ('', 'TenantBody')"));
+    }
+
+    [Test]
+    public void DbScope_SchemaName_EmptyForRegularTemplate()
+    {
+        var product = new Product { Name = "MyProduct", Platform = Platform.SqlServer };
+        var template = new Template { Name = "Core" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd",
+            false, "0", false, "0", false, false, false, null);
+
+        var sql = quench.GetSelectCompletedScriptsSql(
+            quench.ProductName, "Before", "Core", quench.SchemaName);
+
+        Assert.That(sql, Does.Contain("[schema_name] = ''"));
+    }
+
+    [Test]
+    public void LogPrefix_SchemaName_IncludesSchemaTag()
+    {
+        // Per design §5.8, every log line emitted during a schema iteration carries the
+        // [Schema: <name>] prefix so a multi-iteration deploy log stays greppable per tenant.
+        // LogPrefix is the single source of truth for the prefix; SafeProgressLog and its
+        // siblings all route through it.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "TenantBody" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd", "tenant_acme",
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.LogPrefix, Is.EqualTo("[srv].[AppProd] [Schema: tenant_acme]"));
+    }
+
+    [Test]
+    public void LogPrefix_NoSchemaName_OmitsSchemaTag()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "Core" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd",
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.LogPrefix, Is.EqualTo("[srv].[AppProd]"));
+    }
+
+    [Test]
+    public void LogPrefix_EmptySchemaName_OmitsSchemaTag()
+    {
+        // Explicit empty string is equivalent to "no schema iteration" (the work-unit convention
+        // for regular templates) — must not render an empty "[Schema: ]" tag.
+        var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "Core" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd", "",
+            false, "false", false, "false", "false", false, false, null);
+
+        Assert.That(quench.LogPrefix, Is.EqualTo("[srv].[AppProd]"));
+    }
+
+    #endregion
+
+    #region Debug File Name
+
+    [Test]
+    public void GetDebugFileName_RegularTemplate_OmitsSchemaSuffix()
+    {
+        // Regular (non-schema) templates have empty _schemaName — the debug filename must end
+        // with .sql directly, preserving the pre-slice-3 filename shape. Behavior for the
+        // overwhelmingly common path must not change.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "Core" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd",
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.GetDebugFileName("Quench Missing Tables And Columns"),
+            Is.EqualTo("SchemaQuench - Quench Missing Tables And Columns srv.AppProd.sql"));
+    }
+
+    [Test]
+    public void GetDebugFileName_SchemaTemplate_IncludesSchemaSuffix()
+    {
+        // Schema-template iterations share _server/_databaseName across siblings; the schema
+        // name must be part of the debug filename or parallel iterations collide on the same
+        // file path, hitting a Win32 file-sharing violation that throws before the SQL batch
+        // executes (slice-3 audit bug B2).
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template { Name = "TenantBody" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd", "tenant_acme",
+            false, "0", false, "0", false, false, false, null);
+
+        Assert.That(quench.GetDebugFileName("Quench Missing Tables And Columns"),
+            Is.EqualTo("SchemaQuench - Quench Missing Tables And Columns srv.AppProd.tenant_acme.sql"));
+    }
+
+    [Test]
+    public void GetDebugFileName_EmptySchemaName_OmitsSchemaSuffix()
+    {
+        // Explicit empty string is equivalent to "no schema iteration" — must not render
+        // a stray "." before .sql.
+        var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "Core" };
+        var quench = new DatabaseQuench("srv", product, template, "AppProd", "",
+            false, "false", false, "false", "false", false, false, null);
+
+        Assert.That(quench.GetDebugFileName("Quench Indexes"),
+            Is.EqualTo("SchemaQuench - Quench Indexes srv.AppProd.sql"));
+    }
+
+    #endregion
+
+    #region PrepareIterationContent — BaselineValidationScript / VersionStampScript / Table Schema
+
+    // Slice-3 audit Phase 4: design §5.3 steps 4 + 6 require per-iteration {{SchemaName}}
+    // substitution into BaselineValidationScript and VersionStampScript. The private fields
+    // are observed via reflection rather than a dedicated accessor (production code change
+    // out of scope for this phase).
+    private static string GetPrivateString(DatabaseQuench quench, string fieldName)
+    {
+        var field = typeof(DatabaseQuench).GetField(fieldName,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.That(field, Is.Not.Null, $"Expected private field '{fieldName}' on DatabaseQuench.");
+        return (string)field.GetValue(quench);
+    }
+
+    [Test]
+    public void PrepareIterationContent_SchemaTemplate_SubstitutesIntoBaselineValidationScript()
+    {
+        // Design §5.3 step 4: BaselineValidationScript runs per iteration with {{SchemaName}}
+        // resolved. A discovery script that returns 'tenant_a' must observe the per-tenant
+        // baseline body with the token replaced by that tenant name.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            BaselineValidationScript = "SELECT CAST(CASE WHEN SCHEMA_ID('{{SchemaName}}') IS NULL THEN 0 ELSE 1 END AS BIT)"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        var substituted = GetPrivateString(quench, "_iterationBaselineValidationScript");
+        Assert.That(substituted, Does.Contain("SCHEMA_ID('tenant_a')"));
+        Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_RegularTemplate_BaselineValidationScript_LeftVerbatim()
+    {
+        // Regular templates short-circuit the substitution path — the verbatim template body
+        // (which never had a {{SchemaName}} token reason to exist) flows through unmodified.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "Core",
+            BaselineValidationScript = "SELECT CAST(1 AS BIT)"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        var captured = GetPrivateString(quench, "_iterationBaselineValidationScript");
+        Assert.That(captured, Is.EqualTo("SELECT CAST(1 AS BIT)"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_SchemaTemplate_SubstitutesIntoVersionStampScript()
+    {
+        // Design §5.3 step 6: VersionStampScript runs per iteration with {{SchemaName}}
+        // resolved. A stamp that touches a per-tenant audit table must see the iteration
+        // schema substituted.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_globex'",
+            VersionStampScript = "INSERT INTO [{{SchemaName}}].[VersionStamp] (Version) VALUES ('1.0')"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_globex",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        var substituted = GetPrivateString(quench, "_iterationVersionStampScript");
+        Assert.That(substituted, Does.Contain("[tenant_globex]"));
+        Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_RegularTemplate_VersionStampScript_LeftVerbatim()
+    {
+        var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
+        var template = new Template
+        {
+            Name = "Core",
+            VersionStampScript = "DO $$ BEGIN RAISE NOTICE 'stamped'; END $$;"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "false", false, false, null);
+        quench.PrepareIterationContent();
+
+        var captured = GetPrivateString(quench, "_iterationVersionStampScript");
+        Assert.That(captured, Is.EqualTo("DO $$ BEGIN RAISE NOTICE 'stamped'; END $$;"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_SchemaTemplate_SubstitutesIntoIterationTableSchema()
+    {
+        // Design §5.3 step 5 fan-out: the serialized table-definition JSON consumed by the
+        // engine-generated DDL procs must have {{SchemaName}} resolved for the iteration.
+        // Slice 1's SchemaDefaultResolver fills the Schema field with "{{SchemaName}}";
+        // PrepareIterationContent then materializes that token per iteration.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_acme'",
+            TableSchema = "[{\"Schema\":\"{{SchemaName}}\",\"Name\":\"Customers\"}]"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_acme",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        Assert.That(quench.IterationTableSchema, Does.Contain("\"Schema\":\"tenant_acme\""));
+        Assert.That(quench.IterationTableSchema, Does.Not.Contain("{{SchemaName}}"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_RegularTemplate_IterationTableSchema_FallsThroughToTemplate()
+    {
+        // Regular templates leave _iterationTableSchema null; the property falls back to
+        // Template.TableSchema verbatim — no substitution, no behavior change vs. pre-slice-3.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "Core",
+            TableSchema = "[{\"Schema\":\"dbo\",\"Name\":\"Customers\"}]"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        Assert.That(quench.IterationTableSchema,
+            Is.EqualTo("[{\"Schema\":\"dbo\",\"Name\":\"Customers\"}]"));
+    }
+
+    [Test]
+    public void PrepareIterationContent_SchemaTemplate_MultipleSchemaNameOccurrences_AllReplaced()
+    {
+        // Audit item 15: multiple {{SchemaName}} occurrences in a single body. The
+        // String.Replace path used in PrepareIterationContent replaces all occurrences;
+        // exercise the case end-to-end for VersionStampScript so a future regex-style
+        // single-replace refactor would surface here.
+        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "TenantBody",
+            SchemaIdentificationScript = "SELECT 'tenant_a'",
+            VersionStampScript =
+                "INSERT INTO [{{SchemaName}}].[VersionStamp] (Schema_, Version) " +
+                "VALUES ('{{SchemaName}}', '1.0'); PRINT 'Stamped {{SchemaName}}';"
+        };
+
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", false, false, false, null);
+        quench.PrepareIterationContent();
+
+        var substituted = GetPrivateString(quench, "_iterationVersionStampScript");
+        Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
+        // tenant_a appears in the table-name, value, and PRINT — three occurrences.
+        var occurrences = System.Text.RegularExpressions.Regex.Matches(substituted, "tenant_a").Count;
+        Assert.That(occurrences, Is.EqualTo(3),
+            "All three {{SchemaName}} occurrences must be replaced — not just the first.");
     }
 
     #endregion

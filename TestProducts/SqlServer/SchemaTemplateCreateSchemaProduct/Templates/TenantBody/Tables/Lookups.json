@@ -1,0 +1,25 @@
+{
+  "Name": "[Lookups]",
+  "Columns": [
+    {
+      "Name": "[LookupID]",
+      "DataType": "INT"
+    },
+    {
+      "Name": "[Code]",
+      "DataType": "NVARCHAR(32)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Lookups]",
+      "PrimaryKey": true,
+      "IndexColumns": "[LookupID]"
+    }
+  ],
+  "DataDelivery": {
+    "ContentFile": "Tables/Lookups.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "[LookupID]"
+  }
+}

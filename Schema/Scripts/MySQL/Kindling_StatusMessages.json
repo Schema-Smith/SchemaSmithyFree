@@ -1,0 +1,36 @@
+{
+  "Name": "SchemaSmith_StatusMessages",
+  "Columns": [
+    {
+      "Name": "Id",
+      "DataType": "BIGINT",
+      "Nullable": false,
+      "AutoIncrement": true,
+      "PrimaryKey": true
+    },
+    {
+      "Name": "SessionId",
+      "DataType": "BIGINT",
+      "Nullable": false
+    },
+    {
+      "Name": "Message",
+      "DataType": "TEXT",
+      "Nullable": false
+    },
+    {
+      "Name": "CreatedAt",
+      "DataType": "DATETIME(3)",
+      "Nullable": true,
+      "Default": "NOW(3)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "IX_SessionId",
+      "PrimaryKey": false,
+      "Unique": false,
+      "IndexColumns": "SessionId"
+    }
+  ]
+}

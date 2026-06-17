@@ -1,0 +1,13 @@
+{
+  "Name": "mv_customer_count",
+  "Definition": "SELECT customer_id, COUNT(*) AS row_count FROM \"{{SchemaName}}\".customers GROUP BY customer_id",
+  "AccessMethod": "heap",
+  "Indexes": [
+    {
+      "Name": "ix_mv_customer_count_customer_id",
+      "Unique": true,
+      "IndexColumns": "customer_id",
+      "AccessMethod": "btree"
+    }
+  ]
+}

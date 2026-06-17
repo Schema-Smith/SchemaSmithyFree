@@ -54,8 +54,11 @@ public class ProductQuenchTests
             cmd.CommandText = @$"
 TRUNCATE TABLE SchemaSmith.CompletedMigrationScripts
 TRUNCATE TABLE SchemaSmith.TestLog
-INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [QuenchSlot]) VALUES('MigrationScripts/Before/MigrationScript0.sql', '{product.Name}', 'Before')
-INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [QuenchSlot]) VALUES('MigrationScripts/Before/Obsolete.sql', '{product.Name}', 'Before') -- this entry should be removed from the CompletedMigrationScripts table
+-- Slice 2 contract: writes always populate template_name with the actual template the row
+-- belongs to. The prune DELETE is strict on template_name = @template so each template's
+-- prune only deletes its own rows (legacy blank-template rows persist as harmless residue).
+INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [QuenchSlot], [template_name], [schema_name]) VALUES('MigrationScripts/Before/MigrationScript0.sql', '{product.Name}', 'Before', 'Main', '')
+INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [QuenchSlot], [template_name], [schema_name]) VALUES('MigrationScripts/Before/Obsolete.sql', '{product.Name}', 'Before', 'Main', '') -- this entry should be removed from the CompletedMigrationScripts table
 ";
             cmd.ExecuteNonQuery();
             conn.ChangeDatabase(_secondaryDb);

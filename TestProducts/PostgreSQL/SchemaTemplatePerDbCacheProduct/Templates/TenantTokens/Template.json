@@ -1,0 +1,13 @@
+{
+    "Name": "TenantTokens",
+    "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datistemplate = false AND datname = '{{MainDB}}'",
+    "SchemaIdentificationScript": "SELECT nspname FROM pg_namespace WHERE nspname LIKE 'perdbcache_%' ORDER BY nspname",
+    "AllowParallel": false,
+    "ScriptTokens": {
+        "PerDbToken":      "<*Query*>WITH side AS (INSERT INTO public.token_call_counter (token_kind, iteration_schema) VALUES ('PerDb', '') RETURNING 1) SELECT 'perdb_value' FROM side",
+        "IterationToken":  "<*Query*>WITH side AS (INSERT INTO public.token_call_counter (token_kind, iteration_schema) VALUES ('Iteration', '{{SchemaName}}') RETURNING 1) SELECT 'iter_value_{{SchemaName}}' FROM side"
+    },
+    "ScriptFolders": [
+        { "FolderPath" : "Procedures", "QuenchSlot" : "Objects" }
+    ]
+}

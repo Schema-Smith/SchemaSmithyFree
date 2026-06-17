@@ -210,4 +210,115 @@ public class ConnectionStringTests
         var result = ConnectionString.Build(Platform.PostgreSQL, "pghost", "pgdb", "pguser", "pgpass");
         Assert.That(result, Does.Not.Contain("Trust Server Certificate"));
     }
+
+    // ---- RetargetDatabase — issue #248 ----------------------------------------------------------
+    //
+    // Schema-template discovery iterates multiple databases per server, but a user-supplied
+    // --ConnectionString override embeds whatever database the operator put in it (commonly an
+    // admin DB: master / postgres / a privileged login DB). Without retargeting, every per-DB
+    // operation runs against the override's embedded DB instead of the discovered target. The
+    // helper rebuilds the override using the platform's ConnectionStringBuilder, swapping the
+    // database/catalog property to the discovered target while preserving host, auth, and any
+    // other connection options.
+
+    [Test]
+    public void RetargetDatabase_SqlServer_ReplacesInitialCatalog()
+    {
+        var original = "data source=myserver;Initial Catalog=master;User ID=u;Password=p;";
+
+        var result = ConnectionString.RetargetDatabase(original, "tenant1", Platform.SqlServer);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Does.Contain("Initial Catalog=tenant1"));
+            Assert.That(result, Does.Not.Contain("Initial Catalog=master"));
+            Assert.That(result, Does.Contain("myserver"), "host preserved");
+            Assert.That(result, Does.Contain("User ID=u").IgnoreCase, "user preserved");
+            Assert.That(result, Does.Contain("Password=p").IgnoreCase, "password preserved");
+        });
+    }
+
+    [Test]
+    public void RetargetDatabase_PostgreSQL_ReplacesDatabase()
+    {
+        var original = "Host=pghost;Port=5432;Database=postgres;Username=pguser;Password=pgpass;";
+
+        var result = ConnectionString.RetargetDatabase(original, "tenant1", Platform.PostgreSQL);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Does.Contain("Database=tenant1"));
+            Assert.That(result, Does.Not.Contain("Database=postgres"));
+            Assert.That(result, Does.Contain("pghost"), "host preserved");
+            Assert.That(result, Does.Contain("Port=5432"), "port preserved");
+            Assert.That(result, Does.Contain("pguser").IgnoreCase, "user preserved");
+        });
+    }
+
+    [Test]
+    public void RetargetDatabase_MySQL_ReplacesDatabase()
+    {
+        var original = "Server=myhost;Database=admin;Uid=myuid;Pwd=mypwd;AllowUserVariables=true;";
+
+        var result = ConnectionString.RetargetDatabase(original, "tenant1", Platform.MySQL);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Does.Contain("Database=tenant1").IgnoreCase);
+            Assert.That(result, Does.Not.Contain("Database=admin").IgnoreCase);
+            Assert.That(result, Does.Contain("myhost"), "host preserved");
+            // MySqlConnectionStringBuilder normalizes the key to "Allow User Variables" (canonical with spaces).
+            // Semantically equivalent — the connector parses both forms — but the round-tripped output
+            // uses the canonical spacing. Asserting against the canonical form keeps the test honest.
+            Assert.That(result, Does.Contain("Allow User Variables=True").IgnoreCase, "structural property preserved");
+        });
+    }
+
+    [Test]
+    public void RetargetDatabase_NullConnectionString_ReturnedAsIs()
+    {
+        var result = ConnectionString.RetargetDatabase(null, "tenant1", Platform.SqlServer);
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void RetargetDatabase_EmptyConnectionString_ReturnedAsIs()
+    {
+        var result = ConnectionString.RetargetDatabase("", "tenant1", Platform.SqlServer);
+        Assert.That(result, Is.EqualTo(""));
+    }
+
+    [Test]
+    public void RetargetDatabase_NullDatabaseName_ReturnedAsIs()
+    {
+        const string original = "data source=myserver;Initial Catalog=master;User ID=u;Password=p;";
+        var result = ConnectionString.RetargetDatabase(original, null, Platform.SqlServer);
+        Assert.That(result, Is.EqualTo(original));
+    }
+
+    [Test]
+    public void RetargetDatabase_EmptyDatabaseName_ReturnedAsIs()
+    {
+        const string original = "data source=myserver;Initial Catalog=master;User ID=u;Password=p;";
+        var result = ConnectionString.RetargetDatabase(original, "", Platform.SqlServer);
+        Assert.That(result, Is.EqualTo(original));
+    }
+
+    [Test]
+    public void RetargetDatabase_AlreadyTargetingThatDb_StillProducesCorrectTarget()
+    {
+        // No-op-shaped call: the override already targets the right DB. The result must still
+        // produce a connection string that targets that DB (the caller should be free to invoke
+        // RetargetDatabase without first checking whether retargeting is needed).
+        var original = "data source=myserver;Initial Catalog=tenant1;User ID=u;Password=p;";
+        var result = ConnectionString.RetargetDatabase(original, "tenant1", Platform.SqlServer);
+        Assert.That(result, Does.Contain("Initial Catalog=tenant1"));
+    }
+
+    [Test]
+    public void RetargetDatabase_InvalidPlatform_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            ConnectionString.RetargetDatabase("data source=s;Initial Catalog=db;", "tenant1", (Platform)999));
+    }
 }

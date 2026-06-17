@@ -1,0 +1,24 @@
+{
+    "Name": "`marker`",
+    "Engine": "InnoDB",
+    "Columns": [
+        {
+            "Name": "`id`",
+            "DataType": "INT",
+            "Nullable": false,
+            "AutoIncrement": true
+        },
+        {
+            "Name": "`label`",
+            "DataType": "VARCHAR(64)",
+            "Nullable": false
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "PRIMARY",
+            "PrimaryKey": true,
+            "IndexColumns": "`id`"
+        }
+    ]
+}

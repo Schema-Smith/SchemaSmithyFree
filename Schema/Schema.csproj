@@ -25,6 +25,9 @@
 		<EmbeddedResource Include="Scripts\SqlServer\*.sql" />
 		<EmbeddedResource Include="Scripts\PostgreSQL\*.sql" />
 		<EmbeddedResource Include="Scripts\MySQL\*.sql" />
+		<EmbeddedResource Include="Scripts\SqlServer\*.json" />
+		<EmbeddedResource Include="Scripts\PostgreSQL\*.json" />
+		<EmbeddedResource Include="Scripts\MySQL\*.json" />
 	</ItemGroup>
 
 	<ItemGroup>

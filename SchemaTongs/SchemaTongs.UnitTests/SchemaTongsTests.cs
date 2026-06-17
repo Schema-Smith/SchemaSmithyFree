@@ -45,6 +45,20 @@ public class SchemaTongsTests
         _fileWrapper.Exists(Arg.Any<string>()).Returns(false);
     }
 
+    /// <summary>
+    /// Stub <paramref name="mockCmd"/>.ExecuteScalar() so that KindleTheForge takes the
+    /// skip path on MySQL without touching the DB. Lock-acquire returns 1L (success),
+    /// the KindleStamp existence check returns 1L (table present), and the stamp SELECT
+    /// returns the current computed stamp so the gate detects "already current" and returns
+    /// without executing any kindle DDL. Non-MySQL kindle queries fall through to null,
+    /// preserving default NSubstitute behaviour for SQL Server and PostgreSQL tests.
+    /// Call this immediately after SetUpMocks() in MySQL-targeted tests that call
+    /// CastTemplate() — BEFORE any per-test ExecuteScalar stubs that need to return
+    /// query-specific values, so those per-test stubs (which replace this one) are
+    /// last-installed and therefore win.
+    /// </summary>
+    private void StubMySqlKindleGate() => KindleGateTestHelpers.StubMySqlKindleGate(_command);
+
     private void RegisterConfig(Platform platform, Dictionary<string, string> overrides = null)
     {
         var configValues = new Dictionary<string, string>
@@ -1315,8 +1329,14 @@ public class SchemaTongsTests
             reader["matviewname"].Returns("my_matview");
             _command.ExecuteReader().Returns(reader);
 
+            // Discriminate by CommandText: pg_catalog.pg_class is the kindle-gate existence check
+            // (must return 0L so ReadStamp returns null and KindleTheForge runs DDL via ExecuteNonQuery).
+            // All other ExecuteScalar calls (GenerateMaterializedViewJson) return the matview JSON.
             var matViewJson = "{\"Name\":\"my_matview\",\"Schema\":\"public\",\"Definition\":\"SELECT 1\",\"WithData\":true}";
-            _command.ExecuteScalar().Returns(matViewJson);
+            _command.ExecuteScalar().Returns(_ =>
+                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                    ? (object)0L
+                    : (object)matViewJson);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1363,6 +1383,7 @@ public class SchemaTongsTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
+            StubMySqlKindleGate();
             RegisterConfig(Platform.MySQL, new Dictionary<string, string>
             {
                 ["Source:Database"] = "testdb",
@@ -1392,6 +1413,7 @@ public class SchemaTongsTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
+            StubMySqlKindleGate();
             RegisterConfig(Platform.MySQL, new Dictionary<string, string>
             {
                 ["ShouldCast:Tables"] = "false",
@@ -1428,6 +1450,7 @@ public class SchemaTongsTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
+            StubMySqlKindleGate();
             RegisterConfig(Platform.MySQL, new Dictionary<string, string>
             {
                 ["ShouldCast:Tables"] = "false",
@@ -1464,6 +1487,7 @@ public class SchemaTongsTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
+            StubMySqlKindleGate();
             RegisterConfig(Platform.MySQL, new Dictionary<string, string>
             {
                 ["ShouldCast:Tables"] = "false",
@@ -1500,6 +1524,7 @@ public class SchemaTongsTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
+            StubMySqlKindleGate();
             RegisterConfig(Platform.MySQL, new Dictionary<string, string>
             {
                 ["ShouldCast:Tables"] = "false",
@@ -1536,6 +1561,7 @@ public class SchemaTongsTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
+            StubMySqlKindleGate();
             RegisterConfig(Platform.MySQL, new Dictionary<string, string>
             {
                 ["ShouldCast:Tables"] = "false",
@@ -1572,6 +1598,7 @@ public class SchemaTongsTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
+            StubMySqlKindleGate();
             RegisterConfig(Platform.MySQL, new Dictionary<string, string>
             {
                 ["ShouldCast:Tables"] = "true",
@@ -1628,6 +1655,7 @@ public class SchemaTongsTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
+            StubMySqlKindleGate();
             RegisterConfig(Platform.MySQL, new Dictionary<string, string>
             {
                 ["ShouldCast:Tables"] = "true",
@@ -1678,6 +1706,7 @@ public class SchemaTongsTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
+            StubMySqlKindleGate();
             RegisterConfig(Platform.MySQL, new Dictionary<string, string>
             {
                 ["ShouldCast:Tables"] = "false",

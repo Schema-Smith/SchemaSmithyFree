@@ -34,6 +34,15 @@ public class TableDataDeliveryTests
     private const string SchemaName = "public";
 
     [SetUp]
+    public void SetUpClearPgPools() => NpgsqlConnection.ClearAllPools();
+
+    [TearDown]
+    public void TearDownClearPgPools() => NpgsqlConnection.ClearAllPools();
+
+    [OneTimeTearDown]
+    public void OneTimeTearDownClearPgPools() => NpgsqlConnection.ClearAllPools();
+
+    [SetUp]
     public void SetUp()
     {
         _testDb = Schema.IntegrationTests.PostgreSQL.FixtureSetup.MainDb;

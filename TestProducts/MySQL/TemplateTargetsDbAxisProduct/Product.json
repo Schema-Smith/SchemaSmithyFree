@@ -1,0 +1,12 @@
+{
+    "Name": "TemplateTargetsDbAxisProduct",
+    "ValidationScript": "SELECT 1",
+    "TemplateOrder": [
+        "Body"
+    ],
+    "ScriptFolders": [],
+    "ScriptTokens": {
+        "ReleaseVersion": "1.0.0.1"
+    },
+    "Platform": "MySQL"
+}

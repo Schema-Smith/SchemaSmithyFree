@@ -100,13 +100,13 @@ The typical placement inside a schema package is `ScriptPath` pointing at `Templ
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `ShouldCast:OutputScripts` | bool | `true` | Generate merge scripts. When `false`, only `.tabledata` files are written. |
-| `ShouldCast:OutputContentFiles` | bool | `false` | Write raw data to sibling `.tabledata` content files. Automatically enabled when `ConfigureDataDelivery` is on. |
+| `ShouldCast:OutputContentFiles` | bool | `true` | Write raw data to sibling `.tabledata` content files. Set to `false` to skip writing content files (and, transitively, to skip `ConfigureDataDelivery` since the configurator needs a content file path to record). |
 | `ShouldCast:DisableTriggers` | bool | `false` | Wraps the generated script with platform-appropriate trigger disable/enable. |
 | `ShouldCast:MergeUpdate` | bool | `true` | Includes the update branch (matched rows whose data has changed). |
 | `ShouldCast:MergeDelete` | bool | `true` | Includes the delete branch (target rows missing from the source). On all three platforms: SQL Server / PostgreSQL emit `WHEN NOT MATCHED BY SOURCE THEN DELETE` inside the `MERGE`; MySQL emits an `INSERT ... ON DUPLICATE KEY UPDATE` followed by a separate `DELETE WHERE NOT EXISTS` step (because MySQL has no `MERGE`). |
 | `ShouldCast:MergeType` | string | `Insert/Update` | Default `DataDelivery:MergeType` for tables that don't set it explicitly. Values: `None`, `Insert`, `Insert/Update`, `Insert/Update/Delete`. Used when writing `DataDelivery` blocks via `--ConfigureDataDelivery`. |
 | `ShouldCast:ConfigureDataDelivery` | bool | `false` | After extraction, write a `DataDelivery` block into each matching table's JSON file. See [--ConfigureDataDelivery](#--configuredatadelivery). |
-| `ShouldCast:TokenizeScripts` | bool | `false` | **SQL Server only.** Replaces the source database name with script tokens in the generated merge scripts, matching SchemaTongs' tokenization behavior. |
+| `ShouldCast:TokenizeScripts` | bool | `true` | **SQL Server only.** Replaces the source database name with script tokens in the generated merge scripts, matching SchemaTongs' tokenization behavior. Set to `false` to disable tokenization and keep the literal database name in generated scripts. |
 | `ShouldCast:DisableRules` | bool | `false` | **PostgreSQL only.** Wraps the delivery in `ALTER TABLE ... DISABLE RULE` / `ENABLE RULE`. |
 | `ShouldCast:UpdateDescendents` | bool | `true` | **PostgreSQL only.** When `false`, the generated `MERGE` uses `MERGE INTO ... ONLY` so partitioned-table writes do not propagate to descendant tables. |
 
@@ -485,9 +485,97 @@ See [Schema Packages -- DataDelivery](schema-packages.md#datadelivery) for the f
 
 ---
 
+## Schema-Template Data Extraction
+
+Schema templates need per-iteration data delivery -- each tenant gets the same reference data, scaffolded from a canonical source schema. DataTongs extracts data scoped to a single source schema and writes content files and MERGE scripts that use `{{SchemaName}}` as the destination schema reference, so SchemaQuench can resolve it per iteration at deploy time. The common use: extract seed data from a canonical tenant schema so every future onboarding starts from the same known state.
+
+### Activation
+
+Schema-template mode is detected by two signals -- both must be present:
+
+1. **The target `Template.json` has a non-empty `SchemaIdentificationScript` field.** DataTongs walks up from `ContentPath` to find the nearest `Template.json`, then reads it for this field. A template is a schema template when this field exists and is non-empty.
+2. **`Source:Schema` is set in `DataTongs.settings.json`.** This names the source schema DataTongs will extract data from.
+
+When signal 1 is true and signal 2 is absent, DataTongs throws an error:
+
+> Target template is a schema template (has `SchemaIdentificationScript`), but `Source.Schema` is not set in `DataTongs.settings.json`. Set `Source.Schema` to the name of the source schema you are extracting data from (typically a seed-tenant schema), or point DataTongs at a regular template instead.
+
+When signal 1 is false and `Source:Schema` is set anyway, DataTongs logs a warning and proceeds in regular extraction mode -- `Source:Schema` is ignored.
+
+Neither signal set means regular extraction behavior, unchanged.
+
+### Source schema
+
+Add `Schema` to the existing `Source` section in `DataTongs.settings.json`:
+
+```json
+{
+  "Source": {
+    "Server": "localhost",
+    "Database": "TenantSeedDB",
+    "Schema": "tenant_seed",
+    "Platform": "SqlServer"
+  },
+  "ContentPath": "./Templates/TenantBody/Table Data",
+  "ScriptPath":  "./Templates/TenantBody/Table Data",
+  "Tables": [
+    { "Name": "Customers", "KeyColumns": "CustomerID" },
+    { "Name": "Plans" }
+  ],
+  "ShouldCast": {
+    "OutputContentFiles": true,
+    "ConfigureDataDelivery": true
+  }
+}
+```
+
+`Source:Schema` is a string naming the single source schema for this extraction run. All entries in the `Tables` array are resolved against this schema -- it is the only schema DataTongs touches in one schema-template run.
+
+### Mode constraints
+
+Schema-template mode enforces two requirements at startup, before any database connection is made:
+
+**Unqualified table names.** Each `Tables[N].Name` must be an unqualified table name -- no schema prefix. The schema comes from `Source:Schema`, not from the individual table entry. A qualified name like `"tenant_seed.Customers"` is rejected:
+
+> Table names in schema-template mode must be unqualified. `Tables[0].Name = "tenant_seed.Customers"`. Use `"Customers"` and let `Source.Schema` specify the source. Cross-schema data extraction (e.g., from `dbo`) goes in a separate DataTongs run targeting a regular template.
+
+**No cross-schema data extraction in one run.** Schema-template mode produces content for one schema's tables. If you need data from both `{{SchemaName}}.Customers` and a shared `dbo.Plans` table, run DataTongs twice -- once in schema-template mode for the per-tenant tables, once in regular mode for the shared ones. Regular-mode scripts use literal schema names and land in the appropriate folder of a non-schema template.
+
+`ConfigureDataDelivery` works in schema-template mode. The configurator writes a `DataDelivery` block into each matching table's JSON file but does not add a `Schema` field -- schema-template table files are schemaless by construction.
+
+### Transformations
+
+Schema-template mode changes the names and content of every output file:
+
+| Output element | Regular mode | Schema-template mode |
+|---|---|---|
+| Merge script filename | `Populate <schema>.<table>.sql` | `Populate <table>.sql` |
+| Content file filename | `<schema>.<table>.tabledata` | `<table>.tabledata` |
+| Destination schema in merge body | Literal source schema name | `{{SchemaName}}` |
+| Cross-schema refs in merge body | Preserved as-is | Preserved as-is |
+
+The unqualified filenames match the naming convention for table JSON files in a schema template (`Tables/Customers.json`, not `Tables/dbo.Customers.json`). SchemaQuench resolves `{{SchemaName}}` to the active schema when it executes the merge script for each iteration.
+
+### TokenizeScripts
+
+`ShouldCast:TokenizeScripts` (SQL Server only) replaces the source database name with a script token in the generated merge scripts, matching SchemaTongs' tokenization behavior. In schema-template mode, both transformations apply in sequence: the database name is replaced with its token, and the source schema name is replaced with `{{SchemaName}}`. The two are orthogonal -- enabling `TokenizeScripts` in schema-template mode produces merge scripts with both a DB token and a `{{SchemaName}}` destination reference.
+
+### Round-trip
+
+Running DataTongs twice against the same source schema and data produces identical output files. The extraction query orders rows by key columns, content files are deterministic JSON, and the merge script body is generated from that fixed row order. Clean diffs, honest reviews -- running DataTongs on an unchanged source is a no-op for both the files and the deployed data.
+
+### Out of scope for v1
+
+**Multi-schema extraction in one run.** Each DataTongs run in schema-template mode targets exactly one source schema. If a product's data spans multiple schemas (e.g., per-tenant tables in `{{SchemaName}}` and shared lookup tables in `dbo`), use two separate DataTongs runs -- one in schema-template mode for the per-tenant tables, one in regular mode for the shared schema. The two output directories land in different template folders and are managed independently.
+
+---
+
 ## Related Documentation
 
 - [Configuration Reference](configuration.md) -- Shared configuration system, CLI switches, environment variables
 - [Schema Packages Reference](schema-packages.md) -- How `Table Data` scripts fit into a schema package
+- [Schema Templates](schema-packages.md#schema-templates) -- `Template.json` field reference for schema-template configuration
+- [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md) -- Narrative walkthrough of the full schema-template workflow
+- [Schema-Template Extraction](schematongs.md#schema-template-extraction) -- The SchemaTongs sibling section; users typically run both tools when migrating from hand-replicated schemas
 - [SchemaQuench Reference](schemaquench.md) -- The tool that executes the generated scripts against target databases
 - [Custom Properties](custom-properties.md) -- Attach team-defined metadata to the tables DataTongs round-trips

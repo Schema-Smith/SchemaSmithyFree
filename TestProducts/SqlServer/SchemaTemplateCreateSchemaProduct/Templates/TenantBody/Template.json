@@ -1,0 +1,15 @@
+{
+    "Name": "TenantBody",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "SchemaIdentificationScript": "SELECT [Name] FROM dbo.SchemaTemplateCreateSchemaTenants ORDER BY [Name]",
+    "AllowParallel": false,
+    "CreateSchemaIfMissing": true,
+    "VersionStampScript": "PRINT '{{ReleaseVersion}}'",
+    "ScriptTokens": {
+        "TenantLabel": "<*Query*>SELECT '{{SchemaName}}_label'"
+    },
+    "ScriptFolders": [
+        { "FolderPath" : "MigrationScripts/Before", "QuenchSlot" : "Before" },
+        { "FolderPath" : "Procedures", "QuenchSlot" : "Objects" }
+    ]
+}

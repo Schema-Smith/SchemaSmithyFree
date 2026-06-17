@@ -1,0 +1,8 @@
+{
+    "Name": "Shared",
+    "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datistemplate = false AND datname = '{{MainDB}}'",
+    "VersionStampScript": "DO $$\nBEGIN\nRAISE NOTICE '{{ReleaseVersion}}';\nEND;\n$$;",
+    "ScriptFolders": [
+        { "FolderPath" : "Before Scripts", "QuenchSlot" : "Before" }
+    ]
+}

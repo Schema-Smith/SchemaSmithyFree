@@ -303,6 +303,7 @@ SELECT SchemaSmith.fn_StripParenWrapping([definition])
         conn.ChangeDatabase(_mainDb);
         using var cmd = conn.CreateCommand();
         const string json = @"[{
+            ""Schema"": ""[dbo]"",
             ""Name"": ""[VariantLogTest]"",
             ""CompressionType"": ""NONE"",
             ""Columns"": [ { ""Name"": ""[Id]"", ""DataType"": ""INT"", ""Nullable"": false } ],

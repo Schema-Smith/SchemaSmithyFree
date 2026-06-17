@@ -8,7 +8,7 @@
       "QuenchSlot": "Before"
     }
   ],
-  "Required": false,
+  "RequireAtLeastOneTarget": false,
   "ServerToQuench": "Primary",
   "ScriptTokens": {},
   "UpdateFillFactor": true

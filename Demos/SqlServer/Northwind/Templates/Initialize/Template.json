@@ -2,6 +2,6 @@
   "Name": "Initialize",
   "DatabaseIdentificationScript": "SELECT name FROM master.sys.databases WHERE name = 'TestMain' AND NOT EXISTS (SELECT 1 FROM master.sys.databases WHERE name = '{{NorthwindDb}}')",
   "ScriptFolders": [{"FolderPath": "Before Scripts", "QuenchSlot": "Before"}],
-  "Required": false,
+  "RequireAtLeastOneTarget": false,
   "ScriptTokens": {}
 }

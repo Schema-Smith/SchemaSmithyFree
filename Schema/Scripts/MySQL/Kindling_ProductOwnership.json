@@ -1,0 +1,57 @@
+{
+  "Name": "SchemaSmith_ProductOwnership",
+  "Columns": [
+    {
+      "Name": "Id",
+      "DataType": "INT",
+      "Nullable": false,
+      "AutoIncrement": true,
+      "PrimaryKey": true
+    },
+    {
+      "Name": "ObjectType",
+      "DataType": "VARCHAR(50)",
+      "Nullable": false
+    },
+    {
+      "Name": "ObjectSchema",
+      "DataType": "VARCHAR(64)",
+      "Nullable": false
+    },
+    {
+      "Name": "ObjectName",
+      "DataType": "VARCHAR(64)",
+      "Nullable": false
+    },
+    {
+      "Name": "ProductName",
+      "DataType": "VARCHAR(100)",
+      "Nullable": false
+    },
+    {
+      "Name": "TemplateName",
+      "DataType": "VARCHAR(100)",
+      "Nullable": false
+    },
+    {
+      "Name": "CreatedAt",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "Name": "UpdatedAt",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "uk_object",
+      "PrimaryKey": false,
+      "Unique": true,
+      "IndexColumns": "ObjectType,ObjectSchema,ObjectName"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "Schema": "SchemaSmith",
+  "Name": "ProductOwnership",
+  "Columns": [
+    {
+      "Name": "Schema",
+      "DataType": "VARCHAR(256)",
+      "Nullable": false
+    },
+    {
+      "Name": "TableName",
+      "DataType": "VARCHAR(256)",
+      "Nullable": false
+    },
+    {
+      "Name": "IndexName",
+      "DataType": "VARCHAR(256)",
+      "Nullable": true
+    },
+    {
+      "Name": "ProductName",
+      "DataType": "VARCHAR(100)",
+      "Nullable": false
+    },
+    {
+      "Name": "template_name",
+      "DataType": "VARCHAR(256)",
+      "Nullable": false,
+      "Default": "''''"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_ProductOwnership",
+      "PrimaryKey": false,
+      "Unique": true,
+      "IndexColumns": "\"Schema\",\"TableName\",\"IndexName\",\"ProductName\",template_name"
+    }
+  ]
+}

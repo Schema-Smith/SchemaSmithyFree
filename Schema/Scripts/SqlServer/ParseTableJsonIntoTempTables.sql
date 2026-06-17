@@ -5,13 +5,37 @@
   DECLARE @v_SQL NVARCHAR(MAX) = ''
   SET NOCOUNT ON
   RAISERROR('Parse Tables from Json', 10, 100) WITH NOWAIT
+
+  -- I5: missing/blank [Schema] is a programmer error after slice-1's SchemaDefaultResolver.
+  -- The canonical Load path fills Schema with the platform default ('dbo' / 'public') or the
+  -- {{SchemaName}} token; a blank value here means a caller built the JSON without going
+  -- through Template.Load (or a downstream substitution swallowed the token). Silently
+  -- defaulting to dbo here is data-loss-equivalent for schema templates — fail loud.
+  IF EXISTS (SELECT 1 FROM OPENJSON(@TableDefinitions) WITH ([Schema] NVARCHAR(500) '$.Schema', [Name] NVARCHAR(500) '$.Name')
+                 WHERE NULLIF(RTRIM(ISNULL([Schema], '')), '') IS NULL)
+  BEGIN
+    DECLARE @v_BadTable NVARCHAR(500) =
+      (SELECT TOP 1 ISNULL([Name], '<unnamed>') FROM OPENJSON(@TableDefinitions) WITH ([Schema] NVARCHAR(500) '$.Schema', [Name] NVARCHAR(500) '$.Name')
+         WHERE NULLIF(RTRIM(ISNULL([Schema], '')), '') IS NULL);
+    DECLARE @v_Msg NVARCHAR(2000) = 'Table JSON is missing Schema for table ''' + @v_BadTable + '''. ' +
+      'Schema must be populated before reaching ParseTableJsonIntoTempTables — this is a programmer error. ' +
+      'In production the SchemaDefaultResolver fills Schema with the platform default or the {{SchemaName}} token; ' +
+      'a blank value here means a caller bypassed Template.Load or substituted the token away.';
+    THROW 51000, @v_Msg, 1;
+  END
+
   DROP TABLE IF EXISTS #TableDefinitions
   -- [_RowId] gives each parsed row a unique identifier so the per-row ShouldApply DELETE
   -- below targets exactly the source row whose expression evaluated false. Without it,
   -- the DELETE matched on (Schema, Name) and would silently wipe both rows when two
   -- entries shared a name with mutually exclusive ShouldApply expressions.
+  -- Merge note (2026-06-02): main added [_RowId] (kept) AND swapped the Schema column to
+  -- ISNULL([Schema], 'dbo') as a silent-fallback. Schema-templates replaced silent fallback
+  -- with explicit THROW upstream (lines 22-25 above), so the ISNULL is intentionally NOT
+  -- applied here — strict-fail wins on schema-templates because [Schema] is guaranteed
+  -- non-blank by the time we reach this SELECT.
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
-         [Schema] = SchemaSmith.fn_SafeBracketWrap(ISNULL([Schema], 'dbo')), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL(NULLIF(RTRIM([CompressionType]), ''), 'NONE'),
+         [Schema] = SchemaSmith.fn_SafeBracketWrap([Schema]), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL(NULLIF(RTRIM([CompressionType]), ''), 'NONE'),
          [IsTemporal] = ISNULL([IsTemporal], 0), [UpdateFillFactor] = ISNULL([UpdateFillFactor], 0),
          [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints],
          [ShouldApplyExpression], [VariantName], [EnableCDC] = ISNULL([EnableCDC], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName])
@@ -192,10 +216,24 @@
   EXEC(@v_SQL)
   
   RAISERROR('Parse Foreign Keys from Json', 10, 100) WITH NOWAIT
+  -- I5: missing/blank RelatedTableSchema is a programmer error after slice-1's resolver
+  -- (which fills it from the platform default for regular templates or {{SchemaName}} for
+  -- schema templates). Silent 'dbo' fallback here is data-loss-equivalent — fail loud.
+  -- Implementation note: this check runs against the #ForeignKeys temp table AFTER the
+  -- main FK parse below, not against the raw @TableDefinitions JSON. Running it earlier
+  -- against the JSON ran into OPENJSON 'AS JSON' edge cases with single-object inputs
+  -- (the kindling JSON for SchemaSmith's own bootstrap tables passes a single object).
+  -- Post-parse the check is uniform across object / array inputs.
+
   DROP TABLE IF EXISTS #ForeignKeys
+  -- Merge note (2026-06-02): main added [_RowId] (kept) AND swapped RelatedTableSchema to
+  -- ISNULL(f.[RelatedTableSchema], 'dbo'). Schema-templates added the explicit THROW
+  -- check (I5, below the SELECT INTO) instead of a silent fallback, so ISNULL is
+  -- intentionally NOT applied here — the post-parse check catches blank RelatedTableSchema
+  -- loudly rather than silently rewriting it to 'dbo'.
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [KeyName] = SchemaSmith.fn_SafeBracketWrap(f.[KeyName]),
-         [RelatedTableSchema] = SchemaSmith.fn_SafeBracketWrap(ISNULL(f.[RelatedTableSchema], 'dbo')), [RelatedTable] = SchemaSmith.fn_SafeBracketWrap(f.[RelatedTable]), 
+         [RelatedTableSchema] = SchemaSmith.fn_SafeBracketWrap(f.[RelatedTableSchema]), [RelatedTable] = SchemaSmith.fn_SafeBracketWrap(f.[RelatedTable]),
          [Columns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
          [RelatedColumns] = (SELECT STRING_AGG(CAST(SchemaSmith.fn_SafeBracketWrap([value]) AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[RelatedColumns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
          [DeleteAction] = ISNULL(NULLIF(RTRIM([DeleteAction]), ''), 'NO ACTION'),
@@ -215,12 +253,29 @@
       [UpdateAction] NVARCHAR(20) '$.UpdateAction'
       ) f;
 
+  -- I5: post-parse RelatedTableSchema check. fn_SafeBracketWrap(NULL) returns NULL
+  -- (string concat with NULL yields NULL), and fn_SafeBracketWrap('') returns '[]'.
+  -- Both sentinels indicate a blank input — fail loud rather than letting downstream
+  -- code emit DDL against an unintended schema.
+  IF EXISTS (SELECT 1 FROM #ForeignKeys WITH (NOLOCK)
+               WHERE [RelatedTableSchema] IS NULL OR [RelatedTableSchema] IN ('[]', '[ ]', ''))
+  BEGIN
+    DECLARE @v_BadFk NVARCHAR(500) =
+      (SELECT TOP 1 ISNULL([KeyName], '<unnamed>') FROM #ForeignKeys WITH (NOLOCK)
+         WHERE [RelatedTableSchema] IS NULL OR [RelatedTableSchema] IN ('[]', '[ ]', ''));
+    DECLARE @v_FkMsg NVARCHAR(2000) = 'Foreign key ''' + @v_BadFk + ''' is missing RelatedTableSchema. ' +
+      'RelatedTableSchema must be populated before reaching ParseTableJsonIntoTempTables — this is a programmer error. ' +
+      'In production the SchemaDefaultResolver fills RelatedTableSchema with the platform default for regular templates ' +
+      'or {{SchemaName}} for schema templates; a blank value here means a caller bypassed Template.Load.';
+    THROW 51000, @v_FkMsg, 1;
+  END
+
   -- Identify ForeignKeys to skip based on ShouldApply expression (scoped by [_RowId])
   SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #ForeignKeys WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #ForeignKeys WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
-  
+
   RAISERROR('Parse Table Level Check Constraints from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #CheckConstraints
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),

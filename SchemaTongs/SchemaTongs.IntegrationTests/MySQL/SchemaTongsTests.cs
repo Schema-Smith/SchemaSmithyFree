@@ -296,7 +296,7 @@ public class SchemaTongsTests
         config["Source:Port"] = config["MySQL:Port"];
         config["Source:User"] = config["MySQL:User"];
         config["Source:Password"] = config["MySQL:Password"];
-        config["Source:Schema"] = _integrationDb;
+        config["Source:Database"] = _integrationDb;
         var connProps = ConnectionString.ReadProperties(config, "MySQL:ConnectionProperties");
         foreach (var prop in connProps)
             config[$"Source:ConnectionProperties:{prop.Key}"] = prop.Value;

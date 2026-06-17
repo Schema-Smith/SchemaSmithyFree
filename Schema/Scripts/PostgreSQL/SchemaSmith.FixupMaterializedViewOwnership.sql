@@ -2,24 +2,34 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
+-- TRANSITIONAL (slice 3 audit B1 of schema-templates) same template_name scoping as
+-- FixupTableOwnership -- see that file for the rationale. Tracked in the Community
+-- roadmap under Slice 3 transitional aids -- ProductOwnership template_name extension.
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."FixupMaterializedViewOwnership"
-(p_ProductName VARCHAR(50))
+(p_ProductName VARCHAR(50),
+ p_TemplateName VARCHAR(256) = '',
+ p_SchemaName VARCHAR(256) = '')
     LANGUAGE plpgsql
 AS $$
-DECLARE
-    sql_script TEXT = '';
 BEGIN
   RAISE NOTICE 'Add missing Product ownership to materialized views';
   INSERT INTO "SchemaSmith"."ProductOwnership"
-    ("Schema", "TableName", "IndexName", "ProductName")
-    SELECT t."Schema", t."Name", NULL, p_ProductName
+    ("Schema", "TableName", "IndexName", "ProductName", template_name)
+    SELECT t."Schema", t."Name", NULL, p_ProductName, p_TemplateName
       FROM temp_materialized_views t
-      WHERE NOT EXISTS (SELECT 1 FROM "SchemaSmith"."ProductOwnership" po WHERE po."Schema" = t."Schema" AND po."TableName" = t."Name" AND po."IndexName" IS NULL);
+      WHERE NOT EXISTS (SELECT 1 FROM "SchemaSmith"."ProductOwnership" po
+                          WHERE po."Schema" = t."Schema"
+                            AND po."TableName" = t."Name"
+                            AND po."IndexName" IS NULL
+                            AND po.template_name IN ('', p_TemplateName));
 
+  -- Per-iteration scope (see FixupTableOwnership for rationale).
   RAISE NOTICE 'Remove Product Ownership for Obsolete Materialized Views';
   DELETE FROM "SchemaSmith"."ProductOwnership" po
     WHERE "ProductName" = p_ProductName
       AND "IndexName" IS NULL
+      AND template_name = p_TemplateName
+      AND (p_SchemaName = '' OR po."Schema" = p_SchemaName)
       AND NOT EXISTS (SELECT 1
                         FROM temp_materialized_views t
                         WHERE t."Schema" = po."Schema"

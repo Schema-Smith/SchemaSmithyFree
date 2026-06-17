@@ -10,6 +10,9 @@ Demo database schema packages for SQL Server, PostgreSQL, and MySQL, deployed by
 | Chinook | Done | Done | Done |
 | Northwind | Done | Done | Done |
 | Sakila | Done | Done | Done |
+| TenantCRM | Done | Done | n/a — schema templates are SQL Server + PostgreSQL only |
+
+TenantCRM is a hand-authored multi-tenant CRM showcasing the **schema-per-tenant** pattern — one schema-template definition fanned out across an arbitrary number of tenant schemas inside a single database. See the [SQL Server](SqlServer/TenantCRM/README.md) or [PostgreSQL](PostgreSQL/TenantCRM/README.md) demo READMEs for the walkthrough.
 
 ## Conditional Deployment Demos
 
@@ -61,7 +64,7 @@ Each platform folder contains:
 
 ## Sources & Licensing
 
-Each product folder contains a `PROVENANCE.md` documenting the canonical source, license, and extraction notes. All demo products are extracted from open-source sample databases using the SchemaSmith toolset.
+Each extracted product folder contains a `PROVENANCE.md` documenting the canonical source, license, and extraction notes. AdventureWorks, Chinook, Northwind, and Sakila are extracted from open-source sample databases using the SchemaSmith toolset. TenantCRM is hand-authored as a schema-template feature demo and has a tutorial `README.md` in place of a `PROVENANCE.md`.
 
 ## Additional Resources
 

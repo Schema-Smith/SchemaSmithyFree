@@ -27,7 +27,7 @@ namespace Schema.UnitTests.Domain
             Assert.That(template.ScriptTokens, Is.Empty);
             Assert.That(template.UpdateFillFactor, Is.True);
             Assert.That(template.BaselineValidationScript, Is.Null);
-            Assert.That(template.Required, Is.True);
+            Assert.That(template.RequireAtLeastOneTarget, Is.True);
             Assert.That(template.Product, Is.Null);
             Assert.That(template.Tables, Is.Not.Null);
             Assert.That(template.Tables, Is.Empty);
@@ -49,7 +49,7 @@ namespace Schema.UnitTests.Domain
                 IndexOnlyTableQuenches = true,
                 UpdateFillFactor = false,
                 BaselineValidationScript = "SELECT 1",
-                Required = false,
+                RequireAtLeastOneTarget = false,
                 ScriptTokens = new Dictionary<string, string> { { "DB", "TestDB" } }
             };
 
@@ -62,7 +62,7 @@ namespace Schema.UnitTests.Domain
             Assert.That(deserialized.IndexOnlyTableQuenches, Is.True);
             Assert.That(deserialized.UpdateFillFactor, Is.False);
             Assert.That(deserialized.BaselineValidationScript, Is.EqualTo("SELECT 1"));
-            Assert.That(deserialized.Required, Is.False);
+            Assert.That(deserialized.RequireAtLeastOneTarget, Is.False);
             Assert.That(deserialized.ScriptTokens["DB"], Is.EqualTo("TestDB"));
         }
 
@@ -315,6 +315,75 @@ namespace Schema.UnitTests.Domain
 
             // Original should be unaffected
             Assert.That(original.QueryTokens["<*Query*>ServerVersion"], Is.EqualTo("SELECT @@VERSION"));
+        }
+
+        // I9: Clone() must copy all slice-3 fields (SchemaIdentificationScript,
+        // CreateSchemaIfMissing, AllowParallel, ContinueOnSchemaFailure,
+        // ContinueOnDatabaseFailure) and recompute the per-token scope map.
+        [Test]
+        public void Clone_CopiesSlice3SchemaTemplateFields()
+        {
+            var original = new Template
+            {
+                Name = "TenantBody",
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                CreateSchemaIfMissing = true,
+                AllowParallel = false,
+                ContinueOnSchemaFailure = false,
+                ContinueOnDatabaseFailure = false
+            };
+            original.Product = new Product { Name = "P", Platform = Platform.SqlServer };
+
+            var clone = original.Clone();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(clone.SchemaIdentificationScript, Is.EqualTo("SELECT 'tenant_a'"));
+                Assert.That(clone.CreateSchemaIfMissing, Is.True);
+                Assert.That(clone.AllowParallel, Is.False);
+                Assert.That(clone.ContinueOnSchemaFailure, Is.False);
+                Assert.That(clone.ContinueOnDatabaseFailure, Is.False);
+                Assert.That(clone.IsSchemaTemplate, Is.True);
+            });
+        }
+
+        [Test]
+        public void Clone_RegularTemplate_PreservesDefaultsForSlice3Fields()
+        {
+            var original = new Template { Name = "Core" };
+            original.Product = new Product { Name = "P", Platform = Platform.SqlServer };
+
+            var clone = original.Clone();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(clone.SchemaIdentificationScript, Is.Null.Or.Empty);
+                Assert.That(clone.CreateSchemaIfMissing, Is.False);
+                Assert.That(clone.AllowParallel, Is.True);
+                Assert.That(clone.ContinueOnSchemaFailure, Is.True);
+                Assert.That(clone.ContinueOnDatabaseFailure, Is.True);
+                Assert.That(clone.IsSchemaTemplate, Is.False);
+            });
+        }
+
+        [Test]
+        public void Clone_RebuildsTokenScopes_ForSchemaTemplate()
+        {
+            // Pre-resolved iteration-scoped token on the original. The clone must rebuild the
+            // scope map from the cloned dictionaries, so IsIterationScoped reports correctly
+            // even though _tokenScopes was never directly copied.
+            var original = new Template
+            {
+                Name = "TenantBody",
+                SchemaIdentificationScript = "SELECT 'tenant_a'",
+                QueryTokens = { ["TenantId"] = "<*Query*>SELECT TenantId FROM {{SchemaName}}.Config" }
+            };
+            original.Product = new Product { Name = "P", Platform = Platform.SqlServer };
+            original.ResolveTokenScopes();
+
+            var clone = original.Clone();
+
+            Assert.That(clone.IsIterationScoped("TenantId"), Is.True);
         }
     }
 }

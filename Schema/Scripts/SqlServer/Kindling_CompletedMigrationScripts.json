@@ -1,0 +1,55 @@
+{
+  "Schema": "[SchemaSmith]",
+  "Name": "[CompletedMigrationScripts]",
+  "Columns": [
+    {
+      "Name": "[ScriptPath]",
+      "DataType": "VARCHAR(800)",
+      "Nullable": false
+    },
+    {
+      "Name": "[ProductName]",
+      "DataType": "VARCHAR(100)",
+      "Nullable": false
+    },
+    {
+      "Name": "[QuenchSlot]",
+      "DataType": "VARCHAR(30)",
+      "Nullable": false
+    },
+    {
+      "Name": "[template_name]",
+      "DataType": "NVARCHAR(256)",
+      "Nullable": false,
+      "Default": "''''"
+    },
+    {
+      "Name": "[schema_name]",
+      "DataType": "NVARCHAR(256)",
+      "Nullable": false,
+      "Default": "''''"
+    },
+    {
+      "Name": "[QuenchDate]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "GETDATE()"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_CompletedMigrationScripts]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "Clustered": true,
+      "IndexColumns": "[ScriptPath],[ProductName],[QuenchSlot],[template_name],[schema_name]"
+    },
+    {
+      "Name": "[IX_CompletedMigrationScripts_Slot_Scope]",
+      "PrimaryKey": false,
+      "Unique": false,
+      "Clustered": false,
+      "IndexColumns": "[ProductName],[QuenchSlot],[template_name],[schema_name]"
+    }
+  ]
+}

@@ -5,23 +5,29 @@
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."MissingIndexesAndConstraintsQuench"(p_WhatIf BOOLEAN = FALSE)
     LANGUAGE plpgsql
 AS $$
-DECLARE 
+DECLARE
   sql_script TEXT = '';
 BEGIN
+  -- Column existence / default checks below read pg_catalog directly rather than
+  -- information_schema.columns. Under a correlated EXISTS over the per-iteration temp
+  -- tables, the planner materialises the whole information_schema.columns view, which
+  -- AccessShare-locks every table in the database and deadlocks parallel template
+  -- iterations against siblings creating their own tables. pg_catalog scoped to the
+  -- named schema+table locks nothing it doesn't need.
   RAISE NOTICE 'Add New Computed Columns';
   SELECT STRING_AGG('RAISE NOTICE ''  Add new computed columns to ' || tt."Schema" || '.' || tt."Name" || ' (' ||
                     (SELECT STRING_AGG(tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END, ', ')
                      FROM temp_columns tc
                      WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                        AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
-                       AND NOT EXISTS (SELECT 1 FROM information_schema.columns ic WHERE ic.table_name = tc."TableName" AND ic.table_schema = tc."TableSchema" AND ic.column_name = tc."Name")) ||
+                       AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)) ||
                     ')'';' || CHR(10) ||
                     'ALTER TABLE "' || tt."Schema" || '"."' || tt."Name" || '" ' ||
                     (SELECT STRING_AGG('ADD COLUMN "' || tc."Name" || '" ' || tc."DataType" || ' GENERATED ' || tc."Generated" || ' AS (' || tc."GenerationExpression" || ') ' || CASE WHEN tc."Virtual" THEN 'VIRTUAL' ELSE 'STORED' END, ', ')
                        FROM temp_columns tc
                        WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                          AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
-                         AND NOT EXISTS (SELECT 1 FROM information_schema.columns ic WHERE ic.table_name = tc."TableName" AND ic.table_schema = tc."TableSchema" AND ic.column_name = tc."Name")) || ';', CHR(10))
+                         AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)) || ';', CHR(10))
     INTO sql_script
     FROM temp_tables tt
     WHERE EXISTS(SELECT * FROM information_schema.tables t WHERE t.table_schema = tt."Schema" AND t.table_name = tt."Name")
@@ -29,7 +35,7 @@ BEGIN
                     FROM temp_columns tc
                     WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                       AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
-                      AND NOT EXISTS (SELECT 1 FROM information_schema.columns ic WHERE ic.table_name = tc."TableName" AND ic.table_schema = tc."TableSchema" AND ic.column_name = tc."Name"));
+                      AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped));
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
   RAISE NOTICE 'Add Missing Indexes'; -- Includes Primary Keys and Unique Constraints
@@ -127,7 +133,7 @@ BEGIN
     INTO sql_script
     FROM temp_columns tc
     WHERE NULLIF(tc."Default", '') IS NOT NULL
-      AND EXISTS (SELECT 1 FROM information_schema.columns ic WHERE ic.table_name = tc."TableName" AND ic.table_schema = tc."TableSchema" AND ic.column_name = tc."Name" AND ic.column_default IS NULL);
+      AND EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped AND NOT a.atthasdef);
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
   RAISE NOTICE 'Add Missing Check Constraints';

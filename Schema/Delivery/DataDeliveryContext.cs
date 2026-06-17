@@ -23,4 +23,15 @@ public class DataDeliveryContext
     public Action<string> ProgressLog { get; set; }
     public Action<string> ProgressLogError { get; set; }
     public bool WhatIf { get; set; }
+
+    /// <summary>
+    /// Resolved schema name for the current schema-template iteration. Empty string
+    /// for regular templates (the default). When non-empty, DataDeliveryProcessor
+    /// substitutes occurrences of <c>"{{SchemaName}}"</c> in each table's Schema
+    /// before passing it to the catalog-probing metadata helpers and the
+    /// MERGE-script builder. Without this substitution the literal token reaches
+    /// the SQL helpers, yielding empty catalog result sets and emitting
+    /// <c>MERGE INTO [{{SchemaName}}].[Table]</c> — slice-3 audit bug B3.
+    /// </summary>
+    public string SchemaName { get; set; } = "";
 }

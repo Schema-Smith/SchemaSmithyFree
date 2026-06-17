@@ -7,6 +7,6 @@
       "QuenchSlot": "Before"
     }
   ],
-  "Required": false,
+  "RequireAtLeastOneTarget": false,
   "ScriptTokens": {}
 }

@@ -473,7 +473,7 @@ namespace Schema.UnitTests.Domain
                 VersionStampScript = "EXEC SetVersion @v",
                 IndexOnlyTableQuenches = true,
                 UpdateFillFactor = false,
-                Required = false
+                RequireAtLeastOneTarget = false
             });
 
             var result = PlatformDeserializer.DeserializeTemplate(json, Platform.SqlServer);
@@ -483,7 +483,7 @@ namespace Schema.UnitTests.Domain
             Assert.That(result.VersionStampScript, Is.EqualTo("EXEC SetVersion @v"));
             Assert.That(result.IndexOnlyTableQuenches, Is.True);
             Assert.That(result.UpdateFillFactor, Is.False);
-            Assert.That(result.Required, Is.False);
+            Assert.That(result.RequireAtLeastOneTarget, Is.False);
         }
 
         #endregion

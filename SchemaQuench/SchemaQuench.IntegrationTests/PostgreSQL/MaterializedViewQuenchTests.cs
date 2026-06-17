@@ -430,7 +430,8 @@ SELECT c.oid FROM pg_class c
         using var cmd = conn.CreateCommand();
 
         // Deploy initial version via KindleTheForge
-        ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL);
+        // force: the version-gated kindle would otherwise skip after the fixture's initial kindle
+        ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL, forceReKindle: true);
 
         // Verify procedure exists
         cmd.CommandText = @"SELECT prosrc FROM pg_proc p
@@ -469,7 +470,8 @@ END $$;";
         Assert.That(body2, Is.Not.EqualTo(body1), "Body should differ from original deployment");
 
         // Re-deploy original via KindleTheForge to restore correct state
-        ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL);
+        // force: the version-gated kindle would otherwise skip, leaving the modified proc body in place
+        ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL, forceReKindle: true);
 
         // Verify it went back to the original
         cmd.CommandText = @"SELECT prosrc FROM pg_proc p

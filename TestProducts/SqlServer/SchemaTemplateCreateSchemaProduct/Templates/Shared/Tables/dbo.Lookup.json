@@ -1,0 +1,21 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[Lookup]",
+  "Columns": [
+    {
+      "Name": "[LookupID]",
+      "DataType": "INT"
+    },
+    {
+      "Name": "[Code]",
+      "DataType": "NVARCHAR(32)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_Lookup]",
+      "PrimaryKey": true,
+      "IndexColumns": "[LookupID]"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[SchemaTemplateTenants]",
+  "Columns": [
+    {
+      "Name": "[Name]",
+      "DataType": "NVARCHAR(128)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_SchemaTemplateTenants]",
+      "PrimaryKey": true,
+      "IndexColumns": "[Name]"
+    }
+  ]
+}

@@ -65,6 +65,22 @@ services:
       quench-sakila:
         condition: service_completed_successfully
 
+  quench-tenantcrm:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MSSQL_SA_USERNAME}
+      - SmithySettings_Target__Password=${MSSQL_SA_PASSWORD}
+      - SmithySettings_Target__ConnectionProperties__TrustServerCertificate=True
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./TenantCRM:/metadata
+    depends_on:
+      quench-chinook:
+        condition: service_completed_successfully
+
   demoserver:
     build:
       context: ./demoserver
@@ -97,4 +113,6 @@ services:
       quench-sakila:
         condition: service_completed_successfully
       quench-chinook:
+        condition: service_completed_successfully
+      quench-tenantcrm:
         condition: service_completed_successfully

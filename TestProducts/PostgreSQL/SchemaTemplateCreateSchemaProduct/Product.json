@@ -1,0 +1,14 @@
+{
+    "Name": "SchemaTemplateCreateSchemaProduct",
+    "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM pg_database WHERE datistemplate = false AND datname = '{{MainDB}}') THEN 1 ELSE 0 END AS BIT)",
+    "TemplateOrder": [
+        "Shared",
+        "TenantBody"
+    ],
+    "ScriptFolders": [],
+    "ScriptTokens": {
+        "MainDB": "TestMain",
+        "ReleaseVersion": "1.0.0.1"
+    },
+    "Platform": "PostgreSQL"
+}

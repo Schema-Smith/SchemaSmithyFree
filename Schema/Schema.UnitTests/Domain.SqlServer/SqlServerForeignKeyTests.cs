@@ -19,7 +19,9 @@ namespace Schema.UnitTests.Domain.SqlServer
         public void DefaultValues_AreCorrect()
         {
             var fk = new SqlServerForeignKey();
-            Assert.That(fk.RelatedTableSchema, Is.EqualTo("dbo"));
+            // Slice 1 (Schema Templates): bare-constructor RelatedTableSchema is null;
+            // SchemaDefaultResolver fills it. See SqlServerForeignKeyDefaultingTests.
+            Assert.That(fk.RelatedTableSchema, Is.Null);
         }
 
         [Test]

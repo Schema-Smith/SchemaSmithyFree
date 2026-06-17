@@ -28,9 +28,16 @@ public static class Program
         // Clean up checkpoint files only on a clean success — a failed run must preserve
         // checkpoints so the next invocation can resume.
         if (!productQuench.Failed)
+        {
             CleanupCheckpoints();
-
-        LogBackup.BackupLogsAndExit("SchemaQuench");
+            LogBackup.BackupLogsAndExit("SchemaQuench");
+        }
+        else
+        {
+            // Continue mode: some work units failed but the run was not aborted mid-template.
+            // Exit with code 2 to signal partial failure to the caller.
+            LogBackup.BackupLogsAndExit("SchemaQuench", 2);
+        }
     }
 
     public static void UnhandledException(object sender, UnhandledExceptionEventArgs e)

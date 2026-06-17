@@ -49,7 +49,7 @@ public class DataDeliveryProcessor : IDataDelivery
         var cascadeErrors = ValidateDeleteCascade(context.Command, platform, context.DatabaseName,
             tablesToDeliver.Where(t => (t.DataDelivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0)
                 .Select(t => (
-                    Schema: GetSchemaOrDb(t, context.DatabaseName, platform),
+                    Schema: GetSchemaOrDb(t, context.DatabaseName, platform, context.SchemaName),
                     TableName: DataDeliveryHelper.TrimIdentifierQuotes(t.Name, platform)
                 )).ToList());
         if (cascadeErrors.Count > 0)
@@ -159,16 +159,17 @@ public class DataDeliveryProcessor : IDataDelivery
                 log($"    Delivering {tableKey} (pass 2 - updating deferred FK columns)");
 
                 var delivery = table.DataDelivery;
-                var schemaOrDb = GetSchemaOrDb(table, context.DatabaseName, platform);
+                var schemaOrDb = GetSchemaOrDb(table, context.DatabaseName, platform, context.SchemaName);
                 var keyColumns = string.IsNullOrWhiteSpace(delivery.MatchColumns)
                     ? helper.GetKeyColumns(context.Command, schemaOrDb, table.Name)
                     : delivery.MatchColumns;
                 var tableData = tableDataMap.TryGetValue(table, out var data) ? data : "";
                 var update = (delivery.MergeType ?? "").IndexOf("Update", StringComparison.OrdinalIgnoreCase) >= 0;
                 var delete = (delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0;
+                var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
 
                 var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
-                    tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, delivery.MergeFilter,
+                    tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
                     delivery.MergeDisableRules, delivery.MergeUpdateDescendents);
 
                 if (!context.WhatIf)
@@ -190,7 +191,7 @@ public class DataDeliveryProcessor : IDataDelivery
         var log = context.ProgressLog ?? (_ => { });
         var delivery = table.DataDelivery;
         var tableKey = DataDeliveryHelper.GetTableKey(table, platform);
-        var schemaOrDb = GetSchemaOrDb(table, context.DatabaseName, platform);
+        var schemaOrDb = GetSchemaOrDb(table, context.DatabaseName, platform, context.SchemaName);
 
         if (context.WhatIf)
         {
@@ -220,8 +221,9 @@ public class DataDeliveryProcessor : IDataDelivery
             log($"    Delivering {tableKey}");
             var update = (delivery.MergeType ?? "").IndexOf("Update", StringComparison.OrdinalIgnoreCase) >= 0;
             var delete = (delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0;
+            var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
             var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
-                tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, delivery.MergeFilter,
+                tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
                 delivery.MergeDisableRules, delivery.MergeUpdateDescendents);
 
             if (!context.WhatIf)
@@ -311,11 +313,26 @@ WHERE tc_p.TABLE_SCHEMA = '{schema.Replace("'", "''")}'
                $"Deletes would cascade to {child}. Change MergeType to Insert/Update or remove the CASCADE rule.";
     }
 
-    private static string GetSchemaOrDb(IDeliverableTable table, string databaseName, string platform)
+    /// <summary>
+    /// Resolves the schema (or database, on MySQL) qualifier for a table at delivery time.
+    /// For schema-template iterations (<paramref name="iterationSchemaName"/> non-empty),
+    /// substitutes the <c>{{SchemaName}}</c> token in <c>table.Schema</c> with the resolved
+    /// iteration value before returning. Without this substitution the literal token would
+    /// reach the catalog probes in <see cref="Schema.Utility.MergeScriptHelper"/> (returning
+    /// empty result sets) and the emitted <c>MERGE INTO [{{SchemaName}}].[Table]</c> clause —
+    /// slice-3 audit bug B3.
+    /// Regular templates pass an empty <paramref name="iterationSchemaName"/> and the method
+    /// behaves identically to its pre-bug-fix form.
+    /// </summary>
+    internal static string GetSchemaOrDb(IDeliverableTable table, string databaseName, string platform,
+        string iterationSchemaName)
     {
         if (platform.Equals("MySQL", StringComparison.OrdinalIgnoreCase))
             return databaseName;
-        return table.Schema ?? DataDeliveryHelper.GetDefaultSchema(platform);
+        var raw = table.Schema ?? DataDeliveryHelper.GetDefaultSchema(platform);
+        return string.IsNullOrEmpty(iterationSchemaName)
+            ? raw
+            : raw.Replace("{{SchemaName}}", iterationSchemaName);
     }
 
     internal static string ResolveContentFilePath(string templateRootPath, string contentFile)
@@ -324,6 +341,24 @@ WHERE tc_p.TABLE_SCHEMA = '{schema.Replace("'", "''")}'
             return null;
 
         return Path.Combine(templateRootPath, contentFile.Replace('\\', '/'));
+    }
+
+    /// <summary>
+    /// Substitutes the <c>{{SchemaName}}</c> token in a user-authored
+    /// <see cref="DataDelivery.MergeFilter"/> with the iteration's resolved schema name.
+    /// Mirrors the <see cref="GetSchemaOrDb"/> pattern (slice-3 audit B3) for the parallel
+    /// case: MergeFilter is verbatim text embedded into the executed merge body and never
+    /// passes through engine-level token resolution between the helper and the database.
+    /// Without this substitution, schema-template authors who reference <c>{{SchemaName}}</c>
+    /// in MergeFilter would see the literal token reach the server and produce a SQL parse
+    /// error. Regular templates pass an empty <paramref name="iterationSchemaName"/> and
+    /// MergeFilter is returned unchanged.
+    /// </summary>
+    internal static string ResolveMergeFilter(string mergeFilter, string iterationSchemaName)
+    {
+        if (string.IsNullOrEmpty(mergeFilter) || string.IsNullOrEmpty(iterationSchemaName))
+            return mergeFilter;
+        return mergeFilter.Replace("{{SchemaName}}", iterationSchemaName);
     }
 
     private static readonly string[] ValidMergeTypes =

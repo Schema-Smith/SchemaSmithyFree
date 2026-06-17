@@ -1,0 +1,21 @@
+{
+  "Schema": "public",
+  "Name": "lookup",
+  "Columns": [
+    {
+      "Name": "lookup_id",
+      "DataType": "INTEGER"
+    },
+    {
+      "Name": "code",
+      "DataType": "VARCHAR(32)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_lookup",
+      "PrimaryKey": true,
+      "IndexColumns": "lookup_id"
+    }
+  ]
+}

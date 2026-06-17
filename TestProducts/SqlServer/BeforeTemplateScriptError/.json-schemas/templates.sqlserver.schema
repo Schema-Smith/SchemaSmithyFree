@@ -44,7 +44,7 @@
     "BaselineValidationScript": {
       "type": "string"
     },
-    "Required": {
+    "RequireAtLeastOneTarget": {
       "type": "boolean"
     },
     "SkipIfReadOnly": {

@@ -1,0 +1,26 @@
+{
+  "Schema": "[dbo]",
+  "Name": "[SharedAudit]",
+  "Columns": [
+    {
+      "Name": "[AuditID]",
+      "DataType": "INT"
+    },
+    {
+      "Name": "[Tenant]",
+      "DataType": "NVARCHAR(128)"
+    },
+    {
+      "Name": "[Note]",
+      "DataType": "NVARCHAR(256)",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_SharedAudit]",
+      "PrimaryKey": true,
+      "IndexColumns": "[AuditID], [Tenant]"
+    }
+  ]
+}

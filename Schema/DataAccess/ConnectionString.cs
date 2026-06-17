@@ -4,7 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using MySqlConnector;
+using Npgsql;
 using Schema.Domain;
 
 namespace Schema.DataAccess;
@@ -19,6 +22,25 @@ public static class ConnectionString
             Platform.SqlServer => BuildSqlServer(serverName, dbName, user, password, port, connectionProperties),
             Platform.PostgreSQL => BuildPostgreSql(serverName, dbName, user, password, port, connectionProperties),
             Platform.MySQL => BuildMySql(serverName, dbName, user, password, port, connectionProperties),
+            _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
+        };
+    }
+
+    /// <summary>
+    /// Rebuilds <paramref name="connectionString"/> to target <paramref name="databaseName"/>, preserving
+    /// host, auth, and any other connection options. Returns the input unchanged when either argument
+    /// is null/empty, so callers can invoke unconditionally.
+    /// </summary>
+    public static string RetargetDatabase(string connectionString, string databaseName, Platform platform)
+    {
+        if (string.IsNullOrEmpty(connectionString)) return connectionString;
+        if (string.IsNullOrEmpty(databaseName)) return connectionString;
+
+        return platform switch
+        {
+            Platform.SqlServer => new SqlConnectionStringBuilder(connectionString) { InitialCatalog = databaseName }.ToString(),
+            Platform.PostgreSQL => new NpgsqlConnectionStringBuilder(connectionString) { Database = databaseName }.ToString(),
+            Platform.MySQL => new MySqlConnectionStringBuilder(connectionString) { Database = databaseName }.ToString(),
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
         };
     }
