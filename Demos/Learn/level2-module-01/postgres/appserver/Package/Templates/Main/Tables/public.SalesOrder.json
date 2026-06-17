@@ -1,0 +1,12 @@
+{
+  "Schema": "public",
+  "Name": "SalesOrder",
+  "Columns": [
+    { "Name": "SalesOrderId", "DataType": "BIGINT" },
+    { "Name": "CurrencyCode", "DataType": "CHAR(3)" },
+    { "Name": "Total", "DataType": "DECIMAL(18,2)" }
+  ],
+  "Indexes": [
+    { "Name": "pk_salesorder", "PrimaryKey": true, "IndexColumns": "SalesOrderId" }
+  ]
+}

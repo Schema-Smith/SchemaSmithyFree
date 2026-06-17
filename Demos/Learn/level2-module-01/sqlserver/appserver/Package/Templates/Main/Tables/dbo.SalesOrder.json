@@ -1,0 +1,12 @@
+{
+  "Schema": "dbo",
+  "Name": "SalesOrder",
+  "Columns": [
+    { "Name": "SalesOrderId", "DataType": "BIGINT" },
+    { "Name": "CurrencyCode", "DataType": "CHAR(3)" },
+    { "Name": "Total", "DataType": "DECIMAL(18,2)" }
+  ],
+  "Indexes": [
+    { "Name": "PK_SalesOrder", "PrimaryKey": true, "Clustered": true, "IndexColumns": "SalesOrderId" }
+  ]
+}

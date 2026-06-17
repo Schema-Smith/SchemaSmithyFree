@@ -1,0 +1,11 @@
+{
+  "Schema": "public",
+  "Name": "Currency",
+  "Columns": [
+    { "Name": "Code", "DataType": "CHAR(3)" },
+    { "Name": "Name", "DataType": "VARCHAR(50)" }
+  ],
+  "Indexes": [
+    { "Name": "pk_currency", "PrimaryKey": true, "IndexColumns": "Code" }
+  ]
+}
