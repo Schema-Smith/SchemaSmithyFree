@@ -2245,17 +2245,15 @@ SELECT mv.schemaname, mv.matviewname
                 var castPath = Path.Combine(_templatePath, reader["Folder"].ToString());
                 DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
                 var fullName = reader["FullName"].ToString();
-                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(fullName.ToLower()) && !_objectsToCast.Contains($"{fullName}.~~~".Split('.')[1].ToLower())) continue;
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(fullName.ToLower()) && !_objectsToCast.Contains(Identifier.SplitQualifiedName(fullName, _platform).Name.ToLower())) continue;
 
                 // Schema-template mode: skip objects outside the source schema; emit unqualified filenames.
-                var parts = fullName.Split('.');
-                if (_isSchemaTemplate && parts.Length >= 2)
-                {
-                    if (!ShouldExtractFromSchema(parts[0])) continue;
-                }
+                // Delimiter-aware split so a dotted delimited schema name ([my.schema]) is not mis-split (#272).
+                var (qualifiedSchema, objectName) = Identifier.SplitQualifiedName(fullName, _platform);
+                if (_isSchemaTemplate && qualifiedSchema != null && !ShouldExtractFromSchema(qualifiedSchema)) continue;
 
-                var outputName = _isSchemaTemplate && parts.Length >= 2
-                    ? EncodeFileName(parts[^1], ".sql")
+                var outputName = _isSchemaTemplate && qualifiedSchema != null
+                    ? EncodeFileName(objectName, ".sql")
                     : EncodeFullName(fullName, ".sql");
                 var fileName = ResolveOutputPath(castPath, outputName);
                 var folderName = reader["Folder"].ToString();
@@ -2539,7 +2537,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             var castPath = Path.Combine(_templatePath, reader["Folder"].ToString());
             DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
             var fullName = reader["FullName"].ToString();
-            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(fullName.ToLower()) && !_objectsToCast.Contains($"{fullName}.~~~".Split('.')[1].ToLower())) continue;
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(fullName.ToLower()) && !_objectsToCast.Contains(Identifier.SplitQualifiedName(fullName, _platform).Name.ToLower())) continue;
 
             var fileName = ResolveOutputPath(castPath, EncodeFullName(fullName, ".sql"));
             if (ShouldSkipKnownBadScript(fileName)) { count++; continue; }
