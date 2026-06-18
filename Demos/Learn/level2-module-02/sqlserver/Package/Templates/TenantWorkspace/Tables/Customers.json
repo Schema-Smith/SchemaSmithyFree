@@ -1,0 +1,12 @@
+{
+  "Name": "[Customers]",
+  "Columns": [
+    { "Name": "[CustomerID]", "DataType": "INT IDENTITY(1,1)" },
+    { "Name": "[CustomerName]", "DataType": "NVARCHAR(128)" },
+    { "Name": "[Email]", "DataType": "NVARCHAR(256)", "Nullable": true },
+    { "Name": "[CreatedAt]", "DataType": "DATETIME2(0)", "Default": "SYSUTCDATETIME()" }
+  ],
+  "Indexes": [
+    { "Name": "[PK_Customers]", "PrimaryKey": true, "Clustered": true, "IndexColumns": "[CustomerID]" }
+  ]
+}
