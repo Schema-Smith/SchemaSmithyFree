@@ -323,6 +323,49 @@ public class SchemaTemplateExtractionTests
     }
 
     [Test]
+    public void SchemaTemplate_SqlServer_Fk_BracketedSameSchemaRelatedTableSchema_Stripped()
+    {
+        // Issue #272: bracketed RelatedTableSchema "[tenant_seed]" must be omitted the same as
+        // the bare "tenant_seed" form — this is the form GenerateTableJson actually emits
+        // ('[' + OBJECT_SCHEMA_NAME(...) + ']'). Pins the scrub LOGIC; the empirical throwaway-DB
+        // extraction (2026-06-18) confirmed real same-schema FK extraction omits RelatedTableSchema
+        // on current main (fresh + re-extraction). Anchor test for the reporter's #272 FK case.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            var overrides = ShouldCastAllFalse(Platform.SqlServer);
+            overrides["ShouldCast:Tables"] = "true";
+            RegisterConfig(Platform.SqlServer, overrides);
+
+            var tableListReader = SingleSqlServerTableListReader(SourceSchema, "Orders");
+            var jsonReader = SingleColumnReader(
+                "{\"Name\":\"Orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
+                "{\"Name\":\"FK_Orders_Customers\",\"Columns\":\"CustomerId\",\"RelatedTable\":\"Customers\",\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"[tenant_seed]\"}]}");
+            _command.ExecuteReader().Returns(tableListReader);
+            _commandJson.ExecuteReader().Returns(jsonReader);
+
+            string capturedJson = null;
+            _fileWrapper.When(f => f.WriteAllText(
+                Arg.Is<string>(s => s.EndsWith("Orders.json")),
+                Arg.Any<string>())).Do(ci => capturedJson = ci.ArgAt<string>(1));
+
+            var tongs = new SchemaTongs(Platform.SqlServer);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            Assert.That(capturedJson, Is.Not.Null);
+            var parsed = JObject.Parse(capturedJson);
+            var fks = (JArray)parsed["ForeignKeys"];
+            Assert.That(fks, Is.Not.Null);
+            Assert.That(fks.Count, Is.EqualTo(1));
+            Assert.That(fks[0]["RelatedTableSchema"], Is.Null,
+                "Bracketed same-source RelatedTableSchema ([tenant_seed]) should be stripped (issue #272)");
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
     public void SchemaTemplate_SqlServer_Fk_CrossSchemaRelatedTableSchema_Preserved()
     {
         lock (FactoryContainer.SharedLockObject)
