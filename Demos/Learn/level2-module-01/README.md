@@ -1,4 +1,4 @@
-# Level 2, Module 1 — Product boundaries (lab)
+# Course 2, Module 1 — Product boundaries (lab)
 
 Goal: split a deployment into **products** along server-*role* lines, deploy them into the **same**
 database, and prove the shared parts are never duplicated. Along the way you'll wire up the real

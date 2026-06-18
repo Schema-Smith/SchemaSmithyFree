@@ -1,4 +1,4 @@
-# Level 2, Module 2 — Templates: fan-out to find everything (lab)
+# Course 2, Module 2 — Templates: fan-out to find everything (lab)
 
 Goal: deploy one schema package that **discovers its own targets at run time** and updates all of
 them in a single run. You'll deploy a multi-tenant CRM whose per-tenant workspace is a *schema
