@@ -561,6 +561,30 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
+    public void DeliverTables_WhatIfWithMissingContentFile_AbortsLikeRealDeployment()
+    {
+        // The content-file read loop runs before the per-table WhatIf gate, so a missing content
+        // file aborts a WhatIf dry-run just like a real deployment (fail loud during the dry-run).
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+            }
+        };
+        var context = MakeContext(tables);
+        context.WhatIf = true;
+        context.ReadFileContent = _ => null;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => processor.DeliverTables(context));
+
+        Assert.That(ex!.Message, Does.Contain("Unable to read"));
+        Assert.That(_executedScripts, Is.Empty);
+    }
+
+    [Test]
     public void DeliverTables_ReadFileContentThrows_AbortsDelivery()
     {
         var processor = new DataDeliveryProcessor();
