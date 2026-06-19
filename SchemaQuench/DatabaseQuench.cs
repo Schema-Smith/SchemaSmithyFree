@@ -51,14 +51,6 @@ public class DatabaseQuench
     /// </summary>
     public bool ProvisionSchemaIfMissing { get; init; }
 
-    /// <summary>
-    /// Sentinel toggled by <see cref="EnsureSchemaExists(System.Data.IDbCommand)"/>
-    /// when an override-sourced iteration's schema is missing and provisioning is disabled.
-    /// <see cref="Execute"/> short-circuits the rest of the per-iteration work and marks the
-    /// unit successful so the dispatcher records a benign skip rather than a failure.
-    /// </summary>
-    private bool _skipMissingSchema;
-
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly ILog _errorLog = LogFactory.GetLogger("ErrorLog");
 
@@ -256,14 +248,12 @@ public class DatabaseQuench
                 // schema fails fast with a clear error before any DDL is attempted. MySQL schema
                 // templates are rejected at load time (no namespace-inside-database concept);
                 // the empty-schemaName guard handles MySQL and regular templates both.
-                EnsureSchemaExists(command);
-
                 // Skip-missing short-circuit: when an override-sourced iteration's schema is
-                // missing and CreateIfMissing is false, EnsureSchemaExists has logged the skip
-                // and toggled _skipMissingSchema. Mark the unit successful and bail — the
-                // dispatcher records a benign skip rather than running deployment work against
-                // a non-existent target.
-                if (_skipMissingSchema)
+                // missing and CreateIfMissing is false, EnsureSchemaExists logs the skip and
+                // returns MissingSkipped. Mark the unit successful and bail — the dispatcher
+                // records a benign skip rather than running deployment work against a
+                // non-existent target.
+                if (EnsureSchemaExists(command) == SchemaPresence.MissingSkipped)
                 {
                     QuenchSuccessful = true;
                     return;
@@ -626,6 +616,19 @@ public class DatabaseQuench
     }
 
     /// <summary>
+    /// Outcome of <see cref="EnsureSchemaExists(System.Data.IDbCommand)"/>. <see cref="Execute"/>
+    /// short-circuits the iteration as a benign skip on <see cref="MissingSkipped"/>; every other
+    /// value means "schema situation is fine, proceed with the iteration".
+    /// </summary>
+    private enum SchemaPresence
+    {
+        NotApplicable,  // regular template or MySQL — no schema iteration
+        AlreadyExists,  // schema was already present on the target
+        Provisioned,    // schema was created this run (override-provision or CreateSchemaIfMissing)
+        MissingSkipped  // override-sourced, missing, CreateIfMissing:false — skip the iteration
+    }
+
+    /// <summary>
     /// Schema-template existence check (design §5.3 step 3). Called before slot 1 (kindling)
     /// on every schema-template iteration. For regular templates and MySQL, <see cref="_schemaName"/>
     /// is empty and this method returns immediately. For schema templates:
@@ -640,32 +643,30 @@ public class DatabaseQuench
     /// already rejects any name containing bracket / quote / brace characters (slice-3 audit I6),
     /// so <c>[{_schemaName}]</c> / <c>"{_schemaName}"</c> interpolation cannot be injected.
     /// </summary>
-    private void EnsureSchemaExists(IDbCommand command)
+    private SchemaPresence EnsureSchemaExists(IDbCommand command)
     {
-        if (string.IsNullOrEmpty(_schemaName)) return;  // regular template or MySQL — no schema iteration
+        if (string.IsNullOrEmpty(_schemaName)) return SchemaPresence.NotApplicable;  // regular template or MySQL — no schema iteration
 
         if (SchemaExists(command))
-            return;  // already exists — skip
+            return SchemaPresence.AlreadyExists;
 
         // Override-sourced units honor the work-unit-level provisioning flag. CreateIfMissing: true
         // → provision via SchemaProvisioner (idempotent IF-NOT-EXISTS DDL). CreateIfMissing: false
-        // (default) → SKIP the iteration silently with an info log. The _skipMissingSchema sentinel
-        // signals Execute() to short-circuit cleanly so the dispatcher records a benign skip rather
-        // than treating an explicitly-declared "deploy to this list if present" as a hard failure.
-        // Discovery-sourced units bypass this branch and keep the strict CreateSchemaIfMissing
-        // contract below.
+        // (default) → SKIP the iteration silently with an info log: return MissingSkipped so Execute()
+        // short-circuits cleanly and the dispatcher records a benign skip rather than treating an
+        // explicitly-declared "deploy to this list if present" as a hard failure. Discovery-sourced
+        // units bypass this branch and keep the strict CreateSchemaIfMissing contract below.
         if (SchemaFromOverride)
         {
             if (ProvisionSchemaIfMissing)
             {
                 ProvisionSchemaViaProvisioner(command);
-                return;
+                return SchemaPresence.Provisioned;
             }
             SafeProgressLog(
                 $"  Schema '{_schemaName}' does not exist in database '{_databaseName}' and " +
                 $"TemplateTargets CreateIfMissing is false — skipping this iteration.");
-            _skipMissingSchema = true;
-            return;
+            return SchemaPresence.MissingSkipped;
         }
 
         if (!_template.CreateSchemaIfMissing)
@@ -677,6 +678,7 @@ public class DatabaseQuench
                 "that runs CREATE SCHEMA + INSERT atomically — see the TenantCRM demo.");
 
         ProvisionSchemaViaProvisioner(command);
+        return SchemaPresence.Provisioned;
     }
 
     /// <summary>
