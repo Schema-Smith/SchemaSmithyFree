@@ -1225,6 +1225,172 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region ProductName escaping — SQL Server / PostgreSQL dispatch (#274)
+
+    // #274: _product.Name was interpolated raw into the SQL Server (EXEC @ProductName='…')
+    // and PostgreSQL (CALL …(p_ProductName:='…')) dispatch paths, so an apostrophe in the
+    // product name broke deployment on those engines. The MySQL branch already escaped it.
+    // These pin EscapeSqlLiteral across the three affected methods on every engine that
+    // interpolates the product name (the PostgreSQL ForeignKeyQuench path takes no product
+    // name, so there is no literal to escape and no test there); the MySQL cases pin the
+    // already-correct behavior so it can't regress.
+
+    [Test]
+    public void QuenchModifiedTables_SqlServer_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchModifiedTables_PostgreSql_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "false", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchModifiedTables_MySql_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.MySQL };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Table { Name = "[T1]" });
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchIndexesAndConstraints_SqlServer_IndexOnly_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T", IndexOnlyTableQuenches = true };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchIndexesAndConstraints_SqlServer_FullQuench_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T", IndexOnlyTableQuenches = false };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchIndexesAndConstraints_PostgreSql_IndexOnly_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T", IndexOnlyTableQuenches = true };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "false", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchIndexesAndConstraints_PostgreSql_FullQuench_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T", IndexOnlyTableQuenches = false };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "false", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchIndexesAndConstraints_MySql_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.MySQL };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Table { Name = "[T1]" });
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchForeignKeys_SqlServer_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Table { Name = "[T1]" });
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchForeignKeys(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchForeignKeys_MySql_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.MySQL };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Table { Name = "[T1]" });
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchForeignKeys(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    #endregion
+
     #region Schema-Template (Slice 3) — Constructor + DbScope + Log Prefix
 
     [Test]

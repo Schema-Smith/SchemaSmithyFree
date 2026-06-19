@@ -983,7 +983,7 @@ public class DatabaseQuench
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
                 tableCommand.CommandText = $@"
-DECLARE @TableDefinitions VARCHAR(MAX)= '{IterationTableSchema.Replace("'", "''")}',
+DECLARE @TableDefinitions VARCHAR(MAX)= '{EscapeSqlLiteral(IterationTableSchema)}',
         @UpdateFillFactor BIT = {updateFillFactor}
 {ForgeKindler.GetParseTableJsonScript(Platform.SqlServer)}
 EXEC [{_databaseName}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {_whatIfOnly}";
@@ -995,7 +995,7 @@ EXEC [{_databaseName}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {_whatI
 DO $$
 DECLARE
   p_UpdateFillFactor BOOL = {_template.UpdateFillFactor.ToString().ToLower()};
-  table_json JSON = '{IterationTableSchema.Replace("'", "''")}';
+  table_json JSON = '{EscapeSqlLiteral(IterationTableSchema)}';
   sql_script TEXT = '';
 BEGIN
 {ForgeKindler.GetParseTableJsonScript(Platform.PostgreSQL)}
@@ -1008,7 +1008,7 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
             {
                 ParseMySqlTableJson(tableCommand);
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
-                tableCommand.CommandText = $"CALL SchemaSmith_MissingTableAndColumnQuench('{_databaseName.Replace("'", "''")}', {whatIf})";
+                tableCommand.CommandText = $"CALL SchemaSmith_MissingTableAndColumnQuench('{EscapeSqlLiteral(_databaseName)}', {whatIf})";
                 break;
             }
         }
@@ -1019,7 +1019,7 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
         _debugFileLocation = "";
     }
 
-    private void QuenchModifiedTables(IDbCommand tableCommand)
+    internal void QuenchModifiedTables(IDbCommand tableCommand)
     {
         if (_product.Platform == Platform.MySQL && _template.Tables.Count == 0)
             return;
@@ -1029,11 +1029,11 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
         switch (_product.Platform)
         {
             case Platform.SqlServer:
-                tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ModifiedTableQuench @ProductName = '{_product.Name}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}";
+                tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}";
                 break;
             case Platform.PostgreSQL:
                 tableCommand.CommandText = $@"
-CALL ""SchemaSmith"".""ValidateTableOwnership""(p_ProductName := '{_product.Name}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
+CALL ""SchemaSmith"".""ValidateTableOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_DropTablesRemovedFromProduct := {_dropRemovedTables});";
                 break;
             case Platform.MySQL:
@@ -1042,7 +1042,7 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
                     ParseMySqlTableJson(tableCommand);
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropRemoved = _dropRemovedTables == "1" ? 1 : 0;
-                tableCommand.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{_product.Name.Replace("'", "''")}', '{_databaseName.Replace("'", "''")}', {whatIf}, {dropRemoved})";
+                tableCommand.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropRemoved})";
                 break;
             }
         }
@@ -1053,7 +1053,7 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
         _debugFileLocation = "";
     }
 
-    private void QuenchIndexesAndConstraints(IDbCommand tableCommand)
+    internal void QuenchIndexesAndConstraints(IDbCommand tableCommand)
     {
         if (_product.Platform == Platform.MySQL && _template.Tables.Count == 0)
             return;
@@ -1066,20 +1066,20 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
-                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{_product.Name}', @TableDefinitions = '{IterationTableSchema.Replace("'", "''")}', @DropUnknownIndexes = {_dropUnknownIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}"
-                    : $"EXEC [{_databaseName}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{_product.Name}', @WhatIf = {_whatIfOnly}";
+                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}"
+                    : $"EXEC [{_databaseName}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
                 break;
             }
             case Platform.PostgreSQL:
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
                     ? $@"
-CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{IterationTableSchema.Replace("'", "''")}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()});
-CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}', p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
+CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{EscapeSqlLiteral(IterationTableSchema)}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()});
+CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 "
                     : $@"
 CALL ""SchemaSmith"".""MissingIndexesAndConstraintsQuench""(p_WhatIf := {_whatIfOnly});
-CALL ""SchemaSmith"".""FixupTableOwnership""(p_ProductName := '{_product.Name}', p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
-CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}', p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
+CALL ""SchemaSmith"".""FixupTableOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
+CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 ";
                 break;
             case Platform.MySQL:
@@ -1089,8 +1089,8 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
-                    ? $"CALL SchemaSmith_IndexOnlyQuench('{_product.Name.Replace("'", "''")}', '{_databaseName.Replace("'", "''")}', {whatIf}, {dropUnknown})"
-                    : $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{_product.Name.Replace("'", "''")}', '{_databaseName.Replace("'", "''")}', {whatIf}, {dropUnknown})";
+                    ? $"CALL SchemaSmith_IndexOnlyQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown})"
+                    : $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown})";
                 break;
             }
         }
@@ -1101,7 +1101,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
         _debugFileLocation = "";
     }
 
-    private void QuenchForeignKeys(IDbCommand tableCommand)
+    internal void QuenchForeignKeys(IDbCommand tableCommand)
     {
         if (_template.Tables.Count == 0)
             return;
@@ -1111,7 +1111,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
         switch (_product.Platform)
         {
             case Platform.SqlServer:
-                tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ForeignKeyQuench @ProductName = '{_product.Name}', @WhatIf = {_whatIfOnly}";
+                tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ForeignKeyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
                 break;
             case Platform.PostgreSQL:
                 tableCommand.CommandText = $@"CALL ""SchemaSmith"".""ForeignKeyQuench""(p_WhatIf := {_whatIfOnly});";
@@ -1122,7 +1122,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
                     ParseMySqlTableJson(tableCommand);
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
-                tableCommand.CommandText = $"CALL SchemaSmith_ForeignKeyQuench('{_product.Name.Replace("'", "''")}', '{_databaseName.Replace("'", "''")}', {whatIf}, {dropUnknown})";
+                tableCommand.CommandText = $"CALL SchemaSmith_ForeignKeyQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown})";
                 break;
             }
         }
@@ -1138,7 +1138,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
         SafeProgressLog("  Quenching materialized views");
 
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
-        tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{_product.Name.Replace("'", "''")}', '{IterationMaterializedViewSchema.Replace("'", "''")}', {_whatIfOnly}, {updateFillFactor}, '{EscapeSqlLiteral(_template.Name)}', '{EscapeSqlLiteral(_schemaName)}');";
+        tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(IterationMaterializedViewSchema)}', {_whatIfOnly}, {updateFillFactor}, '{EscapeSqlLiteral(_template.Name)}', '{EscapeSqlLiteral(_schemaName)}');";
 
         _debugFileLocation = GetDebugFileName("Quench Materialized Views");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
@@ -1173,7 +1173,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
         // B5 fix: thread @TemplateName + @SchemaName so the existing-views lookup in the proc
         // is scoped to the iteration's schema. Regular templates pass @SchemaName = '' and the
         // proc falls through to today's all-schemas behavior.
-        tableCommand.CommandText = $@"EXEC [SchemaSmith].[IndexedViewQuench] @ProductName = '{_product.Name.Replace("'", "''")}', @IndexedViewSchema = '{viewSchema.Replace("'", "''")}', @WhatIf = {_whatIfOnly}, @UpdateFillFactor = {updateFillFactor}, @TemplateName = N'{EscapeSqlLiteral(_template.Name)}', @SchemaName = N'{EscapeSqlLiteral(_schemaName)}';";
+        tableCommand.CommandText = $@"EXEC [SchemaSmith].[IndexedViewQuench] @ProductName = '{EscapeSqlLiteral(_product.Name)}', @IndexedViewSchema = '{EscapeSqlLiteral(viewSchema)}', @WhatIf = {_whatIfOnly}, @UpdateFillFactor = {updateFillFactor}, @TemplateName = N'{EscapeSqlLiteral(_template.Name)}', @SchemaName = N'{EscapeSqlLiteral(_schemaName)}';";
 
         _debugFileLocation = GetDebugFileName("Quench Indexed Views");
         LogSqlScript(_debugFileLocation, tableCommand.CommandText);
@@ -1190,9 +1190,9 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{_product.Name}',
         var tableJson = !string.IsNullOrEmpty(_template.TableSchema)
             ? _template.TableSchema
             : JsonHelper.SerializeAll(_template.Tables);
-        command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_databaseName.Replace("'", "''")}', @tableJson)";
+        command.CommandText = $"CALL SchemaSmith_ParseTableJson('{EscapeSqlLiteral(_databaseName)}', @tableJson)";
         _debugFileLocation = GetDebugFileName("Parse Table Json");
-        LogSqlScript(_debugFileLocation, command.CommandText.Replace("@tableJson", $"'{tableJson.Replace("'", "''")}'"));
+        LogSqlScript(_debugFileLocation, command.CommandText.Replace("@tableJson", $"'{EscapeSqlLiteral(tableJson)}'"));
         AddJsonParameter(command, "@tableJson", tableJson);
         ExecuteNonQueryHandlingMessages(command);
         ClearParameters(command);
