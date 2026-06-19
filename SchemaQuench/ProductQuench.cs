@@ -19,7 +19,7 @@ namespace SchemaQuench;
 public class ProductQuench
 {
     private readonly IConfigurationRoot _config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-    private readonly LogHygieneOptions _logHygiene = LogHygieneOptions.FromConfiguration(FactoryContainer.ResolveOrCreate<IConfigurationRoot>());
+    private readonly LogHygieneOptions _logHygiene;
     private readonly ILog _errorLog = LogFactory.GetLogger("ErrorLog");
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly Product _product = Product.Load();
@@ -56,6 +56,8 @@ public class ProductQuench
     {
         if (_product.Platform == Platform.Unknown)
             throw new Exception($"Product '{_product.Name}' does not have a Platform assigned. Use SchemaTongs or edit the product.json file to assign a platform before quenching.");
+
+        _logHygiene = LogHygieneOptions.FromConfiguration(_config);
 
         if (!int.TryParse(_config["MaxThreads"], out _maxThreads) || _maxThreads < 1 || _maxThreads > 20)
             _maxThreads = 10;

@@ -72,6 +72,16 @@ public class LogScrubberTests
     }
 
     [Test]
+    public void ShouldScrubName_BareGlobPattern_DoesNotScrubNonSensitiveNames()
+    {
+        // A bare "*" trims to an empty string; an unguarded contains-match would then match
+        // every name. Suppress-all is LogTokens:false, not a wildcard pattern — a bare "*" is
+        // a config mistake and must not silently scrub innocuous names.
+        var options = Options(scrubPatterns: ["*"]);
+        Assert.That(LogScrubber.ShouldScrubName("ServerName", options), Is.False);
+    }
+
+    [Test]
     public void ShouldScrubName_AllowTokens_OptOutOfDefaultPattern()
     {
         var options = Options(allowTokens: ["PublicToken"]);
@@ -120,6 +130,29 @@ public class LogScrubberTests
     {
         var result = LogScrubber.ScrubConnectionStringSubfields("Server=db1;Password=secret");
         Assert.That(result, Is.EqualTo("Server=db1;Password=***"));
+    }
+
+    [Test]
+    public void ScrubConnectionStringSubfields_StripsDoubleQuotedPasswordContainingSemicolon()
+    {
+        // ADO.NET allows quoting a value that itself contains ';'. A naive [^;]* stops at the
+        // first inner ';' and leaks the tail of the password.
+        var result = LogScrubber.ScrubConnectionStringSubfields("Server=db1;Password=\"p;q\";Database=app");
+        Assert.That(result, Is.EqualTo("Server=db1;Password=***;Database=app"));
+    }
+
+    [Test]
+    public void ScrubConnectionStringSubfields_StripsSingleQuotedPasswordContainingSemicolon()
+    {
+        var result = LogScrubber.ScrubConnectionStringSubfields("Server=db1;Password='p;q';Database=app");
+        Assert.That(result, Is.EqualTo("Server=db1;Password=***;Database=app"));
+    }
+
+    [Test]
+    public void ScrubConnectionStringSubfields_StripsBraceQuotedPwdContainingSemicolon()
+    {
+        var result = LogScrubber.ScrubConnectionStringSubfields("Server=db1;Pwd={a;b};Database=app");
+        Assert.That(result, Is.EqualTo("Server=db1;Pwd=***;Database=app"));
     }
 
     [Test]

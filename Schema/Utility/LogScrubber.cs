@@ -20,9 +20,12 @@ public static class LogScrubber
         ["Password", "Pwd", "Secret", "ApiKey", "Token", "ConnectionString", "Credential"];
 
     // Connection-string Password=/Pwd= subfield. \b anchors to the actual key so a "MyPasswordHint="
-    // key is not matched; [^;]* captures up to the next delimiter or end of value.
+    // key is not matched. The value alternation consumes a quoted form FIRST ("...", '...', {...} —
+    // all driver-supported and able to contain ';') before falling back to the unquoted [^;]* form,
+    // so a password whose value contains a semicolon is fully masked rather than truncated at it.
     private static readonly Regex ConnectionStringSecret =
-        new(@"(?<key>\b(?:password|pwd)\s*=)\s*[^;]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"(?<key>\b(?:password|pwd)\s*=)\s*(?:""[^""]*""|'[^']*'|\{[^}]*\}|[^;]*)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public static bool ShouldScrubName(string name, LogHygieneOptions options)
     {
@@ -33,7 +36,7 @@ public static class LogScrubber
         if (options.ScrubTokens.Contains(name)) return true;
 
         return DefaultSensitivePatterns
-            .Concat(options.ScrubPatterns.Select(p => p.Trim('*')))
+            .Concat(options.ScrubPatterns.Select(p => p.Trim('*')).Where(p => p.Length > 0))
             .Any(name.ContainsIgnoringCase);
     }
 
