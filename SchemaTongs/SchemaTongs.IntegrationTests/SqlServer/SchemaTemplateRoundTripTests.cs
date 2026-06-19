@@ -130,6 +130,20 @@ public class SchemaTemplateRoundTripTests
                 Assert.That(procBody, Does.Not.Contain($"[{SourceSchema}]"),
                     "Procedure body must no longer contain the bracketed source-schema literal.");
 
+                // #272: the mixed-bracket form [tenant_seed].Customers (bracketed schema, bare
+                // object — what the SSMS view designer emits) must also rewrite the schema half
+                // to {{SchemaName}}. Before the fix this survived un-rewritten and the package
+                // failed to quench with "Invalid object name 'tenant_seed.Customers'".
+                var mixedViewPath = Path.Combine(templatePath, "Views", "MixedRefView.sql");
+                Assert.That(File.Exists(mixedViewPath), Is.True,
+                    "MixedRefView.sql must be emitted with no schema prefix in the filename.");
+                var mixedViewBody = File.ReadAllText(mixedViewPath);
+                Assert.That(mixedViewBody, Does.Contain("{{SchemaName}}.Customers")
+                    .Or.Contain("{{SchemaName}}.[Customers]"),
+                    "Mixed-bracket [tenant_seed].Customers must rewrite the schema half to {{SchemaName}} (#272).");
+                Assert.That(mixedViewBody, Does.Not.Contain($"[{SourceSchema}].Customers"),
+                    "The bracketed-schema / bare-object source reference must not survive extraction (#272).");
+
                 // ----- Step 2: drop and recreate the source schema empty -----
                 DropAndRecreateTenantSchema();
 
@@ -285,6 +299,15 @@ AS
 SELECT c.[CustomerID], c.[Name], o.[OrderID]
   FROM [{SourceSchema}].[Customers] c
   INNER JOIN [{SourceSchema}].[Orders] o ON o.[CustomerID] = c.[CustomerID];";
+        cmd.ExecuteNonQuery();
+
+        // #272: a view using the SSMS view-designer MIXED-bracket form — bracketed schema,
+        // BARE object ([tenant_seed].Customers) — which the old same-wrapper rewriter missed.
+        cmd.CommandText = $@"
+CREATE VIEW [{SourceSchema}].[MixedRefView]
+AS
+SELECT c.[CustomerID], c.[Name]
+  FROM [{SourceSchema}].Customers c;";
         cmd.ExecuteNonQuery();
 
         // Procedure referencing BOTH source schema AND a cross-schema dbo object.
