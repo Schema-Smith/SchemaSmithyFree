@@ -76,40 +76,40 @@ public class DatabaseQuench
     private StatusMessageMonitor _statusMonitor;
     private readonly object _lockObject = new();
 
-    // Per-iteration cloned script collections, populated at the start of Execute() when this is
-    // a schema-template iteration. Cloning isolates {{SchemaName}}-substituted batches from sibling
-    // iterations that share the same in-memory Template instance. For regular templates these stay
-    // null and execution reads through to _template.<slot>Scripts as before.
-    private List<SqlScript> _iterationBeforeScripts;
-    private List<SqlScript> _iterationObjectScripts;
-    private List<SqlScript> _iterationAfterTablesObjectScripts;
-    private List<SqlScript> _iterationBetweenTablesAndKeysScripts;
-    private List<SqlScript> _iterationAfterTableScripts;
-    private List<SqlScript> _iterationTableDataScripts;
-    private List<SqlScript> _iterationAfterScripts;
-    private string _iterationBaselineValidationScript;
-    private string _iterationVersionStampScript;
+    // Per-iteration content built by PrepareIterationContent at the start of Execute(). For schema-
+    // template iterations the script collections are cloned (isolating {{SchemaName}}-substituted
+    // batches from sibling iterations that share the same in-memory Template) and the table / view
+    // JSON carries the substituted schema. For regular templates the collections alias _template's
+    // own collections (preserving the cross-iteration HasBeenQuenched semantics the engine relies on)
+    // and the schema strings stay null so the accessor properties below fall back to _template.<field>
+    // — no substitution, no behavior change. That fall-back also lets test-only entry points that call
+    // the Quench* methods directly (bypassing Execute → PrepareIterationContent) keep working.
+    private readonly IterationContent _iteration = new();
 
-    // Per-iteration table / view JSON serializations passed into the platform-specific
-    // engine-generated DDL procs (MissingTableAndColumnQuench, IndexOnlyQuench, MaterializedViewQuench).
-    // For schema-template iterations PrepareIterationContent substitutes {{SchemaName}} so the procs
-    // receive fully-qualified table definitions. Regular templates leave the fields null and the
-    // properties below fall back to _template.<field> — no substitution, no behavior change.
-    // <para>The fall-back also lets test-only entry points (which call QuenchMaterializedViews /
-    // QuenchMissingTablesAndColumns directly without going through Execute → PrepareIterationContent)
-    // continue to work without forcing every test to drive the full pipeline.</para>
-    private string _iterationTableSchema;
-    private string _iterationMaterializedViewSchema;
-    private string _iterationIndexedViewSchema;
-    internal string IterationTableSchema => _iterationTableSchema ?? _template.TableSchema ?? "";
-    internal string IterationMaterializedViewSchema => _iterationMaterializedViewSchema ?? _template.MaterializedViewSchema ?? "";
+    private sealed class IterationContent
+    {
+        public List<SqlScript> BeforeScripts { get; set; }
+        public List<SqlScript> ObjectScripts { get; set; }
+        public List<SqlScript> AfterTablesObjectScripts { get; set; }
+        public List<SqlScript> BetweenTablesAndKeysScripts { get; set; }
+        public List<SqlScript> AfterTableScripts { get; set; }
+        public List<SqlScript> TableDataScripts { get; set; }
+        public List<SqlScript> AfterScripts { get; set; }
+        public string BaselineValidationScript { get; set; }
+        public string VersionStampScript { get; set; }
+        public string TableSchema { get; set; }
+        public string MaterializedViewSchema { get; set; }
+        public string IndexedViewSchema { get; set; }
+    }
+    internal string IterationTableSchema => _iteration.TableSchema ?? _template.TableSchema ?? "";
+    internal string IterationMaterializedViewSchema => _iteration.MaterializedViewSchema ?? _template.MaterializedViewSchema ?? "";
     // I10: Mirror the iteration-schema pattern for indexed views. QuenchIndexedViews used to
     // rebuild the JSON inline per call; routing through this field puts the substitution alongside
     // the table / materialized-view substitution in PrepareIterationContent. Per-call ShouldApply
     // filtering still happens inside QuenchIndexedViews (the filter is per-view and can't be done
     // once at iteration-prepare time without losing the filter on regular templates that bypass
     // PrepareIterationContent through the constructor → QuenchIndexedViews test entry points).
-    internal string IterationIndexedViewSchema => _iterationIndexedViewSchema ?? _template.IndexedViewSchema ?? "";
+    internal string IterationIndexedViewSchema => _iteration.IndexedViewSchema ?? _template.IndexedViewSchema ?? "";
 
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         string schemaName, bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
@@ -275,19 +275,19 @@ public class DatabaseQuench
 
                 // Step: Validate baseline. Resolved against per-iteration tokens (BaselineValidationScript
                 // may reference {{SchemaName}} for schema templates).
-                if (!string.IsNullOrWhiteSpace(_iterationBaselineValidationScript))
+                if (!string.IsNullOrWhiteSpace(_iteration.BaselineValidationScript))
                 {
                     _checkpointing.Track(DbScope, "ValidateBaseline", () =>
                     {
                         SafeProgressLog("  Validate Baseline");
-                        command.CommandText = _iterationBaselineValidationScript;
+                        command.CommandText = _iteration.BaselineValidationScript;
                         if (!Convert.ToBoolean(command.ExecuteScalar()))
                             throw new Exception("Invalid baseline for this release");
                     });
                 }
 
                 // Step: Object scripts without unresolved tokens
-                var nonTokenScripts = _iterationObjectScripts.Where(s => s.Batches.All(b => !b.Contains("{{") && !b.Contains("}}"))).ToList();
+                var nonTokenScripts = _iteration.ObjectScripts.Where(s => s.Batches.All(b => !b.Contains("{{") && !b.Contains("}}"))).ToList();
                 if (!IsWhatIf)
                 {
                     SafeProgressLog("  Quenching object scripts without unresolved tokens");
@@ -323,24 +323,24 @@ public class DatabaseQuench
                 {
                     SafeProgressLog("  Quenching object scripts without query tokens");
                     QuenchDatabaseObjectsWithCheckpoint(effectiveObjectsCmd,
-                        _iterationObjectScripts.Where(s => s.Batches.All(b => !b.Contains("{{") && !b.Contains("}}"))).ToList(),
+                        _iteration.ObjectScripts.Where(s => s.Batches.All(b => !b.Contains("{{") && !b.Contains("}}"))).ToList(),
                         false, DatabaseScriptSlot.Object);
 
                     ResolveAndApplyQueryTokens(effectiveSilentCmd);
 
                     SafeProgressLog("  Quenching before database scripts");
-                    QuenchTemplateScriptsWithCheckpoint(command, "Before", _iterationBeforeScripts, DatabaseScriptSlot.Before);
+                    QuenchTemplateScriptsWithCheckpoint(command, "Before", _iteration.BeforeScripts, DatabaseScriptSlot.Before);
                 }
                 else
                 {
                     SafeProgressLog("  [WhatIf] Object scripts without query tokens:");
-                    WhatIfLogScripts(_iterationObjectScripts.Where(s => s.Batches.All(b => !b.Contains("{{") && !b.Contains("}}"))).ToList(), DatabaseScriptSlot.Object);
+                    WhatIfLogScripts(_iteration.ObjectScripts.Where(s => s.Batches.All(b => !b.Contains("{{") && !b.Contains("}}"))).ToList(), DatabaseScriptSlot.Object);
 
                     if (_template.QueryTokens.Count > 0)
                         SafeProgressLog("  [WhatIf] Would resolve template query tokens");
 
                     SafeProgressLog("  [WhatIf] Before database scripts:");
-                    WhatIfLogTemplateScripts(command, "Before", _iterationBeforeScripts, DatabaseScriptSlot.Before);
+                    WhatIfLogTemplateScripts(command, "Before", _iteration.BeforeScripts, DatabaseScriptSlot.Before);
                 }
 
                 // Step: Modified tables
@@ -352,18 +352,18 @@ public class DatabaseQuench
                 if (!IsWhatIf)
                 {
                     SafeProgressLog("  Quenching object scripts");
-                    QuenchDatabaseObjectsWithCheckpoint(effectiveObjectsCmd, _iterationAfterTablesObjectScripts, false, DatabaseScriptSlot.AfterTablesObject);
+                    QuenchDatabaseObjectsWithCheckpoint(effectiveObjectsCmd, _iteration.AfterTablesObjectScripts, false, DatabaseScriptSlot.AfterTablesObject);
 
                     SafeProgressLog("  Quenching between table and keys scripts");
-                    QuenchTemplateScriptsWithCheckpoint(command, "Between Table And Keys", _iterationBetweenTablesAndKeysScripts, DatabaseScriptSlot.BetweenTablesAndKeys);
+                    QuenchTemplateScriptsWithCheckpoint(command, "Between Table And Keys", _iteration.BetweenTablesAndKeysScripts, DatabaseScriptSlot.BetweenTablesAndKeys);
                 }
                 else
                 {
                     SafeProgressLog("  [WhatIf] Object scripts (after tables):");
-                    WhatIfLogScripts(_iterationAfterTablesObjectScripts, DatabaseScriptSlot.AfterTablesObject);
+                    WhatIfLogScripts(_iteration.AfterTablesObjectScripts, DatabaseScriptSlot.AfterTablesObject);
 
                     SafeProgressLog("  [WhatIf] Between table and keys scripts:");
-                    WhatIfLogTemplateScripts(command, "Between Table And Keys", _iterationBetweenTablesAndKeysScripts, DatabaseScriptSlot.BetweenTablesAndKeys);
+                    WhatIfLogTemplateScripts(command, "Between Table And Keys", _iteration.BetweenTablesAndKeysScripts, DatabaseScriptSlot.BetweenTablesAndKeys);
                 }
 
                 // Step: Indexes and constraints
@@ -379,12 +379,12 @@ public class DatabaseQuench
                 if (!IsWhatIf)
                 {
                     SafeProgressLog("  Quenching after table scripts");
-                    QuenchTemplateScriptsWithCheckpoint(command, "After Table", _iterationAfterTableScripts, DatabaseScriptSlot.AfterTable);
+                    QuenchTemplateScriptsWithCheckpoint(command, "After Table", _iteration.AfterTableScripts, DatabaseScriptSlot.AfterTable);
 
-                    if (_iterationObjectScripts.Union(_iterationAfterTablesObjectScripts).Any(s => !s.HasBeenQuenched))
+                    if (_iteration.ObjectScripts.Union(_iteration.AfterTablesObjectScripts).Any(s => !s.HasBeenQuenched))
                     {
                         SafeProgressLog("  Quenching object scripts");
-                        QuenchDatabaseObjectsWithCheckpoint(effectiveObjectsCmd, _iterationAfterTablesObjectScripts.ToList(), true, DatabaseScriptSlot.AfterTablesObject);
+                        QuenchDatabaseObjectsWithCheckpoint(effectiveObjectsCmd, _iteration.AfterTablesObjectScripts.ToList(), true, DatabaseScriptSlot.AfterTablesObject);
                     }
 
                     if (_deliverData)
@@ -413,10 +413,10 @@ public class DatabaseQuench
                             });
                         });
 
-                        if (_iterationObjectScripts.Union(_iterationTableDataScripts).Any(s => !s.HasBeenQuenched))
+                        if (_iteration.ObjectScripts.Union(_iteration.TableDataScripts).Any(s => !s.HasBeenQuenched))
                         {
                             SafeProgressLog("  Quenching table data scripts");
-                            QuenchDatabaseObjectsWithCheckpoint(effectiveObjectsCmd, _iterationTableDataScripts.ToList(), true, DatabaseScriptSlot.TableData);
+                            QuenchDatabaseObjectsWithCheckpoint(effectiveObjectsCmd, _iteration.TableDataScripts.ToList(), true, DatabaseScriptSlot.TableData);
                         }
                     }
 
@@ -444,14 +444,14 @@ public class DatabaseQuench
                     }
 
                     SafeProgressLog("  Quenching after database scripts");
-                    QuenchTemplateScriptsWithCheckpoint(command, "After", _iterationAfterScripts, DatabaseScriptSlot.After);
+                    QuenchTemplateScriptsWithCheckpoint(command, "After", _iteration.AfterScripts, DatabaseScriptSlot.After);
 
-                    if (!string.IsNullOrWhiteSpace(_iterationVersionStampScript))
+                    if (!string.IsNullOrWhiteSpace(_iteration.VersionStampScript))
                     {
                         _checkpointing.Track(DbScope, "VersionStamp", () =>
                         {
                             SafeProgressLog("  Stamp version");
-                            command.CommandText = _iterationVersionStampScript;
+                            command.CommandText = _iteration.VersionStampScript;
                             ExecuteNonQueryHandlingMessages(command);
                         });
                     }
@@ -459,15 +459,15 @@ public class DatabaseQuench
                 else
                 {
                     SafeProgressLog("  [WhatIf] After table scripts:");
-                    WhatIfLogTemplateScripts(command, "After Table", _iterationAfterTableScripts, DatabaseScriptSlot.AfterTable);
+                    WhatIfLogTemplateScripts(command, "After Table", _iteration.AfterTableScripts, DatabaseScriptSlot.AfterTable);
 
                     SafeProgressLog("  [WhatIf] Object scripts (final pass):");
-                    WhatIfLogScripts(_iterationAfterTablesObjectScripts.ToList(), DatabaseScriptSlot.AfterTablesObject);
+                    WhatIfLogScripts(_iteration.AfterTablesObjectScripts.ToList(), DatabaseScriptSlot.AfterTablesObject);
 
                     if (_deliverData)
                     {
                         SafeProgressLog("  [WhatIf] Table data delivery:");
-                        WhatIfLogTableDataScripts(_iterationTableDataScripts.ToList());
+                        WhatIfLogTableDataScripts(_iteration.TableDataScripts.ToList());
 
                         if (FactoryContainer.Resolve<IMergeScriptHelper>() is not MergeScriptHelperAdapter whatIfAdapter || whatIfAdapter.Platform != _product.Platform)
                             FactoryContainer.Register<IMergeScriptHelper>(new MergeScriptHelperAdapter(_product.Platform));
@@ -502,9 +502,9 @@ public class DatabaseQuench
                     }
 
                     SafeProgressLog("  [WhatIf] After database scripts:");
-                    WhatIfLogTemplateScripts(command, "After", _iterationAfterScripts, DatabaseScriptSlot.After);
+                    WhatIfLogTemplateScripts(command, "After", _iteration.AfterScripts, DatabaseScriptSlot.After);
 
-                    if (!string.IsNullOrWhiteSpace(_iterationVersionStampScript))
+                    if (!string.IsNullOrWhiteSpace(_iteration.VersionStampScript))
                         SafeProgressLog("  [WhatIf] Would stamp version");
                 }
             }
@@ -560,16 +560,16 @@ public class DatabaseQuench
             // that switches to per-iteration clones for regular templates would silently change
             // observable script-mutation semantics — don't "fix" the aliasing without explicitly
             // re-validating the regular-template parallel-DB scenarios.
-            _iterationBeforeScripts = _template.BeforeScripts;
-            _iterationObjectScripts = _template.ObjectScripts;
-            _iterationAfterTablesObjectScripts = _template.AfterTablesObjectScripts;
-            _iterationBetweenTablesAndKeysScripts = _template.BetweenTablesAndKeysScripts;
-            _iterationAfterTableScripts = _template.AfterTableScripts;
-            _iterationTableDataScripts = _template.TableDataScripts;
-            _iterationAfterScripts = _template.AfterScripts;
-            _iterationBaselineValidationScript = _template.BaselineValidationScript;
-            _iterationVersionStampScript = _template.VersionStampScript;
-            // _iterationTableSchema / _iterationMaterializedViewSchema deliberately left null —
+            _iteration.BeforeScripts = _template.BeforeScripts;
+            _iteration.ObjectScripts = _template.ObjectScripts;
+            _iteration.AfterTablesObjectScripts = _template.AfterTablesObjectScripts;
+            _iteration.BetweenTablesAndKeysScripts = _template.BetweenTablesAndKeysScripts;
+            _iteration.AfterTableScripts = _template.AfterTableScripts;
+            _iteration.TableDataScripts = _template.TableDataScripts;
+            _iteration.AfterScripts = _template.AfterScripts;
+            _iteration.BaselineValidationScript = _template.BaselineValidationScript;
+            _iteration.VersionStampScript = _template.VersionStampScript;
+            // _iteration.TableSchema / _iteration.MaterializedViewSchema deliberately left null —
             // the IterationTableSchema / IterationMaterializedViewSchema properties fall back to
             // _template.<field>, so regular templates and bypass-Execute test entry points both
             // observe the existing string verbatim.
@@ -584,26 +584,26 @@ public class DatabaseQuench
             new("SchemaName", _schemaName)
         };
 
-        _iterationBeforeScripts = CloneAndSubstitute(_template.BeforeScripts, schemaNameTokens);
-        _iterationObjectScripts = CloneAndSubstitute(_template.ObjectScripts, schemaNameTokens);
-        _iterationAfterTablesObjectScripts = CloneAndSubstitute(_template.AfterTablesObjectScripts, schemaNameTokens);
-        _iterationBetweenTablesAndKeysScripts = CloneAndSubstitute(_template.BetweenTablesAndKeysScripts, schemaNameTokens);
-        _iterationAfterTableScripts = CloneAndSubstitute(_template.AfterTableScripts, schemaNameTokens);
-        _iterationTableDataScripts = CloneAndSubstitute(_template.TableDataScripts, schemaNameTokens);
-        _iterationAfterScripts = CloneAndSubstitute(_template.AfterScripts, schemaNameTokens);
+        _iteration.BeforeScripts = CloneAndSubstitute(_template.BeforeScripts, schemaNameTokens);
+        _iteration.ObjectScripts = CloneAndSubstitute(_template.ObjectScripts, schemaNameTokens);
+        _iteration.AfterTablesObjectScripts = CloneAndSubstitute(_template.AfterTablesObjectScripts, schemaNameTokens);
+        _iteration.BetweenTablesAndKeysScripts = CloneAndSubstitute(_template.BetweenTablesAndKeysScripts, schemaNameTokens);
+        _iteration.AfterTableScripts = CloneAndSubstitute(_template.AfterTableScripts, schemaNameTokens);
+        _iteration.TableDataScripts = CloneAndSubstitute(_template.TableDataScripts, schemaNameTokens);
+        _iteration.AfterScripts = CloneAndSubstitute(_template.AfterScripts, schemaNameTokens);
 
-        _iterationBaselineValidationScript = SqlScript.TokenReplace(
+        _iteration.BaselineValidationScript = SqlScript.TokenReplace(
             _template.BaselineValidationScript ?? "", schemaNameTokens, _product.Platform);
-        _iterationVersionStampScript = SqlScript.TokenReplace(
+        _iteration.VersionStampScript = SqlScript.TokenReplace(
             _template.VersionStampScript ?? "", schemaNameTokens, _product.Platform);
 
         // Engine-generated DDL (MissingTableAndColumnQuench, IndexOnlyQuench, MaterializedViewQuench)
         // consumes the serialized table-definition JSON literally. Slice 1's SchemaDefaultResolver
         // defaults schema-template tables / views to "{{SchemaName}}", which means the JSON carries
         // the token verbatim — substitute here so each iteration sees a fully-qualified DDL payload.
-        _iterationTableSchema = (_template.TableSchema ?? "").Replace("{{SchemaName}}", _schemaName);
-        _iterationMaterializedViewSchema = (_template.MaterializedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
-        _iterationIndexedViewSchema = (_template.IndexedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iteration.TableSchema = (_template.TableSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iteration.MaterializedViewSchema = (_template.MaterializedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iteration.IndexedViewSchema = (_template.IndexedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
     }
 
     private static List<SqlScript> CloneAndSubstitute(
@@ -839,13 +839,13 @@ public class DatabaseQuench
 
         // 7. Apply resolved values to this iteration's cloned scripts.
         var tokenList = iterationQueryTokens.ToList();
-        ApplyToIteration(_iterationBeforeScripts, tokenList);
-        ApplyToIteration(_iterationObjectScripts, tokenList);
-        ApplyToIteration(_iterationAfterTablesObjectScripts, tokenList);
-        ApplyToIteration(_iterationBetweenTablesAndKeysScripts, tokenList);
-        ApplyToIteration(_iterationAfterTableScripts, tokenList);
-        ApplyToIteration(_iterationTableDataScripts, tokenList);
-        ApplyToIteration(_iterationAfterScripts, tokenList);
+        ApplyToIteration(_iteration.BeforeScripts, tokenList);
+        ApplyToIteration(_iteration.ObjectScripts, tokenList);
+        ApplyToIteration(_iteration.AfterTablesObjectScripts, tokenList);
+        ApplyToIteration(_iteration.BetweenTablesAndKeysScripts, tokenList);
+        ApplyToIteration(_iteration.AfterTableScripts, tokenList);
+        ApplyToIteration(_iteration.TableDataScripts, tokenList);
+        ApplyToIteration(_iteration.AfterScripts, tokenList);
     }
 
     private static void ApplyToIteration(

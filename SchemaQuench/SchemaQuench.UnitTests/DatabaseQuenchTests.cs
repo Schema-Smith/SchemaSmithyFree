@@ -1567,12 +1567,16 @@ public class DatabaseQuenchTests
     // substitution into BaselineValidationScript and VersionStampScript. The private fields
     // are observed via reflection rather than a dedicated accessor (production code change
     // out of scope for this phase).
-    private static string GetPrivateString(DatabaseQuench quench, string fieldName)
+    private static string GetIterationString(DatabaseQuench quench, string propertyName)
     {
-        var field = typeof(DatabaseQuench).GetField(fieldName,
+        var iterationField = typeof(DatabaseQuench).GetField("_iteration",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        Assert.That(field, Is.Not.Null, $"Expected private field '{fieldName}' on DatabaseQuench.");
-        return (string)field.GetValue(quench);
+        Assert.That(iterationField, Is.Not.Null, "Expected private field '_iteration' on DatabaseQuench.");
+        var iteration = iterationField.GetValue(quench);
+        Assert.That(iteration, Is.Not.Null, "DatabaseQuench._iteration was null.");
+        var property = iteration.GetType().GetProperty(propertyName);
+        Assert.That(property, Is.Not.Null, $"Expected property '{propertyName}' on IterationContent.");
+        return (string)property.GetValue(iteration);
     }
 
     [Test]
@@ -1593,7 +1597,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", false, false, false, null);
         quench.PrepareIterationContent();
 
-        var substituted = GetPrivateString(quench, "_iterationBaselineValidationScript");
+        var substituted = GetIterationString(quench, "BaselineValidationScript");
         Assert.That(substituted, Does.Contain("SCHEMA_ID('tenant_a')"));
         Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
     }
@@ -1614,7 +1618,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", false, false, false, null);
         quench.PrepareIterationContent();
 
-        var captured = GetPrivateString(quench, "_iterationBaselineValidationScript");
+        var captured = GetIterationString(quench, "BaselineValidationScript");
         Assert.That(captured, Is.EqualTo("SELECT CAST(1 AS BIT)"));
     }
 
@@ -1636,7 +1640,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", false, false, false, null);
         quench.PrepareIterationContent();
 
-        var substituted = GetPrivateString(quench, "_iterationVersionStampScript");
+        var substituted = GetIterationString(quench, "VersionStampScript");
         Assert.That(substituted, Does.Contain("[tenant_globex]"));
         Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
     }
@@ -1655,7 +1659,7 @@ public class DatabaseQuenchTests
             false, "false", false, "false", "false", false, false, null);
         quench.PrepareIterationContent();
 
-        var captured = GetPrivateString(quench, "_iterationVersionStampScript");
+        var captured = GetIterationString(quench, "VersionStampScript");
         Assert.That(captured, Is.EqualTo("DO $$ BEGIN RAISE NOTICE 'stamped'; END $$;"));
     }
 
@@ -1723,7 +1727,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", false, false, false, null);
         quench.PrepareIterationContent();
 
-        var substituted = GetPrivateString(quench, "_iterationVersionStampScript");
+        var substituted = GetIterationString(quench, "VersionStampScript");
         Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
         // tenant_a appears in the table-name, value, and PRINT — three occurrences.
         var occurrences = System.Text.RegularExpressions.Regex.Matches(substituted, "tenant_a").Count;
