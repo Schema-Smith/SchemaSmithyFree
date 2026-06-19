@@ -1225,6 +1225,172 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region ProductName escaping — SQL Server / PostgreSQL dispatch (#274)
+
+    // #274: _product.Name was interpolated raw into the SQL Server (EXEC @ProductName='…')
+    // and PostgreSQL (CALL …(p_ProductName:='…')) dispatch paths, so an apostrophe in the
+    // product name broke deployment on those engines. The MySQL branch already escaped it.
+    // These pin EscapeSqlLiteral across the three affected methods on every engine that
+    // interpolates the product name (the PostgreSQL ForeignKeyQuench path takes no product
+    // name, so there is no literal to escape and no test there); the MySQL cases pin the
+    // already-correct behavior so it can't regress.
+
+    [Test]
+    public void QuenchModifiedTables_SqlServer_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchModifiedTables_PostgreSql_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "false", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchModifiedTables_MySql_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.MySQL };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Table { Name = "[T1]" });
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchIndexesAndConstraints_SqlServer_IndexOnly_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T", IndexOnlyTableQuenches = true };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchIndexesAndConstraints_SqlServer_FullQuench_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T", IndexOnlyTableQuenches = false };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchIndexesAndConstraints_PostgreSql_IndexOnly_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T", IndexOnlyTableQuenches = true };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "false", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchIndexesAndConstraints_PostgreSql_FullQuench_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T", IndexOnlyTableQuenches = false };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "false", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchIndexesAndConstraints_MySql_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.MySQL };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Table { Name = "[T1]" });
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchForeignKeys_SqlServer_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Table { Name = "[T1]" });
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchForeignKeys(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    [Test]
+    public void QuenchForeignKeys_MySql_ProductNameWithApostrophe_EscapesCorrectly()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "O'Brien's DB", Platform = Platform.MySQL };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Table { Name = "[T1]" });
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchForeignKeys(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("O''Brien''s DB"));
+    }
+
+    #endregion
+
     #region Schema-Template (Slice 3) — Constructor + DbScope + Log Prefix
 
     [Test]
@@ -1401,12 +1567,16 @@ public class DatabaseQuenchTests
     // substitution into BaselineValidationScript and VersionStampScript. The private fields
     // are observed via reflection rather than a dedicated accessor (production code change
     // out of scope for this phase).
-    private static string GetPrivateString(DatabaseQuench quench, string fieldName)
+    private static string GetIterationString(DatabaseQuench quench, string propertyName)
     {
-        var field = typeof(DatabaseQuench).GetField(fieldName,
+        var iterationField = typeof(DatabaseQuench).GetField("_iteration",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        Assert.That(field, Is.Not.Null, $"Expected private field '{fieldName}' on DatabaseQuench.");
-        return (string)field.GetValue(quench);
+        Assert.That(iterationField, Is.Not.Null, "Expected private field '_iteration' on DatabaseQuench.");
+        var iteration = iterationField.GetValue(quench);
+        Assert.That(iteration, Is.Not.Null, "DatabaseQuench._iteration was null.");
+        var property = iteration.GetType().GetProperty(propertyName);
+        Assert.That(property, Is.Not.Null, $"Expected property '{propertyName}' on IterationContent.");
+        return (string)property.GetValue(iteration);
     }
 
     [Test]
@@ -1427,7 +1597,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", false, false, false, null);
         quench.PrepareIterationContent();
 
-        var substituted = GetPrivateString(quench, "_iterationBaselineValidationScript");
+        var substituted = GetIterationString(quench, "BaselineValidationScript");
         Assert.That(substituted, Does.Contain("SCHEMA_ID('tenant_a')"));
         Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
     }
@@ -1448,7 +1618,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", false, false, false, null);
         quench.PrepareIterationContent();
 
-        var captured = GetPrivateString(quench, "_iterationBaselineValidationScript");
+        var captured = GetIterationString(quench, "BaselineValidationScript");
         Assert.That(captured, Is.EqualTo("SELECT CAST(1 AS BIT)"));
     }
 
@@ -1470,7 +1640,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", false, false, false, null);
         quench.PrepareIterationContent();
 
-        var substituted = GetPrivateString(quench, "_iterationVersionStampScript");
+        var substituted = GetIterationString(quench, "VersionStampScript");
         Assert.That(substituted, Does.Contain("[tenant_globex]"));
         Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
     }
@@ -1489,7 +1659,7 @@ public class DatabaseQuenchTests
             false, "false", false, "false", "false", false, false, null);
         quench.PrepareIterationContent();
 
-        var captured = GetPrivateString(quench, "_iterationVersionStampScript");
+        var captured = GetIterationString(quench, "VersionStampScript");
         Assert.That(captured, Is.EqualTo("DO $$ BEGIN RAISE NOTICE 'stamped'; END $$;"));
     }
 
@@ -1557,7 +1727,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", false, false, false, null);
         quench.PrepareIterationContent();
 
-        var substituted = GetPrivateString(quench, "_iterationVersionStampScript");
+        var substituted = GetIterationString(quench, "VersionStampScript");
         Assert.That(substituted, Does.Not.Contain("{{SchemaName}}"));
         // tenant_a appears in the table-name, value, and PRINT — three occurrences.
         var occurrences = System.Text.RegularExpressions.Regex.Matches(substituted, "tenant_a").Count;

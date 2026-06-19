@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using NUnit.Framework;
@@ -100,7 +99,7 @@ public class ProductQuenchTests
     #region Product Script Server Routing Tests
 
     [Test]
-    public void QuenchScriptsToServerWithCheckpoint_UsesRequestedServerForCommand()
+    public void QuenchProductScriptsWithCheckpoint_OpensCommandAgainstEachServerByName()
     {
         lock (FactoryContainer.SharedLockObject)
         {
@@ -127,6 +126,7 @@ public class ProductQuenchTests
                     ["SchemaPackagePath"] = schemaPackagePath,
                     ["Target:Server"] = "primary-server",
                     ["Target:SecondaryServers"] = "secondary-server",
+                    ["MaxThreads"] = "1",
                     ["WhatIfONLY"] = "true"
                 })
                 .Build();
@@ -138,24 +138,20 @@ public class ProductQuenchTests
             try
             {
                 var quench = new RecordingProductQuench();
+                var folders = new List<ProductFolder> { new() { ServerToQuench = ServerToQuench.Both } };
 
-                InvokeQuenchScriptsToServerWithCheckpoint(quench, "secondary-server");
+                quench.QuenchProductScriptsWithCheckpoint(folders, "Before Product", true);
 
-                Assert.That(quench.CommandServers, Is.EqualTo(new[] { "secondary-server" }));
+                // The SQL Server fan-out opens one command per server, each against its OWN server
+                // name — the secondary's command must target the secondary, not be re-routed to the
+                // primary. MaxThreads=1 keeps the fan-out serial so the recording list stays single-threaded.
+                Assert.That(quench.CommandServers, Is.EquivalentTo(new[] { "primary-server", "secondary-server" }));
             }
             finally
             {
                 FactoryContainer.Clear();
             }
         }
-    }
-
-    private static void InvokeQuenchScriptsToServerWithCheckpoint(ProductQuench quench, string server)
-    {
-        var method = typeof(ProductQuench).GetMethod("QuenchScriptsToServerWithCheckpoint",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-
-        method!.Invoke(quench, [server, "Before Product", Array.Empty<SqlScript>(), true]);
     }
 
     private sealed class RecordingProductQuench : ProductQuench

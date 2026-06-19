@@ -494,7 +494,7 @@ public class ProductQuench
         return templates;
     }
 
-    private void QuenchProductScriptsWithCheckpoint(List<ProductFolder> folders, string msg, bool isBefore)
+    internal void QuenchProductScriptsWithCheckpoint(List<ProductFolder> folders, string msg, bool isBefore)
     {
         _updateFailed = false;
 
