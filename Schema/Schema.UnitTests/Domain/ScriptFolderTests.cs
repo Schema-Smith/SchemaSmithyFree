@@ -148,5 +148,79 @@ namespace Schema.UnitTests.Domain
 
             Assert.That(deserialized.ObjectType, Is.EqualTo(ScriptObjectType.Procedures));
         }
+
+        // ---- ShouldApplyExpression (folder-level conditional deployment, #260) ----
+
+        [Test]
+        public void ScriptFolder_ShouldApplyExpression_DefaultIsNull()
+        {
+            Assert.That(new TemplateFolder().ShouldApplyExpression, Is.Null);
+        }
+
+        [Test]
+        public void ScriptFolder_ShouldApplyExpression_HasSchemaPropertyAttribute()
+        {
+            var prop = typeof(ScriptFolder).GetProperty(nameof(ScriptFolder.ShouldApplyExpression));
+            var attr = prop?.GetCustomAttribute<SchemaPropertyAttribute>();
+
+            Assert.That(attr, Is.Not.Null);
+        }
+
+        [Test]
+        public void TemplateFolder_JsonRoundTrip_PreservesShouldApplyExpression()
+        {
+            var folder = new TemplateFolder
+            {
+                FolderPath = "MariaDB Only",
+                QuenchSlot = TemplateQuenchSlot.Before,
+                ShouldApplyExpression = "SELECT CASE WHEN @@version LIKE '%MariaDB%' THEN 1 ELSE 0 END"
+            };
+
+            var json = JsonConvert.SerializeObject(folder);
+            var deserialized = JsonConvert.DeserializeObject<TemplateFolder>(json);
+
+            Assert.That(deserialized.ShouldApplyExpression, Is.EqualTo("SELECT CASE WHEN @@version LIKE '%MariaDB%' THEN 1 ELSE 0 END"));
+        }
+
+        [Test]
+        public void ProductFolder_JsonRoundTrip_PreservesShouldApplyExpression()
+        {
+            var folder = new ProductFolder
+            {
+                FolderPath = "Jobs",
+                QuenchSlot = ProductQuenchSlot.After,
+                ShouldApplyExpression = "SELECT CASE WHEN SERVERPROPERTY('EngineEdition') <> 5 THEN 1 ELSE 0 END"
+            };
+
+            var json = JsonConvert.SerializeObject(folder);
+            var deserialized = JsonConvert.DeserializeObject<ProductFolder>(json);
+
+            Assert.That(deserialized.ShouldApplyExpression, Is.EqualTo("SELECT CASE WHEN SERVERPROPERTY('EngineEdition') <> 5 THEN 1 ELSE 0 END"));
+        }
+
+        [Test]
+        public void ScriptFolder_Serialize_WithNullShouldApplyExpression_OmitsIt()
+        {
+            var folder = new TemplateFolder { FolderPath = "Before Scripts", QuenchSlot = TemplateQuenchSlot.Before };
+
+            var json = JsonHelper.Serialize(folder);
+
+            Assert.That(json, Does.Not.Contain("ShouldApplyExpression"));
+        }
+
+        [Test]
+        public void TemplateFolder_Clone_PreservesShouldApplyExpression()
+        {
+            var original = new TemplateFolder
+            {
+                FolderPath = "Region EU",
+                QuenchSlot = TemplateQuenchSlot.Before,
+                ShouldApplyExpression = "SELECT 1"
+            };
+
+            var clone = original.Clone();
+
+            Assert.That(clone.ShouldApplyExpression, Is.EqualTo("SELECT 1"));
+        }
     }
 }
