@@ -340,7 +340,9 @@ WHERE tc_p.TABLE_SCHEMA = '{schema.Replace("'", "''")}'
         if (string.IsNullOrEmpty(contentFile) || string.IsNullOrEmpty(templateRootPath))
             return null;
 
-        return Path.Combine(templateRootPath, contentFile.Replace('\\', '/'));
+        // Normalize both separator styles to the platform separator so output is native on either OS.
+        return Path.Combine(templateRootPath,
+            contentFile.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar));
     }
 
     /// <summary>

@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using NSubstitute;
 using Schema.Delivery;
 
@@ -773,6 +774,42 @@ public class DataDeliveryProcessorTests
         var ctx = new DataDeliveryContext();
         Assert.That(ctx.SchemaName, Is.EqualTo(string.Empty),
             "Regular-template callers must not need to set SchemaName.");
+    }
+
+    // ---------- ResolveContentFilePath separator normalization ----------
+    //
+    // ContentFile paths may use either separator style; resolution normalizes both to the platform
+    // separator so output is native regardless of which OS runs the deployment. The CI matrix runs
+    // both OSes, so these input styles cover all four input/platform combinations.
+
+    [Test]
+    public void ResolveContentFilePath_WindowsStyleInput_ProducesPlatformNativePath()
+    {
+        Assert.That(DataDeliveryProcessor.ResolveContentFilePath("root", @"sub\folder\file.csv"),
+            Is.EqualTo(Path.Combine("root", "sub", "folder", "file.csv")));
+    }
+
+    [Test]
+    public void ResolveContentFilePath_LinuxStyleInput_ProducesPlatformNativePath()
+    {
+        Assert.That(DataDeliveryProcessor.ResolveContentFilePath("root", "sub/folder/file.csv"),
+            Is.EqualTo(Path.Combine("root", "sub", "folder", "file.csv")));
+    }
+
+    [Test]
+    public void ResolveContentFilePath_MixedSeparators_ProducesPlatformNativePath()
+    {
+        Assert.That(DataDeliveryProcessor.ResolveContentFilePath("root", @"sub\folder/file.csv"),
+            Is.EqualTo(Path.Combine("root", "sub", "folder", "file.csv")));
+    }
+
+    [Test]
+    public void ResolveContentFilePath_EmptyOrNullInput_ReturnsNull()
+    {
+        Assert.That(DataDeliveryProcessor.ResolveContentFilePath("root", ""), Is.Null);
+        Assert.That(DataDeliveryProcessor.ResolveContentFilePath("root", null), Is.Null);
+        Assert.That(DataDeliveryProcessor.ResolveContentFilePath("", "file.csv"), Is.Null);
+        Assert.That(DataDeliveryProcessor.ResolveContentFilePath(null, "file.csv"), Is.Null);
     }
 
     // ---------- MergeFilter token substitution (slice 7) ----------
