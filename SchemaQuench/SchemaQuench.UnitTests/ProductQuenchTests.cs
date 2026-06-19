@@ -1847,6 +1847,139 @@ public class ProductQuenchTests
 
     #endregion
 
+    #region Log Hygiene — token scrubbing (#244)
+
+    [Test]
+    public void LogProductInfo_ScrubsSensitiveTokenValue()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.LoadedProduct.ScriptTokens["DbPassword"] = "supersecretvalue";
+
+            quench.InvokeLogProductInfo();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(quench.ProgressLogLines, Has.None.Contains("supersecretvalue"));
+                Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s => s.TrimStart() == "DbPassword: ***"));
+            });
+        });
+    }
+
+    [Test]
+    public void LogProductInfo_LogsNonSensitiveTokenVerbatim()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.LoadedProduct.ScriptTokens["MainDB"] = "AppDatabase";
+
+            quench.InvokeLogProductInfo();
+
+            Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s => s.TrimStart() == "MainDB: AppDatabase"));
+        });
+    }
+
+    [Test]
+    public void LogProductInfo_LogTokensFalse_SuppressesEntireSection()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.LoadedProduct.ScriptTokens["DbPassword"] = "supersecretvalue";
+
+            quench.InvokeLogProductInfo();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("suppressed via LogHygiene.LogTokens=false"));
+                // No token names AND no token values leak when the whole section is suppressed.
+                Assert.That(quench.ProgressLogLines, Has.None.Contains("supersecretvalue"));
+                Assert.That(quench.ProgressLogLines, Has.None.Contains("DbPassword"));
+            });
+        }, extraConfig: new Dictionary<string, string> { ["LogHygiene:LogTokens"] = "false" });
+    }
+
+    [Test]
+    public void LogProductInfo_ScrubTokens_OptInForUnmatchedName()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.LoadedProduct.ScriptTokens["Handshake"] = "opaquevalue";
+
+            quench.InvokeLogProductInfo();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(quench.ProgressLogLines, Has.None.Contains("opaquevalue"));
+                Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s => s.TrimStart() == "Handshake: ***"));
+            });
+        }, extraConfig: new Dictionary<string, string> { ["LogHygiene:ScrubTokens:0"] = "Handshake" });
+    }
+
+    [Test]
+    public void LogProductInfo_AllowTokens_OptOutOfDefaultPattern()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.LoadedProduct.ScriptTokens["PublicToken"] = "shareable";
+
+            quench.InvokeLogProductInfo();
+
+            Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s => s.TrimStart() == "PublicToken: shareable"));
+        }, extraConfig: new Dictionary<string, string> { ["LogHygiene:AllowTokens:0"] = "PublicToken" });
+    }
+
+    [Test]
+    public void QuenchTemplate_ScrubsSensitiveTemplateTokenValue()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            // Optional template + zero discovered DBs → no failure; token logging happens up front.
+            quench.IdentifiedDatabases["primary"] = System.Array.Empty<string>();
+            var template = new Template
+            {
+                Name = "Core",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+            template.LoggableTokens["ApiKey"] = "supersecretkey";
+
+            quench.InvokeQuenchTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(quench.ProgressLogLines, Has.None.Contains("supersecretkey"));
+                Assert.That(quench.ProgressLogLines, Has.Some.Matches<string>(s => s.TrimStart() == "ApiKey: ***"));
+            });
+        });
+    }
+
+    [Test]
+    public void QuenchTemplate_LogTokensFalse_SuppressesTemplateTokenSection()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            quench.IdentifiedDatabases["primary"] = System.Array.Empty<string>();
+            var template = new Template
+            {
+                Name = "Core",
+                Product = quench.LoadedProduct,
+                DatabaseIdentificationScript = "SELECT name FROM sys.databases"
+            };
+            template.LoggableTokens["ApiKey"] = "supersecretkey";
+
+            quench.InvokeQuenchTemplate(template);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(quench.ProgressLogLines, Has.Some.Contains("suppressed via LogHygiene.LogTokens=false"));
+                Assert.That(quench.ProgressLogLines, Has.None.Contains("supersecretkey"));
+                Assert.That(quench.ProgressLogLines, Has.None.Contains("ApiKey"));
+            });
+        }, extraConfig: new Dictionary<string, string> { ["LogHygiene:LogTokens"] = "false" });
+    }
+
+    #endregion
+
     #region Schema-Template Work-Unit Enumeration (Slice 3) — helpers shared with slice 2
 
     /// <summary>
@@ -2078,6 +2211,14 @@ public class ProductQuenchTests
             var method = typeof(ProductQuench).GetMethod("LogSchemaTemplateFieldsIfSet",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             method!.Invoke(this, new object[] { template });
+        }
+
+        public void InvokeLogProductInfo()
+        {
+            ProgressLogLines.Clear();
+            var method = typeof(ProductQuench).GetMethod("LogProductInfo",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            method!.Invoke(this, null);
         }
 
         // Expose the admin-DB connection-string composition for direct assertion.
