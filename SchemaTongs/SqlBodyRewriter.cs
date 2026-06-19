@@ -17,8 +17,9 @@
 //     content inside them is treated as ordinary SQL. In practice this matters for
 //     PL/pgSQL function bodies extracted from <c>pg_proc.prosrc</c>. The conservative
 //     audit warning surfaces the affected files for human review (§7.4).
-//   * Bracket-delimited identifiers ([…]) and double-quoted identifiers ("…") on the
-//     SCHEMA side of a <c>schema.object</c> reference are recognised and rewritten.
+//   * The SCHEMA half of a `schema.object` reference is matched whether bracket-
+//     delimited, double-quoted, or bare, independently of how the OBJECT half is
+//     quoted (issue #272 mixed forms). The object token is preserved verbatim.
 //
 // The rewriter is invoked by SchemaTongs when in schema-template mode (i.e. when
 // Source.Schema is non-empty in SchemaTongs.settings.json). The
@@ -95,28 +96,19 @@ public static class SqlBodyRewriter
             return $"{MaskStart}{literals.Count - 1}{MaskEnd}";
         });
 
-        // Step 2: rewrite source-schema-qualified references in their three forms.
+        // Step 2: rewrite source-schema-qualified references. The schema half may be
+        // bracket-delimited, double-quoted, or bare — independently of how the object half
+        // is quoted — so one pattern enumerates the three schema wrappings and a lookahead
+        // leaves the object token untouched. Issue #272: mixed forms such as `[src].name`
+        // (emitted by the SSMS view designer) were previously missed by the same-wrapper
+        // patterns. The leading lookbehind blocks substring (`tenant_seed_audit`) and
+        // alias.column (`c.tenant_seed`) false matches; the trailing lookahead requires a
+        // following object token (word / quote / bracket).
         var escaped = Regex.Escape(sourceSchema);
-
-        // 2a. `[src].[name]` → `{{SchemaName}}.[name]`
-        var bracketed = new Regex($@"\[{escaped}\]\s*\.\s*\[(?<name>[^\]]+)\]",
+        var sourceQualified = new Regex(
+            $@"(?<![\w.])(?:\[{escaped}\]|""{escaped}""|\b{escaped}\b)\s*\.\s*(?=[\w""\[])",
             RegexOptions.Compiled);
-        masked = bracketed.Replace(masked, m => $"{SchemaToken}.[{m.Groups["name"].Value}]");
-
-        // 2b. `"src"."name"` → `{{SchemaName}}."name"`
-        var doubleQuoted = new Regex($@"""{escaped}""\s*\.\s*""(?<name>[^""]+)""",
-            RegexOptions.Compiled);
-        masked = doubleQuoted.Replace(masked, m => $"{SchemaToken}.\"{m.Groups["name"].Value}\"");
-
-        // 2c. `src.name` → `{{SchemaName}}.name` — guard with word-boundary lookbehind so
-        // we don't rewrite (a) `tenant_seed_audit.Log` where `tenant_seed` is a substring,
-        // or (b) `c.tenant_seed` where `tenant_seed` is the RHS column identifier.
-        // The (?<![\w.]) lookbehind blocks both a leading word character (substring) and
-        // a leading `.` (alias.column form). The (?=\.\w) lookahead ensures the source
-        // schema is followed by a `.name` reference, not bare.
-        var unbracketed = new Regex($@"(?<![\w.])\b{escaped}\b\s*\.\s*(?=[\w""\[])",
-            RegexOptions.Compiled);
-        masked = unbracketed.Replace(masked, $"{SchemaToken}.");
+        masked = sourceQualified.Replace(masked, $"{SchemaToken}.");
 
         // Step 3: walk the masked body line-by-line for unqualified table-like references.
         // The audit is best-effort — see §7.4: we never auto-prefix, we just surface lines

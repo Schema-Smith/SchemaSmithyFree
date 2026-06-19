@@ -39,4 +39,41 @@ public static class Identifier
                 return value;
         }
     }
+
+    /// <summary>
+    /// Splits a (possibly) schema-qualified identifier into its unwrapped
+    /// <c>(Schema, Name)</c> parts, treating the <c>.</c> separator as significant only
+    /// when it is OUTSIDE platform delimiter wrapping — so a delimited name that itself
+    /// contains a dot (<c>[my.schema]</c>, <c>"my.schema"</c>) is not mis-split. Both
+    /// parts are returned <see cref="Unwrap"/>-ed. <c>Schema</c> is <c>null</c> when the
+    /// value carries no top-level qualifier. Splits at the FIRST top-level dot (two-part
+    /// semantics); a multi-dot remainder is returned whole as <c>Name</c>.
+    /// </summary>
+    public static (string Schema, string Name) SplitQualifiedName(string value, Platform platform)
+    {
+        if (string.IsNullOrEmpty(value)) return (null, value);
+
+        var (open, close) = platform switch
+        {
+            Platform.SqlServer => ('[', ']'),
+            Platform.PostgreSQL => ('"', '"'),
+            Platform.MySQL => ('`', '`'),
+            _ => ('\0', '\0')
+        };
+
+        var inWrap = false;
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (open != '\0')
+            {
+                if (!inWrap && c == open) { inWrap = true; continue; }
+                if (inWrap && c == close) { inWrap = false; continue; }
+            }
+            if (!inWrap && c == '.')
+                return (Unwrap(value.Substring(0, i), platform), Unwrap(value.Substring(i + 1), platform));
+        }
+
+        return (null, Unwrap(value, platform));
+    }
 }

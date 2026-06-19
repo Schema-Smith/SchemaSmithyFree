@@ -51,6 +51,29 @@ public class SqlBodyRewriterTests
             "INSERT INTO {{SchemaName}}.[Orders] SELECT * FROM {{SchemaName}}.OrderStaging"));
     }
 
+    [Test]
+    public void MixedBracketedSchemaBareObject_Rewritten()
+    {
+        // Issue #272: the SSMS view-designer form — bracketed schema, bare object.
+        var result = Rewrite("SELECT * FROM [tenant_seed].Customers");
+        Assert.That(result.Body, Is.EqualTo("SELECT * FROM {{SchemaName}}.Customers"));
+    }
+
+    [Test]
+    public void MixedBareSchemaBracketedObject_Rewritten()
+    {
+        var result = Rewrite("SELECT * FROM tenant_seed.[Customers]");
+        Assert.That(result.Body, Is.EqualTo("SELECT * FROM {{SchemaName}}.[Customers]"));
+    }
+
+    [Test]
+    public void MixedForm_CrossSchema_StillPreserved()
+    {
+        // Guard: the relaxed matching must not start rewriting cross-schema refs.
+        var result = Rewrite("SELECT * FROM [dbo].Countries");
+        Assert.That(result.Body, Is.EqualTo("SELECT * FROM [dbo].Countries"));
+    }
+
     #endregion
 
     #region §7.3 — Cross-schema preservation
