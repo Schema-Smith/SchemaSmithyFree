@@ -1961,6 +1961,128 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region LogSqlScript — Writes to ArtifactPath, Not BaseDirectory
+
+    [Test]
+    public void LogSqlScript_WritesUnderArtifactPath_NotBaseDirectory()
+    {
+        // Set up a config with a known ArtifactPath.
+        var mockConfig = Substitute.For<IConfigurationRoot>();
+        mockConfig["ArtifactPath"].Returns(@"C:\artifacts-test");
+        FactoryContainer.Register<IConfigurationRoot>(mockConfig);
+
+        // Capture the write path via the IFile mock.
+        var mockFile = Substitute.For<IFile>();
+        string capturedPath = null;
+        mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
+            .Do(ci => capturedPath = ci.ArgAt<string>(0));
+        FactoryContainer.Register<IFile>(mockFile);
+
+        var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Schema.Domain.Table { Name = "Orders" });
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "true", false, "false", "false", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        // QuenchModifiedTables calls LogSqlScript with the debug filename as the first argument.
+        // We drive it and assert the captured write path is under ArtifactPath, not BaseDirectory.
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(capturedPath, Is.Not.Null, "Expected WriteAllText to have been called by LogSqlScript");
+        Assert.That(capturedPath, Does.StartWith(@"C:\artifacts-test"),
+            "LogSqlScript must write under ArtifactPath, not AppContext.BaseDirectory");
+        Assert.That(capturedPath, Does.Not.StartWith(AppContext.BaseDirectory),
+            "LogSqlScript must NOT write under the bin directory when ArtifactPath is configured");
+    }
+
+    #endregion
+
+    #region Outer-Catch Debug-Path Surfacing (PG/MySQL)
+
+    [Test]
+    public void Execute_OuterCatch_SurfacesDebugFilePath_WhenGeneratedSqlFails()
+    {
+        // This test drives a PostgreSQL quench where the generated-SQL step
+        // (QuenchMissingTablesAndColumns) throws. The outer catch in Execute() must log
+        // "Debug Script: '<path>'" when _debugFileLocation is set — surfacing the generated-SQL
+        // dump for PostgreSQL/MySQL users who have no InfoMessage handler.
+        Schema.Utility.LogFactory.Clear();
+        try
+        {
+            var progressLog = Substitute.For<log4net.ILog>();
+            var progressLogLines = new List<string>();
+            progressLog.When(l => l.Error(Arg.Any<object>()))
+                .Do(ci => progressLogLines.Add(ci.Arg<object>().ToString()));
+            Schema.Utility.LogFactory.Register("ProgressLog", progressLog);
+            Schema.Utility.LogFactory.Register("ErrorLog", Substitute.For<log4net.ILog>());
+
+            // File mock: LogSqlScript calls WriteAllText before the generated SQL executes.
+            // Capture its path — the outer-catch "Debug Script:" line must contain it.
+            var mockFile = Substitute.For<IFile>();
+            string debugPath = null;
+            mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
+                .Do(ci => { if (debugPath == null) debugPath = ci.ArgAt<string>(0); });
+            FactoryContainer.Register<IFile>(mockFile);
+
+            var mockConfig = Substitute.For<IConfigurationRoot>();
+            mockConfig["ArtifactPath"].Returns(@"C:\pg-artifacts");
+            mockConfig["ScrubArtifacts"].Returns((string)null);
+            mockConfig["Target:User"].Returns("u");
+            mockConfig["Target:Password"].Returns("p");
+            FactoryContainer.Register<IConfigurationRoot>(mockConfig);
+
+            // Mock the PostgreSQL connection factory so no real network call is made.
+            // The mock command throws on ExecuteNonQuery, forcing the generated-SQL step to fail.
+            var mockConn = Substitute.For<System.Data.IDbConnection>();
+            var mockCmd = CreateMockCommand();
+            mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception("simulated generated-SQL failure"));
+            mockConn.CreateCommand().Returns(mockCmd);
+            mockConn.Database.Returns("pgdb");
+            var mockConnFactory = Substitute.For<Schema.DataAccess.IDbConnectionFactory>();
+            mockConnFactory.GetDbConnection(Arg.Any<string>()).Returns(mockConn);
+            FactoryContainer.Register<Schema.DataAccess.IDbConnectionFactory>(mockConnFactory);
+
+            var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
+            var template = new Template { Name = "T" };
+            template.Tables.Add(new Schema.Domain.Table { Name = "Orders" });
+
+            var checkpointing = Substitute.For<Schema.Checkpointing.ICheckpointing>();
+            checkpointing.GetDatabaseCheckpointSummary(Arg.Any<Schema.Checkpointing.TrackingScope>())
+                .Returns(Schema.Checkpointing.DatabaseCheckpointSummary.Empty);
+            // Fire the action delegate directly — no resume skip.
+            checkpointing.When(c => c.Track(
+                    Arg.Any<Schema.Checkpointing.TrackingScope>(),
+                    Arg.Any<string>(),
+                    Arg.Any<Action>()))
+                .Do(ci => ci.ArgAt<Action>(2)());
+
+            var quench = new DatabaseQuench("pghost", product, template, "pgdb",
+                suppressKindling: true, whatIfOnly: "false", runScriptsTwice: false,
+                dropRemovedTables: "false", dropUnknownIndexes: "false",
+                updateTables: true, deliverData: false, checkpointing: checkpointing);
+
+            quench.Execute();
+
+            var progressOutput = string.Join("\n", progressLogLines);
+            Assert.That(progressOutput, Does.Contain("Debug Script:"),
+                "Outer catch must surface the debug-file path for PostgreSQL/MySQL users");
+            Assert.That(debugPath, Is.Not.Null,
+                "LogSqlScript must have been called (writing under ArtifactPath) before the failure");
+            // _debugFileLocation holds the filename (same convention as the SQL Server InfoMessage
+            // handler). Assert that the logged "Debug Script:" line names the generated-SQL file.
+            Assert.That(progressOutput, Does.Contain("Quench Missing Tables And Columns"),
+                "The surfaced debug path must name the generated-SQL dump file");
+        }
+        finally
+        {
+            Schema.Utility.LogFactory.Clear();
+        }
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static IDbCommand CreateMockCommand()
@@ -1985,6 +2107,13 @@ public class DatabaseQuenchTests
     {
         var mockFile = Substitute.For<IFile>();
         FactoryContainer.Register<IFile>(mockFile);
+        // LogSqlScript now calls ResolveArtifactDirectory() → IConfigurationRoot. Register a stub
+        // so tests that only mock IFile don't hit FactoryContainer's "create interface" failure.
+        if (FactoryContainer.Resolve<IConfigurationRoot>() == null)
+        {
+            var cfg = Substitute.For<IConfigurationRoot>();
+            FactoryContainer.Register<IConfigurationRoot>(cfg);
+        }
     }
 
     #endregion

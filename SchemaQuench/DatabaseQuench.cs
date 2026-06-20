@@ -524,6 +524,8 @@ public class DatabaseQuench
         catch (Exception e)
         {
             SafeProgressLogError($"FAILED to quench:\r\n{e.Message}");
+            if (!string.IsNullOrWhiteSpace(_debugFileLocation))
+                SafeProgressLogError($"Debug Script: '{_debugFileLocation}'");
         }
     }
 
@@ -1387,10 +1389,10 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         }
     }
 
-    private static void LogSqlScript(string name, string sql)
+    private void LogSqlScript(string name, string sql)
     {
-        var cwd = AppContext.BaseDirectory;
-        FileWrapper.GetFromFactory().WriteAllText(Path.Combine(cwd, name), sql);
+        var path = Path.Combine(ResolveArtifactDirectory(), name);
+        FileWrapper.GetFromFactory().WriteAllText(path, sql);
     }
 
     #endregion
