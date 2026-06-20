@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using Schema.Utility;
 
@@ -21,6 +22,28 @@ public class ResolvedSqlArtifactWriterTests
         Assert.That(text, Does.Contain("CREATE TABLE A"));
         Assert.That(text, Does.Contain("SELECT 1/0"));
         Assert.That(text, Does.Contain("FAILING BATCH"));
+    }
+
+    [Test]
+    public void BuildArtifact_HeaderWithEmbeddedNewlines_StaysFullyCommented()
+    {
+        var text = ResolvedSqlArtifactWriter.BuildArtifact(
+            header: "Failed: x — ERROR: relation does not exist\n\nPOSITION: 87",
+            batches: new List<string> { "SELECT 1;" },
+            failingBatchIndex: 0);
+
+        // Every line of the header block must be a SQL comment — no bare line may escape.
+        // Specifically, "POSITION: 87" must NOT appear on a line that doesn't start with --.
+        foreach (var line in text.Replace("\r", "").Split('\n'))
+            Assert.That(line == "" || line.StartsWith("--") || !line.Contains("POSITION"),
+                $"Un-commented header fragment leaked into artifact body: '{line}'");
+
+        // And stripping comment lines + GO must NOT leave any POSITION fragment in the executable SQL.
+        var executable = string.Join("\n",
+            text.Replace("\r", "").Split('\n')
+                .Where(l => !l.StartsWith("--") && l.Trim() != "GO"));
+        Assert.That(executable, Does.Not.Contain("POSITION"));
+        Assert.That(executable, Does.Contain("SELECT 1"));
     }
 
     [Test]

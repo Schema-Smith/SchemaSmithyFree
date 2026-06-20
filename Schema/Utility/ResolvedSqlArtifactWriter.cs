@@ -21,8 +21,9 @@ public static class ResolvedSqlArtifactWriter
     public static string BuildArtifact(string header, IReadOnlyList<string> batches, int failingBatchIndex)
     {
         var sb = new StringBuilder();
+        var singleLineHeader = (header ?? "").Replace("\r", " ").Replace("\n", " ");
         sb.AppendLine("-- ============================================================");
-        sb.AppendLine($"-- {header}");
+        sb.AppendLine($"-- {singleLineHeader}");
         sb.AppendLine("-- Contains expanded values — may be sensitive. Local debugging; scrub before sharing.");
         sb.AppendLine("-- ============================================================");
         for (var i = 0; i < batches.Count; i++)

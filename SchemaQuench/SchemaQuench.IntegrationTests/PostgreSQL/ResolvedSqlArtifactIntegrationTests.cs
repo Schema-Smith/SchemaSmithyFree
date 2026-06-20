@@ -165,19 +165,8 @@ public class ResolvedSqlArtifactIntegrationTests
     /// The written artifact is re-runnable: reading it back, stripping comment lines (those
     /// starting with '--') and GO separator lines, then executing the remaining SQL against the
     /// same target via a fresh connection must produce the same class of server error.
-    ///
-    /// KNOWN PRODUCT BUG (tracked for fix): <c>ResolvedSqlArtifactWriter.BuildArtifact</c>
-    /// embeds the raw exception message in the comment header via <c>sb.AppendLine($"-- {header}")</c>
-    /// without sanitizing embedded newlines. On PostgreSQL, Npgsql's <c>NpgsqlException.Message</c>
-    /// includes a trailing <c>\n\nPOSITION: N</c> field. This embedded newline causes the
-    /// <c>POSITION: N</c> text to appear on its own non-commented line in the artifact, so
-    /// after stripping <c>--</c> lines, the extracted SQL begins with <c>POSITION: N</c> —
-    /// which PostgreSQL rejects as a syntax error at position 1.
-    /// Fix: normalize the error message to a single line before embedding it in the comment.
-    /// This test documents the observed behavior; it will pass once the bug is fixed.
     /// </summary>
     [Test]
-    [Ignore("Product bug: BuildArtifact embeds raw Npgsql exception message (which includes embedded '\\n\\nPOSITION: N') into the comment header without sanitizing newlines. The POSITION: N line appears un-commented in the artifact, breaking re-execution on PostgreSQL. Fix: normalize the error message to a single line before embedding in the comment header.")]
     public void FailingScript_ArtifactIsRerunnable_ProducesSameError()
     {
         lock (FactoryContainer.SharedLockObject)
@@ -209,9 +198,6 @@ public class ResolvedSqlArtifactIntegrationTests
                     "Extracted SQL must contain the probe object name — confirming the artifact captured the real batch.");
 
                 // Execute the extracted artifact SQL via a fresh Npgsql connection.
-                // BUG: until BuildArtifact sanitizes embedded newlines from exception messages,
-                // the extracted SQL for PostgreSQL will be prefixed with 'POSITION: N' from the
-                // Npgsql error format, causing a syntax error instead of the expected relation error.
                 using var pgConn = new NpgsqlConnection(_mainDbConnectionString + "Pooling=False;");
                 pgConn.Open();
                 using var pgCmd = new NpgsqlCommand(artifactSql, pgConn);
@@ -220,9 +206,7 @@ public class ResolvedSqlArtifactIntegrationTests
                 try { pgCmd.ExecuteNonQuery(); } catch (Exception ex) { caughtEx = ex; }
                 Assert.That(caughtEx, Is.Not.Null, "Re-running the artifact must throw an exception.");
                 Assert.That(caughtEx.Message, Does.Contain("artifact_probe_nonexistent_object"),
-                    "Re-running the artifact must fail with the same missing-relation error. " +
-                    "If this fails with 'syntax error at or near POSITION', the product bug " +
-                    "(embedded newlines in artifact comment header) has not been fixed yet.");
+                    "Re-running the artifact must fail with the same missing-relation error.");
                 pgConn.Close();
             }
             finally
