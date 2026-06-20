@@ -29,7 +29,6 @@ public class SentinelSkipIntegrationTests
     private readonly IEnvironment _environment = Substitute.For<IEnvironment>();
     private readonly string _connectionString;
     private readonly string _mainDb;
-    private readonly string _server;
 
     public SentinelSkipIntegrationTests()
     {
@@ -38,7 +37,6 @@ public class SentinelSkipIntegrationTests
         _connectionString = ConnectionString.Build(Platform.SqlServer, config["Target:Server"], "master",
             config["Target:User"], config["Target:Password"], config["Target:Port"], connProps);
         _mainDb = config["ScriptTokens:MainDB"];
-        _server = config["Target:Server"];
     }
 
     /// <summary>

@@ -29,7 +29,6 @@ public class SentinelSkipIntegrationTests
     private readonly IEnvironment _environment = Substitute.For<IEnvironment>();
     private readonly string _connectionString;
     private readonly string _mainDb;
-    private readonly string _server;
 
     public SentinelSkipIntegrationTests()
     {
@@ -38,7 +37,6 @@ public class SentinelSkipIntegrationTests
         _connectionString = ConnectionString.Build(Platform.PostgreSQL, config["Target:Server"], "postgres",
             config["Target:User"], config["Target:Password"], config["Target:Port"], connProps);
         _mainDb = config["ScriptTokens:MainDB"];
-        _server = config["Target:Server"];
     }
 
     /// <summary>
@@ -172,7 +170,11 @@ public class SentinelSkipIntegrationTests
         using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
 DROP TABLE IF EXISTS public.""SentinelMarker"";
-DELETE FROM ""SchemaSmith"".""CompletedMigrationScripts"" WHERE ""ProductName"" = '{ProductName}';";
+DO $$ BEGIN
+  IF to_regclass('""SchemaSmith"".""CompletedMigrationScripts""') IS NOT NULL THEN
+    DELETE FROM ""SchemaSmith"".""CompletedMigrationScripts"" WHERE ""ProductName"" = '{ProductName}';
+  END IF;
+END $$;";
         cmd.ExecuteNonQuery();
         conn.Close();
     }
