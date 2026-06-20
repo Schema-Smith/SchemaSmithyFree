@@ -203,6 +203,24 @@ public class SqlScriptTests
 
     #endregion
 
+    #region Outcome — Default and settability
+
+    [Test]
+    public void NewScript_DefaultsToAppliedOutcome()
+    {
+        var script = new SqlScript();
+        Assert.That(script.Outcome, Is.EqualTo(ScriptOutcome.Applied));
+    }
+
+    [Test]
+    public void Outcome_IsSettable()
+    {
+        var script = new SqlScript { Outcome = ScriptOutcome.Skipped };
+        Assert.That(script.Outcome, Is.EqualTo(ScriptOutcome.Skipped));
+    }
+
+    #endregion
+
     #region Load — Batch splitting before token resolution
 
     [Test]
