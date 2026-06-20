@@ -409,7 +409,21 @@ public class DatabaseQuench
                                 ExecuteScript = (name, script) => { effectiveSilentCmd.CommandText = script; effectiveSilentCmd.ExecuteNonQuery(); },
                                 ProgressLog = SafeProgressLog,
                                 ProgressLogError = SafeProgressLogError,
-                                WhatIf = IsWhatIf
+                                WhatIf = IsWhatIf,
+                                WriteResolvedSqlArtifact = (label, sql) =>
+                                {
+                                    var content = ResolvedSqlArtifactWriter.BuildArtifact(
+                                        $"Failed data delivery: {_server}.{_databaseName}" +
+                                        $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")} [{label}]",
+                                        new List<string> { sql }, failingBatchIndex: 0);
+                                    if (ScrubArtifactsEnabled)
+                                        content = ResolvedSqlArtifactWriter.Scrub(content, SensitiveTokenValues());
+                                    var safeLabel = string.Concat(label.Select(c =>
+                                        Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+                                    var path = ResolvedSqlArtifactWriter.Write(ResolveArtifactDirectory(),
+                                        GetDebugFileName($"Failed DataDelivery {safeLabel}"), content);
+                                    SafeProgressLogError($"    Resolved SQL written to: {path}");
+                                }
                             });
                         });
 

@@ -173,7 +173,17 @@ public class DataDeliveryProcessor : IDataDelivery
                     delivery.MergeDisableRules, delivery.MergeUpdateDescendents);
 
                 if (!context.WhatIf)
-                    context.ExecuteScript?.Invoke(table.Name, mergeScript);
+                {
+                    try
+                    {
+                        context.ExecuteScript?.Invoke(table.Name, mergeScript);
+                    }
+                    catch (Exception ex)
+                    {
+                        context.WriteResolvedSqlArtifact?.Invoke(tableKey, mergeScript);
+                        logError($"    Error in pass 2 for {tableKey}: {ex.Message}");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -212,7 +222,17 @@ public class DataDeliveryProcessor : IDataDelivery
             var mergeScript = BuildDeferredMergeScript(context, schemaOrDb, table, tableData, keyColumns, deferredColumns);
 
             if (!context.WhatIf)
-                context.ExecuteScript?.Invoke(table.Name, mergeScript);
+            {
+                try
+                {
+                    context.ExecuteScript?.Invoke(table.Name, mergeScript);
+                }
+                catch
+                {
+                    context.WriteResolvedSqlArtifact?.Invoke(tableKey, mergeScript);
+                    throw;
+                }
+            }
 
             pass2Tables.Add(table);
         }
@@ -227,7 +247,17 @@ public class DataDeliveryProcessor : IDataDelivery
                 delivery.MergeDisableRules, delivery.MergeUpdateDescendents);
 
             if (!context.WhatIf)
-                context.ExecuteScript?.Invoke(table.Name, mergeScript);
+            {
+                try
+                {
+                    context.ExecuteScript?.Invoke(table.Name, mergeScript);
+                }
+                catch
+                {
+                    context.WriteResolvedSqlArtifact?.Invoke(tableKey, mergeScript);
+                    throw;
+                }
+            }
         }
 
         delivered.Add(tableKey);
