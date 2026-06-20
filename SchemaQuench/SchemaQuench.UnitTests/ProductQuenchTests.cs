@@ -1847,6 +1847,40 @@ public class ProductQuenchTests
 
     #endregion
 
+    #region Product folder ShouldApplyExpression gating (#260)
+
+    [Test]
+    public void GateProductFolders_KeepsTrueAndBlank_DropsFalse()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var keep = new ProductFolder { FolderPath = "keep", ShouldApplyExpression = "KEEP" };
+            var skip = new ProductFolder { FolderPath = "skip", ShouldApplyExpression = "SKIP" };
+            var plain = new ProductFolder { FolderPath = "plain" };
+            var command = Substitute.For<IDbCommand>();
+            command.ExecuteScalar().Returns(_ => command.CommandText == "KEEP" ? (object)1 : 0);
+
+            var survivors = quench.GateProductFolders(command, new[] { keep, skip, plain });
+
+            Assert.That(survivors.Select(f => f.FolderPath), Is.EqualTo(new[] { "keep", "plain" }));
+        });
+    }
+
+    [Test]
+    public void GateProductFolders_ExpressionThrows_PropagatesFailClosed()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var bad = new ProductFolder { FolderPath = "bad", ShouldApplyExpression = "BROKEN" };
+            var command = Substitute.For<IDbCommand>();
+            command.ExecuteScalar().Returns(_ => throw new Exception("syntax error"));
+
+            Assert.Throws<Exception>(() => quench.GateProductFolders(command, new[] { bad }));
+        });
+    }
+
+    #endregion
+
     #region Log Hygiene — token scrubbing (#244)
 
     [Test]

@@ -385,6 +385,40 @@ namespace Schema.UnitTests.Domain
 
             Assert.That(clone.IsIterationScoped("TenantId"), Is.True);
         }
+
+        // ---- Per-slot folder accessors (#260, folder-gate support) ----
+
+        [Test]
+        public void BeforeFolders_ReturnsOnlyBeforeSlotFolders()
+        {
+            var template = new Template();
+            template.ScriptFolders.Add(new TemplateFolder { FolderPath = "B", QuenchSlot = TemplateQuenchSlot.Before });
+            template.ScriptFolders.Add(new TemplateFolder { FolderPath = "A", QuenchSlot = TemplateQuenchSlot.After });
+
+            Assert.That(template.BeforeFolders.Select(f => f.FolderPath), Is.EqualTo(new[] { "B" }));
+        }
+
+        [Test]
+        public void AfterTablesObjectFolders_IncludesObjectsAndAfterTablesObjects()
+        {
+            var template = new Template();
+            template.ScriptFolders.Add(new TemplateFolder { FolderPath = "O", QuenchSlot = TemplateQuenchSlot.Objects });
+            template.ScriptFolders.Add(new TemplateFolder { FolderPath = "ATO", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects });
+            template.ScriptFolders.Add(new TemplateFolder { FolderPath = "B", QuenchSlot = TemplateQuenchSlot.Before });
+
+            Assert.That(template.AfterTablesObjectFolders.Select(f => f.FolderPath), Is.EquivalentTo(new[] { "O", "ATO" }));
+        }
+
+        [Test]
+        public void BeforeScripts_DelegatesToBeforeFolders()
+        {
+            var template = new Template();
+            var folder = new TemplateFolder { FolderPath = "B", QuenchSlot = TemplateQuenchSlot.Before };
+            folder.Scripts.Add(new SqlScript { Name = "s1" });
+            template.ScriptFolders.Add(folder);
+
+            Assert.That(template.BeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "s1" }));
+        }
     }
 }
 

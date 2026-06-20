@@ -214,6 +214,38 @@ public class ProductQuench
     };
 
     /// <summary>
+    /// Filters product folders by their <c>ShouldApplyExpression</c> evaluated against the server.
+    /// Blank expressions always apply; a false expression drops the folder (logged). Evaluation
+    /// errors propagate so the run fails closed rather than silently skipping a folder.
+    /// </summary>
+    internal List<ProductFolder> GateProductFolders(IDbCommand command, IEnumerable<ProductFolder> folders)
+    {
+        var survivors = new List<ProductFolder>();
+        foreach (var folder in folders)
+        {
+            try
+            {
+                if (!FolderGate.ShouldApply(command, folder.ShouldApplyExpression))
+                {
+                    _progressLog.Info($"  Skipping folder '{folder.FolderPath}' — ShouldApplyExpression evaluated false");
+                    continue;
+                }
+            }
+            catch (Exception e)
+            {
+                var message = $"Folder '{folder.FolderPath}' ShouldApplyExpression failed: {e.Message}";
+                _progressLog.Error($"  {message}");
+                _errorLog.Error(message, e);
+                throw;
+            }
+
+            survivors.Add(folder);
+        }
+
+        return survivors;
+    }
+
+    /// <summary>
     /// Returns the active WhatIfOnly value (for testing visibility).
     /// </summary>
     internal bool IsWhatIfOnly => _product.Platform == Platform.PostgreSQL
@@ -507,15 +539,14 @@ public class ProductQuench
             var serverQueue = new TaskQueueManager<string>(_maxThreads);
             _secondaryServers.Union([_primaryServer]).Distinct().ToList()
                 .ForEach(server => serverQueue.AddToQueue(server, s => QuenchScriptsToServerWithCheckpoint(s, msg,
-                    folders.Where(f => s.Equals(_primaryServer) ? f.QuenchOnPrimary : f.QuenchOnSecondary)
-                        .SelectMany(f => f.Scripts).ToList(), isBefore)));
+                    folders.Where(f => s.Equals(_primaryServer) ? f.QuenchOnPrimary : f.QuenchOnSecondary).ToList(),
+                    isBefore)));
             serverQueue.WaitForAll();
         }
         else
         {
             // PostgreSQL/MySQL: single server only
-            QuenchScriptsToServerWithCheckpoint(_primaryServer, msg,
-                folders.SelectMany(f => f.Scripts).ToList(), isBefore);
+            QuenchScriptsToServerWithCheckpoint(_primaryServer, msg, folders, isBefore);
         }
 
         if (_updateFailed)
@@ -609,13 +640,16 @@ public class ProductQuench
         _progressLog.Info("");
     }
 
-    private void QuenchScriptsToServerWithCheckpoint(string server, string message, IEnumerable<SqlScript> scripts, bool isBefore)
+    private void QuenchScriptsToServerWithCheckpoint(string server, string message, IEnumerable<ProductFolder> folders, bool isBefore)
     {
         _progressLog.Info($"Quenching {message} Scripts to {server}");
         using var productScriptCommand = GetCommand(server);
         try
         {
-            var scriptsToQuench = scripts.Select(j => j.Clone()).ToList();
+            // Folder-level ShouldApplyExpression (#260): gate folders against this server before
+            // flattening their scripts. Evaluated on the same server command the scripts run against.
+            var scriptsToQuench = GateProductFolders(productScriptCommand, folders)
+                .SelectMany(f => f.Scripts).Select(j => j.Clone()).ToList();
             QuenchScriptsWithCheckpoint(productScriptCommand, scriptsToQuench, server, isBefore);
         }
         catch

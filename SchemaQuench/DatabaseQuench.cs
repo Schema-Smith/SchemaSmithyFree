@@ -101,6 +101,79 @@ public class DatabaseQuench
         public string MaterializedViewSchema { get; set; }
         public string IndexedViewSchema { get; set; }
     }
+    // Visible for testing — per-iteration slot scripts after folder gating.
+    internal List<SqlScript> IterationBeforeScripts => _iteration.BeforeScripts;
+    internal List<SqlScript> IterationObjectScripts => _iteration.ObjectScripts;
+    internal List<SqlScript> IterationAfterTablesObjectScripts => _iteration.AfterTablesObjectScripts;
+
+    /// <summary>
+    /// Evaluates each template folder's <c>ShouldApplyExpression</c> against this iteration's target
+    /// and drops the scripts of any folder whose expression is false from the iteration's slot lists.
+    /// No-op (and no queries) when no folder carries an expression, so the common case is unchanged
+    /// bit-for-bit. Evaluation errors propagate — a broken gate fails the iteration rather than
+    /// silently skipping a folder.
+    /// </summary>
+    internal void ApplyFolderGates(IDbCommand command)
+    {
+        var gated = _template.ScriptFolders.Where(f => !string.IsNullOrWhiteSpace(f.ShouldApplyExpression)).ToList();
+        if (gated.Count == 0) return;
+
+        var skip = new HashSet<TemplateFolder>();
+        foreach (var folder in gated)
+        {
+            var expression = ResolveFolderGateExpression(folder.ShouldApplyExpression);
+            try
+            {
+                if (FolderGate.ShouldApply(command, expression)) continue;
+            }
+            catch (Exception e)
+            {
+                var message = $"Folder '{folder.FolderPath}' ShouldApplyExpression failed on {DbScope}: {e.Message}";
+                SafeProgressLog($"  {message}");
+                _errorLog.Error(message, e);
+                throw;
+            }
+
+            skip.Add(folder);
+            SafeProgressLog($"  Skipping folder '{folder.FolderPath}' on {DbScope} — ShouldApplyExpression evaluated false");
+        }
+
+        if (skip.Count > 0) RebuildIterationScripts(skip);
+    }
+
+    private string ResolveFolderGateExpression(string expression) =>
+        string.IsNullOrEmpty(_schemaName)
+            ? expression
+            : SqlScript.TokenReplace(expression, [new KeyValuePair<string, string>("SchemaName", _schemaName)], _product.Platform);
+
+    private void RebuildIterationScripts(HashSet<TemplateFolder> skip)
+    {
+        bool Survives(TemplateFolder f) => !skip.Contains(f);
+        List<SqlScript> Scripts(IEnumerable<TemplateFolder> folders) => folders.Where(Survives).SelectMany(f => f.Scripts).ToList();
+
+        if (string.IsNullOrEmpty(_schemaName))
+        {
+            // Regular template: keep aliasing shared SqlScript references (filter, never clone).
+            _iteration.BeforeScripts = Scripts(_template.BeforeFolders);
+            _iteration.ObjectScripts = Scripts(_template.ObjectFolders);
+            _iteration.AfterTablesObjectScripts = Scripts(_template.AfterTablesObjectFolders);
+            _iteration.BetweenTablesAndKeysScripts = Scripts(_template.BetweenTablesAndKeysFolders);
+            _iteration.AfterTableScripts = Scripts(_template.AfterTableFolders);
+            _iteration.TableDataScripts = Scripts(_template.TableDataFolders);
+            _iteration.AfterScripts = Scripts(_template.AfterFolders);
+            return;
+        }
+
+        var schemaNameTokens = new List<KeyValuePair<string, string>> { new("SchemaName", _schemaName) };
+        _iteration.BeforeScripts = CloneAndSubstitute(Scripts(_template.BeforeFolders), schemaNameTokens);
+        _iteration.ObjectScripts = CloneAndSubstitute(Scripts(_template.ObjectFolders), schemaNameTokens);
+        _iteration.AfterTablesObjectScripts = CloneAndSubstitute(Scripts(_template.AfterTablesObjectFolders), schemaNameTokens);
+        _iteration.BetweenTablesAndKeysScripts = CloneAndSubstitute(Scripts(_template.BetweenTablesAndKeysFolders), schemaNameTokens);
+        _iteration.AfterTableScripts = CloneAndSubstitute(Scripts(_template.AfterTableFolders), schemaNameTokens);
+        _iteration.TableDataScripts = CloneAndSubstitute(Scripts(_template.TableDataFolders), schemaNameTokens);
+        _iteration.AfterScripts = CloneAndSubstitute(Scripts(_template.AfterFolders), schemaNameTokens);
+    }
+
     internal string IterationTableSchema => _iteration.TableSchema ?? _template.TableSchema ?? "";
     internal string IterationMaterializedViewSchema => _iteration.MaterializedViewSchema ?? _template.MaterializedViewSchema ?? "";
     // I10: Mirror the iteration-schema pattern for indexed views. QuenchIndexedViews used to
@@ -258,6 +331,10 @@ public class DatabaseQuench
                     QuenchSuccessful = true;
                     return;
                 }
+
+                // Folder-level ShouldApplyExpression (#260): drop gated-off folders' scripts from
+                // this iteration before any slot runs. Evaluated per target; read-only under WhatIf.
+                ApplyFolderGates(command);
 
                 var effectiveTableCmd = tableCommand ?? command;
                 var effectiveObjectsCmd = objectsCommand ?? command;

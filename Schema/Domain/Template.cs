@@ -193,40 +193,53 @@ namespace Schema.Domain
 
         #region Computed Script Collections
 
+        // Per-slot folder accessors — the single source of slot-membership truth. The script
+        // accessors below flatten these, and the folder-gate path (#260) filters these per target
+        // before flattening, so gating and dispatch always agree on which folder feeds which slot.
         [JsonIgnore]
-        public List<SqlScript> BeforeScripts => ScriptFolders
-            .Where(f => f.QuenchSlot == TemplateQuenchSlot.Before)
-            .SelectMany(f => f.Scripts).ToList();
+        public List<TemplateFolder> BeforeFolders => FoldersInSlots(TemplateQuenchSlot.Before);
 
         [JsonIgnore]
-        public List<SqlScript> ObjectScripts => ScriptFolders
-            .Where(f => f.QuenchSlot is TemplateQuenchSlot.Objects)
-            .SelectMany(f => f.Scripts).ToList();
+        public List<TemplateFolder> ObjectFolders => FoldersInSlots(TemplateQuenchSlot.Objects);
 
         [JsonIgnore]
-        public List<SqlScript> BetweenTablesAndKeysScripts => ScriptFolders
-            .Where(f => f.QuenchSlot == TemplateQuenchSlot.BetweenTablesAndKeys)
-            .SelectMany(f => f.Scripts).ToList();
+        public List<TemplateFolder> BetweenTablesAndKeysFolders => FoldersInSlots(TemplateQuenchSlot.BetweenTablesAndKeys);
 
         [JsonIgnore]
-        public List<SqlScript> AfterTableScripts => ScriptFolders
-            .Where(f => f.QuenchSlot == TemplateQuenchSlot.AfterTablesScripts)
-            .SelectMany(f => f.Scripts).ToList();
+        public List<TemplateFolder> AfterTableFolders => FoldersInSlots(TemplateQuenchSlot.AfterTablesScripts);
 
         [JsonIgnore]
-        public List<SqlScript> AfterTablesObjectScripts => ScriptFolders
-            .Where(f => f.QuenchSlot is TemplateQuenchSlot.Objects or TemplateQuenchSlot.AfterTablesObjects)
-            .SelectMany(f => f.Scripts).ToList();
+        public List<TemplateFolder> AfterTablesObjectFolders => FoldersInSlots(TemplateQuenchSlot.Objects, TemplateQuenchSlot.AfterTablesObjects);
 
         [JsonIgnore]
-        public List<SqlScript> TableDataScripts => ScriptFolders
-            .Where(f => f.QuenchSlot == TemplateQuenchSlot.TableData)
-            .SelectMany(f => f.Scripts).ToList();
+        public List<TemplateFolder> TableDataFolders => FoldersInSlots(TemplateQuenchSlot.TableData);
 
         [JsonIgnore]
-        public List<SqlScript> AfterScripts => ScriptFolders
-            .Where(f => f.QuenchSlot == TemplateQuenchSlot.After)
-            .SelectMany(f => f.Scripts).ToList();
+        public List<TemplateFolder> AfterFolders => FoldersInSlots(TemplateQuenchSlot.After);
+
+        private List<TemplateFolder> FoldersInSlots(params TemplateQuenchSlot[] slots) =>
+            ScriptFolders.Where(f => slots.Contains(f.QuenchSlot)).ToList();
+
+        [JsonIgnore]
+        public List<SqlScript> BeforeScripts => BeforeFolders.SelectMany(f => f.Scripts).ToList();
+
+        [JsonIgnore]
+        public List<SqlScript> ObjectScripts => ObjectFolders.SelectMany(f => f.Scripts).ToList();
+
+        [JsonIgnore]
+        public List<SqlScript> BetweenTablesAndKeysScripts => BetweenTablesAndKeysFolders.SelectMany(f => f.Scripts).ToList();
+
+        [JsonIgnore]
+        public List<SqlScript> AfterTableScripts => AfterTableFolders.SelectMany(f => f.Scripts).ToList();
+
+        [JsonIgnore]
+        public List<SqlScript> AfterTablesObjectScripts => AfterTablesObjectFolders.SelectMany(f => f.Scripts).ToList();
+
+        [JsonIgnore]
+        public List<SqlScript> TableDataScripts => TableDataFolders.SelectMany(f => f.Scripts).ToList();
+
+        [JsonIgnore]
+        public List<SqlScript> AfterScripts => AfterFolders.SelectMany(f => f.Scripts).ToList();
 
         #endregion
 
