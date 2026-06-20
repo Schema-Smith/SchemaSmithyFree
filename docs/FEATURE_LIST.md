@@ -299,7 +299,7 @@ A consistent token grammar runs through every script SchemaSmith sees — migrat
 | Parallel file token resolution | ✓ | ✓ | ✓ | |
 | Single-quote escaping for `<*File*>` values | ✓ | ✓ | ✓ | |
 | Hard fail on missing file / failed query / unknown specific object | ✓ | ✓ | ✓ | |
-| Password masking in startup config dump | ✓ | ✓ | ✓ | Keys containing `Password` / `Pwd` |
+| Sensitive value masking in logs (settings echo + script tokens) | ✓ | ✓ | ✓ | Default name patterns + connection-string subfield strip; tunable via `LogHygiene` |
 
 ## Configuration & CLI
 

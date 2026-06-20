@@ -71,7 +71,7 @@ public class ConfigurationLoggerTests
         ConfigurationLogger.LogConfiguration(config, s => logLines.Add(s));
 
         Assert.That(logLines, Has.None.Matches<string>(s => s.Contains("secret123")));
-        Assert.That(logLines, Has.Some.Matches<string>(s => s.Contains("**********")));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.TrimStart() == "Password: ***"));
     }
 
     [Test]
@@ -88,7 +88,63 @@ public class ConfigurationLoggerTests
         ConfigurationLogger.LogConfiguration(config, s => logLines.Add(s));
 
         Assert.That(logLines, Has.None.Matches<string>(s => s.Contains("hidden")));
-        Assert.That(logLines, Has.Some.Matches<string>(s => s.Contains("**********")));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.TrimStart() == "ConnectionPwd: ***"));
+    }
+
+    [TestCase("ClientSecret", "topsecret")]
+    [TestCase("ApiKey", "ak-12345")]
+    [TestCase("AuthToken", "tok-xyz")]
+    [TestCase("AwsCredential", "cred-abc")]
+    public void LogConfiguration_MasksAllDefaultSensitivePatterns(string key, string secretValue)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                { key, secretValue }
+            })
+            .Build();
+
+        var logLines = new List<string>();
+        ConfigurationLogger.LogConfiguration(config, s => logLines.Add(s));
+
+        Assert.That(logLines, Has.None.Matches<string>(s => s.Contains(secretValue)));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.TrimStart() == $"{key}: ***"));
+    }
+
+    [Test]
+    public void LogConfiguration_MasksConnectionStringValueWholesale()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                { "Target:ConnectionString", "Server=db1;User Id=admin;Password=secret" }
+            })
+            .Build();
+
+        var logLines = new List<string>();
+        ConfigurationLogger.LogConfiguration(config, s => logLines.Add(s));
+
+        Assert.That(logLines, Has.None.Matches<string>(s => s.Contains("secret")));
+        Assert.That(logLines, Has.None.Matches<string>(s => s.Contains("admin")));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.TrimStart() == "ConnectionString: ***"));
+    }
+
+    [Test]
+    public void LogConfiguration_ScrubsEmbeddedPasswordInNonSensitivelyNamedKey()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                { "Target:Dsn", "Server=db1;User Id=admin;Password=secret" }
+            })
+            .Build();
+
+        var logLines = new List<string>();
+        ConfigurationLogger.LogConfiguration(config, s => logLines.Add(s));
+
+        Assert.That(logLines, Has.None.Matches<string>(s => s.Contains("secret")));
+        // Non-sensitive subfields survive; only the embedded password is stripped.
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.Contains("Server=db1") && s.Contains("admin") && s.Contains("Password=***")));
     }
 
     [Test]

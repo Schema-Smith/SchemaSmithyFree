@@ -230,11 +230,13 @@ When `--ConnectionString` is provided, all individual connection settings (`Serv
 
 ---
 
-## Password Masking
+## Sensitive value masking
 
-Your credentials stay out of the logs. When a tool logs its active configuration at startup, it masks any value whose key contains `Password` or `Pwd` (case-insensitive). The masked value appears as `**********` in both the progress log and console output.
+Your credentials stay out of the logs. When a tool logs its active configuration at startup -- and when SchemaQuench logs its product and template script tokens -- it scrubs any value whose name matches a built-in sensitive-name set, so a log is safe to attach to a support ticket, paste into a CI artifact, or drop into a screenshot.
 
-All other configuration values are logged as-is. This lets you audit the active configuration from the log without exposing credentials.
+The default sensitive-name patterns (case-insensitive, substring match) are `Password`, `Pwd`, `Secret`, `ApiKey`, `Token`, `ConnectionString`, and `Credential`. A matched value renders as `***` while its name still prints, so you can confirm the setting exists without exposing it. An embedded `Password=` / `Pwd=` inside a connection-string value is stripped even when the surrounding setting or token is not sensitively named -- one leaked connection string is one too many.
+
+All other values are logged as-is, so you can still audit the active configuration from the log.
 
 Example log output:
 
@@ -243,10 +245,34 @@ Configuration:
     Server: myserver
     Port: 5432
     User: deploy
-    Password: **********
+    Password: ***
     ConnectionProperties:
       SslMode: Prefer
 ```
+
+### Tuning the scrubbing
+
+An optional `LogHygiene` block in any tool's `*.settings.json` tunes the behavior. With no block present, the defaults above apply.
+
+```jsonc
+"LogHygiene": {
+  // Suppress the token-logging section entirely -- one notice line, no token
+  // names and no values. For products with hundreds of tokens. Default: true.
+  "LogTokens": true,
+
+  // Scrub these exact token names too, beyond the default patterns.
+  "ScrubTokens": [ "Handshake", "TenantSeed" ],
+
+  // Scrub names matching these extra patterns (contains-match; the * is optional).
+  "ScrubPatterns": [ "*Salt*", "*PrivateKey*" ],
+
+  // Opt a false positive back out -- log this name verbatim even though it
+  // matches a default pattern (e.g. a column literally named "Token").
+  "AllowTokens": [ "PublicToken" ]
+}
+```
+
+When a token name appears in both `AllowTokens` and a scrub rule, `AllowTokens` wins and the value is logged verbatim -- but an embedded connection-string password is still stripped.
 
 ---
 

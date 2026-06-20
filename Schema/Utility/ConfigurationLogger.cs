@@ -25,6 +25,7 @@ public static class ConfigurationLogger
             .OrderBy(s => PadArrayIndexInKey(s.Key)) // preserve the actual order of array items
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         logLine?.Invoke("Configuration:");
+        var hygiene = LogHygieneOptions.FromConfiguration(config);
         var arrayNameKeys = new HashSet<string>();
         foreach (var entry in entries)
         {
@@ -36,9 +37,9 @@ public static class ConfigurationLogger
                 indents++;
                 key = TryIndexToItemName(key.Substring(key.IndexOf(":", StringComparison.Ordinal) + 1), entries, entry, arrayNameKeys);
             }
-            var value = key.ContainsIgnoringCase("Password") || key.ContainsIgnoringCase("Pwd")
-                ? "**********" // Mask sensitive information
-                : entry.Value ?? "";
+            var value = LogScrubber.ShouldScrubName(key, hygiene)
+                ? LogScrubber.Mask // sensitively-named key: mask the whole value
+                : LogScrubber.ScrubConnectionStringSubfields(entry.Value ?? ""); // strip any embedded connection-string password
             logLine?.Invoke($"{new string(' ', indents * 2)}{key}: {value}");
         }
 

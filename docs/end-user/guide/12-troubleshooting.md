@@ -23,9 +23,9 @@ SchemaQuench --LogPath:/var/log/schemasmith
 
 After each run, the tool copies its logs into a numbered backup directory (e.g., `SchemaQuench.0001/`, `SchemaQuench.0002/`). This preserves the history of previous runs so you can compare what changed between deployments. When you're tracking down a regression, these numbered backups are your timeline.
 
-### Password masking in logs
+### Sensitive value masking
 
-The progress log records your full configuration at the start of each run, but any setting whose name contains "Password" or "Pwd" is masked as `**********`. If you see asterisks where you expected credentials, that's the masking working correctly -- the actual password was still used for the connection.
+The progress log records your full configuration -- and SchemaQuench's script tokens -- at the start of each run, but any value whose name looks sensitive (`Password`, `Pwd`, `Secret`, `ApiKey`, `Token`, `ConnectionString`, `Credential`) is masked as `***`, and an embedded password inside a connection string is stripped even when the surrounding name isn't sensitive. If you see `***` where you expected credentials, that's the masking working correctly -- the real value was still used for the connection. You can tune what gets scrubbed (or suppress token logging entirely) via the `LogHygiene` settings block; see [Sensitive value masking](../reference/configuration.md#sensitive-value-masking) in the configuration reference.
 
 ---
 

@@ -19,6 +19,7 @@ namespace SchemaQuench;
 public class ProductQuench
 {
     private readonly IConfigurationRoot _config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
+    private readonly LogHygieneOptions _logHygiene;
     private readonly ILog _errorLog = LogFactory.GetLogger("ErrorLog");
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly Product _product = Product.Load();
@@ -55,6 +56,8 @@ public class ProductQuench
     {
         if (_product.Platform == Platform.Unknown)
             throw new Exception($"Product '{_product.Name}' does not have a Platform assigned. Use SchemaTongs or edit the product.json file to assign a platform before quenching.");
+
+        _logHygiene = LogHygieneOptions.FromConfiguration(_config);
 
         if (!int.TryParse(_config["MaxThreads"], out _maxThreads) || _maxThreads < 1 || _maxThreads > 20)
             _maxThreads = 10;
@@ -527,10 +530,27 @@ public class ProductQuench
         _progressLog.Info($"ProductName: {_product.Name}, Platform: {_product.Platform}, TemplateOrder: [{string.Join(",", _product.TemplateOrder)}], ValidationScript: {_product.ValidationScript}");
         if (_product.ScriptTokens.Count == 0) return;
 
-        _progressLog.Info("  Product Script Tokens:");
-        _product.ScriptTokens.ToList().ForEach(token => _progressLog.Info($"    {token.Key}: {token.Value}"));
+        LogScriptTokens("  Product Script Tokens:", _product.ScriptTokens);
 
         _progressLog.Info("");
+    }
+
+    /// <summary>
+    /// Logs a token dictionary with sensitive values scrubbed (<see cref="LogScrubber"/>). When the
+    /// operator sets <c>LogHygiene.LogTokens=false</c> the whole section is replaced by a single
+    /// suppression notice — no token names and no values are emitted.
+    /// </summary>
+    private void LogScriptTokens(string header, IReadOnlyDictionary<string, string> tokens)
+    {
+        if (!_logHygiene.LogTokens)
+        {
+            _progressLog.Info($"{header} (suppressed via LogHygiene.LogTokens=false)");
+            return;
+        }
+
+        _progressLog.Info(header);
+        foreach (var token in tokens)
+            _progressLog.Info($"    {token.Key}: {LogScrubber.ScrubTokenValue(token.Key, token.Value, _logHygiene)}");
     }
 
     private void TestServerConnections()
@@ -623,11 +643,7 @@ public class ProductQuench
         _progressLog.Info($"Quenching Template: {template.Name}");
         LogSchemaTemplateFieldsIfSet(template);
         if (template.LoggableTokens.Any())
-        {
-            _progressLog.Info("Template Script Tokens:");
-            template.LoggableTokens.ToList()
-                .ForEach(token => _progressLog.Info($"    {token.Key}: {token.Value}"));
-        }
+            LogScriptTokens("Template Script Tokens:", template.LoggableTokens);
 
         _updateFailed = false;
 
