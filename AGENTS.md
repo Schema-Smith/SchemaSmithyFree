@@ -36,6 +36,10 @@ Each tool project has companion `*.UnitTests` and `*.IntegrationTests` projects 
 - **One concern per PR** — see CONTRIBUTING.md "Pull Request Guidelines."
 - **Self-review checklist** — walk through it before marking a PR ready. See CONTRIBUTING.md "Self-Review Checklist."
 
+## Exercising the product is a test layer
+
+Building examples and demos, writing or updating docs, and running the CLI end-to-end exercise SchemaSmith through paths the unit and integration suites don't — and regularly turn up real bugs that had no test coverage. Treat that kind of work as a genuine test pass, not just output: where it applies, run it against every supported engine (SQL Server, PostgreSQL, MySQL), and when something behaves unexpectedly, open an issue rather than quietly working around it in the example or doc. Surprising behavior found while actually using the tools is some of the most valuable feedback the project gets.
+
 ## What's NOT here
 
 This file deliberately doesn't duplicate `CONTRIBUTING.md`. For:
