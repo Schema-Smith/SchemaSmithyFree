@@ -782,7 +782,7 @@ A migration script (in the `Before`, `BetweenTablesAndKeys`, `AfterTablesScripts
 | Validation scripts | No -- express N/A through conditional logic inside the validation |
 | Tool-generated SQL | No -- use `ShouldApplyExpression` on the component |
 
-For a narrative walkthrough and decision guide (when to use the sentinel vs. `ShouldApplyExpression`), see [Power Workflows -- Runtime skip with a sentinel](../guide/09-power-workflows.md#runtime-skip-with-a-sentinel).
+For a narrative walkthrough and decision guide (when to use the sentinel vs. `ShouldApplyExpression`), see [Power Workflows -- Runtime sentinel skip](../guide/09-power-workflows.md#runtime-sentinel-skip).
 
 ---
 
