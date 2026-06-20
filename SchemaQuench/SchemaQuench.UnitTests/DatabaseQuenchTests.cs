@@ -1784,6 +1784,48 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region Artifact Config Helpers
+
+    [Test]
+    public void ResolveArtifactDirectory_DefaultsToCurrentDirectory_WhenUnset()
+    {
+        RegisterMockConfig();
+        var quench = new DatabaseQuench("srv", new Product { Name = "P", Platform = Platform.SqlServer },
+            new Template { Name = "T" }, "db",
+            false, "0", false, "0", false, false, false, null);
+        Assert.That(quench.ResolveArtifactDirectory(), Is.EqualTo(System.IO.Directory.GetCurrentDirectory()));
+    }
+
+    [Test]
+    public void ResolveArtifactDirectory_UsesConfiguredPath_WhenSet()
+    {
+        var mockConfig = Substitute.For<IConfigurationRoot>();
+        mockConfig["ArtifactPath"].Returns(@"C:\artifacts");
+        FactoryContainer.Register<IConfigurationRoot>(mockConfig);
+
+        var quench = new DatabaseQuench("srv", new Product { Name = "P", Platform = Platform.SqlServer },
+            new Template { Name = "T" }, "db",
+            false, "0", false, "0", false, false, false, null);
+        Assert.That(quench.ResolveArtifactDirectory(), Is.EqualTo(@"C:\artifacts"));
+    }
+
+    [Test]
+    public void SensitiveTokenValues_ReturnsOnlySensitivelyNamedTokens()
+    {
+        RegisterMockConfig();
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        product.ScriptTokens["AdminPassword"] = "supersecret";
+        product.ScriptTokens["Region"] = "us-east";
+        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
+            false, "0", false, "0", false, false, false, null);
+
+        var sensitive = quench.SensitiveTokenValues();
+        Assert.That(sensitive.Select(kv => kv.Key), Does.Contain("AdminPassword"));
+        Assert.That(sensitive.Select(kv => kv.Key), Does.Not.Contain("Region"));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static IDbCommand CreateMockCommand()

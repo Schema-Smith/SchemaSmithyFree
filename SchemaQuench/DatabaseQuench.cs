@@ -968,6 +968,24 @@ public class DatabaseQuench
         };
     }
 
+    internal string ResolveArtifactDirectory()
+    {
+        var configured = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["ArtifactPath"];
+        return string.IsNullOrWhiteSpace(configured) ? Directory.GetCurrentDirectory() : configured;
+    }
+
+    internal bool ScrubArtifactsEnabled =>
+        FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["ScrubArtifacts"]?.ToLower() == "true";
+
+    internal IReadOnlyList<KeyValuePair<string, string>> SensitiveTokenValues()
+    {
+        var options = LogHygieneOptions.FromConfiguration(FactoryContainer.ResolveOrCreate<IConfigurationRoot>());
+        return _product.ScriptTokens
+            .Concat(_template.ScriptTokens)
+            .Where(kv => LogScrubber.ShouldScrubName(kv.Key, options))
+            .ToList();
+    }
+
     #endregion
 
     #region Platform-Specific Table Quench SQL
