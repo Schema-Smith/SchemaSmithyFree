@@ -719,6 +719,53 @@ public class DatabaseQuenchTests
         Assert.That(script.HasBeenQuenched, Is.True);
     }
 
+    [Test]
+    public void QuenchOneScript_SentinelError_MarksSkipped_NotFailed()
+    {
+        var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
+        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
+            false, "false", false, "false", "false", false, false, null);
+
+        var script = new SqlScript { Name = "001_maybe.sql", FilePath = "001_maybe.sql" };
+        script.Batches.Add("RAISE EXCEPTION 'SCHEMASMITH: SHOULD NOT APPLY';");
+
+        var mockCmd = CreateMockCommand();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception(SentinelClassifier.Constant));
+
+        quench.QuenchOneScript(mockCmd, script, runTwice: false, showErrors: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script.HasBeenQuenched, Is.True);
+            Assert.That(script.Outcome, Is.EqualTo(ScriptOutcome.Skipped));
+            Assert.That(script.Error, Is.Null);
+        });
+    }
+
+    [Test]
+    public void QuenchOneScript_RealError_StillFails()
+    {
+        var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
+        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
+            false, "false", false, "false", "false", false, false, null);
+
+        var script = new SqlScript { Name = "001_bad.sql", FilePath = "001_bad.sql" };
+        script.Batches.Add("SELECT 1/0;");
+
+        var mockCmd = CreateMockCommand();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception("division by zero"));
+
+        quench.QuenchOneScript(mockCmd, script, runTwice: false, showErrors: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script.HasBeenQuenched, Is.False);
+            // Outcome stays at the default Applied; the error path records script.Error, not Outcome.
+            Assert.That(script.Outcome, Is.EqualTo(ScriptOutcome.Applied));
+            Assert.That(script.Error, Is.Not.Null);
+        });
+    }
+
     #endregion
 
     #region QuenchDatabaseObjects Tests

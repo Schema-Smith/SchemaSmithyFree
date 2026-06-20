@@ -1444,6 +1444,13 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             script.Error = null;
             if (!showErrors) SafeProgressLog($"    Quenched {script.LogPath}");
         }
+        catch (Exception ex) when (SentinelClassifier.IsShouldNotApply(ex))
+        {
+            script.HasBeenQuenched = true;
+            script.Error = null;
+            script.Outcome = ScriptOutcome.Skipped;
+            SafeProgressLog($"    Skipped (ShouldNotApply): {script.LogPath}");
+        }
         catch (Exception ex)
         {
             script.Error = ex;
