@@ -1,0 +1,10 @@
+{
+    "Name": "Main",
+    "SchemaIdentificationScript": "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{{MainDB}}'",
+    "VersionStampScript": "",
+    "ScriptFolders": [
+        { "FolderPath": "MigrationScripts/Before", "QuenchSlot": "Before" },
+        { "FolderPath": "Procedures", "QuenchSlot": "Objects" },
+        { "FolderPath": "MigrationScripts/After", "QuenchSlot": "After" }
+    ]
+}
