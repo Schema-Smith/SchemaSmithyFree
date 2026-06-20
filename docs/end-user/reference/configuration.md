@@ -378,7 +378,7 @@ Directory where SchemaQuench writes resolved-SQL failure artifacts and generated
 | *(not set)* | Artifacts land in the current working directory (where SchemaQuench was launched). |
 | A directory path | Artifacts land in the specified directory. Relative paths are resolved from the current working directory. |
 
-Setting `ArtifactPath` is useful when you want artifacts in a consistent location regardless of where SchemaQuench is invoked -- a CI agent's workspace directory, for example, or a dedicated debug folder outside the log path.
+Setting `ArtifactPath` is useful when you want artifacts in a consistent location regardless of where SchemaQuench is invoked -- a CI agent's workspace directory, for example, or a dedicated debug folder outside the log path. The directory is created automatically if it does not exist.
 
 #### `ScrubArtifacts`
 

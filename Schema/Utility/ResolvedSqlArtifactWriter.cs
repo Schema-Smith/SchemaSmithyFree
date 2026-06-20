@@ -50,6 +50,7 @@ public static class ResolvedSqlArtifactWriter
         // Always write to real disk via FileWrapper, NOT ProductFileWrapper: a product loaded from a
         // .zip package resolves ProductFileWrapper to the in-memory ZipFileWrapper, which would bury
         // the failure artifact inside the package instead of landing it on a path the user can open.
+        DirectoryWrapper.GetFromFactory().CreateDirectory(directory); // idempotent; ensures a configured-but-missing ArtifactPath works
         FileWrapper.GetFromFactory().WriteAllText(path, content);
         return path;
     }

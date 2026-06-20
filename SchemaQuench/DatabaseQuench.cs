@@ -412,17 +412,24 @@ public class DatabaseQuench
                                 WhatIf = IsWhatIf,
                                 WriteResolvedSqlArtifact = (label, sql) =>
                                 {
-                                    var content = ResolvedSqlArtifactWriter.BuildArtifact(
-                                        $"Failed data delivery: {_server}.{_databaseName}" +
-                                        $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")} [{label}]",
-                                        new List<string> { sql }, failingBatchIndex: 0);
-                                    if (ScrubArtifactsEnabled)
-                                        content = ResolvedSqlArtifactWriter.Scrub(content, SensitiveTokenValues());
-                                    var safeLabel = string.Concat(label.Select(c =>
-                                        Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
-                                    var path = ResolvedSqlArtifactWriter.Write(ResolveArtifactDirectory(),
-                                        GetDebugFileName($"Failed DataDelivery {safeLabel}"), content);
-                                    SafeProgressLogError($"    Resolved SQL written to: {path}");
+                                    try
+                                    {
+                                        var content = ResolvedSqlArtifactWriter.BuildArtifact(
+                                            $"Failed data delivery: {_server}.{_databaseName}" +
+                                            $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")} [{label}]",
+                                            new List<string> { sql }, failingBatchIndex: 0);
+                                        if (ScrubArtifactsEnabled)
+                                            content = ResolvedSqlArtifactWriter.Scrub(content, SensitiveTokenValues());
+                                        var safeLabel = string.Concat(label.Select(c =>
+                                            Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+                                        var path = ResolvedSqlArtifactWriter.Write(ResolveArtifactDirectory(),
+                                            GetDebugFileName($"Failed DataDelivery {safeLabel}"), content);
+                                        SafeProgressLogError($"    Resolved SQL written to: {path}");
+                                    }
+                                    catch (Exception artifactEx)
+                                    {
+                                        SafeProgressLog($"    Could not write resolved-SQL artifact for data delivery '{label}': {artifactEx.Message}");
+                                    }
                                 }
                             });
                         });
@@ -1398,9 +1405,19 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
     private string LogSqlScript(string name, string sql)
     {
-        var path = Path.Combine(ResolveArtifactDirectory(), name);
-        FileWrapper.GetFromFactory().WriteAllText(path, sql);
-        return path;
+        try
+        {
+            var dir = ResolveArtifactDirectory();
+            DirectoryWrapper.GetFromFactory().CreateDirectory(dir);
+            var path = Path.Combine(dir, name);
+            FileWrapper.GetFromFactory().WriteAllText(path, sql);
+            return path;
+        }
+        catch (Exception ex)
+        {
+            SafeProgressLog($"    Could not write debug SQL artifact '{name}': {ex.Message}");
+            return "";
+        }
     }
 
     #endregion
@@ -1649,19 +1666,26 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         {
             sqlScript.Outcome = ScriptOutcome.Failed;
 
-            var header = $"Failed: {_server}.{_databaseName}" +
-                         $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")}" +
-                         $" [{sqlScript.LogPath}] — {sqlScript.Error?.Message}";
-            var content = ResolvedSqlArtifactWriter.BuildArtifact(header, sqlScript.Batches, FailingBatchIndex(sqlScript));
-            if (ScrubArtifactsEnabled)
-                content = ResolvedSqlArtifactWriter.Scrub(content, SensitiveTokenValues());
+            try
+            {
+                var header = $"Failed: {_server}.{_databaseName}" +
+                             $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")}" +
+                             $" [{sqlScript.LogPath}] — {sqlScript.Error?.Message}";
+                var content = ResolvedSqlArtifactWriter.BuildArtifact(header, sqlScript.Batches, FailingBatchIndex(sqlScript));
+                if (ScrubArtifactsEnabled)
+                    content = ResolvedSqlArtifactWriter.Scrub(content, SensitiveTokenValues());
 
-            var fileName = GetDebugFileName($"Failed {Path.GetFileNameWithoutExtension(sqlScript.Name)}");
-            var path = ResolvedSqlArtifactWriter.Write(directory, fileName, content);
+                var fileName = GetDebugFileName($"Failed {Path.GetFileNameWithoutExtension(sqlScript.Name)}");
+                var path = ResolvedSqlArtifactWriter.Write(directory, fileName, content);
+                SafeProgressLogError($"    Resolved SQL written to: {path}");
+                SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message} — resolved SQL: {path}");
+            }
+            catch (Exception artifactEx)
+            {
+                SafeProgressLog($"    Could not write resolved-SQL artifact for '{sqlScript.LogPath}': {artifactEx.Message}");
+            }
 
             SafeProgressLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message}");
-            SafeProgressLogError($"    Resolved SQL written to: {path}");
-            SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message} — resolved SQL: {path}");
         }
 
         throw new Exception("Unable to quench all scripts");

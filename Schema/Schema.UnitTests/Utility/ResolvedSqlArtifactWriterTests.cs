@@ -1,6 +1,8 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using NUnit.Framework;
 using Schema.Utility;
@@ -73,5 +75,30 @@ public class ResolvedSqlArtifactWriterTests
         var sql = "-- conn: Server=x;Password=plaintextpw;";
         var scrubbed = ResolvedSqlArtifactWriter.Scrub(sql, new List<KeyValuePair<string, string>>());
         Assert.That(scrubbed, Does.Not.Contain("plaintextpw"));
+    }
+
+    [Test]
+    public void Write_CreatesDirectory_WhenMissing()
+    {
+        // Use a fresh GUID subdir under temp — guaranteed not to exist before this call.
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var fileName = "artifact.sql";
+        var content = "-- test artifact";
+
+        try
+        {
+            Assert.That(Directory.Exists(tempDir), Is.False, "Precondition: directory must not exist before Write");
+
+            var returnedPath = ResolvedSqlArtifactWriter.Write(tempDir, fileName, content);
+
+            Assert.That(File.Exists(returnedPath), Is.True, "Write must create the file in the missing directory");
+            Assert.That(returnedPath, Is.EqualTo(Path.Combine(tempDir, fileName)));
+            Assert.That(File.ReadAllText(returnedPath), Is.EqualTo(content));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
     }
 }

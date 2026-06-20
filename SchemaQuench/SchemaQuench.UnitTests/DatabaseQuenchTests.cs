@@ -1858,6 +1858,7 @@ public class DatabaseQuenchTests
                     capturedContent = ci.ArgAt<string>(1);
                 });
             FactoryContainer.Register<IFile>(mockFile);
+            FactoryContainer.Register<Schema.Isolators.IDirectory>(Substitute.For<Schema.Isolators.IDirectory>());
 
             // Stub config with ArtifactPath so the directory is deterministic.
             var mockConfig = Substitute.For<IConfigurationRoot>();
@@ -1926,6 +1927,7 @@ public class DatabaseQuenchTests
             mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
                 .Do(ci => capturedContent = ci.ArgAt<string>(1));
             FactoryContainer.Register<IFile>(mockFile);
+            FactoryContainer.Register<Schema.Isolators.IDirectory>(Substitute.For<Schema.Isolators.IDirectory>());
 
             var mockConfig = Substitute.For<IConfigurationRoot>();
             mockConfig["ArtifactPath"].Returns(@"C:\test-artifacts");
@@ -1977,6 +1979,7 @@ public class DatabaseQuenchTests
         mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
             .Do(ci => capturedPath = ci.ArgAt<string>(0));
         FactoryContainer.Register<IFile>(mockFile);
+        FactoryContainer.Register<Schema.Isolators.IDirectory>(Substitute.For<Schema.Isolators.IDirectory>());
 
         var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
         var template = new Template { Name = "T" };
@@ -1995,6 +1998,60 @@ public class DatabaseQuenchTests
             "LogSqlScript must write under ArtifactPath, not AppContext.BaseDirectory");
         Assert.That(capturedPath, Does.Not.StartWith(AppContext.BaseDirectory),
             "LogSqlScript must NOT write under the bin directory when ArtifactPath is configured");
+    }
+
+    [Test]
+    public void LogSqlScript_BadArtifactPath_DoesNotThrow_LogsWarning()
+    {
+        // Drive LogSqlScript with a file mock that throws on WriteAllText — simulates an
+        // unwritable or missing ArtifactPath. The quench must not throw; it must log a warning.
+        Schema.Utility.LogFactory.Clear();
+        try
+        {
+            var progressLog = Substitute.For<log4net.ILog>();
+            var progressLogLines = new List<string>();
+            progressLog.When(l => l.Info(Arg.Any<object>()))
+                .Do(ci => progressLogLines.Add(ci.Arg<object>().ToString()));
+            Schema.Utility.LogFactory.Register("ProgressLog", progressLog);
+            Schema.Utility.LogFactory.Register("ErrorLog", Substitute.For<log4net.ILog>());
+
+            var mockConfig = Substitute.For<IConfigurationRoot>();
+            mockConfig["ArtifactPath"].Returns(@"C:\nonexistent-path-that-fails");
+            FactoryContainer.Register<IConfigurationRoot>(mockConfig);
+
+            // File mock that throws on write — simulates an unwritable directory.
+            var mockFile = Substitute.For<IFile>();
+            mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
+                .Do(_ => throw new System.IO.IOException("Access denied"));
+            FactoryContainer.Register<IFile>(mockFile);
+
+            // Directory mock that throws on CreateDirectory — simulates an invalid path.
+            var mockDir = Substitute.For<Schema.Isolators.IDirectory>();
+            mockDir.When(d => d.CreateDirectory(Arg.Any<string>()))
+                .Do(_ => throw new System.IO.IOException("Access denied"));
+            FactoryContainer.Register<Schema.Isolators.IDirectory>(mockDir);
+
+            var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
+            var template = new Template { Name = "T" };
+            template.Tables.Add(new Schema.Domain.Table { Name = "Orders" });
+
+            var quench = new DatabaseQuench("srv", product, template, "db",
+                false, "true", false, "false", "false", false, false, null);
+
+            var mockCmd = CreateMockCommand();
+
+            // Must not throw — LogSqlScript degrades gracefully on write failure.
+            Assert.DoesNotThrow(() => quench.QuenchModifiedTables(mockCmd));
+
+            // A warning must have been logged.
+            var output = string.Join("\n", progressLogLines);
+            Assert.That(output, Does.Contain("Could not write debug SQL artifact"),
+                "A warning must be logged when the debug SQL artifact write fails");
+        }
+        finally
+        {
+            Schema.Utility.LogFactory.Clear();
+        }
     }
 
     #endregion
@@ -2025,6 +2082,7 @@ public class DatabaseQuenchTests
             mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
                 .Do(ci => { if (debugPath == null) debugPath = ci.ArgAt<string>(0); });
             FactoryContainer.Register<IFile>(mockFile);
+            FactoryContainer.Register<Schema.Isolators.IDirectory>(Substitute.For<Schema.Isolators.IDirectory>());
 
             var mockConfig = Substitute.For<IConfigurationRoot>();
             mockConfig["ArtifactPath"].Returns(@"C:\pg-artifacts");
@@ -2109,6 +2167,7 @@ public class DatabaseQuenchTests
     {
         var mockFile = Substitute.For<IFile>();
         FactoryContainer.Register<IFile>(mockFile);
+        FactoryContainer.Register<Schema.Isolators.IDirectory>(Substitute.For<Schema.Isolators.IDirectory>());
         // LogSqlScript now calls ResolveArtifactDirectory() → IConfigurationRoot. Register a stub
         // so tests that only mock IFile don't hit FactoryContainer's "create interface" failure.
         if (FactoryContainer.Resolve<IConfigurationRoot>() == null)
