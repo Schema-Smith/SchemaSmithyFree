@@ -1,0 +1,9 @@
+{
+    "Name": "Main",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "VersionStampScript": "",
+    "ScriptFolders": [
+        { "FolderPath": "MigrationScripts/Before", "QuenchSlot": "Before" },
+        { "FolderPath": "MigrationScripts/After", "QuenchSlot": "After" }
+    ]
+}
