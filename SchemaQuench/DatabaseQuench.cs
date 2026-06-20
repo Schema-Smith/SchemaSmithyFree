@@ -86,6 +86,12 @@ public class DatabaseQuench
     // the Quench* methods directly (bypassing Execute → PrepareIterationContent) keep working.
     private readonly IterationContent _iteration = new();
 
+    // Relative paths of scripts in folders skipped by a ShouldApplyExpression this iteration. A
+    // gated-off folder's script is still declared in the package (just not applicable to this
+    // target), so its run-once migration tracking row must NOT be pruned as obsolete — mirrors how
+    // an active Target filter narrows pruning scope and how a gated-out object isn't dropped.
+    private readonly HashSet<string> _gatedOffMigrationPaths = new();
+
     private sealed class IterationContent
     {
         public List<SqlScript> BeforeScripts { get; set; }
@@ -135,11 +141,22 @@ public class DatabaseQuench
             }
 
             skip.Add(folder);
+            foreach (var script in folder.Scripts)
+                _gatedOffMigrationPaths.Add(GetRelativeScriptPath(script.LogPath));
             SafeProgressLog($"  Skipping folder '{folder.FolderPath}' on {DbScope} — ShouldApplyExpression evaluated false");
         }
 
         if (skip.Count > 0) RebuildIterationScripts(skip);
     }
+
+    /// <summary>
+    /// A tracking row is obsolete when its script is no longer among the current slot's scripts AND
+    /// it was not skipped by a folder gate this iteration. Gated-off scripts are still declared in
+    /// the package, so their run-once tracking rows are protected from pruning.
+    /// </summary>
+    internal bool IsObsoleteTrackingEntry(string trackedRelativePath, List<SqlScript> currentScripts) =>
+        currentScripts.All(s => GetRelativeScriptPath(s.LogPath) != trackedRelativePath)
+        && !_gatedOffMigrationPaths.Contains(trackedRelativePath);
 
     private string ResolveFolderGateExpression(string expression) =>
         string.IsNullOrEmpty(_schemaName)
@@ -153,7 +170,10 @@ public class DatabaseQuench
 
         if (string.IsNullOrEmpty(_schemaName))
         {
-            // Regular template: keep aliasing shared SqlScript references (filter, never clone).
+            // Regular template: rebuild as freshly-allocated lists that still hold the SAME SqlScript
+            // references (filter, never clone). List identity is not preserved — but it never was, since
+            // the _template.*Scripts accessors allocate a new list per call too — and reference identity
+            // IS, so the cross-iteration HasBeenQuenched dedup the engine relies on keeps working.
             _iteration.BeforeScripts = Scripts(_template.BeforeFolders);
             _iteration.ObjectScripts = Scripts(_template.ObjectFolders);
             _iteration.AfterTablesObjectScripts = Scripts(_template.AfterTablesObjectFolders);
@@ -1590,7 +1610,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
     private void RemoveObsoleteCompletedScriptEntries(IDbCommand destCmd, string slot, List<SqlScript> scripts, List<string> alreadyRan)
     {
-        foreach (var obsoleteScript in alreadyRan.Where(a => scripts.All(s => GetRelativeScriptPath(s.LogPath) != a)))
+        foreach (var obsoleteScript in alreadyRan.Where(a => IsObsoleteTrackingEntry(a, scripts)))
         {
             destCmd.CommandText = GetDeleteCompletedScriptSql(
                 _product.Name, slot, obsoleteScript, _template.Name, DbScope.SchemaName ?? "");
@@ -1672,8 +1692,12 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
     internal string GetRelativeScriptPath(string filePath)
     {
-        return LongPathSupport.StripLongPathPrefix(filePath)
-            .Replace(Path.GetDirectoryName(_template.LogPath) ?? "", "")
+        var stripped = LongPathSupport.StripLongPathPrefix(filePath);
+        var templateDir = string.IsNullOrEmpty(_template.FilePath)
+            ? ""
+            : Path.GetDirectoryName(_template.LogPath) ?? "";
+        if (templateDir.Length > 0) stripped = stripped.Replace(templateDir, "");
+        return stripped
             .Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             .TrimStart(Path.AltDirectorySeparatorChar);
     }

@@ -15,6 +15,7 @@ internal static class FolderGate
     internal static bool ShouldApply(IDbCommand command, string expression)
     {
         if (string.IsNullOrWhiteSpace(expression)) return true;
+        command.Parameters?.Clear(); // defensive: match the codebase discipline of not reusing a dirtied command
         command.CommandText = expression;
         return ProductQuench.ScalarToBool(command.ExecuteScalar());
     }

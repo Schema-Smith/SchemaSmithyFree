@@ -218,7 +218,7 @@ public class ProductQuench
     /// Blank expressions always apply; a false expression drops the folder (logged). Evaluation
     /// errors propagate so the run fails closed rather than silently skipping a folder.
     /// </summary>
-    internal List<ProductFolder> GateProductFolders(IDbCommand command, IEnumerable<ProductFolder> folders)
+    internal List<ProductFolder> GateProductFolders(IDbCommand command, IEnumerable<ProductFolder> folders, string server = null)
     {
         var survivors = new List<ProductFolder>();
         foreach (var folder in folders)
@@ -227,13 +227,13 @@ public class ProductQuench
             {
                 if (!FolderGate.ShouldApply(command, folder.ShouldApplyExpression))
                 {
-                    _progressLog.Info($"  Skipping folder '{folder.FolderPath}' — ShouldApplyExpression evaluated false");
+                    _progressLog.Info($"  Skipping folder '{folder.FolderPath}'{ServerSuffix(server)} — ShouldApplyExpression evaluated false");
                     continue;
                 }
             }
             catch (Exception e)
             {
-                var message = $"Folder '{folder.FolderPath}' ShouldApplyExpression failed: {e.Message}";
+                var message = $"Folder '{folder.FolderPath}'{ServerSuffix(server)} ShouldApplyExpression failed: {e.Message}";
                 _progressLog.Error($"  {message}");
                 _errorLog.Error(message, e);
                 throw;
@@ -244,6 +244,8 @@ public class ProductQuench
 
         return survivors;
     }
+
+    private static string ServerSuffix(string server) => string.IsNullOrEmpty(server) ? "" : $" on {server}";
 
     /// <summary>
     /// Returns the active WhatIfOnly value (for testing visibility).
@@ -648,7 +650,7 @@ public class ProductQuench
         {
             // Folder-level ShouldApplyExpression (#260): gate folders against this server before
             // flattening their scripts. Evaluated on the same server command the scripts run against.
-            var scriptsToQuench = GateProductFolders(productScriptCommand, folders)
+            var scriptsToQuench = GateProductFolders(productScriptCommand, folders, server)
                 .SelectMany(f => f.Scripts).Select(j => j.Clone()).ToList();
             QuenchScriptsWithCheckpoint(productScriptCommand, scriptsToQuench, server, isBefore);
         }
