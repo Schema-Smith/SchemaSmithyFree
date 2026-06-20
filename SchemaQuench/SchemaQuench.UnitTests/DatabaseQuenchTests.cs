@@ -1826,6 +1826,141 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region LogScriptErrors — Artifact-Based Failure Reporting
+
+    [Test]
+    public void LogScriptErrors_WritesResolvedSqlArtifact_AndLogsPath_NotRawSql()
+    {
+        Schema.Utility.LogFactory.Clear();
+        try
+        {
+            // Capture progress-log and error-log output before constructing DatabaseQuench.
+            var progressLog = Substitute.For<log4net.ILog>();
+            var progressLogLines = new List<string>();
+            progressLog.When(l => l.Error(Arg.Any<object>()))
+                .Do(ci => progressLogLines.Add(ci.Arg<object>().ToString()));
+            Schema.Utility.LogFactory.Register("ProgressLog", progressLog);
+
+            var errorLog = Substitute.For<log4net.ILog>();
+            var errorLogLines = new List<string>();
+            errorLog.When(l => l.Error(Arg.Any<object>()))
+                .Do(ci => errorLogLines.Add(ci.Arg<object>().ToString()));
+            Schema.Utility.LogFactory.Register("ErrorLog", errorLog);
+
+            // Capture file writes via the IFile mock.
+            var mockFile = Substitute.For<IFile>();
+            string capturedPath = null;
+            string capturedContent = null;
+            mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
+                .Do(ci =>
+                {
+                    capturedPath = ci.ArgAt<string>(0);
+                    capturedContent = ci.ArgAt<string>(1);
+                });
+            FactoryContainer.Register<IFile>(mockFile);
+
+            // Stub config with ArtifactPath so the directory is deterministic.
+            var mockConfig = Substitute.For<IConfigurationRoot>();
+            mockConfig["ArtifactPath"].Returns(@"C:\test-artifacts");
+            mockConfig["ScrubArtifacts"].Returns((string)null);
+            FactoryContainer.Register<IConfigurationRoot>(mockConfig);
+
+            var product = new Product { Name = "P", Platform = Platform.SqlServer };
+            var quench = new DatabaseQuench("myserver", product, new Template { Name = "T" }, "mydb",
+                false, "0", false, "0", "0", false, false, null);
+
+            // Build a failed script with a distinctive batch body.
+            var script = new SqlScript { Name = "fail.sql", FilePath = "Before Scripts/fail.sql" };
+            script.Batches.Add("SELECT distinctive_marker_sql");
+            script.Error = new Exception("boom");
+            // HasBeenQuenched = false (default) — LogScriptErrors will process it.
+
+            var scripts = new List<SqlScript> { script };
+
+            // Act — drive through QuenchDatabaseObjects(showErrors: true). The mock command
+            // throws so the script stays unquenched, then LogScriptErrors fires and throws.
+            var mockCmd = CreateMockCommand();
+            mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception("SQL error"));
+            var ex = Assert.Throws<Exception>(() => quench.QuenchDatabaseObjects(mockCmd, scripts, showErrors: true));
+            Assert.That(ex!.Message, Does.Contain("Unable to quench all scripts"));
+
+            // Assert: artifact file received the raw SQL batch body.
+            Assert.That(capturedContent, Is.Not.Null, "Expected WriteAllText to be called once");
+            Assert.That(capturedContent, Does.Contain("distinctive_marker_sql"),
+                "Artifact content must contain the raw SQL batch");
+
+            // Assert: progress-log contains the artifact path reference, NOT the raw SQL.
+            var progressOutput = string.Join("\n", progressLogLines);
+            Assert.That(progressOutput, Does.Contain(@"C:\test-artifacts"),
+                "Progress log must reference the artifact path");
+            Assert.That(progressOutput, Does.Not.Contain("distinctive_marker_sql"),
+                "Progress log must NOT contain raw SQL — that is the SQL-leak this task closes");
+
+            // Assert: error-log contains the artifact path reference, NOT the raw SQL.
+            var errorOutput = string.Join("\n", errorLogLines);
+            Assert.That(errorOutput, Does.Contain(@"C:\test-artifacts"),
+                "Error log must reference the artifact path");
+            Assert.That(errorOutput, Does.Not.Contain("distinctive_marker_sql"),
+                "Error log must NOT contain raw SQL — that is the SQL-leak this task closes");
+
+            // Assert: Outcome set to Failed.
+            Assert.That(script.Outcome, Is.EqualTo(ScriptOutcome.Failed));
+        }
+        finally
+        {
+            Schema.Utility.LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void LogScriptErrors_ScrubEnabled_MasksSensitiveTokensInArtifact()
+    {
+        Schema.Utility.LogFactory.Clear();
+        try
+        {
+            Schema.Utility.LogFactory.Register("ProgressLog", Substitute.For<log4net.ILog>());
+            Schema.Utility.LogFactory.Register("ErrorLog", Substitute.For<log4net.ILog>());
+
+            var mockFile = Substitute.For<IFile>();
+            string capturedContent = null;
+            mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
+                .Do(ci => capturedContent = ci.ArgAt<string>(1));
+            FactoryContainer.Register<IFile>(mockFile);
+
+            var mockConfig = Substitute.For<IConfigurationRoot>();
+            mockConfig["ArtifactPath"].Returns(@"C:\test-artifacts");
+            mockConfig["ScrubArtifacts"].Returns("true");
+            FactoryContainer.Register<IConfigurationRoot>(mockConfig);
+
+            // Product with a sensitive token whose value appears in the batch body.
+            var product = new Product { Name = "P", Platform = Platform.SqlServer };
+            product.ScriptTokens["AdminPassword"] = "supersecret1234";
+
+            var quench = new DatabaseQuench("myserver", product, new Template { Name = "T" }, "mydb",
+                false, "0", false, "0", "0", false, false, null);
+
+            var script = new SqlScript { Name = "fail.sql", FilePath = "Before Scripts/fail.sql" };
+            script.Batches.Add("EXEC dbo.SetPassword 'supersecret1234'");
+            script.Error = new Exception("oops");
+
+            var mockCmd = CreateMockCommand();
+            mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception("SQL error"));
+            Assert.Throws<Exception>(() =>
+                quench.QuenchDatabaseObjects(mockCmd, new List<SqlScript> { script }, showErrors: true));
+
+            // The sensitive value must be masked in the artifact content.
+            Assert.That(capturedContent, Is.Not.Null, "Expected WriteAllText to be called");
+            Assert.That(capturedContent, Does.Not.Contain("supersecret1234"),
+                "Sensitive token value must be scrubbed from the artifact when ScrubArtifacts=true");
+        }
+        finally
+        {
+            Schema.Utility.LogFactory.Clear();
+        }
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static IDbCommand CreateMockCommand()

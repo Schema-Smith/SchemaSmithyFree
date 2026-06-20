@@ -1634,15 +1634,30 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     {
         if (scripts.All(x => x.HasBeenQuenched)) return;
 
+        var directory = ResolveArtifactDirectory();
         foreach (var sqlScript in scripts.Where(s => !s.HasBeenQuenched))
         {
-            SafeProgressLogError($"Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}");
-            SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}\r\n\r\n");
-            foreach (var batch in sqlScript.Batches) SafeErrorLogError($"\r\n{batch}");
+            sqlScript.Outcome = ScriptOutcome.Failed;
+
+            var header = $"Failed: {_server}.{_databaseName}" +
+                         $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")}" +
+                         $" [{sqlScript.LogPath}] — {sqlScript.Error?.Message}";
+            var content = ResolvedSqlArtifactWriter.BuildArtifact(header, sqlScript.Batches, FailingBatchIndex(sqlScript));
+            if (ScrubArtifactsEnabled)
+                content = ResolvedSqlArtifactWriter.Scrub(content, SensitiveTokenValues());
+
+            var fileName = GetDebugFileName($"Failed {Path.GetFileNameWithoutExtension(sqlScript.Name)}");
+            var path = ResolvedSqlArtifactWriter.Write(directory, fileName, content);
+
+            SafeProgressLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message}");
+            SafeProgressLogError($"    Resolved SQL written to: {path}");
+            SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message} — resolved SQL: {path}");
         }
 
         throw new Exception("Unable to quench all scripts");
     }
+
+    private static int FailingBatchIndex(SqlScript script) => script.Batches.Count - 1;
 
     /// <summary>
     /// Per-tenant log discipline (design §5.8): when this is a schema-template iteration, every log
