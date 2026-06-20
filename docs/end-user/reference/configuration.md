@@ -343,9 +343,63 @@ C:\Tools\
     SchemaQuench.0003\               (third run backup)
 ```
 
+### Failure artifacts
+
+When any script fails during a SchemaQuench deployment -- a user-authored script, a generated table-quench procedure, or a data-delivery merge -- SchemaQuench writes the exact token-expanded SQL the server rejected to a re-runnable `.sql` artifact file. The progress log tells you where:
+
+```
+Unable to quench 'Before/01-seed-config.sql': Invalid column name 'Region'.
+    Resolved SQL written to: C:\deploy\SchemaQuench - Failed 01-seed-config prod-db.TargetDB.sql
+```
+
+For generated procedures, the same file also appears in the `Debug Script:` log line when the procedure throws:
+
+```
+FAILED to quench: ...
+Debug Script: 'C:\deploy\SchemaQuench - Quench Missing Tables And Columns prod-db.TargetDB.sql'
+```
+
+Both shapes point to the same kind of artifact: a `.sql` file with a comment header (server/database/schema, the failing script name, the error message), every batch the engine received, separated by `GO`, with the last-attempted batch marked `-- >>> FAILING BATCH (#N) >>>`. The failing-batch marker is a best-effort hint -- the engine marks the last batch it attempted, which is usually the one that caused the error.
+
+**Artifacts are raw by default** -- all token values are already expanded to their real values, so you can open the file, connect to the target, and reproduce the failure immediately without any further substitution.
+
+> **Note:** Artifacts land in the `ArtifactPath` directory (default: current working directory), not the log directory. This is intentional: raw artifacts may contain expanded sensitive values and should not be automatically swept into log archives or CI artifacts.
+
+#### `ArtifactPath`
+
+Directory where SchemaQuench writes resolved-SQL failure artifacts and generated-SQL debug files.
+
+```json
+{ "ArtifactPath": "C:\\deploy\\debug" }
+```
+
+| Default | Behavior |
+|---|---|
+| *(not set)* | Artifacts land in the current working directory (where SchemaQuench was launched). |
+| A directory path | Artifacts land in the specified directory. Relative paths are resolved from the current working directory. |
+
+Setting `ArtifactPath` is useful when you want artifacts in a consistent location regardless of where SchemaQuench is invoked -- a CI agent's workspace directory, for example, or a dedicated debug folder outside the log path.
+
+#### `ScrubArtifacts`
+
+Controls whether sensitive values are redacted in failure artifacts before writing.
+
+```json
+{ "ScrubArtifacts": true }
+```
+
+| Value | Behavior |
+|---|---|
+| `false` (default) | Artifacts contain real expanded values. Re-runnable immediately -- open in a query tool and reproduce the failure without restoring secrets. |
+| `true` | Sensitive token values (names matching `*Password*`, `*Secret*`, `*ApiKey*`, `*Token*`, etc., per `LogHygiene` rules) and inline connection-string passwords are redacted to `***`. Safe to attach to a CI artifact or support ticket. To reproduce, restore the real values first. |
+
+Leave `ScrubArtifacts` off for local debugging -- raw artifacts are immediately re-runnable. Turn it on for CI environments or when attaching an artifact to a support ticket. The `LogHygiene` block governs which token names are considered sensitive; see [Sensitive value masking](#sensitive-value-masking) for the full set of rules.
+
+For a step-by-step walkthrough of working a failed deployment from artifact to fix, see [Troubleshooting -- My deployment failed](../guide/12-troubleshooting.md#my-deployment-failed).
+
 ### Debug SQL files
 
-When SchemaQuench runs one of its generated procedures against your target database, it dumps the exact SQL it sent to a companion `.sql` file next to the tool executable. If the procedure throws, the error log points you at the file by name. Open it in your query tool of choice, re-run the SQL by hand, and reproduce or narrow the problem without guessing what SchemaSmith actually executed.
+When SchemaQuench runs one of its generated procedures against your target database, it dumps the exact SQL it sent to a companion `.sql` file. If the procedure throws, the progress log surfaces the file path via `Debug Script:` (see [Failure artifacts](#failure-artifacts) above). Open it in your query tool of choice, re-run the SQL by hand, and reproduce or narrow the problem without guessing what SchemaSmith actually executed.
 
 Generated procedures cover missing tables and columns, modified tables, indexes, foreign keys, materialized views, indexed views, and the table-JSON parse step. Debug files follow the pattern `SchemaQuench - <operation> <server>.<database>.sql`:
 
@@ -359,9 +413,7 @@ SchemaQuench - Quench Indexed Views prod-db.NorthwindClone.sql
 SchemaQuench - Parse Table Json prod-db.NorthwindClone.sql
 ```
 
-Each run overwrites the debug files for the operations it actually performed. Operations that don't apply to your platform (for example, `Indexed Views` on PostgreSQL or `Materialized Views` on MySQL) produce no file. Debug files always land next to the tool executable -- `--LogPath` controls the progress and error logs, not debug SQL.
-
-> **Note:** Debug files only cover SchemaSmith's own generated procedures. The user-authored scripts in your package (`Before/`, `After/`, migration scripts, programmable objects) already live on disk at their original paths -- when one of them fails, the error log points at the file you authored.
+Each run overwrites the debug files for the operations it actually performed. Operations that don't apply to your platform (for example, `Indexed Views` on PostgreSQL or `Materialized Views` on MySQL) produce no file. Debug files land in the `ArtifactPath` directory (default: current working directory); `--LogPath` controls the progress and error logs, not artifact or debug SQL.
 
 ### Engine notices
 

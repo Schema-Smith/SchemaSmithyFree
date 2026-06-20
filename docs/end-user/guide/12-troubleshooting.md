@@ -6,6 +6,56 @@ For background on how the tools work, see the individual reference pages: [Schem
 
 ---
 
+## My deployment failed
+
+A failed quench leaves two things for you: a log entry telling you what broke, and a `.sql` artifact file holding the exact SQL that the server rejected. Here is how to move from "deployment failed" to "I know what's wrong and I can fix it."
+
+### 1. Find the artifact
+
+Open the progress log (`SchemaQuench - Progress.log`) and search for `Resolved SQL written to:` (user scripts and data-delivery merges) or `Debug Script:` (generated quench SQL). Either line gives you the full path to the artifact file.
+
+```
+Unable to quench 'Before/01-seed-config.sql': Invalid column name 'Region'.
+    Resolved SQL written to: C:\deploy\SchemaQuench - Failed 01-seed-config prod-db.TargetDB.sql
+```
+
+Both line shapes tell you the same thing: here is the file that contains what the server actually ran.
+
+> **Note:** Artifacts land in the `ArtifactPath` directory (default: the working directory you ran SchemaQuench from), not the log directory. That is deliberate — so zipping your logs for a support ticket does not sweep up raw SQL that may contain expanded sensitive values.
+
+### 2. Open and read it
+
+The artifact is a plain `.sql` file. It contains a comment header identifying the server, database, schema, and which script failed, followed by every batch the engine sent, separated by `GO`. The batch SchemaQuench attempted last is marked:
+
+```sql
+-- >>> FAILING BATCH (#2) >>>
+ALTER TABLE [dbo].[Orders] ADD [Region] NVARCHAR(50) NOT NULL ...
+GO
+```
+
+> **Note:** The failing-batch marker is a best-effort hint. The engine marks the last batch it attempted, which is usually (but not guaranteed to be) the batch that caused the error.
+
+The artifact contains the real, fully expanded values — tokens already resolved, connection-string parameters already substituted. That is exactly what you need to reproduce the failure. Strip the `--` comment lines and `GO` separators if your query tool needs clean statement text.
+
+### 3. Reproduce and fix
+
+Open the artifact in your query tool, connect to the same target, and run it. You will see the exact same error the engine returned during deployment. Work the fix there — iterate until it succeeds — then apply the fix back to your schema package.
+
+### 4. Common error classes
+
+Most deployment failures fall into one of these categories:
+
+- **Unresolved token.** The batch contains a literal `{{Token}}` instead of the expanded value. Either the token is misspelled, it is not in scope for this script's slot (for example, a `{{SchemaName}}` token in a product-level script), or the token was never defined. Check `ScriptTokens` in your settings and the token reference.
+- **Dependency order.** An object references a table, view, or procedure that doesn't exist yet at the point the script runs. SchemaQuench's retry loop resolves many of these automatically across passes — if the same script fails every pass, it may reference an object that is never created, or the dependency is circular.
+- **Permission.** The deploy login lacks the right to create or alter the object. Check the login's rights against the target database and grant what is needed.
+- **Delivery constraint.** A merge script hit a FK, unique, or check constraint. Open the artifact and look at the VALUES being inserted or the JOIN logic — the data being delivered conflicts with existing rows or references a row that doesn't exist. Fix the source data, adjust the delivery filter, or reorder your delivery scripts.
+
+### 5. Safe to attach?
+
+If you need to attach the artifact to a support ticket or CI build artifact, turn on `ScrubArtifacts: true` in your settings before re-running. With scrubbing on, the artifact file redacts sensitive token values (names matching password, secret, API key, token, etc.) and inline connection-string passwords, producing a variant you can share safely. See `ScrubArtifacts` in the [Configuration Reference](../reference/configuration.md#failure-artifacts) for details.
+
+---
+
 ## Reading logs
 
 Every SchemaSmith CLI tool writes two log files during each run. These are the first place to look when something doesn't go as expected:
