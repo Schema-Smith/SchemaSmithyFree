@@ -2070,10 +2070,12 @@ public class DatabaseQuenchTests
                 "Outer catch must surface the debug-file path for PostgreSQL/MySQL users");
             Assert.That(debugPath, Is.Not.Null,
                 "LogSqlScript must have been called (writing under ArtifactPath) before the failure");
-            // _debugFileLocation holds the filename (same convention as the SQL Server InfoMessage
-            // handler). Assert that the logged "Debug Script:" line names the generated-SQL file.
-            Assert.That(progressOutput, Does.Contain("Quench Missing Tables And Columns"),
-                "The surfaced debug path must name the generated-SQL dump file");
+            // _debugFileLocation must hold the FULL path returned by LogSqlScript, not a bare filename.
+            // A bare filename would fail the StartsWith check below even though it contains the label.
+            Assert.That(progressOutput, Does.Contain(debugPath),
+                "The surfaced 'Debug Script:' line must contain the full artifact path, not just the filename");
+            Assert.That(progressOutput, Does.Contain(@"C:\pg-artifacts"),
+                "The surfaced debug path must be rooted under the configured ArtifactPath");
         }
         finally
         {

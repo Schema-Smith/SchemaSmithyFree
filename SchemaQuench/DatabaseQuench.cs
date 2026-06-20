@@ -1035,8 +1035,7 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
             }
         }
 
-        _debugFileLocation = GetDebugFileName("Quench Missing Tables And Columns");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Missing Tables And Columns"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1069,8 +1068,7 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             }
         }
 
-        _debugFileLocation = GetDebugFileName("Quench Modified Tables");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Modified Tables"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1117,8 +1115,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             }
         }
 
-        _debugFileLocation = GetDebugFileName("Quench Indexes");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Indexes"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1149,8 +1146,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             }
         }
 
-        _debugFileLocation = GetDebugFileName("Quench Foreign Keys");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Foreign Keys"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1162,8 +1158,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(IterationMaterializedViewSchema)}', {_whatIfOnly}, {updateFillFactor}, '{EscapeSqlLiteral(_template.Name)}', '{EscapeSqlLiteral(_schemaName)}');";
 
-        _debugFileLocation = GetDebugFileName("Quench Materialized Views");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Materialized Views"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1197,8 +1192,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         // proc falls through to today's all-schemas behavior.
         tableCommand.CommandText = $@"EXEC [SchemaSmith].[IndexedViewQuench] @ProductName = '{EscapeSqlLiteral(_product.Name)}', @IndexedViewSchema = '{EscapeSqlLiteral(viewSchema)}', @WhatIf = {_whatIfOnly}, @UpdateFillFactor = {updateFillFactor}, @TemplateName = N'{EscapeSqlLiteral(_template.Name)}', @SchemaName = N'{EscapeSqlLiteral(_schemaName)}';";
 
-        _debugFileLocation = GetDebugFileName("Quench Indexed Views");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Indexed Views"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1213,8 +1207,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             ? _template.TableSchema
             : JsonHelper.SerializeAll(_template.Tables);
         command.CommandText = $"CALL SchemaSmith_ParseTableJson('{EscapeSqlLiteral(_databaseName)}', @tableJson)";
-        _debugFileLocation = GetDebugFileName("Parse Table Json");
-        LogSqlScript(_debugFileLocation, command.CommandText.Replace("@tableJson", $"'{EscapeSqlLiteral(tableJson)}'"));
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Parse Table Json"), command.CommandText.Replace("@tableJson", $"'{EscapeSqlLiteral(tableJson)}'"));
         AddJsonParameter(command, "@tableJson", tableJson);
         ExecuteNonQueryHandlingMessages(command);
         ClearParameters(command);
@@ -1389,10 +1382,11 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         }
     }
 
-    private void LogSqlScript(string name, string sql)
+    private string LogSqlScript(string name, string sql)
     {
         var path = Path.Combine(ResolveArtifactDirectory(), name);
         FileWrapper.GetFromFactory().WriteAllText(path, sql);
+        return path;
     }
 
     #endregion
