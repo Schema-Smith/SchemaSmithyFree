@@ -114,6 +114,10 @@ public class ResolvedSqlArtifactIntegrationTests
             {
                 LogFactory.Clear();
                 FactoryContainer.Unregister<IEnvironment>();
+                var cfg = FactoryContainer.Resolve<IConfigurationRoot>();
+                cfg["ArtifactPath"] = null;
+                cfg["ScrubArtifacts"] = null;
+                cfg["SchemaPackagePath"] = null;
             }
         }
     }
@@ -154,6 +158,10 @@ public class ResolvedSqlArtifactIntegrationTests
             {
                 LogFactory.Clear();
                 FactoryContainer.Unregister<IEnvironment>();
+                var cfg = FactoryContainer.Resolve<IConfigurationRoot>();
+                cfg["ArtifactPath"] = null;
+                cfg["ScrubArtifacts"] = null;
+                cfg["SchemaPackagePath"] = null;
             }
         }
     }
@@ -204,6 +212,10 @@ public class ResolvedSqlArtifactIntegrationTests
             {
                 LogFactory.Clear();
                 FactoryContainer.Unregister<IEnvironment>();
+                var cfg = FactoryContainer.Resolve<IConfigurationRoot>();
+                cfg["ArtifactPath"] = null;
+                cfg["ScrubArtifacts"] = null;
+                cfg["SchemaPackagePath"] = null;
             }
         }
     }
