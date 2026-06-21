@@ -1,0 +1,10 @@
+{
+    "Name": "Main",
+    "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datistemplate = false AND datname = '{{MainDB}}'",
+    "VersionStampScript": "",
+    "ScriptFolders": [
+        { "FolderPath": "Before Scripts", "QuenchSlot": "Before" },
+        { "FolderPath": "Functions", "QuenchSlot": "Objects" },
+        { "FolderPath": "After Scripts", "QuenchSlot": "After" }
+    ]
+}

@@ -28,6 +28,9 @@ namespace Schema.Domain
         [JsonIgnore]
         public Exception Error { get; set; }
 
+        [JsonIgnore]
+        public ScriptOutcome Outcome { get; set; } = ScriptOutcome.Applied;
+
         [JsonProperty(Order = 2)]
         public string LogPath => LongPathSupport.StripLongPathPrefix(FilePath);
 

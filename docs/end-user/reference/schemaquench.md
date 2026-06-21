@@ -749,6 +749,51 @@ This turns "different folders for different flavors of a target" into a declarat
 
 ---
 
+## Script-Level Runtime Skip
+
+`ShouldApplyExpression` covers skip decisions that a SQL expression can make from outside the script. When the decision requires logic that can only run from inside the script -- querying row state, checking role membership, branching on a result from a prior batch -- the script raises the sentinel error instead. SchemaQuench recognizes the sentinel as an intentional skip, logs it, and continues the deployment without an error.
+
+### Sentinel constant
+
+```
+SCHEMASMITH: SHOULD NOT APPLY
+```
+
+The match is trimmed and case-insensitive. The message must be the entire error message -- an unrelated error that merely contains the phrase does not trigger a skip. Any error with a different message still surfaces as a real failure.
+
+### Per-platform raise
+
+| Platform | Raise form |
+|----------|-----------|
+| SQL Server | `RAISERROR('SCHEMASMITH: SHOULD NOT APPLY', 16, 1)` |
+| PostgreSQL | `RAISE EXCEPTION 'SCHEMASMITH: SHOULD NOT APPLY'` |
+| MySQL | `SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SCHEMASMITH: SHOULD NOT APPLY'` |
+
+> **Warning:** SQL Server severity must be ≥ 11. `RAISERROR` at severity ≤ 10 is an informational message -- SchemaQuench does not see it and the script continues executing. Severity 16 is the conventional choice.
+
+### Batch semantics
+
+The sentinel may appear in any batch of a multi-batch script, not only at the top. When the sentinel fires, SchemaQuench stops processing the remaining batches. Earlier batches that already ran are committed -- the engine does not wrap the script in a transaction. The user owns the partial-work semantics.
+
+### Tracking behavior
+
+A migration script (in the `Before`, `BetweenTablesAndKeys`, `AfterTablesScripts`, or `After` slot) that raises the sentinel is recorded in `CompletedMigrationScripts` as completed. It will not be retried on the next deployment. Tracking is per-database and per-schema (for schema templates), so a skip in one database never affects another -- a database with different state re-evaluates the script independently.
+
+### Script surface coverage
+
+| Surface | Sentinel honored |
+|---------|-----------------|
+| Before / After scripts | Yes |
+| Object scripts (procedures, views, functions) | Yes |
+| Migration scripts | Yes |
+| `[ALWAYS]` scripts | Yes |
+| Validation scripts | No -- express N/A through conditional logic inside the validation |
+| Tool-generated SQL | No -- use `ShouldApplyExpression` on the component |
+
+For a narrative walkthrough and decision guide (when to use the sentinel vs. `ShouldApplyExpression`), see [Power Workflows -- Runtime sentinel skip](../guide/09-power-workflows.md#runtime-sentinel-skip).
+
+---
+
 ## Exit Codes
 
 | Code | Meaning |

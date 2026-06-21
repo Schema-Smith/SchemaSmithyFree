@@ -34,4 +34,11 @@ public class DataDeliveryContext
     /// <c>MERGE INTO [{{SchemaName}}].[Table]</c> — slice-3 audit bug B3.
     /// </summary>
     public string SchemaName { get; set; } = "";
+
+    /// <summary>
+    /// Optional. Invoked when a generated data-delivery script fails, with (label, resolvedSql) so the
+    /// caller can persist the SQL to a re-runnable artifact and surface its path. Null = no artifact
+    /// (e.g. WhatIf). Keeps artifact directory / scrub / token concerns on the caller side.
+    /// </summary>
+    public Action<string, string> WriteResolvedSqlArtifact { get; set; }
 }

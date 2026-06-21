@@ -108,6 +108,11 @@ public class DataDeliveryProcessor : IDataDelivery
 
         var delivered = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
         var pass2Tables = new List<IDeliverableTable>();
+        // Tracks table keys whose failing SQL has already been written to an artifact, so the
+        // retry/fallback architecture (a table can be attempted in the while loop AND again in the
+        // circular-fallback loop) writes exactly one artifact per failed table rather than one per
+        // attempt.
+        var artifactWritten = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
         var lastCount = -1;
 
         while (tablesToDeliver.Count > 0 && tablesToDeliver.Count != lastCount)
@@ -128,7 +133,7 @@ public class DataDeliveryProcessor : IDataDelivery
 
                 try
                 {
-                    DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Tables, false);
+                    DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Tables, false, artifactWritten);
                 }
                 catch
                 {
@@ -143,7 +148,7 @@ public class DataDeliveryProcessor : IDataDelivery
         {
             try
             {
-                DeliverTable(context, table, tableDataMap, new List<string>(), delivered, pass2Tables, true);
+                DeliverTable(context, table, tableDataMap, new List<string>(), delivered, pass2Tables, true, artifactWritten);
             }
             catch (Exception ex)
             {
@@ -173,7 +178,18 @@ public class DataDeliveryProcessor : IDataDelivery
                     delivery.MergeDisableRules, delivery.MergeUpdateDescendents);
 
                 if (!context.WhatIf)
-                    context.ExecuteScript?.Invoke(table.Name, mergeScript);
+                {
+                    try
+                    {
+                        context.ExecuteScript?.Invoke(table.Name, mergeScript);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (artifactWritten.Add(tableKey))
+                            context.WriteResolvedSqlArtifact?.Invoke(tableKey, mergeScript);
+                        logError($"    Error in pass 2 for {tableKey}: {ex.Message}");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -184,7 +200,8 @@ public class DataDeliveryProcessor : IDataDelivery
 
     private void DeliverTable(DataDeliveryContext context, IDeliverableTable table,
         Dictionary<IDeliverableTable, string> tableDataMap, List<string> deferredColumns,
-        HashSet<string> delivered, List<IDeliverableTable> pass2Tables, bool isCircularFallback)
+        HashSet<string> delivered, List<IDeliverableTable> pass2Tables, bool isCircularFallback,
+        HashSet<string> artifactWritten)
     {
         var platform = context.Platform;
         var helper = context.ScriptHelper;
@@ -212,7 +229,18 @@ public class DataDeliveryProcessor : IDataDelivery
             var mergeScript = BuildDeferredMergeScript(context, schemaOrDb, table, tableData, keyColumns, deferredColumns);
 
             if (!context.WhatIf)
-                context.ExecuteScript?.Invoke(table.Name, mergeScript);
+            {
+                try
+                {
+                    context.ExecuteScript?.Invoke(table.Name, mergeScript);
+                }
+                catch
+                {
+                    if (artifactWritten.Add(tableKey))
+                        context.WriteResolvedSqlArtifact?.Invoke(tableKey, mergeScript);
+                    throw;
+                }
+            }
 
             pass2Tables.Add(table);
         }
@@ -227,7 +255,18 @@ public class DataDeliveryProcessor : IDataDelivery
                 delivery.MergeDisableRules, delivery.MergeUpdateDescendents);
 
             if (!context.WhatIf)
-                context.ExecuteScript?.Invoke(table.Name, mergeScript);
+            {
+                try
+                {
+                    context.ExecuteScript?.Invoke(table.Name, mergeScript);
+                }
+                catch
+                {
+                    if (artifactWritten.Add(tableKey))
+                        context.WriteResolvedSqlArtifact?.Invoke(tableKey, mergeScript);
+                    throw;
+                }
+            }
         }
 
         delivered.Add(tableKey);
