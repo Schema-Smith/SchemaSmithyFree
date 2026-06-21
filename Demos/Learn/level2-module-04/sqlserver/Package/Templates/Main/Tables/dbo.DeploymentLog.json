@@ -1,0 +1,13 @@
+{
+  "Schema": "dbo",
+  "Name": "DeploymentLog",
+  "Columns": [
+    { "Name": "Environment", "DataType": "NVARCHAR(50)" },
+    { "Name": "ProductName", "DataType": "NVARCHAR(128)" },
+    { "Name": "ReleaseVersion", "DataType": "NVARCHAR(50)" },
+    { "Name": "EngineVersion", "DataType": "NVARCHAR(128)" }
+  ],
+  "Indexes": [
+    { "Name": "PK_DeploymentLog", "PrimaryKey": true, "Clustered": true, "IndexColumns": "Environment" }
+  ]
+}
