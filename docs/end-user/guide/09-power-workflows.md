@@ -185,6 +185,48 @@ The same `(variant: ...)` suffix appears in WhatIf output, so a dry run tells yo
 
 **Recommendation:** to vary a table's *structure* by target, prefer component-level variants inside a single table file (or give the structurally different tables distinct names). Two separate same-named whole-table variant files will deploy correctly, but SchemaTongs normalizes a table to one file per name on extraction, so a multi-file same-named-table layout isn't reproduced when you re-extract.
 
+### Runtime sentinel skip
+
+Sometimes the skip decision can't be expressed as a static expression in the package at all -- it depends on something only the target server can answer at the moment the script runs. Is this database on a replica? Did a prior script's data migration land correctly? Is this a tenant that hasn't opted into a feature yet? `ShouldApplyExpression` covers those cases when the answer is a SQL query. But if the logic is inside the script itself -- reading row counts, calling a stored procedure, checking a role membership, branching on a version+edition combination -- you need the script to decide at runtime.
+
+Raise the sentinel error and SchemaQuench treats the script as an intentional skip, not a failure:
+
+```sql
+-- SQL Server
+IF SERVERPROPERTY('EngineEdition') NOT IN (5, 8)
+    RAISERROR('SCHEMASMITH: SHOULD NOT APPLY', 16, 1);
+```
+
+```sql
+-- PostgreSQL
+DO $$
+BEGIN
+    IF current_setting('server_version_num')::int < 150000 THEN
+        RAISE EXCEPTION 'SCHEMASMITH: SHOULD NOT APPLY';
+    END IF;
+END;
+$$;
+```
+
+```sql
+-- MySQL
+SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SCHEMASMITH: SHOULD NOT APPLY';
+```
+
+SchemaQuench recognizes the exact message `SCHEMASMITH: SHOULD NOT APPLY` (trimmed, case-insensitive, matched as the entire message). It logs the skip and moves on -- the deployment succeeds. Any other error still surfaces as a real failure.
+
+> **Warning:** SQL Server severity matters. `RAISERROR` at severity ≤ 10 is an informational message, not an error -- SchemaQuench never sees it and the script continues executing. **Use severity ≥ 11** (16 is the conventional choice) so the raise is an abort-level error that SchemaQuench can catch.
+
+**Any batch may carry the sentinel** -- not just the top of the script. Earlier batches that already ran are committed (the engine does not wrap the script in a transaction). The sentinel stops the rest of the script; the work those earlier batches did is preserved. "Do real setup in early batches, then decide later batches shouldn't apply" is fully supported -- you own the partial-work semantics.
+
+**Run-once scripts record a sentinel skip as completed.** A migration script that raises the sentinel is recorded in `CompletedMigrationScripts` just like a script that ran normally -- it will not be retried on the next deployment. The skip decision is per-database, so a database with different state re-evaluates independently.
+
+**Which script surfaces honor the sentinel:** Before/After scripts, object scripts (procedures/views/functions), migration scripts, and `[ALWAYS]` scripts all respect the sentinel. Validation scripts do not -- a validation should express "N/A here" through its own conditional logic, and it must still fail on a real error. Tool-generated SQL does not raise the sentinel; use `ShouldApplyExpression` on the component instead.
+
+Think of the sentinel as the `ShouldApplyExpression` for logic that can only run inside the script. Use `ShouldApplyExpression` when a single SQL expression makes the call; use the sentinel when the script needs to inspect, branch, or call procedures before it can decide.
+
+For the full mechanics -- match rules, per-platform raise forms, slot coverage table -- see [SchemaQuench -- Script-Level Runtime Skip](../reference/schemaquench.md#script-level-runtime-skip).
+
 ## Multi-database products
 
 Some applications span more than one database -- a main transactional database plus a reporting database, or a primary database plus an audit log. SchemaSmith handles this as a single product with multiple templates. One quench, all databases updated.

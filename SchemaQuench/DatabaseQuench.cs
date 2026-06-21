@@ -409,7 +409,28 @@ public class DatabaseQuench
                                 ExecuteScript = (name, script) => { effectiveSilentCmd.CommandText = script; effectiveSilentCmd.ExecuteNonQuery(); },
                                 ProgressLog = SafeProgressLog,
                                 ProgressLogError = SafeProgressLogError,
-                                WhatIf = IsWhatIf
+                                WhatIf = IsWhatIf,
+                                WriteResolvedSqlArtifact = (label, sql) =>
+                                {
+                                    try
+                                    {
+                                        var content = ResolvedSqlArtifactWriter.BuildArtifact(
+                                            $"Failed data delivery: {_server}.{_databaseName}" +
+                                            $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")} [{label}]",
+                                            new List<string> { sql }, failingBatchIndex: 0);
+                                        if (ScrubArtifactsEnabled)
+                                            content = ResolvedSqlArtifactWriter.Scrub(content, SensitiveTokenValues());
+                                        var safeLabel = string.Concat(label.Select(c =>
+                                            Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+                                        var path = ResolvedSqlArtifactWriter.Write(ResolveArtifactDirectory(),
+                                            GetDebugFileName($"Failed DataDelivery {safeLabel}"), content);
+                                        SafeProgressLogError($"    Resolved SQL written to: {path}");
+                                    }
+                                    catch (Exception artifactEx)
+                                    {
+                                        SafeProgressLog($"    Could not write resolved-SQL artifact for data delivery '{label}': {artifactEx.Message}");
+                                    }
+                                }
                             });
                         });
 
@@ -524,6 +545,8 @@ public class DatabaseQuench
         catch (Exception e)
         {
             SafeProgressLogError($"FAILED to quench:\r\n{e.Message}");
+            if (!string.IsNullOrWhiteSpace(_debugFileLocation))
+                SafeProgressLogError($"Debug Script: '{_debugFileLocation}'");
         }
     }
 
@@ -968,6 +991,24 @@ public class DatabaseQuench
         };
     }
 
+    internal string ResolveArtifactDirectory()
+    {
+        var configured = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["ArtifactPath"];
+        return string.IsNullOrWhiteSpace(configured) ? Directory.GetCurrentDirectory() : configured;
+    }
+
+    internal bool ScrubArtifactsEnabled =>
+        FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["ScrubArtifacts"]?.ToLower() == "true";
+
+    internal IReadOnlyList<KeyValuePair<string, string>> SensitiveTokenValues()
+    {
+        var options = LogHygieneOptions.FromConfiguration(FactoryContainer.ResolveOrCreate<IConfigurationRoot>());
+        return _product.ScriptTokens
+            .Concat(_template.ScriptTokens)
+            .Where(kv => LogScrubber.ShouldScrubName(kv.Key, options))
+            .ToList();
+    }
+
     #endregion
 
     #region Platform-Specific Table Quench SQL
@@ -1015,8 +1056,7 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
             }
         }
 
-        _debugFileLocation = GetDebugFileName("Quench Missing Tables And Columns");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Missing Tables And Columns"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1049,8 +1089,7 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             }
         }
 
-        _debugFileLocation = GetDebugFileName("Quench Modified Tables");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Modified Tables"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1097,8 +1136,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             }
         }
 
-        _debugFileLocation = GetDebugFileName("Quench Indexes");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Indexes"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1129,8 +1167,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             }
         }
 
-        _debugFileLocation = GetDebugFileName("Quench Foreign Keys");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Foreign Keys"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1142,8 +1179,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(IterationMaterializedViewSchema)}', {_whatIfOnly}, {updateFillFactor}, '{EscapeSqlLiteral(_template.Name)}', '{EscapeSqlLiteral(_schemaName)}');";
 
-        _debugFileLocation = GetDebugFileName("Quench Materialized Views");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Materialized Views"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1177,8 +1213,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         // proc falls through to today's all-schemas behavior.
         tableCommand.CommandText = $@"EXEC [SchemaSmith].[IndexedViewQuench] @ProductName = '{EscapeSqlLiteral(_product.Name)}', @IndexedViewSchema = '{EscapeSqlLiteral(viewSchema)}', @WhatIf = {_whatIfOnly}, @UpdateFillFactor = {updateFillFactor}, @TemplateName = N'{EscapeSqlLiteral(_template.Name)}', @SchemaName = N'{EscapeSqlLiteral(_schemaName)}';";
 
-        _debugFileLocation = GetDebugFileName("Quench Indexed Views");
-        LogSqlScript(_debugFileLocation, tableCommand.CommandText);
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Indexed Views"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
@@ -1193,8 +1228,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             ? _template.TableSchema
             : JsonHelper.SerializeAll(_template.Tables);
         command.CommandText = $"CALL SchemaSmith_ParseTableJson('{EscapeSqlLiteral(_databaseName)}', @tableJson)";
-        _debugFileLocation = GetDebugFileName("Parse Table Json");
-        LogSqlScript(_debugFileLocation, command.CommandText.Replace("@tableJson", $"'{EscapeSqlLiteral(tableJson)}'"));
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Parse Table Json"), command.CommandText.Replace("@tableJson", $"'{EscapeSqlLiteral(tableJson)}'"));
         AddJsonParameter(command, "@tableJson", tableJson);
         ExecuteNonQueryHandlingMessages(command);
         ClearParameters(command);
@@ -1369,10 +1403,21 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         }
     }
 
-    private static void LogSqlScript(string name, string sql)
+    private string LogSqlScript(string name, string sql)
     {
-        var cwd = AppContext.BaseDirectory;
-        FileWrapper.GetFromFactory().WriteAllText(Path.Combine(cwd, name), sql);
+        try
+        {
+            var dir = ResolveArtifactDirectory();
+            DirectoryWrapper.GetFromFactory().CreateDirectory(dir);
+            var path = Path.Combine(dir, name);
+            FileWrapper.GetFromFactory().WriteAllText(path, sql);
+            return path;
+        }
+        catch (Exception ex)
+        {
+            SafeProgressLog($"    Could not write debug SQL artifact '{name}': {ex.Message}");
+            return "";
+        }
     }
 
     #endregion
@@ -1443,6 +1488,13 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             script.HasBeenQuenched = true;
             script.Error = null;
             if (!showErrors) SafeProgressLog($"    Quenched {script.LogPath}");
+        }
+        catch (Exception ex) when (SentinelClassifier.IsShouldNotApply(ex))
+        {
+            script.HasBeenQuenched = true;
+            script.Error = null;
+            script.Outcome = ScriptOutcome.Skipped;
+            SafeProgressLog($"    Skipped (ShouldNotApply): {script.LogPath}");
         }
         catch (Exception ex)
         {
@@ -1609,15 +1661,37 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     {
         if (scripts.All(x => x.HasBeenQuenched)) return;
 
+        var directory = ResolveArtifactDirectory();
         foreach (var sqlScript in scripts.Where(s => !s.HasBeenQuenched))
         {
-            SafeProgressLogError($"Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}");
-            SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}\r\n\r\n");
-            foreach (var batch in sqlScript.Batches) SafeErrorLogError($"\r\n{batch}");
+            sqlScript.Outcome = ScriptOutcome.Failed;
+
+            try
+            {
+                var header = $"Failed: {_server}.{_databaseName}" +
+                             $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")}" +
+                             $" [{sqlScript.LogPath}] — {sqlScript.Error?.Message}";
+                var content = ResolvedSqlArtifactWriter.BuildArtifact(header, sqlScript.Batches, FailingBatchIndex(sqlScript));
+                if (ScrubArtifactsEnabled)
+                    content = ResolvedSqlArtifactWriter.Scrub(content, SensitiveTokenValues());
+
+                var fileName = GetDebugFileName($"Failed {Path.GetFileNameWithoutExtension(sqlScript.Name)}");
+                var path = ResolvedSqlArtifactWriter.Write(directory, fileName, content);
+                SafeProgressLogError($"    Resolved SQL written to: {path}");
+                SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message} — resolved SQL: {path}");
+            }
+            catch (Exception artifactEx)
+            {
+                SafeProgressLog($"    Could not write resolved-SQL artifact for '{sqlScript.LogPath}': {artifactEx.Message}");
+            }
+
+            SafeProgressLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message}");
         }
 
         throw new Exception("Unable to quench all scripts");
     }
+
+    private static int FailingBatchIndex(SqlScript script) => script.Batches.Count - 1;
 
     /// <summary>
     /// Per-tenant log discipline (design §5.8): when this is a schema-template iteration, every log

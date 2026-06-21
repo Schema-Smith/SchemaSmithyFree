@@ -776,6 +776,131 @@ public class DataDeliveryProcessorTests
             "Regular-template callers must not need to set SchemaName.");
     }
 
+    // ---------- WriteResolvedSqlArtifact callback on merge failure ----------
+
+    [Test]
+    public void DeliverTables_OnMergeFailure_InvokesWriteResolvedSqlArtifact_WithFailingSql()
+    {
+        // Arrange: ExecuteScript throws for the target table so the processor reaches the
+        // merge-failure catch path. Record every callback invocation.
+        var invocations = new List<(string Label, string Sql)>();
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Orders", Schema = "dbo",
+                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "orders.json" }
+            }
+        };
+
+        var context = MakeContext(tables);
+        context.ExecuteScript = (name, script) => throw new Exception("Simulated DB failure");
+        context.WriteResolvedSqlArtifact = (label, sql) => invocations.Add((label, sql));
+
+        // Act: delivery aborts after the failure (circular-fallback catch logs and swallows per-table)
+        processor.DeliverTables(context);
+
+        // Assert: callback fired EXACTLY ONCE despite the table being attempted in both the while
+        // loop and the circular-fallback loop, and carried the table key + generated merge SQL.
+        Assert.That(invocations, Has.Count.EqualTo(1),
+            "WriteResolvedSqlArtifact must fire exactly once per failed table, not once per attempt");
+        Assert.That(invocations[0].Label, Does.Contain("Orders"), "Label must identify the failing table");
+        Assert.That(invocations[0].Sql, Is.Not.Null.And.Not.Empty, "Captured SQL must be non-empty");
+        Assert.That(invocations[0].Sql, Does.Contain("MERGE INTO"), "Captured SQL must be the generated merge script");
+    }
+
+    [Test]
+    public void DeliverTables_OnDeferredMergeFailure_InvokesWriteResolvedSqlArtifactOnce()
+    {
+        // Drives the pass-1 (deferred-column) merge path: a child with a nullable FK to a parent
+        // delivers via the deferred merge first. ExecuteScript throws on the child's merge,
+        // exercising the Site-A (deferred) catch. Assert the callback fires exactly once.
+        var invocations = new List<(string Label, string Sql)>();
+
+        var processor = new DataDeliveryProcessor();
+        var parent = new TestTable
+        {
+            Name = "Employees", Schema = "dbo",
+            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "employees.json" }
+        };
+        var child = new TestTable
+        {
+            Name = "Tasks", Schema = "dbo",
+            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "tasks.json" },
+            DeliverableColumns = new List<IDeliverableColumn>
+            {
+                new TestColumn { Name = "AssigneeId", Nullable = true }
+            },
+            DeliverableForeignKeys = new List<IDeliverableForeignKey>
+            {
+                new TestFK { Columns = "AssigneeId", RelatedTable = "Employees", RelatedTableSchema = "dbo" }
+            }
+        };
+
+        var context = MakeContext(new List<IDeliverableTable> { child, parent });
+        // Fail only the child's merges (the parent delivers fine); the child's pass-1 deferred merge
+        // is the failing one and reaches the Site-A catch.
+        context.ExecuteScript = (name, script) =>
+        {
+            if (name == "Tasks") throw new Exception("Simulated deferred-merge failure");
+        };
+        context.WriteResolvedSqlArtifact = (label, sql) => invocations.Add((label, sql));
+
+        processor.DeliverTables(context);
+
+        Assert.That(invocations, Has.Count.EqualTo(1),
+            "Deferred-path failure must write exactly one artifact for the failing table");
+        Assert.That(invocations[0].Label, Does.Contain("Tasks"));
+        Assert.That(invocations[0].Sql, Is.Not.Null.And.Not.Empty);
+    }
+
+    [Test]
+    public void DeliverTables_OnMergeFailure_ExistingErrorLogStillFires()
+    {
+        // Regression guard: adding the artifact callback must not suppress the existing error log.
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Products", Schema = "dbo",
+                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "products.json" }
+            }
+        };
+
+        var context = MakeContext(tables);
+        context.ExecuteScript = (name, script) => throw new Exception("DB error");
+        context.WriteResolvedSqlArtifact = (_, _) => { };
+
+        processor.DeliverTables(context);
+
+        Assert.That(_logs, Has.Some.Contains("ERROR:").And.Some.Contains("Error delivering"));
+    }
+
+    [Test]
+    public void DeliverTables_OnMergeFailure_NullCallback_DoesNotThrow()
+    {
+        // Null-guard: WhatIf callers and any caller that didn't wire the callback must be unaffected.
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+            }
+        };
+
+        var context = MakeContext(tables);
+        context.ExecuteScript = (name, script) => throw new Exception("DB error");
+        context.WriteResolvedSqlArtifact = null;
+
+        Assert.DoesNotThrow(() => processor.DeliverTables(context),
+            "Null WriteResolvedSqlArtifact must not cause a NullReferenceException");
+    }
+
     // ---------- ResolveContentFilePath separator normalization ----------
     //
     // ContentFile paths may use either separator style; resolution normalizes both to the platform
