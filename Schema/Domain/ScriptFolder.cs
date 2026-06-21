@@ -32,6 +32,12 @@ namespace Schema.Domain
 
         public void LoadSqlFiles(string basePath, List<KeyValuePair<string, string>> scriptTokens, Platform platform = Platform.SqlServer)
         {
+            // The folder's gate expression takes the same script-token pass as its scripts (#260) — and
+            // independently of whether the folder has files — so a gate may reference any resolved token,
+            // not just literal SQL. SchemaName stays per-iteration (resolved at quench time).
+            if (!string.IsNullOrWhiteSpace(ShouldApplyExpression))
+                ShouldApplyExpression = SqlScript.TokenReplace(ShouldApplyExpression, scriptTokens, platform);
+
             var sqlFilePath = Path.Combine(basePath, FolderPath);
             if (!ProductDirectoryWrapper.GetFromFactory().Exists(sqlFilePath)) return;
             var files = ProductDirectoryWrapper.GetFromFactory()

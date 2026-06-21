@@ -1,5 +1,8 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using Newtonsoft.Json;
 using Schema.Domain;
@@ -221,6 +224,83 @@ namespace Schema.UnitTests.Domain
             var clone = original.Clone();
 
             Assert.That(clone.ShouldApplyExpression, Is.EqualTo("SELECT 1"));
+        }
+
+        // ---- ShouldApplyExpression script-token resolution (#260 bug: gate expressions skipped the token pass) ----
+
+        private static string NonexistentBasePath() =>
+            Path.Combine(Path.GetTempPath(), "ss-folder-gate-" + Guid.NewGuid().ToString("N"));
+
+        [Test]
+        public void LoadSqlFiles_ResolvesScriptTokensInShouldApplyExpression()
+        {
+            var folder = new TemplateFolder
+            {
+                FolderPath = "EnvGated",
+                QuenchSlot = TemplateQuenchSlot.Before,
+                ShouldApplyExpression = "'{{EnvType}}' = 'prod'"
+            };
+
+            folder.LoadSqlFiles(NonexistentBasePath(), [new KeyValuePair<string, string>("EnvType", "prod")]);
+
+            Assert.That(folder.ShouldApplyExpression, Is.EqualTo("'prod' = 'prod'"));
+        }
+
+        [Test]
+        public void LoadSqlFiles_ResolvesScriptTokensInShouldApplyExpression_OnProductFolder()
+        {
+            var folder = new ProductFolder
+            {
+                FolderPath = "EnvGated",
+                QuenchSlot = ProductQuenchSlot.Before,
+                ShouldApplyExpression = "'{{EnvType}}' = 'prod'"
+            };
+
+            folder.LoadSqlFiles(NonexistentBasePath(), [new KeyValuePair<string, string>("EnvType", "prod")]);
+
+            Assert.That(folder.ShouldApplyExpression, Is.EqualTo("'prod' = 'prod'"));
+        }
+
+        [Test]
+        public void LoadSqlFiles_WithNullShouldApplyExpression_LeavesItNull()
+        {
+            var folder = new TemplateFolder { FolderPath = "Plain", QuenchSlot = TemplateQuenchSlot.Before };
+
+            folder.LoadSqlFiles(NonexistentBasePath(), [new KeyValuePair<string, string>("EnvType", "prod")]);
+
+            Assert.That(folder.ShouldApplyExpression, Is.Null);
+        }
+
+        [Test]
+        public void LoadSqlFiles_LeavesSchemaNameTokenForPerIterationSubstitution()
+        {
+            // SchemaName is per-iteration (resolved at quench time by DatabaseQuench), so it must NOT
+            // be in the load-time token set and must survive this pass intact.
+            var folder = new TemplateFolder
+            {
+                FolderPath = "SchemaScoped",
+                QuenchSlot = TemplateQuenchSlot.Before,
+                ShouldApplyExpression = "'{{SchemaName}}' = 'tenant_a'"
+            };
+
+            folder.LoadSqlFiles(NonexistentBasePath(), [new KeyValuePair<string, string>("EnvType", "prod")]);
+
+            Assert.That(folder.ShouldApplyExpression, Is.EqualTo("'{{SchemaName}}' = 'tenant_a'"));
+        }
+
+        [Test]
+        public void LoadSqlFiles_WithNoTokensInShouldApplyExpression_LeavesItUnchanged()
+        {
+            var folder = new TemplateFolder
+            {
+                FolderPath = "Plain",
+                QuenchSlot = TemplateQuenchSlot.Before,
+                ShouldApplyExpression = "SELECT CASE WHEN @@version LIKE '%MariaDB%' THEN 1 ELSE 0 END"
+            };
+
+            folder.LoadSqlFiles(NonexistentBasePath(), [new KeyValuePair<string, string>("EnvType", "prod")]);
+
+            Assert.That(folder.ShouldApplyExpression, Is.EqualTo("SELECT CASE WHEN @@version LIKE '%MariaDB%' THEN 1 ELSE 0 END"));
         }
     }
 }
