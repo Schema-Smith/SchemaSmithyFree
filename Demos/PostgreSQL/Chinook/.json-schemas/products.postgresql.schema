@@ -33,6 +33,10 @@
           "ObjectType": {
             "type": "string",
             "pattern": "None|Views|Functions|Procedures|Triggers|Schemas|DataTypes|FullTextCatalogs|FullTextStopLists|XMLSchemaCollections|DDLTriggers|IndexedViews|DomainTypes|EnumTypes|CompositeTypes|TriggerFunctions|WindowFunctions|Aggregates|Sequences|Rules|MaterializedViews|Events"
+          },
+          "ShouldApplyExpression": {
+            "type": "string",
+            "description": "Optional SQL predicate evaluated against the target at deployment time. Blank deploys the folder; a non-blank expression must return a boolean — true deploys the folder, false skips it (logged). Evaluated per target in the target engine's SQL; may read server properties, an environment-type function, a control table, or resolved tokens."
           }
         },
         "additionalProperties": false,

@@ -186,6 +186,7 @@ The deployment engine. Templates run in 9 ordered execution slots, with state-ba
 | IndexedViewQuench (diff-based) | ✓ | n/a | n/a | |
 | MaterializedViewQuench + MissingMaterializedViewIndexesQuench | n/a | ✓ | n/a | |
 | ShouldApplyExpression evaluation | ✓ | ✓ | ✓ | |
+| Conditional folder deployment | ✓ | ✓ | ✓ | `ShouldApplyExpression` on a script folder; per-target, fail-closed |
 | Secondary servers (parallel deploy) | ✓ | n/a | n/a | Availability Group; `Target:SecondaryServers` |
 | `ServerToQuench` per product folder | ✓ | n/a | n/a | Primary / Secondary / Both |
 | Parallel template / database execution | ✓ | ✓ | ✓ | `MaxThreads` 1–20 |

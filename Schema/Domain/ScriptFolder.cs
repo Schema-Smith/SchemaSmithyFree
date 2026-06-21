@@ -18,6 +18,10 @@ namespace Schema.Domain
         [JsonProperty(Order = 1)]
         public string FolderPath { get; set; } = "";
 
+        [SchemaProperty(Description = "Optional SQL predicate evaluated against the target at deployment time. Blank deploys the folder; a non-blank expression must return a boolean — true deploys the folder, false skips it (logged). Evaluated per target in the target engine's SQL; may read server properties, an environment-type function, a control table, or resolved tokens.")]
+        [JsonProperty(Order = 11)]
+        public string ShouldApplyExpression { get; set; }
+
         [SchemaProperty]
         [JsonProperty(Order = 10)]
         [JsonConverter(typeof(StringEnumConverter))]
@@ -49,6 +53,7 @@ namespace Schema.Domain
         {
             clone.FolderPath = FolderPath;
             clone.ObjectType = ObjectType;
+            clone.ShouldApplyExpression = ShouldApplyExpression;
             clone.Scripts.AddRange(Scripts.Select(s => s.Clone()));
             return clone;
         }

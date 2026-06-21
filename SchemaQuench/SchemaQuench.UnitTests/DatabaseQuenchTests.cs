@@ -633,6 +633,186 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region Folder ShouldApplyExpression gating (#260)
+
+    private static IDbCommand GateCommand(System.Func<string, object> scalarFor)
+    {
+        var command = Substitute.For<IDbCommand>();
+        command.ExecuteScalar().Returns(_ => scalarFor(command.CommandText));
+        return command;
+    }
+
+    private static TemplateFolder GatedFolder(string path, TemplateQuenchSlot slot, string expression, string scriptName)
+    {
+        var folder = new TemplateFolder { FolderPath = path, QuenchSlot = slot, ShouldApplyExpression = expression };
+        folder.Scripts.Add(new SqlScript { Name = scriptName });
+        return folder;
+    }
+
+    [Test]
+    public void ApplyFolderGates_DropsFoldersWhoseExpressionIsFalse_KeepsTrueOnes()
+    {
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        template.ScriptFolders.Add(GatedFolder("keep", TemplateQuenchSlot.Before, "KEEP", "keep.sql"));
+        template.ScriptFolders.Add(GatedFolder("skip", TemplateQuenchSlot.Before, "SKIP", "skip.sql"));
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        quench.ApplyFolderGates(GateCommand(sql => sql == "KEEP" ? 1 : 0));
+
+        Assert.That(quench.IterationBeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "keep.sql" }));
+    }
+
+    [Test]
+    public void ApplyFolderGates_SkippedObjectsFolder_RemovedFromBothObjectSlots()
+    {
+        // A folder in the Objects slot feeds both ObjectScripts and AfterTablesObjectScripts; a
+        // gate skip must remove it from both.
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        template.ScriptFolders.Add(GatedFolder("obj", TemplateQuenchSlot.Objects, "SKIP", "obj.sql"));
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        quench.ApplyFolderGates(GateCommand(_ => 0));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(quench.IterationObjectScripts, Is.Empty);
+            Assert.That(quench.IterationAfterTablesObjectScripts, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void ApplyFolderGates_NoExpressions_IsNoOpAndNeverQueries()
+    {
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        template.ScriptFolders.Add(GatedFolder("plain", TemplateQuenchSlot.Before, null, "plain.sql"));
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+        var command = Substitute.For<IDbCommand>();
+
+        quench.ApplyFolderGates(command);
+
+        Assert.That(quench.IterationBeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "plain.sql" }));
+        command.DidNotReceive().ExecuteScalar();
+    }
+
+    [Test]
+    public void ApplyFolderGates_ExpressionThrows_PropagatesFailClosed()
+    {
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        template.ScriptFolders.Add(GatedFolder("bad", TemplateQuenchSlot.Before, "BROKEN", "bad.sql"));
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+        var command = Substitute.For<IDbCommand>();
+        command.ExecuteScalar().Returns(_ => throw new System.InvalidOperationException("syntax error"));
+
+        Assert.Throws<System.InvalidOperationException>(() => quench.ApplyFolderGates(command));
+    }
+
+    [Test]
+    public void ApplyFolderGates_GatedOffMigration_IsProtectedFromObsoletePruning()
+    {
+        // A gated-off folder's run-once migration is still declared in the package, so its tracking
+        // row must NOT be treated as obsolete (and pruned) just because it didn't run this iteration.
+        var baseDir = System.IO.Path.Combine("pkg", "Templates", "T");
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T", FilePath = System.IO.Path.Combine(baseDir, "Template.json") };
+        var gated = new TemplateFolder
+        {
+            FolderPath = "MigrationScripts/Before", QuenchSlot = TemplateQuenchSlot.Before, ShouldApplyExpression = "SKIP"
+        };
+        var migration = new SqlScript
+        {
+            Name = "Migration_1.sql",
+            FilePath = System.IO.Path.Combine(baseDir, "MigrationScripts", "Before", "Migration_1.sql")
+        };
+        gated.Scripts.Add(migration);
+        template.ScriptFolders.Add(gated);
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        quench.ApplyFolderGates(GateCommand(_ => 0)); // gate the folder off
+
+        var gatedPath = quench.GetRelativeScriptPath(migration.LogPath);
+        Assert.Multiple(() =>
+        {
+            Assert.That(quench.IsObsoleteTrackingEntry(gatedPath, quench.IterationBeforeScripts), Is.False,
+                "A gated-off folder's run-once migration must NOT be pruned as obsolete.");
+            Assert.That(quench.IsObsoleteTrackingEntry("MigrationScripts/Before/Removed.sql", quench.IterationBeforeScripts), Is.True,
+                "A genuinely-removed script IS obsolete.");
+        });
+    }
+
+    [Test]
+    public void ApplyFolderGates_RegularTemplate_SurvivingScriptKeepsSameReference()
+    {
+        // Regular template: surviving folder's scripts must remain the SAME SqlScript instances
+        // (filter, not clone) so cross-iteration HasBeenQuenched dedup keeps working.
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var keep = new TemplateFolder { FolderPath = "keep", QuenchSlot = TemplateQuenchSlot.Before, ShouldApplyExpression = "KEEP" };
+        var keepScript = new SqlScript { Name = "keep.sql" };
+        keep.Scripts.Add(keepScript);
+        template.ScriptFolders.Add(keep);
+        template.ScriptFolders.Add(GatedFolder("skip", TemplateQuenchSlot.Before, "SKIP", "skip.sql"));
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        quench.ApplyFolderGates(GateCommand(sql => sql == "KEEP" ? 1 : 0));
+
+        Assert.That(quench.IterationBeforeScripts.Single(), Is.SameAs(keepScript));
+    }
+
+    [Test]
+    public void ApplyFolderGates_SchemaTemplate_SurvivingScriptIsCloned()
+    {
+        // Schema template: survivors are cloned (so {{SchemaName}} substitution is per-iteration);
+        // the iteration script must NOT be the template's instance.
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var keep = new TemplateFolder { FolderPath = "keep", QuenchSlot = TemplateQuenchSlot.Before, ShouldApplyExpression = "KEEP" };
+        var keepScript = new SqlScript { Name = "keep.sql" };
+        keep.Scripts.Add(keepScript);
+        template.ScriptFolders.Add(keep);
+        template.ScriptFolders.Add(GatedFolder("skip", TemplateQuenchSlot.Before, "SKIP", "skip.sql"));
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        quench.ApplyFolderGates(GateCommand(sql => sql == "KEEP" ? 1 : 0));
+
+        Assert.That(quench.IterationBeforeScripts.Single(), Is.Not.SameAs(keepScript));
+    }
+
+    [Test]
+    public void ApplyFolderGates_SchemaTemplate_SubstitutesSchemaNameBeforeEvaluating()
+    {
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        template.ScriptFolders.Add(GatedFolder("eu", TemplateQuenchSlot.Before, "CHECK {{SchemaName}}", "eu.sql"));
+        var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
+            false, "0", false, "0", "0", false, false, null);
+        quench.PrepareIterationContent();
+
+        // Only the schema-substituted form should be the query; gate true for tenant_a.
+        quench.ApplyFolderGates(GateCommand(sql => sql == "CHECK tenant_a" ? 1 : 0));
+
+        Assert.That(quench.IterationBeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "eu.sql" }));
+    }
+
+    #endregion
+
     #region QuenchOneScript Tests
 
     [Test]
