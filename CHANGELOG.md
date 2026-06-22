@@ -6,6 +6,10 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ## [Unreleased]
 
+### Fixed
+
+- **Phantom column-modify / primary-key drop+recreate on every quench for hand-authored decimal/numeric columns.** A column whose authored `DataType` differed from the engine's canonical spelling only by whitespace (e.g. `numeric(10,2)` vs `numeric(10, 2)`, a space before/inside the parens) or by the `DECIMAL`/`NUMERIC` synonym was wrongly detected as "modified" on every quench, re-altering the column — and on PostgreSQL and SQL Server drop/recreating any dependent primary key — so the deployment was never idempotent. The type-string comparison now normalizes whitespace around the structural delimiters and treats `DECIMAL` and `NUMERIC` as equivalent before comparing (the emitted DDL still uses the authored spelling verbatim). Affected all three engines. On MySQL the normalization is guarded so it never applies to `ENUM`/`SET`, whose parenthesized content is string values where whitespace is significant. — (#PENDING)
+
 ## [v2.1.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.1.0) — 2026-06-22
 
 ### Added

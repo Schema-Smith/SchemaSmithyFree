@@ -383,9 +383,9 @@ BEGIN
                                                     AND ec2."ColumnName" = c."Name"                                                    
                       WHERE c."TableSchema" = ec."TableSchema"
                         AND c."TableName" = ec."TableName"
-                        AND ((c."Name" = ec."ColumnName" AND UPPER(c."DataType") != UPPER(ec."DataType"))
+                        AND ((c."Name" = ec."ColumnName" AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(ec."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC'))
                           OR (c."Name" = ec."ColumnName" AND ec."Virtual" AND c."GenerationExpression" = '')
-                          OR (c."Name" != ec."ColumnName" AND (UPPER(ec2."DataType") != UPPER(c."DataType") OR COALESCE(ec2."Collation", '') != COALESCE(c."Collation", '')) AND ec."GenerationExpression" LIKE '%' || c."Name" || '%')))
+                          OR (c."Name" != ec."ColumnName" AND (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(ec2."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') OR COALESCE(ec2."Collation", '') != COALESCE(c."Collation", '')) AND ec."GenerationExpression" LIKE '%' || c."Name" || '%')))
          AND EXISTS (SELECT 1
                        FROM information_schema.columns ic
                        WHERE ic.table_schema = ec."TableSchema"
@@ -442,7 +442,7 @@ BEGIN
                       WHERE c."TableSchema" = ec."TableSchema"
                         AND c."TableName" = ec."TableName"
                         AND c."Name" = ec."ColumnName"
-                        AND UPPER(c."DataType") != UPPER(ec."DataType"));
+                        AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(ec."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC'));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Add New Physical Columns Switched From Generated';
@@ -491,7 +491,7 @@ BEGIN
                                 AND ic2.column_name = ic."Name")
                 AND ic."TableSchema" = c."TableSchema"
                 AND ic."TableName" = c."TableName"
-                AND (UPPER(ic."DataType") != UPPER(iec."DataType")
+                AND (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(ic."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(iec."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
                   OR ic."Nullable" != iec."Nullable"
                   OR COALESCE(ic."Default", '') != COALESCE(iec."Default", '')
                   OR COALESCE(ic."Collation", '') != COALESCE(iec."Collation", '')
@@ -501,7 +501,7 @@ BEGIN
                   OR (COALESCE(ic."Compression", '') != '' AND COALESCE(ic."Compression", '') != COALESCE(iec."Compression", '')))) || ')'';' || CHR(10) ||
            'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '"' || CHR(10) ||
            STRING_AGG(RTRIM(TRIM(TRAILING ',' FROM
-                      CASE WHEN UPPER(c."DataType") != UPPER(ec."DataType") OR COALESCE(c."Collation", '') != COALESCE(ec."Collation", '')
+                      CASE WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(ec."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') OR COALESCE(c."Collation", '') != COALESCE(ec."Collation", '')
                            THEN ' ALTER COLUMN "' || c."Name" || '" SET DATA TYPE ' || c."DataType" ||
                                                     CASE WHEN COALESCE(c."Collation", '') != '' THEN ' COLLATE "' || c."Collation" || '"' ELSE '' END || ','
                            ELSE '' END ||
@@ -535,7 +535,7 @@ BEGIN
                       WHERE ic.table_schema = c."TableSchema"
                         AND ic.table_name = c."TableName"
                         AND ic.column_name = c."Name")
-        AND (UPPER(c."DataType") != UPPER(ec."DataType")
+        AND (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(ec."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
           OR c."Nullable" != ec."Nullable"
           OR COALESCE(c."Default", '') != COALESCE(ec."Default", '')
           OR COALESCE(c."Collation", '') != COALESCE(ec."Collation", '')

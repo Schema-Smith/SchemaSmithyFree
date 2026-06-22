@@ -165,7 +165,7 @@ BEGIN TRY
     LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[name] = SchemaSmith.fn_StripBracketWrapping(c.ColumnName)
                                                  AND mc.[object_id] = OBJECT_ID(C.[Schema] + '.' + C.[TableName])
     WHERE t.NewTable = 0
-      AND (REPLACE(UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
+      AND (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
                                            THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
                                            WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
                                            THEN  '(' + CONVERT(NVARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(NVARCHAR(20), NUMERIC_SCALE) + ')'
@@ -179,7 +179,7 @@ BEGIN TRY
                                       CASE WHEN ident.column_id IS NOT NULL
                                            THEN ' IDENTITY(' + CONVERT(NVARCHAR(20), ident.seed_value) + ', ' + CONVERT(NVARCHAR(20), ident.increment_value) + ')' +
                                                 CASE WHEN ident.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
-                                           ELSE '' END, ', ', ',')  <> REPLACE(c.DataType, ', ', ',')
+                                           ELSE '' END), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')  <> REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
         OR CASE WHEN c.Nullable = 1 THEN 'YES' ELSE 'NO' END <> ic.IS_NULLABLE
         OR ISNULL(SchemaSmith.fn_StripParenWrapping(cc.[definition]), '') <> ISNULL(c.ComputedExpression, '')
         OR ISNULL(cc.is_persisted, 0) <> ISNULL(c.[Persisted], 0))
