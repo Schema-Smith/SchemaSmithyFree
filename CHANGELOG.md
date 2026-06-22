@@ -6,7 +6,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ## [Unreleased]
 
-## [v2.1.0]
+## [v2.1.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.1.0) — 2026-06-22
 
 ### Added
 
