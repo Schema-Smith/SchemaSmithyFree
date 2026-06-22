@@ -1,0 +1,13 @@
+{
+  "Schema": "public",
+  "Name": "datacatalog",
+  "Columns": [
+    { "Name": "tablename", "DataType": "VARCHAR(256)" },
+    { "Name": "columnname", "DataType": "VARCHAR(256)" },
+    { "Name": "classification", "DataType": "VARCHAR(64)", "Nullable": true },
+    { "Name": "owningteam", "DataType": "VARCHAR(64)" }
+  ],
+  "Indexes": [
+    { "Name": "pk_datacatalog", "PrimaryKey": true, "IndexColumns": "tablename,columnname" }
+  ]
+}

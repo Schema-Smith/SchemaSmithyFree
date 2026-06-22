@@ -1,0 +1,14 @@
+{
+  "Schema": "dbo",
+  "Name": "Customer",
+  "Extensions": { "OwningTeam": "Identity" },
+  "Columns": [
+    { "Name": "CustomerId", "DataType": "INT" },
+    { "Name": "Email", "DataType": "NVARCHAR(256)", "Extensions": { "Classification": "PII" } },
+    { "Name": "Ssn", "DataType": "CHAR(11)", "Extensions": { "Classification": "PII" } },
+    { "Name": "DisplayName", "DataType": "NVARCHAR(128)", "Extensions": { "Classification": "Internal" } }
+  ],
+  "Indexes": [
+    { "Name": "PK_Customer", "PrimaryKey": true, "Clustered": true, "IndexColumns": "CustomerId" }
+  ]
+}

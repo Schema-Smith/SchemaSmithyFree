@@ -1,0 +1,12 @@
+{
+  "Name": "`DataCatalog`",
+  "Columns": [
+    { "Name": "`TableName`", "DataType": "VARCHAR(256)" },
+    { "Name": "`ColumnName`", "DataType": "VARCHAR(256)" },
+    { "Name": "`Classification`", "DataType": "VARCHAR(64)", "Nullable": true },
+    { "Name": "`OwningTeam`", "DataType": "VARCHAR(64)" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`TableName`,`ColumnName`" }
+  ]
+}
