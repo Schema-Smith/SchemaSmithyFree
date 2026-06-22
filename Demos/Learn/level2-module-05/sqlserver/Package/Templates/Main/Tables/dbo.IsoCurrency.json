@@ -1,0 +1,17 @@
+{
+  "Schema": "dbo",
+  "Name": "IsoCurrency",
+  "Columns": [
+    { "Name": "Code", "DataType": "CHAR(3)" },
+    { "Name": "CurrencyName", "DataType": "NVARCHAR(64)" },
+    { "Name": "IsoNumber", "DataType": "INT" }
+  ],
+  "Indexes": [
+    { "Name": "PK_IsoCurrency", "PrimaryKey": true, "Clustered": true, "IndexColumns": "Code" }
+  ],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.IsoCurrency.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "Code"
+  }
+}
