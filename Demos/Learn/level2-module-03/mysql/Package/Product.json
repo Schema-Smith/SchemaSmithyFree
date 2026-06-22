@@ -1,0 +1,10 @@
+{
+  "Name": "OrderService",
+  "ValidationScript": "SELECT CASE WHEN EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'learn') THEN 1 ELSE 0 END",
+  "TemplateOrder": ["Main"],
+  "ScriptTokens": {
+    "Environment": "Development"
+  },
+  "ScriptFolders": [],
+  "Platform": "MySQL"
+}

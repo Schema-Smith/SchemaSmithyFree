@@ -1,0 +1,13 @@
+{
+  "Schema": "dbo",
+  "Name": "Orders",
+  "Columns": [
+    { "Name": "OrderId", "DataType": "INT" },
+    { "Name": "Region", "DataType": "NVARCHAR(20)" },
+    { "Name": "CreatedAt", "DataType": "DATETIME2(0)", "Default": "SYSUTCDATETIME()" }
+  ],
+  "Indexes": [
+    { "Name": "PK_Orders", "PrimaryKey": true, "Clustered": true, "IndexColumns": "OrderId" },
+    { "Name": "IX_Orders_Region", "IndexColumns": "Region", "ShouldApplyExpression": "'{{Environment}}' = 'Production'" }
+  ]
+}

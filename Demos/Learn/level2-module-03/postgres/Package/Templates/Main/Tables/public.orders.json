@@ -1,0 +1,13 @@
+{
+  "Schema": "public",
+  "Name": "orders",
+  "Columns": [
+    { "Name": "orderid", "DataType": "INT" },
+    { "Name": "region", "DataType": "VARCHAR(20)" },
+    { "Name": "createdat", "DataType": "TIMESTAMP", "Default": "now()" }
+  ],
+  "Indexes": [
+    { "Name": "pk_orders", "PrimaryKey": true, "IndexColumns": "orderid" },
+    { "Name": "ix_orders_region", "IndexColumns": "region", "ShouldApplyExpression": "'{{Environment}}' = 'Production'" }
+  ]
+}
