@@ -1,0 +1,11 @@
+{
+  "Name": "Customer",
+  "Columns": [
+    { "Name": "CustomerId", "DataType": "INT", "AutoIncrement": true },
+    { "Name": "Name", "DataType": "VARCHAR(100)" },
+    { "Name": "Email", "DataType": "VARCHAR(200)" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "CustomerId" }
+  ]
+}

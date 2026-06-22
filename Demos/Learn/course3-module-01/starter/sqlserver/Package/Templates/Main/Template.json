@@ -1,0 +1,5 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT name FROM sys.databases WHERE name = 'ordersservice_dev'",
+  "ScriptFolders": []
+}
