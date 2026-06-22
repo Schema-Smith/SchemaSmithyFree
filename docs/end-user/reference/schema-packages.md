@@ -155,6 +155,7 @@ The array is an explicit replacement, not a merge. The moment you provide `Scrip
 | `FolderPath` | string | Yes | Relative path under the template directory. Forward or back slashes both work. |
 | `QuenchSlot` | string | Yes | Which execution slot the folder runs in. See [Quench Slot Reference](#quench-slot-reference) below for valid values. |
 | `ObjectType` | string | No | When the folder contains programmable objects (functions, views, procedures, triggers, etc.), tag it with the corresponding object type so SchemaQuench can route it through the dependency-retry loop correctly. |
+| `ShouldApplyExpression` | string | No | Optional SQL predicate evaluated against the target at deploy time (tokens resolved first): true deploys the folder, false skips it (logged), blank always deploys. See [Conditional Deployment](schemaquench.md#shouldapplyexpression-and-conditional-deployment). |
 
 ### Example -- adding a custom folder for an extra migration step
 
@@ -185,7 +186,7 @@ Custom script folders are how you make the schema package fit *your* deployment 
 
 ### Custom product-level folders
 
-`Product.json` can also declare custom folders via its `ScriptFolders` array (the property name is the same as `Template.json`'s). The shape is similar but uses `ProductQuenchSlot` (`Before` or `After`) and supports a `ServerToQuench` setting that controls whether the folder runs on the primary, secondaries, or both. See [Secondary Servers](#secondary-servers) below.
+`Product.json` can also declare custom folders via its `ScriptFolders` array (the property name is the same as `Template.json`'s). The shape is similar but uses `ProductQuenchSlot` (`Before` or `After`) and supports a `ServerToQuench` setting that controls whether the folder runs on the primary, secondaries, or both. See [Secondary Servers](#secondary-servers) below. Product folders also accept a `ShouldApplyExpression`, evaluated per server against the admin connection -- see [Conditional Deployment](schemaquench.md#shouldapplyexpression-and-conditional-deployment).
 
 ---
 
