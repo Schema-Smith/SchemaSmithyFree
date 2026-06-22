@@ -2,7 +2,7 @@
 
 *Terraform for SQL Server, Postgres, and MySQL databases*
 
-> **SchemaSmith v2.1.0 released.** Schema Templates — fan one package out across many schemas or tenants — plus per-environment folder deployment, runtime script skips, and sensitive-value log hygiene. [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.1.0) · [CHANGELOG](https://github.com/Schema-Smith/SchemaSmith/blob/main/CHANGELOG.md)
+> **SchemaSmith v2.1.0 released.** Schema Templates — fan one package out across many schemas or tenants — plus per-environment folder deployment, runtime script skips, and sensitive-value log hygiene. [Read the v2.1.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/281) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.1.0) · [CHANGELOG](https://github.com/Schema-Smith/SchemaSmith/blob/main/CHANGELOG.md)
 
 ![Build](https://github.com/Schema-Smith/SchemaSmith/actions/workflows/continuous-integration.yml/badge.svg)
 [![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/releases/latest)
