@@ -6,6 +6,8 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ## [Unreleased]
 
+## [v2.1.0]
+
 ### Added
 
 - **Folder-level conditional deployment (`ShouldApplyExpression` on folders).** Any product- or template-level script folder can now carry a `ShouldApplyExpression` — a SQL predicate evaluated against the target at deployment time. Blank deploys the folder (unchanged); a non-blank expression that returns true deploys it, false skips it (logged). The expression is arbitrary SQL in the target engine — read `SERVERPROPERTY`/`@@version`, call your own environment-type function, query a control table, or reference resolved tokens (including `{{SchemaName}}` on schema templates). Common uses: a `MariaDB/` vs `MySQL/` folder split by `@@version`, skipping `Jobs/` on Azure SQL, or keeping `TableData/TestData/` out of production. Evaluated per target; a malformed or erroring expression fails the deployment rather than silently skipping the folder. Same mental model as object-level `ShouldApplyExpression`, lifted to the folder. Cross-platform (SQL Server, PostgreSQL, MySQL). See [ShouldApplyExpression and Conditional Deployment](docs/end-user/reference/schemaquench.md#shouldapplyexpression-and-conditional-deployment) in the SchemaQuench reference. — #260
