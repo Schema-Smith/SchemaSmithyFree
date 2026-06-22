@@ -1,0 +1,11 @@
+{
+  "Name": "TenantCRM",
+  "ValidationScript": "SELECT CASE WHEN DB_ID('{{TenantCRMDb}}') IS NOT NULL THEN 1 ELSE 0 END",
+  "TemplateOrder": ["Shared", "TenantWorkspace"],
+  "ScriptTokens": {
+    "TenantCRMDb": "learn",
+    "ReleaseVersion": "1.0.0"
+  },
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}

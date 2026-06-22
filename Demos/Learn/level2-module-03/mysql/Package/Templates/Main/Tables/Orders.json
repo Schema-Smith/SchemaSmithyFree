@@ -1,0 +1,12 @@
+{
+  "Name": "`Orders`",
+  "Columns": [
+    { "Name": "`OrderId`", "DataType": "INT" },
+    { "Name": "`Region`", "DataType": "VARCHAR(20)" },
+    { "Name": "`CreatedAt`", "DataType": "TIMESTAMP", "Default": "CURRENT_TIMESTAMP" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`OrderId`" },
+    { "Name": "ix_orders_region", "IndexColumns": "`Region`", "ShouldApplyExpression": "'{{Environment}}' = 'Production'" }
+  ]
+}

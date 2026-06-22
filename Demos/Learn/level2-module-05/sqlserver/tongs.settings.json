@@ -1,0 +1,15 @@
+{
+  "Source": {
+    "Server": "localhost,11433",
+    "User": "sa",
+    "Password": "Learn!Passw0rd",
+    "Database": "learn",
+    "Platform": "SqlServer",
+    "ConnectionProperties": { "TrustServerCertificate": "True" }
+  },
+  "ContentPath": "./cast",
+  "ScriptPath": "./cast",
+  "Tables": [
+    { "Name": "dbo.IsoCurrency", "KeyColumns": "Code" }
+  ]
+}

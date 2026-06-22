@@ -1,0 +1,12 @@
+{
+  "Name": "DeploymentLog",
+  "Columns": [
+    { "Name": "Environment", "DataType": "VARCHAR(50)" },
+    { "Name": "ProductName", "DataType": "VARCHAR(128)" },
+    { "Name": "ReleaseVersion", "DataType": "VARCHAR(50)" },
+    { "Name": "EngineVersion", "DataType": "VARCHAR(128)" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "Environment" }
+  ]
+}

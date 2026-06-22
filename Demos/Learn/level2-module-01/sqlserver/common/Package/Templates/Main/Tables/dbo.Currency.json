@@ -1,0 +1,11 @@
+{
+  "Schema": "dbo",
+  "Name": "Currency",
+  "Columns": [
+    { "Name": "Code", "DataType": "CHAR(3)" },
+    { "Name": "Name", "DataType": "NVARCHAR(50)" }
+  ],
+  "Indexes": [
+    { "Name": "PK_Currency", "PrimaryKey": true, "Clustered": true, "IndexColumns": "Code" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "Name": "Currency",
+  "Columns": [
+    { "Name": "Code", "DataType": "CHAR(3)" },
+    { "Name": "Name", "DataType": "VARCHAR(50)" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "Code" }
+  ]
+}

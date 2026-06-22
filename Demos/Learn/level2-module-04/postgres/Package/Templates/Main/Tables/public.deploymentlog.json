@@ -1,0 +1,13 @@
+{
+  "Schema": "public",
+  "Name": "deploymentlog",
+  "Columns": [
+    { "Name": "environment", "DataType": "VARCHAR(50)" },
+    { "Name": "product_name", "DataType": "VARCHAR(128)" },
+    { "Name": "release_version", "DataType": "VARCHAR(50)" },
+    { "Name": "engine_version", "DataType": "VARCHAR(128)" }
+  ],
+  "Indexes": [
+    { "Name": "pk_deploymentlog", "PrimaryKey": true, "IndexColumns": "environment" }
+  ]
+}

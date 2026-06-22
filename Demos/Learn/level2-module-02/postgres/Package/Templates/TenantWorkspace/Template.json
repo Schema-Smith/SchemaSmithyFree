@@ -1,0 +1,11 @@
+{
+  "Name": "TenantWorkspace",
+  "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datname = '{{TenantCRMDb}}'",
+  "SchemaIdentificationScript": "SELECT name FROM public.tenants WHERE status = 'Active' ORDER BY name",
+  "CreateSchemaIfMissing": true,
+  "AllowParallel": true,
+  "ContinueOnSchemaFailure": true,
+  "RequireAtLeastOneTarget": false,
+  "VersionStampScript": "DO $$\nBEGIN\nRAISE NOTICE 'TenantCRM TenantWorkspace [{{SchemaName}}] {{ReleaseVersion}}';\nEND;\n$$;",
+  "ScriptFolders": []
+}

@@ -1,0 +1,13 @@
+{
+  "Schema": "dbo",
+  "Name": "DataCatalog",
+  "Columns": [
+    { "Name": "TableName", "DataType": "NVARCHAR(256)" },
+    { "Name": "ColumnName", "DataType": "NVARCHAR(256)" },
+    { "Name": "Classification", "DataType": "NVARCHAR(64)", "Nullable": true },
+    { "Name": "OwningTeam", "DataType": "NVARCHAR(64)" }
+  ],
+  "Indexes": [
+    { "Name": "PK_DataCatalog", "PrimaryKey": true, "Clustered": true, "IndexColumns": "TableName,ColumnName" }
+  ]
+}

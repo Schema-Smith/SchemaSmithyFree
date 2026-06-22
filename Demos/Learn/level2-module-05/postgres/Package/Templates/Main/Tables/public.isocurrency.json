@@ -1,0 +1,17 @@
+{
+  "Schema": "public",
+  "Name": "isocurrency",
+  "Columns": [
+    { "Name": "code", "DataType": "CHAR(3)" },
+    { "Name": "currency_name", "DataType": "VARCHAR(64)" },
+    { "Name": "iso_number", "DataType": "INT" }
+  ],
+  "Indexes": [
+    { "Name": "pk_isocurrency", "PrimaryKey": true, "IndexColumns": "code" }
+  ],
+  "DataDelivery": {
+    "ContentFile": "data/public.isocurrency.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "code"
+  }
+}

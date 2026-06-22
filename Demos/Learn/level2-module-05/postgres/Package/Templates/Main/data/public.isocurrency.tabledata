@@ -1,0 +1,7 @@
+[
+{"code":"USD","currency_name":"US Dollar","iso_number":840},
+{"code":"EUR","currency_name":"Euro","iso_number":978},
+{"code":"GBP","currency_name":"Pound Sterling","iso_number":826},
+{"code":"JPY","currency_name":"Yen","iso_number":392},
+{"code":"CAD","currency_name":"Canadian Dollar","iso_number":124}
+]
