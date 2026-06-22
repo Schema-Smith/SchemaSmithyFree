@@ -178,10 +178,11 @@ The same `(variant: ...)` suffix appears in WhatIf output, so a dry run tells yo
 
 ### Conditional deployment: whole table vs. within a table
 
-`ShouldApplyExpression` works at two levels, and it helps to keep them straight:
+`ShouldApplyExpression` works at more than one level, and it helps to keep them straight:
 
 - **Within a table.** Columns, indexes, foreign keys, check constraints, statistics, and the other components inside a table file can each declare conditional variants -- same name, mutually exclusive expressions -- and the matching one is chosen per target. These variant sets are fully preserved when SchemaTongs re-extracts the table.
 - **The whole table.** A table-level `ShouldApplyExpression` gates the entire table present-or-absent on a given target, and that gating round-trips through extraction too.
+- **A whole folder.** A product- or template-level script folder can carry a `ShouldApplyExpression`, so an entire folder of scripts deploys or is skipped per target -- a `MariaDB/` variant gated on `@@version`, a `Jobs/` folder skipped on Azure SQL, or `TableData/TestData/` kept out of production. Its tokens are resolved before evaluation, like every other gate. See [Conditional Deployment](../reference/schemaquench.md#shouldapplyexpression-and-conditional-deployment).
 
 **Recommendation:** to vary a table's *structure* by target, prefer component-level variants inside a single table file (or give the structurally different tables distinct names). Two separate same-named whole-table variant files will deploy correctly, but SchemaTongs normalizes a table to one file per name on extraction, so a multi-file same-named-table layout isn't reproduced when you re-extract.
 

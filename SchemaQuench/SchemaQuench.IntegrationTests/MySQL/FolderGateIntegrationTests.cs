@@ -1,5 +1,8 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
+using System.Collections.Generic;
+using System.IO;
 using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -44,4 +47,27 @@ public class FolderGateIntegrationTests
                 Is.True, "A real predicate returning Int64 evaluates true on MySQL.");
         });
     }
+
+    [Test]
+    public void FolderGate_LiveMySql_EvaluatesResolvedScriptToken()
+    {
+        // #260 fix: a gate may reference a script token, which is resolved before evaluation.
+        // Pre-fix the unresolved '{{EnvType}}' would never equal 'prod' and the gate would read false.
+        var folder = new TemplateFolder
+        {
+            FolderPath = "EnvGated",
+            QuenchSlot = TemplateQuenchSlot.Before,
+            ShouldApplyExpression = "SELECT CASE WHEN '{{EnvType}}' = 'prod' THEN 1 ELSE 0 END"
+        };
+        folder.LoadSqlFiles(NonexistentBasePath(), [new KeyValuePair<string, string>("EnvType", "prod")], Platform.MySQL);
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        Assert.That(FolderGate.ShouldApply(cmd, folder.ShouldApplyExpression), Is.True);
+    }
+
+    private static string NonexistentBasePath() =>
+        Path.Combine(Path.GetTempPath(), "ss-folder-gate-" + Guid.NewGuid().ToString("N"));
 }

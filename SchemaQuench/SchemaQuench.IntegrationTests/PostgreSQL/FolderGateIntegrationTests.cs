@@ -1,5 +1,8 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
+using System.Collections.Generic;
+using System.IO;
 using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -43,4 +46,27 @@ public class FolderGateIntegrationTests
                 Is.True, "A real native-boolean predicate evaluates true on PostgreSQL.");
         });
     }
+
+    [Test]
+    public void FolderGate_LivePostgreSql_EvaluatesResolvedScriptToken()
+    {
+        // #260 fix: a gate may reference a script token, which is resolved before evaluation.
+        // Pre-fix the unresolved '{{EnvType}}' would never equal 'prod' and the gate would read false.
+        var folder = new TemplateFolder
+        {
+            FolderPath = "EnvGated",
+            QuenchSlot = TemplateQuenchSlot.Before,
+            ShouldApplyExpression = "SELECT '{{EnvType}}' = 'prod'"
+        };
+        folder.LoadSqlFiles(NonexistentBasePath(), [new KeyValuePair<string, string>("EnvType", "prod")], Platform.PostgreSQL);
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        Assert.That(FolderGate.ShouldApply(cmd, folder.ShouldApplyExpression), Is.True);
+    }
+
+    private static string NonexistentBasePath() =>
+        Path.Combine(Path.GetTempPath(), "ss-folder-gate-" + Guid.NewGuid().ToString("N"));
 }
