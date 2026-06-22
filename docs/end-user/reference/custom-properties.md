@@ -149,7 +149,7 @@ Custom property tokens resolve anywhere script tokens resolve -- `ShouldApplyExp
     {
       "Name": "[IX_Orders_CreatedDate]",
       "IndexColumns": "[CreatedDate]",
-      "ShouldApplyExpression": "SELECT CASE WHEN '{{Table.Environment}}' = 'Production' THEN 1 ELSE 0 END"
+      "ShouldApplyExpression": "'{{Table.Environment}}' = 'Production'"
     }
   ]
 }
@@ -189,7 +189,7 @@ At quench time, the index applies only on the database whose deployment is flagg
   "Extensions": {
     "PII": "true"
   },
-  "ShouldApplyExpression": "SELECT CASE WHEN '{{PII}}' = 'true' AND '{{Table.Environment}}' = 'NonProd' THEN 0 ELSE 1 END"
+  "ShouldApplyExpression": "NOT ('{{PII}}' = 'true' AND '{{Table.Environment}}' = 'NonProd')"
 }
 ```
 

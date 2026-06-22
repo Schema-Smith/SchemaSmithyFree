@@ -153,7 +153,7 @@ Anything you put in an `Extensions` object on a table component is also availabl
     {
       "Name": "[IX_Orders_CreatedDate]",
       "IndexColumns": "[CreatedDate]",
-      "ShouldApplyExpression": "SELECT CASE WHEN '{{Table.Environment}}' = 'Production' THEN 1 ELSE 0 END"
+      "ShouldApplyExpression": "'{{Table.Environment}}' = 'Production'"
     }
   ]
 }
