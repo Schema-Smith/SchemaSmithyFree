@@ -109,7 +109,7 @@ Tokens aren't just for deployment parameters. Custom metadata you attach to your
     {
       "Name": "[IX_Orders_AuditCreatedAt]",
       "IndexColumns": "[CreatedAt]",
-      "ShouldApplyExpression": "SELECT CASE WHEN '{{Table.Environment}}' = 'Production' THEN 1 ELSE 0 END"
+      "ShouldApplyExpression": "'{{Table.Environment}}' = 'Production'"
     }
   ]
 }
@@ -128,7 +128,7 @@ See [Custom Properties](../reference/custom-properties.md) for the full mechanis
   "Name": "[LargeTextColumn]",
   "DataType": "NVARCHAR(MAX)",
   "Nullable": true,
-  "ShouldApplyExpression": "SELECT CASE WHEN SERVERPROPERTY('EngineEdition') IN (5, 8) THEN 0 ELSE 1 END"
+  "ShouldApplyExpression": "SERVERPROPERTY('EngineEdition') NOT IN (5, 8)"
 }
 ```
 
@@ -138,7 +138,7 @@ This column exists on on-prem SQL Server but not Azure SQL Database. One table d
 {
   "Name": "[IX_Orders_ReplicaOptimized]",
   "IndexColumns": "[OrderDate], [CustomerId]",
-  "ShouldApplyExpression": "SELECT CASE WHEN DB_NAME() LIKE '%_replica' THEN 1 ELSE 0 END"
+  "ShouldApplyExpression": "DB_NAME() LIKE '%_replica'"
 }
 ```
 
@@ -157,13 +157,13 @@ When a component carries several same-named variants gated by mutually exclusive
     "VariantName": "Modern engines",
     "IndexColumns": "[Region]",
     "FilterExpression": "[Region] IS NOT NULL",
-    "ShouldApplyExpression": "SELECT CASE WHEN SERVERPROPERTY('ProductMajorVersion') >= 16 THEN 1 ELSE 0 END"
+    "ShouldApplyExpression": "SERVERPROPERTY('ProductMajorVersion') >= 16"
   },
   {
     "Name": "[IX_Orders_Region]",
     "VariantName": "Legacy engines",
     "IndexColumns": "[Region]",
-    "ShouldApplyExpression": "SELECT CASE WHEN SERVERPROPERTY('ProductMajorVersion') >= 16 THEN 0 ELSE 1 END"
+    "ShouldApplyExpression": "SERVERPROPERTY('ProductMajorVersion') < 16"
   }
 ]
 ```

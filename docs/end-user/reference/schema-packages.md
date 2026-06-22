@@ -908,7 +908,7 @@ Dev uses synthetic data and a lean index set. Staging mirrors production's footp
     {
       "Name": "[IX_Orders_Reporting]",
       "IndexColumns": "[ReportingDate]",
-      "ShouldApplyExpression": "SELECT CASE WHEN '{{Table.Environment}}' = 'Production' THEN 1 ELSE 0 END"
+      "ShouldApplyExpression": "'{{Table.Environment}}' = 'Production'"
     }
   ]
 }
