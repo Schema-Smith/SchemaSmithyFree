@@ -246,7 +246,15 @@ BEGIN
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
           AND (
-              UPPER(isc.COLUMN_TYPE) != UPPER(c.DataType)
+              -- Normalize whitespace adjacent to structural delimiters and the DECIMAL/NUMERIC
+              -- synonym so a hand-authored type that differs only by spacing/synonym is not a
+              -- false "modified". Guarded for ENUM/SET, whose parenthesized content is string
+              -- values where whitespace is meaningful (normalizing could miss a real change).
+              CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
+                     OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
+                   THEN UPPER(isc.COLUMN_TYPE) != UPPER(c.DataType)
+                   ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
+                     != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') END
               OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)
               OR (isc.IS_NULLABLE = 'NO' AND c.IsNullable = 1)
               -- Default value changes (strip outer single quotes from JSON default for comparison,
@@ -290,7 +298,15 @@ BEGIN
                        AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
                   )
                   AND (
-                      UPPER(isc.COLUMN_TYPE) != UPPER(c.DataType)
+                      -- Normalize whitespace adjacent to structural delimiters and the DECIMAL/NUMERIC
+                      -- synonym so a hand-authored type that differs only by spacing/synonym is not a
+                      -- false "modified". Guarded for ENUM/SET, whose parenthesized content is string
+                      -- values where whitespace is meaningful (normalizing could miss a real change).
+                      CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
+                             OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
+                           THEN UPPER(isc.COLUMN_TYPE) != UPPER(c.DataType)
+                           ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
+                             != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') END
                       OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)
                       OR (isc.IS_NULLABLE = 'NO' AND c.IsNullable = 1)
                       -- Default value changes (strip outer single quotes from JSON default for comparison,
