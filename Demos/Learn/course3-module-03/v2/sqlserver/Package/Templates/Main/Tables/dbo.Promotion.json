@@ -1,0 +1,12 @@
+{
+  "Schema": "dbo",
+  "Name": "Promotion",
+  "Columns": [
+    { "Name": "PromotionId", "DataType": "INT IDENTITY(1,1)" },
+    { "Name": "Name", "DataType": "NVARCHAR(100)" },
+    { "Name": "Discount", "DataType": "DECIMAL(5,2)" }
+  ],
+  "Indexes": [
+    { "Name": "PK_Promotion", "PrimaryKey": true, "Clustered": true, "IndexColumns": "PromotionId" }
+  ]
+}
