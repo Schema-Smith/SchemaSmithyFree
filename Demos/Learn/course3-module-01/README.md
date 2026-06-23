@@ -97,15 +97,15 @@ deploy.
 ## Step 4: Confirm the column is there
 
 ```bash
-# SQL Server (from a SQL client):
-#   SELECT name FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Customer') AND name = 'LoyaltyTier';
+docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_dev -h -1 -W \
+  -Q "SET NOCOUNT ON; SELECT name, TYPE_NAME(system_type_id), max_length FROM sys.columns WHERE object_id=OBJECT_ID('dbo.Customer') AND name='LoyaltyTier'"
 docker exec learn-postgres psql -U postgres -d ordersservice_dev -tAc \
   "SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_name='Customer' AND column_name='LoyaltyTier'"
 docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e \
   "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND COLUMN_NAME='LoyaltyTier'"
 ```
 
-You'll see `LoyaltyTier` as a 20-character string column on each engine.
+You'll see `LoyaltyTier` as a 20-character string column on each engine (`nvarchar` length 40 on SQL Server — `NVARCHAR(20)` is 40 bytes).
 
 ## Step 5: Re-run — the no-op
 
