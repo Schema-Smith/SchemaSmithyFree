@@ -493,7 +493,7 @@ BEGIN
                 AND ic."TableName" = c."TableName"
                 AND (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(ic."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(iec."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
                   OR ic."Nullable" != iec."Nullable"
-                  OR COALESCE(ic."Default", '') != COALESCE(iec."Default", '')
+                  OR COALESCE("SchemaSmith"."StripTypeCast"(ic."Default"), '') != COALESCE("SchemaSmith"."StripTypeCast"(iec."Default"), '')
                   OR COALESCE(ic."Collation", '') != COALESCE(iec."Collation", '')
                   OR COALESCE(ic."Generated", 'NEVER') != COALESCE(iec."Generated", 'NEVER')
                   OR COALESCE(ic."GenerationExpression", '') != COALESCE(iec."GenerationExpression", '')
@@ -515,7 +515,7 @@ BEGIN
                                      THEN ' ALTER COLUMN "' || c."Name" || '" DROP NOT NULL,'
                                      ELSE ' ALTER COLUMN "' || c."Name" || '" SET NOT NULL,' END
                            ELSE '' END ||
-                      CASE WHEN COALESCE(c."Default", '') != COALESCE(ec."Default", '')
+                      CASE WHEN COALESCE("SchemaSmith"."StripTypeCast"(c."Default"), '') != COALESCE("SchemaSmith"."StripTypeCast"(ec."Default"), '')
                            THEN CASE WHEN COALESCE(c."Default", '') = ''
                                      THEN ' ALTER COLUMN "' || c."Name" || '" DROP DEFAULT,'
                                      ELSE ' ALTER COLUMN "' || c."Name" || '" SET DEFAULT ' || c."Default" || ',' END
@@ -537,7 +537,7 @@ BEGIN
                         AND ic.column_name = c."Name")
         AND (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(ec."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
           OR c."Nullable" != ec."Nullable"
-          OR COALESCE(c."Default", '') != COALESCE(ec."Default", '')
+          OR COALESCE("SchemaSmith"."StripTypeCast"(c."Default"), '') != COALESCE("SchemaSmith"."StripTypeCast"(ec."Default"), '')
           OR COALESCE(c."Collation", '') != COALESCE(ec."Collation", '')
           OR COALESCE(c."Generated", 'NEVER') != COALESCE(ec."Generated", 'NEVER')
           OR COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
