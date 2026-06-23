@@ -317,7 +317,7 @@ BEGIN
                           AND i."Name" = ei."IndexName"
                           AND (i."IndexColumns" != ei."IndexColumns"
                             OR COALESCE(i."IncludeColumns", '') != COALESCE(ei."IncludeColumns", '')
-                            OR COALESCE(i."Unique", FALSE) != ei."Unique"
+                            OR (COALESCE(i."Unique", FALSE) OR COALESCE(i."PrimaryKey", FALSE) OR COALESCE(i."UniqueConstraint", FALSE)) != ei."Unique"
                             OR COALESCE(i."UniqueConstraint", FALSE) != ei."UniqueConstraint"
                             OR COALESCE(i."PrimaryKey", FALSE) != ei."PrimaryKey"
                             OR COALESCE(i."FilterExpression", '') != COALESCE(ei."FilterExpression", '')
