@@ -74,6 +74,24 @@ BEGIN TRY
 
     IF EXISTS (SELECT * FROM #TablesRemovedFromProduct WITH (NOLOCK))
     BEGIN
+      -- A system-versioned temporal table can't be dropped while versioning is on (error 13552).
+      -- Capture each removed temporal table's history table BEFORE turning versioning off
+      -- (history_table_id is only valid while versioning is on), then turn versioning off so the
+      -- table can be dropped; the now-orphaned history table is dropped after the main drop below.
+      RAISERROR('Turn off system versioning for temporal tables removed from the product', 10, 100) WITH NOWAIT
+      DROP TABLE IF EXISTS #RemovedTemporalHistory
+      SELECT hs.[name] COLLATE DATABASE_DEFAULT AS HistSchema, h.[name] COLLATE DATABASE_DEFAULT AS HistName
+        INTO #RemovedTemporalHistory
+        FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+        JOIN sys.tables mt WITH (NOLOCK) ON mt.[object_id] = OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']') AND mt.temporal_type = 2
+        JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = mt.history_table_id
+        JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]
+      SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Turn OFF system versioning for ' + t.[Schema] + '.' + t.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                      'ALTER TABLE ' + t.[Schema] + '.[' + t.[TableName] + '] SET (SYSTEM_VERSIONING = OFF);' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+        FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+        WHERE OBJECTPROPERTY(OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']'), 'TableTemporalType') = 2
+      IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
       RAISERROR('Drop inbound foreign keys referencing tables removed from the product', 10, 100) WITH NOWAIT
       SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping inbound foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                       'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
@@ -89,6 +107,18 @@ BEGIN TRY
                                            END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #TablesRemovedFromProduct t WITH (NOLOCK)
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+      -- Drop the now-orphaned history tables of removed temporal tables (versioning was turned off
+      -- above). Skipped when a CustomTableDrop hook is installed -- that hook owns table removal,
+      -- including any history handling for the recycle path.
+      IF OBJECT_ID('SchemaSmith.CustomTableDrop') IS NULL
+      BEGIN
+        RAISERROR('Drop history tables of temporal tables removed from the product', 10, 100) WITH NOWAIT
+        SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping history table ' + h.HistSchema + '.' + h.HistName + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                        'DROP TABLE IF EXISTS [' + h.HistSchema + '].[' + h.HistName + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+          FROM #RemovedTemporalHistory h WITH (NOLOCK)
+        IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+      END
     END
   END
 
