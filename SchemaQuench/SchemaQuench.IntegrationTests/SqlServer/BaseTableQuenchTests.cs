@@ -26,12 +26,13 @@ public class BaseTableQuenchTests
         _mainDb = config["ScriptTokens:MainDB"];
     }
 
-    protected void RunTableQuenchProc(IDbCommand cmd, string json, bool indexOnly = false)
+    protected void RunTableQuenchProc(IDbCommand cmd, string json, bool indexOnly = false, bool dropTablesRemovedFromProduct = false, bool whatIf = false, string productName = "")
     {
+        var prod = string.IsNullOrEmpty(productName) ? _productName : productName;
         cmd.CommandTimeout = 300;
         cmd.CommandText = indexOnly
-            ? $"EXEC SchemaSmith.IndexOnlyQuench @ProductName = '{_productName}', @TableDefinitions = '{json.Replace("'", "''")}', @DropUnknownIndexes = 1"
-            : $"EXEC SchemaSmith.TableQuench @ProductName = '{_productName}', @TableDefinitions = '{json.Replace("'", "''")}', @DropTablesRemovedFromProduct = 0, @DropUnknownIndexes = 0";
+            ? $"EXEC SchemaSmith.IndexOnlyQuench @ProductName = '{prod}', @TableDefinitions = '{json.Replace("'", "''")}', @DropUnknownIndexes = 1"
+            : $"EXEC SchemaSmith.TableQuench @ProductName = '{prod}', @TableDefinitions = '{json.Replace("'", "''")}', @WhatIf = {(whatIf ? 1 : 0)}, @DropTablesRemovedFromProduct = {(dropTablesRemovedFromProduct ? 1 : 0)}, @DropUnknownIndexes = 0";
         var retry = true;
         var tries = 0;
         while (retry && tries++ < 10)

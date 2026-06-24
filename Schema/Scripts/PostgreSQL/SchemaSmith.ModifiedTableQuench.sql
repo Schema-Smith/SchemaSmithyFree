@@ -12,6 +12,29 @@ DECLARE
   sql_script TEXT = '';
 BEGIN
     IF p_DropTablesRemovedFromProduct THEN
+      RAISE NOTICE 'Drop inbound foreign keys referencing tables removed from the product';
+      -- Drop any foreign key that REFERENCES a table about to be removed (from any table), so the
+      -- table drop below does not fail on a still-present inbound dependency. Same removed-table
+      -- predicate as the drop pass; catalog-driven so it is not limited to product-declared parents.
+      SELECT STRING_AGG('ALTER TABLE "' || pn.nspname || '"."' || pc.relname || '" DROP CONSTRAINT IF EXISTS "' || con.conname || '";', CHR(10))
+        INTO sql_script
+        FROM temp_product_ownership tp
+        JOIN pg_class fc       ON fc.relname = tp."TableName"
+        JOIN pg_namespace fn   ON fn.oid = fc.relnamespace AND fn.nspname = tp."Schema"
+        JOIN pg_constraint con ON con.contype = 'f' AND con.confrelid = fc.oid
+        JOIN pg_class pc       ON pc.oid = con.conrelid
+        JOIN pg_namespace pn   ON pn.oid = pc.relnamespace
+        WHERE tp."IndexName" IS NULL
+          AND NOT EXISTS (SELECT 1
+                            FROM temp_tables t
+                            WHERE tp."Schema" = t."Schema"
+                              AND tp."TableName" = t."Name")
+          AND NOT EXISTS (SELECT 1
+                            FROM pg_matviews mv
+                            WHERE mv.schemaname = tp."Schema"
+                              AND mv.matviewname = tp."TableName");
+      CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
       RAISE NOTICE 'Drop tables removed from the product';
       -- temp_product_ownership is template-and-schema-scoped (see ValidateTableOwnership),
       -- so this pass only considers tables owned by the current (template, schema)
@@ -21,7 +44,7 @@ BEGIN
       -- (slice 3 audit B1 of schema-templates) markers there for the deletion trigger.
       SELECT STRING_AGG('RAISE NOTICE ''  Table ' || tp."Schema" || '.' || tp."TableName" || ' no longer in product'';' || CHR(10) ||
                         CASE WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE p.proname = 'CustomTableDrop' AND n.nspname = 'SchemaSmith' )
-                             THEN 'CALL "SchemaSmith"."CustomTableDrop"(''' || tp."Schema" || ''', ''' || tp."TableName" || ''')'
+                             THEN 'CALL "SchemaSmith"."CustomTableDrop"(''' || tp."Schema" || ''', ''' || tp."TableName" || ''');'
                              ELSE 'DROP TABLE IF EXISTS "' || tp."Schema" || '"."' || tp."TableName" || '";'
                              END, CHR(10))
         INTO sql_script

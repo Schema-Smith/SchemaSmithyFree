@@ -65,7 +65,7 @@ BEGIN
             WHERE parent_object_id = @ObjectId
           UNION ALL
           SELECT name
-            FROM ys.default_constraints
+            FROM sys.default_constraints
             WHERE parent_object_id = @ObjectId) x;
   EXEC(@v_SQL);
 

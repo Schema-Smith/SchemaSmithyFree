@@ -923,10 +923,116 @@ BEGIN
     -- =======================
     -- Drop tables that are owned by this product but no longer in the definition
     IF p_DropTablesRemovedFromProduct = 1 THEN
+        -- #289: drop any foreign key that REFERENCES a table about to be removed BEFORE the table
+        -- drop below, otherwise the DROP TABLE fails on a still-present inbound dependency.
+        IF p_WhatIf = 1 THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop inbound foreign keys referencing tables removed from product');
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT DISTINCT CONNECTION_ID(), CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
+                                   CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                                   '` DROP FOREIGN KEY `', CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`')
+            FROM SchemaSmith_ProductOwnership po
+            INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                ON CONVERT(kcu.REFERENCED_TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+               AND CONVERT(kcu.REFERENCED_TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+            INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+                ON CONVERT(tc.TABLE_SCHEMA USING utf8mb4) = CONVERT(kcu.TABLE_SCHEMA USING utf8mb4)
+               AND CONVERT(tc.TABLE_NAME USING utf8mb4) = CONVERT(kcu.TABLE_NAME USING utf8mb4)
+               AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4)
+               AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
+            WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+              AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+              AND po.ObjectType = 'TABLE'
+              AND EXISTS (
+                  SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+                  WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                    AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM _SchemaSmith_Tables t
+                  WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+              );
+        ELSE
+            -- Helper temp table + cursor mirrors the column-drop FK pattern above (avoids the MySQL
+            -- optimizer bug with INFORMATION_SCHEMA.KEY_COLUMN_USAGE joins and keeps DECLARE ordering).
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_InboundFKsToDrop;
+            CREATE TEMPORARY TABLE _SchemaSmith_InboundFKsToDrop (
+                DropFKSql TEXT NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            INSERT INTO _SchemaSmith_InboundFKsToDrop (DropFKSql)
+            SELECT DISTINCT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
+                                   CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                                   '` DROP FOREIGN KEY `', CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`')
+            FROM SchemaSmith_ProductOwnership po
+            INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                ON CONVERT(kcu.REFERENCED_TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+               AND CONVERT(kcu.REFERENCED_TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+            INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+                ON CONVERT(tc.TABLE_SCHEMA USING utf8mb4) = CONVERT(kcu.TABLE_SCHEMA USING utf8mb4)
+               AND CONVERT(tc.TABLE_NAME USING utf8mb4) = CONVERT(kcu.TABLE_NAME USING utf8mb4)
+               AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4)
+               AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
+            WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+              AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+              AND po.ObjectType = 'TABLE'
+              AND EXISTS (
+                  SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+                  WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                    AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM _SchemaSmith_Tables t
+                  WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+              );
+
+            BEGIN
+                DECLARE v_DropInFKDone INT DEFAULT FALSE;
+                DECLARE v_DropInFKSql TEXT;
+                DECLARE cur_DropInboundFKs CURSOR FOR
+                    SELECT DropFKSql FROM _SchemaSmith_InboundFKsToDrop;
+
+                DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropInFKDone = TRUE;
+
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop inbound foreign keys referencing tables removed from product');
+                SET v_DropInFKDone = FALSE;
+                OPEN cur_DropInboundFKs;
+
+                drop_inbound_fks_loop: LOOP
+                    FETCH cur_DropInboundFKs INTO v_DropInFKSql;
+                    IF v_DropInFKDone THEN
+                        LEAVE drop_inbound_fks_loop;
+                    END IF;
+
+                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop inbound FK: ', v_DropInFKSql));
+                    SET @exec_sql = v_DropInFKSql;
+                    PREPARE stmt FROM @exec_sql;
+                    EXECUTE stmt;
+                    DEALLOCATE PREPARE stmt;
+                END LOOP;
+
+                CLOSE cur_DropInboundFKs;
+            END;
+
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_InboundFKsToDrop;
+        END IF;
+
+        -- A CustomTableDrop hook (e.g. a recyclebin pattern) replaces the plain DROP TABLE when the
+        -- user has installed a SchemaSmith_CustomTableDrop procedure in this database, mirroring the
+        -- SQL Server / PostgreSQL hook.
+        SET @has_custom_drop = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.ROUTINES
+                                WHERE CONVERT(ROUTINE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                                  AND ROUTINE_NAME = 'SchemaSmith_CustomTableDrop'
+                                  AND ROUTINE_TYPE = 'PROCEDURE');
+
         IF p_WhatIf = 1 THEN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop tables removed from product');
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-            SELECT CONNECTION_ID(), CONCAT('DROP TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', po.ObjectName, '`')
+            SELECT CONNECTION_ID(),
+                   CASE WHEN @has_custom_drop = 1
+                        THEN CONCAT('CALL SchemaSmith_CustomTableDrop(''', p_DatabaseName COLLATE utf8mb4_unicode_ci, ''', ''', po.ObjectName, ''')')
+                        ELSE CONCAT('DROP TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', po.ObjectName, '`')
+                        END
             FROM SchemaSmith_ProductOwnership po
             WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
               AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
@@ -950,7 +1056,10 @@ BEGIN
                 DECLARE cur_DropTables CURSOR FOR
                     SELECT
                         po.ObjectName AS TableName,
-                        CONCAT('DROP TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', po.ObjectName, '`') AS DropSql
+                        CASE WHEN @has_custom_drop = 1
+                             THEN CONCAT('CALL SchemaSmith_CustomTableDrop(''', p_DatabaseName COLLATE utf8mb4_unicode_ci, ''', ''', po.ObjectName, ''')')
+                             ELSE CONCAT('DROP TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', po.ObjectName, '`')
+                             END AS DropSql
                     FROM SchemaSmith_ProductOwnership po
                     WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
                       AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
