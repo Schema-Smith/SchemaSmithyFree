@@ -73,8 +73,23 @@ BEGIN
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'BEGIN MissingTableAndColumnQuench');
 
+    -- A CustomTableRestore hook restores tables being added in case they were custom-dropped
+    -- (recycled) previously; mirrors the SQL Server / PostgreSQL hook.
+    SET @has_custom_restore = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.ROUTINES
+                               WHERE CONVERT(ROUTINE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                                 AND ROUTINE_NAME = 'SchemaSmith_CustomTableRestore'
+                                 AND ROUTINE_TYPE = 'PROCEDURE');
+
     IF p_WhatIf = 1 THEN
         -- WhatIf mode: output the actual SQL that would be executed
+
+        IF @has_custom_restore = 1 THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Attempt custom table restore for tables being added');
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('CALL SchemaSmith_CustomTableRestore(''', p_DatabaseName COLLATE utf8mb4_unicode_ci, ''', ''', SchemaSmith_StripBacktickWrapping(t.TableName), ''')')
+            FROM _SchemaSmith_Tables t
+            WHERE t.NewTable = 1;
+        END IF;
 
         -- Step 1: Show CREATE TABLE statements
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing tables');
@@ -109,6 +124,54 @@ BEGIN
         CLOSE cur_NewColumns;
 
     ELSE
+        -- CustomTableRestore hook: attempt to restore tables being added in case they were
+        -- custom-dropped (recycled) previously, then mark any that now exist as not-new so the
+        -- create step below does not recreate them empty (preserving restored data).
+        IF @has_custom_restore = 1 THEN
+            BEGIN
+                DECLARE v_RestoreDone INT DEFAULT FALSE;
+                DECLARE v_RestoreTable VARCHAR(128);
+                DECLARE cur_RestoreTables CURSOR FOR
+                    SELECT SchemaSmith_StripBacktickWrapping(t.TableName)
+                    FROM _SchemaSmith_Tables t
+                    WHERE t.NewTable = 1;
+                DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_RestoreDone = TRUE;
+
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Attempt custom table restore for tables being added');
+                SET v_RestoreDone = FALSE;
+                OPEN cur_RestoreTables;
+                restore_tables_loop: LOOP
+                    FETCH cur_RestoreTables INTO v_RestoreTable;
+                    IF v_RestoreDone THEN
+                        LEAVE restore_tables_loop;
+                    END IF;
+                    SET @exec_sql = CONCAT('CALL SchemaSmith_CustomTableRestore(''', p_DatabaseName COLLATE utf8mb4_unicode_ci, ''', ''', v_RestoreTable, ''')');
+                    PREPARE stmt FROM @exec_sql;
+                    EXECUTE stmt;
+                    DEALLOCATE PREPARE stmt;
+                END LOOP;
+                CLOSE cur_RestoreTables;
+            END;
+
+            UPDATE _SchemaSmith_Tables t
+            SET t.NewTable = 0
+            WHERE t.NewTable = 1
+              AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+                          WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                            AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4));
+
+            -- NewColumn was set at parse time, before the restore brought the table back, so the
+            -- restored table's columns are still flagged as new. Clear the flag for any column that
+            -- now exists so the add-columns step does not try to re-add it (duplicate column error).
+            UPDATE _SchemaSmith_Columns c
+            SET c.NewColumn = 0
+            WHERE c.NewColumn = 1
+              AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS ic
+                          WHERE CONVERT(ic.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                            AND CONVERT(ic.TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(c.TableName) USING utf8mb4)
+                            AND CONVERT(ic.COLUMN_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(c.ColumnName) USING utf8mb4));
+        END IF;
+
         -- Step 1: Create new tables (with non-generated columns only)
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing tables');
         SET v_Done = FALSE;

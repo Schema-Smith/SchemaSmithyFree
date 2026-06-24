@@ -1017,10 +1017,22 @@ BEGIN
             DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_InboundFKsToDrop;
         END IF;
 
+        -- A CustomTableDrop hook (e.g. a recyclebin pattern) replaces the plain DROP TABLE when the
+        -- user has installed a SchemaSmith_CustomTableDrop procedure in this database, mirroring the
+        -- SQL Server / PostgreSQL hook.
+        SET @has_custom_drop = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.ROUTINES
+                                WHERE CONVERT(ROUTINE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                                  AND ROUTINE_NAME = 'SchemaSmith_CustomTableDrop'
+                                  AND ROUTINE_TYPE = 'PROCEDURE');
+
         IF p_WhatIf = 1 THEN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop tables removed from product');
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-            SELECT CONNECTION_ID(), CONCAT('DROP TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', po.ObjectName, '`')
+            SELECT CONNECTION_ID(),
+                   CASE WHEN @has_custom_drop = 1
+                        THEN CONCAT('CALL SchemaSmith_CustomTableDrop(''', p_DatabaseName COLLATE utf8mb4_unicode_ci, ''', ''', po.ObjectName, ''')')
+                        ELSE CONCAT('DROP TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', po.ObjectName, '`')
+                        END
             FROM SchemaSmith_ProductOwnership po
             WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
               AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
@@ -1044,7 +1056,10 @@ BEGIN
                 DECLARE cur_DropTables CURSOR FOR
                     SELECT
                         po.ObjectName AS TableName,
-                        CONCAT('DROP TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', po.ObjectName, '`') AS DropSql
+                        CASE WHEN @has_custom_drop = 1
+                             THEN CONCAT('CALL SchemaSmith_CustomTableDrop(''', p_DatabaseName COLLATE utf8mb4_unicode_ci, ''', ''', po.ObjectName, ''')')
+                             ELSE CONCAT('DROP TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', po.ObjectName, '`')
+                             END AS DropSql
                     FROM SchemaSmith_ProductOwnership po
                     WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
                       AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)

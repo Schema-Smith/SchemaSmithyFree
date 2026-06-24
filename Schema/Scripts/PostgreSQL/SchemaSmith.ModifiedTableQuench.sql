@@ -44,7 +44,7 @@ BEGIN
       -- (slice 3 audit B1 of schema-templates) markers there for the deletion trigger.
       SELECT STRING_AGG('RAISE NOTICE ''  Table ' || tp."Schema" || '.' || tp."TableName" || ' no longer in product'';' || CHR(10) ||
                         CASE WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE p.proname = 'CustomTableDrop' AND n.nspname = 'SchemaSmith' )
-                             THEN 'CALL "SchemaSmith"."CustomTableDrop"(''' || tp."Schema" || ''', ''' || tp."TableName" || ''')'
+                             THEN 'CALL "SchemaSmith"."CustomTableDrop"(''' || tp."Schema" || ''', ''' || tp."TableName" || ''');'
                              ELSE 'DROP TABLE IF EXISTS "' || tp."Schema" || '"."' || tp."TableName" || '";'
                              END, CHR(10))
         INTO sql_script
