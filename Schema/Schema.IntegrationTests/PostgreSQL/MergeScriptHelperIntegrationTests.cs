@@ -77,6 +77,47 @@ public class MergeScriptHelperIntegrationTests
 
     #endregion
 
+    #region Quoted Identifier Tests
+
+    [Test]
+    public void BuildMergeScript_TableNameWithSingleQuote_GeneratesValidScript()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"zz't_{Guid.NewGuid():N}";
+
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""public"".""{tableName.Replace("\"", "\"\"")}"" (
+    ""id"" INT PRIMARY KEY,
+    ""name"" VARCHAR(50) NOT NULL
+)";
+            command.ExecuteNonQuery();
+
+            var tableData = @"[{""id"":1,""name"":""Alpha""}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command,
+                "public", tableName, tableData, @"""id""",
+                mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null);
+
+            Assert.That(script, Is.Not.Null);
+            Assert.That(script, Does.Contain("MERGE INTO"));
+            Assert.That(script, Does.Contain(@"""name"""));
+
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"SELECT ""name"" FROM ""public"".""{tableName.Replace("\"", "\"\"")}"" WHERE ""id"" = 1";
+            Assert.That(command.ExecuteScalar()?.ToString(), Is.EqualTo("Alpha"));
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""public"".""{tableName.Replace("\"", "\"\"")}""";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    #endregion
+
     #region JSONB Tests
 
     [Test]
