@@ -906,26 +906,37 @@ public class DataDeliveryProcessorTests
     // ContentFile paths may use either separator style; resolution normalizes both to the platform
     // separator so output is native regardless of which OS runs the deployment. The CI matrix runs
     // both OSes, so these input styles cover all four input/platform combinations.
+    // The method now returns the fully-resolved absolute path (Path.GetFullPath), so tests use an
+    // absolute root and verify the result ends with the expected sub-path suffix.
+
+    private static string SepNormRoot =>
+        Path.Combine(Path.GetTempPath(), "ssmith_sep_" + Guid.NewGuid().ToString("N"));
 
     [Test]
     public void ResolveContentFilePath_WindowsStyleInput_ProducesPlatformNativePath()
     {
-        Assert.That(DataDeliveryProcessor.ResolveContentFilePath("root", @"sub\folder\file.csv"),
-            Is.EqualTo(Path.Combine("root", "sub", "folder", "file.csv")));
+        var root = SepNormRoot;
+        var result = DataDeliveryProcessor.ResolveContentFilePath(root, @"sub\folder\file.csv");
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result, Does.EndWith(Path.Combine("sub", "folder", "file.csv")));
     }
 
     [Test]
     public void ResolveContentFilePath_LinuxStyleInput_ProducesPlatformNativePath()
     {
-        Assert.That(DataDeliveryProcessor.ResolveContentFilePath("root", "sub/folder/file.csv"),
-            Is.EqualTo(Path.Combine("root", "sub", "folder", "file.csv")));
+        var root = SepNormRoot;
+        var result = DataDeliveryProcessor.ResolveContentFilePath(root, "sub/folder/file.csv");
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result, Does.EndWith(Path.Combine("sub", "folder", "file.csv")));
     }
 
     [Test]
     public void ResolveContentFilePath_MixedSeparators_ProducesPlatformNativePath()
     {
-        Assert.That(DataDeliveryProcessor.ResolveContentFilePath("root", @"sub\folder/file.csv"),
-            Is.EqualTo(Path.Combine("root", "sub", "folder", "file.csv")));
+        var root = SepNormRoot;
+        var result = DataDeliveryProcessor.ResolveContentFilePath(root, @"sub\folder/file.csv");
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result, Does.EndWith(Path.Combine("sub", "folder", "file.csv")));
     }
 
     [Test]
@@ -935,6 +946,64 @@ public class DataDeliveryProcessorTests
         Assert.That(DataDeliveryProcessor.ResolveContentFilePath("root", null), Is.Null);
         Assert.That(DataDeliveryProcessor.ResolveContentFilePath("", "file.csv"), Is.Null);
         Assert.That(DataDeliveryProcessor.ResolveContentFilePath(null, "file.csv"), Is.Null);
+    }
+
+    // ---------- ResolveContentFilePath path-traversal containment ----------
+    //
+    // ContentFile may come from an externally-authored template. A malicious value
+    // can use ".." to escape the template root or an absolute path to bypass it
+    // entirely. The containment guard must reject both attack shapes and return null
+    // (which routes into the caller's existing "Unable to locate content file" error
+    // path). These tests are written cross-platform: they use Path helpers rather
+    // than hard-coded Windows or Unix paths so CI passes on both Windows and Linux.
+
+    private static string _tplRoot =>
+        Path.Combine(Path.GetTempPath(), "ssmith_tpl_" + Guid.NewGuid().ToString("N"));
+
+    [Test]
+    public void ResolveContentFilePath_NormalRelativePath_ReturnsContainedPath()
+    {
+        var root = _tplRoot;
+        var sep = Path.DirectorySeparatorChar.ToString();
+        var contentFile = "sub" + sep + "file.sql";
+
+        var result = DataDeliveryProcessor.ResolveContentFilePath(root, contentFile);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result, Does.StartWith(Path.GetFullPath(root) + sep));
+    }
+
+    [Test]
+    public void ResolveContentFilePath_ParentEscape_ReturnsNull()
+    {
+        var root = _tplRoot;
+        var sep = Path.DirectorySeparatorChar.ToString();
+        var contentFile = ".." + sep + "outside.sql";
+
+        var result = DataDeliveryProcessor.ResolveContentFilePath(root, contentFile);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void ResolveContentFilePath_DeepEscapeWithBackslashes_ReturnsNull()
+    {
+        var root = _tplRoot;
+
+        var result = DataDeliveryProcessor.ResolveContentFilePath(root, @"..\..\..\x");
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void ResolveContentFilePath_AbsoluteContentFile_ReturnsNull()
+    {
+        var root = _tplRoot;
+        var absoluteContentFile = Path.Combine(Path.GetTempPath(), "evil.sql");
+
+        var result = DataDeliveryProcessor.ResolveContentFilePath(root, absoluteContentFile);
+
+        Assert.That(result, Is.Null);
     }
 
     // ---------- MergeFilter token substitution (slice 7) ----------
