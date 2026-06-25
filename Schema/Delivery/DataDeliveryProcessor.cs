@@ -384,12 +384,14 @@ WHERE tc_p.TABLE_SCHEMA = '{schema.Replace("'", "''")}'
             .Replace('\\', Path.DirectorySeparatorChar)
             .Replace('/', Path.DirectorySeparatorChar);
 
-        // Reject absolute contentFile values — Path.Combine would silently discard templateRootPath.
+        // An absolute contentFile is never inside the template root — reject it outright.
         if (Path.IsPathRooted(normalized))
             return null;
 
         var fullRoot = Path.GetFullPath(templateRootPath);
-        var fullCombined = Path.GetFullPath(Path.Combine(fullRoot, normalized));
+        // Append the (now guaranteed relative) suffix and canonicalize. Concatenate rather than
+        // Path.Combine, which would discard fullRoot for a rooted suffix — already excluded above.
+        var fullCombined = Path.GetFullPath(fullRoot + Path.DirectorySeparatorChar + normalized);
 
         // Require that the resolved path stays inside the template root (containment guard).
         // Append the separator before comparing so "/rootEvil" is not treated as inside "/root".
