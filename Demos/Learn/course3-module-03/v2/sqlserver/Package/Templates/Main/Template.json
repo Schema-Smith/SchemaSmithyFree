@@ -1,5 +1,8 @@
 {
   "Name": "Main",
   "DatabaseIdentificationScript": "SELECT name FROM sys.databases WHERE name = '{{TargetDb}}'",
-  "ScriptFolders": []
+  "ScriptFolders": [
+    { "FolderPath": "Schemas", "QuenchSlot": "Objects", "ObjectType": "Schemas" },
+    { "FolderPath": "Procedures", "QuenchSlot": "Objects", "ObjectType": "Procedures" }
+  ]
 }

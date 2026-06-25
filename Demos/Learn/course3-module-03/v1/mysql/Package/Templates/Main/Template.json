@@ -1,5 +1,7 @@
 {
   "Name": "Main",
   "DatabaseIdentificationScript": "SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{{TargetDb}}'",
-  "ScriptFolders": []
+  "ScriptFolders": [
+    { "FolderPath": "Procedures", "QuenchSlot": "Objects", "ObjectType": "Procedures" }
+  ]
 }
