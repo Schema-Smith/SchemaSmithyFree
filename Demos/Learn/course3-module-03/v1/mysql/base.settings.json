@@ -8,6 +8,5 @@
   },
   "WhatIfONLY": false,
   "SchemaPackagePath": "./Package",
-  "KindleTheForge": true,
-  "DropTablesRemovedFromProduct": false
+  "KindleTheForge": true
 }

@@ -26,10 +26,11 @@ course3-module-03/
 ```
 
 `<engine>` is `sqlserver`, `postgres`, or `mysql`. Each `v1/` and `v2/` carries its own `Package/`
-plus a shared **`base.settings.json`** (connection details, package-path default, and the
-rollback-friendly `DropTablesRemovedFromProduct: false` posture — see "The auto-drop posture" below).
-The target database rides on a `{{TargetDb}}` script token, exactly as in Module 2, so one package
-targets any database via an env var.
+plus a shared **`base.settings.json`** (connection details and package-path default). These packages
+run with **auto-drop on** — `DropTablesRemovedFromProduct` is left at SchemaQuench's default of `true`,
+so a rollback removes tables the newer release added. That's only safe because every package ships a
+**recyclebin** that catches those drops — see "The auto-drop posture" below. The target database rides
+on a `{{TargetDb}}` script token, exactly as in Module 2, so one package targets any database via an env var.
 
 ## The additive delta (what v2 adds)
 
@@ -70,9 +71,9 @@ The four steps, conceptually:
 2. **Deploy `v2`** — ship the next release. Watch `Promotion` and `Customer.PromotionId` land.
 3. **WhatIf `v1`** against the v2-state database — the rollback *preview*. SchemaQuench runs the full
    deploy logic against the database and prints the reverting delta — the FK and column it *would*
-   drop — then applies nothing.
-4. **Deploy `v1`** — apply the rollback. SchemaQuench computes the same delta and reverts the
-   structure.
+   drop, and the `Promotion` table it *would* recycle — then applies nothing.
+4. **Deploy `v1`** — apply the rollback. SchemaQuench computes the same delta: it drops the FK and the
+   `Customer.PromotionId` column, and recycles the now-removed `Promotion` table into the recyclebin.
 
 ### SQL Server
 
@@ -118,15 +119,14 @@ For **PostgreSQL** or **MySQL**, swap `sqlserver` for `postgres` or `mysql` in t
 
 ## What you'll see — the rollback preview (Step 3)
 
-WhatIf runs the full deploy path and reports the reverting delta without touching a row. The wording
-differs per engine, but each previews the same two destructive operations: drop the foreign key, drop
-the `PromotionId` column.
+WhatIf runs the full deploy path and reports the reverting delta without touching a row. Three operations
+show up: drop the inbound foreign key, drop the `Customer.PromotionId` column, and remove the `Promotion`
+table — routed through the recyclebin's `CustomTableDrop` hook rather than a raw `DROP TABLE`.
 
 **SQL Server:**
 
 ```
-  Dropping foreign Key [dbo].[Customer].FK_Customer_Promotion
-  ALTER TABLE [dbo].[Customer] DROP CONSTRAINT IF EXISTS [FK_Customer_Promotion];
+  EXEC SchemaSmith.CustomTableDrop 'dbo', 'Promotion';
   Dropping columns from [dbo].[Customer] ([PromotionId])
   ALTER TABLE [dbo].[Customer] DROP COLUMN [PromotionId];
 ```
@@ -134,43 +134,51 @@ the `PromotionId` column.
 **PostgreSQL:**
 
 ```
-  Foreign Key public.Customer.fk_customer_promotion no longer in product
-  ALTER TABLE "public"."Customer" DROP CONSTRAINT IF EXISTS "fk_customer_promotion" CASCADE;
+  ALTER TABLE "public"."Customer" DROP CONSTRAINT IF EXISTS "fk_customer_promotion";
+  Table public.Promotion no longer in product             -- routed to CALL "SchemaSmith"."CustomTableDrop"(...)
   Column public.Customer.PromotionId no longer in product
-  ALTER TABLE "public"."Customer" DROP COLUMN IF EXISTS "PromotionId" CASCADE;
 ```
 
-**MySQL** (the WhatIf preview names the column drop; the apply also drops the FK first):
+**MySQL:**
 
 ```
   ALTER TABLE `ordersservice_dev`.`Customer` DROP COLUMN `PromotionId`
+  ALTER TABLE `ordersservice_dev`.`Customer` DROP FOREIGN KEY `FK_Customer_Promotion`
+  CALL SchemaSmith_CustomTableDrop('ordersservice_dev', 'Promotion')
 ```
 
-That column drop is the line to read twice. **Dropping a column drops its data.** In this lab
-`PromotionId` is empty, so there's nothing to lose — but in a real rollback, any data written into a
-column added by the newer release is gone the moment that column drops. If you need it, copy it out
-with a data-preservation script *before* you quench the rollback. WhatIf is where you catch that: read
-every drop line, decide what's destructive, preserve what matters, then apply.
+The line to read twice is the **column** drop. **Dropping a column drops its data** — and unlike the
+table, a column is *not* caught by the recyclebin. In this lab `PromotionId` is empty, so there's nothing
+to lose, but in a real rollback any data written into a column the newer release added is gone the moment
+that column drops. If you need it, copy it out with a data-preservation script *before* you quench. The
+`Promotion` **table** is the opposite: that `CustomTableDrop` call routes it into the recyclebin, data and
+all, so the drop is reversible (next section). WhatIf is where you sort the two apart: read every line,
+decide what's destructive, preserve what matters, then apply.
 
 ## The auto-drop posture
 
-These packages set `DropTablesRemovedFromProduct: false` in `base.settings.json` — the
-rollback-friendly production posture the end-user guide recommends. With it off, rolling back to `v1`
-reverts the structure that touches existing data (the FK and the `Customer.PromotionId` column both
-drop) but **leaves the now-unreferenced `Promotion` table in place.** That's usually what you want on a
-rollback: the orphaned table costs nothing, holds no references, and stays available in case you decide
-to roll *forward* again. Once the rollback is confirmed permanent, drop the table explicitly — or, if
-you'd rather the rollback remove it cleanly *without* gambling its data on an irreversible `DROP`,
-install a **recyclebin** (next section) and turn auto-drop on.
+These packages leave `DropTablesRemovedFromProduct` at its default of `true`, so a rollback actually
+*removes* the tables the newer release added — it doesn't leave them orphaned behind. That convergence is
+what you want from a declarative tool: the database ends up matching the package, no manual cleanup. The
+catch is that an unconditional `DROP TABLE` destroys data, and a rollback is exactly when you're least
+sure you won't need it back. That's why the recyclebin is part of every package here (next section): with
+it installed, "auto-drop on" stops meaning "destroy" and starts meaning "set aside, recoverable." You get
+the clean convergence *and* a safety net.
 
-This is also the safe order. A table being rolled away is referenced by a foreign key on a table you're
-keeping; leaving the table until the FK is gone keeps the dependency chain intact through the revert.
+The one thing the recyclebin doesn't cover is **columns**. Rolling back drops `Customer.PromotionId`
+outright — that data is gone unless you preserve it first. So the posture is: tables removed by a rollback
+are recycled (recoverable); columns removed by a rollback are destroyed (preserve before you quench). WhatIf
+shows you both; you decide.
+
+SchemaQuench also handles the **drop order** for you. `Promotion` is referenced by a foreign key on
+`Customer`, which you're keeping; the inbound FK is dropped before the table is recycled, so the dependency
+chain stays intact through the revert.
 
 ## Recovering a dropped table — the recyclebin
 
-The posture above keeps `Promotion` by *not* dropping it. But sometimes you genuinely want the clean
-rollback — the table actually gone from `v1`'s schema — without gambling its data on a `DROP TABLE`
-you can't undo. That's what a **recyclebin** is for, and these packages ship one from `v1` onward:
+The recyclebin is what makes the auto-drop posture above safe: the rollback genuinely removes `Promotion`
+from `v1`'s schema, but instead of gambling its data on a `DROP TABLE` you can't undo, the table is set
+aside where you can pull it back. These packages ship the recyclebin from `v1` onward:
 
 - a **registry** table recording what was recycled, when, and when it expires
   (`recyclebin.Registry` on SQL Server and PostgreSQL; `recyclebin_Registry` on MySQL);
@@ -193,11 +201,11 @@ SchemaQuench creates a table that's missing from the target, it checks the recyc
 
 So with the recyclebin installed you can roll back with auto-drop **on** and lose nothing.
 
-### Roll back with auto-drop on
+### Roll back and watch the data survive
 
-Run the flow again, but seed a row first so you can watch it survive, and turn auto-drop on for the
-rollback. Only the rollback command changes; the SQL Server form is shown — swap `sqlserver` for your
-engine.
+The Step 4 rollback already recycles `Promotion` — auto-drop is on by default, so there's no flag to set.
+To watch the data make the round trip, seed a row *before* you roll back. The SQL Server form is shown —
+swap `sqlserver` for your engine.
 
 ```bash
 cd v1/sqlserver
@@ -205,9 +213,8 @@ cd v1/sqlserver
 docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_dev \
   -Q "INSERT INTO dbo.Promotion(Name, Discount) VALUES('Summer Sale', 10.00)"
 
-# 3. roll back to v1 WITH auto-drop on — Promotion is recycled, not destroyed
+# 3. roll back to v1 — Promotion is recycled (not destroyed), data and all
 SmithySettings_ScriptTokens__TargetDb=ordersservice_dev \
-SmithySettings_DropTablesRemovedFromProduct=true \
   schemaquench --ConfigFile:./base.settings.json
 ```
 
@@ -291,8 +298,9 @@ docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mysql mysql -uroot -N -e \
 
 After **Step 2 (deploy v2)** the `Promotion` table, the `Customer.PromotionId` column, and the foreign
 key all exist. After **Step 4 (rollback to v1)** the foreign key and `PromotionId` column are gone,
-`Customer` and `OrderHeader` keep all their original columns and rows, and the `Promotion` table is
-still present (orphaned, per the posture above).
+`Customer` and `OrderHeader` keep all their original columns and rows, and the `Promotion` table has been
+**recycled** — gone from its original schema, its rows preserved in the recyclebin (`recyclebin.dbo_Promotion`
+on SQL Server) until retention expires or you restore it by rolling forward.
 
 ## A platform note on transactional DDL
 
