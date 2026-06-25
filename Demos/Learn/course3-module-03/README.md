@@ -4,7 +4,9 @@ Goal: roll back a schema release the SchemaSmith way — **deploy the prior pack
 SchemaQuench compute the reverting delta.** No hand-written undo scripts. The same tool that deploys
 forward deploys backward, on SQL Server, PostgreSQL, and MySQL alike. Along the way you'll see
 exactly what reverts automatically (structure, keys) and where you have to think about **data
-preservation** before you pull the trigger.
+preservation** before you pull the trigger. Then you'll wire up a **recyclebin** so that when a
+rollback *does* drop a table, the drop is reversible — the table is set aside with its data intact,
+recoverable until a retention window purges it.
 
 The release under test is the continuous `OrdersService` spine:
 
@@ -157,10 +159,117 @@ rollback-friendly production posture the end-user guide recommends. With it off,
 reverts the structure that touches existing data (the FK and the `Customer.PromotionId` column both
 drop) but **leaves the now-unreferenced `Promotion` table in place.** That's usually what you want on a
 rollback: the orphaned table costs nothing, holds no references, and stays available in case you decide
-to roll *forward* again. Once the rollback is confirmed permanent, drop the table explicitly.
+to roll *forward* again. Once the rollback is confirmed permanent, drop the table explicitly — or, if
+you'd rather the rollback remove it cleanly *without* gambling its data on an irreversible `DROP`,
+install a **recyclebin** (next section) and turn auto-drop on.
 
 This is also the safe order. A table being rolled away is referenced by a foreign key on a table you're
 keeping; leaving the table until the FK is gone keeps the dependency chain intact through the revert.
+
+## Recovering a dropped table — the recyclebin
+
+The posture above keeps `Promotion` by *not* dropping it. But sometimes you genuinely want the clean
+rollback — the table actually gone from `v1`'s schema — without gambling its data on a `DROP TABLE`
+you can't undo. That's what a **recyclebin** is for, and these packages ship one from `v1` onward:
+
+- a **registry** table recording what was recycled, when, and when it expires
+  (`recyclebin.Registry` on SQL Server and PostgreSQL; `recyclebin_Registry` on MySQL);
+- two engine **hooks**, `CustomTableDrop` and `CustomTableRestore`, that SchemaQuench calls
+  automatically when it would drop or re-create a table;
+- a `CleanupJob` procedure that purges recycled tables past their retention window.
+
+SQL Server and PostgreSQL keep these in a dedicated `recyclebin` schema; MySQL has no schemas, so they
+live under a `recyclebin_` name prefix in the same database. Installing them is just part of deploying
+the package — there's nothing extra to run.
+
+### What the hooks change
+
+When a `CustomTableDrop` hook is present, SchemaQuench stops issuing a plain `DROP TABLE` for a removed
+table and calls the hook instead. The hook doesn't destroy the table — it **moves it aside** into the
+recyclebin (a rename / schema transfer), strips the constraints that would collide with a future copy,
+and writes a registry row. The data goes with it. `CustomTableRestore` is the mirror: before
+SchemaQuench creates a table that's missing from the target, it checks the recyclebin first and
+**restores the set-aside copy — rows and all** — instead of creating an empty one.
+
+So with the recyclebin installed you can roll back with auto-drop **on** and lose nothing.
+
+### Roll back with auto-drop on
+
+Run the flow again, but seed a row first so you can watch it survive, and turn auto-drop on for the
+rollback. Only the rollback command changes; the SQL Server form is shown — swap `sqlserver` for your
+engine.
+
+```bash
+cd v1/sqlserver
+# 1-2. deploy v1, then v2 (as before), then seed a row into the new table:
+docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_dev \
+  -Q "INSERT INTO dbo.Promotion(Name, Discount) VALUES('Summer Sale', 10.00)"
+
+# 3. roll back to v1 WITH auto-drop on — Promotion is recycled, not destroyed
+SmithySettings_ScriptTokens__TargetDb=ordersservice_dev \
+SmithySettings_DropTablesRemovedFromProduct=true \
+  schemaquench --ConfigFile:./base.settings.json
+```
+
+The rollback log drops the inbound foreign key first, then routes the table through the hook. On SQL
+Server the line reads like an ordinary drop — the hook does its work silently:
+
+```
+  Dropping inbound foreign Key dbo.Customer.FK_Customer_Promotion
+  Dropping table [dbo].Promotion
+```
+
+PostgreSQL and MySQL announce it outright — e.g. `Table public.Promotion recycled as
+recyclebin.public_Promotion with a retention of 90 days.` Either way `Promotion` is gone from its
+schema, but its rows are sitting in the recyclebin — confirm it:
+
+```bash
+docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_dev -h -1 -W \
+  -Q "SET NOCOUNT ON; SELECT Name, Discount FROM recyclebin.dbo_Promotion; SELECT OriginalName, RecycledName FROM recyclebin.Registry"
+```
+
+The recycled name follows an `originalschema_table` convention so two recycled copies never collide:
+`recyclebin.dbo_Promotion` (SQL Server), `recyclebin.public_Promotion` (PostgreSQL),
+`recyclebin_Promotion` (MySQL).
+
+### Roll forward — automatic restore
+
+Now deploy `v2` again. `Promotion` is back in the package, so SchemaQuench goes to create it — but
+`CustomTableRestore` intercepts and restores the recycled copy instead of an empty table:
+
+```bash
+SmithySettings_ScriptTokens__TargetDb=ordersservice_dev \
+SmithySettings_SchemaPackagePath=../../v2/sqlserver/Package \
+  schemaquench --ConfigFile:./base.settings.json
+```
+
+```
+  Attempt custom table restore for tables being added …
+  [dbo].[Promotion] Restored
+```
+
+`Promotion` is back **with the `Summer Sale` row intact**, the foreign key and `PromotionId` column are
+rebuilt from the package, and the registry entry is gone. The round trip preserved the data without a
+single hand-written backup script.
+
+### Retention and cleanup
+
+A recycled table isn't kept forever. Each registry row carries a retention window (90 days by default);
+`CleanupJob` drops everything past it:
+
+```sql
+EXEC recyclebin.CleanupJob;      -- SQL Server
+CALL recyclebin.cleanup_job();   -- PostgreSQL
+CALL recyclebin_CleanupJob();    -- MySQL (run with the target database selected)
+```
+
+`CleanupJob` ships as a procedure on all three engines but is **not** scheduled for you — wire it to
+your platform's scheduler once and forget it: a SQL Server Agent job, a PostgreSQL `pg_cron` entry, or
+a MySQL `CREATE EVENT`. Until then it's a manual, idempotent call you can run any time.
+
+> **The recyclebin is the safety net, not the plan.** It buys back the data a careless drop would
+> destroy and a window to change your mind — but a rollback still deserves the same WhatIf-first
+> discipline as a forward deploy. Preview the drops, decide what's destructive, *then* quench.
 
 ## Confirm it by hand
 
