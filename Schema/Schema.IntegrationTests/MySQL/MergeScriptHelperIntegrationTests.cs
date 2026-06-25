@@ -38,6 +38,45 @@ public class MergeScriptHelperIntegrationTests
     }
 
     [Test]
+    public void BuildMergeScript_TableNameWithSingleQuote_GeneratesValidScript()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"zz't_{Guid.NewGuid():N}";
+
+        try
+        {
+            command.CommandText = $@"
+CREATE TABLE `{_testDb}`.`{tableName.Replace("`", "``")}` (
+    id INT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL
+)";
+            command.ExecuteNonQuery();
+
+            var tableData = @"[{""id"":1,""name"":""Alpha""}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.MySQL, command, _testDb, tableName,
+                tableData, "`id`", true, true, false, false, null!);
+
+            Assert.That(script, Is.Not.Null);
+            Assert.That(script, Does.Contain($"`{_testDb}`.`{tableName}`"));
+
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrWhiteSpace(batch)) continue;
+                command.CommandText = batch;
+                command.ExecuteNonQuery();
+            }
+
+            command.CommandText = $"SELECT name FROM `{_testDb}`.`{tableName.Replace("`", "``")}` WHERE id = 1";
+            Assert.That(command.ExecuteScalar()?.ToString(), Is.EqualTo("Alpha"));
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName.Replace("`", "``")}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
     public void GetKeyColumns_ReturnsCorrectPrimaryKey_SingleColumn()
     {
         // Arrange - actor table has single-column primary key (actor_id)

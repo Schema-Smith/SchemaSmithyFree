@@ -335,6 +335,48 @@ INSERT INTO [dbo].[{tableName}] VALUES (1, 0x48454C4C4F);";
 
     #endregion
 
+    #region Quoted Identifier Tests
+
+    [Test]
+    public void BuildMergeScript_TableNameWithSingleQuote_GeneratesValidScript()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"zz't_{Guid.NewGuid():N}";
+
+        try
+        {
+            command.CommandText = $@"
+CREATE TABLE [dbo].[{tableName.Replace("]", "]]")}] (
+    [Id] INT PRIMARY KEY,
+    [Name] NVARCHAR(50) NOT NULL
+)";
+            command.ExecuteNonQuery();
+
+            var tableData = @"[{""Id"":1,""Name"":""Alpha""}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, command,
+                "dbo", tableName, tableData, "[Id]",
+                mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null);
+
+            Assert.That(script, Is.Not.Null);
+            Assert.That(script, Does.Contain("MERGE INTO"));
+            Assert.That(script, Does.Contain("[Name]"));
+
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            command.CommandText = $"SELECT [Name] FROM [dbo].[{tableName.Replace("]", "]]")}] WHERE [Id] = 1";
+            Assert.That(command.ExecuteScalar()?.ToString(), Is.EqualTo("Alpha"));
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS [dbo].[{tableName.Replace("]", "]]")}]";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    #endregion
+
     #region XML Tests
 
     [Test]

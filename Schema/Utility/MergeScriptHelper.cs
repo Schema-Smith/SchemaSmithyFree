@@ -58,6 +58,27 @@ public static class MergeScriptHelper
         return $" AND LOWER({columnExpression}) IN ({string.Join(",", jsonKeys.Select(k => $"'{k.ToLowerInvariant().Replace("'", "''")}'"))})";
     }
 
+    /// <summary>
+    /// Binds named parameters on a shared introspection command. Clears any parameters from a
+    /// prior reuse of <paramref name="cmd"/> first — these helper methods reassign CommandText and
+    /// re-execute the same command repeatedly, so stale parameters would otherwise throw
+    /// "parameter already added". Identifier values are bound as parameters (never interpolated)
+    /// so single quotes and other characters in schema/table names can't break or inject into the
+    /// introspection query. The <c>@name</c> style is supported by SqlClient, Npgsql, and MySqlConnector.
+    /// </summary>
+    private static void BindIdentifierParameters(IDbCommand cmd, params (string Name, string Value)[] parameters)
+    {
+        cmd.Parameters.Clear();
+        foreach (var (name, value) in parameters)
+        {
+            var p = cmd.CreateParameter();
+            p.ParameterName = name;
+            p.DbType = DbType.String;
+            p.Value = (object)value ?? DBNull.Value;
+            cmd.Parameters.Add(p);
+        }
+    }
+
     #region IMergeScriptHelper dispatch methods
 
     public static string GetMatchColumns(Platform platform, string keyColumns) => platform switch
@@ -139,6 +160,7 @@ public static class MergeScriptHelper
         var schema = schemaOrDb.Trim().Trim('[', ']');
         var table = tableName.Trim().Trim('[', ']');
 
+        BindIdentifierParameters(cmd, ("@schema", schema), ("@table", table));
         cmd.CommandText = $@"
 SELECT c.COLUMN_NAME, c.DATA_TYPE,
        CASE WHEN SCHEMA_NAME(st.[schema_id]) IN ('sys', 'dbo')
@@ -158,7 +180,7 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE,
                                                     AND ident.[object_id] = OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME)
   LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
                                                  AND cc.[object_id] = OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME)
-  WHERE c.TABLE_SCHEMA = '{schema}' AND c.TABLE_NAME = '{table}'
+  WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
     AND cc.[name] IS NULL
     AND sc.is_rowguidcol = 0
     {SqlServerUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
@@ -215,6 +237,7 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE,
         var schema = schemaOrDb.Trim().Trim('"');
         var table = tableName.Trim().Trim('"');
 
+        BindIdentifierParameters(cmd, ("@schema", schema), ("@table", table));
         cmd.CommandText = $@"
 SELECT c.column_name, c.data_type, c.udt_name, c.udt_schema,
        c.character_maximum_length, c.numeric_precision, c.numeric_scale, c.datetime_precision,
@@ -225,7 +248,7 @@ SELECT c.column_name, c.data_type, c.udt_name, c.udt_schema,
   JOIN pg_class cls ON cls.relname = c.table_name
   JOIN pg_namespace ns ON ns.oid = cls.relnamespace AND ns.nspname = c.table_schema
   JOIN pg_attribute a ON a.attrelid = cls.oid AND a.attname = c.column_name AND NOT a.attisdropped AND a.attgenerated = ''
-  WHERE c.table_schema = '{schema}' AND c.table_name = '{table}'{BuildJsonKeyFilter(jsonKeys, "c.column_name")}
+  WHERE c.table_schema = @schema AND c.table_name = @table{BuildJsonKeyFilter(jsonKeys, "c.column_name")}
   ORDER BY c.column_name
 ";
         var results = new List<MergeColumnInfo>();
@@ -275,6 +298,7 @@ SELECT c.column_name, c.data_type, c.udt_name, c.udt_schema,
         var db = schemaOrDb.Trim().Trim('`');
         var table = tableName.Trim().Trim('`');
 
+        BindIdentifierParameters(cmd, ("@db", db), ("@table", table));
         cmd.CommandText = $@"
 SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
        c.CHARACTER_MAXIMUM_LENGTH, c.NUMERIC_PRECISION, c.NUMERIC_SCALE, c.DATETIME_PRECISION,
@@ -283,8 +307,8 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
        CASE WHEN c.GENERATION_EXPRESSION != '' THEN 1 ELSE 0 END AS IsComputed,
        c.CHARACTER_SET_NAME
   FROM INFORMATION_SCHEMA.COLUMNS c
-  WHERE BINARY c.TABLE_SCHEMA = BINARY '{db.Replace("'", "''")}'
-    AND BINARY c.TABLE_NAME = BINARY '{table.Replace("'", "''")}'
+  WHERE BINARY c.TABLE_SCHEMA = BINARY @db
+    AND BINARY c.TABLE_NAME = BINARY @table
     AND (c.GENERATION_EXPRESSION IS NULL OR c.GENERATION_EXPRESSION = ''){BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
   ORDER BY c.ORDINAL_POSITION
 ";
@@ -359,6 +383,7 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
         tableSchema = tableSchema.Trim().Trim('[', ']');
         tableName = tableName.Trim().Trim('[', ']');
 
+        BindIdentifierParameters(cmd, ("@objname", $"{tableSchema}.{tableName}"));
         cmd.CommandText = $@"
 SELECT STRING_AGG(CASE WHEN sc.is_nullable = 1 THEN '*' ELSE '' END + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',')
   FROM sys.indexes si WITH (NOLOCK)
@@ -366,7 +391,7 @@ SELECT STRING_AGG(CASE WHEN sc.is_nullable = 1 THEN '*' ELSE '' END + '[' + COL_
                                          AND ic.index_id = si.index_id
   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = ic.[object_id]
                                    AND sc.column_id = ic.column_id
-  WHERE si.[object_id] = OBJECT_ID('{tableSchema}.{tableName}')
+  WHERE si.[object_id] = OBJECT_ID(@objname)
     AND si.index_id = (SELECT TOP 1 si2.index_id
                          FROM sys.indexes si2 WITH (NOLOCK)
                          WHERE si2.[object_id] = si.[object_id]
@@ -386,6 +411,7 @@ SELECT STRING_AGG(CASE WHEN sc.is_nullable = 1 THEN '*' ELSE '' END + '[' + COL_
         tableSchema = tableSchema.Trim().Trim('"');
         tableName = tableName.Trim().Trim('"');
 
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG(CASE WHEN c.is_nullable = 'YES' THEN '*' ELSE '' END || '""' || a.attname || '""', ',' ORDER BY ik.ord )
   FROM pg_index idx
@@ -397,8 +423,8 @@ SELECT STRING_AGG(CASE WHEN c.is_nullable = 'YES' THEN '*' ELSE '' END || '""' |
   JOIN information_schema.columns c ON c.table_schema = ns.nspname
                                    AND c.table_name = tbl.relname
                                    AND c.column_name = a.attname
-  WHERE ns.nspname = '{tableSchema}'
-    AND tbl.relname = '{tableName}'
+  WHERE ns.nspname = @schema
+    AND tbl.relname = @table
     AND idx.indexrelid = (SELECT i2.indexrelid
                             FROM pg_index i2
                             WHERE i2.indrelid = tbl.oid
@@ -418,6 +444,7 @@ SELECT STRING_AGG(CASE WHEN c.is_nullable = 'YES' THEN '*' ELSE '' END || '""' |
         databaseName = databaseName.Trim().Trim('`');
         tableName = tableName.Trim().Trim('`');
 
+        BindIdentifierParameters(cmd, ("@db", databaseName), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT GROUP_CONCAT(CONCAT('`', kcu.COLUMN_NAME, '`') ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',')
 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
@@ -426,8 +453,8 @@ JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
   AND tc.TABLE_SCHEMA = kcu.TABLE_SCHEMA
   AND tc.TABLE_NAME = kcu.TABLE_NAME
 WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
-  AND BINARY tc.TABLE_SCHEMA = BINARY '{databaseName.Replace("'", "''")}'
-  AND BINARY tc.TABLE_NAME = BINARY '{tableName.Replace("'", "''")}';
+  AND BINARY tc.TABLE_SCHEMA = BINARY @db
+  AND BINARY tc.TABLE_NAME = BINARY @table;
 ";
         return cmd.ExecuteScalar()?.ToString() ?? "";
     }
@@ -501,10 +528,11 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
 
     private static string GetUnsupportedColumnCommentsSqlServer(IDbCommand cmd, string tableSchema, string tableName)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG('-- Column [' + c.COLUMN_NAME + '] skipped: ' + c.DATA_TYPE + ' is not supported for data delivery', CHAR(13) + CHAR(10))
   FROM INFORMATION_SCHEMA.COLUMNS c
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+  WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
     AND c.DATA_TYPE IN ('sql_variant', 'rowversion', 'timestamp')
 ";
         return cmd.ExecuteScalar()?.ToString() ?? "";
@@ -512,13 +540,14 @@ SELECT STRING_AGG('-- Column [' + c.COLUMN_NAME + '] skipped: ' + c.DATA_TYPE + 
 
     private static string GetUnsupportedColumnCommentsPostgreSql(IDbCommand cmd, string tableSchema, string tableName)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_name || ' is not supported for data delivery', CHR(10) ORDER BY c.column_name)
   FROM information_schema.columns c
   JOIN pg_class cls ON cls.relname = c.table_name
   JOIN pg_namespace ns ON ns.oid = cls.relnamespace AND ns.nspname = c.table_schema
   JOIN pg_attribute a ON a.attrelid = cls.oid AND a.attname = c.column_name AND NOT a.attisdropped AND a.attgenerated = ''
-  WHERE c.table_schema = '{tableSchema}' AND c.table_name = '{tableName}'
+  WHERE c.table_schema = @schema AND c.table_name = @table
     AND (c.udt_name IN ('tsvector', 'tsquery', 'money', 'box', 'circle', 'line', 'lseg', 'path')
          OR EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
                     WHERE t.typname = c.udt_name AND n.nspname = c.udt_schema AND t.typtype = 'c'))
@@ -642,6 +671,7 @@ WHEN MATCHED AND ({updateCompare}) THEN
 
     private static string GetJsonSelectColumnsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
                        THEN CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' THEN 'geography' ELSE 'geometry' END + '::STGeomFromText([' + c.COLUMN_NAME + '], [' + c.COLUMN_NAME + '.STSrid]) AS [' + c.COLUMN_NAME + ']'
@@ -650,7 +680,7 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
   LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
                                                  AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+  WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
     AND cc.[name] IS NULL
     AND sc.is_rowguidcol = 0
     {SqlServerUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
@@ -660,8 +690,9 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
 
     private static bool NeedsIdentityInsertSqlServer(IDbCommand cmd, string tableSchema, string tableName)
     {
+        BindIdentifierParameters(cmd, ("@objname", $"{tableSchema}.{tableName}"));
         cmd.CommandText = $@"
-SELECT CAST(CASE WHEN EXISTS (SELECT * FROM sys.identity_columns WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('{tableSchema}.{tableName}'))
+SELECT CAST(CASE WHEN EXISTS (SELECT * FROM sys.identity_columns WITH (NOLOCK) WHERE [object_id] = OBJECT_ID(@objname))
                  THEN 1 ELSE 0 END AS BIT)
 ";
         return cmd.ExecuteScalar() as bool? ?? false;
@@ -671,9 +702,10 @@ SELECT CAST(CASE WHEN EXISTS (SELECT * FROM sys.identity_columns WITH (NOLOCK) W
     {
         if (jsonKeys == null || jsonKeys.Count == 0) return false;
         var names = string.Join(",", jsonKeys.Select(k => $"'{k.Replace("'", "''")}'"));
+        BindIdentifierParameters(cmd, ("@objname", $"{tableSchema}.{tableName}"));
         cmd.CommandText = $@"
 SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM sys.identity_columns c WITH (NOLOCK)
-                              WHERE c.[object_id] = OBJECT_ID('{tableSchema}.{tableName}')
+                              WHERE c.[object_id] = OBJECT_ID(@objname)
                                 AND c.[name] IN ({names}))
                  THEN 1 ELSE 0 END AS BIT)
 ";
@@ -682,6 +714,7 @@ SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM sys.identity_columns c WITH (NOLOCK)
 
     private static string GetJsonColumnDefinitionsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
                   REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(USER_TYPE), 'HIERARCHYID', 'NVARCHAR(4000)'), 'GEOGRAPHY', 'NVARCHAR(4000)'), 'GEOMETRY', 'NVARCHAR(4000)'), 'DATETIMEOFFSET', 'NVARCHAR(50)'), 'NTEXT', 'NVARCHAR(MAX)'), 'TEXT', 'VARCHAR(MAX)'), 'IMAGE', 'VARBINARY(MAX)') +
@@ -705,7 +738,7 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
                                                     AND ident.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
   LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
                                                  AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+  WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
     AND cc.[name] IS NULL
     {SqlServerUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
 ";
@@ -714,6 +747,7 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
 
     private static string GetInsertColumnsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG('        [' + c.COLUMN_NAME + ']', ',' + CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY c.COLUMN_NAME)
   FROM INFORMATION_SCHEMA.COLUMNS c
@@ -722,7 +756,7 @@ SELECT STRING_AGG('        [' + c.COLUMN_NAME + ']', ',' + CHAR(13) + CHAR(10)) 
                                                     AND ident.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
   LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
                                                  AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+  WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
     AND cc.[name] IS NULL
     AND sc.is_rowguidcol = 0
     {SqlServerUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
@@ -732,6 +766,7 @@ SELECT STRING_AGG('        [' + c.COLUMN_NAME + ']', ',' + CHAR(13) + CHAR(10)) 
 
     private static string GetUpdateColumnsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
                        WHEN c.DATA_TYPE = 'DATETIMEOFFSET' THEN 'D'
@@ -747,7 +782,7 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
                                                     AND ident.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
   LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
                                                  AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+  WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
     AND ident.[Name] IS NULL
     AND cc.[name] IS NULL
     AND sc.is_rowguidcol = 0
@@ -875,10 +910,11 @@ END $$ LANGUAGE plpgsql;
     private static (string DisableStatements, string EnableStatements) GetRuleDisableEnableStatements(
         IDbCommand cmd, string tableSchema, string tableName, bool updateDescendents, string destSchema = null)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT rulename FROM pg_rules
-WHERE schemaname = '{tableSchema.Replace("'", "''")}'
-  AND tablename = '{tableName.Replace("'", "''")}'
+WHERE schemaname = @schema
+  AND tablename = @table
   AND rulename <> '_RETURN'
 ORDER BY rulename;";
         var ruleNames = new List<string>();
@@ -910,6 +946,7 @@ ORDER BY rulename;";
 
     private static string GetIdentityColumnAndSequencePostgreSql(IDbCommand cmd, string tableSchema, string tableName)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT c.column_name || '=' || COALESCE(PG_GET_SERIAL_SEQUENCE(c.table_schema || '.' || c.table_name, c.column_name),
                                         CASE WHEN LOWER(c.column_default) LIKE 'nextval(%'
@@ -918,8 +955,8 @@ SELECT c.column_name || '=' || COALESCE(PG_GET_SERIAL_SEQUENCE(c.table_schema ||
                                                             FOR POSITION('''' IN SUBSTRING(c.column_default FROM POSITION('''' IN c.column_default) + 1)) - 1)
                                              END) || '=' || CASE WHEN c.is_identity = 'YES' THEN 'SYSTEM' ELSE 'USER' END
   FROM information_schema.columns c
-  WHERE c.table_schema = '{tableSchema}'
-    AND c.table_name = '{tableName}'
+  WHERE c.table_schema = @schema
+    AND c.table_name = @table
     AND (LOWER(c.column_default) LIKE 'nextval(%' OR c.is_identity = 'YES')
 ";
         return cmd.ExecuteScalar()?.ToString();
@@ -927,6 +964,7 @@ SELECT c.column_name || '=' || COALESCE(PG_GET_SERIAL_SEQUENCE(c.table_schema ||
 
     private static string GetJsonColumnDefinitionsPostgreSql(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys = null)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG(
     CASE WHEN c.udt_name IN ('geometry','geography','point','linestring','polygon',
@@ -960,7 +998,7 @@ SELECT STRING_AGG(
                      AND a.attname = c.column_name
                      AND NOT a.attisdropped
                      AND a.attgenerated = ''
-  WHERE c.table_schema = '{tableSchema}' AND c.table_name = '{tableName}'
+  WHERE c.table_schema = @schema AND c.table_name = @table
     {PostgreSqlUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.column_name")}
 ";
         return cmd.ExecuteScalar()?.ToString() ?? "";
@@ -968,6 +1006,7 @@ SELECT STRING_AGG(
 
     private static string GetInsertColumnsPostgreSql(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys = null)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG('        ""' || c.column_name || '""', ',' || CHR(10) ORDER BY c.column_name)
   FROM information_schema.columns c
@@ -977,8 +1016,8 @@ SELECT STRING_AGG('        ""' || c.column_name || '""', ',' || CHR(10) ORDER BY
                      AND a.attname = c.column_name
                      AND NOT a.attisdropped
                      AND a.attgenerated = ''
-  WHERE c.table_schema = '{tableSchema}'
-    AND c.table_name = '{tableName}'
+  WHERE c.table_schema = @schema
+    AND c.table_name = @table
     {PostgreSqlUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.column_name")}
 ";
         return cmd.ExecuteScalar()?.ToString() ?? "";
@@ -986,14 +1025,15 @@ SELECT STRING_AGG('        ""' || c.column_name || '""', ',' || CHR(10) ORDER BY
 
     private static string GetUpdateColumnsPostgreSql(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys = null)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG('""' || c.column_name || '""', ',' ORDER BY c.column_name)
   FROM information_schema.columns c
   JOIN pg_class cls ON cls.relname = c.table_name
   JOIN pg_namespace ns ON ns.oid = cls.relnamespace AND ns.nspname = c.table_schema
   JOIN pg_attribute a ON a.attrelid = cls.oid AND a.attname = c.column_name AND NOT a.attisdropped AND a.attgenerated = ''
-  WHERE c.table_schema = '{tableSchema}'
-    AND c.table_name = '{tableName}'
+  WHERE c.table_schema = @schema
+    AND c.table_name = @table
     AND NOT (COALESCE(c.column_default, '') LIKE 'nextval(%' OR c.is_identity = 'YES')
     {PostgreSqlUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.column_name")}
 ";
@@ -1021,11 +1061,12 @@ SELECT STRING_AGG('""' || c.column_name || '""', ',' ORDER BY c.column_name)
 
     private static HashSet<string> GetXmlColumnsPostgreSql(IDbCommand cmd, string tableSchema, string tableName)
     {
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT STRING_AGG(c.column_name, ',')
   FROM information_schema.columns c
-  WHERE c.table_schema = '{tableSchema}'
-    AND c.table_name = '{tableName}'
+  WHERE c.table_schema = @schema
+    AND c.table_name = @table
     AND c.udt_name = 'xml';
 ";
         var result = cmd.ExecuteScalar()?.ToString();
@@ -1036,11 +1077,12 @@ SELECT STRING_AGG(c.column_name, ',')
     private static Dictionary<string, string> GetJsonColumnsPostgreSql(IDbCommand cmd, string tableSchema, string tableName)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT c.column_name, c.udt_name
   FROM information_schema.columns c
-  WHERE c.table_schema = '{tableSchema}'
-    AND c.table_name = '{tableName}'
+  WHERE c.table_schema = @schema
+    AND c.table_name = @table
     AND c.udt_name IN ('json', 'jsonb')";
 
         using var reader = cmd.ExecuteReader();
@@ -1138,6 +1180,7 @@ SELECT c.column_name, c.udt_name
         databaseName = databaseName.Trim().Trim('`');
         tableName = tableName.Trim().Trim('`');
 
+        BindIdentifierParameters(cmd, ("@db", databaseName), ("@table", tableName));
         cmd.CommandText = $@"
 SELECT
     c.COLUMN_NAME,
@@ -1150,8 +1193,8 @@ SELECT
     c.EXTRA,
     c.GENERATION_EXPRESSION
 FROM INFORMATION_SCHEMA.COLUMNS c
-WHERE BINARY c.TABLE_SCHEMA = BINARY '{databaseName.Replace("'", "''")}'
-  AND BINARY c.TABLE_NAME = BINARY '{tableName.Replace("'", "''")}'
+WHERE BINARY c.TABLE_SCHEMA = BINARY @db
+  AND BINARY c.TABLE_NAME = BINARY @table
 ORDER BY c.ORDINAL_POSITION;
 ";
         var columns = new List<MySqlColumnInfo>();

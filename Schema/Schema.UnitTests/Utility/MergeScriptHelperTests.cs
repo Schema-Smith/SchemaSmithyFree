@@ -70,11 +70,15 @@ public class MergeScriptHelperTests
     {
         var cmd = Substitute.For<IDbCommand>();
         cmd.ExecuteScalar().Returns("\"id\"");
+        var bound = CaptureBoundParameters(cmd);
 
         MergeScriptHelper.GetKeyColumns(Platform.PostgreSQL, cmd, "\"public\"", "\"test\"");
 
-        Assert.That(cmd.CommandText, Does.Contain("'public'"));
-        Assert.That(cmd.CommandText, Does.Contain("'test'"));
+        // Quotes are trimmed and the identifiers are passed as parameters, not interpolated.
+        Assert.That(bound.Any(p => p.Name == "@schema" && Equals(p.Value, "public")), Is.True);
+        Assert.That(bound.Any(p => p.Name == "@table" && Equals(p.Value, "test")), Is.True);
+        Assert.That(cmd.CommandText, Does.Not.Contain("'public'"));
+        Assert.That(cmd.CommandText, Does.Not.Contain("'test'"));
     }
 
     [Test]
@@ -82,11 +86,15 @@ public class MergeScriptHelperTests
     {
         var cmd = Substitute.For<IDbCommand>();
         cmd.ExecuteScalar().Returns("`id`");
+        var bound = CaptureBoundParameters(cmd);
 
         MergeScriptHelper.GetKeyColumns(Platform.MySQL, cmd, "`testdb`", "`test`");
 
-        Assert.That(cmd.CommandText, Does.Contain("'testdb'"));
-        Assert.That(cmd.CommandText, Does.Contain("'test'"));
+        // Backticks are trimmed and the identifiers are passed as parameters, not interpolated.
+        Assert.That(bound.Any(p => p.Name == "@db" && Equals(p.Value, "testdb")), Is.True);
+        Assert.That(bound.Any(p => p.Name == "@table" && Equals(p.Value, "test")), Is.True);
+        Assert.That(cmd.CommandText, Does.Not.Contain("'testdb'"));
+        Assert.That(cmd.CommandText, Does.Not.Contain("'test'"));
     }
 
     [Test]
@@ -1317,6 +1325,24 @@ public class MergeScriptHelperTests
         return cmd;
     }
 
+    /// <summary>
+    /// Wires an NSubstitute command to record every parameter bound through
+    /// CreateParameter()/Parameters.Add(...). Identifiers are now passed as parameters rather
+    /// than interpolated into the SQL, so tests assert on the captured (name, value) pairs.
+    /// The returned list fills as the command under test runs.
+    /// </summary>
+    private static List<(string Name, object Value)> CaptureBoundParameters(IDbCommand cmd)
+    {
+        var bound = new List<(string Name, object Value)>();
+        cmd.CreateParameter().Returns(_ => Substitute.For<IDbDataParameter>());
+        cmd.Parameters.When(p => p.Add(Arg.Any<object>())).Do(ci =>
+        {
+            var parameter = (IDbDataParameter)ci.Arg<object>();
+            bound.Add((parameter.ParameterName, parameter.Value));
+        });
+        return bound;
+    }
+
     #endregion
 
     #region Helper Methods - PostgreSQL Mock
@@ -1882,18 +1908,11 @@ public class MergeScriptHelperTests
         // that's where the table physically exists. Only the EMITTED script body switches to
         // the override.
         var cmd = Substitute.For<IDbCommand>();
-        var capturedQueries = new List<string>();
 
         // Sequence: unsupported(null) -> jsonSelectCols -> needsIdentity -> jsonColDefs -> insertCols.
-        // Capture CommandText inside the Returns delegate so each invocation snapshots the query
-        // that *triggered* it; using When().Do() in addition can race with the dequeue and leak
-        // null values into downstream string concatenations.
         var sequence = new Queue<object>(new object[] { null, "[Id]", false, "           [Id] INT", "        [Id]" });
-        cmd.ExecuteScalar().Returns(_ =>
-        {
-            capturedQueries.Add(cmd.CommandText);
-            return sequence.Count > 0 ? sequence.Dequeue() : null;
-        });
+        cmd.ExecuteScalar().Returns(_ => sequence.Count > 0 ? sequence.Dequeue() : null);
+        var bound = CaptureBoundParameters(cmd);
 
         MergeScriptHelper.BuildMergeScript(Platform.SqlServer, cmd,
             "tenant_seed", "Customers", "[]", "[Id]",
@@ -1902,9 +1921,11 @@ public class MergeScriptHelperTests
             disableRules: false, updateDescendents: true,
             destSchemaOverride: "{{SchemaName}}");
 
-        Assert.That(capturedQueries.Any(q => q != null && q.Contains("'tenant_seed'")), Is.True,
+        // Catalog probes bind the SOURCE schema as a parameter; the emitted-script override token
+        // must never reach the source-metadata queries.
+        Assert.That(bound.Any(p => Equals(p.Value, "tenant_seed")), Is.True,
             "Catalog probes must use the SOURCE schema for INFORMATION_SCHEMA lookups, not the override.");
-        Assert.That(capturedQueries.Any(q => q != null && q.Contains("'{{SchemaName}}'")), Is.False,
+        Assert.That(bound.Any(p => Equals(p.Value, "{{SchemaName}}")), Is.False,
             "Catalog probes must not pass the engine token through to source metadata queries.");
     }
 

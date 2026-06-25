@@ -380,8 +380,26 @@ WHERE tc_p.TABLE_SCHEMA = '{schema.Replace("'", "''")}'
             return null;
 
         // Normalize both separator styles to the platform separator so output is native on either OS.
-        return Path.Combine(templateRootPath,
-            contentFile.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar));
+        var normalized = contentFile
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+
+        // An absolute contentFile is never inside the template root — reject it outright.
+        if (Path.IsPathRooted(normalized))
+            return null;
+
+        var fullRoot = Path.GetFullPath(templateRootPath);
+        // Append the (now guaranteed relative) suffix and canonicalize. Concatenate rather than
+        // Path.Combine, which would discard fullRoot for a rooted suffix — already excluded above.
+        var fullCombined = Path.GetFullPath(fullRoot + Path.DirectorySeparatorChar + normalized);
+
+        // Require that the resolved path stays inside the template root (containment guard).
+        // Append the separator before comparing so "/rootEvil" is not treated as inside "/root".
+        if (!fullCombined.Equals(fullRoot, StringComparison.Ordinal) &&
+            !fullCombined.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            return null;
+
+        return fullCombined;
     }
 
     /// <summary>

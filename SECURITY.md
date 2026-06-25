@@ -30,6 +30,17 @@ SchemaSmith tools connect to SQL Server, PostgreSQL, and MySQL databases and exe
 - **SQL generation** — tools generate and execute dynamic SQL against target databases
 - **File handling** — tools read schema packages from disk or ZIP archives
 
+## Threat Model
+
+SchemaSmith is an **operator-run** command-line tool, intended to be run by an operator against databases and schema definitions that operator controls. In the normal case, schema definitions (table JSON, `Project.json`, configuration) and the chosen target connections are trusted inputs.
+
+Hardening therefore focuses on the surfaces where input may originate from a **less-trusted source** than the operator's own authored schema:
+
+- **Identifiers read from a database via introspection** (catalog views / `INFORMATION_SCHEMA`) are bound as query parameters rather than interpolated into SQL, so identifier contents cannot alter the introspection queries.
+- **Template and content-file references** that may come from externally-authored or distributed schema packages are constrained to the template's own directory tree during path resolution.
+
+Running SchemaSmith against a schema package or database you do not trust is outside the intended operating model; the hardening above reduces — but does not eliminate — that risk. Treat untrusted schema packages with the same caution you would any untrusted code or configuration.
+
 ## Best Practices
 
 - Prefer your platform's strongest non-password authentication over storing credentials in config files: Windows integrated authentication or Azure AD on SQL Server, Kerberos / GSSAPI or SCRAM-SHA-256 on PostgreSQL, socket auth or PAM auth on MySQL
