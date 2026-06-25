@@ -7,7 +7,7 @@ package and adds your first table.
 
 ## Before you start
 
-- **Install the CLI.** See the [Installation guide](https://github.com/Schema-Smith/SchemaSmith/blob/main/docs/end-user/guide/installation.md) — `choco install schemasmith` on Windows, or `curl -fsSL https://raw.githubusercontent.com/Schema-Smith/SchemaSmith/main/packaging/install/install.sh | sh` on Linux/macOS.
+- **Install the CLI.** See the [Installation guide](https://github.com/Schema-Smith/SchemaSmith/blob/main/docs/end-user/guide/installation.md) — `choco install schemasmith` on Windows, or `curl -fsSL https://schemasmith.com/dl/install.sh | sh` on Linux/macOS.
 - **Start the sandbox.** From [`Demos/Learn/docker`](../docker), run `docker compose up -d` and confirm all three engines report `PASS` with `./verify-sandbox.sh` (or `verify-sandbox.ps1`). The sandbox provisions a `learn` database on SQL Server, PostgreSQL, and MySQL.
 
 ## Step 1: Confirm the install

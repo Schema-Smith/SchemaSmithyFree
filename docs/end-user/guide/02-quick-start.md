@@ -11,7 +11,7 @@ You need three things:
 **SchemaSmith tools.** Pick the fastest path for your platform:
 
 - **Windows:** `choco install schemasmith`
-- **Linux / macOS:** `curl -fsSL https://raw.githubusercontent.com/Schema-Smith/SchemaSmith/main/packaging/install/install.sh | sh`
+- **Linux / macOS:** `curl -fsSL https://schemasmith.com/dl/install.sh | sh`
 - **Debian/Ubuntu, RHEL/Fedora, manual ZIP, signature verification, all the rest:** see [Installation](installation.md).
 
 **A database server.** Either an existing instance or Docker (recommended). The repository includes a Docker Compose file that starts the demo servers for you.

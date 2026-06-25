@@ -53,7 +53,7 @@ Layout matches the `.deb` package -- binaries under `/usr/lib/schemasmith/`, sym
 The universal Unix path. One command, any glibc-based Linux distro, any modern macOS, both `x64` and `arm64`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Schema-Smith/SchemaSmith/main/packaging/install/install.sh | sh
+curl -fsSL https://schemasmith.com/dl/install.sh | sh
 ```
 
 `install.sh` detects your OS and architecture, resolves the latest release without a GitHub API token, downloads the matching `.tar.gz` bundle, verifies SHA-256 against the release manifest, and installs the three CLI commands onto your PATH. The script is POSIX `sh` -- no bash-isms -- so it runs on whatever shell your container or distro happens to ship.
@@ -68,7 +68,7 @@ By default it installs to `/usr/local/bin` if you run it as root and `~/.local/b
 Pin a version and target a custom directory in one go:
 
 ```sh
-INSTALL_VERSION=2.0.0 INSTALL_DIR=$HOME/tools sh -c "$(curl -fsSL https://raw.githubusercontent.com/Schema-Smith/SchemaSmith/main/packaging/install/install.sh)"
+INSTALL_VERSION=2.0.0 INSTALL_DIR=$HOME/tools sh -c "$(curl -fsSL https://schemasmith.com/dl/install.sh)"
 ```
 
 When the install directory is not on your `$PATH`, the script prints shell-specific PATH-fixup instructions before exiting -- `export` lines for bash and zsh, `fish_add_path` for fish -- so you can paste once and move on.
