@@ -23,6 +23,9 @@ env:
   TEST_USER: TestUser
   TEST_PASSWORD: 'aCa2d805-41E5@40c4!98e7#92F93zzxo176'
 
+permissions:
+  contents: read
+
 jobs:
   build-and-unit-tests:
     name: Build & Unit Tests
