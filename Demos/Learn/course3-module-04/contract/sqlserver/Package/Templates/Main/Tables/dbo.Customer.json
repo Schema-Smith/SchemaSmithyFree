@@ -1,0 +1,14 @@
+{
+  "Schema": "dbo",
+  "Name": "Customer",
+  "Columns": [
+    { "Name": "CustomerId", "DataType": "INT IDENTITY(1,1)" },
+    { "Name": "Name", "DataType": "NVARCHAR(100)" },
+    { "Name": "ContactEmail", "DataType": "NVARCHAR(200)", "Nullable": true },
+    { "Name": "LoyaltyTier", "DataType": "NVARCHAR(20)", "Nullable": true, "Default": "N'Standard'" }
+  ],
+  "Indexes": [
+    { "Name": "PK_Customer", "PrimaryKey": true, "Clustered": true, "IndexColumns": "CustomerId" },
+    { "Name": "IX_Customer_ContactEmail", "Unique": false, "IndexColumns": "ContactEmail" }
+  ]
+}

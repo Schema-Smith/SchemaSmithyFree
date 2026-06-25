@@ -1,0 +1,11 @@
+{
+  "Name": "Promotion",
+  "Columns": [
+    { "Name": "PromotionId", "DataType": "INT", "AutoIncrement": true },
+    { "Name": "Name", "DataType": "VARCHAR(100)" },
+    { "Name": "Discount", "DataType": "DECIMAL(5,2)" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "PromotionId" }
+  ]
+}

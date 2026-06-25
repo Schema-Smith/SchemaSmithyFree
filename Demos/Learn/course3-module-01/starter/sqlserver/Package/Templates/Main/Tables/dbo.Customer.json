@@ -1,0 +1,12 @@
+{
+  "Schema": "dbo",
+  "Name": "Customer",
+  "Columns": [
+    { "Name": "CustomerId", "DataType": "INT IDENTITY(1,1)" },
+    { "Name": "Name", "DataType": "NVARCHAR(100)" },
+    { "Name": "Email", "DataType": "NVARCHAR(200)" }
+  ],
+  "Indexes": [
+    { "Name": "PK_Customer", "PrimaryKey": true, "Clustered": true, "IndexColumns": "CustomerId" }
+  ]
+}

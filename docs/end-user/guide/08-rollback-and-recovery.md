@@ -82,7 +82,7 @@ Most rollbacks don't require migration scripts. Data preservation is only needed
 
 **WhatIf first, always.** Never roll back production without running WhatIf mode and reading every line of the generated SQL. The same discipline that applies to forward deployments applies to rollbacks.
 
-**Keep auto-drops off.** If your production config has `DropTablesRemovedFromProduct: false` (the recommended production posture for rollback-friendly deployments), rolling back to a prior package won't drop tables that only exist in the newer release. That's usually what you want -- the tables stay around until you're sure the rollback is permanent, then you can clean them up explicitly. See [SchemaQuench -- DropTablesRemovedFromProduct](../reference/schemaquench.md#droptablesremovedfromproduct).
+**Choose your auto-drop posture.** `DropTablesRemovedFromProduct` defaults to `true`, so rolling back to a prior package removes the tables the newer release added -- clean convergence, but an outright drop destroys their data. Two safe postures fit a rollback-friendly deployment: (1) set `DropTablesRemovedFromProduct: false` so the rollback leaves those tables in place until you're sure it's permanent, then clean them up explicitly -- the conservative default when you have no other safety net; or (2) keep auto-drops on but install a **soft-drop hook** that sets a removed table aside in a recoverable holding area (a "recycle bin") instead of destroying it, so the rollback converges *and* the data is recoverable. Either way, **a dropped column is never caught by these mechanisms** -- preserve column data yourself before a rollback that drops it. See [SchemaQuench -- DropTablesRemovedFromProduct](../reference/schemaquench.md#droptablesremovedfromproduct).
 
 ---
 

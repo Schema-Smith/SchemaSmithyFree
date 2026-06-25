@@ -74,3 +74,8 @@ packaging/chocolatey/schemasmith/tools/*.nupkg
 # Python (coverage gate check script)
 __pycache__/
 *.pyc
+
+# SchemaQuench run output — generated DDL scripts written to the invocation cwd
+# during quench runs (e.g. "SchemaQuench - Quench Indexes localhost.db.sql").
+# Run artifacts, regenerated on demand; never tracked.
+SchemaQuench - *.sql
