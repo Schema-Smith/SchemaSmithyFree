@@ -660,7 +660,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", "0", false, false, null);
         quench.PrepareIterationContent();
 
-        quench.ApplyFolderGates(GateCommand(sql => sql == "KEEP" ? 1 : 0));
+        quench.ApplyFolderGates(GateCommand(sql => sql.Contains("KEEP") ? 1 : 0));
 
         Assert.That(quench.IterationBeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "keep.sql" }));
     }
@@ -769,7 +769,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", "0", false, false, null);
         quench.PrepareIterationContent();
 
-        quench.ApplyFolderGates(GateCommand(sql => sql == "KEEP" ? 1 : 0));
+        quench.ApplyFolderGates(GateCommand(sql => sql.Contains("KEEP") ? 1 : 0));
 
         Assert.That(quench.IterationBeforeScripts.Single(), Is.SameAs(keepScript));
     }
@@ -790,7 +790,7 @@ public class DatabaseQuenchTests
             false, "0", false, "0", "0", false, false, null);
         quench.PrepareIterationContent();
 
-        quench.ApplyFolderGates(GateCommand(sql => sql == "KEEP" ? 1 : 0));
+        quench.ApplyFolderGates(GateCommand(sql => sql.Contains("KEEP") ? 1 : 0));
 
         Assert.That(quench.IterationBeforeScripts.Single(), Is.Not.SameAs(keepScript));
     }
@@ -806,7 +806,7 @@ public class DatabaseQuenchTests
         quench.PrepareIterationContent();
 
         // Only the schema-substituted form should be the query; gate true for tenant_a.
-        quench.ApplyFolderGates(GateCommand(sql => sql == "CHECK tenant_a" ? 1 : 0));
+        quench.ApplyFolderGates(GateCommand(sql => sql.Contains("CHECK tenant_a") ? 1 : 0));
 
         Assert.That(quench.IterationBeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "eu.sql" }));
     }

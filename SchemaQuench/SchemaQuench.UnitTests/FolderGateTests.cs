@@ -68,4 +68,39 @@ public class FolderGateTests
 
         Assert.Throws<InvalidOperationException>(() => FolderGate.ShouldApply(command, "NOT VALID SQL"));
     }
+
+    [Test]
+    public void ShouldApply_BarePredicate_WrappedInSelectCase()
+    {
+        var command = CommandReturning(1);
+
+        FolderGate.ShouldApply(command, "@@version LIKE '%MariaDB%'");
+
+        command.Received().CommandText = "SELECT CASE WHEN (@@version LIKE '%MariaDB%') THEN 1 ELSE 0 END";
+    }
+
+    [TestCase("SELECT 1")]
+    [TestCase("select 1")]
+    [TestCase("  SELECT 1")]
+    [TestCase("SELECT\tCASE WHEN 1=1 THEN 1 ELSE 0 END")]
+    public void ShouldApply_SelectForm_PassesThroughUnchanged(string expression)
+    {
+        var command = CommandReturning(1);
+
+        FolderGate.ShouldApply(command, expression);
+
+        command.Received().CommandText = expression;
+    }
+
+    [Test]
+    public void NormalizeToSelect_BarePredicate_Wraps()
+    {
+        Assert.That(FolderGate.NormalizeToSelect("a = 1"), Is.EqualTo("SELECT CASE WHEN (a = 1) THEN 1 ELSE 0 END"));
+    }
+
+    [Test]
+    public void NormalizeToSelect_SelectForm_Unchanged()
+    {
+        Assert.That(FolderGate.NormalizeToSelect("select a from t"), Is.EqualTo("select a from t"));
+    }
 }

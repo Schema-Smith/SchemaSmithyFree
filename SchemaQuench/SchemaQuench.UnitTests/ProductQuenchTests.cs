@@ -1908,7 +1908,7 @@ public class ProductQuenchTests
             var skip = new ProductFolder { FolderPath = "skip", ShouldApplyExpression = "SKIP" };
             var plain = new ProductFolder { FolderPath = "plain" };
             var command = Substitute.For<IDbCommand>();
-            command.ExecuteScalar().Returns(_ => command.CommandText == "KEEP" ? (object)1 : 0);
+            command.ExecuteScalar().Returns(_ => command.CommandText.Contains("KEEP") ? (object)1 : 0);
 
             var survivors = quench.GateProductFolders(command, new[] { keep, skip, plain });
 
