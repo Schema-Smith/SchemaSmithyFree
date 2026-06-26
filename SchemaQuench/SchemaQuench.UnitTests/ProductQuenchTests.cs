@@ -242,13 +242,32 @@ public class ProductQuenchTests
     }
 
     [Test]
-    public void BuildSpecialTokens_MaterializedViewSchema_EscapesSingleQuotes()
+    public void BuildSpecialTokens_MaterializedViewSchema_StoresRawValue_NotPreEscaped()
     {
+        // #301: special-token values are stored RAW. Quote-escaping happens at substitution time
+        // (SqlScript.TokenReplace, context-aware), so pre-escaping here would double-escape a token
+        // embedded in a string literal.
         var template = new Template { Name = "Core", MaterializedViewSchema = "[{\"Name\":\"test's view\"}]" };
 
         var tokens = ProductQuench.BuildSpecialTokens(template);
 
-        Assert.That(tokens["MaterializedViewSchema_Core"], Is.EqualTo("[{\"Name\":\"test''s view\"}]"));
+        Assert.That(tokens["MaterializedViewSchema_Core"], Is.EqualTo("[{\"Name\":\"test's view\"}]"));
+    }
+
+    [Test]
+    public void CrossTemplateToken_InStringLiteral_ProducesSingleLevelEscaping()
+    {
+        // #301: a cross-template token embedded in a SQL string literal must have its single quotes
+        // escaped exactly once for that literal — not left raw (unclosed-quote error), not doubled.
+        var template = new Template { Name = "App", TableSchema = "[{\"Default\":\"'X'\"}]" };
+        var tokens = ProductQuench.BuildSpecialTokens(template);
+
+        var script = new SqlScript { Name = "t", FilePath = "t.sql" };
+        script.Batches.Add("EXEC Foo '{{TableSchema_App}}'");
+        script.ReplaceQueryTokens(tokens.ToList());
+
+        Assert.That(script.Batches[0], Is.EqualTo("EXEC Foo '[{\"Default\":\"''X''\"}]'"),
+            $"Actual: {script.Batches[0]}");
     }
 
     [Test]
@@ -287,13 +306,14 @@ public class ProductQuenchTests
     }
 
     [Test]
-    public void BuildSpecialTokens_IndexedViewSchema_EscapesSingleQuotes()
+    public void BuildSpecialTokens_IndexedViewSchema_StoresRawValue_NotPreEscaped()
     {
+        // #301: stored raw; escaping happens at substitution (see MaterializedView test above).
         var template = new Template { Name = "Core", IndexedViewSchema = "[{\"Name\":\"test's view\"}]" };
 
         var tokens = ProductQuench.BuildSpecialTokens(template);
 
-        Assert.That(tokens["IndexedViewSchema_Core"], Is.EqualTo("[{\"Name\":\"test''s view\"}]"));
+        Assert.That(tokens["IndexedViewSchema_Core"], Is.EqualTo("[{\"Name\":\"test's view\"}]"));
     }
 
     // I8: cross-template snapshots of schema-template content (TableSchema_/

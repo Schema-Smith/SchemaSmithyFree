@@ -488,13 +488,19 @@ public class ProductQuench
         var matViewSchema = ScrubSchemaNameToken(template.MaterializedViewSchema);
         var indexedViewSchema = ScrubSchemaNameToken(template.IndexedViewSchema);
 
+        // Values are stored RAW (not single-quote-escaped). Escaping happens at substitution time,
+        // context-aware, in SqlScript.TokenReplace — which doubles quotes only when the token lands
+        // inside a SQL string literal. Pre-escaping here too double-escaped a cross-template token
+        // embedded in a literal (e.g. '{{TableSchema_App}}' -> '''' ... ''''), producing invalid SQL
+        // (#301). The current-template tokens (Template.cs) use a non-escaping substitution and so
+        // pre-escape there; these go through TokenReplace, so they must not.
         var tokens = new Dictionary<string, string>
         {
-            { $"TableSchema_{template.Name}", tableSchema.Replace("'", "''") },
-            { $"ObjectScripts_{template.Name}", JsonHelper.Serialize(template.ObjectScripts.Concat(template.AfterTablesObjectScripts)).Replace("'", "''") },
-            { $"QueryTokens_{template.Name}", JsonHelper.Serialize(template.QueryTokens).Replace("'", "''") },
-            { $"MaterializedViewSchema_{template.Name}", matViewSchema.Replace("'", "''") },
-            { $"IndexedViewSchema_{template.Name}", indexedViewSchema.Replace("'", "''") }
+            { $"TableSchema_{template.Name}", tableSchema },
+            { $"ObjectScripts_{template.Name}", JsonHelper.Serialize(template.ObjectScripts.Concat(template.AfterTablesObjectScripts)) },
+            { $"QueryTokens_{template.Name}", JsonHelper.Serialize(template.QueryTokens) },
+            { $"MaterializedViewSchema_{template.Name}", matViewSchema },
+            { $"IndexedViewSchema_{template.Name}", indexedViewSchema }
         };
         return tokens;
     }
