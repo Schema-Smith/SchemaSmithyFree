@@ -46,8 +46,7 @@
     <PackageVersion Include="Spectre.Console.Testing" Version="0.54.0" />
 
     <!-- Test infrastructure -->
-    <!-- coverlet.collector held at 8.0.1 — 10.0.0 is a two-major bump; deferred to post-v2 maintenance -->
-    <PackageVersion Include="coverlet.collector" Version="8.0.1" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
     <!-- NSubstitute 5.3.0 — latest stable; 6.0.0 is RC only -->
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
