@@ -88,7 +88,7 @@ BEGIN TRY
       ) i;
 
   -- Identify Indexes to skip based on ShouldApply expression (scoped by [_RowId])
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Indexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Indexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Indexes WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
@@ -112,7 +112,7 @@ BEGIN TRY
       ) i;
 
   -- Identify XmlIndexes to skip based on ShouldApply expression (scoped by [_RowId])
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #XmlIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #XmlIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #XmlIndexes WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
@@ -135,7 +135,7 @@ BEGIN TRY
       ) s;
 
   -- Identify Statistics to skip based on ShouldApply expression (scoped by [_RowId])
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Statistics WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Statistics WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Statistics WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)
@@ -160,7 +160,7 @@ BEGIN TRY
       ) f;
 
   -- Identify FullTextIndexes to skip based on ShouldApply expression (scoped by [_RowId])
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #FullTextIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + [ShouldApplyExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #FullTextIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #FullTextIndexes WITH (NOLOCK)
     WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
   EXEC(@v_SQL)

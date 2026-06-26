@@ -67,7 +67,7 @@ BEGIN
     DROP TABLE IF EXISTS #ViewGate;
     SELECT * INTO #ViewGate FROM @Views;
     DECLARE @gateSql NVARCHAR(MAX);
-    SELECT @gateSql = STRING_AGG(CAST('DELETE FROM #ViewGate WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + ShouldApplyExpression + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    SELECT @gateSql = STRING_AGG(CAST('DELETE FROM #ViewGate WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect(ShouldApplyExpression) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #ViewGate
     WHERE RTRIM(ISNULL(ShouldApplyExpression, '')) <> '';
     IF @gateSql IS NOT NULL

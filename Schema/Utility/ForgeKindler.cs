@@ -181,6 +181,7 @@ public static class ForgeKindler
                 new("Kindling_KindleStamp_Table.sql", ReplaceTableDef: true),
                 new("Kindling_CompletedMigrationScripts_Table.sql", ReplaceTableDef: true),
                 new("SchemaSmith.fn_StripParenWrapping.sql"),
+                new("SchemaSmith.fn_StripLeadingSelect.sql"),
                 new("SchemaSmith.fn_StripBracketWrapping.sql"),
                 new("SchemaSmith.fn_SafeBracketWrap.sql"),
                 new("SchemaSmith.PrintWithNoWait.sql"),
