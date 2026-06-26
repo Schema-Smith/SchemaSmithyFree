@@ -9,6 +9,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 ### Added
 
 - **MySQL recyclebin hooks — `CustomTableDrop` / `CustomTableRestore` parity.** MySQL now supports the same custom table-removal hooks as SQL Server and PostgreSQL. When a `SchemaSmith_CustomTableDrop` procedure exists in the database, `DropTablesRemovedFromProduct` routes a removed table through it instead of issuing a plain `DROP TABLE`; and `MissingTableAndColumnQuench` calls `SchemaSmith_CustomTableRestore` for tables being added (in case they were custom-dropped), then skips recreating any the restore brought back so restored data survives. Both honor WhatIf (the preview shows the `CALL …` it would run). Enables recyclebin-style soft-drop/restore on MySQL. — #292
+- **`ShouldApplyExpression` accepts either a bare predicate or a full `SELECT` on every gate.** Component gates (tables, columns, indexes, foreign keys, check constraints, statistics, and the platform-specific full-text / indexed-view / materialized-view carriers) historically required a bare boolean predicate, while script-folder gates required a full `SELECT` — writing the wrong form failed (e.g. SQL Server Msg 4145 on a component gate, a syntax error on a folder gate). Both forms now work on both kinds of gate: a folder gate wraps a bare predicate as `SELECT CASE WHEN (…) THEN 1 ELSE 0 END`, and a component gate strips a leading `SELECT` before embedding the predicate. Bare predicates are unchanged. Cross-platform (SQL Server, PostgreSQL, MySQL). — #282
 
 ### Fixed
 
