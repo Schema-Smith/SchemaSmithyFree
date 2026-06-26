@@ -21,6 +21,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("Kindling_SchemaSmith_Schema.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.BootstrapTableQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_StripParenWrapping.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.fn_StripLeadingSelect.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_StripBracketWrapping.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_SafeBracketWrap.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.PrintWithNoWait.sql"));
@@ -69,6 +70,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.QuoteIndexColumnList.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.StripParenWrapping.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.StripTypeCast.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.StripLeadingSelect.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ValidateTableOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupTableOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupIndexOwnership.sql"));
@@ -115,6 +117,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith_QuoteIdentifier.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_StripBacktickWrapping.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_SafeBacktickWrap.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_StripLeadingSelect.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_NormalizeIndexColumns.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_GenerateTableJson.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_ParseTableJson.sql"));
@@ -161,12 +164,12 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        // SqlServer: 20 = 19 prior + 1 for KindleStamp.
-        Assert.That(sqlServer.Length, Is.EqualTo(20));
-        // PostgreSQL: 25 = 24 prior + 1 for StripTypeCast (string-default cast normalization).
-        Assert.That(postgres.Length, Is.EqualTo(25));
-        // MySQL: 17 = 16 prior + 1 for KindleStamp.
-        Assert.That(mysql.Length, Is.EqualTo(17));
+        // SqlServer: 21 = 20 prior + 1 for fn_StripLeadingSelect (#282 component-gate SELECT tolerance).
+        Assert.That(sqlServer.Length, Is.EqualTo(21));
+        // PostgreSQL: 26 = 25 prior + 1 for StripLeadingSelect (#282 component-gate SELECT tolerance).
+        Assert.That(postgres.Length, Is.EqualTo(26));
+        // MySQL: 18 = 17 prior + 1 for StripLeadingSelect (#282 component-gate SELECT tolerance).
+        Assert.That(mysql.Length, Is.EqualTo(18));
     }
 
     [Test]

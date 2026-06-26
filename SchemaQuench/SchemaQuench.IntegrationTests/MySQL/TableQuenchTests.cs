@@ -1548,6 +1548,51 @@ public class TableQuenchTests
     }
 
     [Test]
+    public void ShouldApplyExpression_SelectForm_AppliesWhenTrue_SkipsWhenFalse()
+    {
+        // #282: a component gate may be written in the folder-gate form (a projection-only SELECT)
+        // as well as a bare predicate. SchemaSmith_StripLeadingSelect strips a leading SELECT before
+        // the predicate is embedded, so either form works consistently across all three engines.
+        using var command = _connection.CreateCommand();
+
+        var tableName = $"{_testTablePrefix}_selectform";
+
+        var tableJson = $@"[
+            {{
+                ""Name"": ""{tableName}"",
+                ""ShouldApplyExpression"": ""SELECT 1 = 1"",
+                ""Columns"": [
+                    {{ ""Name"": ""id"", ""DataType"": ""INT"", ""Nullable"": false }},
+                    {{ ""Name"": ""col_yes"", ""DataType"": ""VARCHAR(100)"", ""Nullable"": true, ""ShouldApplyExpression"": ""SELECT 1 = 1"" }},
+                    {{ ""Name"": ""col_no"", ""DataType"": ""VARCHAR(100)"", ""Nullable"": true, ""ShouldApplyExpression"": ""SELECT 1 = 0"" }}
+                ]
+            }}
+        ]";
+
+        command.CommandText = "CALL SchemaSmith_ParseTableJson(@databaseName, @tableJson)";
+        command.Parameters.Clear();
+        command.AddParameterWithValue("@databaseName", _testDb);
+        command.AddParameterWithValue("@tableJson", tableJson);
+        command.ExecuteNonQuery();
+
+        command.CommandText = "CALL SchemaSmith_MissingTableAndColumnQuench(@databaseName, @whatIf)";
+        command.Parameters.Clear();
+        command.AddParameterWithValue("@databaseName", _testDb);
+        command.AddParameterWithValue("@whatIf", 0);
+        command.ExecuteNonQuery();
+
+        command.Parameters.Clear();
+        command.CommandText = $@"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{tableName}'";
+        Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1), "Table with a true SELECT-form gate should be created.");
+
+        command.CommandText = $@"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{tableName}' AND COLUMN_NAME = 'col_yes'";
+        Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1), "Column with a true SELECT-form gate should be created.");
+
+        command.CommandText = $@"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{tableName}' AND COLUMN_NAME = 'col_no'";
+        Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0), "Column with a false SELECT-form gate should be skipped.");
+    }
+
+    [Test]
     public void ShouldApplyExpression_FalseColumn_SkipsColumnCreation()
     {
         using var command = _connection.CreateCommand();

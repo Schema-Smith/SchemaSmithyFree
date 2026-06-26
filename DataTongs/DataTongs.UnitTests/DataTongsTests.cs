@@ -538,6 +538,38 @@ public class DataTongsTests
 
     #endregion
 
+    #region CountRows Tests
+
+    [Test]
+    public void CountRows_FormattedMultiRow_ReturnsActualCount()
+    {
+        // FormatJsonResult rewrites row separators to "},\r\n{"; the old Split("},{")
+        // heuristic never matched that, reporting 1 for any multi-row table.
+        var formatted = global::DataTongs.DataTongs.FormatJsonResult(
+            "[{\"id\":1},{\"id\":2},{\"id\":3},{\"id\":4},{\"id\":5}]");
+        Assert.That(global::DataTongs.DataTongs.CountRows(formatted), Is.EqualTo(5));
+    }
+
+    [Test]
+    public void CountRows_CompactMultiRow_ReturnsActualCount()
+    {
+        Assert.That(global::DataTongs.DataTongs.CountRows("[{\"id\":1},{\"id\":2},{\"id\":3}]"), Is.EqualTo(3));
+    }
+
+    [Test]
+    public void CountRows_SingleRow_Returns1()
+    {
+        Assert.That(global::DataTongs.DataTongs.CountRows("[{\"id\":1}]"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void CountRows_EmptyArray_ReturnsZero()
+    {
+        Assert.That(global::DataTongs.DataTongs.CountRows("[]"), Is.EqualTo(0));
+    }
+
+    #endregion
+
     #region CastData Tests
 
     [Test]
