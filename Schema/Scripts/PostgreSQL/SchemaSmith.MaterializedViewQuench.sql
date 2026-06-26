@@ -41,7 +41,7 @@ BEGIN
   FROM my_views, JSON_ARRAY_ELEMENTS(arr) AS elem;
 
   -- Evaluate ShouldApplyExpression: remove views whose expression evaluates to false
-  SELECT STRING_AGG('DELETE FROM temp_materialized_views WHERE "Schema" = ''' || "Schema" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+  SELECT STRING_AGG('DELETE FROM temp_materialized_views WHERE "Schema" = ''' || "Schema" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
     INTO sql_script
     FROM temp_materialized_views
     WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -68,7 +68,7 @@ BEGIN
     CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS(COALESCE((elem ->> 'Indexes')::JSON, '[]'::JSON)) AS celem(value);
 
   -- Evaluate index ShouldApplyExpression
-  SELECT STRING_AGG('DELETE FROM temp_mv_indexes WHERE "ViewSchema" = ''' || "ViewSchema" || ''' AND "ViewName" = ''' || "ViewName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+  SELECT STRING_AGG('DELETE FROM temp_mv_indexes WHERE "ViewSchema" = ''' || "ViewSchema" || ''' AND "ViewName" = ''' || "ViewName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
     INTO sql_script
     FROM temp_mv_indexes
     WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;

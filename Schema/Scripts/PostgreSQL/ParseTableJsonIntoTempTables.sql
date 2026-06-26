@@ -25,7 +25,7 @@
     FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem;
 
     -- ShouldApply scoped by "_RowId" so each generated DELETE targets exactly the source row.
-    SELECT STRING_AGG('DELETE FROM temp_tables WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_tables WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
       INTO sql_script
       FROM temp_tables
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -73,7 +73,7 @@
                              WHEN "DataType" ILIKE 'bpchar%' THEN REGEXP_REPLACE("DataType", 'bpchar', 'CHAR', 'i')
                              ELSE "DataType" END;
 
-    SELECT STRING_AGG('DELETE FROM temp_columns WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_columns WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
       INTO sql_script
       FROM temp_columns
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -113,7 +113,7 @@
                         AND t."Name" = "TableName"
                         AND t."UpdateFillFactor" = true);
 
-    SELECT STRING_AGG('DELETE FROM temp_indexes WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_indexes WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
       INTO sql_script
       FROM temp_indexes
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -134,7 +134,7 @@
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'CheckConstraints')::JSON) AS celem(value);
 
-    SELECT STRING_AGG('DELETE FROM temp_checks WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_checks WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
       INTO sql_script
       FROM temp_checks
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -161,7 +161,7 @@
     FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'ForeignKeys')::JSON) AS celem(value);
 
-    SELECT STRING_AGG('DELETE FROM temp_fks WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_fks WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
       INTO sql_script
       FROM temp_fks
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -181,7 +181,7 @@
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Statistics')::JSON) AS celem(value);
 
-    SELECT STRING_AGG('DELETE FROM temp_statistics WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_statistics WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
       INTO sql_script
       FROM temp_statistics
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -204,7 +204,7 @@
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'ExcludeConstraints')::JSON) AS celem(value);
 
-    SELECT STRING_AGG('DELETE FROM temp_excludes WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_excludes WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
       INTO sql_script
       FROM temp_excludes
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;

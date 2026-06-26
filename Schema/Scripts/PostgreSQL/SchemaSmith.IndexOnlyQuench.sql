@@ -27,7 +27,7 @@ BEGIN
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((elem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem;
 
-    SELECT STRING_AGG('DELETE FROM temp_tables WHERE "Schema" = ''' || "Schema" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_tables WHERE "Schema" = ''' || "Schema" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
       INTO sql_script
       FROM temp_tables
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -66,7 +66,7 @@ BEGIN
                          AND t."Name" = "TableName"
                          AND t."UpdateFillFactor" = true);
 
-    SELECT STRING_AGG('DELETE FROM temp_indexes WHERE "TableSchema" = ''' || "TableSchema" || ''' AND "TableName" = ''' || "TableName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_indexes WHERE "TableSchema" = ''' || "TableSchema" || ''' AND "TableName" = ''' || "TableName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
       INTO sql_script
       FROM temp_indexes
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
@@ -86,7 +86,7 @@ BEGIN
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Statistics')::JSON) AS celem(value);
 
-    SELECT STRING_AGG('DELETE FROM temp_statistics WHERE "TableSchema" = ''' || "TableSchema" || ''' AND "TableName" = ''' || "TableName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "ShouldApplyExpression" || ');', CHR(10))
+    SELECT STRING_AGG('DELETE FROM temp_statistics WHERE "TableSchema" = ''' || "TableSchema" || ''' AND "TableName" = ''' || "TableName" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
       INTO sql_script
       FROM temp_statistics
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
