@@ -264,8 +264,8 @@ public class DataTongs
                 }
                 else
                 {
-                    var approxRows = tableData.Split("},{").Length;
-                    _progressLog.Info($"    Extracted ~{approxRows} row(s) from {table.TableName}.");
+                    var rowCount = CountRows(tableData);
+                    _progressLog.Info($"    Extracted {rowCount} row(s) from {table.TableName}.");
                 }
 
                 string contentFilePath = null;
@@ -706,6 +706,8 @@ ORDER BY c.ORDINAL_POSITION;";
         if (string.IsNullOrWhiteSpace(rawJson)) return "";
         return rawJson.Replace("}, {", "},\r\n{").Replace("},{", "},\r\n{").Replace("[{", "[\r\n{").Replace("}]", "}\r\n]");
     }
+
+    internal static int CountRows(string tableDataJson) => JArray.Parse(tableDataJson).Count;
 
     #endregion
 
