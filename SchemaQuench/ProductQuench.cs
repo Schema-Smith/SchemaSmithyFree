@@ -499,6 +499,9 @@ public class ProductQuench
         return tokens;
     }
 
+    internal static bool ReferencesSpecialToken(SqlScript script) =>
+        script.RemainingTokens.Any(token => SpecialTokenTags.Any(token.StartsWithIgnoringCase));
+
     private static string ScrubSchemaNameToken(string snapshot) =>
         string.IsNullOrEmpty(snapshot)
             ? snapshot
@@ -519,7 +522,7 @@ public class ProductQuench
 
         _progressLog.Info("Check for Template Special Script Tokens");
         var scriptsWithSchemaTokens = templates.SelectMany(t => t.ScriptFolders).SelectMany(f => f.Scripts)
-            .Where(s => s.RemainingTokens.Any(b => SpecialTokenTags.Any(b.EqualsIgnoringCase))).ToList();
+            .Where(ReferencesSpecialToken).ToList();
         if (scriptsWithSchemaTokens.Count > 0)
         {
             _progressLog.Info("Process Template Special Script Tokens");
