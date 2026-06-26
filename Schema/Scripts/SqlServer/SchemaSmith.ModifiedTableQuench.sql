@@ -417,9 +417,13 @@ BEGIN TRY
                                  AND ei.[xIndexName] <> SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
     WHERE NOT EXISTS (SELECT * FROM #Indexes i2 WITH (NOLOCK) WHERE i2.[Schema] = ei.[xSchema] AND i2.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i2.[IndexName]) = ei.[xIndexName])
       AND INDEXPROPERTY(OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]), SchemaSmith.fn_StripBracketWrapping(i.[IndexName]), 'IndexID') IS NULL
-      AND EXISTS (SELECT * 
+      -- A PK / unique constraint and a plain index are NOT rename-equivalent even when structurally
+      -- identical: renaming a plain unique index into a PK name leaves an index where the constraint
+      -- should be, and the PK is then never created (#304). Only rename when constraint-ness matches.
+      AND ei.[IsConstraint] = (CASE WHEN i.[PrimaryKey] = 1 OR i.[UniqueConstraint] = 1 THEN 1 ELSE 0 END)
+      AND EXISTS (SELECT *
                     FROM sys.indexes si WITH (NOLOCK)
-                    WHERE si.[object_id] = OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]) 
+                    WHERE si.[object_id] = OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName])
                       AND si.[name] = ei.[xIndexName])
       AND REPLACE(ei.IndexScript, ei.[xIndexName], 'IndexName') = 'CREATE ' + 
                                                                   CASE WHEN i.[Unique] = 1 OR i.[PrimaryKey] = 1 THEN 'UNIQUE ' ELSE '' END + 

@@ -345,9 +345,13 @@ BEGIN TRY
                                  AND ei.[xIndexName] <> SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
     WHERE NOT EXISTS (SELECT * FROM #Indexes i2 WITH (NOLOCK) WHERE i2.[Schema] = ei.[xSchema] AND i2.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i2.[IndexName]) = ei.[xIndexName])
       AND INDEXPROPERTY(OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]), SchemaSmith.fn_StripBracketWrapping(i.[IndexName]), 'IndexID') IS NULL
-      AND EXISTS (SELECT * 
+      -- A PK / unique constraint and a plain index are NOT rename-equivalent even when structurally
+      -- identical: renaming a plain unique index into a PK name leaves an index where the constraint
+      -- should be, and the PK is then never created (#304). Only rename when constraint-ness matches.
+      AND ei.[IsConstraint] = (CASE WHEN i.[PrimaryKey] = 1 OR i.[UniqueConstraint] = 1 THEN 1 ELSE 0 END)
+      AND EXISTS (SELECT *
                     FROM sys.indexes si WITH (NOLOCK)
-                    WHERE si.[object_id] = OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]) 
+                    WHERE si.[object_id] = OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName])
                       AND si.[name] = ei.[xIndexName])
       AND REPLACE(ei.IndexScript, ei.[xIndexName], 'IndexName') = 'CREATE ' + 
                                                                   CASE WHEN i.[Unique] = 1 OR i.[PrimaryKey] = 1 THEN 'UNIQUE ' ELSE '' END + 
@@ -522,6 +526,33 @@ BEGIN TRY
     FROM #StatsChanges sc WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
+  -- A table can hold only one clustered index. When the product declares a clustered index that
+  -- doesn't yet exist by name and a DIFFERENT clustered index already occupies the slot, drop the
+  -- existing one first so the new clustered index/PK can be created (#302). The full table quench
+  -- already does this; the index-only path did not, so replacing a clustered index in index-only
+  -- mode failed with "Cannot create more than one clustered index" (1913).
+  RAISERROR('Identify Existing Clustered Index Conflicts', 10, 100) WITH NOWAIT
+  DROP TABLE IF EXISTS #MissingClusteredIndexTables
+  SELECT DISTINCT i.[Schema], i.[TableName]
+    INTO #MissingClusteredIndexTables
+    FROM #Indexes i WITH (NOLOCK)
+    WHERE i.[Clustered] = 1
+      AND NOT EXISTS (SELECT *
+                        FROM sys.indexes si WITH (NOLOCK)
+                        WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName])
+                          AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
+
+  RAISERROR('Drop Conflicting Clustered Index', 10, 100) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping ' + CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + mct.[Schema] + '.' + mct.[TableName] + '.' + si.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1
+                                       THEN 'ALTER TABLE ' + mct.[Schema] + '.' + mct.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + si.[Name] + '];'
+                                       ELSE 'DROP INDEX IF EXISTS [' + si.[Name] + '] ON ' + mct.[Schema] + '.' + mct.[TableName] + ';'
+                                       END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #MissingClusteredIndexTables mct WITH (NOLOCK)
+    JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(mct.[Schema] + '.' + mct.[TableName])
+                                     AND si.[type] IN (1, 5)
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
   RAISERROR('Add Missing Indexes', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Creating ' + CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + CASE WHEN RTRIM(ISNULL(i.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(i.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1

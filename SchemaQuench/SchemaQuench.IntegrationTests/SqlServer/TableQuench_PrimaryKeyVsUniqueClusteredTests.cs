@@ -17,7 +17,6 @@ namespace SchemaQuench.IntegrationTests.SqlServer;
 public class TableQuench_PrimaryKeyVsUniqueClusteredTests : BaseTableQuenchTests
 {
     [Test]
-    [Explicit("BUG #304 — declared PK silently not created when a same-column unique clustered index already exists. Confirmed red (PK count 0, no error). Remove [Explicit] when the fix lands so this runs in CI.")]
     public void PrimaryKey_IsCreated_WhenSameColumnUniqueClusteredIndexAlreadyExists()
     {
         using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
