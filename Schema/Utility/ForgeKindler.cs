@@ -237,6 +237,7 @@ public static class ForgeKindler
                 new("SchemaSmith_QuoteIdentifier.sql"),
                 new("SchemaSmith_StripBacktickWrapping.sql"),
                 new("SchemaSmith_SafeBacktickWrap.sql"),
+                new("SchemaSmith_StripLeadingSelect.sql"),
                 new("SchemaSmith_NormalizeIndexColumns.sql"),
                 new("SchemaSmith_GenerateTableJson.sql"),
                 new("SchemaSmith_ParseTableJson.sql"),

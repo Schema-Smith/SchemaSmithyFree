@@ -117,6 +117,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith_QuoteIdentifier.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_StripBacktickWrapping.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_SafeBacktickWrap.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_StripLeadingSelect.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_NormalizeIndexColumns.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_GenerateTableJson.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_ParseTableJson.sql"));
@@ -167,8 +168,8 @@ public class ForgeKindlerTests
         Assert.That(sqlServer.Length, Is.EqualTo(21));
         // PostgreSQL: 26 = 25 prior + 1 for StripLeadingSelect (#282 component-gate SELECT tolerance).
         Assert.That(postgres.Length, Is.EqualTo(26));
-        // MySQL: 17 = 16 prior + 1 for KindleStamp.
-        Assert.That(mysql.Length, Is.EqualTo(17));
+        // MySQL: 18 = 17 prior + 1 for StripLeadingSelect (#282 component-gate SELECT tolerance).
+        Assert.That(mysql.Length, Is.EqualTo(18));
     }
 
     [Test]

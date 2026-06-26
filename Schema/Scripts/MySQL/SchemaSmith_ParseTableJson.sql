@@ -557,7 +557,7 @@ BEGIN
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
     SELECT CONCAT('UPDATE _SchemaSmith_Tables SET ShouldApply = 0 WHERE RowId = ',
                   RowId,
-                  ' AND NOT (', ShouldApplyExpression, ')')
+                  ' AND NOT (', SchemaSmith_StripLeadingSelect(ShouldApplyExpression), ')')
     FROM _SchemaSmith_Tables
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
@@ -565,7 +565,7 @@ BEGIN
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
     SELECT CONCAT('UPDATE _SchemaSmith_Columns SET ShouldApply = 0 WHERE RowId = ',
                   RowId,
-                  ' AND NOT (', ShouldApplyExpression, ')')
+                  ' AND NOT (', SchemaSmith_StripLeadingSelect(ShouldApplyExpression), ')')
     FROM _SchemaSmith_Columns
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
@@ -573,7 +573,7 @@ BEGIN
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
     SELECT CONCAT('UPDATE _SchemaSmith_Indexes SET ShouldApply = 0 WHERE RowId = ',
                   RowId,
-                  ' AND NOT (', ShouldApplyExpression, ')')
+                  ' AND NOT (', SchemaSmith_StripLeadingSelect(ShouldApplyExpression), ')')
     FROM _SchemaSmith_Indexes
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
@@ -581,7 +581,7 @@ BEGIN
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
     SELECT CONCAT('UPDATE _SchemaSmith_ForeignKeys SET ShouldApply = 0 WHERE RowId = ',
                   RowId,
-                  ' AND NOT (', ShouldApplyExpression, ')')
+                  ' AND NOT (', SchemaSmith_StripLeadingSelect(ShouldApplyExpression), ')')
     FROM _SchemaSmith_ForeignKeys
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
@@ -589,7 +589,7 @@ BEGIN
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
     SELECT CONCAT('UPDATE _SchemaSmith_CheckConstraints SET ShouldApply = 0 WHERE RowId = ',
                   RowId,
-                  ' AND NOT (', ShouldApplyExpression, ')')
+                  ' AND NOT (', SchemaSmith_StripLeadingSelect(ShouldApplyExpression), ')')
     FROM _SchemaSmith_CheckConstraints
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
@@ -601,7 +601,7 @@ BEGIN
     INSERT INTO _SchemaSmith_ShouldApplyEval (EvalSql)
     SELECT CONCAT('UPDATE _SchemaSmith_FullTextIndexes SET ShouldApply = 0 WHERE RowId = ',
                   RowId,
-                  ' AND NOT (', ShouldApplyExpression, ')')
+                  ' AND NOT (', SchemaSmith_StripLeadingSelect(ShouldApplyExpression), ')')
     FROM _SchemaSmith_FullTextIndexes
     WHERE ShouldApplyExpression IS NOT NULL AND TRIM(ShouldApplyExpression) <> '';
 
