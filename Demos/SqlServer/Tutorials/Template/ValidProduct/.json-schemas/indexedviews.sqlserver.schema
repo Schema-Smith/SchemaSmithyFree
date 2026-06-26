@@ -10,15 +10,20 @@
     "Definition": {
       "type": "string"
     },
+    "ShouldApplyExpression": {
+      "type": "string"
+    },
+    "VariantName": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+    },
     "Indexes": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "Name": {
-            "type": "string"
-          },
-          "CompressionType": {
             "type": "string"
           },
           "PrimaryKey": {
@@ -29,6 +34,23 @@
           },
           "UniqueConstraint": {
             "type": "boolean"
+          },
+          "IndexColumns": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "FilterExpression": {
+            "type": "string"
+          },
+          "CompressionType": {
+            "type": "string"
           },
           "Clustered": {
             "type": "boolean"
@@ -41,18 +63,13 @@
             "minimum": 0.0,
             "maximum": 100.0
           },
-          "IndexColumns": {
-            "type": "string"
-          },
           "IncludeColumns": {
-            "type": "string"
-          },
-          "FilterExpression": {
             "type": "string"
           },
           "UpdateFillFactor": {
             "type": "boolean"
-          }
+          },
+          "Extensions": {}
         },
         "additionalProperties": false,
         "required": [
@@ -60,7 +77,8 @@
           "IndexColumns"
         ]
       }
-    }
+    },
+    "Extensions": {}
   },
   "additionalProperties": false,
   "required": [

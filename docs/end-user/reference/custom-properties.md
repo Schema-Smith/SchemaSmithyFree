@@ -229,7 +229,7 @@ Community generates validation schemas (`.json-schemas/*.schema`) for `Product.j
 
 If you want editor validation for *your* `Extensions` shape, you can hand-edit the relevant `.schema` file and add a JSON Schema fragment under the `Extensions` property. When SchemaTongs regenerates that schema file, it will **preserve your custom `Extensions` definition** and merge it back into the newly generated schema. Your validation rules outlive the regeneration cycle.
 
-**Example** — tightening `Extensions` on `tables.schema` to require a `DataClassification` value:
+**Example** — tightening `Extensions` on `tables.<platform>.schema` to require a `DataClassification` value:
 
 ```json
 {
@@ -249,7 +249,7 @@ If you want editor validation for *your* `Extensions` shape, you can hand-edit t
 }
 ```
 
-Drop that into `.json-schemas/tables.schema` under `properties.Extensions` (merging with whatever the schema already contains), and your editor enforces it for every table file in the package. SchemaTongs will carry your fragment forward on the next extraction; it will not re-validate the Extensions content itself.
+Drop that into `.json-schemas/tables.<platform>.schema` (e.g. `tables.sqlserver.schema`) under `properties.Extensions` (merging with whatever the schema already contains), and your editor enforces it for every table file in the package. SchemaTongs will carry your fragment forward on the next extraction; it will not re-validate the Extensions content itself.
 
 > **No GUI property builder in Community.** Community treats `Extensions` as a data-only feature -- you edit the JSON directly, you hand-author the optional `Extensions` schema fragment, and you consume the values through script tokens. That's intentional: it keeps the Community tooling focused on what every team needs. Schema authorship, not form design.
 

@@ -34,7 +34,7 @@ The testing workflow becomes a tight loop: make changes to your schema files, ru
 
 Before a schema package ever reaches a database, you can validate that every JSON file is structurally correct. You can add a CI job that validates schema files on every pull request -- catching malformed JSON, missing required properties, and structural errors without spinning up a database at all.
 
-Each schema package includes JSON Schema files in a `.json-schemas/` directory, generated **on the fly** from the live C# domain types. The schemas always match the current engine, for the exact platform the package targets. A typical GitHub Actions step validates three categories:
+Each schema package includes JSON Schema files in a `.json-schemas/` directory, generated **on the fly** from the live C# domain types. The schemas always match the current engine, for the exact platform the package targets -- so each file carries a platform infix (`.sqlserver.`, `.postgresql.`, or `.mysql.`). The examples below use a SQL Server package; swap the infix for your platform. A typical GitHub Actions step validates three categories:
 
 ```yaml
 validate-product:
@@ -45,27 +45,27 @@ validate-product:
     - name: validate-product
       uses: GrantBirki/json-yaml-validate@v3.3.0
       with:
-        json_schema: "./my-product/.json-schemas/products.schema"
+        json_schema: "./my-product/.json-schemas/products.sqlserver.schema"
         files: "./my-product/Product.json"
 
     - name: validate-templates
       uses: GrantBirki/json-yaml-validate@v3.3.0
       with:
-        json_schema: "./my-product/.json-schemas/templates.schema"
+        json_schema: "./my-product/.json-schemas/templates.sqlserver.schema"
         files: "./my-product/Templates/Main/Template.json"
 
     - name: validate-tables
       uses: GrantBirki/json-yaml-validate@v3.3.0
       with:
-        json_schema: "./my-product/.json-schemas/tables.schema"
+        json_schema: "./my-product/.json-schemas/tables.sqlserver.schema"
         base_dir: "./my-product/Templates/Main/Tables"
 ```
 
 What each validator catches:
 
-- **Product definition** -- `Product.json` validated against `products.schema`. Catches missing product names, invalid token structures, malformed validation scripts, unknown platform values.
-- **Template definitions** -- Each `Template.json` validated against `templates.schema`. Catches invalid template order entries, broken database identification scripts, malformed settings, bad custom folder declarations.
-- **Table definitions** -- Every table JSON file validated against `tables.schema`. Catches invalid column types, malformed index definitions, structural errors in any table. On PostgreSQL packages, there's also `materializedviews.schema`; on SQL Server packages, `indexedviews.schema`.
+- **Product definition** -- `Product.json` validated against `products.<platform>.schema`. Catches missing product names, invalid token structures, malformed validation scripts, unknown platform values.
+- **Template definitions** -- Each `Template.json` validated against `templates.<platform>.schema`. Catches invalid template order entries, broken database identification scripts, malformed settings, bad custom folder declarations.
+- **Table definitions** -- Every table JSON file validated against `tables.<platform>.schema`. Catches invalid column types, malformed index definitions, structural errors in any table. On PostgreSQL packages, there's also `materializedviews.postgresql.schema`; on SQL Server packages, `indexedviews.sqlserver.schema`.
 
 This is the first line of defense. No database, no deployment, no credentials required -- just structural validation that runs in seconds. A typo in a column definition or a missing required field gets caught here, long before it could cause a deployment failure.
 
