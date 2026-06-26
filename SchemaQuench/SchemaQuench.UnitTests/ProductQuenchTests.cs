@@ -96,6 +96,56 @@ public class ProductQuenchTests
 
     #endregion
 
+    #region ReferencesSpecialToken Tests
+
+    [Test]
+    public void ReferencesSpecialToken_CrossTemplateTableSchemaToken_IsDetected()
+    {
+        var script = new SqlScript();
+        script.RemainingTokens.Add("TableSchema_App");
+
+        Assert.That(ProductQuench.ReferencesSpecialToken(script), Is.True);
+    }
+
+    [Test]
+    public void ReferencesSpecialToken_EachSpecialTag_IsDetected()
+    {
+        foreach (var tag in ProductQuench.SpecialTokenTags)
+        {
+            var script = new SqlScript();
+            script.RemainingTokens.Add($"{tag}SomeTemplate");
+
+            Assert.That(ProductQuench.ReferencesSpecialToken(script), Is.True,
+                $"Token {tag}SomeTemplate should be detected as a special cross-template token");
+        }
+    }
+
+    [Test]
+    public void ReferencesSpecialToken_CaseInsensitiveTag_IsDetected()
+    {
+        var script = new SqlScript();
+        script.RemainingTokens.Add("tableschema_App");
+
+        Assert.That(ProductQuench.ReferencesSpecialToken(script), Is.True);
+    }
+
+    [Test]
+    public void ReferencesSpecialToken_OrdinaryUnresolvedToken_IsNotDetected()
+    {
+        var script = new SqlScript();
+        script.RemainingTokens.Add("SomeOtherToken");
+
+        Assert.That(ProductQuench.ReferencesSpecialToken(script), Is.False);
+    }
+
+    [Test]
+    public void ReferencesSpecialToken_NoRemainingTokens_IsNotDetected()
+    {
+        Assert.That(ProductQuench.ReferencesSpecialToken(new SqlScript()), Is.False);
+    }
+
+    #endregion
+
     #region Product Script Server Routing Tests
 
     [Test]
