@@ -159,5 +159,5 @@ BEGIN
   CALL "SchemaSmith"."MissingMaterializedViewIndexesQuench"(p_WhatIf, p_UpdateFillFactor);
 
   -- Fixup ownership
-  CALL "SchemaSmith"."FixupMaterializedViewOwnership"(p_ProductName, p_TemplateName, p_SchemaName);
+  CALL "SchemaSmith"."FixupMaterializedViewOwnership"(p_ProductName, p_WhatIf, p_TemplateName, p_SchemaName);
 END $$;

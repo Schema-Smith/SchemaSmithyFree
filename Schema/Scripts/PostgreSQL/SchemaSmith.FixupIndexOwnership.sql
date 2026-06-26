@@ -7,11 +7,14 @@
 -- roadmap under Slice 3 transitional aids -- ProductOwnership template_name extension.
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."FixupIndexOwnership"
 (p_ProductName VARCHAR(50),
+ p_WhatIf BOOLEAN = FALSE,
  p_TemplateName VARCHAR(256) = '',
  p_SchemaName VARCHAR(256) = '')
     LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- WhatIf is read-only: ownership bookkeeping is a real mutation, so skip it entirely (#303).
+  IF p_WhatIf THEN RETURN; END IF;
   RAISE NOTICE 'Add Missing Index Product Ownership';
   INSERT INTO "SchemaSmith"."ProductOwnership"
     ("Schema", "TableName", "IndexName", "ProductName", template_name)

@@ -22,6 +22,6 @@ BEGIN
   CALL "SchemaSmith"."ModifiedTableQuench"(p_WhatIf, p_DropUnknownIndexes, p_DropTablesRemovedFromProduct);
   CALL "SchemaSmith"."MissingIndexesAndConstraintsQuench"(p_WhatIf);
   CALL "SchemaSmith"."ForeignKeyQuench"(p_WhatIf);
-  CALL "SchemaSmith"."FixupTableOwnership"(p_ProductName);
-  CALL "SchemaSmith"."FixupIndexOwnership"(p_ProductName);
+  CALL "SchemaSmith"."FixupTableOwnership"(p_ProductName, p_WhatIf);
+  CALL "SchemaSmith"."FixupIndexOwnership"(p_ProductName, p_WhatIf);
 END $$;
