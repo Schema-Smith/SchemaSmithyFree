@@ -19,10 +19,10 @@ schemaquench --version
 Expected:
 
 ```
-SchemaQuench - Version: 2.0.0.0
+SchemaQuench - Version: 2.1.0.0
 ```
 
-If the command isn't found, the CLI isn't on your PATH — revisit the install guide.
+Your exact version may be `2.1.0.0` or later — any version line means the CLI is installed and on your PATH. If the command isn't found, revisit the install guide.
 
 ## Step 2: Connect and kindle each engine
 
