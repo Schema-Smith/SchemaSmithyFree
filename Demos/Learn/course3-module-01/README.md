@@ -24,6 +24,7 @@ once under `solution/` — each with its own `Package/` and `dev.settings.json` 
 
   It creates the nine `ordersservice_{dev,staging,prod}` databases across the three engines and
   reports `PASS` for each.
+<!-- TRAINING-RELEASE-PIN #288: the PostgreSQL "re-run is a no-op" step in this lab is valid only on a CLI release that includes the #287/#288 string-default fix. When a release includes it: set this pre-flight version to that release, re-certify the PG no-op, and remove this marker. -->
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.1.0.0`).
 
 ## Step 1: Establish the base (the v1 package)

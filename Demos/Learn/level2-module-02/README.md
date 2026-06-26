@@ -39,6 +39,7 @@ two-engine feature, not because a third engine was skipped.
 
 - The [sandbox](../docker) is up (`docker compose up -d`) and verified (`./verify-sandbox.sh` /
   `.\verify-sandbox.ps1` — SQL Server and PostgreSQL `PASS`).
+<!-- TRAINING-RELEASE-PIN #288: the PostgreSQL "re-run is a no-op" step in this lab is valid only on a CLI release that includes the #287/#288 string-default fix. When a release includes it: set this pre-flight version to that release, re-certify the PG no-op, and remove this marker. -->
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.0.0.0`).
 
 ## Step 1: Look at the two templates
