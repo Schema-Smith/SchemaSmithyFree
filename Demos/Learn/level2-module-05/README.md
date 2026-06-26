@@ -22,7 +22,7 @@ Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package
 ## Before you start
 
 - The [sandbox](../docker) is up (`docker compose up -d`) and verified (all three engines `PASS`).
-- The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.0.0.0`;
+- The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.1.0.0` or later;
   `datatongs --version` is available too).
 
 ## Step 1: Look at the delivery declaration
