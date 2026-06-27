@@ -574,6 +574,10 @@ BEGIN
                                      THEN ' ALTER COLUMN "' || c."Name" || '" SET EXPRESSION AS (' || COALESCE(c."GenerationExpression", '') || '),'
                                      ELSE '' END  -- PG < 17: expression change is handled by the drop-and-re-add pass below
                            ELSE '' END ||
+                      CASE WHEN COALESCE(ec."Generated", 'NEVER') LIKE 'GENERATED%IDENTITY%'
+                                AND COALESCE(c."Generated", 'NEVER') NOT LIKE 'GENERATED%IDENTITY%'
+                           THEN ' ALTER COLUMN "' || c."Name" || '" DROP IDENTITY IF EXISTS,'
+                           ELSE '' END ||
                       CASE WHEN c."Nullable" != ec."Nullable"
                            THEN CASE WHEN c."Nullable"
                                      THEN ' ALTER COLUMN "' || c."Name" || '" DROP NOT NULL,'
