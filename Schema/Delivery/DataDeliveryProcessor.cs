@@ -175,7 +175,7 @@ public class DataDeliveryProcessor : IDataDelivery
 
                 var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
                     tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
-                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents);
+                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum);
 
                 if (!context.WhatIf)
                 {
@@ -252,7 +252,7 @@ public class DataDeliveryProcessor : IDataDelivery
             var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
             var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
                 tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
-                delivery.MergeDisableRules, delivery.MergeUpdateDescendents);
+                delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum);
 
             if (!context.WhatIf)
             {
@@ -278,7 +278,8 @@ public class DataDeliveryProcessor : IDataDelivery
         return DeferredMergeBuilder.Build(context.ScriptHelper, context.Command, context.Platform,
             schemaOrDb, table.Name, tableData, keyColumns,
             table.DataDelivery.MergeDisableTriggers, deferredColumns,
-            table.DataDelivery.MergeDisableRules, table.DataDelivery.MergeUpdateDescendents);
+            table.DataDelivery.MergeDisableRules, table.DataDelivery.MergeUpdateDescendents,
+            context.PostgreSqlServerVersionNum);
     }
 
     /// <summary>

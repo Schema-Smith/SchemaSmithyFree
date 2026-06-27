@@ -19,12 +19,12 @@ internal static class DeferredMergeBuilder
     public static string Build(IMergeScriptHelper helper, IDbCommand cmd, string platform,
         string schemaOrDb, string tableName, string tableData, string keyColumns,
         bool disableTriggers, List<string> deferredColumns,
-        bool disableRules = false, bool updateDescendents = false)
+        bool disableRules = false, bool updateDescendents = false, int pgServerVersionNum = 0)
     {
         if (platform.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
             return BuildSqlServer(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns);
         if (platform.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase))
-            return BuildPostgreSql(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns, disableRules, updateDescendents);
+            return BuildPostgreSql(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns, disableRules, updateDescendents, pgServerVersionNum);
         if (platform.Equals("MySQL", StringComparison.OrdinalIgnoreCase))
             return BuildMySql(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, deferredColumns);
 
@@ -98,7 +98,7 @@ internal static class DeferredMergeBuilder
     private static string BuildPostgreSql(IMergeScriptHelper helper, IDbCommand cmd,
         string schemaOrDb, string tableName, string tableData, string keyColumns,
         bool disableTriggers, List<string> deferredColumns,
-        bool disableRules, bool updateDescendents)
+        bool disableRules, bool updateDescendents, int pgServerVersionNum = 0)
     {
         var schema = schemaOrDb.Trim().Trim('"');
         var table = tableName.Trim().Trim('"');

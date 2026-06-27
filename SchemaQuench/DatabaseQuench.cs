@@ -75,6 +75,7 @@ public class DatabaseQuench
     private Exception _infoMessageException;
     private StatusMessageMonitor _statusMonitor;
     private readonly object _lockObject = new();
+    private int _postgreSqlServerVersionNum; // 0 until detected; only meaningful when Platform == PostgreSQL
 
     // Per-iteration content built by PrepareIterationContent at the start of Execute(). For schema-
     // template iterations the script collections are cloned (isolating {{SchemaName}}-substituted
@@ -360,6 +361,12 @@ public class DatabaseQuench
                 var effectiveObjectsCmd = objectsCommand ?? command;
                 var effectiveSilentCmd = silentCommand ?? command;
 
+                if (_product.Platform == Platform.PostgreSQL)
+                {
+                    using var versionCmd = connection.CreateCommand();
+                    _postgreSqlServerVersionNum = TargetVersionDetector.Detect(versionCmd, Platform.PostgreSQL).ServerComparable;
+                }
+
                 // Step: Kindle the forge
                 if (!_suppressKindling)
                 {
@@ -507,6 +514,7 @@ public class DatabaseQuench
                                 ProgressLog = SafeProgressLog,
                                 ProgressLogError = SafeProgressLogError,
                                 WhatIf = IsWhatIf,
+                                PostgreSqlServerVersionNum = _postgreSqlServerVersionNum,
                                 WriteResolvedSqlArtifact = (label, sql) =>
                                 {
                                     try
@@ -597,6 +605,7 @@ public class DatabaseQuench
                             Platform = _product.Platform.ToString(),
                             DatabaseName = _databaseName,
                             SchemaName = _schemaName,
+                            PostgreSqlServerVersionNum = _postgreSqlServerVersionNum,
                             TemplateRootPath = Path.GetDirectoryName(_template.FilePath) ?? "",
                             ScriptHelper = FactoryContainer.Resolve<IMergeScriptHelper>(),
                             ReadFileContent = path => ProductFileWrapper.GetFromFactory().ReadAllText(path),
