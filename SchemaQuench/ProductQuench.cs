@@ -213,6 +213,17 @@ public class ProductQuench
         _ => Convert.ToInt64(result) != 0
     };
 
+    internal static List<string> BuildMinimumVersionFailures(
+        IEnumerable<(string Server, TargetVersionInfo Info)> detected,
+        int requiredComparable,
+        string declaredMinimum)
+    {
+        return detected
+            .Where(d => !VersionHelper.IsAtLeast(d.Info.ServerComparable, requiredComparable))
+            .Select(d => $"  {d.Server}: detected version {d.Info.RawVersion} is below the product's declared MinimumVersion {declaredMinimum}")
+            .ToList();
+    }
+
     /// <summary>
     /// Filters product folders by their <c>ShouldApplyExpression</c> evaluated against the server.
     /// Blank expressions always apply; a false expression drops the folder (logged). Evaluation
