@@ -374,4 +374,148 @@ public class MergeScriptHelperIntegrationTests
     }
 
     #endregion
+
+    #region PG<17 Delete-on-Absence Fallback Tests (#241)
+
+    [Test]
+    public void BuildMergeScript_Pg16Fallback_DeletesRowsAbsentFromSource()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_del16_{Guid.NewGuid():N}"[..40];
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""public"".""{tableName}"" (
+    ""id"" INT PRIMARY KEY,
+    ""val"" INT NOT NULL
+)";
+            command.ExecuteNonQuery();
+            command.CommandText = $@"INSERT INTO ""public"".""{tableName}"" (""id"", ""val"") VALUES (1, 10), (2, 20)";
+            command.ExecuteNonQuery();
+
+            // Source has only id=1 -> id=2 must be deleted on absence.
+            var tableData = @"[{""id"":1,""val"":11}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command,
+                "public", tableName, tableData, @"""id""",
+                mergeUpdate: true, mergeDelete: true, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null,
+                disableRules: false, updateDescendents: false,
+                destSchemaOverride: null, pgServerVersionNum: 16);
+
+            Assert.That(script, Does.Contain("WHERE NOT EXISTS"));
+            Assert.That(script, Does.Not.Contain("WHEN NOT MATCHED BY SOURCE"));
+
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"SELECT COUNT(*) FROM ""public"".""{tableName}""";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1), "id=2 should have been deleted on absence");
+
+            command.CommandText = $@"SELECT ""val"" FROM ""public"".""{tableName}"" WHERE ""id"" = 1";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(11), "id=1 should have been updated");
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""public"".""{tableName}""";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void BuildMergeScript_NativeVersion_DeletesRowsAbsentFromSource()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_delnat_{Guid.NewGuid():N}"[..40];
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""public"".""{tableName}"" (
+    ""id"" INT PRIMARY KEY,
+    ""val"" INT NOT NULL
+)";
+            command.ExecuteNonQuery();
+            command.CommandText = $@"INSERT INTO ""public"".""{tableName}"" (""id"", ""val"") VALUES (1, 10), (2, 20)";
+            command.ExecuteNonQuery();
+
+            var pgVer = TargetVersionDetector.Detect(command, Platform.PostgreSQL).ServerComparable;
+
+            var tableData = @"[{""id"":1,""val"":11}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command,
+                "public", tableName, tableData, @"""id""",
+                mergeUpdate: true, mergeDelete: true, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null,
+                disableRules: false, updateDescendents: false,
+                destSchemaOverride: null, pgServerVersionNum: pgVer);
+
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"SELECT COUNT(*) FROM ""public"".""{tableName}""";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1), "id=2 should have been deleted on absence");
+
+            command.CommandText = $@"SELECT ""val"" FROM ""public"".""{tableName}"" WHERE ""id"" = 1";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(11), "id=1 should have been updated");
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""public"".""{tableName}""";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void BuildMergeScript_Pg16Fallback_WithMergeFilter_RespectsTargetAlias()
+    {
+        // Execution-verifies that the "Target"-qualified mergeFilter resolves correctly in the
+        // PG<17 fallback DELETE after D1's fix aliased the target table AS "Target".
+        // Row id=2 is absent from source AND matches the filter (keep=true) -> must be deleted.
+        // Row id=3 is absent from source but does NOT match the filter (keep=false) -> must survive.
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_delf16_{Guid.NewGuid():N}"[..40];
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""public"".""{tableName}"" (
+    ""id"" INT PRIMARY KEY,
+    ""val"" INT NOT NULL,
+    ""keep"" BOOLEAN NOT NULL
+)";
+            command.ExecuteNonQuery();
+            command.CommandText = $@"INSERT INTO ""public"".""{tableName}"" (""id"", ""val"", ""keep"") VALUES (1, 10, true), (2, 20, true), (3, 30, false)";
+            command.ExecuteNonQuery();
+
+            // Source has only id=1; mergeFilter restricts deletion to rows where keep = true.
+            var tableData = @"[{""id"":1,""val"":11,""keep"":true}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command,
+                "public", tableName, tableData, @"""id""",
+                mergeUpdate: true, mergeDelete: true, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: @"""Target"".""keep"" = true",
+                disableRules: false, updateDescendents: false,
+                destSchemaOverride: null, pgServerVersionNum: 16);
+
+            Assert.That(script, Does.Contain("NOT EXISTS"), "fallback DELETE must be present");
+            Assert.That(script, Does.Not.Contain("WHEN NOT MATCHED BY SOURCE"), "PG<17 path must not emit MERGE BY SOURCE");
+            Assert.That(script, Does.Contain(@"""Target"""), "Target alias must appear in the emitted DELETE");
+
+            // Must not throw "missing FROM-clause entry for table Target".
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"SELECT COUNT(*) FROM ""public"".""{tableName}""";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(2),
+                "id=2 (absent, keep=true) deleted; id=3 (absent, keep=false) survives");
+
+            command.CommandText = $@"SELECT ""id"" FROM ""public"".""{tableName}"" ORDER BY ""id""";
+            using var reader = command.ExecuteReader();
+            Assert.That(reader.Read(), Is.True);
+            Assert.That(reader.GetInt32(0), Is.EqualTo(1), "id=1 (in source) must survive");
+            Assert.That(reader.Read(), Is.True);
+            Assert.That(reader.GetInt32(0), Is.EqualTo(3), "id=3 (absent, keep=false) must survive");
+            Assert.That(reader.Read(), Is.False, "no more rows");
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""public"".""{tableName}""";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    #endregion
 }
