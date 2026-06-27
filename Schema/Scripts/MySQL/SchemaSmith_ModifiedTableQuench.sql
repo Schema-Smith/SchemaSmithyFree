@@ -270,6 +270,8 @@ BEGIN
               -- Generated expression changes (both sides are generated, but expression differs)
               OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
+              -- AUTO_INCREMENT removal/addition (live EXTRA vs declared IsAutoIncrement) — parity with identity removal
+              OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
           );
     ELSE
         BEGIN
@@ -322,6 +324,8 @@ BEGIN
                       -- Generated expression changes (both sides are generated, but expression differs)
                       OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
                           AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
+                      -- AUTO_INCREMENT removal/addition (live EXTRA vs declared IsAutoIncrement) — parity with identity removal
+                      OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
                   );
 
             DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_ModifyDone = TRUE;
