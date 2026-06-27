@@ -1,0 +1,25 @@
+{
+  "Schema": "dbo",
+  "Name": "Customer",
+  "Extensions": { "OwningTeam": "Identity" },
+  "Columns": [
+    { "Name": "CustomerId", "DataType": "INT", "Nullable": false },
+    { "Name": "Email", "DataType": "NVARCHAR(256)", "Nullable": false },
+    {
+      "Name": "DebugPayload",
+      "DataType": "NVARCHAR(MAX)",
+      "Nullable": true,
+      "Extensions": { "Audience": "NonProdOnly" },
+      "ShouldApplyExpression": "'{{Audience}}' = 'NonProdOnly' AND '{{DeployEnv}}' <> 'Production'"
+    }
+  ],
+  "Indexes": [
+    { "Name": "PK_Customer", "PrimaryKey": true, "Clustered": true, "IndexColumns": "CustomerId" },
+    {
+      "Name": "IX_Customer_Email",
+      "IndexColumns": "Email",
+      "Extensions": { "Purpose": "PerfOnly" },
+      "ShouldApplyExpression": "'{{Purpose}}' = 'PerfOnly' AND '{{DeployEnv}}' = 'Production'"
+    }
+  ]
+}
