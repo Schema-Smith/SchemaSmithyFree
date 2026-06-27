@@ -126,4 +126,71 @@ INSERT INTO ""{schema}"".""{tableName}"" (""Qty"") VALUES (5);";
         cmd.ExecuteNonQuery();
         conn.Close();
     }
+
+    // Regression for the #296 double-processing bug. On PG < 17 a generated column whose expression
+    // AND data type change together must be handled SOLELY by the drop-and-re-add pass (which re-adds
+    // the full definition incl. the new type), and must NOT also enter the ALTER pass — otherwise the
+    // ALTER pass emits a redundant SET DATA TYPE computed off the stale pre-DDL snapshot, which can
+    // hard-fail on a GENERATED ... STORED column. Asserts the new expression is live AND the new type
+    // is in effect, with the quench completing without error.
+    [Test]
+    public void TableQuench_ChangesGeneratedExpressionAndType_ViaDropAndReAdd_WhenForcedPg16()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var schema = "GeneratedColumnVersionTests";
+        var tableName = $"GenColV16Mixed_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        // Seed: a stored generated INT column "DoubleQty" = Qty * 2, with a row.
+        cmd.CommandText = $@"
+SET schemasmith.version_override = '16';
+CREATE TABLE ""{schema}"".""{tableName}"" (
+  ""Qty"" INT NOT NULL,
+  ""DoubleQty"" INT GENERATED ALWAYS AS (""Qty"" * 2) STORED
+);
+INSERT INTO ""{schema}"".""{tableName}"" (""Qty"") VALUES (5);";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        // Quench with BOTH the expression (Qty*2 -> Qty*3) AND the data type (INT -> BIGINT) changed.
+        // The mixed change is exactly the case the old guard let leak into the ALTER pass.
+        var json = $$"""
+{
+    "Schema": "{{schema}}",
+    "Name": "{{tableName}}",
+    "Columns": [
+        { "Name": "Qty", "DataType": "INT", "Nullable": false },
+        { "Name": "DoubleQty", "DataType": "BIGINT", "Nullable": true,
+          "Generated": "ALWAYS", "GenerationExpression": "(\"Qty\" * 3)" }
+    ]
+}
+""";
+        cmd.CommandText = $@"
+SET schemasmith.version_override = '16';
+CALL ""SchemaSmith"".""TableQuench""(p_ProductName := '{productName}', p_TableDefinitions := '{json.Replace("'", "''")}', p_WhatIf := false, p_DropTablesRemovedFromProduct := false, p_DropUnknownIndexes := false);";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        // New expression must be live: row recomputed to 15 (5 * 3).
+        cmd.CommandText = $@"RESET schemasmith.version_override;
+SELECT ""DoubleQty"" FROM ""{schema}"".""{tableName}"" WHERE ""Qty"" = 5;";
+        Assert.That(Convert.ToInt64(cmd.ExecuteScalar()), Is.EqualTo(15L),
+            "Generated-column expression change must apply via drop-and-re-add on PG < 17");
+
+        // New data type must be in effect: the re-add carries BIGINT (int8); no stale SET DATA TYPE double-processing.
+        cmd.CommandText = $@"
+SELECT data_type FROM information_schema.columns
+ WHERE table_schema = '{schema}' AND table_name = '{tableName}' AND column_name = 'DoubleQty';";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("bigint"),
+            "Mixed expression+type change must converge the new type via drop-and-re-add (column handled solely by that pass)");
+
+        cmd.CommandText = $@"DROP TABLE ""{schema}"".""{tableName}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
 }
