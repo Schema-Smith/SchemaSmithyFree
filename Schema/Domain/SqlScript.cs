@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using Schema.Isolators;
 using Schema.DataAccess;
@@ -90,22 +91,26 @@ namespace Schema.Domain
 
             foreach (var token in tokensToReplace)
             {
-                if (tokenLookup.TryGetValue(token, out var value))
+                if (!tokenLookup.TryGetValue(token, out var rawValue)) { remainingTokens?.Add(token); continue; }
+                var placeholder = $"{{{{{token}}}}}";
+                var sb = new StringBuilder();
+                int pos = 0, idx;
+                while ((idx = script.IndexOf(placeholder, pos, StringComparison.OrdinalIgnoreCase)) >= 0)
                 {
-                    var placeholder = $"{{{{{token}}}}}";
-                    var idx = script.IndexOf(placeholder, StringComparison.OrdinalIgnoreCase);
-                    // If the token is inside a SQL string literal (preceded by '), escape for SQL
+                    sb.Append(script, pos, idx - pos);
+                    var v = rawValue;
                     if (idx > 0 && script[idx - 1] == '\'')
                     {
                         // MySQL interprets backslashes as escape sequences in string literals
                         if (platform == Platform.MySQL)
-                            value = value.Replace("\\", "\\\\");
-                        value = value.Replace("'", "''");
+                            v = v.Replace("\\", "\\\\");
+                        v = v.Replace("'", "''");
                     }
-                    script = script.Replace(placeholder, value, StringComparison.OrdinalIgnoreCase);
+                    sb.Append(v);
+                    pos = idx + placeholder.Length;
                 }
-                else
-                    remainingTokens?.Add(token);
+                sb.Append(script, pos, script.Length - pos);
+                script = sb.ToString();
             }
 
             return script;

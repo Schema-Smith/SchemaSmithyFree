@@ -203,6 +203,57 @@ public class SqlScriptTests
 
     #endregion
 
+    #region TokenReplace — Per-occurrence escaping (#308)
+
+    [Test]
+    public void TokenReplace_CommentThenLiteral_EscapesLiteralOccurrenceOnly()
+    {
+        // #308: first occurrence is in a comment (no escaping); second is inside a string literal
+        // (must escape). The bug applied the first-occurrence decision to all occurrences.
+        var script = "-- mentions {{X}}\nEXEC Foo '{{X}}'";
+        var tokens = new List<KeyValuePair<string, string>>
+        {
+            new("X", "[{\"d\":\"'a'\"}]")
+        };
+
+        var result = SqlScript.TokenReplace(script, tokens);
+
+        Assert.That(result, Is.EqualTo("-- mentions [{\"d\":\"'a'\"}]\nEXEC Foo '[{\"d\":\"''a''\"}]'"));
+    }
+
+    [Test]
+    public void TokenReplace_LiteralThenComment_EscapesLiteralOccurrenceOnly()
+    {
+        // #308: first occurrence is inside a string literal (escaped); second is in a comment
+        // (must NOT be escaped). The bug doubled quotes in the comment occurrence.
+        var script = "EXEC Foo '{{X}}'\n-- note: {{X}}";
+        var tokens = new List<KeyValuePair<string, string>>
+        {
+            new("X", "[{\"d\":\"'a'\"}]")
+        };
+
+        var result = SqlScript.TokenReplace(script, tokens);
+
+        Assert.That(result, Is.EqualTo("EXEC Foo '[{\"d\":\"''a''\"}]'\n-- note: [{\"d\":\"'a'\"}]"));
+    }
+
+    [Test]
+    public void TokenReplace_TwoStringLiteralOccurrences_BothEscaped()
+    {
+        // #308: both occurrences inside string literals must be independently escaped
+        var script = "EXEC A '{{X}}'; EXEC B '{{X}}'";
+        var tokens = new List<KeyValuePair<string, string>>
+        {
+            new("X", "it's here")
+        };
+
+        var result = SqlScript.TokenReplace(script, tokens);
+
+        Assert.That(result, Is.EqualTo("EXEC A 'it''s here'; EXEC B 'it''s here'"));
+    }
+
+    #endregion
+
     #region Outcome — Default and settability
 
     [Test]
