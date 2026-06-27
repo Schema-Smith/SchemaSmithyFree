@@ -397,6 +397,32 @@ public class ProductQuench
             _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
     }
 
+    public bool RunPreFlight(bool previewTargets)
+    {
+        _progressLog.Info($"Pre-flight diagnostics for {_product.Name} ({(previewTargets ? "--PreviewTargets" : "--TestConnection")})");
+        try
+        {
+            TestServerConnections();   // throws on failure
+            ValidateMinimumVersion();  // throws on failure
+        }
+        catch (Exception e)
+        {
+            _progressLog.Error($"Pre-flight FAILED: {e.Message}");
+            _anyFailure = true;
+            return false;
+        }
+
+        if (!previewTargets)
+        {
+            _progressLog.Info("RESULT: PASS (connections and minimum version validated)");
+            return true;
+        }
+
+        return PreviewTargets();   // implemented in Task 3
+    }
+
+    private bool PreviewTargets() => true;
+
     public void QuenchProduct(bool suppressKindlingForTesting = false)
     {
         _progressLog.Info($"Begin Quench of {_product.Name}");
