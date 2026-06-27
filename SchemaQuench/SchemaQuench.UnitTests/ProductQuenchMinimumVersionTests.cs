@@ -148,5 +148,23 @@ namespace SchemaQuench.UnitTests
                 finally { FactoryContainer.Clear(); }
             }
         }
+
+        [Test]
+        public void ValidateMinimumVersion_Throws_WhenMinimumVersionUnparseable()
+        {
+            lock (FactoryContainer.SharedLockObject)
+            {
+                FactoryContainer.Clear();
+                try
+                {
+                    ConfigureProduct("PostgreSQL", minimumVersion: "not-a-version");
+                    var quench = new StubDetectProductQuench("150010");
+
+                    var ex = Assert.Throws<Exception>(() => quench.ValidateMinimumVersion());
+                    Assert.That(ex!.Message, Does.Contain("is not a valid"));
+                }
+                finally { FactoryContainer.Clear(); }
+            }
+        }
     }
 }
