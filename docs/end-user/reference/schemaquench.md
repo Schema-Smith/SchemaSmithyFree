@@ -319,6 +319,43 @@ When `UpdateTables` is `false`, steps 4 through 16 are skipped entirely. When `I
 
 ---
 
+## Engine Version Compatibility
+
+SchemaSmith deploys the same package to SQL Server, PostgreSQL, and MySQL — and within each platform, it adapts to the target server's version rather than demanding uniformity. You declare one package; SchemaQuench detects the engine version of each target and does the right thing for that target. When you need to enforce a version floor, declare it once in `Product.json`.
+
+### Supported engine floors
+
+These are the minimum versions SchemaSmith supports for deployment:
+
+| Platform | Minimum supported |
+|----------|------------------|
+| SQL Server | 2017 (major version 14) |
+| PostgreSQL | 15 |
+| MySQL | 8.0 |
+
+### MinimumVersion pre-flight gate
+
+You can raise the floor for a specific product by declaring `MinimumVersion` in `Product.json`. Before any deployment work begins, SchemaQuench detects the version of every resolved target. If any target is below the declared floor, the entire run aborts with a manifest naming each below-floor server and its detected version. Nothing is deployed -- no partial work, no side effects on any target.
+
+See [Schema Packages -- Product.json](schema-packages.md#productjson) for the accepted value formats (`16` or `2022` for SQL Server; `15` for PostgreSQL; `8.0` for MySQL) and configuration details.
+
+If a target's version cannot be determined, that is a hard error -- SchemaQuench never deploys blind against an unknown version. An unparseable `MinimumVersion` value fails at startup before any connections open.
+
+### Version-adaptive code generation
+
+When the supported range across your targets diverges, SchemaSmith adapts the DDL it generates automatically. There is nothing to configure -- you deploy the same package to older and newer engine versions and SchemaSmith picks the right form for each target.
+
+> **PostgreSQL:** The following cases apply only to PostgreSQL, where the supported range spans versions that differ in available DDL.
+
+| Operation | PostgreSQL 17+ | PostgreSQL 15 / 16 |
+|-----------|---------------|--------------------|
+| **Generated-column change** | `ALTER COLUMN … SET EXPRESSION` applied in place | Drop and re-add the generated column, preserving data type, collation, nullability, storage, and compression |
+| **Delete-on-absence** (`Insert/Update/Delete` DataDelivery) | Single `MERGE … WHEN NOT MATCHED BY SOURCE THEN DELETE` | `MERGE` for insert/update, then a follow-on `DELETE … WHERE NOT EXISTS` keyed identically, honoring the same merge filter |
+
+In both cases the end state is identical. On PostgreSQL 15 and 16, SchemaSmith takes the longer path that those engine versions support. You can deploy the same package to PostgreSQL 15, 16, or 17 and the result is the same database.
+
+---
+
 ## Quench Slots
 
 SchemaQuench assigns every script folder to a quench slot that determines when the folder's scripts execute and how they are handled. The slot list is the same on every platform; the **default folders** vary by platform (see [Schema Packages -- Default Folders](schema-packages.md#default-folders)).

@@ -126,35 +126,11 @@ When `RunScriptsTwice` is enabled, SchemaQuench runs the entire set of object sc
 
 > See [SchemaQuench Reference -- RunScriptsTwice](../reference/schemaquench.md#runscriptstwice) for the full configuration details.
 
-## MinimumVersion
+## Deploying across engine versions
 
-`MinimumVersion` in `Product.json` declares the minimum server version this product targets. It's currently **metadata only** -- SchemaQuench doesn't enforce it at runtime. An upcoming enhancement will use MinimumVersion to adapt generated tool code to match the target server version, making it functional rather than purely declarative.
+Declare `MinimumVersion` in `Product.json` to set the version floor for a product. SchemaQuench detects each target's version before deployment begins -- if any target is below the floor, the run aborts cleanly with a diagnostic naming the offending servers. For targets that meet the floor, SchemaSmith adapts the DDL it generates to match the engine version automatically. You deploy the same package to older and newer targets; SchemaSmith picks the right form for each.
 
-```json
-{
-  "Name": "MyProduct",
-  "Platform": "SqlServer",
-  "MinimumVersion": "2017",
-  "ValidationScript": "SELECT CAST(1 AS BIT)"
-}
-```
-
-**If you need version gating today**, use `ValidationScript` with the platform's version query:
-
-```json
-// SQL Server
-"ValidationScript": "SELECT CAST(CASE WHEN SERVERPROPERTY('ProductMajorVersion') >= 13 THEN 1 ELSE 0 END AS BIT)"
-
-// PostgreSQL
-"ValidationScript": "SELECT current_setting('server_version_num')::int >= 150000"
-
-// MySQL
-"ValidationScript": "SELECT CAST(SUBSTRING_INDEX(VERSION(), '.', 1) AS UNSIGNED) >= 8"
-```
-
-This gives you a hard deployment gate while `MinimumVersion` remains declarative. Script tokens and conditional logic in migration scripts can handle version-specific structural changes.
-
-> See the [Schema Packages Reference](../reference/schema-packages.md) for the full `Product.json` specification.
+> See [SchemaQuench -- Engine Version Compatibility](../reference/schemaquench.md#engine-version-compatibility) for the full pre-flight behavior, version-adaptive code generation cases, and the supported engine floors. See the [Schema Packages Reference](../reference/schema-packages.md#productjson) for accepted `MinimumVersion` value formats.
 
 ## Orphan handling strategies
 
