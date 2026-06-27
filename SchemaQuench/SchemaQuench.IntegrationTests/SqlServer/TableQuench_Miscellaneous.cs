@@ -792,7 +792,6 @@ EXEC sp_addextendedproperty @name = N'ProductName', @value = '{productName}', @l
     }
 
     [Test]
-    [Explicit("BUG: ModifiedTableQuench does not handle identity removal — MustDropAndRecreate only triggers for adding identity, not removing it")]
     public void ShouldRemoveIdentityFromExistingColumn()
     {
         var productName = Guid.NewGuid().ToString();
