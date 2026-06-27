@@ -43,6 +43,20 @@ namespace Schema.UnitTests.Utility
         }
 
         [Test]
+        public void Detect_Throws_WhenScalarUnparseable()
+        {
+            var cmd = CommandReturning("garbage");
+            var ex = Assert.Throws<Exception>(() => TargetVersionDetector.Detect(cmd, Platform.SqlServer));
+            Assert.That(ex!.Message, Does.Contain("Unable to determine"));
+        }
+
+        [Test]
+        public void GetVersionQuery_Throws_OnUnknownPlatform()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => TargetVersionDetector.GetVersionQuery((Platform)999));
+        }
+
+        [Test]
         public void GetVersionQuery_IsPlatformSpecific()
         {
             Assert.That(TargetVersionDetector.GetVersionQuery(Platform.SqlServer), Does.Contain("ProductMajorVersion"));
