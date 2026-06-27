@@ -973,10 +973,21 @@ ORDER BY rulename;";
 
     private static string BuildPostgreSqlMatchColumns(string keyColumns)
     {
+        // Mirrors the PG<17 fallback's deleteKeyPredicate (source of truth — keep in sync).
+        // A leading '*' is a user-config NULL-safe marker: strip it from the emitted column and
+        // emit the (l = r OR (l IS NULL AND r IS NULL)) form with both aliases properly quoted.
         return string.Join(" AND ", keyColumns.Split(',')
-            .Select(c => c.Trim().StartsWith("*")
-                ? $"(\"Source\".\"{c.Trim().Trim('"')}\" = \"Target\".\"{c.Trim().Trim('"')}\" OR (Source.\"{c.Trim().Trim('"')}\" IS NULL AND \"Target\".\"{c.Trim().Trim('"')}\" IS NULL))"
-                : $"\"Source\".\"{c.Trim().Trim('"')}\" = \"Target\".\"{c.Trim().Trim('"')}\""));
+            .Select(k =>
+            {
+                var raw = k.Trim();
+                var nullSafe = raw.StartsWith("*");
+                var col = $"\"{raw.TrimStart('*').Trim('"')}\"";  // normalized quoted ident, * stripped
+                var l = $"\"Source\".{col}";
+                var r = $"\"Target\".{col}";
+                return nullSafe
+                    ? $"({l} = {r} OR ({l} IS NULL AND {r} IS NULL))"
+                    : $"{l} = {r}";
+            }));
     }
 
     private static string GetIdentityColumnAndSequencePostgreSql(IDbCommand cmd, string tableSchema, string tableName)

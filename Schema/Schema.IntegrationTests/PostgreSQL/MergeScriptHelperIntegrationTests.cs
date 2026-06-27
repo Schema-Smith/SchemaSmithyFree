@@ -518,4 +518,63 @@ public class MergeScriptHelperIntegrationTests
     }
 
     #endregion
+
+    #region NULL-safe Key (*-prefix) MERGE-ON Tests
+
+    [Test]
+    public void BuildMergeScript_NullSafeStarKey_ModernMergePath_MatchesNullKeyRow()
+    {
+        // Exercises BuildPostgreSqlMatchColumns on the modern MERGE ON path (PG17+ native).
+        // A '*'-prefixed key is a NULL-safe marker: the emitted column must strip the '*'
+        // (so no literal "*key" reference) and both aliases must be quoted ("Source"/"Target").
+        // The old broken builder emitted "Source"."*key" + an unquoted Source. -> PG error here.
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_nullkey_{Guid.NewGuid():N}"[..40];
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""public"".""{tableName}"" (
+    ""key"" INT,
+    ""val"" INT NOT NULL
+)";
+            command.ExecuteNonQuery();
+            // Seed a NULL-key row (to be matched/updated) and a normal-key row (must be untouched).
+            command.CommandText = $@"INSERT INTO ""public"".""{tableName}"" (""key"", ""val"") VALUES (NULL, 10), (1, 20)";
+            command.ExecuteNonQuery();
+
+            // Source carries a NULL-key row with a new value; '*'-prefix on "key" requests NULL-safe match.
+            var tableData = @"[{""key"":null,""val"":11},{""key"":1,""val"":21}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command,
+                "public", tableName, tableData, @"*""key""",
+                mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null);
+
+            // Modern path must emit the native MERGE ON, no literal '*' in the correspondence.
+            Assert.That(script, Does.Contain("MERGE INTO"));
+            Assert.That(script, Does.Not.Contain(@"""*"));
+
+            // Would throw on the old broken SQL (non-existent "*key" column / unqualified Source.).
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            // NULL-safe match fired: the NULL-key row was UPDATED (10 -> 11), not duplicated.
+            command.CommandText = $@"SELECT COUNT(*) FROM ""public"".""{tableName}""";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(2),
+                "NULL-key source row must match the existing NULL-key target row (no duplicate insert)");
+
+            command.CommandText = $@"SELECT ""val"" FROM ""public"".""{tableName}"" WHERE ""key"" IS NULL";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(11),
+                "NULL-key row must have been updated, proving the NULL-safe correspondence matched");
+
+            command.CommandText = $@"SELECT ""val"" FROM ""public"".""{tableName}"" WHERE ""key"" = 1";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(21),
+                "normal-key row must have been updated by its exact match");
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""public"".""{tableName}""";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    #endregion
 }
