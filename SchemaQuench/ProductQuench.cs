@@ -441,7 +441,7 @@ public class ProductQuench
                 _progressLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
                 _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
                 _anyFailure = true;
-                previews.Add(new TemplatePreview(template.Name, template.RequireAtLeastOneTarget, units, matchedNothing: true));
+                previews.Add(new TemplatePreview(template.Name, template.RequireAtLeastOneTarget, Array.Empty<WorkUnit>(), matchedNothing: true));
                 continue;
             }
             var matchedNothing = template.RequireAtLeastOneTarget && units.Count == 0;

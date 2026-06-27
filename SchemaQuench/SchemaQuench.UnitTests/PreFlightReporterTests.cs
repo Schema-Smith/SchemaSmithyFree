@@ -114,7 +114,7 @@ public class PreFlightReporterTests
         var lines = PreFlightReporter.Render(previews);
 
         var combinedOutput = string.Join("\n", lines);
-        Assert.That(combinedOutput, Does.Contain("sales").Or.Contain("hr"),
+        Assert.That(combinedOutput, Does.Contain("sales").And.Contain("hr"),
             "Schema names must appear somewhere in the rendered output");
     }
 
