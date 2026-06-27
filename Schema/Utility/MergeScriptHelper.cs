@@ -491,7 +491,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
         bool mergeUpdate, bool mergeDelete, bool disableTriggers,
         bool tokenizeScripts, string mergeFilter,
         bool disableRules = false, bool updateDescendents = false,
-        string destSchemaOverride = null)
+        string destSchemaOverride = null, int pgServerVersionNum = 0)
     {
         // Extract JSON keys to filter columns — only include columns present in the data.
         // For tokenized scripts, data is replaced at runtime so we include all columns.
@@ -502,7 +502,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
             Platform.SqlServer => BuildMergeScriptSqlServer(cmd, schemaOrDb, tableName, tableData, keyColumns,
                 mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride),
             Platform.PostgreSQL => BuildMergeScriptPostgreSql(cmd, schemaOrDb, tableName, updateDescendents, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride),
+                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride, pgServerVersionNum),
             Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, tableData, keyColumns,
                 mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, jsonKeys),
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
@@ -798,7 +798,7 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
     private static string BuildMergeScriptPostgreSql(IDbCommand cmd, string tableSchema, string tableName,
         bool updateDescendents, string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete,
         bool disableTriggers, bool disableRules, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys,
-        string destSchemaOverride = null)
+        string destSchemaOverride = null, int pgServerVersionNum = 0)
     {
         tableSchema = tableSchema.Trim().Trim('"');
         tableName = tableName.Trim().Trim('"');
@@ -889,7 +889,8 @@ WHEN MATCHED AND ({updateCompare}) THEN
    )
  ";
 
-        if (mergeDelete)
+        var modernDelete = pgServerVersionNum == 0 || pgServerVersionNum >= 17;
+        if (mergeDelete && modernDelete)
         {
             mergeSQL += $@"
 
@@ -904,6 +905,31 @@ WHEN MATCHED AND ({updateCompare}) THEN
 
 END $$ LANGUAGE plpgsql;
 " + (string.IsNullOrEmpty(enableRuleStatements) ? "" : "\n" + enableRuleStatements);
+
+        if (mergeDelete && !modernDelete)
+        {
+            // PG < 17 has no MERGE WHEN NOT MATCHED BY SOURCE. Emit a standalone DELETE outside the
+            // DO $$ block targeting rows with no matching source row, keyed on the same columns the
+            // MERGE matched on, honoring the same mergeFilter. Source is the JSON array reprojected
+            // identically to the MERGE USING clause so key correspondence is exact.
+            var deleteKeyPredicate = string.Join(" AND ",
+                keyColumns.Split(',').Select(k =>
+                {
+                    var col = k.Trim();  // already quoted, e.g. "Id"
+                    return $"\"DeleteSource\".{col} = \"{destSchema}\".\"{tableName}\".{col}";
+                }));
+
+            mergeSQL += $@"
+DELETE FROM {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}""
+ WHERE {(string.IsNullOrWhiteSpace(mergeFilter) ? "" : $"({mergeFilter}) AND ")}NOT EXISTS (
+   SELECT 1
+     FROM (WITH my_tables(arr) AS (VALUES('{jsonValue}'::JSON))
+           SELECT {jsonColumns}
+             FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS ""DeleteSource""
+    WHERE {deleteKeyPredicate}
+ );";
+        }
+
         return mergeSQL;
     }
 

@@ -392,6 +392,48 @@ public class MergeScriptHelperTests
     }
 
     [Test]
+    public void BuildMergeScript_PostgreSql_Pg17_EmitsMergeNotMatchedBySource()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: null,
+            jsonColDefs: "(elem ->> 'Id')::int4 AS \"Id\"",
+            insertCols: "        \"Id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "public", "TestTable", "[{\"Id\":1}]", "\"Id\"",
+            mergeUpdate: false, mergeDelete: true, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null,
+            disableRules: false, updateDescendents: false,
+            destSchemaOverride: null, pgServerVersionNum: 17);
+
+        Assert.That(result, Does.Contain("WHEN NOT MATCHED BY SOURCE"));
+        Assert.That(result, Does.Contain("DELETE"));
+        Assert.That(result, Does.Not.Contain("WHERE NOT EXISTS"));
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_Pg16_EmitsDeleteWhereNotExists()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: null,
+            jsonColDefs: "(elem ->> 'Id')::int4 AS \"Id\"",
+            insertCols: "        \"Id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "public", "TestTable", "[{\"Id\":1}]", "\"Id\"",
+            mergeUpdate: false, mergeDelete: true, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null,
+            disableRules: false, updateDescendents: false,
+            destSchemaOverride: null, pgServerVersionNum: 16);
+
+        Assert.That(result, Does.Not.Contain("WHEN NOT MATCHED BY SOURCE"));
+        Assert.That(result, Does.Contain("DELETE FROM"));
+        Assert.That(result, Does.Contain("WHERE NOT EXISTS"));
+    }
+
+    [Test]
     public void BuildMergeScript_PostgreSQL_WithDisableTriggers()
     {
         var cmd = CreatePostgreSqlMockCommand(
