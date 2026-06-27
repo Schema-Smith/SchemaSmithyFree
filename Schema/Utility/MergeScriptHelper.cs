@@ -491,7 +491,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
         bool mergeUpdate, bool mergeDelete, bool disableTriggers,
         bool tokenizeScripts, string mergeFilter,
         bool disableRules = false, bool updateDescendents = false,
-        string destSchemaOverride = null)
+        string destSchemaOverride = null, int pgServerVersionNum = 0)
     {
         // Extract JSON keys to filter columns — only include columns present in the data.
         // For tokenized scripts, data is replaced at runtime so we include all columns.
@@ -502,7 +502,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
             Platform.SqlServer => BuildMergeScriptSqlServer(cmd, schemaOrDb, tableName, tableData, keyColumns,
                 mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride),
             Platform.PostgreSQL => BuildMergeScriptPostgreSql(cmd, schemaOrDb, tableName, updateDescendents, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride),
+                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride, pgServerVersionNum),
             Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, tableData, keyColumns,
                 mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, jsonKeys),
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
@@ -798,7 +798,7 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
     private static string BuildMergeScriptPostgreSql(IDbCommand cmd, string tableSchema, string tableName,
         bool updateDescendents, string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete,
         bool disableTriggers, bool disableRules, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys,
-        string destSchemaOverride = null)
+        string destSchemaOverride = null, int pgServerVersionNum = 0)
     {
         tableSchema = tableSchema.Trim().Trim('"');
         tableName = tableName.Trim().Trim('"');
@@ -889,7 +889,8 @@ WHEN MATCHED AND ({updateCompare}) THEN
    )
  ";
 
-        if (mergeDelete)
+        var modernDelete = pgServerVersionNum == 0 || pgServerVersionNum >= 17;
+        if (mergeDelete && modernDelete)
         {
             mergeSQL += $@"
 
@@ -904,6 +905,40 @@ WHEN MATCHED AND ({updateCompare}) THEN
 
 END $$ LANGUAGE plpgsql;
 " + (string.IsNullOrEmpty(enableRuleStatements) ? "" : "\n" + enableRuleStatements);
+
+        if (mergeDelete && !modernDelete)
+        {
+            // PG < 17 has no MERGE WHEN NOT MATCHED BY SOURCE. Emit a standalone DELETE outside the
+            // DO $$ block targeting rows with no matching source row, keyed on the same columns the
+            // MERGE matched on, honoring the same mergeFilter. Source is the JSON array reprojected
+            // identically to the MERGE USING clause so key correspondence is exact.
+            // Per-key correspondence mirrors BuildPostgreSqlMatchColumns' *-prefix NULL-safe
+            // handling (source of truth — keep in sync). A leading '*' is a user-config NULL-safe
+            // marker: strip it and emit the (l = r OR (l IS NULL AND r IS NULL)) form.
+            var deleteKeyPredicate = string.Join(" AND ",
+                keyColumns.Split(',').Select(k =>
+                {
+                    var raw = k.Trim();
+                    var nullSafe = raw.StartsWith("*");
+                    var col = $"\"{raw.Trim('*').Trim('"')}\"";  // normalized quoted ident, * stripped
+                    var l = $"\"DeleteSource\".{col}";
+                    var r = $"\"Target\".{col}";
+                    return nullSafe
+                        ? $"({l} = {r} OR ({l} IS NULL AND {r} IS NULL))"
+                        : $"{l} = {r}";
+                }));
+
+            mergeSQL += $@"
+DELETE FROM {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}"" AS ""Target""
+ WHERE {(string.IsNullOrWhiteSpace(mergeFilter) ? "" : $"({mergeFilter}) AND ")}NOT EXISTS (
+   SELECT 1
+     FROM (WITH my_tables(arr) AS (VALUES('{jsonValue}'::JSON))
+           SELECT {jsonColumns}
+             FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS ""DeleteSource""
+    WHERE {deleteKeyPredicate}
+ );";
+        }
+
         return mergeSQL;
     }
 
@@ -938,10 +973,21 @@ ORDER BY rulename;";
 
     private static string BuildPostgreSqlMatchColumns(string keyColumns)
     {
+        // Mirrors the PG<17 fallback's deleteKeyPredicate (source of truth — keep in sync).
+        // A leading '*' is a user-config NULL-safe marker: strip it from the emitted column and
+        // emit the (l = r OR (l IS NULL AND r IS NULL)) form with both aliases properly quoted.
         return string.Join(" AND ", keyColumns.Split(',')
-            .Select(c => c.Trim().StartsWith("*")
-                ? $"(\"Source\".\"{c.Trim().Trim('"')}\" = \"Target\".\"{c.Trim().Trim('"')}\" OR (Source.\"{c.Trim().Trim('"')}\" IS NULL AND \"Target\".\"{c.Trim().Trim('"')}\" IS NULL))"
-                : $"\"Source\".\"{c.Trim().Trim('"')}\" = \"Target\".\"{c.Trim().Trim('"')}\""));
+            .Select(k =>
+            {
+                var raw = k.Trim();
+                var nullSafe = raw.StartsWith("*");
+                var col = $"\"{raw.TrimStart('*').Trim('"')}\"";  // normalized quoted ident, * stripped
+                var l = $"\"Source\".{col}";
+                var r = $"\"Target\".{col}";
+                return nullSafe
+                    ? $"({l} = {r} OR ({l} IS NULL AND {r} IS NULL))"
+                    : $"{l} = {r}";
+            }));
     }
 
     private static string GetIdentityColumnAndSequencePostgreSql(IDbCommand cmd, string tableSchema, string tableName)

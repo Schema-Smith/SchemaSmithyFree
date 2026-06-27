@@ -496,7 +496,46 @@ BEGIN
                         AND NOT EXISTS (SELECT 1 FROM information_schema.columns ic WHERE ic.table_name = tc."TableName" AND ic.table_schema = tc."TableSchema" AND ic.column_name = tc."Name"));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
-    
+    RAISE NOTICE 'Recreate Generated Columns With Changed Expression (PG < 17)';
+    -- Sole handler for a generated-expression change on a generated column (status unchanged) on PG < 17.
+    -- The re-add carries the FULL target definition (DataType, Collation, GENERATED ALWAYS AS (...) STORED,
+    -- nullability) and applies non-default Storage/Compression on the freshly re-added column, so the column
+    -- is fully converged after this pass — type/collation/nullability/storage/compression changes ride along
+    -- here even when they changed alongside the expression. The "Alter Modified Columns" pass below excludes
+    -- EXACTLY this column set via a matching NOT (...) guard.
+    -- MUST match the "Alter Modified Columns" NOT (...) predicate below (Task A1 #296) — keep in lockstep.
+    IF "SchemaSmith"."ServerVersionNum"() < 17 THEN
+      SELECT STRING_AGG('RAISE NOTICE ''  Recreating generated column ' || c."TableSchema" || '.' || c."TableName" || '.' || c."Name" || ' (expression changed)'';' || CHR(10) ||
+                        'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" DROP COLUMN IF EXISTS "' || c."Name" || '" CASCADE;' || CHR(10) ||
+                        'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ADD "' || c."Name" || '" ' || c."DataType" ||
+                        CASE WHEN COALESCE(c."Collation", '') != '' THEN ' COLLATE "' || c."Collation" || '"' ELSE '' END ||
+                        ' GENERATED ALWAYS AS (' || c."GenerationExpression" || ') STORED' ||
+                        CASE WHEN c."Nullable" THEN '' ELSE ' NOT NULL' END || ';' ||
+                        -- Re-added column is at default storage/compression; carry over any non-default target so
+                        -- a combined expression+storage/compression change fully converges in this single pass.
+                        CASE WHEN COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != 'DEFAULT'
+                             THEN CHR(10) || 'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ALTER COLUMN "' || c."Name" || '" SET STORAGE ' || c."Storage" || ';'
+                             ELSE '' END ||
+                        CASE WHEN COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != 'DEFAULT'
+                             THEN CHR(10) || 'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ALTER COLUMN "' || c."Name" || '" SET COMPRESSION ' || c."Compression" || ';'
+                             ELSE '' END, CHR(10))
+        INTO sql_script
+        FROM temp_columns c
+        JOIN temp_existing_columns ec ON ec."TableSchema" = c."TableSchema"
+                                     AND ec."TableName" = c."TableName"
+                                     AND ec."ColumnName" = c."Name"
+        WHERE COALESCE(c."Generated", 'NEVER') != 'NEVER'
+          AND COALESCE(c."GenerationExpression", '') != ''
+          AND COALESCE(c."Generated", 'NEVER') = COALESCE(ec."Generated", 'NEVER')  -- generated status NOT changing — pure expression edit
+          AND COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
+          AND EXISTS (SELECT 1
+                        FROM information_schema.columns ic
+                        WHERE ic.table_schema = c."TableSchema"
+                          AND ic.table_name = c."TableName"
+                          AND ic.column_name = c."Name");
+      CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+    END IF;
+
     RAISE NOTICE 'Alter Modified Columns';
     SELECT STRING_AGG("code", CHR(10))
       INTO sql_script
@@ -531,7 +570,13 @@ BEGIN
                       CASE WHEN COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
                            THEN CASE WHEN (COALESCE(c."Generated", 'NEVER') = 'NEVER' OR COALESCE(c."GenerationExpression", '') = '')
                                      THEN ' ALTER COLUMN "' || c."Name" || '" DROP EXPRESSION,'
-                                     ELSE ' ALTER COLUMN "' || c."Name" || '" SET EXPRESSION AS (' || COALESCE(c."GenerationExpression", '') || '),' END
+                                     WHEN "SchemaSmith"."ServerVersionNum"() >= 17
+                                     THEN ' ALTER COLUMN "' || c."Name" || '" SET EXPRESSION AS (' || COALESCE(c."GenerationExpression", '') || '),'
+                                     ELSE '' END  -- PG < 17: expression change is handled by the drop-and-re-add pass below
+                           ELSE '' END ||
+                      CASE WHEN COALESCE(ec."Generated", 'NEVER') LIKE 'GENERATED%IDENTITY%'
+                                AND COALESCE(c."Generated", 'NEVER') NOT LIKE 'GENERATED%IDENTITY%'
+                           THEN ' ALTER COLUMN "' || c."Name" || '" DROP IDENTITY IF EXISTS,'
                            ELSE '' END ||
                       CASE WHEN c."Nullable" != ec."Nullable"
                            THEN CASE WHEN c."Nullable"
@@ -553,7 +598,7 @@ BEGIN
       JOIN temp_existing_columns ec ON ec."TableSchema" = c."TableSchema"
                                    AND ec."TableName" = c."TableName"
                                    AND ec."ColumnName" = c."Name"
-      WHERE EXISTS (SELECT 1 
+      WHERE EXISTS (SELECT 1
                       FROM information_schema.columns ic
                       WHERE ic.table_schema = c."TableSchema"
                         AND ic.table_name = c."TableName"
@@ -566,6 +611,17 @@ BEGIN
           OR COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
           OR (COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != COALESCE(ec."Storage", ''))
           OR (COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != COALESCE(ec."Compression", '')))
+        AND NOT (-- PG < 17 generated-expression change on a generated column (status unchanged): handled SOLELY by the
+                 -- drop-and-re-add pass above, which re-adds the FULL target definition. Exclude such columns from the
+                 -- ALTER pass entirely — regardless of whether type/collation/nullability ALSO changed (the re-add carries
+                 -- them). This guard must partition the column set IDENTICALLY to that pass: same predicate, no extra
+                 -- "all other attributes equal" tail (a mixed change still belongs solely to drop-and-re-add).
+                 -- MUST match the "Recreate Generated Columns With Changed Expression (PG < 17)" predicate above (Task A1 #296) — keep in lockstep.
+                 "SchemaSmith"."ServerVersionNum"() < 17
+                 AND COALESCE(c."Generated", 'NEVER') != 'NEVER'
+                 AND COALESCE(c."GenerationExpression", '') != ''
+                 AND COALESCE(c."Generated", 'NEVER') = COALESCE(ec."Generated", 'NEVER')
+                 AND COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", ''))
        GROUP BY c."TableSchema", c."TableName") x;
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 

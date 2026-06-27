@@ -36,6 +36,12 @@ public class DataDeliveryContext
     public string SchemaName { get; set; } = "";
 
     /// <summary>
+    /// Detected PostgreSQL server major (e.g. 16). 0 = unknown/not-PostgreSQL; codegen treats
+    /// unknown as modern (>= 17). Drives the MERGE-vs-DELETE branch in MergeScriptHelper (#241).
+    /// </summary>
+    public int PostgreSqlServerVersionNum { get; set; }
+
+    /// <summary>
     /// Optional. Invoked when a generated data-delivery script fails, with (label, resolvedSql) so the
     /// caller can persist the SQL to a re-runnable artifact and surface its path. Null = no artifact
     /// (e.g. WhatIf). Keeps artifact directory / scrub / token concerns on the caller side.

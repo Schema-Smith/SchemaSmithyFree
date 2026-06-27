@@ -392,6 +392,96 @@ public class MergeScriptHelperTests
     }
 
     [Test]
+    public void BuildMergeScript_PostgreSql_Pg17_EmitsMergeNotMatchedBySource()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: null,
+            jsonColDefs: "(elem ->> 'Id')::int4 AS \"Id\"",
+            insertCols: "        \"Id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "public", "TestTable", "[{\"Id\":1}]", "\"Id\"",
+            mergeUpdate: false, mergeDelete: true, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null,
+            disableRules: false, updateDescendents: false,
+            destSchemaOverride: null, pgServerVersionNum: 17);
+
+        Assert.That(result, Does.Contain("WHEN NOT MATCHED BY SOURCE"));
+        Assert.That(result, Does.Contain("DELETE"));
+        Assert.That(result, Does.Not.Contain("WHERE NOT EXISTS"));
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_Pg16_EmitsDeleteWhereNotExists()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: null,
+            jsonColDefs: "(elem ->> 'Id')::int4 AS \"Id\"",
+            insertCols: "        \"Id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "public", "TestTable", "[{\"Id\":1}]", "\"Id\"",
+            mergeUpdate: false, mergeDelete: true, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null,
+            disableRules: false, updateDescendents: false,
+            destSchemaOverride: null, pgServerVersionNum: 16);
+
+        Assert.That(result, Does.Not.Contain("WHEN NOT MATCHED BY SOURCE"));
+        Assert.That(result, Does.Contain("DELETE FROM"));
+        Assert.That(result, Does.Contain("WHERE NOT EXISTS"));
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_Pg16_FallbackDeleteAliasesTargetForMergeFilter()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: null,
+            jsonColDefs: "(elem ->> 'Id')::int4 AS \"Id\"",
+            insertCols: "        \"Id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "public", "TestTable", "[{\"Id\":1}]", "\"Id\"",
+            mergeUpdate: false, mergeDelete: true, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: "\"Target\".\"Type\" = 'A'",
+            disableRules: false, updateDescendents: false,
+            destSchemaOverride: null, pgServerVersionNum: 16);
+
+        // The fallback DELETE must alias its target so the mergeFilter's "Target" ref resolves.
+        var fallback = result.Substring(result.IndexOf("DELETE FROM", StringComparison.Ordinal));
+        Assert.That(fallback, Does.Contain("DELETE FROM ONLY \"public\".\"TestTable\" AS \"Target\""));
+        Assert.That(fallback, Does.Contain("\"Target\".\"Type\" = 'A'"));
+        Assert.That(fallback, Does.Contain("NOT EXISTS"));
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_Pg16_FallbackDeleteHandlesNullSafeKey()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: null,
+            jsonColDefs: "(elem ->> 'Id')::int4 AS \"Id\"",
+            insertCols: "        \"Id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "public", "TestTable", "[{\"Id\":1}]", "*\"Id\"",
+            mergeUpdate: false, mergeDelete: true, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null,
+            disableRules: false, updateDescendents: false,
+            destSchemaOverride: null, pgServerVersionNum: 16);
+
+        // *-prefixed key must produce the NULL-safe arm with the '*' stripped from the column ref.
+        // Scope assertions to the fallback DELETE block (the MERGE ON path is out of scope here).
+        var fallback = result.Substring(result.IndexOf("DELETE FROM", StringComparison.Ordinal));
+        Assert.That(fallback, Does.Contain("NOT EXISTS"));
+        Assert.That(fallback, Does.Contain(
+            "(\"DeleteSource\".\"Id\" = \"Target\".\"Id\" OR (\"DeleteSource\".\"Id\" IS NULL AND \"Target\".\"Id\" IS NULL))"));
+        Assert.That(fallback, Does.Not.Contain("*"));
+    }
+
+    [Test]
     public void BuildMergeScript_PostgreSQL_WithDisableTriggers()
     {
         var cmd = CreatePostgreSqlMockCommand(

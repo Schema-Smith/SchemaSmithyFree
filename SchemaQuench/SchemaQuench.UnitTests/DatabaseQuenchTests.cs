@@ -2275,6 +2275,7 @@ public class DatabaseQuenchTests
             // The mock command throws on ExecuteNonQuery, forcing the generated-SQL step to fail.
             var mockConn = Substitute.For<System.Data.IDbConnection>();
             var mockCmd = CreateMockCommand();
+            mockCmd.ExecuteScalar().Returns("160000"); // PG version detection (D3: TargetVersionDetector)
             mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception("simulated generated-SQL failure"));
             mockConn.CreateCommand().Returns(mockCmd);
             mockConn.Database.Returns("pgdb");
