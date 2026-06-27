@@ -224,6 +224,38 @@ public class ProductQuench
             .ToList();
     }
 
+    internal void ValidateMinimumVersion()
+    {
+        if (string.IsNullOrWhiteSpace(_product.MinimumVersion))
+            return;
+
+        var required = VersionHelper.ParseDeclaredVersion(_product.MinimumVersion, _product.Platform);
+        if (required == null)
+            throw new Exception($"Product MinimumVersion '{_product.MinimumVersion}' is not a valid {_product.Platform} version.");
+
+        _progressLog.Info("Validate Minimum Version");
+        var detected = new List<(string Server, TargetVersionInfo Info)>();
+        foreach (var server in _secondaryServers.Union([_primaryServer]))
+        {
+            using var command = GetCommand(server);
+            try
+            {
+                detected.Add((server, TargetVersionDetector.Detect(command, _product.Platform)));
+            }
+            finally
+            {
+                command.Connection?.Close();
+                command.Connection?.Dispose();
+            }
+        }
+
+        var failures = BuildMinimumVersionFailures(detected, required.Value, _product.MinimumVersion);
+        if (failures.Count > 0)
+            throw new Exception(
+                "One or more target servers are below the product's declared MinimumVersion; aborting before any deployment:"
+                + Environment.NewLine + string.Join(Environment.NewLine, failures));
+    }
+
     /// <summary>
     /// Filters product folders by their <c>ShouldApplyExpression</c> evaluated against the server.
     /// Blank expressions always apply; a false expression drops the folder (logged). Evaluation
@@ -372,6 +404,8 @@ public class ProductQuench
         LogProductInfo();
 
         TestServerConnections();
+
+        ValidateMinimumVersion();
 
         RemoveOldTableQuenchScripts();
 
