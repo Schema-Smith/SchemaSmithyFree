@@ -421,7 +421,64 @@ public class ProductQuench
         return PreviewTargets();   // implemented in Task 3
     }
 
-    private bool PreviewTargets() => true;
+    private bool PreviewTargets()
+    {
+        var templates = LoadTemplates();
+        TemplateTargetValidator.Validate(_templateTargets, templates, _targetTemplates);
+        if (!TryFilterTemplatesByTarget(templates, out var inScope)) return true;
+
+        var previews = new List<TemplatePreview>();
+        foreach (var template in inScope)
+        {
+            if (string.IsNullOrWhiteSpace(template.DatabaseIdentificationScript)) continue;
+            var units = EnumerateWorkUnitsForTemplate(template, previewOnly: true);
+            try
+            {
+                units = ApplyPerTemplateTargetFilter(template, units);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _progressLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
+                _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
+                _anyFailure = true;
+                previews.Add(new TemplatePreview(template.Name, template.RequireAtLeastOneTarget, units, matchedNothing: true));
+                continue;
+            }
+            var matchedNothing = template.RequireAtLeastOneTarget && units.Count == 0;
+            previews.Add(new TemplatePreview(template.Name, template.RequireAtLeastOneTarget, units, matchedNothing));
+        }
+
+        foreach (var line in PreFlightReporter.Render(previews)) _progressLog.Info(line);
+
+        var anyRequiredMissed = previews.Any(p => p.matchedNothing);
+        if (anyRequiredMissed)
+        {
+            _anyFailure = true;
+            _progressLog.Error("RESULT: FAIL (one or more required templates matched nothing)");
+            return false;
+        }
+        _progressLog.Info("RESULT: PASS");
+        return true;
+    }
+
+    /// <summary>
+    /// Applies the <c>Target.Databases</c> / <c>Target.Schemas</c> per-template filter to
+    /// <paramref name="units"/>. Returns the filtered list unchanged when the filter is empty
+    /// or the input is empty. Throws <see cref="InvalidOperationException"/> on rejection
+    /// (unknown filter value or zero-result intersection) — callers handle the exception
+    /// differently: <see cref="QuenchTemplate"/> logs + exits; <see cref="PreviewTargets"/>
+    /// logs + continues so remaining templates are still reported.
+    /// </summary>
+    private List<WorkUnit> ApplyPerTemplateTargetFilter(Template template, List<WorkUnit> units)
+    {
+        if (units.Count == 0 || (_targetDatabases.Count == 0 && _targetSchemas.Count == 0))
+            return units;
+
+        var perTemplateFilter = new WorkUnitFilter([], _targetDatabases, _targetSchemas);
+        var filtered = perTemplateFilter.Apply(units, _progressLog.Warn);
+        _progressLog.Info($"[Target] Resolved {filtered.Count} work unit(s) after filtering {units.Count} discovered unit(s) for template '{template.Name}'.");
+        return filtered;
+    }
 
     public void QuenchProduct(bool suppressKindlingForTesting = false)
     {
@@ -767,7 +824,6 @@ public class ProductQuench
         // dispatch to a single MaxThreads-bounded pool. SQL Server's per-server ServerToQuench
         // selection is applied at enumeration; PostgreSQL/MySQL run against the primary server only.
         var workUnits = EnumerateWorkUnitsForTemplate(template);
-        var discoveredCount = workUnits.Count;
 
         // Slice-5 selective execution (§9.3, §9.4): apply Target.Databases / Target.Schemas to
         // the per-template enumerated set, validating filter values against this template's
@@ -781,23 +837,18 @@ public class ProductQuench
         // exists). Running an empty input through the filter would surface a misleading "filter
         // produced zero results" diagnostic, blaming the user's Target.* values for what is
         // actually an expected pass-through.
-        if (workUnits.Count > 0 && (_targetDatabases.Count > 0 || _targetSchemas.Count > 0))
+        try
         {
-            var perTemplateFilter = new WorkUnitFilter([], _targetDatabases, _targetSchemas);
-            try
-            {
-                workUnits = perTemplateFilter.Apply(workUnits, _progressLog.Warn);
-                _progressLog.Info($"[Target] Resolved {workUnits.Count} work unit(s) after filtering {discoveredCount} discovered unit(s) for template '{template.Name}'.");
-            }
-            catch (InvalidOperationException ex)
-            {
-                _progressLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
-                _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
-                _updateFailed = true;
-                _anyFailure = true;
-                LogBackup.BackupLogsAndExit("SchemaQuench", 2);
-                return;
-            }
+            workUnits = ApplyPerTemplateTargetFilter(template, workUnits);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _progressLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
+            _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
+            _updateFailed = true;
+            _anyFailure = true;
+            LogBackup.BackupLogsAndExit("SchemaQuench", 2);
+            return;
         }
 
         if (template.RequireAtLeastOneTarget && workUnits.Count == 0)
