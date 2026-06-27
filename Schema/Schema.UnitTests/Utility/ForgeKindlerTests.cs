@@ -71,6 +71,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.QuoteIndexColumnList.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.StripParenWrapping.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.StripTypeCast.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.ServerVersionNum.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.StripLeadingSelect.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ValidateTableOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupTableOwnership.sql"));
@@ -167,8 +168,8 @@ public class ForgeKindlerTests
 
         // SqlServer: 22 = 21 prior + 1 for fn_ServerMajorVersion (version-aware codegen helper).
         Assert.That(sqlServer.Length, Is.EqualTo(22));
-        // PostgreSQL: 26 = 25 prior + 1 for StripLeadingSelect (#282 component-gate SELECT tolerance).
-        Assert.That(postgres.Length, Is.EqualTo(26));
+        // PostgreSQL: 27 = 26 prior + 1 for ServerVersionNum (version-aware codegen helper).
+        Assert.That(postgres.Length, Is.EqualTo(27));
         // MySQL: 18 = 17 prior + 1 for StripLeadingSelect (#282 component-gate SELECT tolerance).
         Assert.That(mysql.Length, Is.EqualTo(18));
     }

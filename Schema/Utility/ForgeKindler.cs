@@ -211,6 +211,7 @@ public static class ForgeKindler
                 new("SchemaSmith.QuoteIndexColumnList.sql"),
                 new("SchemaSmith.StripParenWrapping.sql"),
                 new("SchemaSmith.StripTypeCast.sql"),
+                new("SchemaSmith.ServerVersionNum.sql"),
                 new("SchemaSmith.StripLeadingSelect.sql"),
                 new("SchemaSmith.ValidateTableOwnership.sql"),
                 new("SchemaSmith.FixupTableOwnership.sql"),
