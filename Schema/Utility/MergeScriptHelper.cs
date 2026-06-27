@@ -912,15 +912,24 @@ END $$ LANGUAGE plpgsql;
             // DO $$ block targeting rows with no matching source row, keyed on the same columns the
             // MERGE matched on, honoring the same mergeFilter. Source is the JSON array reprojected
             // identically to the MERGE USING clause so key correspondence is exact.
+            // Per-key correspondence mirrors BuildPostgreSqlMatchColumns' *-prefix NULL-safe
+            // handling (source of truth — keep in sync). A leading '*' is a user-config NULL-safe
+            // marker: strip it and emit the (l = r OR (l IS NULL AND r IS NULL)) form.
             var deleteKeyPredicate = string.Join(" AND ",
                 keyColumns.Split(',').Select(k =>
                 {
-                    var col = k.Trim();  // already quoted, e.g. "Id"
-                    return $"\"DeleteSource\".{col} = \"{destSchema}\".\"{tableName}\".{col}";
+                    var raw = k.Trim();
+                    var nullSafe = raw.StartsWith("*");
+                    var col = $"\"{raw.Trim('*').Trim('"')}\"";  // normalized quoted ident, * stripped
+                    var l = $"\"DeleteSource\".{col}";
+                    var r = $"\"Target\".{col}";
+                    return nullSafe
+                        ? $"({l} = {r} OR ({l} IS NULL AND {r} IS NULL))"
+                        : $"{l} = {r}";
                 }));
 
             mergeSQL += $@"
-DELETE FROM {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}""
+DELETE FROM {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}"" AS ""Target""
  WHERE {(string.IsNullOrWhiteSpace(mergeFilter) ? "" : $"({mergeFilter}) AND ")}NOT EXISTS (
    SELECT 1
      FROM (WITH my_tables(arr) AS (VALUES('{jsonValue}'::JSON))
