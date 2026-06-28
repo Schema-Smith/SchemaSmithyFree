@@ -15,7 +15,23 @@ public static class SchemaGenerator
 {
     public static JObject GenerateSchema(Type rootType)
     {
-        return BuildObjectSchema(rootType);
+        // Identity resolver preserves the historical behavior exactly: list element types are
+        // built as their declared (base) type. Existing callers/tests rely on this.
+        return GenerateSchema(rootType, t => t);
+    }
+
+    /// <summary>
+    /// Generates a schema where list ELEMENT types can be upgraded via <paramref name="elementTypeResolver"/>.
+    /// This is the precise fix for platform subclass props being dropped from collection element schemas:
+    /// base <c>Table.Columns</c>/<c>Indexes</c>/etc. are declared as base-typed lists, so reflection only
+    /// sees base props. The resolver maps a list element type to its platform subclass (e.g. Column →
+    /// SqlServerColumn) so the generated element schema includes the subclass properties. Only list element
+    /// types are resolved — the root type and single-object property types pass through unchanged (those
+    /// subclass props are already surfaced via <c>new</c>-shadowed properties on the platform Table subclasses).
+    /// </summary>
+    public static JObject GenerateSchema(Type rootType, Func<Type, Type> elementTypeResolver)
+    {
+        return BuildObjectSchema(rootType, elementTypeResolver);
     }
 
     public static JObject MergeExtensionsDefinition(JObject generated, JObject existing)
@@ -31,7 +47,7 @@ public static class SchemaGenerator
         return generated;
     }
 
-    private static JObject BuildObjectSchema(Type type)
+    private static JObject BuildObjectSchema(Type type, Func<Type, Type> elementTypeResolver)
     {
         var schema = new JObject { ["type"] = "object" };
         var properties = new JObject();
@@ -39,7 +55,7 @@ public static class SchemaGenerator
 
         foreach (var prop in GetSortedProperties(type))
         {
-            var propSchema = MapType(prop.PropertyType);
+            var propSchema = MapType(prop.PropertyType, elementTypeResolver);
             ApplyConstraints(prop, propSchema);
 
             var schemaAttr = prop.GetCustomAttribute<SchemaPropertyAttribute>();
@@ -60,7 +76,7 @@ public static class SchemaGenerator
         return schema;
     }
 
-    private static JObject MapType(Type type)
+    private static JObject MapType(Type type, Func<Type, Type> elementTypeResolver)
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
 
@@ -80,15 +96,17 @@ public static class SchemaGenerator
         if (IsListType(type))
         {
             var elementType = type.GetGenericArguments()[0];
+            // Resolve only list element types — this is the precise gap the overload closes.
+            elementType = elementTypeResolver(elementType);
             var items = elementType == typeof(string) || IsIntegerType(elementType) || IsNumberType(elementType) || elementType == typeof(bool)
-                ? MapType(elementType)
-                : BuildObjectSchema(elementType);
+                ? MapType(elementType, elementTypeResolver)
+                : BuildObjectSchema(elementType, elementTypeResolver);
             return new JObject { ["type"] = "array", ["items"] = items };
         }
         if (IsDictionaryType(type)) return new JObject { ["type"] = "object" };
         if (typeof(JToken).IsAssignableFrom(type)) return new JObject();
 
-        return BuildObjectSchema(type);
+        return BuildObjectSchema(type, elementTypeResolver);
     }
 
     private static void ApplyConstraints(PropertyInfo prop, JObject propSchema)

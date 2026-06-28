@@ -414,4 +414,96 @@ public class SchemaGeneratorTests
         Assert.That(oneOf[0]?["type"]?.ToString(), Is.EqualTo("object"));
         Assert.That(oneOf[1]?["type"]?.ToString(), Is.EqualTo("array"));
     }
+
+    // --- Element-type resolver overload (platform subclass props in collection element schemas) ---
+
+    // The resolver mirrors the production one in RepositoryHelper: only list ELEMENT types of the
+    // base collection types are upgraded to their platform subclass. Root/single-object types pass
+    // through unchanged, which is the precise gap the overload closes.
+    private static System.Func<System.Type, System.Type> SubclassResolver(
+        System.Type column = null, System.Type index = null, System.Type foreignKey = null, System.Type check = null)
+        => t =>
+            column != null && t == typeof(Schema.Domain.Column) ? column
+            : index != null && t == typeof(Schema.Domain.Index) ? index
+            : foreignKey != null && t == typeof(Schema.Domain.ForeignKey) ? foreignKey
+            : check != null && t == typeof(Schema.Domain.CheckConstraint) ? check
+            : t;
+
+    private static JObject ColumnItemProps(JObject schema) =>
+        schema["properties"]?["Columns"]?["items"]?["properties"] as JObject;
+
+    [Test]
+    public void ResolverOverload_SqlServerColumns_IncludeSubclassProps()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.SqlServer.SqlServerTable),
+            SubclassResolver(column: typeof(Schema.Domain.SqlServer.SqlServerColumn)));
+        var colProps = ColumnItemProps(schema);
+        Assert.Multiple(() =>
+        {
+            Assert.That(colProps?["CheckExpression"], Is.Not.Null);
+            Assert.That(colProps?["ComputedExpression"], Is.Not.Null);
+            Assert.That(colProps?["EncryptionType"], Is.Not.Null);
+            Assert.That(schema["properties"]?["Columns"]?["items"]?["additionalProperties"]?.Value<bool>(), Is.False);
+        });
+    }
+
+    [Test]
+    public void ResolverOverload_PostgreSqlColumns_IncludeSubclassProps()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.PostgreSQL.PostgreSqlTable),
+            SubclassResolver(column: typeof(Schema.Domain.PostgreSQL.PostgreSqlColumn)));
+        var colProps = ColumnItemProps(schema);
+        Assert.Multiple(() =>
+        {
+            Assert.That(colProps?["GenerationExpression"], Is.Not.Null);
+            Assert.That(colProps?["CheckExpression"], Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public void ResolverOverload_MySqlColumns_IncludeSubclassProps()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.MySQL.MySqlTable),
+            SubclassResolver(column: typeof(Schema.Domain.MySQL.MySqlColumn)));
+        var colProps = ColumnItemProps(schema);
+        Assert.Multiple(() =>
+        {
+            Assert.That(colProps?["GenerationExpression"], Is.Not.Null);
+            Assert.That(colProps?["CheckExpression"], Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public void ResolverOverload_SubclassIndexForeignKeyAndCheckPropsAppear()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.PostgreSQL.PostgreSqlTable),
+            SubclassResolver(
+                index: typeof(Schema.Domain.PostgreSQL.PostgreSqlIndex),
+                foreignKey: typeof(Schema.Domain.PostgreSQL.PostgreSqlForeignKey),
+                check: typeof(Schema.Domain.PostgreSQL.PostgreSqlCheckConstraint)));
+        var indexProps = schema["properties"]?["Indexes"]?["items"]?["properties"] as JObject;
+        var fkProps = schema["properties"]?["ForeignKeys"]?["items"]?["properties"] as JObject;
+        var checkProps = schema["properties"]?["CheckConstraints"]?["items"]?["properties"] as JObject;
+        Assert.Multiple(() =>
+        {
+            Assert.That(indexProps?["AccessMethod"], Is.Not.Null, "PostgreSqlIndex adds AccessMethod");
+            Assert.That(fkProps?["MatchType"], Is.Not.Null, "PostgreSqlForeignKey adds MatchType");
+            Assert.That(checkProps?["Deferrable"], Is.Not.Null, "PostgreSqlCheckConstraint adds Deferrable");
+        });
+    }
+
+    [Test]
+    public void IdentityOverload_TableColumns_OnlyBaseProps_BackCompat()
+    {
+        // The no-resolver overload must keep emitting ONLY base Column props (identity path),
+        // so the new overload can't silently change the historical behavior.
+        var withResolver = SchemaGenerator.GenerateSchema(typeof(Table), t => t);
+        var noResolver = SchemaGenerator.GenerateSchema(typeof(Table));
+        Assert.Multiple(() =>
+        {
+            Assert.That(ColumnItemProps(withResolver)?["CheckExpression"], Is.Null);
+            Assert.That(ColumnItemProps(noResolver)?["CheckExpression"], Is.Null);
+            Assert.That(ColumnItemProps(noResolver)?["Name"], Is.Not.Null);
+        });
+    }
 }
