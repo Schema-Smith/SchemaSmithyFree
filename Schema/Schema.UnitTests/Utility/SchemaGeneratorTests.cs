@@ -589,6 +589,17 @@ public class SchemaGeneratorTests
     }
 
     [Test]
+    public void GenerateSchema_DatabaseIdentificationScript_IsNotRequired()
+    {
+        // A template may identify its target via SchemaIdentificationScript instead, so
+        // DatabaseIdentificationScript must not be schema-required (only Name is).
+        var schema = SchemaGenerator.GenerateSchema(typeof(Template));
+        var required = schema["required"]?.ToObject<List<string>>() ?? new List<string>();
+        Assert.That(required, Does.Not.Contain("DatabaseIdentificationScript"));
+        Assert.That(required, Contains.Item("Name"));
+    }
+
+    [Test]
     public void IdentityOverload_TableColumns_OnlyBaseProps_BackCompat()
     {
         // The no-resolver overload must keep emitting ONLY base Column props (identity path),
