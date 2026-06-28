@@ -1,0 +1,10 @@
+{
+  "Schema": "public",
+  "Name": "category",
+  "Columns": [
+    { "Name": "categoryname", "DataType": "VARCHAR(50)", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "pk_category", "PrimaryKey": true, "IndexColumns": "categoryname" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "Schema": "dbo",
+  "Name": "Category",
+  "Columns": [
+    { "Name": "CategoryName", "DataType": "NVARCHAR(50)", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PK_Category", "PrimaryKey": true, "Clustered": true, "IndexColumns": "CategoryName" }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "Schema": "dbo",
+  "Name": "BrandAssets",
+  "Columns": [
+    { "Name": "AssetName", "DataType": "NVARCHAR(50)", "Nullable": false },
+    { "Name": "Image", "DataType": "VARBINARY(MAX)", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PK_BrandAssets", "PrimaryKey": true, "Clustered": true, "IndexColumns": "AssetName" }
+  ]
+}
