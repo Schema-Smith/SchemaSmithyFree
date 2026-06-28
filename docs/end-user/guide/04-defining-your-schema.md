@@ -265,6 +265,84 @@ The `[ALWAYS]` marker tells SchemaQuench to run this script every time the Initi
 
 The same pattern works on PostgreSQL and MySQL -- swap the identification script to use `pg_database` or `information_schema.schemata`, and the `CREATE DATABASE` / `CREATE SCHEMA` statement to match. One `docker compose up` bootstraps everything from an empty server. Subsequent runs skip Initialize automatically and apply only schema changes. Fresh environment or existing environment, same command, same result.
 
+## Advanced engine features
+
+Every engine brings capabilities that go beyond basic columns and indexes. SQL Server has temporal tables and columnstore indexes. PostgreSQL has exclusion constraints and materialized views. MySQL has generated columns with automatic dependency ordering. All of them live in the same JSON you've been writing -- no new tools, no separate configuration layer. You declare the feature; SchemaSmith handles the DDL.
+
+### SQL Server
+
+**Temporal tables.** Audit trails are one of the most common database requirements -- and one of the most tedious to implement correctly. Set `"IsTemporal": true` on any table and SchemaSmith adds the system-time period columns (`ValidFrom`, `ValidTo`), the `PERIOD FOR SYSTEM_TIME` declaration, and `SYSTEM_VERSIONING = ON` pointing at the `<Name>_Hist` history table. You declare neither the period columns nor the history table's DDL -- just the flag, and the engine takes it from there.
+
+> **Note:** You must declare the history table (`<Name>_Hist`) as a sibling table JSON in your package (or create it via a Before script) before quenching the temporal table. SchemaSmith manages the period columns and `SYSTEM_VERSIONING` setup; it does not auto-create the history table file.
+
+```json
+{
+  "Schema": "[dbo]",
+  "Name": "[AuditableOrders]",
+  "IsTemporal": true,
+  "Columns": [
+    { "Name": "[OrderID]", "DataType": "INT IDENTITY(1, 1)", "Nullable": false },
+    { "Name": "[Status]", "DataType": "NVARCHAR(20)", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "[PK_AuditableOrders]", "PrimaryKey": true, "Clustered": true, "IndexColumns": "[OrderID]" }
+  ]
+}
+```
+
+When you toggle `IsTemporal` back to `false`, SchemaSmith emits `SET (SYSTEM_VERSIONING = OFF)` -- clean in both directions.
+
+**Columnstore indexes.** Analytic queries that scan millions of rows for aggregations and reports are where row-store indexes struggle. Add `"ColumnStore": true` to any index definition and SchemaSmith creates a columnstore index instead of the default B-tree structure. SQL Server also supports `"CompressionType": "COLUMNSTORE_ARCHIVE"` for maximum compression on cold data. No separate DDL, no separate tooling -- just a flag on the index object you already know.
+
+**Full-text search.** Natural-language search over text columns requires a full-text index -- a catalog-backed structure that SQL Server manages separately from its B-tree indexes. Declare it as a `FullTextIndex` object on the table, specifying the catalog, the unique key index, the columns to index, and the change-tracking mode. SQL Server allows one full-text index per table, but that one index can cover multiple text columns at once. For the full property set, variant rules, and conditional-application patterns, see the [Full-Text Index (SQL Server) reference](../reference/schema-packages.md#full-text-index-sql-server).
+
+**CDC -- brief note.** Set `"EnableCDC": true` on any table to enable Change Data Capture. SchemaSmith safely sequences the enable/disable around column changes so CDC and schema evolution don't conflict.
+
+### PostgreSQL
+
+**Exclude constraints.** Unique indexes enforce equality: no two rows can have the same value. Exclusion constraints enforce an operator relationship: no two rows can satisfy a given operator pair. The canonical use case is non-overlapping reservation periods -- a GiST index with the `&&` (overlap) operator guarantees that no two reservations for the same room span the same time.
+
+```json
+{
+  "Name": "no_overlapping_reservations",
+  "AccessMethod": "gist",
+  "ExcludeColumns": [
+    { "Column": "room_id",         "Operator": "="  },
+    { "Column": "reserved_period", "Operator": "&&" }
+  ]
+}
+```
+
+Declare these in the `ExcludeConstraints` array on the table. This is something a unique index simply cannot express -- it requires a different constraint type entirely. For the full property set including deferrable options, see the [Exclude Constraints (PostgreSQL) reference](../reference/schema-packages.md#exclude-constraints-postgresql).
+
+**Materialized views.** Some queries are too expensive to compute on every request -- reporting aggregations, denormalized read models, dashboards pulling from many joined tables. Materialize the result: PostgreSQL computes the query once, stores it as a physical table, and you refresh it on demand. SchemaSmith manages the create/drop lifecycle and the view's own indexes in a `Materialized Views/` folder alongside your regular tables. For the full shape including `WithData`, `Tablespace`, and index declarations, see the [Materialized View reference](../reference/schema-packages.md#materialized-view-json-format-postgresql).
+
+**Generated columns.** A generated column derives its value from an expression over other columns in the same row -- the engine computes it and stores it (STORED). Declare it with `GenerationExpression` on the column:
+
+```json
+{ "Name": "full_name", "DataType": "TEXT", "GenerationExpression": "first_name || ' ' || last_name", "Nullable": false }
+```
+
+The engine keeps the value current on every insert and update. No triggers, no application-layer logic.
+
+> **Note:** PostgreSQL also supports `"RowLevelSecurity": true` and `"ForceRowLevelSecurity": true` on the table to enable row-level security. SchemaSmith manages the table-level RLS flag. The policies themselves are defined in your scripts -- SchemaSmith does not manage individual row policies.
+
+> **PostgreSQL:** Advanced index methods -- GIN for JSONB and arrays, GiST for ranges and geometry, BRIN for append-only time-series -- are available via `"AccessMethod"` on any index definition (e.g., `"AccessMethod": "gin"`). SchemaSmith emits the appropriate `USING` clause.
+
+### MySQL
+
+**Generated columns.** MySQL generated columns work the same conceptually as PostgreSQL's, but with an important constraint: a generated column must be defined *after* all columns whose values it references. For multi-column expressions or complex schemas, getting that order right by hand is error-prone. SchemaSmith resolves the creation order automatically using a topological sort with circular-dependency detection -- declare the expression, and the tool handles where in the DDL sequence the column lands.
+
+```json
+{ "Name": "full_name", "DataType": "VARCHAR(255)", "GenerationExpression": "CONCAT(first_name, ' ', last_name)", "Nullable": false }
+```
+
+Use `"Generated": "STORED"` or `"Generated": "VIRTUAL"` to control whether the value is persisted on disk or recomputed on every read.
+
+**Full-text indexes.** Unlike SQL Server, MySQL allows multiple full-text indexes per table -- which is why the property is `FullTextIndexes` (an array). Each index can specify a custom parser: `"Parser": "ngram"` for CJK and other non-space-delimited languages, for example. SchemaSmith creates each full-text index with `CREATE FULLTEXT INDEX ... WITH PARSER` when a parser is specified. For the full property set, see the [Full-Text Indexes (MySQL) reference](../reference/schema-packages.md#full-text-indexes-mysql).
+
+**Spatial indexes.** Index geometry columns for spatial queries by setting `"IndexType": "SPATIAL"` on the index definition. SchemaSmith emits the appropriate `CREATE SPATIAL INDEX` DDL. Pair with a geometry-typed column and MySQL's spatial functions for proximity searches, bounding-box queries, and GIS workloads.
+
 ---
 
 That's how you shape your schema -- adding tables, modifying columns, writing procedures, casting changes, and bootstrapping new environments. Clean, repeatable, no surprises. When you're ready to bring your team into the process, the next chapter shows how schema-as-files transforms collaboration. [Working with Your Team](05-working-with-your-team.md)
