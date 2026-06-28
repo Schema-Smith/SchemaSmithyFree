@@ -562,7 +562,7 @@ When `EncryptionType` is not `"NONE"`, SchemaQuench emits `ENCRYPTED WITH (COLUM
 
 > **Note:** Encrypted columns require a BIN2 collation (e.g., `Latin1_General_BIN2`) on character types. SQL Server enforces this — a non-binary collation on an encrypted column fails at DDL execution time.
 
-### What works and what doesn't
+### Works and limitations
 
 **Declaring encrypted columns and extracting them both work.** Add new encrypted columns to a table JSON; SchemaQuench creates them with the declared CEK, type, and algorithm. SchemaTongs extracts existing encrypted columns and maps `EncryptionType`, `EncryptionKey`, and `EncryptionAlgorithm` correctly, so an extract-then-deploy round-trip is faithful.
 
