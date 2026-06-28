@@ -229,7 +229,26 @@ Community generates validation schemas (`.json-schemas/*.schema`) for `Product.j
 
 If you want editor validation for *your* `Extensions` shape, you can hand-edit the relevant `.schema` file and add a JSON Schema fragment under the `Extensions` property. When SchemaTongs regenerates that schema file, it will **preserve your custom `Extensions` definition** and merge it back into the newly generated schema. Your validation rules outlive the regeneration cycle.
 
-**Example** — tightening `Extensions` on `tables.<platform>.schema` to require a `DataClassification` value:
+### Fragment governance
+
+The `Extensions` governance pattern turns the schema package into a contract surface your team owns. You define what keys are required, what values are acceptable, and the CI pipeline enforces it automatically on every pull request -- no database, no deployment, no extra tooling beyond what the schema validation workflow already does.
+
+**A real demo.** The `Demos/Learn/level2-module-06` packages carry governance-style Extensions on both tables and columns -- table-level `OwningTeam` and column-level `Classification` markers across SQL Server, PostgreSQL, and MySQL:
+
+```json
+{
+  "Schema": "dbo",
+  "Name": "Customer",
+  "Extensions": { "OwningTeam": "Identity" },
+  "Columns": [
+    { "Name": "Email", "DataType": "NVARCHAR(256)", "Extensions": { "Classification": "PII" } },
+    { "Name": "Ssn",   "DataType": "CHAR(11)",       "Extensions": { "Classification": "PII" } },
+    { "Name": "DisplayName", "DataType": "NVARCHAR(128)", "Extensions": { "Classification": "Internal" } }
+  ]
+}
+```
+
+**Starter fragment** -- tightening `Extensions` on `tables.<platform>.schema` to require a `DataClassification` value and constrain `OwningTeam` to a known list:
 
 ```json
 {
@@ -242,14 +261,29 @@ If you want editor validation for *your* `Extensions` shape, you can hand-edit t
           "type": "string",
           "enum": ["Public", "Internal", "Confidential", "PII", "Financial"]
         },
-        "OwningTeam": { "type": "string" }
+        "OwningTeam": {
+          "type": "string",
+          "enum": ["Identity", "Billing", "Compliance", "Platform"]
+        }
       }
     }
   }
 }
 ```
 
-Drop that into `.json-schemas/tables.<platform>.schema` (e.g. `tables.sqlserver.schema`) under `properties.Extensions` (merging with whatever the schema already contains), and your editor enforces it for every table file in the package. SchemaTongs will carry your fragment forward on the next extraction; it will not re-validate the Extensions content itself.
+Drop that into `.json-schemas/tables.<platform>.schema` (e.g. `tables.sqlserver.schema`) under `properties.Extensions`, merging with whatever the schema already contains. Your editor enforces it for every table file in the package immediately. The schema validation workflow picks it up on the next PR with no changes required -- it validates against the whole `.schema` file, which now includes your governance rules.
+
+**What this enforces at PR time:**
+
+- **Require keys** -- `"required": ["DataClassification"]` fails any table that omits the field.
+- **Constrain values** -- `"enum": [...]` fails any table that uses a classification or team name not in the list.
+- **No database needed** -- the same `GrantBirki/json-yaml-validate` action that checks standard structure now checks your governance rules in the same step.
+
+**What SchemaTongs does on the next extraction** -- it regenerates the standard properties and merges your `Extensions` fragment back in. Your governance contract survives the round-trip.
+
+To add column-level governance (constraining `Classification` on individual columns), add the same pattern under `properties.Columns.items.properties.Extensions` in the same schema file.
+
+> **Note:** The fragment constrains what editors and CI see at authoring time. SchemaQuench reads the `Extensions` values at quench time and resolves them as script tokens -- it does not re-validate the fragment itself at deployment time. CI validation is the enforcement point.
 
 > **No GUI property builder in Community.** Community treats `Extensions` as a data-only feature -- you edit the JSON directly, you hand-author the optional `Extensions` schema fragment, and you consume the values through script tokens. That's intentional: it keeps the Community tooling focused on what every team needs. Schema authorship, not form design.
 

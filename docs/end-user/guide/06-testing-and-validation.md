@@ -34,31 +34,26 @@ The testing workflow becomes a tight loop: make changes to your schema files, ru
 
 Before a schema package ever reaches a database, you can validate that every JSON file is structurally correct. You can add a CI job that validates schema files on every pull request -- catching malformed JSON, missing required properties, and structural errors without spinning up a database at all.
 
-Each schema package includes JSON Schema files in a `.json-schemas/` directory, generated **on the fly** from the live C# domain types. The schemas always match the current engine, for the exact platform the package targets -- so each file carries a platform infix (`.sqlserver.`, `.postgresql.`, or `.mysql.`). The examples below use a SQL Server package; swap the infix for your platform. A typical GitHub Actions step validates three categories:
+Each schema package includes JSON Schema files in a `.json-schemas/` directory, generated **on the fly** from the live C# domain types. The schemas always match the current engine, for the exact platform the package targets -- so each file carries a platform infix (`.sqlserver.`, `.postgresql.`, or `.mysql.`). The examples below use a SQL Server package; swap the infix for your platform. A typical CI step validates three categories:
 
 ```yaml
-validate-product:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
+- name: validate-product
+  uses: GrantBirki/json-yaml-validate@v3.3.0
+  with:
+    json_schema: "./my-product/.json-schemas/products.sqlserver.schema"
+    files: "./my-product/Product.json"
 
-    - name: validate-product
-      uses: GrantBirki/json-yaml-validate@v3.3.0
-      with:
-        json_schema: "./my-product/.json-schemas/products.sqlserver.schema"
-        files: "./my-product/Product.json"
+- name: validate-templates
+  uses: GrantBirki/json-yaml-validate@v3.3.0
+  with:
+    json_schema: "./my-product/.json-schemas/templates.sqlserver.schema"
+    files: "./my-product/Templates/Main/Template.json"
 
-    - name: validate-templates
-      uses: GrantBirki/json-yaml-validate@v3.3.0
-      with:
-        json_schema: "./my-product/.json-schemas/templates.sqlserver.schema"
-        files: "./my-product/Templates/Main/Template.json"
-
-    - name: validate-tables
-      uses: GrantBirki/json-yaml-validate@v3.3.0
-      with:
-        json_schema: "./my-product/.json-schemas/tables.sqlserver.schema"
-        base_dir: "./my-product/Templates/Main/Tables"
+- name: validate-tables
+  uses: GrantBirki/json-yaml-validate@v3.3.0
+  with:
+    json_schema: "./my-product/.json-schemas/tables.sqlserver.schema"
+    base_dir: "./my-product/Templates/Main/Tables"
 ```
 
 What each validator catches:
@@ -69,11 +64,13 @@ What each validator catches:
 
 This is the first line of defense. No database, no deployment, no credentials required -- just structural validation that runs in seconds. A typo in a column definition or a missing required field gets caught here, long before it could cause a deployment failure.
 
+**A working example you can copy from.** The SchemaSmith repository ships a complete, runnable workflow at `.github/workflows/validate-demo-schemas.yml` that does exactly this across all three engines -- SQL Server, PostgreSQL, and MySQL -- on every pull request that touches a demo JSON file. It uses a matrix to run one validator job per content type per demo package (products, templates, tables, and for PostgreSQL packages, materialized views). Each matrix entry names a schema file and a file glob, and the `GrantBirki/json-yaml-validate@v3.3.0` action does the rest. No database containers, no credentials, no setup -- the workflow passes or fails in seconds. The matrix pattern scales naturally: add a new demo or a new content type and you add one matrix entry. The pattern for your own repository is identical: one entry per content type per package, each pointing at the `.json-schemas/*.schema` file that already lives alongside your source.
+
 ## Custom Extensions validation
 
-If your team has authored a custom JSON Schema fragment for the `Extensions` bag on tables (for example, to require a `DataClassification` field on every table or to constrain `OwningTeam` to a known list), that fragment rides inside the same `.schema` files and gets validated in the same CI step. The schema generation process preserves your custom Extensions fragment through regeneration, so your team's governance rules are enforced automatically on every pull request.
+If your team has authored a custom JSON Schema fragment for the `Extensions` bag on tables (for example, to require a `DataClassification` field on every table or to constrain `OwningTeam` to a known list), that fragment rides inside the same `.schema` files and gets validated in the same CI step -- with zero workflow changes. The CI workflow picks it up automatically because it validates the whole `.schema` file, including whatever `Extensions` fragment your team has added. The schema generation process preserves your custom Extensions fragment through regeneration, so your team's governance rules are enforced automatically on every pull request.
 
-See [Custom Properties -- JSON Schema Validation](../reference/custom-properties.md#json-schema-validation) for the full pattern.
+See [Custom Properties -- JSON Schema Validation](../reference/custom-properties.md#json-schema-validation) for the fragment format, a real demo that carries table-level and column-level Extensions governance, and step-by-step instructions for constraining the `Extensions` shape in your own `.schema` files.
 
 ## WhatIf as a validation gate
 
