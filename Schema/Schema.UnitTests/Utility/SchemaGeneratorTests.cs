@@ -528,6 +528,15 @@ public class SchemaGeneratorTests
     }
 
     [Test]
+    public void GenerateSchema_EmitsStringPatternForTemplateQuenchSlot()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.TemplateFolder));
+        var slot = schema["properties"]?["QuenchSlot"];
+        Assert.That(slot?["type"]?.ToString(), Is.EqualTo("string"));
+        Assert.That(slot?["pattern"]?.ToString(), Does.Contain("Objects"));
+    }
+
+    [Test]
     public void GenerateSchema_MapsUnsignedLongToInteger()
     {
         var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.MySQL.MySqlTable));
