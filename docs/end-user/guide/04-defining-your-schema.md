@@ -273,8 +273,6 @@ Every engine brings capabilities that go beyond basic columns and indexes. SQL S
 
 **Temporal tables.** Audit trails are one of the most common database requirements -- and one of the most tedious to implement correctly. Set `"IsTemporal": true` on any table and SchemaSmith adds the system-time period columns (`ValidFrom`, `ValidTo`), the `PERIOD FOR SYSTEM_TIME` declaration, and `SYSTEM_VERSIONING = ON` pointing at the `<Name>_Hist` history table. You declare neither the period columns nor the history table's DDL -- just the flag, and the engine takes it from there.
 
-> **Note:** You must declare the history table (`<Name>_Hist`) as a sibling table JSON in your package (or create it via a Before script) before quenching the temporal table. SchemaSmith manages the period columns and `SYSTEM_VERSIONING` setup; it does not auto-create the history table file.
-
 ```json
 {
   "Schema": "[dbo]",
@@ -320,7 +318,7 @@ Declare these in the `ExcludeConstraints` array on the table. This is something 
 **Generated columns.** A generated column derives its value from an expression over other columns in the same row -- the engine computes it and stores it (STORED). Declare it with `GenerationExpression` on the column:
 
 ```json
-{ "Name": "full_name", "DataType": "TEXT", "GenerationExpression": "first_name || ' ' || last_name", "Nullable": false }
+{ "Name": "full_name", "DataType": "TEXT", "Generated": "ALWAYS", "GenerationExpression": "first_name || ' ' || last_name", "Nullable": false }
 ```
 
 The engine keeps the value current on every insert and update. No triggers, no application-layer logic.
