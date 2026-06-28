@@ -23,6 +23,16 @@ public static class Program
         RegisterCheckpointing();
 
         var productQuench = new ProductQuench();
+
+        var testConnection = CommandLineParser.ContainsSwitch("TestConnection");
+        var previewTargets = CommandLineParser.ContainsSwitch("PreviewTargets");
+        if (testConnection || previewTargets)
+        {
+            var ok = productQuench.RunPreFlight(previewTargets);
+            LogBackup.BackupLogsAndExit("SchemaQuench", ok ? 0 : 2);
+            return;
+        }
+
         productQuench.QuenchProduct(skipKindlingForge);
 
         // Clean up checkpoint files only on a clean success — a failed run must preserve
@@ -74,6 +84,8 @@ public static class Program
 
     private static void ToolSpecificSwitches()
     {
+        Console.WriteLine("  --TestConnection                 Validate server connection(s) + minimum version, then exit. No deployment.");
+        Console.WriteLine("  --PreviewTargets                 Validate, then list the databases/schemas each template would target (read-only). No deployment.");
         Console.WriteLine("  --ResumeQuench                   Resume from an existing checkpoint if one is present.");
         Console.WriteLine("  --CheckpointDirectory:<path>     Directory for checkpoint files (default: %TEMP%/schemaquench-checkpoints).");
     }

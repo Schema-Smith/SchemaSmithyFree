@@ -397,6 +397,89 @@ public class ProductQuench
             _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
     }
 
+    public bool RunPreFlight(bool previewTargets)
+    {
+        _progressLog.Info($"Pre-flight diagnostics for {_product.Name} ({(previewTargets ? "--PreviewTargets" : "--TestConnection")})");
+        try
+        {
+            TestServerConnections();   // throws on failure
+            ValidateMinimumVersion();  // throws on failure
+        }
+        catch (Exception e)
+        {
+            _progressLog.Error($"Pre-flight FAILED: {e.Message}");
+            _anyFailure = true;
+            return false;
+        }
+
+        if (!previewTargets)
+        {
+            _progressLog.Info("RESULT: PASS (connections and minimum version validated)");
+            return true;
+        }
+
+        return PreviewTargets();   // implemented in Task 3
+    }
+
+    private bool PreviewTargets()
+    {
+        var templates = LoadTemplates();
+        TemplateTargetValidator.Validate(_templateTargets, templates, _targetTemplates);
+        if (!TryFilterTemplatesByTarget(templates, out var inScope)) return true;
+
+        var previews = new List<TemplatePreview>();
+        foreach (var template in inScope)
+        {
+            if (string.IsNullOrWhiteSpace(template.DatabaseIdentificationScript)) continue;
+            var units = EnumerateWorkUnitsForTemplate(template, previewOnly: true);
+            try
+            {
+                units = ApplyPerTemplateTargetFilter(template, units);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _progressLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
+                _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
+                _anyFailure = true;
+                previews.Add(new TemplatePreview(template.Name, template.RequireAtLeastOneTarget, Array.Empty<WorkUnit>(), matchedNothing: true));
+                continue;
+            }
+            var matchedNothing = template.RequireAtLeastOneTarget && units.Count == 0;
+            previews.Add(new TemplatePreview(template.Name, template.RequireAtLeastOneTarget, units, matchedNothing));
+        }
+
+        foreach (var line in PreFlightReporter.Render(previews)) _progressLog.Info(line);
+
+        var anyRequiredMissed = previews.Any(p => p.matchedNothing);
+        if (anyRequiredMissed)
+        {
+            _anyFailure = true;
+            _progressLog.Error("RESULT: FAIL (one or more required templates matched nothing)");
+            return false;
+        }
+        _progressLog.Info("RESULT: PASS");
+        return true;
+    }
+
+    /// <summary>
+    /// Applies the <c>Target.Databases</c> / <c>Target.Schemas</c> per-template filter to
+    /// <paramref name="units"/>. Returns the filtered list unchanged when the filter is empty
+    /// or the input is empty. Throws <see cref="InvalidOperationException"/> on rejection
+    /// (unknown filter value or zero-result intersection) — callers handle the exception
+    /// differently: <see cref="QuenchTemplate"/> logs + exits; <see cref="PreviewTargets"/>
+    /// logs + continues so remaining templates are still reported.
+    /// </summary>
+    private List<WorkUnit> ApplyPerTemplateTargetFilter(Template template, List<WorkUnit> units)
+    {
+        if (units.Count == 0 || (_targetDatabases.Count == 0 && _targetSchemas.Count == 0))
+            return units;
+
+        var perTemplateFilter = new WorkUnitFilter([], _targetDatabases, _targetSchemas);
+        var filtered = perTemplateFilter.Apply(units, _progressLog.Warn);
+        _progressLog.Info($"[Target] Resolved {filtered.Count} work unit(s) after filtering {units.Count} discovered unit(s) for template '{template.Name}'.");
+        return filtered;
+    }
+
     public void QuenchProduct(bool suppressKindlingForTesting = false)
     {
         _progressLog.Info($"Begin Quench of {_product.Name}");
@@ -741,7 +824,6 @@ public class ProductQuench
         // dispatch to a single MaxThreads-bounded pool. SQL Server's per-server ServerToQuench
         // selection is applied at enumeration; PostgreSQL/MySQL run against the primary server only.
         var workUnits = EnumerateWorkUnitsForTemplate(template);
-        var discoveredCount = workUnits.Count;
 
         // Slice-5 selective execution (§9.3, §9.4): apply Target.Databases / Target.Schemas to
         // the per-template enumerated set, validating filter values against this template's
@@ -755,23 +837,18 @@ public class ProductQuench
         // exists). Running an empty input through the filter would surface a misleading "filter
         // produced zero results" diagnostic, blaming the user's Target.* values for what is
         // actually an expected pass-through.
-        if (workUnits.Count > 0 && (_targetDatabases.Count > 0 || _targetSchemas.Count > 0))
+        try
         {
-            var perTemplateFilter = new WorkUnitFilter([], _targetDatabases, _targetSchemas);
-            try
-            {
-                workUnits = perTemplateFilter.Apply(workUnits, _progressLog.Warn);
-                _progressLog.Info($"[Target] Resolved {workUnits.Count} work unit(s) after filtering {discoveredCount} discovered unit(s) for template '{template.Name}'.");
-            }
-            catch (InvalidOperationException ex)
-            {
-                _progressLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
-                _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
-                _updateFailed = true;
-                _anyFailure = true;
-                LogBackup.BackupLogsAndExit("SchemaQuench", 2);
-                return;
-            }
+            workUnits = ApplyPerTemplateTargetFilter(template, workUnits);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _progressLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
+            _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
+            _updateFailed = true;
+            _anyFailure = true;
+            LogBackup.BackupLogsAndExit("SchemaQuench", 2);
+            return;
         }
 
         if (template.RequireAtLeastOneTarget && workUnits.Count == 0)
@@ -903,13 +980,13 @@ public class ProductQuench
     /// the SQL-Server-vs-other-platforms server-selection logic. The default implementation is what
     /// production code runs.</para>
     /// </summary>
-    internal virtual List<WorkUnit> EnumerateWorkUnitsForTemplate(Template template)
+    internal virtual List<WorkUnit> EnumerateWorkUnitsForTemplate(Template template, bool previewOnly = false)
     {
         var serverList = DetermineServerListForTemplate(template);
         var workUnits = new List<WorkUnit>();
         foreach (var server in serverList)
         {
-            if (!EnumerateAndProvisionWorkUnitsForServer(template, server, workUnits))
+            if (!EnumerateAndProvisionWorkUnitsForServer(template, server, workUnits, previewOnly))
             {
                 if (ShouldAbortOnFailure(template))
                     break;
@@ -964,7 +1041,7 @@ public class ProductQuench
     /// skipped database. The name reflects this dual responsibility (enumerate + provision).
     /// </para>
     /// </summary>
-    private bool EnumerateAndProvisionWorkUnitsForServer(Template template, string server, List<WorkUnit> workUnits)
+    private bool EnumerateAndProvisionWorkUnitsForServer(Template template, string server, List<WorkUnit> workUnits, bool previewOnly = false)
     {
         // TemplateTargets override: when an entry exists for this template, the matching
         // axis (Databases / Schemas) REPLACES the corresponding identification-script result. Each
@@ -1037,8 +1114,13 @@ public class ProductQuench
             // any work units. CreateIfMissing: true → provision via admin connection (idempotent);
             // CreateIfMissing: false → emit skip log; DO NOT add work units for this (server, db).
             // Discovery-sourced DBs bypass this entirely.
-            if (databasesOverride && !DatabaseAxisProvisioningGate(server, db, template, overrideEntry!))
-                continue;
+            bool wouldCreateThisDb = false;
+            if (databasesOverride)
+            {
+                var gate = DatabaseAxisProvisioningGate(server, db, template, overrideEntry!, previewOnly);
+                if (!gate.Proceed) continue;
+                wouldCreateThisDb = gate.WouldCreate;
+            }
 
             if (template.IsSchemaTemplate)
             {
@@ -1089,7 +1171,8 @@ public class ProductQuench
                         SchemaFromOverride = schemasOverride,
                         ProvisionSchemaIfMissing = schemasOverride && overrideEntry!.CreateIfMissing,
                         DatabaseFromOverride = databasesOverride,
-                        ProvisionDatabaseIfMissing = databasesOverride && overrideEntry!.CreateIfMissing
+                        ProvisionDatabaseIfMissing = databasesOverride && overrideEntry!.CreateIfMissing,
+                        WouldCreateDatabase = wouldCreateThisDb
                     });
             }
             else
@@ -1099,7 +1182,8 @@ public class ProductQuench
                     DatabaseSource = databaseSource,
                     SchemaSource = "(regular template)",
                     DatabaseFromOverride = databasesOverride,
-                    ProvisionDatabaseIfMissing = databasesOverride && overrideEntry!.CreateIfMissing
+                    ProvisionDatabaseIfMissing = databasesOverride && overrideEntry!.CreateIfMissing,
+                    WouldCreateDatabase = wouldCreateThisDb
                 });
             }
         }
@@ -1108,17 +1192,27 @@ public class ProductQuench
     }
 
     /// <summary>
+    /// Result of <see cref="DatabaseAxisProvisioningGate"/>: whether to proceed with
+    /// enumerating work units for this (server, db) pair, and whether preview mode determined
+    /// the database would be created on a real run.
+    /// </summary>
+    internal readonly record struct DbAxisGate(bool Proceed, bool WouldCreate);
+
+    /// <summary>
     /// DB-axis provisioning gate. Called once per (server, db) pair when the DB came from a
     /// <c>TemplateTargets:&lt;T&gt;:Databases</c> override. Checks whether the database exists
     /// on <paramref name="server"/>; if missing, branches on <c>CreateIfMissing</c>:
     /// <list type="bullet">
-    ///   <item><term>true</term><description>Provisions the DB via admin connection (idempotent).</description></item>
-    ///   <item><term>false</term><description>Emits a skip log and returns <c>false</c> so the caller
-    ///   short-circuits without adding any work units for this DB.</description></item>
+    ///   <item><term>true</term><description>Provisions the DB via admin connection (idempotent)
+    ///   unless <paramref name="previewOnly"/> is <c>true</c>, in which case logs "would create"
+    ///   and proceeds without issuing any DDL.</description></item>
+    ///   <item><term>false</term><description>Emits a skip log and returns <c>Proceed=false</c>
+    ///   so the caller short-circuits without adding any work units for this DB.</description></item>
     /// </list>
-    /// Returns <c>true</c> when the DB exists (either pre-existing or just provisioned) and the
-    /// caller should proceed with schema discovery / work-unit enqueueing; <c>false</c> when the
-    /// DB is missing and skip-missing applies.
+    /// Returns <see cref="DbAxisGate.Proceed"/> = <c>true</c> when the caller should proceed
+    /// with schema discovery / work-unit enqueueing; <c>false</c> when the DB is missing and
+    /// skip-missing applies. <see cref="DbAxisGate.WouldCreate"/> is <c>true</c> only in
+    /// preview mode when a missing-but-CreateIfMissing DB was identified without provisioning.
     /// <para>
     /// Internal+virtual so tests can override the entire decision flow without standing up a
     /// live admin connection. Production code uses the default implementation here, which
@@ -1128,8 +1222,8 @@ public class ProductQuench
     /// <see cref="SchemaProvisioner.EnsureDatabaseExists"/>.
     /// </para>
     /// </summary>
-    internal virtual bool DatabaseAxisProvisioningGate(string server, string databaseName,
-        Template template, TemplateTarget overrideEntry)
+    internal virtual DbAxisGate DatabaseAxisProvisioningGate(string server, string databaseName,
+        Template template, TemplateTarget overrideEntry, bool previewOnly = false)
     {
         bool exists;
         try
@@ -1146,13 +1240,19 @@ public class ProductQuench
             _errorLog.Error(
                 $"[{server}] Database existence check failed for '{databaseName}' (template '{template.Name}'):\r\n{e}");
             _updateFailed = true;
-            return false;
+            return new DbAxisGate(false, false);
         }
 
-        if (exists) return true;
+        if (exists) return new DbAxisGate(true, false);
 
         if (overrideEntry.CreateIfMissing)
         {
+            if (previewOnly)
+            {
+                _progressLog.Info($"[{server}] Database '{databaseName}' does not exist — would be created (CreateIfMissing: true).");
+                return new DbAxisGate(true, true);   // proceed for reporting; nothing provisioned
+            }
+
             // Per-create log line surfaces from the provisioner (slice 3 / slice 4 contract:
             // ONE log line per create, branched by WhatIf inside the provisioner). The gate
             // owns ONLY the skip-missing and existence-check-failure logs — no pre-provision
@@ -1176,9 +1276,9 @@ public class ProductQuench
                 _errorLog.Error(
                     $"[{server}] Database provisioning failed for '{databaseName}' (template '{template.Name}'):\r\n{ex}");
                 _updateFailed = true;
-                return false;
+                return new DbAxisGate(false, false);
             }
-            return true;
+            return new DbAxisGate(true, false);
         }
 
         // Skip-missing on the DB axis. Mirror the schema-axis log shape so a grep for
@@ -1188,7 +1288,7 @@ public class ProductQuench
         _progressLog.Info(
             $"[{server}] Database '{databaseName}' does not exist and " +
             $"TemplateTargets CreateIfMissing is false — skipping all iterations for this server-database pair.");
-        return false;
+        return new DbAxisGate(false, false);
     }
 
     /// <summary>

@@ -24,5 +24,8 @@ namespace Schema.Domain.MySQL
 
         [JsonProperty(Order = 105)]
         public string Comment { get; set; }
+
+        [JsonProperty(Order = 106)]
+        public string CheckExpression { get; set; }
     }
 }

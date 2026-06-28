@@ -3,6 +3,7 @@
 using Newtonsoft.Json;
 using Schema.Domain;
 using Schema.Domain.PostgreSQL;
+using Schema.Utility;
 
 namespace Schema.UnitTests.Domain.PostgreSQL
 {
@@ -70,13 +71,36 @@ namespace Schema.UnitTests.Domain.PostgreSQL
             var column = new PostgreSqlColumn { Name = "Id", DataType = "int" };
             var json = JsonConvert.SerializeObject(column);
 
-            Assert.That(json, Does.Not.Contain("CheckExpression"));
             Assert.That(json, Does.Not.Contain("ComputedExpression"));
             Assert.That(json, Does.Not.Contain("Sparse"));
             Assert.That(json, Does.Not.Contain("DataMaskFunction"));
             Assert.That(json, Does.Not.Contain("EncryptionType"));
             Assert.That(json, Does.Not.Contain("AutoIncrement"));
             Assert.That(json, Does.Not.Contain("CharacterSet"));
+        }
+
+        [Test]
+        public void PostgreSqlColumn_PreservesCheckExpression_ThroughDeserializeAndSerializeAll()
+        {
+            const string json = """
+            {"Name":"T","Schema":"public","Columns":[
+                {"Name":"Quantity","DataType":"int4","CheckExpression":"Quantity > 0"}
+            ]}
+            """;
+            var table = PlatformDeserializer.DeserializeTable(json, Platform.PostgreSQL);
+            var roundTripped = JsonHelper.SerializeAll(table);
+            Assert.That(roundTripped, Does.Contain("CheckExpression"));
+            Assert.That(roundTripped, Does.Contain("Quantity > 0"));
+        }
+
+        [Test]
+        public void PostgreSqlColumn_OmitsNullCheckExpression_FromSerializeAll()
+        {
+            const string json = """
+            {"Name":"T","Schema":"public","Columns":[{"Name":"Id","DataType":"int4"}]}
+            """;
+            var table = PlatformDeserializer.DeserializeTable(json, Platform.PostgreSQL);
+            Assert.That(JsonHelper.SerializeAll(table), Does.Not.Contain("CheckExpression"));
         }
     }
 }

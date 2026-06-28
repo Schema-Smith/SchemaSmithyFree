@@ -89,4 +89,13 @@ public sealed record WorkUnit(
     /// removed from the dispatch queue.
     /// </summary>
     public bool ProvisionDatabaseIfMissing { get; init; }
+
+    /// <summary>
+    /// True when the DB-axis provisioning gate ran in preview-only mode and determined that
+    /// this unit's database does not exist but <c>CreateIfMissing: true</c> would cause it to
+    /// be created on a real run. No <c>CREATE DATABASE</c> was issued; the unit is still
+    /// enumerated so the pre-flight preview report can surface it as "would be created".
+    /// Default false so non-preview units and existing-DB units stay unaffected.
+    /// </summary>
+    public bool WouldCreateDatabase { get; init; }
 }

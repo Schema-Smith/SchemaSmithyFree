@@ -260,7 +260,31 @@ BEGIN
                           WHERE ec."TableSchema" = c."TableSchema"
                             AND ec."TableName" = c."TableName"
                             AND ec."CheckName" = c."Name"
-                            AND ec."Expression" = c."Expression");
+                            AND ec."Expression" = c."Expression")
+        -- Column-level checks (CK_<table>_<column>) are owned by the column pass below, not the
+        -- table-level CheckConstraints array; excluding them here prevents a phantom drop on every run.
+        AND NOT EXISTS (SELECT 1
+                          FROM temp_columns col
+                          WHERE col."TableSchema" = ec."TableSchema"
+                            AND col."TableName" = ec."TableName"
+                            AND NULLIF(col."CheckExpression", '') IS NOT NULL
+                            AND ec."CheckName" = 'CK_' || col."TableName" || '_' || col."Name");
+    CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
+    RAISE NOTICE 'Drop Modified Column Check Constraints';
+    -- A column-check (CK_<table>_<column>) whose live, normalized definition differs from the desired
+    -- CheckExpression is dropped here so the create pass re-adds it with the new expression. Reuses the
+    -- SAME pg_get_constraintdef normalization (temp_existing_checks."Expression") as the table-level
+    -- compare above, so an unchanged expression compares equal and is left untouched (idempotent).
+    SELECT STRING_AGG('RAISE NOTICE ''  Column Check Constraint ' || ec."TableSchema" || '.' || ec."TableName" || '.' || ec."CheckName" || ' modified'';' || CHR(10) ||
+                      'ALTER TABLE "' || ec."TableSchema" || '"."' || ec."TableName" || '" DROP CONSTRAINT IF EXISTS "' || ec."CheckName" || '" CASCADE;', CHR(10))
+      INTO sql_script
+      FROM temp_existing_checks ec
+      JOIN temp_columns col ON col."TableSchema" = ec."TableSchema"
+                           AND col."TableName" = ec."TableName"
+                           AND NULLIF(col."CheckExpression", '') IS NOT NULL
+                           AND ec."CheckName" = 'CK_' || col."TableName" || '_' || col."Name"
+      WHERE ec."Expression" != col."CheckExpression";
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Drop Modified or Removed Statistics';

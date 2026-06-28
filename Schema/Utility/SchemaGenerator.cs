@@ -15,7 +15,18 @@ public static class SchemaGenerator
 {
     public static JObject GenerateSchema(Type rootType)
     {
-        return BuildObjectSchema(rootType);
+        // Identity resolver preserves the historical behavior exactly: list element types are
+        // built as their declared (base) type. Existing callers/tests rely on this.
+        return GenerateSchema(rootType, t => t);
+    }
+
+    /// <summary>
+    /// Generates a JSON schema, mapping list element types through <paramref name="elementTypeResolver"/>
+    /// so platform subclass properties appear in generated collection element schemas.
+    /// </summary>
+    public static JObject GenerateSchema(Type rootType, Func<Type, Type> elementTypeResolver)
+    {
+        return BuildObjectSchema(rootType, elementTypeResolver);
     }
 
     public static JObject MergeExtensionsDefinition(JObject generated, JObject existing)
@@ -31,7 +42,7 @@ public static class SchemaGenerator
         return generated;
     }
 
-    private static JObject BuildObjectSchema(Type type)
+    private static JObject BuildObjectSchema(Type type, Func<Type, Type> elementTypeResolver)
     {
         var schema = new JObject { ["type"] = "object" };
         var properties = new JObject();
@@ -39,7 +50,7 @@ public static class SchemaGenerator
 
         foreach (var prop in GetSortedProperties(type))
         {
-            var propSchema = MapType(prop.PropertyType);
+            var propSchema = MapType(prop.PropertyType, elementTypeResolver);
             ApplyConstraints(prop, propSchema);
 
             var schemaAttr = prop.GetCustomAttribute<SchemaPropertyAttribute>();
@@ -60,7 +71,7 @@ public static class SchemaGenerator
         return schema;
     }
 
-    private static JObject MapType(Type type)
+    private static JObject MapType(Type type, Func<Type, Type> elementTypeResolver)
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
 
@@ -80,15 +91,17 @@ public static class SchemaGenerator
         if (IsListType(type))
         {
             var elementType = type.GetGenericArguments()[0];
+            // Resolve only list element types — this is the precise gap the overload closes.
+            elementType = elementTypeResolver(elementType);
             var items = elementType == typeof(string) || IsIntegerType(elementType) || IsNumberType(elementType) || elementType == typeof(bool)
-                ? MapType(elementType)
-                : BuildObjectSchema(elementType);
+                ? MapType(elementType, elementTypeResolver)
+                : BuildObjectSchema(elementType, elementTypeResolver);
             return new JObject { ["type"] = "array", ["items"] = items };
         }
         if (IsDictionaryType(type)) return new JObject { ["type"] = "object" };
         if (typeof(JToken).IsAssignableFrom(type)) return new JObject();
 
-        return BuildObjectSchema(type);
+        return BuildObjectSchema(type, elementTypeResolver);
     }
 
     private static void ApplyConstraints(PropertyInfo prop, JObject propSchema)

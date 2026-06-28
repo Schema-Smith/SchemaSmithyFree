@@ -106,7 +106,7 @@ public static class RepositoryHelper
             var schemaFile = Path.Combine(schemaPath, fileName);
             if (file.Exists(schemaFile)) continue;
 
-            var generated = SchemaGenerator.GenerateSchema(GetTypeForSchemaFile(fileName, platform));
+            var generated = SchemaGenerator.GenerateSchema(GetTypeForSchemaFile(fileName, platform), PlatformElementResolver(platform));
             file.WriteAllText(schemaFile, generated.ToString(Formatting.Indented));
         }
     }
@@ -235,7 +235,7 @@ public static class RepositoryHelper
     {
         var file = FileWrapper.GetFromFactory();
         var schemaFile = Path.Combine(schemaPath, fileName);
-        var generated = SchemaGenerator.GenerateSchema(GetTypeForSchemaFile(fileName, platform));
+        var generated = SchemaGenerator.GenerateSchema(GetTypeForSchemaFile(fileName, platform), PlatformElementResolver(platform));
 
         if (!file.Exists(schemaFile))
         {
@@ -249,6 +249,19 @@ public static class RepositoryHelper
         file.WriteAllText(schemaFile, merged.ToString(Formatting.Indented));
         return new SchemaFileResult { FileName = fileName };
     }
+
+    /// <summary>
+    /// Maps the base collection element types (Column/Index/ForeignKey/CheckConstraint) to their
+    /// platform subclass so generated table element schemas include platform-specific properties
+    /// (e.g. CheckExpression, GenerationExpression). Reuses the canonical platform→subclass mapping
+    /// in <see cref="PlatformDeserializer"/> rather than duplicating it.
+    /// </summary>
+    private static Func<Type, Type> PlatformElementResolver(Platform platform) => t =>
+        t == typeof(Column) ? PlatformDeserializer.GetColumnType(platform)
+        : t == typeof(Schema.Domain.Index) ? PlatformDeserializer.GetIndexType(platform)
+        : t == typeof(ForeignKey) ? PlatformDeserializer.GetForeignKeyType(platform)
+        : t == typeof(CheckConstraint) ? PlatformDeserializer.GetCheckConstraintType(platform)
+        : t;
 
     private static Type GetTypeForSchemaFile(string fileName, Platform platform)
     {

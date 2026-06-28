@@ -51,8 +51,10 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') AS [Collation],
                        ISNULL(mc.masking_function, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,
                        ISNULL(sc.encryption_type_desc, 'NONE') COLLATE DATABASE_DEFAULT AS EncryptionType,
-                       ISNULL(sc.encryption_algorithm_name, '') COLLATE DATABASE_DEFAULT AS EncryptionKey,
-                       ISNULL(sc.column_encryption_key_database_name, '') COLLATE DATABASE_DEFAULT AS EncryptionAlgorithm,
+                       ISNULL((SELECT '[' + cek.[name] + ']'
+                                 FROM sys.column_encryption_keys cek WITH (NOLOCK)
+                                WHERE cek.column_encryption_key_id = sc.column_encryption_key_id), '') COLLATE DATABASE_DEFAULT AS EncryptionKey,
+                       ISNULL(sc.encryption_algorithm_name, '') COLLATE DATABASE_DEFAULT AS EncryptionAlgorithm,
                        '' AS [OldName],
                        JSON_QUERY('{"ExtendedProperties": {' + (SELECT STRING_AGG(CAST('"' + [Name] + '": "' + CONVERT(NVARCHAR(MAX), [Value]) + '"' AS NVARCHAR(MAX)), ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Column', c.COLUMN_NAME) x WHERE x.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)) + '}}') AS [Extensions]
                   FROM INFORMATION_SCHEMA.COLUMNS c WITH (NOLOCK)

@@ -32,6 +32,34 @@
             "maxLength": 128,
             "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
+          "CheckExpression": {
+            "type": "string"
+          },
+          "ComputedExpression": {
+            "type": "string"
+          },
+          "Persisted": {
+            "type": "boolean"
+          },
+          "Sparse": {
+            "type": "boolean"
+          },
+          "Collation": {
+            "type": "string"
+          },
+          "DataMaskFunction": {
+            "type": "string"
+          },
+          "EncryptionType": {
+            "type": "string",
+            "pattern": "DETERMINISTIC|RANDOMIZED|NONE"
+          },
+          "EncryptionKey": {
+            "type": "string"
+          },
+          "EncryptionAlgorithm": {
+            "type": "string"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -68,6 +96,29 @@
             "type": "string",
             "maxLength": 128,
             "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "FilterExpression": {
+            "type": "string"
+          },
+          "CompressionType": {
+            "type": "string"
+          },
+          "Clustered": {
+            "type": "boolean"
+          },
+          "ColumnStore": {
+            "type": "boolean"
+          },
+          "FillFactor": {
+            "type": "integer",
+            "minimum": 0.0,
+            "maximum": 100.0
+          },
+          "IncludeColumns": {
+            "type": "string"
+          },
+          "UpdateFillFactor": {
+            "type": "boolean"
           },
           "Extensions": {}
         },
@@ -110,6 +161,9 @@
             "type": "string",
             "maxLength": 128,
             "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "RelatedTableSchema": {
+            "type": "string"
           },
           "Extensions": {}
         },

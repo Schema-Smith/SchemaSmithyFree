@@ -521,6 +521,64 @@ When a database uses user-defined types (`CREATE TYPE` / `CREATE DOMAIN`), the `
 
 ---
 
+## Always Encrypted (SQL Server)
+
+Always Encrypted lets SQL Server store sensitive column data in encrypted form that the server itself cannot read — only authorized clients holding the Column Master Key can decrypt. SchemaTongs extracts encrypted columns and captures all three encryption properties; SchemaQuench declares them with the exact `ENCRYPTED WITH (…)` syntax SQL Server requires. Extract once, deploy everywhere the CMK is distributed — no hand-written DDL.
+
+> **SQL Server only:** Always Encrypted is a SQL Server feature with no equivalent on PostgreSQL or MySQL. No parity gap — there is no cross-platform AE analogue to implement.
+
+### Column properties
+
+These three properties appear on SQL Server column definitions only and are ignored on all other platforms.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `EncryptionType` | string | `"NONE"` | Encryption type: `"DETERMINISTIC"` (repeatable ciphertext, supports equality comparisons) or `"RANDOMIZED"` (non-repeatable ciphertext, stronger protection). `"NONE"` or absent means no encryption. |
+| `EncryptionKey` | string | `""` | Column Encryption Key name, bracket-wrapped (e.g., `"[MyCEK]"`). Must match a CEK already installed in the target database. |
+| `EncryptionAlgorithm` | string | `""` | Encryption algorithm name. The only currently supported value is `"AEAD_AES_256_CBC_HMAC_SHA_256"`. |
+
+When `EncryptionType` is not `"NONE"`, SchemaQuench emits `ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = [EncryptionKey], ENCRYPTION_TYPE = [EncryptionType], ALGORITHM = '[EncryptionAlgorithm]')` in the column DDL.
+
+### Example
+
+```json
+{
+  "Name": "[Customer]",
+  "Schema": "[dbo]",
+  "Columns": [
+    { "Name": "[CustomerId]",  "DataType": "INT",          "Nullable": false },
+    { "Name": "[SSN]",         "DataType": "NVARCHAR(11)", "Nullable": false,
+      "Collation": "Latin1_General_BIN2",
+      "EncryptionType": "DETERMINISTIC",
+      "EncryptionKey": "[CustomerCEK]",
+      "EncryptionAlgorithm": "AEAD_AES_256_CBC_HMAC_SHA_256" },
+    { "Name": "[Notes]",       "DataType": "NVARCHAR(500)", "Nullable": true,
+      "EncryptionType": "RANDOMIZED",
+      "EncryptionKey": "[CustomerCEK]",
+      "EncryptionAlgorithm": "AEAD_AES_256_CBC_HMAC_SHA_256" }
+  ]
+}
+```
+
+> **Note:** Encrypted columns require a BIN2 collation (e.g., `Latin1_General_BIN2`) on character types. SQL Server enforces this — a non-binary collation on an encrypted column fails at DDL execution time.
+
+### Works and limitations
+
+**Declaring encrypted columns and extracting them both work.** Add new encrypted columns to a table JSON; SchemaQuench creates them with the declared CEK, type, and algorithm. SchemaTongs extracts existing encrypted columns and maps `EncryptionType`, `EncryptionKey`, and `EncryptionAlgorithm` correctly, so an extract-then-deploy round-trip is faithful.
+
+**Changing the encryption settings on a populated column is not supported in-quench.** If you change `EncryptionType`, `EncryptionKey`, or `EncryptionAlgorithm` on a column that already has data — or add `EncryptionType` to a column that was previously plaintext — SchemaQuench raises a hard error before any DDL runs, names the column, and points you at the workaround. The column is left untouched.
+
+This is a fundamental SQL Server constraint, not a tooling limitation. A standard (non-enclave) SQL Server holds no Column Master Key and cannot decrypt or re-encrypt data server-side; re-encryption requires client-side key access that SchemaQuench does not have. The guard fires in both live and WhatIf mode so the constraint is visible in previews before any deployment runs.
+
+**Workaround — Before/After full-table rebuild:**
+
+1. **Before script:** create the new table with the target encrypted schema; `INSERT INTO new SELECT * FROM old` over a `Column Encryption Setting=Enabled` connection (the ADO.NET driver handles decrypt/re-encrypt client-side); drop foreign keys and constraints on the old table; drop the old table; `sp_rename` the new table.
+2. **After script:** recreate foreign keys, constraints, and extended properties.
+
+This is the same approach SQL Server Management Studio uses for Always Encrypted changes. Run it in a maintenance window — referential integrity is briefly broken between the Before and After steps.
+
+---
+
 ## Indexes
 
 Every entry in the `Indexes` array defines an index or key constraint on the table. The shared shape covers the common cases; per-platform index types extend it.

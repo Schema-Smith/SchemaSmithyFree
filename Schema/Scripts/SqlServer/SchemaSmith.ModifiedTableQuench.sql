@@ -695,19 +695,13 @@ BEGIN TRY
     DECLARE @v_TempColName NVARCHAR(256) = @v_SwapColumn + '_swap_temp'
     -- Extract data type without NULL/NOT NULL (used only by non-encrypted path, but declared here to avoid re-declare in cursor loop)
     DECLARE @v_SwapDataType NVARCHAR(MAX) = RTRIM(REPLACE(REPLACE(@v_SwapColumnScript, ' NOT NULL', ''), ' NULL', ''))
-    -- For encrypted columns, we must use the full definition directly because:
-    -- 1. SQL Server rejects nullable encrypted columns
-    -- 2. The ENCRYPTED WITH clause must be present from column creation
-    -- For non-encrypted columns, use the existing nullable-then-constrain pattern
+    -- Always Encrypted changes on existing columns cannot be performed server-side on a standard
+    -- (non-enclave) deployment: the server holds no Column Master Key and cannot re-encrypt data.
+    -- Fail closed immediately — before any DDL — in both live and WhatIf mode so the impossibility
+    -- is visible in previews. The operator must use the Before/After full-table rebuild instead.
     IF @v_SwapColumnScript LIKE '%ENCRYPTED WITH%'
     BEGIN
-      -- Encrypted swap: create temp with full target definition (always NOT NULL)
-      SET @v_SQL = 'RAISERROR(''  Swapping column ' + @v_SwapSchema + '.' + @v_SwapTable + '.[' + @v_SwapColumn + '] (encrypted data-preserving replacement)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                   'ALTER TABLE ' + @v_SwapSchema + '.' + @v_SwapTable + ' ADD [' + @v_TempColName + '] ' + @v_SwapColumnScript + ';'
-      IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-      -- Copy data from original to temp (ADO.NET driver handles decrypt/re-encrypt)
-      SET @v_SQL = 'UPDATE ' + @v_SwapSchema + '.' + @v_SwapTable + ' SET [' + @v_TempColName + '] = [' + @v_SwapColumn + '];'
-      IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+      RAISERROR('Always Encrypted: in-place encryption change on %s.%s.[%s] cannot be performed on a standard (non-enclave) server. Use Before/After migration scripts to rebuild the table with the target encryption settings and copy data client-side over a Column Encryption Setting=Enabled connection.', 16, 1, @v_SwapSchema, @v_SwapTable, @v_SwapColumn)
     END
     ELSE
     BEGIN

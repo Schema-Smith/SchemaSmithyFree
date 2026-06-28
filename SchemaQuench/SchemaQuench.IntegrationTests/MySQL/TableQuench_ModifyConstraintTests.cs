@@ -52,7 +52,7 @@ public class TableQuench_ModifyConstraintTests : BaseTableQuenchTests
             WHERE CONSTRAINT_SCHEMA = '{TestSchema}'
               AND CONSTRAINT_NAME = 'CHK_ModifyMyTableCheck_MyCheck'";
         var checkClause = cmd.ExecuteScalar()?.ToString();
-        Assert.That(checkClause, Does.Contain("Id").And.Contain("Col2"));
+        Assert.That(checkClause, Does.Contain("100"));
 
         conn.Close();
     }
@@ -152,7 +152,7 @@ INSERT INTO `{_mainDb}`.SchemaSmith_ProductOwnership (ProductName, TemplateName,
 VALUES ('{_productName}', '', '{TestSchema}', 'TABLE', 'ModifyMyDefault');
 -- TableQuench_ShouldModifyTableLevelCheckConstraint
 CREATE TABLE IF NOT EXISTS `{TestSchema}`.`ModifyMyTableCheck` (`Id` INT NOT NULL, `Col2` INT);
-ALTER TABLE `{TestSchema}`.`ModifyMyTableCheck` ADD CONSTRAINT `CHK_ModifyMyTableCheck_MyCheck` CHECK (`Col2`>`Id`);
+ALTER TABLE `{TestSchema}`.`ModifyMyTableCheck` ADD CONSTRAINT `CHK_ModifyMyTableCheck_MyCheck` CHECK (`Id` > 0);
 INSERT INTO `{_mainDb}`.SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
 VALUES ('{_productName}', '', '{TestSchema}', 'TABLE', 'ModifyMyTableCheck');
 INSERT INTO `{_mainDb}`.SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
@@ -218,7 +218,7 @@ VALUES ('{_productName}', '', '{TestSchema}', 'FOREIGN KEY', 'ModFKCascUpd.FK_Mo
                     { "Name": "Col2", "DataType": "INT", "Nullable": true }
                 ],
                 "CheckConstraints": [
-                    { "Name": "CHK_ModifyMyTableCheck_MyCheck", "Expression": "`Id`<`Col2`" }
+                    { "Name": "CHK_ModifyMyTableCheck_MyCheck", "Expression": "`Id` > 100" }
                 ]
             },
             {

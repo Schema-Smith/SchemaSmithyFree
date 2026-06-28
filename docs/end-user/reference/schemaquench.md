@@ -20,6 +20,10 @@ Common switches:
 SchemaQuench --ConfigFile:path/to/alternate.settings.json
 SchemaQuench --LogPath:path/to/logs
 
+# Pre-flight diagnostics (no deployment)
+SchemaQuench --TestConnection     # validate connections + MinimumVersion, then exit
+SchemaQuench --PreviewTargets     # validate connections + MinimumVersion + show target report, then exit
+
 # SQL Server
 SchemaQuench --ConnectionString:"Data Source=myserver;Initial Catalog=master;User ID=sa;Password=secret;TrustServerCertificate=True;"
 
@@ -420,6 +424,61 @@ These files can be reviewed to understand exactly what structural changes were (
 ### When to use WhatIf
 
 Reach for WhatIf while you're debugging a tricky deployment or while you're still building confidence with the tooling. Inspect the generated SQL, confirm the changes match intent, then run for real. Once you trust the package and the pipeline, direct quenches are the normal mode -- WhatIf isn't a required gate on every deployment.
+
+---
+
+## Pre-Flight Diagnostics
+
+You don't have to quench to know whether your configuration is ready. Two CLI switches run targeted diagnostic passes against a live server and exit before touching any schema — so you can validate connectivity, version constraints, and per-environment target rosters as early as your pipeline allows, without deploying a single byte.
+
+### --TestConnection
+
+```bash
+SchemaQuench --TestConnection
+```
+
+Opens a connection to every configured server (primary plus any `Target:SecondaryServers`), runs a platform-appropriate liveness query, and validates that each server meets the product's declared `MinimumVersion` floor (if one is set). Nothing is deployed. No schema is read, no helper procedures are installed, no migration scripts are touched.
+
+Use this in your pipeline's readiness check before you commit to a full deployment window — catch a bad connection string, a firewall rule that didn't propagate, or a server below your version floor before the quench itself begins.
+
+**What it validates:**
+- Connects to every configured server
+- Detects duplicate servers in the configured list
+- Enforces the product's `MinimumVersion` floor against every server's detected version
+
+**Exit codes:** `0` on pass, `2` on any connection failure or version violation.
+
+### --PreviewTargets
+
+```bash
+SchemaQuench --PreviewTargets
+```
+
+Everything `--TestConnection` does, plus a read-only per-template report of the databases and schemas the deployment would target. For each template in scope, the report lists every `(database, schema)` work unit that would run — exactly what the full quench would touch, without touching any of it.
+
+This is the right tool before a large fan-out deployment, before onboarding a new environment, or any time you want human eyes on the scope before committing to the run.
+
+The preview respects the same `Target` filters and `TemplateTargets` overrides a real deployment would use. What it shows is what the quench would actually do.
+
+**What it shows:**
+
+```
+Template: TenantWorkspace [required]
+  db: acme_prod
+    schemas: acme, acme_reporting
+  db: globex_prod (would be created)
+    schemas: globex
+```
+
+**Read-only guarantee:** The preview never provisions databases or schemas and never deploys DDL. A database entry labeled `(would be created)` means `CreateIfMissing: true` is configured for that entry in `TemplateTargets` and the database does not yet exist on the server — the preview reports the intent without acting on it.
+
+**RequireAtLeastOneTarget enforcement:** If a template has `RequireAtLeastOneTarget: true` and the discovery or filter produces zero targets, the preview fails with a `FAIL` result and exit code 2 — the same enforcement that applies at quench time, caught here before any deployment begins.
+
+**Exit codes:** `0` on pass (all required templates have targets), `2` on any connection failure, version violation, or required-template match failure.
+
+> **Tip:** Use `--PreviewTargets` to spot-check `TemplateTargets` configuration for a new environment before its first deployment. When the preview shows the right databases and schemas, the quench will target exactly those — nothing will surprise you at run time.
+
+> **Note:** Neither switch performs WhatIf analysis (no SQL generation, no schema diff). They validate connectivity and enumerate targets only. For a preview of the structural changes a quench would make, use `WhatIfONLY: true` — see [WhatIf Mode](#whatif-mode).
 
 ---
 
@@ -835,8 +894,8 @@ For a narrative walkthrough and decision guide (when to use the sentinel vs. `Sh
 
 | Code | Meaning |
 |------|---------|
-| 0 | Successful quench. All databases quenched, logs backed up. |
-| 2 | One or more database quenches failed. |
+| 0 | Successful quench (or passing pre-flight). All databases quenched, logs backed up. |
+| 2 | Failure. One or more database quenches failed; or a `--TestConnection` / `--PreviewTargets` pre-flight found a connection error, version violation, or required-template target miss. |
 | 3 | Unhandled exception. An unexpected error occurred outside the normal quench flow. |
 | 4 | Unable to back up log files. |
 

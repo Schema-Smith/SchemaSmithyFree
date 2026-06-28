@@ -1,63 +1,207 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System.Data;
+using System.Text;
+using Microsoft.Data.SqlClient;
 using Schema.DataAccess;
 using Schema.Domain;
 
 namespace SchemaQuench.IntegrationTests.SqlServer;
 
 /// <summary>
-/// Always Encrypted infrastructure validation and known limitation documentation.
+/// Always Encrypted (AE) certification — what TableQuench actually does for encrypted columns.
 ///
-/// POC FINDINGS (2026-03-23):
+/// CERTIFIED FINDINGS (2026-06-27, live SQL Server container, standard NON-enclave deployment).
+/// Every claim below was reproduced against the container; the swap path lives in
+/// Schema/Scripts/SqlServer/SchemaSmith.ModifiedTableQuench.sql (the @v_SwapColumnScript
+/// LIKE '%ENCRYPTED WITH%' block, ~lines 702-711).
 ///
-/// The AE test infrastructure works:
-/// - Custom SqlColumnEncryptionKeyStoreProvider (InMemoryKeyStoreProvider) works in Docker Linux
-/// - CMK/CEK creation via DDL with custom provider works
-/// - Column Encryption Setting=Enabled on connections does not break non-AE tests
-/// - Provider registration is process-wide and stable across parallel test execution
+/// HARNESS CONTROL (passes): a static DETERMINISTIC column, populated through an
+/// AE-enabled (Column Encryption Setting=Enabled), PARAMETERIZED insert and read back through an
+/// AE-enabled connection, decrypts to the original. The harness is sound, so the failures below
+/// are the product, not the test.
 ///
-/// KNOWN LIMITATION — Column-level modifications cannot handle Always Encrypted:
+/// WHAT WORKS:
+///   - New encrypted column on an EMPTY table via quench: column is created with the declared
+///     CEK / ENCRYPTION_TYPE / algorithm (verified in sys.columns). Certified by
+///     ShouldCreateNewEncryptedColumnOnEmptyTable below.
+///   - DDL containing ENCRYPTED WITH executes fine over an AE-enabled connection on this engine
+///     version — it does NOT parse-error. (Refutes the prior POC note; certified by
+///     ShouldExecuteEncryptedWithDdlOverAeEnabledConnection.)
 ///
-/// The MustSwapColumn pattern (add temp column → copy data → drop original → rename) and
-/// ALTER COLUMN both fail for Always Encrypted changes. SQL Server imposes these restrictions
-/// on encrypted columns:
-///   - Cannot be nullable (blocks the "add as NULL, copy, constrain" swap pattern)
-///   - Cannot have DEFAULT constraints (blocks the "add with DEFAULT" workaround)
-///   - Cannot be added to non-empty tables without one of the above
-///   - ALTER COLUMN with ENCRYPTED WITH requires secure enclaves (not standard deployments)
-///   - DDL containing ENCRYPTED WITH is intercepted by the ADO.NET driver when
-///     Column Encryption Setting=Enabled, causing parse errors for direct execution
+/// WHAT DOES NOT WORK — encryption CHANGES on a POPULATED table (re-type, re-key, or initial
+/// encryption of plaintext). The quench raises a deliberate, explicit fail-closed guard error
+/// (RAISERROR severity 16) naming the offending column and pointing to the Before/After rebuild
+/// workaround. The column is left UNTOUCHED.
 ///
-/// Additional bugs found during POC:
-///   - #ColumnChanges.ColumnScript was missing the ENCRYPTED WITH clause entirely
-///   - ColumnScript had wrong ordering: ENCRYPTED WITH must come before NULL/NOT NULL
-///     (fixed in ParseTableJsonIntoTempTables.sql — correct regardless of swap support)
-///   - ALTER COLUMN section processed MustSwapColumn rows redundantly (fixed below)
-///   - #ColumnChanges WHERE clause has parenthesization issue: encryption checks at line 181
-///     are OR'd outside the NewTable=0 AND group, causing spurious detection on new tables
+/// WHY IT CANNOT WORK (the fundamental limit on standard non-enclave servers):
+///   - A NOT NULL encrypted column cannot be ADDed to a non-empty table (general SQL rule; no
+///     DEFAULT is allowed on encrypted columns to escape it).
+///   - A NULLABLE encrypted column CAN be added to a non-empty table on this engine version,
+///     but the swap's data copy would be a SERVER-SIDE "UPDATE [temp] = [original]", and when
+///     the two columns have different encryption settings the server rejects it:
+///        "Operand type clash: nvarchar(50) encrypted with (encryption_type = 'DETERMINISTIC'...)
+///         is incompatible with nvarchar(50) encrypted with (encryption_type = 'RANDOMIZED'...)."
+///     The server holds no Column Master Key and cannot decrypt/re-encrypt; re-encryption requires
+///     secure enclaves, which a standard deployment does not have.
 ///
-/// WORKAROUND — Full table rebuild via Before/After migration scripts:
+/// NET: on a standard (non-enclave) server, an AE encryption CHANGE on populated data is
+/// impossible to perform inside the quench. The guard (ModifiedTableQuench.sql, the ENCRYPTED WITH
+/// sub-branch) raises immediately — before any DDL or data copy — naming the column and instructing
+/// the operator to use a Before/After full-table rebuild. Certified by
+/// ShouldBlockEncryptionTypeChange_OnPopulatedColumn and
+/// ShouldBlockInitialEncryption_OnPopulatedColumn below.
 ///
-///   Before Script:
-///     1. Create new table with target schema (encrypted columns as needed)
-///     2. INSERT INTO new_table SELECT * FROM old_table
-///        (Connection must have "Column Encryption Setting=Enabled" — the ADO.NET driver
-///         handles encrypt/decrypt transparently during the INSERT...SELECT)
-///     3. Drop foreign keys, indexes, constraints referencing the old table
-///     4. Drop old table
-///     5. sp_rename new table to original name
-///
-///   After Script:
-///     6. Recreate foreign keys, indexes, constraints, extended properties
-///
-///   Note: This temporarily breaks referential integrity. Run during a maintenance window.
-///   The full table rebuild is the same approach SSMS uses for Always Encrypted changes.
+/// WORKAROUND for users — full table rebuild via Before/After migration scripts:
+///   Before: create the new table with the target (encrypted) schema; INSERT INTO new SELECT * FROM
+///     old over a "Column Encryption Setting=Enabled" connection (the ADO.NET driver does the
+///     decrypt/re-encrypt client-side); drop FKs/indexes/constraints on old; drop old; sp_rename new.
+///   After:  recreate FKs/indexes/constraints/extended properties.
+///   This is the same full-rebuild approach SSMS uses for Always Encrypted changes; run it in a
+///   maintenance window (referential integrity is briefly broken).
 /// </summary>
 [TestFixture]
 [Category("SqlServer")]
 [NonParallelizable]
 public class TableQuench_AlwaysEncryptedTests : BaseTableQuenchTests
 {
+    // AE-enabled connection targeting the integration main DB: the ADO.NET driver encrypts
+    // parameters on insert and decrypts on read. Required for any data round-trip verification.
+    private string AeConnectionString() =>
+        new SqlConnectionStringBuilder(_connectionString)
+        {
+            InitialCatalog = _mainDb,
+            ColumnEncryptionSetting = SqlConnectionColumnEncryptionSetting.Enabled
+        }.ToString();
+
+    private const string Cek = "[TestCEK]";
+    private const string Algo = "AEAD_AES_256_CBC_HMAC_SHA_256";
+
+    /// <summary>
+    /// HARNESS CONTROL — proves the AE round-trip works before any swap scenario is judged.
+    /// Static DETERMINISTIC column, parameterized encrypted insert, AE-enabled read-back.
+    /// </summary>
+    [Test]
+    public void HarnessControl_StaticEncryptedColumn_RoundTripsThroughAeConnection()
+    {
+        using var conn = new SqlConnection(AeConnectionString());
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeControlRoundTrip";
+        cmd.ExecuteNonQuery();
+        try
+        {
+            cmd.CommandText = $@"
+                CREATE TABLE dbo.AeControlRoundTrip (
+                  Id INT NOT NULL,
+                  Secret NVARCHAR(50) COLLATE Latin1_General_BIN2
+                    ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = {Cek}, ENCRYPTION_TYPE = DETERMINISTIC,
+                                    ALGORITHM = '{Algo}') NOT NULL)";
+            cmd.ExecuteNonQuery();
+
+            cmd.CommandText = "INSERT dbo.AeControlRoundTrip (Id, Secret) VALUES (@id, @secret)";
+            cmd.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = 1 });
+            cmd.Parameters.Add(new SqlParameter("@secret", SqlDbType.NVarChar, 50) { Value = "TopSecret" });
+            cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+
+            cmd.CommandText = "SELECT Secret FROM dbo.AeControlRoundTrip WHERE Id = 1";
+            Assert.That(cmd.ExecuteScalar(), Is.EqualTo("TopSecret"),
+                "AE harness control: encrypted value must round-trip through the driver");
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeControlRoundTrip";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// Certifies the prior POC claim is false on this engine: ENCRYPTED WITH DDL does NOT
+    /// parse-error when run over an AE-enabled connection.
+    /// </summary>
+    [Test]
+    public void ShouldExecuteEncryptedWithDdlOverAeEnabledConnection()
+    {
+        using var conn = new SqlConnection(AeConnectionString());
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeDdlOverAe";
+        cmd.ExecuteNonQuery();
+        try
+        {
+            cmd.CommandText = $@"
+                CREATE TABLE dbo.AeDdlOverAe (
+                  Id INT NOT NULL,
+                  Secret NVARCHAR(50) COLLATE Latin1_General_BIN2
+                    ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = {Cek}, ENCRYPTION_TYPE = RANDOMIZED,
+                                    ALGORITHM = '{Algo}') NULL)";
+            Assert.DoesNotThrow(() => cmd.ExecuteNonQuery(),
+                "ENCRYPTED WITH DDL must not parse-error over an AE-enabled connection");
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeDdlOverAe";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// SCENARIO A (works): quench that adds a new ENCRYPTED column to an EMPTY table creates it
+    /// with the declared CEK / type / algorithm, and the column round-trips encrypted data.
+    /// </summary>
+    [Test]
+    public void ShouldCreateNewEncryptedColumnOnEmptyTable()
+    {
+        using var conn = new SqlConnection(AeConnectionString());
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeNewColEmpty";
+        cmd.ExecuteNonQuery();
+        try
+        {
+            cmd.CommandText = "CREATE TABLE dbo.AeNewColEmpty (Id INT NOT NULL)";
+            cmd.ExecuteNonQuery();
+
+            var json = """
+                {
+                    "Schema": "[dbo]",
+                    "Name": "[AeNewColEmpty]",
+                    "Columns": [
+                        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+                        {"Name": "[Secret]", "DataType": "NVARCHAR(50)", "Nullable": false, "Collation": "Latin1_General_BIN2",
+                         "EncryptionType": "DETERMINISTIC", "EncryptionKey": "[TestCEK]", "EncryptionAlgorithm": "AEAD_AES_256_CBC_HMAC_SHA_256"}
+                    ]
+                }
+                """;
+            RunTableQuenchProc(cmd, json);
+
+            cmd.CommandText = @"SELECT encryption_type_desc, encryption_algorithm_name
+                                FROM sys.columns WHERE object_id = OBJECT_ID('dbo.AeNewColEmpty') AND name = 'Secret'";
+            using (var r = cmd.ExecuteReader())
+            {
+                Assert.That(r.Read(), Is.True, "encrypted column should exist");
+                Assert.That(r.GetString(0), Is.EqualTo("DETERMINISTIC"));
+                Assert.That(r.GetString(1), Is.EqualTo(Algo));
+            }
+
+            // And it must actually round-trip encrypted data.
+            cmd.CommandText = "INSERT dbo.AeNewColEmpty (Id, Secret) VALUES (@id, @secret)";
+            cmd.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = 1 });
+            cmd.Parameters.Add(new SqlParameter("@secret", SqlDbType.NVarChar, 50) { Value = "NewColSecret" });
+            cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+
+            cmd.CommandText = "SELECT Secret FROM dbo.AeNewColEmpty WHERE Id = 1";
+            Assert.That(cmd.ExecuteScalar(), Is.EqualTo("NewColSecret"));
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeNewColEmpty";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
     [Test]
     public void ShouldNotAlterSwappedColumnsRedundantly()
     {
@@ -93,5 +237,229 @@ public class TableQuench_AlwaysEncryptedTests : BaseTableQuenchTests
         cmd.CommandText = "DROP TABLE dbo.AESwapSkipTest";
         cmd.ExecuteNonQuery();
         conn.Close();
+    }
+
+    [Test]
+    public void GenerateTableJson_AeColumn_MapsKeyAndAlgorithmCorrectly()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+            CREATE TABLE dbo.AeRoundTrip (
+              Id INT NOT NULL,
+              Secret NVARCHAR(50) COLLATE Latin1_General_BIN2
+                ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = [TestCEK], ENCRYPTION_TYPE = DETERMINISTIC,
+                                ALGORITHM = 'AEAD_AES_256_CBC_HMAC_SHA_256') NOT NULL)";
+        cmd.ExecuteNonQuery();
+
+        try
+        {
+            cmd.CommandText = "EXEC SchemaSmith.GenerateTableJSON @p_Schema = 'dbo', @p_Table = 'AeRoundTrip'";
+            var json = ReadAllLines(cmd);
+
+            Assert.That(json, Does.Contain("\"EncryptionType\": \"DETERMINISTIC\""));
+            Assert.That(json, Does.Contain("\"EncryptionKey\": \"[TestCEK]\""));
+            Assert.That(json, Does.Contain("\"EncryptionAlgorithm\": \"AEAD_AES_256_CBC_HMAC_SHA_256\""));
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE dbo.AeRoundTrip";
+            cmd.ExecuteNonQuery();
+            conn.Close();
+        }
+    }
+
+    /// <summary>
+    /// SCENARIO B (blocked): changing encryption type (DETERMINISTIC -> RANDOMIZED) on a POPULATED
+    /// column raises a fail-closed guard error naming the column and pointing to the rebuild path.
+    /// The column is left UNTOUCHED (original value still decrypts).
+    /// </summary>
+    [Test]
+    public void ShouldBlockEncryptionTypeChange_OnPopulatedColumn()
+    {
+        using var conn = new SqlConnection(AeConnectionString());
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockTypeChange";
+        cmd.ExecuteNonQuery();
+        try
+        {
+            // Create table with DETERMINISTIC column
+            cmd.CommandText = $@"
+                CREATE TABLE dbo.AeBlockTypeChange (
+                  Id INT NOT NULL,
+                  Secret NVARCHAR(50) COLLATE Latin1_General_BIN2
+                    ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = {Cek}, ENCRYPTION_TYPE = DETERMINISTIC,
+                                    ALGORITHM = '{Algo}') NOT NULL)";
+            cmd.ExecuteNonQuery();
+
+            // Seed a row so the table is populated
+            cmd.CommandText = "INSERT dbo.AeBlockTypeChange (Id, Secret) VALUES (@id, @secret)";
+            cmd.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = 1 });
+            cmd.Parameters.Add(new SqlParameter("@secret", SqlDbType.NVarChar, 50) { Value = "DetSecret" });
+            cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+
+            // Quench: change DETERMINISTIC -> RANDOMIZED (AE encryption type change on populated column)
+            var json = $$$"""
+                {
+                    "Schema": "[dbo]",
+                    "Name": "[AeBlockTypeChange]",
+                    "Columns": [
+                        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+                        {"Name": "[Secret]", "DataType": "NVARCHAR(50)", "Nullable": false, "Collation": "Latin1_General_BIN2",
+                         "EncryptionType": "RANDOMIZED", "EncryptionKey": "[TestCEK]", "EncryptionAlgorithm": "{{{Algo}}}"}
+                    ]
+                }
+                """;
+
+            var ex = Assert.Throws<SqlException>(() => RunTableQuenchProc(cmd, json));
+            Assert.That(ex!.Message, Does.Contain("Always Encrypted").IgnoreCase);
+            Assert.That(ex.Message, Does.Contain("Secret").IgnoreCase,
+                "guard message must name the offending column");
+            Assert.That(ex.Message, Does.Contain("rebuild").IgnoreCase,
+                "guard message must point to the Before/After rebuild workaround");
+            Assert.That(ex.Message, Does.Contain("[dbo].[AeBlockTypeChange]"),
+                "guard message must render schema/table with single brackets, not double");
+
+            // Column must be left UNTOUCHED — still DETERMINISTIC, original value still decrypts
+            cmd.CommandText = "SELECT Secret FROM dbo.AeBlockTypeChange WHERE Id = 1";
+            Assert.That(cmd.ExecuteScalar(), Is.EqualTo("DetSecret"),
+                "original encrypted value must survive the blocked quench attempt");
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockTypeChange";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// SCENARIO C (blocked): initial encryption of a populated PLAINTEXT column raises the same
+    /// fail-closed guard error. The column is left plaintext and UNTOUCHED.
+    /// </summary>
+    [Test]
+    public void ShouldBlockInitialEncryption_OnPopulatedColumn()
+    {
+        using var conn = new SqlConnection(_connectionString + ";Initial Catalog=" + _mainDb);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockInitialEncrypt";
+        cmd.ExecuteNonQuery();
+        try
+        {
+            // Create table with a plaintext column
+            cmd.CommandText = @"
+                CREATE TABLE dbo.AeBlockInitialEncrypt (
+                  Id INT NOT NULL,
+                  Secret NVARCHAR(50) NOT NULL)";
+            cmd.ExecuteNonQuery();
+
+            // Seed a row so the table is populated
+            cmd.CommandText = "INSERT dbo.AeBlockInitialEncrypt (Id, Secret) VALUES (1, 'PlainSecret')";
+            cmd.ExecuteNonQuery();
+
+            // Quench: add DETERMINISTIC encryption to the plaintext column (initial encryption on populated data)
+            var json = $$$"""
+                {
+                    "Schema": "[dbo]",
+                    "Name": "[AeBlockInitialEncrypt]",
+                    "Columns": [
+                        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+                        {"Name": "[Secret]", "DataType": "NVARCHAR(50)", "Nullable": false,
+                         "EncryptionType": "DETERMINISTIC", "EncryptionKey": "[TestCEK]", "EncryptionAlgorithm": "{{{Algo}}}"}
+                    ]
+                }
+                """;
+
+            var ex = Assert.Throws<SqlException>(() => RunTableQuenchProc(cmd, json));
+            Assert.That(ex!.Message, Does.Contain("Always Encrypted").IgnoreCase);
+            Assert.That(ex.Message, Does.Contain("Secret").IgnoreCase,
+                "guard message must name the offending column");
+            Assert.That(ex.Message, Does.Contain("rebuild").IgnoreCase,
+                "guard message must point to the Before/After rebuild workaround");
+            Assert.That(ex.Message, Does.Contain("[dbo].[AeBlockInitialEncrypt]"),
+                "guard message must render schema/table with single brackets, not double");
+
+            // Column must be left UNTOUCHED — still plaintext, original value intact
+            cmd.CommandText = "SELECT Secret FROM dbo.AeBlockInitialEncrypt WHERE Id = 1";
+            Assert.That(cmd.ExecuteScalar(), Is.EqualTo("PlainSecret"),
+                "original plaintext value must survive the blocked quench attempt");
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockInitialEncrypt";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// SCENARIO D (WhatIf): the fail-closed guard is unconditional — it fires in WhatIf mode too,
+    /// so the impossibility is visible in previews before any DDL runs.
+    /// </summary>
+    [Test]
+    public void ShouldBlockEncryptionTypeChange_InWhatIfMode()
+    {
+        using var conn = new SqlConnection(AeConnectionString());
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockTypeChangeWhatIf";
+        cmd.ExecuteNonQuery();
+        try
+        {
+            cmd.CommandText = $@"
+                CREATE TABLE dbo.AeBlockTypeChangeWhatIf (
+                  Id INT NOT NULL,
+                  Secret NVARCHAR(50) COLLATE Latin1_General_BIN2
+                    ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = {Cek}, ENCRYPTION_TYPE = DETERMINISTIC,
+                                    ALGORITHM = '{Algo}') NOT NULL)";
+            cmd.ExecuteNonQuery();
+
+            cmd.CommandText = "INSERT dbo.AeBlockTypeChangeWhatIf (Id, Secret) VALUES (@id, @secret)";
+            cmd.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = 1 });
+            cmd.Parameters.Add(new SqlParameter("@secret", SqlDbType.NVarChar, 50) { Value = "WhatIfSecret" });
+            cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+
+            var json = $$$"""
+                {
+                    "Schema": "[dbo]",
+                    "Name": "[AeBlockTypeChangeWhatIf]",
+                    "Columns": [
+                        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+                        {"Name": "[Secret]", "DataType": "NVARCHAR(50)", "Nullable": false, "Collation": "Latin1_General_BIN2",
+                         "EncryptionType": "RANDOMIZED", "EncryptionKey": "[TestCEK]", "EncryptionAlgorithm": "{{{Algo}}}"}
+                    ]
+                }
+                """;
+
+            var ex = Assert.Throws<SqlException>(() => RunTableQuenchProc(cmd, json, whatIf: true));
+            Assert.That(ex!.Message, Does.Contain("Always Encrypted").IgnoreCase,
+                "guard must fire in WhatIf mode");
+            Assert.That(ex.Message, Does.Contain("[dbo].[AeBlockTypeChangeWhatIf]"),
+                "WhatIf guard message must render schema/table with single brackets");
+
+            // Column is untouched — still DETERMINISTIC, original value still decrypts
+            cmd.CommandText = "SELECT Secret FROM dbo.AeBlockTypeChangeWhatIf WHERE Id = 1";
+            Assert.That(cmd.ExecuteScalar(), Is.EqualTo("WhatIfSecret"),
+                "original encrypted value must survive the WhatIf guard");
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockTypeChangeWhatIf";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    private static string ReadAllLines(IDbCommand cmd)
+    {
+        var sb = new StringBuilder();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            sb.Append(reader.GetString(0));
+        return sb.ToString();
     }
 }
