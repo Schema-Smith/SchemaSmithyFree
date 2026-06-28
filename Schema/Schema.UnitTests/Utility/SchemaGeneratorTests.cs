@@ -528,6 +528,14 @@ public class SchemaGeneratorTests
     }
 
     [Test]
+    public void GenerateSchema_MapsUnsignedLongToInteger()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.MySQL.MySqlTable));
+        var autoInc = schema["properties"]?["AutoIncrementValue"];
+        Assert.That(autoInc?["type"]?.ToString(), Is.EqualTo("integer"));
+    }
+
+    [Test]
     public void IdentityOverload_TableColumns_OnlyBaseProps_BackCompat()
     {
         // The no-resolver overload must keep emitting ONLY base Column props (identity path),

@@ -128,7 +128,7 @@ public static class SchemaGenerator
         return prop.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName ?? prop.Name;
     }
 
-    private static bool IsIntegerType(Type t) => t == typeof(byte) || t == typeof(short) || t == typeof(ushort) || t == typeof(int) || t == typeof(long);
+    private static bool IsIntegerType(Type t) => t == typeof(byte) || t == typeof(short) || t == typeof(ushort) || t == typeof(int) || t == typeof(uint) || t == typeof(long) || t == typeof(ulong);
     private static bool IsNumberType(Type t) => t == typeof(float) || t == typeof(double) || t == typeof(decimal);
     private static bool IsListType(Type t) => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(List<>);
     private static bool IsDictionaryType(Type t) => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Dictionary<,>);
