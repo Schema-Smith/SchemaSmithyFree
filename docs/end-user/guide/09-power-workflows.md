@@ -455,7 +455,7 @@ Declare your own folder layout via `ScriptFolders` in `Template.json`:
 
 When you declare a `ScriptFolders` array, it fully replaces the platform default set -- so include every folder you want active. This is a full replacement, not a merge, which means you're always in control of exactly which folders run.
 
-### Organizing into subfolders
+### Organizing subfolders
 
 When a package grows beyond a handful of objects, flat script folders become hard to navigate. SchemaQuench discovers scripts recursively -- all `.sql` files in a folder and every subfolder underneath it, sorted alphabetically by full path -- so you can group related objects without changing their deployment behavior.
 

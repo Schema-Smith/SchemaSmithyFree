@@ -315,7 +315,7 @@ Declare these in the `ExcludeConstraints` array on the table. This is something 
 
 **Materialized views.** Some queries are too expensive to compute on every request -- reporting aggregations, denormalized read models, dashboards pulling from many joined tables. Materialize the result: PostgreSQL computes the query once, stores it as a physical table, and you refresh it on demand. SchemaSmith manages the create/drop lifecycle and the view's own indexes in a `Materialized Views/` folder alongside your regular tables. For the full shape including `WithData`, `Tablespace`, and index declarations, see the [Materialized View reference](../reference/schema-packages.md#materialized-view-json-format-postgresql).
 
-**Generated columns.** A generated column derives its value from an expression over other columns in the same row -- the engine computes it and stores it (STORED). Declare it with `GenerationExpression` on the column:
+**Generated columns.** A generated column derives its value from an expression over other columns in the same row -- the engine maintains the value for you. By default it's persisted on disk (STORED); set `"Virtual": true` on the column and PostgreSQL recomputes it on every read instead (VIRTUAL). Declare it with `GenerationExpression`:
 
 ```json
 { "Name": "full_name", "DataType": "TEXT", "Generated": "ALWAYS", "GenerationExpression": "first_name || ' ' || last_name", "Nullable": false }
