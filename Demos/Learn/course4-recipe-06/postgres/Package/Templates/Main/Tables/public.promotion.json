@@ -1,0 +1,12 @@
+{
+  "Schema": "public",
+  "Name": "promotion",
+  "Columns": [
+    { "Name": "promotionid", "DataType": "INT", "Nullable": false },
+    { "Name": "code", "DataType": "VARCHAR(50)", "Nullable": false },
+    { "Name": "discountpct", "DataType": "INT", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "pk_promotion", "PrimaryKey": true, "IndexColumns": "promotionid" }
+  ]
+}

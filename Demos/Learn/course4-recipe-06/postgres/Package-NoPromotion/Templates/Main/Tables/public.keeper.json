@@ -1,0 +1,10 @@
+{
+  "Schema": "public",
+  "Name": "keeper",
+  "Columns": [
+    { "Name": "id", "DataType": "INT", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "pk_keeper", "PrimaryKey": true, "IndexColumns": "id" }
+  ]
+}
