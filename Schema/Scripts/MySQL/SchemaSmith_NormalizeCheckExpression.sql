@@ -38,6 +38,7 @@ BEGIN
     END IF;
 
     -- Strip all whitespace (spaces, tabs, newlines)
+    -- Note: strips all whitespace, so check expressions whose semantics depend on whitespace inside a string literal (e.g. 'New York') may falsely converge — same limitation as the PG/SQL Server expression normalization.
     SET v_Result = p_Expression;
     SET v_Result = REPLACE(v_Result, ' ', '');
     SET v_Result = REPLACE(v_Result, '\t', '');

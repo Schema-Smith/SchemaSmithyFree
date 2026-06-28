@@ -119,7 +119,7 @@ CREATE TABLE `{_mainDb}`.`{table}` (`Id` INT NOT NULL, `Quantity` INT NULL, PRIM
 
             Assert.Multiple(() =>
             {
-                Assert.That(CountMessages(cmd, "Drop modified column check constraint:", table), Is.EqualTo(0),
+                Assert.That(CountMessages(cmd, "Drop modified check constraint:", table), Is.EqualTo(0),
                     "Converged column check must NOT be phantom-dropped (normalization failed).");
                 Assert.That(CountMessages(cmd, "Create column check constraint:", table), Is.EqualTo(0),
                     "Converged column check must NOT be re-created.");
