@@ -60,6 +60,7 @@ These are server-level catalog checks on purpose: the validation runs against th
 admin/init database (`master`, `postgres`, `information_schema`) before the template picks the
 target database, so it asks "is the right database *present on this server?*" — not "am I *in* it?".
 
+<!-- TRAINING-RELEASE-PIN #296: the "MinimumVersion is metadata only / not enforced at deploy time" prose below is correct for stock v2.1.0 but WRONG once #296/#309 ships — that release makes MinimumVersion an enforced pre-flight version floor. Do NOT flip this prose early. When the release shipping #309 is cut: rewrite this blockquote to "enforced pre-flight floor — aborts the whole run below the floor, no partial deploy" (keep ValidationScript as the complementary runtime/state gate), re-certify, and remove this marker. -->
 > `ValidationScript` is the guardrail — not `MinimumVersion`. `MinimumVersion` in `Product.json` is
 > metadata only (displayed in tooling); it does **not** enforce a version floor at deploy time. When
 > you need a runtime gate — right server, right environment, right baseline state — that's
