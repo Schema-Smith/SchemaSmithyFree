@@ -153,5 +153,23 @@ BEGIN
                           AND con.conname = tc."Name");
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+  -- Column-level checks get a deterministic name (CK_<table>_<column>) so create-idempotency
+  -- and modify-detection (in ModifiedTableQuench) can both key on it.
+  RAISE NOTICE 'Add Missing Column Check Constraints';
+  SELECT STRING_AGG('RAISE NOTICE ''  Add missing column check constraint ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
+                    'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ADD CONSTRAINT "CK_' || tc."TableName" || '_' || tc."Name" || '" CHECK (' || tc."CheckExpression" || ');', CHR(10))
+    INTO sql_script
+    FROM temp_columns tc
+    WHERE NULLIF(tc."CheckExpression", '') IS NOT NULL
+      AND NOT EXISTS (SELECT 1
+                        FROM pg_constraint con
+                        JOIN pg_class rel ON rel.oid = con.conrelid
+                        JOIN pg_namespace nsp ON nsp.oid = con.connamespace
+                                             AND nsp.nspname = tc."TableSchema"
+                                             AND rel.relname = tc."TableName"
+                        WHERE con.contype = 'c'
+                          AND con.conname = 'CK_' || tc."TableName" || '_' || tc."Name");
+  CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
 END
 $$;

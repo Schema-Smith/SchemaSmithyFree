@@ -49,7 +49,8 @@
            COALESCE(celem ->> 'Compression', '') AS "Compression",
            COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
            COALESCE(celem ->> 'VariantName', '') AS "VariantName",
-           COALESCE(celem ->> 'OldName', '') AS "OldName"
+           COALESCE(celem ->> 'OldName', '') AS "OldName",
+           COALESCE(celem ->> 'CheckExpression', '') AS "CheckExpression"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Columns')::JSON) AS celem(value);
 
