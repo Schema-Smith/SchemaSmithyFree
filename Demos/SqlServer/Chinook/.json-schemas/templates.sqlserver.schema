@@ -76,7 +76,6 @@
   },
   "additionalProperties": false,
   "required": [
-    "Name",
-    "DatabaseIdentificationScript"
+    "Name"
   ]
 }
