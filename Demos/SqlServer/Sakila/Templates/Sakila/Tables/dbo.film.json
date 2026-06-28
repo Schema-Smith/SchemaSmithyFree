@@ -15,15 +15,14 @@
     },
     {
       "Name": "[film_id]",
-      "DataType": "INT",
+      "DataType": "INT IDENTITY(1,1)",
       "ShouldApplyExpression": "",
       "OldName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
       "EncryptionKey": "",
-      "EncryptionAlgorithm": "",
-      "Identity": true
+      "EncryptionAlgorithm": ""
     },
     {
       "Name": "[language_id]",
