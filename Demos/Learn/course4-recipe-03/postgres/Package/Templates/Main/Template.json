@@ -1,0 +1,10 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datname = 'cookbook_r3'",
+  "ScriptTokens": {
+    "EnabledFeatures": "<*Query*>SELECT STRING_AGG(flagname, ',' ORDER BY flagname) FROM public.featureflag WHERE enabled = true"
+  },
+  "ScriptFolders": [
+    { "FolderPath": "After Scripts", "QuenchSlot": "After" }
+  ]
+}

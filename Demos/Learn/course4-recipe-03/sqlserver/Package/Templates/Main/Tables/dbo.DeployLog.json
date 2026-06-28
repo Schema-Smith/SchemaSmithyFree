@@ -1,0 +1,11 @@
+{
+  "Schema": "dbo",
+  "Name": "DeployLog",
+  "Columns": [
+    { "Name": "LoggedAt", "DataType": "DATETIME2(7)", "Nullable": false, "Default": "SYSUTCDATETIME()" },
+    { "Name": "ActiveFeatures", "DataType": "NVARCHAR(200)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "PK_DeployLog", "PrimaryKey": true, "Clustered": true, "IndexColumns": "LoggedAt" }
+  ]
+}
