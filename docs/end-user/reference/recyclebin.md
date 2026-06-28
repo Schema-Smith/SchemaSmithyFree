@@ -24,7 +24,7 @@ The recyclebin is built on two optional stored procedures you create in the targ
 
 Reference implementations ship with the Northwind demos at `Demos/<engine>/Northwind/Templates/Northwind/Procedures/`.
 
-### Hook names and signatures
+### Hook names
 
 | Engine | Drop hook | Restore hook |
 |---|---|---|
@@ -145,6 +145,8 @@ MySQL Events require the event scheduler to be enabled (`SET GLOBAL event_schedu
 ---
 
 ## See Also
+
+The links below cover the drop-protection setting that gates recyclebin activation, the dry-run mode that previews hook invocations, and the full quench sequence showing where the drop and restore paths sit.
 
 - [DropTablesRemovedFromProduct](schemaquench.md#droptablesremovedfromproduct) — the setting that controls whether auto-drops are on at all; the recyclebin hooks only activate on the drop path.
 - [WhatIf Mode](schemaquench.md#whatif-mode) — full reference for dry-run behavior, including how hook invocations appear in WhatIf output.
