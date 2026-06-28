@@ -244,6 +244,38 @@ jobs:
             schema: Demos/Learn/module-04/sqlserver/solution/.json-schemas/templates.sqlserver.schema
             files: Demos/Learn/module-04/sqlserver/solution/Templates/*/Template.json
 
+          - name: SqlServer-TenantCRM-Tables
+            schema: Demos/SqlServer/TenantCRM/.json-schemas/tables.sqlserver.schema
+            files: Demos/SqlServer/TenantCRM/Templates/**/Tables/**/*.json
+
+          - name: SqlServer-TenantCRM-Products
+            schema: Demos/SqlServer/TenantCRM/.json-schemas/products.sqlserver.schema
+            files: Demos/SqlServer/TenantCRM/Product.json
+
+          - name: SqlServer-TenantCRM-Templates
+            schema: Demos/SqlServer/TenantCRM/.json-schemas/templates.sqlserver.schema
+            files: Demos/SqlServer/TenantCRM/Templates/*/Template.json
+
+          - name: SqlServer-TenantCRM-IndexedViews
+            schema: Demos/SqlServer/TenantCRM/.json-schemas/indexedviews.sqlserver.schema
+            files: "Demos/SqlServer/TenantCRM/Templates/**/Indexed Views/**/*.json"
+
+          - name: PostgreSQL-TenantCRM-Tables
+            schema: Demos/PostgreSQL/TenantCRM/.json-schemas/tables.postgresql.schema
+            files: Demos/PostgreSQL/TenantCRM/Templates/**/Tables/**/*.json
+
+          - name: PostgreSQL-TenantCRM-Products
+            schema: Demos/PostgreSQL/TenantCRM/.json-schemas/products.postgresql.schema
+            files: Demos/PostgreSQL/TenantCRM/Product.json
+
+          - name: PostgreSQL-TenantCRM-Templates
+            schema: Demos/PostgreSQL/TenantCRM/.json-schemas/templates.postgresql.schema
+            files: Demos/PostgreSQL/TenantCRM/Templates/*/Template.json
+
+          - name: PostgreSQL-TenantCRM-MaterializedViews
+            schema: Demos/PostgreSQL/TenantCRM/.json-schemas/materializedviews.postgresql.schema
+            files: "Demos/PostgreSQL/TenantCRM/Templates/**/Materialized Views/**/*.json"
+
     steps:
       - uses: actions/checkout@v4
 
