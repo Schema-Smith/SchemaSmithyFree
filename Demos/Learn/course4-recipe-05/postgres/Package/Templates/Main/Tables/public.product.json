@@ -1,0 +1,12 @@
+{
+  "Schema": "public",
+  "Name": "product",
+  "Columns": [
+    { "Name": "productid", "DataType": "INT", "Nullable": false },
+    { "Name": "name", "DataType": "VARCHAR(100)", "Nullable": false },
+    { "Name": "price", "DataType": "DECIMAL(10,2)", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "pk_product", "PrimaryKey": true, "IndexColumns": "productid" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datname = 'cookbook_r5'",
+  "ScriptTokens": {
+    "ProductTable": "<*SpecificTable*>public.product"
+  },
+  "ScriptFolders": [
+    { "FolderPath": "After Scripts", "QuenchSlot": "After" }
+  ]
+}

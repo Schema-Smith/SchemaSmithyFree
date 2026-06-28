@@ -1,0 +1,11 @@
+{
+  "Name": "`Product`",
+  "Columns": [
+    { "Name": "`ProductId`", "DataType": "INT", "Nullable": false },
+    { "Name": "`Name`", "DataType": "VARCHAR(100)", "Nullable": false },
+    { "Name": "`Price`", "DataType": "DECIMAL(10,2)", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`ProductId`" }
+  ]
+}
