@@ -1,7 +1,7 @@
 {
   "Schema": "dbo",
   "Name": "Document",
-  "Extensions": { "Retention": { "ArchiveDays": "90" } },
+  "Extensions": { "Retention": { "ArchiveDays": "90", "MaxRetentionDays": "365" } },
   "Columns": [
     { "Name": "DocumentId", "DataType": "INT", "Nullable": false },
     { "Name": "Title", "DataType": "NVARCHAR(200)", "Nullable": false },
@@ -9,7 +9,7 @@
     { "Name": "RetentionDays", "DataType": "INT", "Nullable": false }
   ],
   "CheckConstraints": [
-    { "Name": "CK_Document_RetentionWithinPolicy", "Expression": "[RetentionDays] <= {{Table.Retention.ArchiveDays}}" }
+    { "Name": "CK_Document_RetentionWithinPolicy", "Expression": "[RetentionDays] <= {{Table.Retention.MaxRetentionDays}}" }
   ],
   "Indexes": [
     { "Name": "PK_Document", "PrimaryKey": true, "Clustered": true, "IndexColumns": "DocumentId" }

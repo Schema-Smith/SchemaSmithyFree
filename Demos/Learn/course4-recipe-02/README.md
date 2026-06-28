@@ -1,9 +1,9 @@
 # Course 4, Recipe 2 — Policy that enforces itself (lab)
 
-Goal: declare a retention policy **once**, as nested custom-property metadata on the table, and have it
-drive two things at deploy time — a column's `Default` and a check constraint that enforces the bound.
-Change the policy value, re-quench, and the column **default follows** the new number. The number lives
-in one place; the schema carries it.
+Goal: declare your retention policy **once**, as nested custom-property metadata on the table, and have it
+drive two things at deploy time — a column's `Default` and a check constraint that enforces a ceiling.
+Change the policy number, re-quench, and the column **default follows** the new value. The numbers live in
+one place; the schema reads them.
 
 Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package/` plus `deploy.settings.json`,
 all targeting `cookbook_r2`.
@@ -15,19 +15,18 @@ all targeting `cookbook_r2`.
 
 ## Step 1: Look at the policy and what it drives
 
-Open `Tables/…Document.json`. The table carries a nested custom property:
+Open `Tables/…Document.json`. The table carries a nested custom property with two numbers:
 
 ```json
-"Extensions": { "Retention": { "ArchiveDays": "90" } }
+"Extensions": { "Retention": { "ArchiveDays": "90", "MaxRetentionDays": "365" } }
 ```
 
-Two objects read it back through the `{{Table.Retention.ArchiveDays}}` token (nested values flatten with dots):
+Each is read back through a `{{Table.Retention.*}}` token (nested values flatten with dots):
 
-- the `ArchiveAfterDays` column: `"Default": "{{Table.Retention.ArchiveDays}}"` → a default of `90`;
-- a check constraint in the `CheckConstraints` array:
-  `"Expression": "[RetentionDays] <= {{Table.Retention.ArchiveDays}}"` → enforces `<= 90`.
+- the `ArchiveAfterDays` column default reads `{{Table.Retention.ArchiveDays}}` → a default of `90`;
+- the check constraint reads `{{Table.Retention.MaxRetentionDays}}` → enforces `RetentionDays <= 365`.
 
-One declared number, two places it lands — and you never typed `90` into either the default or the check.
+You never typed `90` or `365` into the default or the check. Both read from the one place you declared them.
 
 ## Step 2: Deploy and watch the policy take hold
 
@@ -41,29 +40,28 @@ The default and the check are both built from the metadata:
 ```bash
 # SQL Server
 docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d cookbook_r2 -Q \"SELECT definition FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.Document')\""
-# → ([RetentionDays]<=(90))
+# → ([RetentionDays]<=(365))
 ```
 
 Prove the default applies and the check enforces:
 
 ```sql
 -- omit ArchiveAfterDays → it defaults to 90
-INSERT INTO Document (DocumentId, Title, RetentionDays) VALUES (1, 'Contract', 50);   -- OK
--- exceed the policy → the check rejects it
-INSERT INTO Document (DocumentId, Title, ArchiveAfterDays, RetentionDays) VALUES (2, 'TooLong', 90, 120);
+INSERT INTO Document (DocumentId, Title, RetentionDays) VALUES (1, 'Contract', 50);    -- OK
+-- exceed the ceiling → the check rejects it
+INSERT INTO Document (DocumentId, Title, ArchiveAfterDays, RetentionDays) VALUES (2, 'Forever', 90, 500);
 -- → CHECK constraint violation (Msg 547 / "violates check constraint" / Error 3819)
 ```
 
-## Step 3: Change the policy once — the default follows
+## Step 3: Change the archive policy once — the default follows
 
-Edit the metadata — `ArchiveDays` from `90` to `30` — and re-quench (clear any rows that would violate the
-tighter bound first):
+Edit the metadata — `ArchiveDays` from `90` to `30` — and re-quench:
 
 ```bash
 schemaquench --ConfigFile:deploy.settings.json
 ```
 
-The column default re-derives from the new number, on all three engines:
+The column default re-derives from the new number, identically on all three engines:
 
 ```bash
 # PostgreSQL
@@ -72,15 +70,16 @@ docker exec learn-postgres psql -U postgres -d cookbook_r2 -tAc "SELECT column_d
 ```
 
 You didn't touch the column. You changed the *policy on the table*, and the next ordinary quench rebuilt the
-default from it. The number you declared once is the only place the value lives.
+default from it. (The check still enforces `MaxRetentionDays`, which you didn't change — each number drives its
+own object, and each lives in exactly one place.)
 
 ## Per-engine notes
 
 | | SQL Server | PostgreSQL | MySQL |
 | --- | --- | --- | --- |
-| Nested token | `{{Table.Retention.ArchiveDays}}` | same | same |
+| Nested tokens | `{{Table.Retention.ArchiveDays}}` / `…MaxRetentionDays` | same | same |
 | Default from metadata | `DEFAULT ((90))` | `DEFAULT 90` | `DEFAULT 90` |
-| Check from metadata | `([RetentionDays]<=(90))` | `CHECK ((retentiondays <= 90))` | `` (`RetentionDays` <= 90) `` |
+| Check from metadata | `([RetentionDays]<=(365))` | `CHECK ((retentiondays <= 365))` | `` (`RetentionDays` <= 365) `` |
 | Default follows a policy change | ✅ | ✅ | ✅ |
 
 The `Default` and the check are both authored once on the table and resolve identically across the three
@@ -88,7 +87,7 @@ engines; only the dialect's constraint syntax differs.
 
 ## The principle
 
-The retention number used to live in three places — the column default, the constraint, and a wiki page
-nobody updated. Here it lives in exactly one: a custom property on the table. The default reads it, the check
-reads it, and when the policy changes you change the *policy*, not the columns. Declare the rule once on the
-object; let the schema carry it.
+The retention numbers used to live in three places each — the column default, the constraint, and a wiki page
+nobody updated. Here each lives in exactly one: a custom property on the table. The default reads its number,
+the check reads its number, and when a policy changes you change the *policy*, not the columns. Declare the rule
+once on the object; let the schema carry it.

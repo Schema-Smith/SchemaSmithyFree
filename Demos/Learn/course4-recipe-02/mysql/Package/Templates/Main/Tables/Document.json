@@ -1,6 +1,6 @@
 {
   "Name": "`Document`",
-  "Extensions": { "Retention": { "ArchiveDays": "90" } },
+  "Extensions": { "Retention": { "ArchiveDays": "90", "MaxRetentionDays": "365" } },
   "Columns": [
     { "Name": "`DocumentId`", "DataType": "INT", "Nullable": false },
     { "Name": "`Title`", "DataType": "VARCHAR(200)", "Nullable": false },
@@ -8,7 +8,7 @@
     { "Name": "`RetentionDays`", "DataType": "INT", "Nullable": false }
   ],
   "CheckConstraints": [
-    { "Name": "ck_document_retention", "Expression": "`RetentionDays` <= {{Table.Retention.ArchiveDays}}" }
+    { "Name": "ck_document_retention", "Expression": "`RetentionDays` <= {{Table.Retention.MaxRetentionDays}}" }
   ],
   "Indexes": [
     { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`DocumentId`" }
