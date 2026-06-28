@@ -1,0 +1,12 @@
+{
+  "Schema": "dbo",
+  "Name": "Product",
+  "Columns": [
+    { "Name": "ProductId", "DataType": "INT", "Nullable": false },
+    { "Name": "Name", "DataType": "NVARCHAR(100)", "Nullable": false },
+    { "Name": "Price", "DataType": "DECIMAL(10,2)", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PK_Product", "PrimaryKey": true, "Clustered": true, "IndexColumns": "ProductId" }
+  ]
+}
