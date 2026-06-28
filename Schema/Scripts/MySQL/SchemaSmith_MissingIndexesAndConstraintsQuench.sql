@@ -382,6 +382,105 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- STEP 3.5: Drop modified check constraints (table-level AND column-level)
+    -- =========================================================================
+    -- MySQL has no DDL to change a CHECK expression in place, so a constraint whose live
+    -- expression no longer matches the desired one is dropped here and re-created by the
+    -- create passes below (STEP 4 for table-level, STEP 4.5 for column-level). This closes
+    -- the Bug 2 gap (a modified TABLE-level check used to drift silently) and gives parity
+    -- with SQL Server / PostgreSQL, which both drop-then-recreate a changed check.
+    --
+    -- Comparison uses SchemaSmith_NormalizeCheckExpression on BOTH sides so an unchanged
+    -- check is NOT phantom-dropped: MySQL reformats CHECK_CLAUSE on storage (adds an outer
+    -- paren pair and normalizes spacing), which the normalizer collapses to a canonical form.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ModifiedChecks;
+    CREATE TEMPORARY TABLE _SchemaSmith_ModifiedChecks (
+        TableName VARCHAR(128) NOT NULL,
+        ConstraintName VARCHAR(128) NOT NULL,
+        PRIMARY KEY (TableName, ConstraintName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    -- Table-level checks: live CHECK_CLAUSE differs from the desired _SchemaSmith_CheckConstraints.Expression
+    INSERT IGNORE INTO _SchemaSmith_ModifiedChecks (TableName, ConstraintName)
+    SELECT
+        SchemaSmith_StripBacktickWrapping(c.TableName) AS TableName,
+        SchemaSmith_StripBacktickWrapping(c.ConstraintName) AS ConstraintName
+    FROM _SchemaSmith_CheckConstraints c
+    JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+        ON BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+        AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+        AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
+        AND tc.CONSTRAINT_TYPE = 'CHECK'
+    JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+        ON BINARY cc.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
+        AND BINARY cc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
+    WHERE BINARY SchemaSmith_NormalizeCheckExpression(CONVERT(cc.CHECK_CLAUSE USING utf8mb4))
+        != BINARY SchemaSmith_NormalizeCheckExpression(c.Expression);
+
+    -- Column-level checks: keyed on the deterministic name CK_<table>_<column>; live CHECK_CLAUSE
+    -- differs from the desired column CheckExpression. (INFORMATION_SCHEMA.CHECK_CONSTRAINTS has
+    -- no column linkage, which is exactly why column checks carry a deterministic name.)
+    INSERT IGNORE INTO _SchemaSmith_ModifiedChecks (TableName, ConstraintName)
+    SELECT
+        SchemaSmith_StripBacktickWrapping(col.TableName) AS TableName,
+        CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName)) AS ConstraintName
+    FROM _SchemaSmith_Columns col
+    JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+        ON BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+        AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(col.TableName)
+        AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName))
+        AND tc.CONSTRAINT_TYPE = 'CHECK'
+    JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+        ON BINARY cc.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
+        AND BINARY cc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName))
+    WHERE col.CheckExpression IS NOT NULL
+      AND TRIM(col.CheckExpression) != ''
+      AND BINARY SchemaSmith_NormalizeCheckExpression(CONVERT(cc.CHECK_CLAUSE USING utf8mb4))
+        != BINARY SchemaSmith_NormalizeCheckExpression(col.CheckExpression);
+
+    IF p_WhatIf = 1 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop modified check constraints');
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` DROP CHECK `', ConstraintName, '`')
+        FROM _SchemaSmith_ModifiedChecks;
+    ELSE
+        BEGIN
+            DECLARE v_DropChkDone INT DEFAULT FALSE;
+            DECLARE v_DropChkTable VARCHAR(128);
+            DECLARE v_DropChkName VARCHAR(128);
+            DECLARE v_DropChkSql TEXT;
+
+            DECLARE cur_ModifiedChecks CURSOR FOR
+                SELECT TableName, ConstraintName,
+                       CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` DROP CHECK `', ConstraintName, '`') AS DropCheckSql
+                FROM _SchemaSmith_ModifiedChecks;
+
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropChkDone = TRUE;
+
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop modified check constraints');
+            SET v_DropChkDone = FALSE;
+            OPEN cur_ModifiedChecks;
+
+            drop_modified_checks_loop: LOOP
+                FETCH cur_ModifiedChecks INTO v_DropChkTable, v_DropChkName, v_DropChkSql;
+                IF v_DropChkDone THEN
+                    LEAVE drop_modified_checks_loop;
+                END IF;
+
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop modified check constraint: ', v_DropChkTable, '.', v_DropChkName));
+                SET @exec_sql = v_DropChkSql;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+            END LOOP;
+
+            CLOSE cur_ModifiedChecks;
+        END;
+    END IF;
+
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ModifiedChecks;
+
+    -- =========================================================================
     -- STEP 4: Create missing check constraints (MySQL 8.0.16+)
     -- =========================================================================
     IF p_WhatIf = 1 THEN
@@ -450,6 +549,81 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- STEP 4.5: Create missing column-level check constraints (MySQL 8.0.16+)
+    -- =========================================================================
+    -- A column's CheckExpression becomes a deterministically named CK_<table>_<column> check.
+    -- The deterministic name lets the create/modify passes key on it (INFORMATION_SCHEMA has no
+    -- column linkage for checks). Mirrors the table-level STEP 4 idiom exactly.
+    IF p_WhatIf = 1 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing column check constraints');
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                      ' ADD CONSTRAINT `CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`',
+                      ' CHECK (', c.CheckExpression, ')')
+        FROM _SchemaSmith_Columns c
+        WHERE c.CheckExpression IS NOT NULL
+          AND TRIM(c.CheckExpression) != ''
+          AND NOT EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+              AND tc.CONSTRAINT_TYPE = 'CHECK'
+        );
+    ELSE
+        BEGIN
+            DECLARE v_ColCheckDone INT DEFAULT FALSE;
+            DECLARE v_ColCheckTable VARCHAR(128);
+            DECLARE v_ColCheckName VARCHAR(128);
+            DECLARE v_ColCheckVariant VARCHAR(128);
+            DECLARE v_ColCheckSql TEXT;
+
+            DECLARE cur_MissingColCheckConstraints CURSOR FOR
+                SELECT
+                    SchemaSmith_StripBacktickWrapping(c.TableName),
+                    CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName)),
+                    c.VariantName,
+                    CONCAT(
+                        'ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                        ' ADD CONSTRAINT `CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`',
+                        ' CHECK (', c.CheckExpression, ')'
+                    ) AS CreateColCheckStatement
+                FROM _SchemaSmith_Columns c
+                WHERE c.CheckExpression IS NOT NULL
+                  AND TRIM(c.CheckExpression) != ''
+                  AND NOT EXISTS (
+                    SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+                    WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+                      AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                      AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+                      AND tc.CONSTRAINT_TYPE = 'CHECK'
+                );
+
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_ColCheckDone = TRUE;
+
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing column check constraints');
+            SET v_ColCheckDone = FALSE;
+            OPEN cur_MissingColCheckConstraints;
+
+            create_col_checks_loop: LOOP
+                FETCH cur_MissingColCheckConstraints INTO v_ColCheckTable, v_ColCheckName, v_ColCheckVariant, v_ColCheckSql;
+                IF v_ColCheckDone THEN
+                    LEAVE create_col_checks_loop;
+                END IF;
+
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create column check constraint: ', v_ColCheckTable, '.', v_ColCheckName,
+                    CASE WHEN COALESCE(v_ColCheckVariant, '') <> '' THEN CONCAT(' (variant: ', v_ColCheckVariant, ')') ELSE '' END));
+                SET @exec_sql = v_ColCheckSql;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+            END LOOP;
+
+            CLOSE cur_MissingColCheckConstraints;
+        END;
+    END IF;
+
+    -- =========================================================================
     -- STEP 7: Update ProductOwnership for managed objects
     -- =========================================================================
     IF p_WhatIf = 0 THEN
@@ -475,6 +649,22 @@ BEGIN
             WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
               AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
               AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
+              AND tc.CONSTRAINT_TYPE = 'CHECK'
+        );
+
+        -- Track column-level check constraints (deterministic CK_<table>_<column> name)
+        INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
+        SELECT p_ProductName, '', p_DatabaseName, 'CHECK CONSTRAINT',
+               CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.CK_',
+                      SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+        FROM _SchemaSmith_Columns c
+        WHERE c.CheckExpression IS NOT NULL
+          AND TRIM(c.CheckExpression) != ''
+          AND EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
               AND tc.CONSTRAINT_TYPE = 'CHECK'
         );
     END IF;
