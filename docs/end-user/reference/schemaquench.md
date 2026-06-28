@@ -784,6 +784,8 @@ This keeps the database clean as tables are removed from the schema package over
 3. Write a migration script that renames or archives the table (or verifies no dependencies remain).
 4. After the retention period, either enable the setting for one deployment or add an explicit DROP in a migration script.
 
+For an alternative that keeps auto-drops on while still protecting data, see [Recyclebin -- Soft-Drop and Restore Hooks](recyclebin.md) (posture 2: drop-but-recoverable via the `SchemaSmith.CustomTableDrop` / `SchemaSmith.CustomTableRestore` hooks).
+
 ---
 
 ## RunScriptsTwice

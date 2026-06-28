@@ -73,6 +73,7 @@ Already know what you're looking for? Jump straight to the details.
 |-----------|--------|
 | [SchemaTongs](reference/schematongs.md) | Schema extraction across SQL Server, PostgreSQL, and MySQL — object types, config, orphan detection, validation |
 | [SchemaQuench](reference/schemaquench.md) | Deployment engine — execution flow, slots, WhatIf, migration tracking |
+| [Recyclebin](reference/recyclebin.md) | Soft-drop and restore hooks for recoverable table removal across SQL Server, PostgreSQL, and MySQL |
 | [DataTongs](reference/datatongs.md) | Data extraction — MERGE generation, type handling, key detection |
 | [Configuration](reference/configuration.md) | Shared CLI switches, config hierarchy, environment variables, logging |
 | [Schema Packages](reference/schema-packages.md) | Product/Template JSON, folder structure, table definition format |
