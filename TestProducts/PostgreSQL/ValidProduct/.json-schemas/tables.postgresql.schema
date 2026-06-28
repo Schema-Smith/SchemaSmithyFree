@@ -32,6 +32,27 @@
             "maxLength": 128,
             "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
+          "GenerationExpression": {
+            "type": "string"
+          },
+          "Collation": {
+            "type": "string"
+          },
+          "Generated": {
+            "type": "string"
+          },
+          "Virtual": {
+            "type": "boolean"
+          },
+          "Storage": {
+            "type": "string"
+          },
+          "Compression": {
+            "type": "string"
+          },
+          "CheckExpression": {
+            "type": "string"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -68,6 +89,35 @@
             "type": "string",
             "maxLength": 128,
             "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "FilterExpression": {
+            "type": "string"
+          },
+          "Clustered": {
+            "type": "boolean"
+          },
+          "IncludeColumns": {
+            "type": "string"
+          },
+          "AccessMethod": {
+            "type": "string"
+          },
+          "FillFactor": {
+            "type": "integer",
+            "minimum": 0.0,
+            "maximum": 100.0
+          },
+          "NullsNotDistinct": {
+            "type": "boolean"
+          },
+          "Deferrable": {
+            "type": "boolean"
+          },
+          "InitiallyDeferred": {
+            "type": "boolean"
+          },
+          "UpdateFillFactor": {
+            "type": "boolean"
           },
           "Extensions": {}
         },
@@ -111,6 +161,19 @@
             "maxLength": 128,
             "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
+          "RelatedTableSchema": {
+            "type": "string"
+          },
+          "Deferrable": {
+            "type": "boolean"
+          },
+          "InitiallyDeferred": {
+            "type": "boolean"
+          },
+          "MatchType": {
+            "type": "string",
+            "pattern": "FULL|PARTIAL|SIMPLE"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -140,6 +203,12 @@
             "type": "string",
             "maxLength": 128,
             "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "Deferrable": {
+            "type": "boolean"
+          },
+          "InitiallyDeferred": {
+            "type": "boolean"
           },
           "Extensions": {}
         },

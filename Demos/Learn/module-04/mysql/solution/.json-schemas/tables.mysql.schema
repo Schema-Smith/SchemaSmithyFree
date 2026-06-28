@@ -32,6 +32,28 @@
             "maxLength": 128,
             "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
+          "GenerationExpression": {
+            "type": "string"
+          },
+          "AutoIncrement": {
+            "type": "boolean"
+          },
+          "Generated": {
+            "type": "string",
+            "pattern": "STORED|VIRTUAL"
+          },
+          "CharacterSet": {
+            "type": "string"
+          },
+          "Collation": {
+            "type": "string"
+          },
+          "Comment": {
+            "type": "string"
+          },
+          "CheckExpression": {
+            "type": "string"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -68,6 +90,16 @@
             "type": "string",
             "maxLength": 128,
             "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "IndexType": {
+            "type": "string",
+            "pattern": "BTREE|HASH|FULLTEXT|SPATIAL"
+          },
+          "Visible": {
+            "type": "boolean"
+          },
+          "Comment": {
+            "type": "string"
           },
           "Extensions": {}
         },
@@ -110,6 +142,9 @@
             "type": "string",
             "maxLength": 128,
             "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "RelatedTableSchema": {
+            "type": "string"
           },
           "Extensions": {}
         },
