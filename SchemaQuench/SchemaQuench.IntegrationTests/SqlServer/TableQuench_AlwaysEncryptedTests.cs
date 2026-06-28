@@ -322,6 +322,8 @@ public class TableQuench_AlwaysEncryptedTests : BaseTableQuenchTests
                 "guard message must name the offending column");
             Assert.That(ex.Message, Does.Contain("rebuild").IgnoreCase,
                 "guard message must point to the Before/After rebuild workaround");
+            Assert.That(ex.Message, Does.Contain("[dbo].[AeBlockTypeChange]"),
+                "guard message must render schema/table with single brackets, not double");
 
             // Column must be left UNTOUCHED — still DETERMINISTIC, original value still decrypts
             cmd.CommandText = "SELECT Secret FROM dbo.AeBlockTypeChange WHERE Id = 1";
@@ -379,6 +381,8 @@ public class TableQuench_AlwaysEncryptedTests : BaseTableQuenchTests
                 "guard message must name the offending column");
             Assert.That(ex.Message, Does.Contain("rebuild").IgnoreCase,
                 "guard message must point to the Before/After rebuild workaround");
+            Assert.That(ex.Message, Does.Contain("[dbo].[AeBlockInitialEncrypt]"),
+                "guard message must render schema/table with single brackets, not double");
 
             // Column must be left UNTOUCHED — still plaintext, original value intact
             cmd.CommandText = "SELECT Secret FROM dbo.AeBlockInitialEncrypt WHERE Id = 1";
@@ -388,6 +392,64 @@ public class TableQuench_AlwaysEncryptedTests : BaseTableQuenchTests
         finally
         {
             cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockInitialEncrypt";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// SCENARIO D (WhatIf): the fail-closed guard is unconditional — it fires in WhatIf mode too,
+    /// so the impossibility is visible in previews before any DDL runs.
+    /// </summary>
+    [Test]
+    public void ShouldBlockEncryptionTypeChange_InWhatIfMode()
+    {
+        using var conn = new SqlConnection(AeConnectionString());
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockTypeChangeWhatIf";
+        cmd.ExecuteNonQuery();
+        try
+        {
+            cmd.CommandText = $@"
+                CREATE TABLE dbo.AeBlockTypeChangeWhatIf (
+                  Id INT NOT NULL,
+                  Secret NVARCHAR(50) COLLATE Latin1_General_BIN2
+                    ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = {Cek}, ENCRYPTION_TYPE = DETERMINISTIC,
+                                    ALGORITHM = '{Algo}') NOT NULL)";
+            cmd.ExecuteNonQuery();
+
+            cmd.CommandText = "INSERT dbo.AeBlockTypeChangeWhatIf (Id, Secret) VALUES (@id, @secret)";
+            cmd.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = 1 });
+            cmd.Parameters.Add(new SqlParameter("@secret", SqlDbType.NVarChar, 50) { Value = "WhatIfSecret" });
+            cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+
+            var json = $$$"""
+                {
+                    "Schema": "[dbo]",
+                    "Name": "[AeBlockTypeChangeWhatIf]",
+                    "Columns": [
+                        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+                        {"Name": "[Secret]", "DataType": "NVARCHAR(50)", "Nullable": false, "Collation": "Latin1_General_BIN2",
+                         "EncryptionType": "RANDOMIZED", "EncryptionKey": "[TestCEK]", "EncryptionAlgorithm": "{{{Algo}}}"}
+                    ]
+                }
+                """;
+
+            var ex = Assert.Throws<SqlException>(() => RunTableQuenchProc(cmd, json, whatIf: true));
+            Assert.That(ex!.Message, Does.Contain("Always Encrypted").IgnoreCase,
+                "guard must fire in WhatIf mode");
+            Assert.That(ex.Message, Does.Contain("[dbo].[AeBlockTypeChangeWhatIf]"),
+                "WhatIf guard message must render schema/table with single brackets");
+
+            // Column is untouched — still DETERMINISTIC, original value still decrypts
+            cmd.CommandText = "SELECT Secret FROM dbo.AeBlockTypeChangeWhatIf WHERE Id = 1";
+            Assert.That(cmd.ExecuteScalar(), Is.EqualTo("WhatIfSecret"),
+                "original encrypted value must survive the WhatIf guard");
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockTypeChangeWhatIf";
             cmd.ExecuteNonQuery();
         }
     }

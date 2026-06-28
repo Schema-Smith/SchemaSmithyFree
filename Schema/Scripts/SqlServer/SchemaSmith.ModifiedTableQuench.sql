@@ -701,7 +701,7 @@ BEGIN TRY
     -- is visible in previews. The operator must use the Before/After full-table rebuild instead.
     IF @v_SwapColumnScript LIKE '%ENCRYPTED WITH%'
     BEGIN
-      RAISERROR('Always Encrypted: in-place encryption change on [%s].[%s].[%s] cannot be performed on a standard (non-enclave) server. Use Before/After migration scripts to rebuild the table with the target encryption settings and copy data client-side over a Column Encryption Setting=Enabled connection.', 16, 1, @v_SwapSchema, @v_SwapTable, @v_SwapColumn)
+      RAISERROR('Always Encrypted: in-place encryption change on %s.%s.[%s] cannot be performed on a standard (non-enclave) server. Use Before/After migration scripts to rebuild the table with the target encryption settings and copy data client-side over a Column Encryption Setting=Enabled connection.', 16, 1, @v_SwapSchema, @v_SwapTable, @v_SwapColumn)
     END
     ELSE
     BEGIN
