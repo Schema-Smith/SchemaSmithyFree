@@ -1,0 +1,11 @@
+{
+  "Name": "`Promotion`",
+  "Columns": [
+    { "Name": "`PromotionId`", "DataType": "INT", "Nullable": false },
+    { "Name": "`Code`", "DataType": "VARCHAR(50)", "Nullable": false },
+    { "Name": "`DiscountPct`", "DataType": "INT", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`PromotionId`" }
+  ]
+}
