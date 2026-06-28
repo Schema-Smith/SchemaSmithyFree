@@ -1,0 +1,11 @@
+{
+  "Schema": "public",
+  "Name": "deploylog",
+  "Columns": [
+    { "Name": "loggedat", "DataType": "TIMESTAMP(6)", "Nullable": false, "Default": "clock_timestamp()" },
+    { "Name": "activefeatures", "DataType": "VARCHAR(200)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "pk_deploylog", "PrimaryKey": true, "IndexColumns": "loggedat" }
+  ]
+}

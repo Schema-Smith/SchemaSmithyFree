@@ -1,0 +1,10 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'cookbook_r3'",
+  "ScriptTokens": {
+    "EnabledFeatures": "<*Query*>SELECT GROUP_CONCAT(FlagName ORDER BY FlagName SEPARATOR ',') FROM FeatureFlag WHERE Enabled = 1"
+  },
+  "ScriptFolders": [
+    { "FolderPath": "After Scripts", "QuenchSlot": "After" }
+  ]
+}

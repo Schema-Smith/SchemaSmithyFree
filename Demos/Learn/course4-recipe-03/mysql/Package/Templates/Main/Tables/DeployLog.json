@@ -1,0 +1,10 @@
+{
+  "Name": "`DeployLog`",
+  "Columns": [
+    { "Name": "`LoggedAt`", "DataType": "DATETIME(6)", "Nullable": false, "Default": "CURRENT_TIMESTAMP(6)" },
+    { "Name": "`ActiveFeatures`", "DataType": "VARCHAR(200)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`LoggedAt`" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT name FROM sys.databases WHERE name = 'cookbook_r3'",
+  "ScriptTokens": {
+    "EnabledFeatures": "<*Query*>SELECT STRING_AGG(FlagName, ',') WITHIN GROUP (ORDER BY FlagName) FROM dbo.FeatureFlag WHERE Enabled = 1"
+  },
+  "ScriptFolders": [
+    { "FolderPath": "After Scripts", "QuenchSlot": "After" }
+  ]
+}
