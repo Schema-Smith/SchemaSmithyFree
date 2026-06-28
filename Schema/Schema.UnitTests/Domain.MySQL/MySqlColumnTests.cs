@@ -3,6 +3,7 @@
 using Newtonsoft.Json;
 using Schema.Domain;
 using Schema.Domain.MySQL;
+using Schema.Utility;
 
 namespace Schema.UnitTests.Domain.MySQL
 {
@@ -68,7 +69,6 @@ namespace Schema.UnitTests.Domain.MySQL
             var column = new MySqlColumn { Name = "Id", DataType = "int" };
             var json = JsonConvert.SerializeObject(column);
 
-            Assert.That(json, Does.Not.Contain("CheckExpression"));
             Assert.That(json, Does.Not.Contain("ComputedExpression"));
             Assert.That(json, Does.Not.Contain("Sparse"));
             Assert.That(json, Does.Not.Contain("Persisted"));
@@ -77,6 +77,20 @@ namespace Schema.UnitTests.Domain.MySQL
             Assert.That(json, Does.Not.Contain("Storage"));
             Assert.That(json, Does.Not.Contain("Compression"));
             Assert.That(json, Does.Not.Contain("Virtual"));
+        }
+
+        [Test]
+        public void MySqlColumn_PreservesCheckExpression_ThroughDeserializeAndSerializeAll()
+        {
+            const string json = """
+            {"Name":"T","Schema":"public","Columns":[
+                {"Name":"Quantity","DataType":"int","CheckExpression":"Quantity > 0"}
+            ]}
+            """;
+            var table = PlatformDeserializer.DeserializeTable(json, Platform.MySQL);
+            var roundTripped = JsonHelper.SerializeAll(table);
+            Assert.That(roundTripped, Does.Contain("CheckExpression"));
+            Assert.That(roundTripped, Does.Contain("Quantity > 0"));
         }
     }
 }
