@@ -21,13 +21,8 @@ public static class SchemaGenerator
     }
 
     /// <summary>
-    /// Generates a schema where list ELEMENT types can be upgraded via <paramref name="elementTypeResolver"/>.
-    /// This is the precise fix for platform subclass props being dropped from collection element schemas:
-    /// base <c>Table.Columns</c>/<c>Indexes</c>/etc. are declared as base-typed lists, so reflection only
-    /// sees base props. The resolver maps a list element type to its platform subclass (e.g. Column →
-    /// SqlServerColumn) so the generated element schema includes the subclass properties. Only list element
-    /// types are resolved — the root type and single-object property types pass through unchanged (those
-    /// subclass props are already surfaced via <c>new</c>-shadowed properties on the platform Table subclasses).
+    /// Generates a JSON schema, mapping list element types through <paramref name="elementTypeResolver"/>
+    /// so platform subclass properties appear in generated collection element schemas.
     /// </summary>
     public static JObject GenerateSchema(Type rootType, Func<Type, Type> elementTypeResolver)
     {

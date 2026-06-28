@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
@@ -238,7 +239,7 @@ public class SchemaGeneratorTests
     public void ShouldIncludeUpdateFillFactorInIndexSchema()
     {
         // UpdateFillFactor is SQL Server-specific; base Index does not have this property
-        var schema = SchemaGenerator.GenerateSchema(typeof(Index));
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.Index));
         Assert.That(schema["properties"]?["UpdateFillFactor"], Is.Null,
             "Base Index does not have UpdateFillFactor; it is SQL Server-specific");
     }
@@ -420,8 +421,8 @@ public class SchemaGeneratorTests
     // The resolver mirrors the production one in RepositoryHelper: only list ELEMENT types of the
     // base collection types are upgraded to their platform subclass. Root/single-object types pass
     // through unchanged, which is the precise gap the overload closes.
-    private static System.Func<System.Type, System.Type> SubclassResolver(
-        System.Type column = null, System.Type index = null, System.Type foreignKey = null, System.Type check = null)
+    private static Func<Type, Type> SubclassResolver(
+        Type column = null, Type index = null, Type foreignKey = null, Type check = null)
         => t =>
             column != null && t == typeof(Schema.Domain.Column) ? column
             : index != null && t == typeof(Schema.Domain.Index) ? index
@@ -489,6 +490,40 @@ public class SchemaGeneratorTests
             Assert.That(indexProps?["AccessMethod"], Is.Not.Null, "PostgreSqlIndex adds AccessMethod");
             Assert.That(fkProps?["MatchType"], Is.Not.Null, "PostgreSqlForeignKey adds MatchType");
             Assert.That(checkProps?["Deferrable"], Is.Not.Null, "PostgreSqlCheckConstraint adds Deferrable");
+        });
+    }
+
+    [Test]
+    public void ResolverOverload_SqlServerIndexForeignKeySubclassPropsAppear()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.SqlServer.SqlServerTable),
+            SubclassResolver(
+                index: typeof(Schema.Domain.SqlServer.SqlServerIndex),
+                foreignKey: typeof(Schema.Domain.SqlServer.SqlServerForeignKey)));
+        var indexProps = schema["properties"]?["Indexes"]?["items"]?["properties"] as JObject;
+        var fkProps = schema["properties"]?["ForeignKeys"]?["items"]?["properties"] as JObject;
+        Assert.Multiple(() =>
+        {
+            Assert.That(indexProps?["Clustered"], Is.Not.Null, "SqlServerIndex adds Clustered");
+            Assert.That(indexProps?["ColumnStore"], Is.Not.Null, "SqlServerIndex adds ColumnStore");
+            Assert.That(fkProps?["RelatedTableSchema"], Is.Not.Null, "SqlServerForeignKey adds RelatedTableSchema");
+        });
+    }
+
+    [Test]
+    public void ResolverOverload_MySqlIndexForeignKeySubclassPropsAppear()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.MySQL.MySqlTable),
+            SubclassResolver(
+                index: typeof(Schema.Domain.MySQL.MySqlIndex),
+                foreignKey: typeof(Schema.Domain.MySQL.MySqlForeignKey)));
+        var indexProps = schema["properties"]?["Indexes"]?["items"]?["properties"] as JObject;
+        var fkProps = schema["properties"]?["ForeignKeys"]?["items"]?["properties"] as JObject;
+        Assert.Multiple(() =>
+        {
+            Assert.That(indexProps?["IndexType"], Is.Not.Null, "MySqlIndex adds IndexType");
+            Assert.That(indexProps?["Visible"], Is.Not.Null, "MySqlIndex adds Visible");
+            Assert.That(fkProps?["RelatedTableSchema"], Is.Not.Null, "MySqlForeignKey adds RelatedTableSchema");
         });
     }
 
