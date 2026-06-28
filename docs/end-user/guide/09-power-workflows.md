@@ -95,6 +95,8 @@ For the full token reference -- scopes, custom-property tokens from `Extensions`
 
 Tokens aren't just for deployment parameters. Custom metadata you attach to your tables via the `Extensions` carrier becomes available as tokens in every expression field on that table and its components. This is where SchemaSmith starts to feel like a governance platform instead of just a deployment tool.
 
+The `Extensions` property is an open JSON bag that lives on every entity in the schema package -- tables, columns, indexes, foreign keys, check constraints, all of them. Attach whatever your team cares about: environment markers, data classification tags, team ownership, replication configuration, sensitivity flags. One declaration rides through source control, survives SchemaTongs re-extraction, and flows into every `ShouldApplyExpression` on that component.
+
 **Declare once:**
 
 ```json
@@ -115,7 +117,11 @@ Tokens aren't just for deployment parameters. Custom metadata you attach to your
 }
 ```
 
-**Consume everywhere:** `{{Table.Environment}}` drives whether the audit index is created. `{{Table.DataClassification}}` could drive a script token that generates masking policies. `{{Table.OwningTeam}}` could drive ownership tags. One declaration, visible in the PR diff, enforceable in CI, actionable at deployment time.
+**Consume everywhere:** `{{Table.Environment}}` drives whether the audit index is created. `{{Table.DataClassification}}` could drive a script token that generates masking policies. `{{Table.OwningTeam}}` could drive ownership tags. A component's own `Extensions` keys flatten to `{{KeyName}}`; the parent table's `Extensions` keys are available as `{{Table.KeyName}}` anywhere inside that table.
+
+**Full table graph as JSON.** At the template level, the automatic `{{TableSchema}}` token carries the entire current template's table graph serialized as JSON -- every table, every column, every index, all your `Extensions` metadata included. A migration script can consume this token, parse it in-engine (via `JSON_VALUE`, `json_each`, or `JSON_TABLE` depending on platform), and drive behavior entirely from your declared metadata. Write a single script that reads column-level sensitivity flags and generates dynamic masking policies. Write a procedure that reads team-ownership tags and builds an audit trail. The metadata lives in your schema package, travels through source control, and gets acted on at deployment time -- without any external tooling.
+
+**Extensions round-trip.** When SchemaTongs re-extracts a table from the live database, it preserves the `Extensions` bag from your original table JSON. Your custom properties aren't lost to the extraction cycle -- they round-trip intact.
 
 See [Custom Properties](../reference/custom-properties.md) for the full mechanism -- scoping, nested objects, array flattening, preservation through SchemaTongs re-extraction, and the JSON Schema validation pattern for team governance.
 
@@ -175,6 +181,8 @@ Both variants share a name and target the same column, but only one matches any 
 ```
 
 The same `(variant: ...)` suffix appears in WhatIf output, so a dry run tells you exactly which variant *would* be applied to each target -- before you commit to it. `VariantName` is metadata only: it has no effect on what gets deployed, it just makes the deployment legible. It's an optional label, up to 128 characters, and it round-trips through SchemaTongs re-extraction alongside the rest of the variant set.
+
+For deploying a partial package of migration scripts to fix a specific production issue, see [Operational Profiles](07-cicd-integration.md#operational-profiles) in the CI/CD chapter and [Partial-Package Deployments (Data Fixes)](../reference/schemaquench.md#partial-package-deployments-data-fixes) in the SchemaQuench reference.
 
 ### Conditional deployment: whole table vs. within a table
 
@@ -261,6 +269,48 @@ Each template has its own complete folder structure -- `Tables/`, `Procedures/`,
 **Multi-tenant in one template.** The `DatabaseIdentificationScript` can return multiple rows. One template, one declaration, every tenant database gets the same schema. Combine with `MaxThreads` in the SchemaQuench settings file and the tenants deploy in parallel up to the configured limit.
 
 **Schema-per-tenant.** If your tenants share one database -- each tenant owning their own schema -- a schema template fans out the same way. Add `SchemaIdentificationScript` to `Template.json` and SchemaQuench runs the full template once per returned schema, with `{{SchemaName}}` available everywhere. The pattern, the field reference, and a full walkthrough of the TenantCRM demo are in [Multi-Tenant Deployments](10-multi-tenant-deployments.md).
+
+## Validation gates
+
+Every SchemaQuench run has a pre-flight window before a single table is touched. That window exists to answer one question: is this the right server, in the right state, for this package? Two properties -- `ValidationScript` and `BaselineValidationScript` -- give you precise control over those gates, and they work together as a versioned handshake between your package and its deployment targets.
+
+**Right server.** `ValidationScript` is a required Product-level property. It runs first, against the server's admin connection (the platform's init database: `master`, `postgres`, or `information_schema`). If it returns a falsy value, the deployment aborts before any quench begins. This is your identity check: am I on the database server I think I am? Common patterns:
+
+- Verify an expected database exists on the server
+- Confirm a linked server or infrastructure dependency is in place
+- Gate on server version or edition to prevent running an incompatible package
+
+```sql
+-- SQL Server: confirm the target database exists before touching anything
+SELECT CAST(CASE WHEN EXISTS(
+    SELECT 1 FROM master.sys.databases WHERE [name] = '{{MainDB}}'
+) THEN 1 ELSE 0 END AS BIT)
+```
+
+```sql
+-- Version gate: abort if the server is below SQL Server 2019
+SELECT CAST(CASE WHEN CAST(SERVERPROPERTY('ProductMajorVersion') AS INT) >= 15
+    THEN 1 ELSE 0 END AS BIT)
+```
+
+Token replacement applies -- `{{MainDB}}`, `{{ReleaseVersion}}`, any token you define in `ScriptTokens` -- so the validation script isn't hardcoded to one environment.
+
+**Right state.** `BaselineValidationScript` is optional and runs at two levels. At the Product level, it runs after server validation but before template processing. At the Template level, it runs per database, before that database's quench. Both answer the same question: is this environment at the state this package expects?
+
+The canonical use is anti-rollback protection. Pair `BaselineValidationScript` with `VersionStampScript`: the stamp records a version identifier after a successful deployment; the baseline checks for that identifier before the next deployment. If someone accidentally runs an older package against an already-upgraded environment, the baseline check aborts before any harm is done.
+
+```json
+{
+  "VersionStampScript": "UPDATE dbo.DeploymentInfo SET Version = '{{ReleaseVersion}}'",
+  "BaselineValidationScript": "SELECT CAST(CASE WHEN EXISTS(
+      SELECT 1 FROM dbo.DeploymentInfo WHERE Version = '{{PreviousVersion}}'
+  ) THEN 1 ELSE 0 END AS BIT)"
+}
+```
+
+**Version floor.** `MinimumVersion` is the declarative companion -- set it in `Product.json` and SchemaQuench enforces a hard engine version floor before running anything. Use it for the unconditional floor ("this package requires PostgreSQL 15 or later"); write `ValidationScript` logic for conditional gates or checks that need to read server state.
+
+For the full property reference -- Product vs. Template scope, return type requirements, token availability, and worked examples across all three platforms -- see [Schema Packages](../reference/schema-packages.md) and [SchemaQuench](../reference/schemaquench.md).
 
 ## Secondary server support (SQL Server)
 
@@ -404,6 +454,28 @@ Declare your own folder layout via `ScriptFolders` in `Template.json`:
 ```
 
 When you declare a `ScriptFolders` array, it fully replaces the platform default set -- so include every folder you want active. This is a full replacement, not a merge, which means you're always in control of exactly which folders run.
+
+### Organizing into subfolders
+
+When a package grows beyond a handful of objects, flat script folders become hard to navigate. SchemaQuench discovers scripts recursively -- all `.sql` files in a folder and every subfolder underneath it, sorted alphabetically by full path -- so you can group related objects without changing their deployment behavior.
+
+```
+Procedures/
+  Reporting/
+    dbo.GetMonthlyRevenue.sql
+    dbo.GetQuarterlyReport.sql
+  Core/
+    dbo.ProcessOrder.sql
+    dbo.ValidateCustomer.sql
+```
+
+The alphabetical-by-full-path sort determines execution order, so `Core/` scripts run before `Reporting/` scripts. Name your folders and files to make the order legible -- a prefix convention (`01-Core/`, `02-Reporting/`) makes intent obvious at a glance.
+
+Table and view JSON follows the same rule. Files in `Tables/Analytics/Orders.json` and `Tables/Transactional/Customers.json` are both discovered and loaded; the subfolder is purely organizational.
+
+**Layout round-trips.** When you re-extract a table, SchemaTongs looks up the object's existing file path in its index and writes back to that same location. Your subfolder organization survives the extraction cycle intact.
+
+> **Note:** If the same filename appears in more than one subfolder -- for example, `Reporting/dbo.GetReport.sql` and `Archive/dbo.GetReport.sql` -- SchemaTongs logs a warning and writes to the base folder instead of an ambiguous location. Keep object filenames unique across subfolders to avoid this.
 
 ## Script folder execution order
 
