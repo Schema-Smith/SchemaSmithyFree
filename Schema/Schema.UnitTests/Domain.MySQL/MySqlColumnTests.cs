@@ -92,5 +92,15 @@ namespace Schema.UnitTests.Domain.MySQL
             Assert.That(roundTripped, Does.Contain("CheckExpression"));
             Assert.That(roundTripped, Does.Contain("Quantity > 0"));
         }
+
+        [Test]
+        public void MySqlColumn_OmitsNullCheckExpression_FromSerializeAll()
+        {
+            const string json = """
+            {"Name":"T","Columns":[{"Name":"Id","DataType":"int"}]}
+            """;
+            var table = PlatformDeserializer.DeserializeTable(json, Platform.MySQL);
+            Assert.That(JsonHelper.SerializeAll(table), Does.Not.Contain("CheckExpression"));
+        }
     }
 }

@@ -92,5 +92,15 @@ namespace Schema.UnitTests.Domain.PostgreSQL
             Assert.That(roundTripped, Does.Contain("CheckExpression"));
             Assert.That(roundTripped, Does.Contain("Quantity > 0"));
         }
+
+        [Test]
+        public void PostgreSqlColumn_OmitsNullCheckExpression_FromSerializeAll()
+        {
+            const string json = """
+            {"Name":"T","Schema":"public","Columns":[{"Name":"Id","DataType":"int4"}]}
+            """;
+            var table = PlatformDeserializer.DeserializeTable(json, Platform.PostgreSQL);
+            Assert.That(JsonHelper.SerializeAll(table), Does.Not.Contain("CheckExpression"));
+        }
     }
 }
