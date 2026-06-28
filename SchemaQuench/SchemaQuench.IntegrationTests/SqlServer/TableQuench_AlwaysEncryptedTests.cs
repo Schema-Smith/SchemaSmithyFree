@@ -1,5 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System.Data;
+using System.Text;
 using Schema.DataAccess;
 using Schema.Domain;
 
@@ -93,5 +95,47 @@ public class TableQuench_AlwaysEncryptedTests : BaseTableQuenchTests
         cmd.CommandText = "DROP TABLE dbo.AESwapSkipTest";
         cmd.ExecuteNonQuery();
         conn.Close();
+    }
+
+    [Test]
+    public void GenerateTableJson_AeColumn_MapsKeyAndAlgorithmCorrectly()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+            CREATE TABLE dbo.AeRoundTrip (
+              Id INT NOT NULL,
+              Secret NVARCHAR(50) COLLATE Latin1_General_BIN2
+                ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = [TestCEK], ENCRYPTION_TYPE = DETERMINISTIC,
+                                ALGORITHM = 'AEAD_AES_256_CBC_HMAC_SHA_256') NOT NULL)";
+        cmd.ExecuteNonQuery();
+
+        try
+        {
+            cmd.CommandText = "EXEC SchemaSmith.GenerateTableJSON @p_Schema = 'dbo', @p_Table = 'AeRoundTrip'";
+            var json = ReadAllLines(cmd);
+
+            Assert.That(json, Does.Contain("\"EncryptionType\": \"DETERMINISTIC\""));
+            Assert.That(json, Does.Contain("\"EncryptionKey\": \"[TestCEK]\""));
+            Assert.That(json, Does.Contain("\"EncryptionAlgorithm\": \"AEAD_AES_256_CBC_HMAC_SHA_256\""));
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE dbo.AeRoundTrip";
+            cmd.ExecuteNonQuery();
+            conn.Close();
+        }
+    }
+
+    private static string ReadAllLines(IDbCommand cmd)
+    {
+        var sb = new StringBuilder();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            sb.Append(reader.GetString(0));
+        return sb.ToString();
     }
 }
