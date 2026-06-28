@@ -22,7 +22,8 @@
             "type": "string"
           },
           "QuenchSlot": {
-            "type": "integer"
+            "type": "string",
+            "pattern": "Before|Objects|BetweenTablesAndKeys|AfterTablesScripts|AfterTablesObjects|TableData|After|None"
           },
           "ObjectType": {
             "type": "string",

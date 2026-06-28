@@ -28,7 +28,8 @@
             "type": "integer"
           },
           "QuenchSlot": {
-            "type": "integer"
+            "type": "string",
+            "pattern": "Before|After|None"
           },
           "ObjectType": {
             "type": "string",

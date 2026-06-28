@@ -229,7 +229,7 @@
     },
     "RowFormat": {
       "type": "string",
-      "pattern": "DYNAMIC|COMPACT|COMPRESSED|REDUNDANT"
+      "pattern": "Dynamic|Compact|Compressed|Redundant|Fixed"
     },
     "CharacterSet": {
       "type": "string"
@@ -241,9 +241,7 @@
       "type": "string"
     },
     "AutoIncrementValue": {
-      "type": "object",
-      "properties": {},
-      "additionalProperties": false,
+      "type": "integer",
       "minimum": 1.0
     },
     "FullTextIndexes": {
