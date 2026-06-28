@@ -1,7 +1,7 @@
 {
   "Schema": "public",
   "Name": "document",
-  "Extensions": { "Retention": { "ArchiveDays": "90" } },
+  "Extensions": { "Retention": { "ArchiveDays": "90", "MaxRetentionDays": "365" } },
   "Columns": [
     { "Name": "documentid", "DataType": "INT", "Nullable": false },
     { "Name": "title", "DataType": "VARCHAR(200)", "Nullable": false },
@@ -9,7 +9,7 @@
     { "Name": "retentiondays", "DataType": "INT", "Nullable": false }
   ],
   "CheckConstraints": [
-    { "Name": "ck_document_retention", "Expression": "retentiondays <= {{Table.Retention.ArchiveDays}}" }
+    { "Name": "ck_document_retention", "Expression": "retentiondays <= {{Table.Retention.MaxRetentionDays}}" }
   ],
   "Indexes": [
     { "Name": "pk_document", "PrimaryKey": true, "IndexColumns": "documentid" }
