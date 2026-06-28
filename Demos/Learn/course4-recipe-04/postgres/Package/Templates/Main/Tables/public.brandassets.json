@@ -1,0 +1,11 @@
+{
+  "Schema": "public",
+  "Name": "brandassets",
+  "Columns": [
+    { "Name": "assetname", "DataType": "VARCHAR(50)", "Nullable": false },
+    { "Name": "image", "DataType": "BYTEA", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "pk_brandassets", "PrimaryKey": true, "IndexColumns": "assetname" }
+  ]
+}
