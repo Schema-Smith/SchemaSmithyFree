@@ -215,6 +215,66 @@ Once the PR merges, the deployment pipeline takes over. A typical flow:
 
 The combination catches problems at every stage. WhatIf catches SQL errors, missing tokens, and broken references in the PR. Staging deployment catches environment-specific issues. Integration tests catch application-level regressions. The approval gate gives humans the final word.
 
+## Operational Profiles
+
+SchemaQuench has one config surface — a handful of top-level boolean settings — but your pipeline has more than one job. A full release pipeline, a patch-only datafix pipeline, a PR validation check, and an idempotency gate each call for a different posture. These six settings control which posture you're in, and all six work identically on SQL Server, PostgreSQL, and MySQL.
+
+### Full release pipeline
+
+The standard deployment profile. Structural changes land, helper procedures stay current, and tables removed from the product are caught early.
+
+```json
+{
+  "KindleTheForge": true,
+  "UpdateTables": true,
+  "WhatIfONLY": false,
+  "DropTablesRemovedFromProduct": true
+}
+```
+
+`DropTablesRemovedFromProduct` is environment-dependent. Set `true` in CI and staging to catch removals early. In production many teams set it `false` for rollback safety — the next release can always clean it up once the window passes. See [DropTablesRemovedFromProduct](../reference/schemaquench.md#droptablesremovedfromproduct) and the rollback guidance in [Chapter 08](08-rollback-and-recovery.md) for the full reasoning.
+
+### Datafix patch pipeline
+
+Migration scripts only. No DDL, no table quenching, no tracking inserts for run-once scripts. The deploy account needs no schema permissions.
+
+```json
+{
+  "KindleTheForge": false,
+  "UpdateTables": false,
+  "DropTablesRemovedFromProduct": false,
+  "TrackRunOnceMigrations": false
+}
+```
+
+Use this when shipping a data patch, hotfix, or bulk data load between structural releases. For the full per-flag reasoning, the comparison table, and patterns that pair well, see [Partial-Package Deployments (Data Fixes)](../reference/schemaquench.md#partial-package-deployments-data-fixes).
+
+### WhatIf PR check
+
+WhatIf runs the full deployment logic — validation, token replacement, DDL generation, dependency resolution — without touching a real database. Wire it up as a PR gate against a disposable database container and catch SQL errors, missing tokens, and broken references before code reaches your main branch.
+
+```json
+{
+  "WhatIfONLY": true
+}
+```
+
+The [WhatIf-in-PR pattern](#the-whatif-in-pr-pattern) above shows a complete pipeline for this. Once you trust the package and the pipeline, direct deploys are the normal mode — WhatIf earns its keep during complex migrations and when you're working with an unfamiliar target, not as a standing gate on every production run.
+
+### Idempotency CI check
+
+Runs every object script and `[ALWAYS]` script twice in sequence and requires both passes to succeed. A strong guarantee that your scripts are truly stateless and can be re-applied after a partial failure.
+
+```json
+{
+  "WhatIfONLY": false,
+  "RunScriptsTwice": true,
+  "DropTablesRemovedFromProduct": true
+}
+```
+
+Run this against a disposable database in CI — it is not meant for production targets. `RunScriptsTwice` is an idempotency check, not a dependency-resolution mechanism: the retry loop already handles inter-object dependencies. Run-once migration scripts are excluded from the double-run.
+
 ## Secret management
 
 Every CI/CD platform has a built-in secret store. SchemaSmith's environment variable model was designed to work with all of them -- every sensitive setting injected at runtime, nothing stored in files committed to source control.
