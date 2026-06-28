@@ -1,6 +1,5 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
-using System;
 using System.Data;
 using System.Text;
 using Microsoft.Data.SqlClient;
@@ -31,34 +30,27 @@ namespace SchemaQuench.IntegrationTests.SqlServer;
 ///     ShouldExecuteEncryptedWithDdlOverAeEnabledConnection.)
 ///
 /// WHAT DOES NOT WORK — encryption CHANGES on a POPULATED table (re-type, re-key, or initial
-/// encryption of plaintext). The quench ERRORS; it does NOT silently corrupt. Observed on the
-/// container (these are documented here, NOT asserted as passing tests — a fail-closed guard and
-/// its green tests are the follow-up task):
+/// encryption of plaintext). The quench raises a deliberate, explicit fail-closed guard error
+/// (RAISERROR severity 16) naming the offending column and pointing to the Before/After rebuild
+/// workaround. The column is left UNTOUCHED.
 ///
-///   1. DETERMINISTIC -> RANDOMIZED on a populated encrypted column:
-///        TableQuench fails with "Incorrect syntax near 'ENCRYPTED'." The column is left UNTOUCHED
-///        (still DETERMINISTIC, original value still decrypts). Root cause: the swap path emits
-///        ALTER TABLE ... ADD [col_swap_temp] NVARCHAR(50) NOT NULL ENCRYPTED WITH (...) — the
-///        nullability clause precedes ENCRYPTED WITH, which is invalid T-SQL ordering.
-///   2. Initial encryption of a populated plaintext column: identical "Incorrect syntax near
-///        'ENCRYPTED'." failure; column left plaintext, value intact.
-///
-/// WHY IT CANNOT WORK EVEN IF THE DDL ORDERING WERE FIXED (the deeper, fundamental limit):
+/// WHY IT CANNOT WORK (the fundamental limit on standard non-enclave servers):
 ///   - A NOT NULL encrypted column cannot be ADDed to a non-empty table (general SQL rule; no
 ///     DEFAULT is allowed on encrypted columns to escape it).
-///   - A NULLABLE encrypted column CAN be added to a non-empty table on this engine version
-///     (so the prior POC claim "encrypted columns cannot be nullable" is outdated). But the
-///     swap's data copy is a SERVER-SIDE "UPDATE [temp] = [original]", and when the two columns
-///     have different encryption settings the server rejects it:
+///   - A NULLABLE encrypted column CAN be added to a non-empty table on this engine version,
+///     but the swap's data copy would be a SERVER-SIDE "UPDATE [temp] = [original]", and when
+///     the two columns have different encryption settings the server rejects it:
 ///        "Operand type clash: nvarchar(50) encrypted with (encryption_type = 'DETERMINISTIC'...)
 ///         is incompatible with nvarchar(50) encrypted with (encryption_type = 'RANDOMIZED'...)."
 ///     The server holds no Column Master Key and cannot decrypt/re-encrypt; re-encryption requires
-///     secure enclaves, which a standard deployment does not have. The server-side copy is only a
-///     valid byte move when CEK AND encryption type are unchanged.
+///     secure enclaves, which a standard deployment does not have.
 ///
 /// NET: on a standard (non-enclave) server, an AE encryption CHANGE on populated data is
-/// impossible to perform inside the quench. The current behavior is a loud (if misleading) syntax
-/// error rather than silent corruption — which is the motivation for an explicit fail-closed guard.
+/// impossible to perform inside the quench. The guard (ModifiedTableQuench.sql, the ENCRYPTED WITH
+/// sub-branch) raises immediately — before any DDL or data copy — naming the column and instructing
+/// the operator to use a Before/After full-table rebuild. Certified by
+/// ShouldBlockEncryptionTypeChange_OnPopulatedColumn and
+/// ShouldBlockInitialEncryption_OnPopulatedColumn below.
 ///
 /// WORKAROUND for users — full table rebuild via Before/After migration scripts:
 ///   Before: create the new table with the target (encrypted) schema; INSERT INTO new SELECT * FROM
@@ -277,6 +269,126 @@ public class TableQuench_AlwaysEncryptedTests : BaseTableQuenchTests
             cmd.CommandText = "DROP TABLE dbo.AeRoundTrip";
             cmd.ExecuteNonQuery();
             conn.Close();
+        }
+    }
+
+    /// <summary>
+    /// SCENARIO B (blocked): changing encryption type (DETERMINISTIC -> RANDOMIZED) on a POPULATED
+    /// column raises a fail-closed guard error naming the column and pointing to the rebuild path.
+    /// The column is left UNTOUCHED (original value still decrypts).
+    /// </summary>
+    [Test]
+    public void ShouldBlockEncryptionTypeChange_OnPopulatedColumn()
+    {
+        using var conn = new SqlConnection(AeConnectionString());
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockTypeChange";
+        cmd.ExecuteNonQuery();
+        try
+        {
+            // Create table with DETERMINISTIC column
+            cmd.CommandText = $@"
+                CREATE TABLE dbo.AeBlockTypeChange (
+                  Id INT NOT NULL,
+                  Secret NVARCHAR(50) COLLATE Latin1_General_BIN2
+                    ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = {Cek}, ENCRYPTION_TYPE = DETERMINISTIC,
+                                    ALGORITHM = '{Algo}') NOT NULL)";
+            cmd.ExecuteNonQuery();
+
+            // Seed a row so the table is populated
+            cmd.CommandText = "INSERT dbo.AeBlockTypeChange (Id, Secret) VALUES (@id, @secret)";
+            cmd.Parameters.Add(new SqlParameter("@id", SqlDbType.Int) { Value = 1 });
+            cmd.Parameters.Add(new SqlParameter("@secret", SqlDbType.NVarChar, 50) { Value = "DetSecret" });
+            cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+
+            // Quench: change DETERMINISTIC -> RANDOMIZED (AE encryption type change on populated column)
+            var json = $$$"""
+                {
+                    "Schema": "[dbo]",
+                    "Name": "[AeBlockTypeChange]",
+                    "Columns": [
+                        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+                        {"Name": "[Secret]", "DataType": "NVARCHAR(50)", "Nullable": false, "Collation": "Latin1_General_BIN2",
+                         "EncryptionType": "RANDOMIZED", "EncryptionKey": "[TestCEK]", "EncryptionAlgorithm": "{{{Algo}}}"}
+                    ]
+                }
+                """;
+
+            var ex = Assert.Throws<SqlException>(() => RunTableQuenchProc(cmd, json));
+            Assert.That(ex!.Message, Does.Contain("Always Encrypted").IgnoreCase);
+            Assert.That(ex.Message, Does.Contain("Secret").IgnoreCase,
+                "guard message must name the offending column");
+            Assert.That(ex.Message, Does.Contain("rebuild").IgnoreCase,
+                "guard message must point to the Before/After rebuild workaround");
+
+            // Column must be left UNTOUCHED — still DETERMINISTIC, original value still decrypts
+            cmd.CommandText = "SELECT Secret FROM dbo.AeBlockTypeChange WHERE Id = 1";
+            Assert.That(cmd.ExecuteScalar(), Is.EqualTo("DetSecret"),
+                "original encrypted value must survive the blocked quench attempt");
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockTypeChange";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// SCENARIO C (blocked): initial encryption of a populated PLAINTEXT column raises the same
+    /// fail-closed guard error. The column is left plaintext and UNTOUCHED.
+    /// </summary>
+    [Test]
+    public void ShouldBlockInitialEncryption_OnPopulatedColumn()
+    {
+        using var conn = new SqlConnection(_connectionString + ";Initial Catalog=" + _mainDb);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockInitialEncrypt";
+        cmd.ExecuteNonQuery();
+        try
+        {
+            // Create table with a plaintext column
+            cmd.CommandText = @"
+                CREATE TABLE dbo.AeBlockInitialEncrypt (
+                  Id INT NOT NULL,
+                  Secret NVARCHAR(50) NOT NULL)";
+            cmd.ExecuteNonQuery();
+
+            // Seed a row so the table is populated
+            cmd.CommandText = "INSERT dbo.AeBlockInitialEncrypt (Id, Secret) VALUES (1, 'PlainSecret')";
+            cmd.ExecuteNonQuery();
+
+            // Quench: add DETERMINISTIC encryption to the plaintext column (initial encryption on populated data)
+            var json = $$$"""
+                {
+                    "Schema": "[dbo]",
+                    "Name": "[AeBlockInitialEncrypt]",
+                    "Columns": [
+                        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+                        {"Name": "[Secret]", "DataType": "NVARCHAR(50)", "Nullable": false,
+                         "EncryptionType": "DETERMINISTIC", "EncryptionKey": "[TestCEK]", "EncryptionAlgorithm": "{{{Algo}}}"}
+                    ]
+                }
+                """;
+
+            var ex = Assert.Throws<SqlException>(() => RunTableQuenchProc(cmd, json));
+            Assert.That(ex!.Message, Does.Contain("Always Encrypted").IgnoreCase);
+            Assert.That(ex.Message, Does.Contain("Secret").IgnoreCase,
+                "guard message must name the offending column");
+            Assert.That(ex.Message, Does.Contain("rebuild").IgnoreCase,
+                "guard message must point to the Before/After rebuild workaround");
+
+            // Column must be left UNTOUCHED — still plaintext, original value intact
+            cmd.CommandText = "SELECT Secret FROM dbo.AeBlockInitialEncrypt WHERE Id = 1";
+            Assert.That(cmd.ExecuteScalar(), Is.EqualTo("PlainSecret"),
+                "original plaintext value must survive the blocked quench attempt");
+        }
+        finally
+        {
+            cmd.CommandText = "DROP TABLE IF EXISTS dbo.AeBlockInitialEncrypt";
+            cmd.ExecuteNonQuery();
         }
     }
 
