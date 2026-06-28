@@ -7,7 +7,6 @@ namespace Schema.Domain.SqlServer
 {
     public class SqlServerTemplate : Template
     {
-        [SchemaProperty(Required = true)]
         [JsonProperty(Order = 100)]
         [JsonConverter(typeof(StringEnumConverter))]
         public ServerToQuench ServerToQuench { get; set; } = ServerToQuench.Primary;
