@@ -327,6 +327,6 @@ VALUES ('{_productName}', '', '{_mainDb}', 'CHECK CONSTRAINT', '{table}.{ck}');"
             cmd.CommandText = "DELETE FROM SchemaSmith_StatusMessages WHERE SessionId = CONNECTION_ID()";
             cmd.ExecuteNonQuery();
         }
-        catch { /* best-effort cleanup */ }
+        catch (System.Data.Common.DbException) { /* best-effort cleanup */ }
     }
 }

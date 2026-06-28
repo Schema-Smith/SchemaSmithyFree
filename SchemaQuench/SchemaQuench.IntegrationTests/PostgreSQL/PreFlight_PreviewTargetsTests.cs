@@ -359,7 +359,7 @@ public class PreFlight_PreviewTargetsTests
             }
             conn.Close();
         }
-        catch
+        catch (System.Data.Common.DbException)
         {
             // Best-effort cleanup.
         }
@@ -383,7 +383,7 @@ SELECT pg_terminate_backend(pid)
             cmd.ExecuteNonQuery();
             conn.Close();
         }
-        catch
+        catch (System.Data.Common.DbException)
         {
             // Best-effort cleanup.
         }

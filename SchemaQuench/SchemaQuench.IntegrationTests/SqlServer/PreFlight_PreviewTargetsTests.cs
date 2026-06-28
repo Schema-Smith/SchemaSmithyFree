@@ -365,7 +365,7 @@ public class PreFlight_PreviewTargetsTests
             }
             conn.Close();
         }
-        catch
+        catch (System.Data.Common.DbException)
         {
             // Best-effort cleanup.
         }
@@ -388,7 +388,7 @@ END";
             cmd.ExecuteNonQuery();
             conn.Close();
         }
-        catch
+        catch (System.Data.Common.DbException)
         {
             // Best-effort cleanup.
         }
