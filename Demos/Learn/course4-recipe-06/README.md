@@ -23,11 +23,17 @@ cd <engine>
 schemaquench --ConfigFile:deploy.settings.json     # creates Keeper + Promotion, and kindles SchemaSmith
 ```
 
-Then install the recyclebin hooks (kindling created the `SchemaSmith` schema they live in):
+Then install the recyclebin hooks (kindling created the `SchemaSmith` schema they live in) — run the one for your engine:
 
 ```bash
 # SQL Server
 docker exec -i learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d cookbook_r6" < install-recyclebin.sql
+
+# PostgreSQL
+docker exec -i learn-postgres psql -U postgres -d cookbook_r6 < install-recyclebin.sql
+
+# MySQL
+docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd cookbook_r6 < install-recyclebin.sql
 ```
 
 ## Step 2: Put data in the table
