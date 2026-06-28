@@ -56,7 +56,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductPhotoID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

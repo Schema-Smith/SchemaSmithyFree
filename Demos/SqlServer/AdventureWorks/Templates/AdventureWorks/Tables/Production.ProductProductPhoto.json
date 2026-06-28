@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -27,8 +29,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Photo is not the principal image. 1 = Photo is the principal image."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "0 = Photo is not the principal image. 1 = Photo is the principal image."
+        }
       }
     },
     {
@@ -41,8 +45,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+        }
       }
     },
     {
@@ -55,8 +61,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product photo identification number. Foreign key to ProductPhoto.ProductPhotoID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product photo identification number. Foreign key to ProductPhoto.ProductPhotoID."
+        }
       }
     }
   ],
@@ -68,8 +76,10 @@
       "IndexColumns": "[ProductID],[ProductPhotoID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Nonclustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Nonclustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -83,8 +93,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Product.ProductID."
+        }
       }
     },
     {
@@ -96,8 +108,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ProductPhoto.ProductPhotoID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing ProductPhoto.ProductPhotoID."
+        }
       }
     }
   ],
@@ -108,12 +122,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping products and product photos."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.ProductProductPhoto.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[ProductID],[ProductPhotoID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Cross-reference table mapping products and product photos."
+    }
   }
 }

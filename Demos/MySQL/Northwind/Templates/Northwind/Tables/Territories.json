@@ -26,7 +26,7 @@
     {
       "Name": "FK_Territories_Region",
       "IndexColumns": "`RegionID`",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -36,7 +36,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`TerritoryID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

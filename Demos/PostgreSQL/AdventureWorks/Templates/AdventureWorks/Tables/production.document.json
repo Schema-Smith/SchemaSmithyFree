@@ -171,10 +171,12 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "production",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
   "Statistics": [],
-  "ExcludeConstraints": []
+  "ExcludeConstraints": [],
+  "DataDelivery": {
+    "MergeUpdateDescendents": true
+  }
 }

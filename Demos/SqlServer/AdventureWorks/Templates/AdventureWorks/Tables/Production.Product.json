@@ -13,8 +13,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "H = High, M = Medium, L = Low"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "H = High, M = Medium, L = Low"
+        }
       }
     },
     {
@@ -28,8 +30,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product color."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product color."
+        }
       }
     },
     {
@@ -43,8 +47,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Number of days required to manufacture the product."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Number of days required to manufacture the product."
+        }
       }
     },
     {
@@ -58,8 +64,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the product was discontinued."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date the product was discontinued."
+        }
       }
     },
     {
@@ -73,8 +81,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Product is not a salable item. 1 = Product is salable."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "0 = Product is not a salable item. 1 = Product is salable."
+        }
       }
     },
     {
@@ -88,8 +98,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Selling price."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Selling price."
+        }
       }
     },
     {
@@ -103,8 +115,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Product is purchased, 1 = Product is manufactured in-house."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "0 = Product is purchased, 1 = Product is manufactured in-house."
+        }
       }
     },
     {
@@ -118,8 +132,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -132,8 +148,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Name of the product."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Name of the product."
+        }
       }
     },
     {
@@ -146,8 +164,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Product records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for Product records."
+        }
       }
     },
     {
@@ -162,8 +182,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "R = Road, M = Mountain, T = Touring, S = Standard"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "R = Road, M = Mountain, T = Touring, S = Standard"
+        }
       }
     },
     {
@@ -177,8 +199,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product is a member of this product model. Foreign key to ProductModel.ProductModelID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product is a member of this product model. Foreign key to ProductModel.ProductModelID."
+        }
       }
     },
     {
@@ -191,8 +215,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unique product identification number."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique product identification number."
+        }
       }
     },
     {
@@ -206,8 +232,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product is a member of this product subcategory. Foreign key to ProductSubCategory.ProductSubCategoryID. "
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product is a member of this product subcategory. Foreign key to ProductSubCategory.ProductSubCategoryID. "
+        }
       }
     },
     {
@@ -221,8 +249,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Inventory level that triggers a purchase order or work order. "
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Inventory level that triggers a purchase order or work order. "
+        }
       }
     },
     {
@@ -236,8 +266,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     },
     {
@@ -251,8 +283,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Minimum inventory quantity. "
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Minimum inventory quantity. "
+        }
       }
     },
     {
@@ -266,8 +300,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the product was no longer available for sale."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date the product was no longer available for sale."
+        }
       }
     },
     {
@@ -280,8 +316,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the product was available for sale."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date the product was available for sale."
+        }
       }
     },
     {
@@ -295,8 +333,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product size."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product size."
+        }
       }
     },
     {
@@ -310,8 +350,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unit of measure for Size column."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unit of measure for Size column."
+        }
       }
     },
     {
@@ -325,8 +367,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Standard cost of the product."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Standard cost of the product."
+        }
       }
     },
     {
@@ -341,8 +385,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "W = Womens, M = Mens, U = Universal"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "W = Womens, M = Mens, U = Universal"
+        }
       }
     },
     {
@@ -357,8 +403,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product weight."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product weight."
+        }
       }
     },
     {
@@ -372,8 +420,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unit of measure for Weight column."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unit of measure for Weight column."
+        }
       }
     }
   ],
@@ -384,8 +434,10 @@
       "IndexColumns": "[Name]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -394,8 +446,10 @@
       "IndexColumns": "[ProductNumber]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -404,8 +458,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -416,8 +472,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -431,8 +489,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ProductModel.ProductModelID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing ProductModel.ProductModelID."
+        }
       }
     },
     {
@@ -444,8 +504,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ProductSubcategory.ProductSubcategoryID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing ProductSubcategory.ProductSubcategoryID."
+        }
       }
     },
     {
@@ -457,8 +519,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+        }
       }
     },
     {
@@ -470,8 +534,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+        }
       }
     }
   ],
@@ -480,8 +546,10 @@
       "Name": "[CK_Product_SellEndDate]",
       "Expression": "[SellEndDate]>=[SellStartDate] OR [SellEndDate] IS NULL",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [SellEndDate] >= [SellStartDate] OR [SellEndDate] IS NULL"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [SellEndDate] >= [SellStartDate] OR [SellEndDate] IS NULL"
+        }
       }
     }
   ],
@@ -491,12 +559,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Products sold or used in the manfacturing of sold products."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.Product.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[ProductID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Products sold or used in the manfacturing of sold products."
+    }
   }
 }

@@ -70,21 +70,21 @@
       "Name": "IFK_TrackAlbumId",
       "IndexColumns": "`AlbumId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IFK_TrackGenreId",
       "IndexColumns": "`GenreId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IFK_TrackMediaTypeId",
       "IndexColumns": "`MediaTypeId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -94,7 +94,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`TrackId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

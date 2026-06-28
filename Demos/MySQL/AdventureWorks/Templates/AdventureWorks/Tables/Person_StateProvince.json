@@ -69,7 +69,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`Name`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -78,7 +78,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rowguid`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -87,21 +87,21 @@
       "UniqueConstraint": true,
       "IndexColumns": "`StateProvinceCode`,`CountryRegionCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Person_StateProvince_CountryRegionCode",
       "IndexColumns": "`CountryRegionCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Person_StateProvince_TerritoryID",
       "IndexColumns": "`TerritoryID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -111,7 +111,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`StateProvinceID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

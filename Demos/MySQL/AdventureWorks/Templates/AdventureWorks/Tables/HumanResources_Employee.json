@@ -120,7 +120,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`LoginID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -129,7 +129,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`NationalIDNumber`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -138,14 +138,14 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rowguid`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_Employee_OrganizationNode",
       "IndexColumns": "`OrganizationNode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -155,7 +155,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`BusinessEntityID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

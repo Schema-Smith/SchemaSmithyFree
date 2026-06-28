@@ -114,7 +114,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "production",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -123,6 +122,7 @@
   "DataDelivery": {
     "ContentFile": "data/production.productinventory.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "productid,locationid"
+    "MatchColumns": "productid,locationid",
+    "MergeUpdateDescendents": true
   }
 }

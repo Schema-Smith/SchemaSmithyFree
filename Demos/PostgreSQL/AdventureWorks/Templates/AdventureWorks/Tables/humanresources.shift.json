@@ -66,7 +66,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "humanresources",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -75,6 +74,7 @@
   "DataDelivery": {
     "ContentFile": "data/humanresources.shift.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "shiftid"
+    "MatchColumns": "shiftid",
+    "MergeUpdateDescendents": true
   }
 }

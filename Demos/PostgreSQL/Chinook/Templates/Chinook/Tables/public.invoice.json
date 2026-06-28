@@ -123,7 +123,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -132,6 +131,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.invoice.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "invoice_id"
+    "MatchColumns": "invoice_id",
+    "MergeUpdateDescendents": true
   }
 }

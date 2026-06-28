@@ -75,7 +75,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -84,6 +83,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.city.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "city_id"
+    "MatchColumns": "city_id",
+    "MergeUpdateDescendents": true
   }
 }

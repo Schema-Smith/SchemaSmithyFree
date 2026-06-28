@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product cost end date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product cost end date."
+        }
       }
     },
     {
@@ -27,8 +29,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -41,8 +45,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product identification number. Foreign key to Product.ProductID"
+        }
       }
     },
     {
@@ -56,8 +62,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Standard cost of the product."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Standard cost of the product."
+        }
       }
     },
     {
@@ -70,8 +78,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product cost start date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product cost start date."
+        }
       }
     }
   ],
@@ -84,8 +94,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -99,8 +111,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Product.ProductID."
+        }
       }
     }
   ],
@@ -109,8 +123,10 @@
       "Name": "[CK_ProductCostHistory_EndDate]",
       "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NULL"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NULL"
+        }
       }
     }
   ],
@@ -120,12 +136,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Changes in the cost of a product over time."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.ProductCostHistory.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[ProductID],[StartDate]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Changes in the cost of a product over time."
+    }
   }
 }

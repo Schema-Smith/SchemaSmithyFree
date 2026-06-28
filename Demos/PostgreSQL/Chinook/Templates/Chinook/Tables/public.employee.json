@@ -184,7 +184,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -193,6 +192,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.employee.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "employee_id"
+    "MatchColumns": "employee_id",
+    "MergeUpdateDescendents": true
   }
 }

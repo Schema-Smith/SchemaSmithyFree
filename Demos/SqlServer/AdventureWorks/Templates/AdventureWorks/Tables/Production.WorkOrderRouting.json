@@ -13,8 +13,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Actual manufacturing cost."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Actual manufacturing cost."
+        }
       }
     },
     {
@@ -28,8 +30,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Actual end date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Actual end date."
+        }
       }
     },
     {
@@ -44,8 +48,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Number of manufacturing hours used."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Number of manufacturing hours used."
+        }
       }
     },
     {
@@ -59,8 +65,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Actual start date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Actual start date."
+        }
       }
     },
     {
@@ -73,8 +81,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Manufacturing location where the part is processed. Foreign key to Location.LocationID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Manufacturing location where the part is processed. Foreign key to Location.LocationID."
+        }
       }
     },
     {
@@ -88,8 +98,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -102,8 +114,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Indicates the manufacturing process sequence."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Indicates the manufacturing process sequence."
+        }
       }
     },
     {
@@ -117,8 +131,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Estimated manufacturing cost."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Estimated manufacturing cost."
+        }
       }
     },
     {
@@ -131,8 +147,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to Product.ProductID."
+        }
       }
     },
     {
@@ -145,8 +163,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Planned manufacturing end date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Planned manufacturing end date."
+        }
       }
     },
     {
@@ -159,8 +179,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Planned manufacturing start date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Planned manufacturing start date."
+        }
       }
     },
     {
@@ -173,8 +195,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to WorkOrder.WorkOrderID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to WorkOrder.WorkOrderID."
+        }
       }
     }
   ],
@@ -184,8 +208,10 @@
       "IndexColumns": "[ProductID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -196,8 +222,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -211,8 +239,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Location.LocationID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Location.LocationID."
+        }
       }
     },
     {
@@ -224,8 +254,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing WorkOrder.WorkOrderID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing WorkOrder.WorkOrderID."
+        }
       }
     }
   ],
@@ -234,16 +266,20 @@
       "Name": "[CK_WorkOrderRouting_ActualEndDate]",
       "Expression": "[ActualEndDate]>=[ActualStartDate] OR [ActualEndDate] IS NULL OR [ActualStartDate] IS NULL",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [ActualEndDate] >= [ActualStartDate] OR [ActualEndDate] IS NULL OR [ActualStartDate] IS NULL"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [ActualEndDate] >= [ActualStartDate] OR [ActualEndDate] IS NULL OR [ActualStartDate] IS NULL"
+        }
       }
     },
     {
       "Name": "[CK_WorkOrderRouting_ScheduledEndDate]",
       "Expression": "[ScheduledEndDate]>=[ScheduledStartDate]",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [ScheduledEndDate] >= [ScheduledStartDate]"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [ScheduledEndDate] >= [ScheduledStartDate]"
+        }
       }
     }
   ],
@@ -253,12 +289,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Work order details."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.WorkOrderRouting.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[WorkOrderID],[ProductID],[OperationSequence]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Work order details."
+    }
   }
 }

@@ -37,7 +37,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -46,6 +45,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.artist.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "artist_id"
+    "MatchColumns": "artist_id",
+    "MergeUpdateDescendents": true
   }
 }

@@ -56,7 +56,7 @@
       "Name": "FK_Production_ProductInventory_LocationID",
       "IndexColumns": "`LocationID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -66,7 +66,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductID`,`LocationID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

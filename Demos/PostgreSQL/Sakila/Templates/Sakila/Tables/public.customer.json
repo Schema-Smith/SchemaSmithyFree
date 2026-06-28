@@ -159,7 +159,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -168,6 +167,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.customer.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "customer_id"
+    "MatchColumns": "customer_id",
+    "MergeUpdateDescendents": true
   }
 }

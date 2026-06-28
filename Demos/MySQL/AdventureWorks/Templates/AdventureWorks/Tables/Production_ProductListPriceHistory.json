@@ -42,7 +42,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductID`,`StartDate`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

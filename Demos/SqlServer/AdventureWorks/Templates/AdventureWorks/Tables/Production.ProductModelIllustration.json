@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to Illustration.IllustrationID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to Illustration.IllustrationID."
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -40,8 +44,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to ProductModel.ProductModelID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to ProductModel.ProductModelID."
+        }
       }
     }
   ],
@@ -54,8 +60,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -69,8 +77,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Illustration.IllustrationID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Illustration.IllustrationID."
+        }
       }
     },
     {
@@ -82,8 +92,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ProductModel.ProductModelID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing ProductModel.ProductModelID."
+        }
       }
     }
   ],
@@ -94,12 +106,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping product models and illustrations."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.ProductModelIllustration.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[ProductModelID],[IllustrationID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Cross-reference table mapping product models and illustrations."
+    }
   }
 }

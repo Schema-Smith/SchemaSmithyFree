@@ -79,7 +79,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "production",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -88,6 +87,7 @@
   "DataDelivery": {
     "ContentFile": "data/production.location.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "locationid"
+    "MatchColumns": "locationid",
+    "MergeUpdateDescendents": true
   }
 }

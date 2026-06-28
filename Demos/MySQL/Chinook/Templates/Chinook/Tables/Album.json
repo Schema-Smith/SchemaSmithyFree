@@ -28,7 +28,7 @@
       "Name": "IFK_AlbumArtistId",
       "IndexColumns": "`ArtistId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -38,7 +38,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`AlbumId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

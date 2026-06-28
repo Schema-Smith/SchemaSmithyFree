@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Financial accounting number reference."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Financial accounting number reference."
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Customer billing address. Foreign key to Address.AddressID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Customer billing address. Foreign key to Address.AddressID."
+        }
       }
     },
     {
@@ -41,8 +45,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales representative comments."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Sales representative comments."
+        }
       }
     },
     {
@@ -56,8 +62,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Approval code provided by the credit card company."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Approval code provided by the credit card company."
+        }
       }
     },
     {
@@ -71,8 +79,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Credit card identification number. Foreign key to CreditCard.CreditCardID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Credit card identification number. Foreign key to CreditCard.CreditCardID."
+        }
       }
     },
     {
@@ -86,8 +96,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Currency exchange rate used. Foreign key to CurrencyRate.CurrencyRateID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Currency exchange rate used. Foreign key to CurrencyRate.CurrencyRateID."
+        }
       }
     },
     {
@@ -100,8 +112,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Customer identification number. Foreign key to Customer.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Customer identification number. Foreign key to Customer.BusinessEntityID."
+        }
       }
     },
     {
@@ -114,8 +128,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the order is due to the customer."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date the order is due to the customer."
+        }
       }
     },
     {
@@ -130,8 +146,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shipping cost."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Shipping cost."
+        }
       }
     },
     {
@@ -145,8 +163,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -160,8 +180,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Order placed by sales person. 1 = Order placed online by customer."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "0 = Order placed by sales person. 1 = Order placed online by customer."
+        }
       }
     },
     {
@@ -175,8 +197,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Dates the sales order was created."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Dates the sales order was created."
+        }
       }
     },
     {
@@ -190,8 +214,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Customer purchase order number reference. "
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Customer purchase order number reference. "
+        }
       }
     },
     {
@@ -205,8 +231,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Incremental number to track changes to the sales order over time."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Incremental number to track changes to the sales order over time."
+        }
       }
     },
     {
@@ -220,8 +248,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     },
     {
@@ -234,8 +264,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key."
+        }
       }
     },
     {
@@ -249,8 +281,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unique sales order identification number."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique sales order identification number."
+        }
       }
     },
     {
@@ -264,8 +298,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales person who created the sales order. Foreign key to SalesPerson.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Sales person who created the sales order. Foreign key to SalesPerson.BusinessEntityID."
+        }
       }
     },
     {
@@ -279,8 +315,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the order was shipped to the customer."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date the order was shipped to the customer."
+        }
       }
     },
     {
@@ -293,8 +331,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shipping method. Foreign key to ShipMethod.ShipMethodID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Shipping method. Foreign key to ShipMethod.ShipMethodID."
+        }
       }
     },
     {
@@ -307,8 +347,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Customer shipping address. Foreign key to Address.AddressID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Customer shipping address. Foreign key to Address.AddressID."
+        }
       }
     },
     {
@@ -323,8 +365,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Order current status. 1 = In process; 2 = Approved; 3 = Backordered; 4 = Rejected; 5 = Shipped; 6 = Cancelled"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Order current status. 1 = In process; 2 = Approved; 3 = Backordered; 4 = Rejected; 5 = Shipped; 6 = Cancelled"
+        }
       }
     },
     {
@@ -339,8 +383,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales subtotal. Computed as SUM(SalesOrderDetail.LineTotal)for the appropriate SalesOrderID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Sales subtotal. Computed as SUM(SalesOrderDetail.LineTotal)for the appropriate SalesOrderID."
+        }
       }
     },
     {
@@ -355,8 +401,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Tax amount."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Tax amount."
+        }
       }
     },
     {
@@ -370,8 +418,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Territory in which the sale was made. Foreign key to SalesTerritory.SalesTerritoryID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Territory in which the sale was made. Foreign key to SalesTerritory.SalesTerritoryID."
+        }
       }
     },
     {
@@ -385,8 +435,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Total due from customer. Computed as Subtotal + TaxAmt + Freight."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Total due from customer. Computed as Subtotal + TaxAmt + Freight."
+        }
       }
     }
   ],
@@ -397,8 +449,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -407,8 +461,10 @@
       "IndexColumns": "[SalesOrderNumber]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -416,8 +472,10 @@
       "IndexColumns": "[CustomerID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -425,8 +483,10 @@
       "IndexColumns": "[SalesPersonID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -437,8 +497,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -452,8 +514,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Address.AddressID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Address.AddressID."
+        }
       }
     },
     {
@@ -465,8 +529,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Address.AddressID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Address.AddressID."
+        }
       }
     },
     {
@@ -478,8 +544,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing CreditCard.CreditCardID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing CreditCard.CreditCardID."
+        }
       }
     },
     {
@@ -491,8 +559,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing CurrencyRate.CurrencyRateID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing CurrencyRate.CurrencyRateID."
+        }
       }
     },
     {
@@ -504,8 +574,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Customer.CustomerID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Customer.CustomerID."
+        }
       }
     },
     {
@@ -517,8 +589,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesPerson.SalesPersonID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing SalesPerson.SalesPersonID."
+        }
       }
     },
     {
@@ -530,8 +604,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesTerritory.TerritoryID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing SalesTerritory.TerritoryID."
+        }
       }
     },
     {
@@ -543,8 +619,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Purchasing]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ShipMethod.ShipMethodID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing ShipMethod.ShipMethodID."
+        }
       }
     }
   ],
@@ -553,16 +631,20 @@
       "Name": "[CK_SalesOrderHeader_DueDate]",
       "Expression": "[DueDate]>=[OrderDate]",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [DueDate] >= [OrderDate]"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [DueDate] >= [OrderDate]"
+        }
       }
     },
     {
       "Name": "[CK_SalesOrderHeader_ShipDate]",
       "Expression": "[ShipDate]>=[OrderDate] OR [ShipDate] IS NULL",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [ShipDate] >= [OrderDate] OR [ShipDate] IS NULL"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [ShipDate] >= [OrderDate] OR [ShipDate] IS NULL"
+        }
       }
     }
   ],
@@ -572,12 +654,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "General sales order information."
-  },
   "DataDelivery": {
     "ContentFile": "data/Sales.SalesOrderHeader.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[SalesOrderID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "General sales order information."
+    }
   }
 }

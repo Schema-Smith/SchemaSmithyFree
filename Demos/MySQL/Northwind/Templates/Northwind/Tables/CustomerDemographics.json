@@ -25,7 +25,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`CustomerTypeID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

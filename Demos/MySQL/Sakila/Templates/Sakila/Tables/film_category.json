@@ -26,7 +26,7 @@
       "Name": "fk_film_category_category",
       "IndexColumns": "`category_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -36,7 +36,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`film_id`,`category_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

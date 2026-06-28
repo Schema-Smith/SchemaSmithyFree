@@ -36,7 +36,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -45,6 +44,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.region.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "region_id"
+    "MatchColumns": "region_id",
+    "MergeUpdateDescendents": true
   }
 }

@@ -80,7 +80,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "sales",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -89,6 +88,7 @@
   "DataDelivery": {
     "ContentFile": "data/sales.specialofferproduct.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "specialofferid,productid"
+    "MatchColumns": "specialofferid,productid",
+    "MergeUpdateDescendents": true
   }
 }

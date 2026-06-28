@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "The average span of time (in days) between placing an order with the vendor and receiving the purchased product."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "The average span of time (in days) between placing an order with the vendor and receiving the purchased product."
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to Vendor.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to Vendor.BusinessEntityID."
+        }
       }
     },
     {
@@ -42,8 +46,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "The selling price when last purchased."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "The selling price when last purchased."
+        }
       }
     },
     {
@@ -57,8 +63,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the product was last received by the vendor."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date the product was last received by the vendor."
+        }
       }
     },
     {
@@ -72,8 +80,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "The minimum quantity that should be ordered."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "The minimum quantity that should be ordered."
+        }
       }
     },
     {
@@ -87,8 +97,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "The maximum quantity that should be ordered."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "The maximum quantity that should be ordered."
+        }
       }
     },
     {
@@ -102,8 +114,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -118,8 +132,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "The quantity currently on order."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "The quantity currently on order."
+        }
       }
     },
     {
@@ -132,8 +148,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to Product.ProductID."
+        }
       }
     },
     {
@@ -147,8 +165,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "The vendor's usual selling price."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "The vendor's usual selling price."
+        }
       }
     },
     {
@@ -161,8 +181,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "The product's unit of measure."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "The product's unit of measure."
+        }
       }
     }
   ],
@@ -172,8 +194,10 @@
       "IndexColumns": "[BusinessEntityID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -181,8 +205,10 @@
       "IndexColumns": "[UnitMeasureCode]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -193,8 +219,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -208,8 +236,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Product.ProductID."
+        }
       }
     },
     {
@@ -221,8 +251,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+        }
       }
     },
     {
@@ -234,8 +266,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Purchasing]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Vendor.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Vendor.BusinessEntityID."
+        }
       }
     }
   ],
@@ -246,12 +280,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping vendors with the products they supply."
-  },
   "DataDelivery": {
     "ContentFile": "data/Purchasing.ProductVendor.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[ProductID],[BusinessEntityID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Cross-reference table mapping vendors with the products they supply."
+    }
   }
 }

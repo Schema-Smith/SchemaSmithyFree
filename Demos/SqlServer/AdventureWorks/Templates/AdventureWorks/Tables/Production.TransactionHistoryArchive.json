@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product cost."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product cost."
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -40,8 +44,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+        }
       }
     },
     {
@@ -54,8 +60,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product quantity."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product quantity."
+        }
       }
     },
     {
@@ -68,8 +76,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Purchase order, sales order, or work order identification number."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Purchase order, sales order, or work order identification number."
+        }
       }
     },
     {
@@ -83,8 +93,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Line number associated with the purchase order, sales order, or work order."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Line number associated with the purchase order, sales order, or work order."
+        }
       }
     },
     {
@@ -98,8 +110,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time of the transaction."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time of the transaction."
+        }
       }
     },
     {
@@ -112,8 +126,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for TransactionHistoryArchive records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for TransactionHistoryArchive records."
+        }
       }
     },
     {
@@ -127,8 +143,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "W = Work Order, S = Sales Order, P = Purchase Order"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "W = Work Order, S = Sales Order, P = Purchase Order"
+        }
       }
     }
   ],
@@ -138,8 +156,10 @@
       "IndexColumns": "[ProductID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -147,8 +167,10 @@
       "IndexColumns": "[ReferenceOrderID],[ReferenceOrderLineID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -159,8 +181,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -172,12 +196,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Transactions for previous years."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.TransactionHistoryArchive.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[TransactionID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Transactions for previous years."
+    }
   }
 }

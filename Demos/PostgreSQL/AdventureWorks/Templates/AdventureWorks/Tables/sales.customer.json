@@ -91,7 +91,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "sales",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -100,6 +99,7 @@
   "DataDelivery": {
     "ContentFile": "data/sales.customer.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "customerid"
+    "MatchColumns": "customerid",
+    "MergeUpdateDescendents": true
   }
 }

@@ -101,14 +101,14 @@
       "Name": "CompanyName",
       "IndexColumns": "`CompanyName`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "PostalCode",
       "IndexColumns": "`PostalCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -118,7 +118,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`SupplierID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

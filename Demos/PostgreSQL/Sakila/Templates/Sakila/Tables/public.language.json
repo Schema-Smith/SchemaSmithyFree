@@ -47,7 +47,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -56,6 +55,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.language.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "language_id"
+    "MatchColumns": "language_id",
+    "MergeUpdateDescendents": true
   }
 }

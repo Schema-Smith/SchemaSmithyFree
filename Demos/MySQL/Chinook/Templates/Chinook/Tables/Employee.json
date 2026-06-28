@@ -132,7 +132,7 @@
       "Name": "IFK_EmployeeReportsTo",
       "IndexColumns": "`ReportsTo`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -142,7 +142,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`EmployeeId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

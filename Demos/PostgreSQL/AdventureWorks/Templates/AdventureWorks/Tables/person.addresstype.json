@@ -58,7 +58,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "person",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -67,6 +66,7 @@
   "DataDelivery": {
     "ContentFile": "data/person.addresstype.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "addresstypeid"
+    "MatchColumns": "addresstypeid",
+    "MergeUpdateDescendents": true
   }
 }

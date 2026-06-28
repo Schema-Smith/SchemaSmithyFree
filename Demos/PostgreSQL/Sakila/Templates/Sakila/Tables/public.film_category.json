@@ -69,7 +69,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -78,6 +77,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.film_category.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "film_id,category_id"
+    "MatchColumns": "film_id,category_id",
+    "MergeUpdateDescendents": true
   }
 }

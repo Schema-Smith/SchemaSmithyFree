@@ -23,7 +23,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`RegionID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

@@ -117,7 +117,7 @@
       "Name": "IFK_CustomerSupportRepId",
       "IndexColumns": "`SupportRepId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -127,7 +127,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`CustomerId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

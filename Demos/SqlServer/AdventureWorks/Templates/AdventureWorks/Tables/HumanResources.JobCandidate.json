@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Employee identification number if applicant was hired. Foreign key to Employee.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Employee identification number if applicant was hired. Foreign key to Employee.BusinessEntityID."
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for JobCandidate records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for JobCandidate records."
+        }
       }
     },
     {
@@ -41,8 +45,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -56,8 +62,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Résumé in XML format."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "R\u00e9sum\u00e9 in XML format."
+        }
       }
     }
   ],
@@ -67,8 +75,10 @@
       "IndexColumns": "[BusinessEntityID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -79,8 +89,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -94,8 +106,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[HumanResources]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
+        }
       }
     }
   ],
@@ -113,12 +127,14 @@
   },
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Résumés submitted to Human Resources by job applicants."
-  },
   "DataDelivery": {
     "ContentFile": "data/HumanResources.JobCandidate.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[JobCandidateID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "R\u00e9sum\u00e9s submitted to Human Resources by job applicants."
+    }
   }
 }

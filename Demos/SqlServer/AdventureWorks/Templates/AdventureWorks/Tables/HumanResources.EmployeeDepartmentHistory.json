@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Employee identification number. Foreign key to Employee.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Employee identification number. Foreign key to Employee.BusinessEntityID."
+        }
       }
     },
     {
@@ -25,8 +27,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Department in which the employee worked including currently. Foreign key to Department.DepartmentID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Department in which the employee worked including currently. Foreign key to Department.DepartmentID."
+        }
       }
     },
     {
@@ -40,8 +44,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the employee left the department. NULL = Current department."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date the employee left the department. NULL = Current department."
+        }
       }
     },
     {
@@ -55,8 +61,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -69,8 +77,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Identifies which 8-hour shift the employee works. Foreign key to Shift.Shift.ID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Identifies which 8-hour shift the employee works. Foreign key to Shift.Shift.ID."
+        }
       }
     },
     {
@@ -83,8 +93,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the employee started work in the department."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date the employee started work in the department."
+        }
       }
     }
   ],
@@ -94,8 +106,10 @@
       "IndexColumns": "[DepartmentID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -103,8 +117,10 @@
       "IndexColumns": "[ShiftID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -115,8 +131,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -130,8 +148,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[HumanResources]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Department.DepartmentID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Department.DepartmentID."
+        }
       }
     },
     {
@@ -143,8 +163,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[HumanResources]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
+        }
       }
     },
     {
@@ -156,8 +178,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[HumanResources]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Shift.ShiftID"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Shift.ShiftID"
+        }
       }
     }
   ],
@@ -166,8 +190,10 @@
       "Name": "[CK_EmployeeDepartmentHistory_EndDate]",
       "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NUL"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NUL"
+        }
       }
     }
   ],
@@ -177,12 +203,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Employee department transfers."
-  },
   "DataDelivery": {
     "ContentFile": "data/HumanResources.EmployeeDepartmentHistory.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[BusinessEntityID],[StartDate],[DepartmentID],[ShiftID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Employee department transfers."
+    }
   }
 }

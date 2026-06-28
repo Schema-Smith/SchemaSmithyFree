@@ -26,7 +26,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`MediaTypeId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

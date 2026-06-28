@@ -63,7 +63,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -72,6 +71,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.actor.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "actor_id"
+    "MatchColumns": "actor_id",
+    "MergeUpdateDescendents": true
   }
 }

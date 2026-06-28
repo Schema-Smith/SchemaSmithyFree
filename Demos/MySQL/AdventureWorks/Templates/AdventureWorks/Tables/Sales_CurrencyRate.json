@@ -57,21 +57,21 @@
       "UniqueConstraint": true,
       "IndexColumns": "`CurrencyRateDate`,`FromCurrencyCode`,`ToCurrencyCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Sales_CurrencyRate_FromCurrencyCode",
       "IndexColumns": "`FromCurrencyCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Sales_CurrencyRate_ToCurrencyCode",
       "IndexColumns": "`ToCurrencyCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -81,7 +81,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`CurrencyRateID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

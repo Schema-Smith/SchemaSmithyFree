@@ -115,7 +115,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "humanresources",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -124,6 +123,7 @@
   "DataDelivery": {
     "ContentFile": "data/humanresources.employeedepartmenthistory.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "businessentityid,startdate,departmentid,shiftid"
+    "MatchColumns": "businessentityid,startdate,departmentid,shiftid",
+    "MergeUpdateDescendents": true
   }
 }

@@ -191,7 +191,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -200,6 +199,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.orders.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "order_id"
+    "MatchColumns": "order_id",
+    "MergeUpdateDescendents": true
   }
 }

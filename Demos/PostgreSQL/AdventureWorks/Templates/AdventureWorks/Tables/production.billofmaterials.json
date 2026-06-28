@@ -160,7 +160,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "production",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -169,6 +168,7 @@
   "DataDelivery": {
     "ContentFile": "data/production.billofmaterials.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "billofmaterialsid"
+    "MatchColumns": "billofmaterialsid",
+    "MergeUpdateDescendents": true
   }
 }

@@ -113,35 +113,35 @@
       "Name": "CustomerID",
       "IndexColumns": "`CustomerID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "CustomersOrders",
       "IndexColumns": "`CustomerID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "EmployeeID",
       "IndexColumns": "`EmployeeID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "EmployeesOrders",
       "IndexColumns": "`EmployeeID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "OrderDate",
       "IndexColumns": "`OrderDate`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -151,28 +151,28 @@
       "UniqueConstraint": true,
       "IndexColumns": "`OrderID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "ShippedDate",
       "IndexColumns": "`ShippedDate`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "ShippersOrders",
       "IndexColumns": "`ShipVia`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "ShipPostalCode",
       "IndexColumns": "`ShipPostalCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

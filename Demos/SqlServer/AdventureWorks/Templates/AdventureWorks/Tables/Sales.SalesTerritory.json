@@ -13,8 +13,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Business costs in the territory the previous year."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Business costs in the territory the previous year."
+        }
       }
     },
     {
@@ -29,8 +31,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Business costs in the territory year to date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Business costs in the territory year to date."
+        }
       }
     },
     {
@@ -43,8 +47,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ISO standard country or region code. Foreign key to CountryRegion.CountryRegionCode. "
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ISO standard country or region code. Foreign key to CountryRegion.CountryRegionCode. "
+        }
       }
     },
     {
@@ -57,8 +63,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Geographic area to which the sales territory belong."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Geographic area to which the sales territory belong."
+        }
       }
     },
     {
@@ -72,8 +80,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -86,8 +96,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales territory description"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Sales territory description"
+        }
       }
     },
     {
@@ -101,8 +113,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     },
     {
@@ -117,8 +131,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales in the territory the previous year."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Sales in the territory the previous year."
+        }
       }
     },
     {
@@ -133,8 +149,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Sales in the territory year to date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Sales in the territory year to date."
+        }
       }
     },
     {
@@ -147,8 +165,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for SalesTerritory records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for SalesTerritory records."
+        }
       }
     }
   ],
@@ -159,8 +179,10 @@
       "IndexColumns": "[Name]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -169,8 +191,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -181,8 +205,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -196,8 +222,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
+        }
       }
     }
   ],
@@ -208,12 +236,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Sales territory lookup table."
-  },
   "DataDelivery": {
     "ContentFile": "data/Sales.SalesTerritory.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[TerritoryID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Sales territory lookup table."
+    }
   }
 }

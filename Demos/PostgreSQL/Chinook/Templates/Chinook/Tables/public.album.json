@@ -64,7 +64,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -73,6 +72,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.album.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "album_id"
+    "MatchColumns": "album_id",
+    "MergeUpdateDescendents": true
   }
 }

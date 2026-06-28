@@ -9,7 +9,6 @@
     }
   ],
   "RequireAtLeastOneTarget": false,
-  "ServerToQuench": "Primary",
   "ScriptTokens": {},
   "UpdateFillFactor": true
 }

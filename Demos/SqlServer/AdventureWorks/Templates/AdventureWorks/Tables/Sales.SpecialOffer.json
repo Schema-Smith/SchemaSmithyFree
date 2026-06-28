@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Group the discount applies to such as Reseller or Customer."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Group the discount applies to such as Reseller or Customer."
+        }
       }
     },
     {
@@ -25,8 +27,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount description."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Discount description."
+        }
       }
     },
     {
@@ -41,8 +45,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount precentage."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Discount precentage."
+        }
       }
     },
     {
@@ -55,8 +61,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount end date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Discount end date."
+        }
       }
     },
     {
@@ -71,8 +79,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Maximum discount percent allowed."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Maximum discount percent allowed."
+        }
       }
     },
     {
@@ -87,8 +97,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Minimum discount percent allowed."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Minimum discount percent allowed."
+        }
       }
     },
     {
@@ -102,8 +114,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -117,8 +131,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     },
     {
@@ -131,8 +147,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for SpecialOffer records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for SpecialOffer records."
+        }
       }
     },
     {
@@ -145,8 +163,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount start date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Discount start date."
+        }
       }
     },
     {
@@ -159,8 +179,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount type category."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Discount type category."
+        }
       }
     }
   ],
@@ -171,8 +193,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -183,8 +207,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -194,8 +220,10 @@
       "Name": "[CK_SpecialOffer_EndDate]",
       "Expression": "[EndDate]>=[StartDate]",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [EndDate] >= [StartDate]"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [EndDate] >= [StartDate]"
+        }
       }
     }
   ],
@@ -205,12 +233,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Sale discounts lookup table."
-  },
   "DataDelivery": {
     "ContentFile": "data/Sales.SpecialOffer.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[SpecialOfferID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Sale discounts lookup table."
+    }
   }
 }

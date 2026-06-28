@@ -79,14 +79,14 @@
       "Name": "IX_ProductVendor_BusinessEntityID",
       "IndexColumns": "`BusinessEntityID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_ProductVendor_UnitMeasureCode",
       "IndexColumns": "`UnitMeasureCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -96,7 +96,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductID`,`BusinessEntityID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

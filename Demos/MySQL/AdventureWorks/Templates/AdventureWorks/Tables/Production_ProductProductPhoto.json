@@ -33,7 +33,7 @@
       "Name": "FK_Production_ProductProductPhoto_ProductPhotoID",
       "IndexColumns": "`ProductPhotoID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -43,7 +43,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductID`,`ProductPhotoID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

@@ -143,21 +143,21 @@
     {
       "Name": "FK_Employees_Employees",
       "IndexColumns": "`ReportsTo`",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "LastName",
       "IndexColumns": "`LastName`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "PostalCode",
       "IndexColumns": "`PostalCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -167,7 +167,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`EmployeeID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

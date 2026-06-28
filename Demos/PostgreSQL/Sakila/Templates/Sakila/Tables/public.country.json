@@ -47,7 +47,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -56,6 +55,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.country.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "country_id"
+    "MatchColumns": "country_id",
+    "MergeUpdateDescendents": true
   }
 }

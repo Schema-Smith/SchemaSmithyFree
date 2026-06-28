@@ -43,21 +43,21 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rowguid`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_BusinessEntityContact_ContactTypeID",
       "IndexColumns": "`ContactTypeID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_BusinessEntityContact_PersonID",
       "IndexColumns": "`PersonID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -67,7 +67,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`BusinessEntityID`,`PersonID`,`ContactTypeID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

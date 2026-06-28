@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Detailed product catalog information in xml format."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Detailed product catalog information in xml format."
+        }
       }
     },
     {
@@ -27,8 +29,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Manufacturing instructions in xml format."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Manufacturing instructions in xml format."
+        }
       }
     },
     {
@@ -42,8 +46,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -56,8 +62,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product model description."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product model description."
+        }
       }
     },
     {
@@ -70,8 +78,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for ProductModel records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for ProductModel records."
+        }
       }
     },
     {
@@ -85,8 +95,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     }
   ],
@@ -97,8 +109,10 @@
       "IndexColumns": "[Name]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -107,8 +121,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -119,8 +135,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -135,26 +153,32 @@
       "Name": "[PXML_ProductModel_CatalogDescription]",
       "IsPrimary": true,
       "Column": "[CatalogDescription]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary XML index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary XML index."
+        }
       }
     },
     {
       "Name": "[PXML_ProductModel_Instructions]",
       "IsPrimary": true,
       "Column": "[Instructions]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary XML index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary XML index."
+        }
       }
     }
   ],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Product model classification."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.ProductModel.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[ProductModelID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Product model classification."
+    }
   }
 }

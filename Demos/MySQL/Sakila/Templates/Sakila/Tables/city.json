@@ -35,7 +35,7 @@
       "Name": "idx_fk_country_id",
       "IndexColumns": "`country_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -45,7 +45,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`city_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Work order due date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Work order due date."
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Work order end date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Work order end date."
+        }
       }
     },
     {
@@ -41,8 +45,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -56,8 +62,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product quantity to build."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product quantity to build."
+        }
       }
     },
     {
@@ -70,8 +78,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+        }
       }
     },
     {
@@ -85,8 +95,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Quantity that failed inspection."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Quantity that failed inspection."
+        }
       }
     },
     {
@@ -100,8 +112,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Reason for inspection failure."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Reason for inspection failure."
+        }
       }
     },
     {
@@ -114,8 +128,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Work order start date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Work order start date."
+        }
       }
     },
     {
@@ -129,8 +145,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Quantity built and put in inventory."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Quantity built and put in inventory."
+        }
       }
     },
     {
@@ -143,8 +161,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for WorkOrder records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for WorkOrder records."
+        }
       }
     }
   ],
@@ -154,8 +174,10 @@
       "IndexColumns": "[ProductID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -163,8 +185,10 @@
       "IndexColumns": "[ScrapReasonID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -175,8 +199,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -190,8 +216,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Product.ProductID."
+        }
       }
     },
     {
@@ -203,8 +231,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ScrapReason.ScrapReasonID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing ScrapReason.ScrapReasonID."
+        }
       }
     }
   ],
@@ -213,8 +243,10 @@
       "Name": "[CK_WorkOrder_EndDate]",
       "Expression": "[EndDate]>=[StartDate] OR [EndDate] IS NULL",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NULL"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [EndDate] >= [StartDate] OR [EndDate] IS NULL"
+        }
       }
     }
   ],
@@ -224,12 +256,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Manufacturing work orders."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.WorkOrder.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[WorkOrderID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Manufacturing work orders."
+    }
   }
 }

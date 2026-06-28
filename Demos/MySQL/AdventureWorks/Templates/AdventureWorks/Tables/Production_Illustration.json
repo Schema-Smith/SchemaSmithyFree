@@ -33,7 +33,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`IllustrationID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

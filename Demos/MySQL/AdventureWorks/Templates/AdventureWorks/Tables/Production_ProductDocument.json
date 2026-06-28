@@ -28,7 +28,7 @@
       "Name": "FK_Production_ProductDocument_DocumentNode",
       "IndexColumns": "`DocumentNode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -38,7 +38,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductID`,`DocumentNode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

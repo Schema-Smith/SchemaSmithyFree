@@ -57,7 +57,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -66,6 +65,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.us_states.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "state_id"
+    "MatchColumns": "state_id",
+    "MergeUpdateDescendents": true
   }
 }

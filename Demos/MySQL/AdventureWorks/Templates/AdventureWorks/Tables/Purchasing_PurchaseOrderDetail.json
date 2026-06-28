@@ -81,7 +81,7 @@
       "Name": "IX_PurchaseOrderDetail_ProductID",
       "IndexColumns": "`ProductID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -91,14 +91,14 @@
       "UniqueConstraint": true,
       "IndexColumns": "`PurchaseOrderID`,`PurchaseOrderDetailID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "PurchaseOrderDetailID",
       "IndexColumns": "`PurchaseOrderDetailID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

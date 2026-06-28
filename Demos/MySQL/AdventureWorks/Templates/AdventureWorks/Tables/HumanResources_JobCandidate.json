@@ -37,7 +37,7 @@
       "Name": "IX_JobCandidate_BusinessEntityID",
       "IndexColumns": "`BusinessEntityID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -47,7 +47,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`JobCandidateID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

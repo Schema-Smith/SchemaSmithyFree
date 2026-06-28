@@ -51,7 +51,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`CardNumber`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -61,7 +61,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`CreditCardID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

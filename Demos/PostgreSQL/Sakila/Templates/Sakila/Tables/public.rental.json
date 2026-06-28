@@ -133,7 +133,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -142,6 +141,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.rental.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "rental_id"
+    "MatchColumns": "rental_id",
+    "MergeUpdateDescendents": true
   }
 }

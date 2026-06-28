@@ -38,14 +38,14 @@
       "Name": "IFK_InvoiceLineInvoiceId",
       "IndexColumns": "`InvoiceId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IFK_InvoiceLineTrackId",
       "IndexColumns": "`TrackId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -55,7 +55,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`InvoiceLineId`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

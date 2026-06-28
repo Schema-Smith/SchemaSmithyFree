@@ -59,7 +59,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "sales",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -68,6 +67,7 @@
   "DataDelivery": {
     "ContentFile": "data/sales.personcreditcard.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "businessentityid,creditcardid"
+    "MatchColumns": "businessentityid,creditcardid",
+    "MergeUpdateDescendents": true
   }
 }

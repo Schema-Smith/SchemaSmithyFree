@@ -117,7 +117,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "person",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -126,6 +125,7 @@
   "DataDelivery": {
     "ContentFile": "data/person.address.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "addressid"
+    "MatchColumns": "addressid",
+    "MergeUpdateDescendents": true
   }
 }

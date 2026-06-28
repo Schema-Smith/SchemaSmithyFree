@@ -32,7 +32,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ShipperID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

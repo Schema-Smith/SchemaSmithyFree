@@ -60,7 +60,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "production",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -69,6 +68,7 @@
   "DataDelivery": {
     "ContentFile": "data/production.productdocument.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "productid,documentnode"
+    "MatchColumns": "productid,documentnode",
+    "MergeUpdateDescendents": true
   }
 }

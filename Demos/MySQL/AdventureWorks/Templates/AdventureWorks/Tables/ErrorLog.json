@@ -76,7 +76,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ErrorLogID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],
