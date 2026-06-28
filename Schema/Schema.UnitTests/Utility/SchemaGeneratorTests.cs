@@ -163,7 +163,9 @@ public class SchemaGeneratorTests
 
         var required = schema["required"]?.ToObject<List<string>>();
         Assert.That(required, Contains.Item("Name"));
-        Assert.That(required, Contains.Item("DatabaseIdentificationScript"));
+        // DatabaseIdentificationScript is no longer schema-required — a template may identify
+        // its target via SchemaIdentificationScript instead.
+        Assert.That(required, Does.Not.Contain("DatabaseIdentificationScript"));
     }
 
     [Test]
@@ -306,8 +308,8 @@ public class SchemaGeneratorTests
             "ServerToQuench has a C# default so it must not be schema-required");
         Assert.That(required, Contains.Item("Name"),
             "Name (inherited) must remain required");
-        Assert.That(required, Contains.Item("DatabaseIdentificationScript"),
-            "DatabaseIdentificationScript (inherited) must remain required");
+        Assert.That(required, Does.Not.Contain("DatabaseIdentificationScript"),
+            "DatabaseIdentificationScript is no longer schema-required (SchemaIdentificationScript is a valid alternative)");
     }
 
     // --- MergeExtensionsDefinition tests ---
