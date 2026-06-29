@@ -65,8 +65,10 @@ schemaquench --ConfigFile:quench.settings.json
 The first run adopts your existing tables (stamps them as managed, stands up SchemaSmith's own
 bookkeeping in a separate `SchemaSmith` schema). Run it a second time and nothing happens — a clean
 no-op. That no-op is the proof: the package matches the live database your DACPAC built. Your publish
-profile's switches (`DropObjectsNotInSource`, `BlockOnPossibleDataLoss`) now live in the quench config,
-and there's no `.dacpac` build between commit and deploy.
+profile's `DropObjectsNotInSource` switch becomes `DropTablesRemovedFromProduct` in the quench config
+(default `true`); for the data-loss protection `BlockOnPossibleDataLoss` gave you, set that flag `false`
+(never drop) or install the recyclebin hooks (drop-but-recoverable), with WhatIf to preview first. And
+there's no `.dacpac` build between commit and deploy.
 
 ## The principle
 
