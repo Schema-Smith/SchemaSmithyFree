@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="2" author="dev">
+    <comment>addForeignKeyConstraint — OrderItem and its references</comment>
+
+    <createTable tableName="OrderItem">
+      <column name="OrderItemId" type="INT">
+        <constraints primaryKey="true" primaryKeyName="PK_OrderItem" nullable="false"/>
+      </column>
+      <column name="OrderId" type="INT"><constraints nullable="false"/></column>
+      <column name="ProductId" type="INT"><constraints nullable="false"/></column>
+      <column name="Quantity" type="INT"><constraints nullable="false"/></column>
+      <column name="UnitPrice" type="DECIMAL(10,2)"><constraints nullable="false"/></column>
+    </createTable>
+
+    <addForeignKeyConstraint
+      constraintName="FK_OrderItem_SalesOrder"
+      baseTableName="OrderItem" baseColumnNames="OrderId"
+      referencedTableName="SalesOrder" referencedColumnNames="OrderId"/>
+
+    <addForeignKeyConstraint
+      constraintName="FK_OrderItem_Product"
+      baseTableName="OrderItem" baseColumnNames="ProductId"
+      referencedTableName="Product" referencedColumnNames="ProductId"/>
+
+    <rollback>
+      <dropTable tableName="OrderItem"/>
+    </rollback>
+  </changeSet>
+
+  <!--
+    A context-gated changeset — the kind of thing the lesson maps onto
+    ShouldApplyExpression. Liquibase only runs this when invoked with
+    `--contexts=dev`, so it never reached production.
+  -->
+  <changeSet id="3" author="dev" context="dev">
+    <comment>seed a demo customer — dev context only</comment>
+    <insert tableName="Customer">
+      <column name="CustomerId" valueNumeric="1"/>
+      <column name="Email" value="demo@example.com"/>
+      <column name="FullName" value="Demo Customer"/>
+    </insert>
+    <rollback>
+      <delete tableName="Customer"><where>CustomerId = 1</where></delete>
+    </rollback>
+  </changeSet>
+
+</databaseChangeLog>

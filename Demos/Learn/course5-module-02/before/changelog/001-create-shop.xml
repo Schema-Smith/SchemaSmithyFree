@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="1" author="dev">
+    <comment>createTable shop — Customer, Product, SalesOrder</comment>
+
+    <createTable tableName="Customer">
+      <column name="CustomerId" type="INT">
+        <constraints primaryKey="true" primaryKeyName="PK_Customer" nullable="false"/>
+      </column>
+      <column name="Email" type="NVARCHAR(256)"><constraints nullable="false"/></column>
+      <column name="FullName" type="NVARCHAR(200)"/>
+    </createTable>
+
+    <createTable tableName="Product">
+      <column name="ProductId" type="INT">
+        <constraints primaryKey="true" primaryKeyName="PK_Product" nullable="false"/>
+      </column>
+      <column name="Sku" type="VARCHAR(64)"><constraints nullable="false"/></column>
+      <column name="Name" type="NVARCHAR(200)"><constraints nullable="false"/></column>
+      <column name="UnitPrice" type="DECIMAL(10,2)"><constraints nullable="false"/></column>
+    </createTable>
+
+    <createTable tableName="SalesOrder">
+      <column name="OrderId" type="INT">
+        <constraints primaryKey="true" primaryKeyName="PK_SalesOrder" nullable="false"/>
+      </column>
+      <column name="CustomerId" type="INT"><constraints nullable="false"/></column>
+      <column name="OrderDate" type="DATETIME2"><constraints nullable="false"/></column>
+      <column name="Status" type="VARCHAR(20)"><constraints nullable="false"/></column>
+    </createTable>
+
+    <addForeignKeyConstraint
+      constraintName="FK_SalesOrder_Customer"
+      baseTableName="SalesOrder" baseColumnNames="CustomerId"
+      referencedTableName="Customer" referencedColumnNames="CustomerId"/>
+  </changeSet>
+
+</databaseChangeLog>

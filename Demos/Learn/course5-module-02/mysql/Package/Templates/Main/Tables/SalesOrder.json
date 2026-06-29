@@ -1,0 +1,54 @@
+{
+  "Name": "`SalesOrder`",
+  "Columns": [
+    {
+      "Name": "`OrderId`",
+      "DataType": "int"
+    },
+    {
+      "Name": "`CustomerId`",
+      "DataType": "int"
+    },
+    {
+      "Name": "`OrderDate`",
+      "DataType": "datetime"
+    },
+    {
+      "Name": "`Status`",
+      "DataType": "varchar(20)",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_SalesOrder_Customer",
+      "IndexColumns": "`CustomerId`",
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`OrderId`",
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_SalesOrder_Customer",
+      "Columns": "`CustomerId`",
+      "RelatedTable": "`Customer`",
+      "RelatedColumns": "`CustomerId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "Engine": "InnoDB",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "FullTextIndexes": []
+}

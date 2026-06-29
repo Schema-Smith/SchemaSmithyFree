@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  READ-ONLY reference. This is the Liquibase project that built the shop, the
+  way Liquibase would have built it. You do NOT run it in this lab — the
+  course5-setup script already applied its end state (the four tables plus
+  DATABASECHANGELOG / DATABASECHANGELOGLOCK) to shop_from_liquibase. It's here
+  so you can see what you're migrating away from.
+-->
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <include file="changelog/001-create-shop.xml" relativeToChangelogFile="true"/>
+  <include file="changelog/002-add-orderitem-and-fks.xml" relativeToChangelogFile="true"/>
+
+</databaseChangeLog>
