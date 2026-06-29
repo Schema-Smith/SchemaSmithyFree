@@ -2,6 +2,12 @@
 -- the kind of ALTER that a declarative tool would have just folded into the
 -- table definition. Guarded against double-apply, because by now everyone knew
 -- to guard. The end state matches what's live in shop_from_scripts.
+--
+-- The add-then-drop-constraint two-step is a classic hand-rolled idiom: the
+-- DEFAULT 'New' is only there to backfill the existing rows (you can't add a
+-- NOT NULL column to a populated table without one), then it's dropped so the
+-- default doesn't linger on future inserts. It's exactly the kind of multi-step
+-- workaround a declarative model never makes you write.
 IF NOT EXISTS (
   SELECT 1 FROM sys.columns
   WHERE object_id = OBJECT_ID('dbo.SalesOrder') AND name = 'Status'

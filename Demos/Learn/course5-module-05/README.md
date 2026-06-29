@@ -25,13 +25,15 @@ diff your own extract against it.
 
 ```bash
 ls before/
-# → 001_create_customer.sql  002_create_product.sql  003_orders.sql  004_add_status.sql
+# → 000_init.sql  001_create_customer.sql  002_create_product.sql  003_orders.sql  004_add_status.sql
 ```
 
-Open a couple of them. Notice `001_create_customer.sql` has no existence guard, but
-`002_create_product.sql` wraps its `CREATE TABLE` in `IF OBJECT_ID(...) IS NULL`. Each script hand-writes
-an `INSERT INTO schema_version`. That inconsistency — guarded here, bare there, tracked when someone
-remembered — is exactly what you're leaving behind.
+Open a few of them. `000_init.sql` stands up the home-grown `schema_version` tracker. Then notice the
+drift: `001_create_customer.sql` has no existence guard, but `002_create_product.sql` wraps its
+`CREATE TABLE` in `IF OBJECT_ID(...) IS NULL` — and `003_orders.sql` guards `SalesOrder` but not
+`OrderItem` in the *same file*. Each script hand-writes an `INSERT INTO schema_version`, and `004` shows
+the classic add-a-column-then-drop-its-default two-step. Guarded here, bare there, tracked when someone
+remembered — that inconsistency is exactly what you're leaving behind.
 
 ## Step 2: Extract — name the tables you keep
 
