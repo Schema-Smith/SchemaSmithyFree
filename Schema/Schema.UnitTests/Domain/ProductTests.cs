@@ -286,5 +286,29 @@ namespace Schema.UnitTests.Domain
                 """{ "Name": "P", "Platform": "SqlServer", "DropUnknownIndexes": true }""");
             Assert.That(product.DropUnknownIndexes, Is.True);
         }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer" }""");
+            Assert.That(product.DropColumnsRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropColumnsRemovedFromProduct": false }""");
+            Assert.That(product.DropColumnsRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropColumnsRemovedFromProduct": true }""");
+            Assert.That(product.DropColumnsRemovedFromProduct, Is.True);
+        }
     }
 }

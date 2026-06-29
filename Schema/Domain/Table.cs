@@ -41,6 +41,10 @@ namespace Schema.Domain
         [JsonProperty(Order = 81)]
         public DataDelivery DataDelivery { get; set; }
 
+        [SchemaProperty(Description = "When set, overrides the template- and product-level DropColumnsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
+        [JsonProperty(Order = 85)]
+        public bool? DropColumnsRemovedFromProduct { get; set; }
+
         [JsonProperty(Order = 90)]
         public string OldName { get; set; }
 

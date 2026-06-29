@@ -99,5 +99,29 @@ namespace Schema.UnitTests.Domain
             Assert.That(deserialized.VariantName, Is.EqualTo("EU region"));
         }
 
+        [Test]
+        public void DropColumnsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T" }""");
+            Assert.That(table.DropColumnsRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T", "DropColumnsRemovedFromProduct": false }""");
+            Assert.That(table.DropColumnsRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T", "DropColumnsRemovedFromProduct": true }""");
+            Assert.That(table.DropColumnsRemovedFromProduct, Is.True);
+        }
+
     }
 }

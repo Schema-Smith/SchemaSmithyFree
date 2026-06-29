@@ -81,8 +81,8 @@ namespace Schema.UnitTests.Domain
 
             Assert.That(json, Does.Not.Contain("FilePath"));
             Assert.That(json, Does.Not.Contain("TableSchema"));
-            Assert.That(json, Does.Not.Contain("Product"));
-            Assert.That(json, Does.Not.Contain("Tables"));
+            Assert.That(json, Does.Not.Contain("\"Product\":"));
+            Assert.That(json, Does.Not.Contain("\"Tables\":"));
             Assert.That(json, Does.Not.Contain("QueryTokens"));
             Assert.That(json, Does.Not.Contain("NonQueryTokens"));
             Assert.That(json, Does.Not.Contain("LoggableTokens"));
@@ -466,6 +466,30 @@ namespace Schema.UnitTests.Domain
             var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
                 """{ "Name": "T", "DropUnknownIndexes": true }""");
             Assert.That(template.DropUnknownIndexes, Is.True);
+        }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropColumnsRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropColumnsRemovedFromProduct": false }""");
+            Assert.That(template.DropColumnsRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropColumnsRemovedFromProduct": true }""");
+            Assert.That(template.DropColumnsRemovedFromProduct, Is.True);
         }
     }
 }

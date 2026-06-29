@@ -137,6 +137,9 @@ namespace Schema.Domain
         [JsonProperty(Order = 17)]
         public bool? DropUnknownIndexes { get; set; }
 
+        [JsonProperty(Order = 18)]
+        public bool? DropColumnsRemovedFromProduct { get; set; }
+
         [JsonIgnore]
         public Product Product { get; set; }
 
