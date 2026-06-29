@@ -410,6 +410,48 @@ Sometimes you need procedural control: conditional seeds, one-off data rebuilds,
 
 For the full DataTongs configuration reference -- key column detection, filter semantics, per-platform type handling, `--ConfigureDataDelivery` mechanics -- see [DataTongs Reference](../reference/datatongs.md). For the `DataDelivery` JSON schema, see [Schema Packages -- DataDelivery](../reference/schema-packages.md#datadelivery).
 
+## Emergency patch with SchemaShears
+
+You have a production incident. Two stored procedures need to go out now -- not the full release, not the whole product, just those two procedures. SchemaShears builds exactly that patch.
+
+### The one-liner manifest
+
+Generate your manifest from the commit range that holds the fix:
+
+```bash
+git diff --name-only <before-sha> <after-sha> -- MyProduct/ > patch.manifest
+```
+
+This produces a list of every file changed between those two commits inside the product folder -- exactly what belongs in the patch. No hand-editing a file list; the VCS tells you what changed.
+
+### Build the patch
+
+```bash
+SchemaShears --Source:./MyProduct --Manifest:./patch.manifest --Output:./MyProduct-patch
+```
+
+SchemaShears reads the manifest, pulls in the scaffolding (`Product.json` plus the relevant `Template.json` files), and writes the patch package to `./MyProduct-patch`. A `patch-build-report.txt` in the output root lists every included file and why it was included.
+
+### Verify before deploying
+
+```bash
+SchemaQuench --SchemaPackagePath:./MyProduct-patch --WhatIf
+```
+
+The WhatIf output shows exactly which objects the patch will touch. Review it against your intent: if the manifest was complete, only the objects you chose will appear. If something unexpected shows up -- or something expected is missing -- adjust the manifest and rebuild.
+
+### Deploy
+
+Once verified against a non-production target, deploy to production:
+
+```bash
+SchemaQuench --SchemaPackagePath:./MyProduct-patch
+```
+
+The patch updates only the objects it includes. Every other object in the target database -- tables, procedures, indexes, anything not in the patch -- is left untouched. Drop suppression is baked into the emitted `Product.json` by SchemaShears: absent objects are preserved, not reconciled away.
+
+For the full SchemaShears reference -- manifest format, always-include file, `--AllowDrops`, drop suppression details -- see [SchemaShears Reference](../reference/schemashears.md).
+
 ## Resuming a failed deployment
 
 Long-running deployments fail. A 90-minute production quench hits a transient deadlock at minute 75, or the migration script at stage 12 of 18 trips on unexpected data. Without checkpointing, the recovery is brutal: start over from zero, re-run every step you already applied, hope the interrupted state is self-consistent.

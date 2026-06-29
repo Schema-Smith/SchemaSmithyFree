@@ -24,15 +24,17 @@ SchemaSmith Community supports **SQL Server**, **PostgreSQL**, and **MySQL** as 
 
 The platform is a property of each product, not of the tool. Point SchemaQuench at a SQL Server product and it quenches SQL Server. Point it at a PostgreSQL product and it quenches PostgreSQL. Same binary, same command line, same CI pipeline shape.
 
-## Three tools, one lifecycle
+## Four tools, one lifecycle
 
-SchemaSmith is a toolset of three components that cover the full schema lifecycle -- extraction to deployment:
+SchemaSmith is a toolset of four components that cover the full schema lifecycle -- extraction to deployment:
 
 **[SchemaTongs](../reference/schematongs.md)** grips your live database and casts it into a clean, organized package -- tables as JSON, programmable objects as SQL files, everything structured for humans to read and source control to track. Works against SQL Server, PostgreSQL, and MySQL.
 
 **[SchemaQuench](../reference/schemaquench.md)** deploys a schema package to any compatible server -- the moment your declared state hardens into a live database. It reads your declaration, compares it to the target, and applies only the changes needed. No migration ordering. No manual diffing. Run it against dev, staging, and production -- same package, correct results everywhere. Boring, predictable, reliable deployments. That's the goal.
 
 **[DataTongs](../reference/datatongs.md)** grips reference data -- lookup tables, configuration rows, seed data -- and extracts it as deployable synchronization scripts. Capture once, deploy alongside your schema.
+
+**[SchemaShears](../reference/schemashears.md)** carves an object-level patch (subset) package from a full product using a manifest. When you need to deploy only the objects that changed -- without touching everything else -- SchemaShears carves out exactly that slice and stamps the patch so omitted objects are preserved on the target.
 
 ## How teams actually use this
 

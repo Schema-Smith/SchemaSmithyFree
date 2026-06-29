@@ -133,7 +133,7 @@ For the complete folder reference and file naming conventions, see [Schema Packa
 
 ## The tool lifecycle
 
-The three SchemaSmith tools form a cycle that covers the full schema management workflow:
+The four SchemaSmith tools form a cycle that covers the full schema management workflow:
 
 ```
                  Live Database
@@ -149,6 +149,7 @@ The three SchemaSmith tools form a cycle that covers the full schema management 
                code review in PRs
 
     DataTongs: Live Database ──→ Sync Scripts
+    SchemaShears: Full Package + Manifest ──→ Patch Package
 ```
 
 **SchemaTongs** grips a live database and casts it into a schema package. Tables become JSON files, procedures become SQL files, everything organized into the folder structure described above. This is how you onboard an existing database -- run SchemaTongs once, commit the output, and you have a versioned baseline. Your database's entire definition, captured in files you own.
@@ -156,6 +157,8 @@ The three SchemaSmith tools form a cycle that covers the full schema management 
 **SchemaQuench** deploys -- quenches -- a schema package to a database. It reads your declared state, queries the target, computes the delta, and applies the changes. This is the deployment engine -- the tool that makes state-based management work. Same package in, correct database out, every time.
 
 **DataTongs** grips reference data from a live database and extracts it as deployable sync scripts. Lookup tables, configuration rows, seed data -- anything that should travel with the schema. The output goes into the `Table Data/` folder and deploys alongside structural changes. For the full DataTongs configuration and type handling details, see the [DataTongs Reference](../reference/datatongs.md).
+
+**SchemaShears** carves an object-level patch package from a full schema package using a manifest -- a list of the specific files to include. The patch is a valid schema package that SchemaQuench can deploy, but it only updates the objects in scope; drop suppression stamps ensure omitted objects are left untouched on the target. For the full SchemaShears reference, see the [SchemaShears Reference](../reference/schemashears.md).
 
 The tools don't impose a rigid sequence. A typical flow looks like:
 
