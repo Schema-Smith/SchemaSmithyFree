@@ -1,0 +1,29 @@
+{
+    "Schema": "public",
+    "Name": "CascColTable",
+    "Columns": [
+        {
+            "Name": "Id",
+            "DataType": "INTEGER",
+            "Nullable": false
+        },
+        {
+            "Name": "KeepCol",
+            "DataType": "INTEGER",
+            "Nullable": true
+        },
+        {
+            "Name": "OrphanCol",
+            "DataType": "INTEGER",
+            "Nullable": true
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "PK_CascColTable",
+            "PrimaryKey": true,
+            "Unique": true,
+            "IndexColumns": "Id"
+        }
+    ]
+}
