@@ -508,7 +508,9 @@ BEGIN
             OR (dc.OldName IS NOT NULL AND BINARY dc.OldName = BINARY isc.COLUMN_NAME)
         )
     WHERE t.NewTable = 0
-      AND dc.ColumnName IS NULL;
+      AND dc.ColumnName IS NULL
+      AND p_DropColumnsRemovedFromProduct = 1
+      AND COALESCE(t.DropColumnsRemovedFromProduct, 1) = 1;
 
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unused columns');

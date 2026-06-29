@@ -45,6 +45,7 @@ BEGIN
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
         VariantName VARCHAR(128) DEFAULT NULL,
         AutoIncrementKeyClause VARCHAR(500) DEFAULT '',
+        DropColumnsRemovedFromProduct TINYINT DEFAULT NULL,
         KEY ix_tables_name (TableName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -52,7 +53,7 @@ BEGIN
     -- The NOT EXISTS check against INFORMATION_SCHEMA is done separately via UPDATE
     -- to avoid a MySQL optimizer issue where correlated subqueries with function calls
     -- inside JSON_TABLE context don't re-evaluate correctly for all rows.
-    INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, NewTable, ShouldApply, ShouldApplyExpression, VariantName)
+    INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct)
     SELECT
         SchemaSmith_SafeBacktickWrap(jt.Name) AS TableName,
         COALESCE(NULLIF(TRIM(jt.Engine), ''), 'InnoDB') AS Engine,
@@ -63,7 +64,8 @@ BEGIN
         0 AS NewTable,
         1 AS ShouldApply,
         NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
-        NULLIF(TRIM(jt.VariantName), '') AS VariantName
+        NULLIF(TRIM(jt.VariantName), '') AS VariantName,
+        jt.DropColumnsRemovedFromProduct
     FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
         Name VARCHAR(128) PATH '$.Name',
         Engine VARCHAR(50) PATH '$.Engine',
@@ -72,7 +74,8 @@ BEGIN
         RowFormat VARCHAR(20) PATH '$.RowFormat',
         AutoIncrementValue BIGINT UNSIGNED PATH '$.AutoIncrementValue',
         ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
-        VariantName VARCHAR(128) PATH '$.VariantName'
+        VariantName VARCHAR(128) PATH '$.VariantName',
+        DropColumnsRemovedFromProduct TINYINT PATH '$.DropColumnsRemovedFromProduct'
     )) AS jt
     WHERE jt.Name IS NOT NULL;
 

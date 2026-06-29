@@ -125,6 +125,24 @@ public class TableQuench_DropColumnsTests : BaseTableQuenchTests
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldSuppressDropWhenTableFlagIsFalse()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        // The suppressed table: OrphanedColumn was removed from JSON + flag = false → column survives
+        Assert.That(ColumnExists(cmd, "DropColumnSuppressed", "OrphanedColumn"), Is.True,
+            "OrphanedColumn should still exist (suppressed by table flag)");
+
+        // The control table: flag absent (inherits default = true) → column was dropped
+        Assert.That(ColumnExists(cmd, "DropColumnControl", "OrphanedColumn"), Is.False,
+            "OrphanedColumn should be gone (no suppression flag)");
+
+        conn.Close();
+    }
+
     private new bool ColumnExists(IDbCommand cmd, string table, string column)
     {
         cmd.CommandText = $@"
@@ -178,6 +196,9 @@ CREATE UNIQUE INDEX `UQ_Column2` ON `{TestSchema}`.`DropColumnWithFK` (`Column2`
 CREATE TABLE IF NOT EXISTS `{TestSchema}`.`DropColumnWithFKRef` (`Column1` INT NOT NULL, `Column2` INT, PRIMARY KEY (`Column1`));
 -- TableQuench_ShouldHandleRemovingColumnWithComputedExpression
 CREATE TABLE IF NOT EXISTS `{TestSchema}`.`DropColumnWithComputed` (`Column1` INT NOT NULL, `Column2` INT, `Column3` INT AS (`Column2` * 3) VIRTUAL);
+-- TableQuench_ShouldSuppressDropWhenTableFlagIsFalse
+CREATE TABLE IF NOT EXISTS `{TestSchema}`.`DropColumnSuppressed` (`Column1` INT NOT NULL, `OrphanedColumn` INT);
+CREATE TABLE IF NOT EXISTS `{TestSchema}`.`DropColumnControl` (`Column1` INT NOT NULL, `OrphanedColumn` INT);
 ";
         cmd.ExecuteNonQuery();
 
@@ -225,6 +246,36 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`DropColumnWithComputed` (`Column1` IN
             """;
 
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ParseTableJson('{TestSchema}', '{json.Replace("'", "''")}')";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1)";
+        cmd.ExecuteNonQuery();
+
+        // Second quench: exercises table-level DropColumnsRemovedFromProduct flag.
+        // DropColumnSuppressed carries "DropColumnsRemovedFromProduct": false → OrphanedColumn survives.
+        // DropColumnControl has no flag (null → inherits cascade default=true) → OrphanedColumn drops.
+        var flagJson = """
+            [
+            {
+                "Name": "DropColumnSuppressed",
+                "DropColumnsRemovedFromProduct": false,
+                "Columns": [
+                    { "Name": "Column1", "DataType": "INT", "Nullable": false }
+                ]
+            },
+            {
+                "Name": "DropColumnControl",
+                "Columns": [
+                    { "Name": "Column1", "DataType": "INT", "Nullable": false }
+                ]
+            }
+            ]
+            """;
+
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ParseTableJson('{TestSchema}', '{flagJson.Replace("'", "''")}')";
         cmd.ExecuteNonQuery();
 
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
