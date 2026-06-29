@@ -115,6 +115,26 @@ public class ProductQuench
     internal static bool ResolveDropTablesRemovedFromProduct(IConfiguration config, Product product) =>
         config["DropTablesRemovedFromProduct"]?.ToLower() != "false" && product.DropTablesRemovedFromProduct;
 
+    internal static bool ResolveCascadedFlag(bool? env, bool? product, bool? template, bool defaultValue)
+    {
+        var effective = defaultValue;
+        var locked = false;
+        foreach (var level in new[] { env, product, template })
+        {
+            if (!level.HasValue) continue;
+            if (!level.Value) { effective = false; locked = true; }
+            else if (!locked) { effective = true; }
+        }
+        return effective;
+    }
+
+    internal static bool? ConfigBool(IConfiguration config, string key)
+    {
+        var raw = config[key];
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        return bool.TryParse(raw, out var parsed) ? parsed : (bool?)null;
+    }
+
     /// <summary>
     /// Reads <c>Target.TemplateTargets</c> from configuration into the per-template override map.
     /// Each template name becomes a dictionary key (case-insensitive) carrying the parsed

@@ -2441,4 +2441,19 @@ public class ProductQuenchTests
     }
 
     #endregion
+
+    #region ResolveCascadedFlag + ConfigBool
+
+    [Test] public void Cascade_AllAbsent_ReturnsDefault_True()  => Assert.That(ProductQuench.ResolveCascadedFlag(null,null,null,true), Is.True);
+    [Test] public void Cascade_AllAbsent_ReturnsDefault_False() => Assert.That(ProductQuench.ResolveCascadedFlag(null,null,null,false), Is.False);
+    [Test] public void Cascade_EnvFalse_ProductTrue_StaysFalse() => Assert.That(ProductQuench.ResolveCascadedFlag(false,true,null,true), Is.False);
+    [Test] public void Cascade_EnvTrue_ProductFalse_False()      => Assert.That(ProductQuench.ResolveCascadedFlag(true,false,null,false), Is.False);
+    [Test] public void Cascade_DefaultFalse_EnvTrue_Enables()    => Assert.That(ProductQuench.ResolveCascadedFlag(true,null,null,false), Is.True);
+    [Test] public void Cascade_TemplateFalse_Tightens()          => Assert.That(ProductQuench.ResolveCascadedFlag(null,null,false,true), Is.False);
+    [Test] public void Cascade_TemplateTrue_CannotBeatAncestorFalse() => Assert.That(ProductQuench.ResolveCascadedFlag(false,null,true,false), Is.False);
+    [Test] public void ConfigBool_Absent_Null()  { var c = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string>()).Build(); Assert.That(ProductQuench.ConfigBool(c,"X"), Is.Null); }
+    [Test] public void ConfigBool_False_False()   { var c = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string>{["X"]="false"}).Build(); Assert.That(ProductQuench.ConfigBool(c,"X"), Is.False); }
+    [Test] public void ConfigBool_True_True()     { var c = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string>{["X"]="true"}).Build(); Assert.That(ProductQuench.ConfigBool(c,"X"), Is.True); }
+
+    #endregion
 }
