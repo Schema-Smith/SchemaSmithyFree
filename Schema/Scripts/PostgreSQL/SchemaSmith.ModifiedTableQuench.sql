@@ -395,11 +395,15 @@ BEGIN
                       'ALTER TABLE "' || ec."TableSchema" || '"."' || ec."TableName" || '" DROP COLUMN IF EXISTS "' || ec."ColumnName" || '" CASCADE;', CHR(10))
       INTO sql_script
       FROM temp_existing_columns ec
+      JOIN temp_tables tt ON tt."Schema" = ec."TableSchema"
+                         AND tt."Name" = ec."TableName"
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_columns c
                           WHERE ec."TableSchema" = c."TableSchema"
                             AND ec."TableName" = c."TableName"
-                            AND ec."ColumnName" = c."Name");
+                            AND ec."ColumnName" = c."Name")
+        AND p_DropColumnsRemovedFromProduct
+        AND COALESCE(tt."DropColumnsRemovedFromProduct", TRUE);
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Fixup Any Modified Index Fill Factors';
