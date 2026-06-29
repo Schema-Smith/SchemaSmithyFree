@@ -1,0 +1,12 @@
+{
+    "Name": "CascadeColumnTier",
+    "ValidationScript": "SELECT CAST(1 AS BIT)",
+    "TemplateOrder": [
+        "Main"
+    ],
+    "ScriptFolders": [],
+    "ScriptTokens": {
+        "MainDB": "TestMain"
+    },
+    "Platform": "MSSQL"
+}
