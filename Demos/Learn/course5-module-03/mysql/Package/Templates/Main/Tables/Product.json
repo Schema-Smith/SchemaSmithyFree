@@ -1,0 +1,40 @@
+{
+  "Name": "`Product`",
+  "Columns": [
+    {
+      "Name": "`ProductId`",
+      "DataType": "int"
+    },
+    {
+      "Name": "`Sku`",
+      "DataType": "varchar(64)",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Name`",
+      "DataType": "varchar(200)",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`UnitPrice`",
+      "DataType": "decimal(10,2)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductId`",
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "Engine": "InnoDB",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "FullTextIndexes": []
+}
