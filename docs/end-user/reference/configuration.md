@@ -462,6 +462,33 @@ SchemaQuench --ConnectionString:"Host=prod-db;Database=mydb;Username=deploy;Pass
 
 ---
 
+## DropTablesRemovedFromProduct
+
+Controls whether SchemaQuench drops tables that exist in the database but no longer appear in the schema package. Two control points compose to produce the effective value, and both must allow the drop for it to run.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment / runtime | `DropTablesRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropTablesRemovedFromProduct` environment variable) | `true` |
+| Package | `DropTablesRemovedFromProduct` in `Product.json` | `true` |
+
+The effective behavior is the logical AND of both values — a `false` at either level suppresses the drop pass. This lets a package declare that its absent tables must never be dropped without requiring every operator to configure the environment flag, or lets an environment turn off auto-drops globally regardless of what individual packages declare.
+
+```json
+// SchemaQuench.settings.json — turn off auto-drop for this environment
+{ "DropTablesRemovedFromProduct": false }
+```
+
+```json
+// Product.json — package declares its tables must never be auto-dropped
+{ "DropTablesRemovedFromProduct": false }
+```
+
+> **Note:** Default `true` at both levels preserves existing behavior — if you haven't set either, table-drop-by-absence works exactly as it always has.
+
+For full guidance — environment advice, the rollback-friendly removal pattern, and the recyclebin alternative — see [DropTablesRemovedFromProduct](schemaquench.md#droptablesremovedfromproduct) in the SchemaQuench reference.
+
+---
+
 ## Related Documentation
 
 - [SchemaQuench Reference](schemaquench.md) -- Deployment engine settings and behavior

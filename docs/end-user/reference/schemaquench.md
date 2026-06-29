@@ -61,7 +61,7 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
 | `WhatIfONLY` | bool | `false` | Dry-run mode. Generates SQL without executing. |
 | `KindleTheForge` | bool | `true` | Deploy SchemaSmith helper procedures and the migration tracking table to each target database before quenching. |
 | `UpdateTables` | bool | `true` | Apply table structure changes (columns, indexes, constraints, foreign keys) from the schema package. |
-| `DropTablesRemovedFromProduct` | bool | `true` | Drop tables that exist in the database but aren't defined in the schema package. |
+| `DropTablesRemovedFromProduct` | bool | `true` | Drop tables that exist in the database but aren't defined in the schema package. Also settable as a `Product.json` property — see [DropTablesRemovedFromProduct](#droptablesremovedfromproduct). |
 | `DeliverData` | bool | `true` | Run the per-table `DataDelivery` step and the `TableData`-slot scripts. Set to `false` to ship a structure-only deployment that leaves reference data untouched -- pairs naturally with `UpdateTables: true` for "deploy schema, skip data" pipelines. |
 | `RunScriptsTwice` | bool | `false` | Run object scripts twice to verify idempotency. A CI/testing tool. |
 | `TrackRunOnceMigrations` | bool | `true` | Track run-once migration scripts. When `false`, all scripts run on every deployment. |
@@ -771,6 +771,13 @@ When `DropTablesRemovedFromProduct` is `true` (the default), `ModifiedTableQuenc
 - Were previously managed by this product.
 
 This keeps the database clean as tables are removed from the schema package over time.
+
+**Two control points — environment and package.** The setting is configurable at two independent levels, and both must be `true` (or absent, which defaults to `true`) for a table-drop-by-absence pass to run:
+
+- **Runtime / environment** — `DropTablesRemovedFromProduct` in `SchemaQuench.settings.json` (or the matching environment variable). Controls all products deployed in that environment.
+- **Package** — `DropTablesRemovedFromProduct` in `Product.json`. Controls a single package regardless of which environment it deploys to.
+
+A `false` at either level suppresses the drop pass. The effective behavior is the logical AND of both values — so a package can declare "never auto-drop my tables" in its own `Product.json` without requiring every operator to set the environment flag.
 
 **Environment guidance:**
 
