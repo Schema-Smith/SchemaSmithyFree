@@ -2395,4 +2395,50 @@ public class ProductQuenchTests
     }
 
     #endregion
+
+    #region ResolveDropTablesRemovedFromProduct (drop-protection Slice A)
+
+    private static IConfigurationRoot ConfigWith(params (string Key, string Value)[] pairs)
+    {
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(pairs.ToDictionary(p => p.Key, p => p.Value))
+            .Build();
+    }
+
+    [Test]
+    public void ResolveDropTablesRemoved_BothDefault_True()
+    {
+        // Env unset (default true) AND product default true -> drop (today's behavior).
+        var config = ConfigWith();
+        var product = new Product { DropTablesRemovedFromProduct = true };
+        Assert.That(ProductQuench.ResolveDropTablesRemovedFromProduct(config, product), Is.True);
+    }
+
+    [Test]
+    public void ResolveDropTablesRemoved_ProductFalse_EnvDefault_False()
+    {
+        // The SchemaShears patch case: ambient env would drop, the package vetoes.
+        var config = ConfigWith();
+        var product = new Product { DropTablesRemovedFromProduct = false };
+        Assert.That(ProductQuench.ResolveDropTablesRemovedFromProduct(config, product), Is.False);
+    }
+
+    [Test]
+    public void ResolveDropTablesRemoved_EnvFalse_ProductTrue_False()
+    {
+        // Env false wins regardless of product (AND-cascade, false dominates).
+        var config = ConfigWith(("DropTablesRemovedFromProduct", "false"));
+        var product = new Product { DropTablesRemovedFromProduct = true };
+        Assert.That(ProductQuench.ResolveDropTablesRemovedFromProduct(config, product), Is.False);
+    }
+
+    [Test]
+    public void ResolveDropTablesRemoved_BothFalse_False()
+    {
+        var config = ConfigWith(("DropTablesRemovedFromProduct", "false"));
+        var product = new Product { DropTablesRemovedFromProduct = false };
+        Assert.That(ProductQuench.ResolveDropTablesRemovedFromProduct(config, product), Is.False);
+    }
+
+    #endregion
 }

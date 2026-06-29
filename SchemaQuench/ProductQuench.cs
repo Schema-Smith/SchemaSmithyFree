@@ -68,7 +68,7 @@ public class ProductQuench
         // CLI-overridable (unlike the other kindling flags): ForceReKindle is an ad-hoc operational
         // gesture run on demand, not a sticky pipeline default, so a command-line switch is the natural UX.
         _forceReKindle = CommandLineParser.ContainsSwitch("ForceReKindle") || _config["ForceReKindle"]?.ToLower() == "true";
-        _dropRemovedTables = FormatBooleanFlag(_config["DropTablesRemovedFromProduct"]?.ToLower() != "false");
+        _dropRemovedTables = FormatBooleanFlag(ResolveDropTablesRemovedFromProduct(_config, _product));
         _updateTables = _config["UpdateTables"]?.ToLower() != "false";
         _deliverData = _config["DeliverData"]?.ToLower() != "false";
         _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
@@ -100,6 +100,9 @@ public class ProductQuench
     /// are <c>Trim()</c>med so a user-supplied <c>" tenant_acme"</c> matches <c>"tenant_acme"</c>
     /// instead of surfacing as an unknown-name error.
     /// </summary>
+    internal static bool ResolveDropTablesRemovedFromProduct(IConfiguration config, Product product) =>
+        config["DropTablesRemovedFromProduct"]?.ToLower() != "false" && product.DropTablesRemovedFromProduct;
+
     internal static IReadOnlyList<string> ReadFilterArray(IConfiguration config, string sectionKey)
     {
         var section = config.GetSection(sectionKey);
