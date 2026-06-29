@@ -5,31 +5,36 @@
       "Name": "orderid",
       "DataType": "int4",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "orderitemid",
       "DataType": "int4",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "productid",
       "DataType": "int4",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "quantity",
       "DataType": "int4",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "unitprice",
       "DataType": "numeric(10, 2)",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     }
   ],
   "Indexes": [
@@ -38,7 +43,8 @@
       "PrimaryKey": true,
       "Unique": true,
       "IndexColumns": "orderitemid",
-      "ShouldApplyExpression": ""
+      "ShouldApplyExpression": "",
+      "VariantName": ""
     }
   ],
   "ForeignKeys": [
@@ -49,7 +55,8 @@
       "RelatedColumns": "productid",
       "DeleteAction": "",
       "UpdateAction": "",
-      "ShouldApplyExpression": ""
+      "ShouldApplyExpression": "",
+      "VariantName": ""
     },
     {
       "Name": "fk_orderitem_salesorder",
@@ -58,10 +65,12 @@
       "RelatedColumns": "orderid",
       "DeleteAction": "",
       "UpdateAction": "",
-      "ShouldApplyExpression": ""
+      "ShouldApplyExpression": "",
+      "VariantName": ""
     }
   ],
   "CheckConstraints": [],
   "ShouldApplyExpression": "",
+  "VariantName": "",
   "OldName": ""
 }

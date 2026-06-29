@@ -5,20 +5,23 @@
       "Name": "customerid",
       "DataType": "int4",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "email",
       "DataType": "text",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "fullname",
       "DataType": "text",
       "Nullable": true,
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     }
   ],
   "Indexes": [
@@ -27,11 +30,13 @@
       "PrimaryKey": true,
       "Unique": true,
       "IndexColumns": "customerid",
-      "ShouldApplyExpression": ""
+      "ShouldApplyExpression": "",
+      "VariantName": ""
     }
   ],
   "ForeignKeys": [],
   "CheckConstraints": [],
   "ShouldApplyExpression": "",
+  "VariantName": "",
   "OldName": ""
 }

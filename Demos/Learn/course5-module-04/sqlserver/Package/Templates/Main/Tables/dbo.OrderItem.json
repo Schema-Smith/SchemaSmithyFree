@@ -4,7 +4,9 @@
     {
       "Name": "[OrderId]",
       "DataType": "INT",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -14,7 +16,9 @@
     {
       "Name": "[OrderItemId]",
       "DataType": "INT",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -24,7 +28,9 @@
     {
       "Name": "[ProductId]",
       "DataType": "INT",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -34,7 +40,9 @@
     {
       "Name": "[Quantity]",
       "DataType": "INT",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -44,7 +52,9 @@
     {
       "Name": "[UnitPrice]",
       "DataType": "DECIMAL(10, 2)",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -58,6 +68,8 @@
       "PrimaryKey": true,
       "Unique": true,
       "IndexColumns": "[OrderItemId]",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
       "CompressionType": "NONE",
       "Clustered": true
     }
@@ -70,6 +82,8 @@
       "RelatedColumns": "[ProductId]",
       "DeleteAction": "NO ACTION",
       "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
       "RelatedTableSchema": "[dbo]"
     },
     {
@@ -79,10 +93,14 @@
       "RelatedColumns": "[OrderId]",
       "DeleteAction": "NO ACTION",
       "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
       "RelatedTableSchema": "[dbo]"
     }
   ],
   "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
   "OldName": "",
   "Schema": "[dbo]",
   "CompressionType": "NONE",

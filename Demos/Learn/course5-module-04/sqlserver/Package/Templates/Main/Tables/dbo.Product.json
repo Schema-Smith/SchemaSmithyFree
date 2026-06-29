@@ -4,7 +4,9 @@
     {
       "Name": "[Name]",
       "DataType": "NVARCHAR(200)",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -14,7 +16,9 @@
     {
       "Name": "[ProductId]",
       "DataType": "INT",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -24,7 +28,9 @@
     {
       "Name": "[Sku]",
       "DataType": "VARCHAR(64)",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -34,7 +40,9 @@
     {
       "Name": "[UnitPrice]",
       "DataType": "DECIMAL(10, 2)",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -48,12 +56,16 @@
       "PrimaryKey": true,
       "Unique": true,
       "IndexColumns": "[ProductId]",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
       "CompressionType": "NONE",
       "Clustered": true
     }
   ],
   "ForeignKeys": [],
   "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
   "OldName": "",
   "Schema": "[dbo]",
   "CompressionType": "NONE",

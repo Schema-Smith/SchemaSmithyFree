@@ -5,25 +5,29 @@
       "Name": "customerid",
       "DataType": "int4",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "orderdate",
       "DataType": "timestamp",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "orderid",
       "DataType": "int4",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "status",
       "DataType": "varchar(20)",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     }
   ],
   "Indexes": [
@@ -32,7 +36,8 @@
       "PrimaryKey": true,
       "Unique": true,
       "IndexColumns": "orderid",
-      "ShouldApplyExpression": ""
+      "ShouldApplyExpression": "",
+      "VariantName": ""
     }
   ],
   "ForeignKeys": [
@@ -43,10 +48,12 @@
       "RelatedColumns": "customerid",
       "DeleteAction": "",
       "UpdateAction": "",
-      "ShouldApplyExpression": ""
+      "ShouldApplyExpression": "",
+      "VariantName": ""
     }
   ],
   "CheckConstraints": [],
   "ShouldApplyExpression": "",
+  "VariantName": "",
   "OldName": ""
 }

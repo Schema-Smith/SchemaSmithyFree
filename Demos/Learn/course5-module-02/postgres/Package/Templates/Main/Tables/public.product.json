@@ -5,25 +5,29 @@
       "Name": "name",
       "DataType": "varchar(200)",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "productid",
       "DataType": "int4",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "sku",
       "DataType": "varchar(64)",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "unitprice",
       "DataType": "numeric(10, 2)",
       "ShouldApplyExpression": "",
-      "OldName": ""
+      "OldName": "",
+      "VariantName": ""
     }
   ],
   "Indexes": [
@@ -32,11 +36,13 @@
       "PrimaryKey": true,
       "Unique": true,
       "IndexColumns": "productid",
-      "ShouldApplyExpression": ""
+      "ShouldApplyExpression": "",
+      "VariantName": ""
     }
   ],
   "ForeignKeys": [],
   "CheckConstraints": [],
   "ShouldApplyExpression": "",
+  "VariantName": "",
   "OldName": ""
 }

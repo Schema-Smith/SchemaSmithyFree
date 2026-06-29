@@ -3,19 +3,31 @@
   "Columns": [
     {
       "Name": "`OrderId`",
-      "DataType": "int"
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "`CustomerId`",
-      "DataType": "int"
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "`OrderDate`",
-      "DataType": "datetime"
+      "DataType": "datetime",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
     },
     {
       "Name": "`Status`",
       "DataType": "varchar(20)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": "",
       "CharacterSet": "utf8mb4"
     }
   ],
@@ -23,6 +35,8 @@
     {
       "Name": "FK_SalesOrder_Customer",
       "IndexColumns": "`CustomerId`",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
       "IndexType": "BTREE"
     },
     {
@@ -31,6 +45,8 @@
       "Unique": true,
       "UniqueConstraint": true,
       "IndexColumns": "`OrderId`",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
       "IndexType": "BTREE"
     }
   ],
@@ -42,10 +58,15 @@
       "RelatedColumns": "`CustomerId`",
       "DeleteAction": "NO ACTION",
       "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
       "RelatedTableSchema": ""
     }
   ],
   "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": "",
   "Engine": "InnoDB",
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",

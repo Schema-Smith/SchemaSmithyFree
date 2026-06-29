@@ -4,7 +4,9 @@
     {
       "Name": "[CustomerId]",
       "DataType": "INT",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -14,7 +16,9 @@
     {
       "Name": "[OrderDate]",
       "DataType": "DATETIME2(7)",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -24,7 +28,9 @@
     {
       "Name": "[OrderId]",
       "DataType": "INT",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -34,7 +40,9 @@
     {
       "Name": "[Status]",
       "DataType": "VARCHAR(20)",
+      "ShouldApplyExpression": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
@@ -48,6 +56,8 @@
       "PrimaryKey": true,
       "Unique": true,
       "IndexColumns": "[OrderId]",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
       "CompressionType": "NONE",
       "Clustered": true
     }
@@ -60,10 +70,14 @@
       "RelatedColumns": "[CustomerId]",
       "DeleteAction": "NO ACTION",
       "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
       "RelatedTableSchema": "[dbo]"
     }
   ],
   "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
   "OldName": "",
   "Schema": "[dbo]",
   "CompressionType": "NONE",
