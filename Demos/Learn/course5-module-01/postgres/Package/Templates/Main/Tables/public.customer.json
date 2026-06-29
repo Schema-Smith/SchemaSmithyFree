@@ -1,0 +1,37 @@
+{
+  "Name": "customer",
+  "Columns": [
+    {
+      "Name": "customerid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "email",
+      "DataType": "text",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "fullname",
+      "DataType": "text",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_customer",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "customerid",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": ""
+}

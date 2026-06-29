@@ -1,0 +1,67 @@
+{
+  "Name": "orderitem",
+  "Columns": [
+    {
+      "Name": "orderid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "orderitemid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "productid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "quantity",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "unitprice",
+      "DataType": "numeric(10, 2)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_orderitem",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "orderitemid",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_orderitem_product",
+      "Columns": "productid",
+      "RelatedTable": "product",
+      "RelatedColumns": "productid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "fk_orderitem_salesorder",
+      "Columns": "orderid",
+      "RelatedTable": "salesorder",
+      "RelatedColumns": "orderid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": ""
+}

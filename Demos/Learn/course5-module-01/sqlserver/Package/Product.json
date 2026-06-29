@@ -1,0 +1,15 @@
+{
+  "Name": "Shop",
+  "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] = '{{MainDb}}') THEN 1 ELSE 0 END AS BIT)",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {
+    "MainDb": "shop_from_flyway"
+  },
+  "ScriptFolders": [],
+  "BranchNameFile": "{{repo_path}}/.git/HEAD",
+  "BeforeBranchNameMask": "ref: refs/heads/",
+  "AfterBranchNameMask": "",
+  "Platform": "SqlServer"
+}

@@ -1,0 +1,42 @@
+{
+  "Name": "product",
+  "Columns": [
+    {
+      "Name": "name",
+      "DataType": "varchar(200)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "productid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "sku",
+      "DataType": "varchar(64)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "unitprice",
+      "DataType": "numeric(10, 2)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_product",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "productid",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": ""
+}
