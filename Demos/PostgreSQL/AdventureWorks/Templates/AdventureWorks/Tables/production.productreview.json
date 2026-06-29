@@ -113,7 +113,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "production",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -122,6 +121,7 @@
   "DataDelivery": {
     "ContentFile": "data/production.productreview.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "productreviewid"
+    "MatchColumns": "productreviewid",
+    "MergeUpdateDescendents": true
   }
 }

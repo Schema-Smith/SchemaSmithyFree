@@ -196,7 +196,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "purchasing",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -205,6 +204,7 @@
   "DataDelivery": {
     "ContentFile": "data/purchasing.purchaseorderheader.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "purchaseorderid"
+    "MatchColumns": "purchaseorderid",
+    "MergeUpdateDescendents": true
   }
 }

@@ -97,21 +97,21 @@
       "Name": "FK_Purchasing_PurchaseOrderHeader_ShipMethodID",
       "IndexColumns": "`ShipMethodID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_PurchaseOrderHeader_EmployeeID",
       "IndexColumns": "`EmployeeID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_PurchaseOrderHeader_VendorID",
       "IndexColumns": "`VendorID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -121,7 +121,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`PurchaseOrderID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

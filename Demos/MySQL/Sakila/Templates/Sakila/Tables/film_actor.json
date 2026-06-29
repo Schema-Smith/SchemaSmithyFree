@@ -26,7 +26,7 @@
       "Name": "idx_fk_film_id",
       "IndexColumns": "`film_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -36,7 +36,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`actor_id`,`film_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

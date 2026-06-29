@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Additional contact information about the person stored in xml format. "
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Additional contact information about the person stored in xml format. "
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Person records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for Person records."
+        }
       }
     },
     {
@@ -41,8 +45,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Personal information such as hobbies, and income collected from online shoppers. Used for sales analysis."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Personal information such as hobbies, and income collected from online shoppers. Used for sales analysis."
+        }
       }
     },
     {
@@ -57,8 +63,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Contact does not wish to receive e-mail promotions, 1 = Contact does wish to receive e-mail promotions from AdventureWorks, 2 = Contact does wish to receive e-mail promotions from AdventureWorks and selected partners. "
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "0 = Contact does not wish to receive e-mail promotions, 1 = Contact does wish to receive e-mail promotions from AdventureWorks, 2 = Contact does wish to receive e-mail promotions from AdventureWorks and selected partners. "
+        }
       }
     },
     {
@@ -71,8 +79,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "First name of the person."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "First name of the person."
+        }
       }
     },
     {
@@ -85,8 +95,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Last name of the person."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Last name of the person."
+        }
       }
     },
     {
@@ -100,8 +112,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Middle name or middle initial of the person."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Middle name or middle initial of the person."
+        }
       }
     },
     {
@@ -115,8 +129,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -130,8 +146,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = The data in FirstName and LastName are stored in western style (first name, last name) order.  1 = Eastern style (last name, first name) order."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "0 = The data in FirstName and LastName are stored in western style (first name, last name) order.  1 = Eastern style (last name, first name) order."
+        }
       }
     },
     {
@@ -145,8 +163,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary type of person: SC = Store Contact, IN = Individual (retail) customer, SP = Sales person, EM = Employee (non-sales), VC = Vendor contact, GC = General contact"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary type of person: SC = Store Contact, IN = Individual (retail) customer, SP = Sales person, EM = Employee (non-sales), VC = Vendor contact, GC = General contact"
+        }
       }
     },
     {
@@ -160,8 +180,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     },
     {
@@ -175,8 +197,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Surname suffix. For example, Sr. or Jr."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Surname suffix. For example, Sr. or Jr."
+        }
       }
     },
     {
@@ -190,8 +214,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "A courtesy title. For example, Mr. or Ms."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "A courtesy title. For example, Mr. or Ms."
+        }
       }
     }
   ],
@@ -202,8 +228,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -220,8 +248,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -235,8 +265,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID."
+        }
       }
     }
   ],
@@ -250,16 +282,20 @@
       "Name": "[PXML_Person_AddContact]",
       "IsPrimary": true,
       "Column": "[AdditionalContactInfo]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary XML index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary XML index."
+        }
       }
     },
     {
       "Name": "[PXML_Person_Demographics]",
       "IsPrimary": true,
       "Column": "[Demographics]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary XML index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary XML index."
+        }
       }
     },
     {
@@ -267,8 +303,10 @@
       "Column": "[Demographics]",
       "PrimaryIndex": "[PXML_Person_Demographics]",
       "SecondaryIndexType": "PATH",
-      "ExtendedProperties": {
-        "MS_Description": "Secondary XML index for path."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Secondary XML index for path."
+        }
       }
     },
     {
@@ -276,8 +314,10 @@
       "Column": "[Demographics]",
       "PrimaryIndex": "[PXML_Person_Demographics]",
       "SecondaryIndexType": "PROPERTY",
-      "ExtendedProperties": {
-        "MS_Description": "Secondary XML index for property."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Secondary XML index for property."
+        }
       }
     },
     {
@@ -285,18 +325,22 @@
       "Column": "[Demographics]",
       "PrimaryIndex": "[PXML_Person_Demographics]",
       "SecondaryIndexType": "VALUE",
-      "ExtendedProperties": {
-        "MS_Description": "Secondary XML index for value."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Secondary XML index for value."
+        }
       }
     }
   ],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Human beings involved with AdventureWorks: employees, customer contacts, and vendor contacts."
-  },
   "DataDelivery": {
     "ContentFile": "data/Person.Person.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[BusinessEntityID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Human beings involved with AdventureWorks: employees, customer contacts, and vendor contacts."
+    }
   }
 }

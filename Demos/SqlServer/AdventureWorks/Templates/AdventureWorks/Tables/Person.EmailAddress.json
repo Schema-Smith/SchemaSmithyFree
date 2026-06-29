@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Person associated with this email address.  Foreign key to Person.BusinessEntityID"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Person associated with this email address.  Foreign key to Person.BusinessEntityID"
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "E-mail address for the person."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "E-mail address for the person."
+        }
       }
     },
     {
@@ -40,8 +44,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. ID of this email address."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. ID of this email address."
+        }
       }
     },
     {
@@ -55,8 +61,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -70,8 +78,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     }
   ],
@@ -81,8 +91,10 @@
       "IndexColumns": "[EmailAddress]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -93,8 +105,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -108,8 +122,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Person.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Person.BusinessEntityID."
+        }
       }
     }
   ],
@@ -120,12 +136,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Where to send a person email."
-  },
   "DataDelivery": {
     "ContentFile": "data/Person.EmailAddress.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[BusinessEntityID],[EmailAddressID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Where to send a person email."
+    }
   }
 }

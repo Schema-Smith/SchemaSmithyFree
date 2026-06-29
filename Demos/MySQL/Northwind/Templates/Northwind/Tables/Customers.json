@@ -93,21 +93,21 @@
       "Name": "City",
       "IndexColumns": "`City`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "CompanyName",
       "IndexColumns": "`CompanyName`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "PostalCode",
       "IndexColumns": "`PostalCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -117,14 +117,14 @@
       "UniqueConstraint": true,
       "IndexColumns": "`CustomerID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "Region",
       "IndexColumns": "`Region`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

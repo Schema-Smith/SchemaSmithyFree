@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ISO code for countries and regions. Foreign key to CountryRegion.CountryRegionCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ISO code for countries and regions. Foreign key to CountryRegion.CountryRegionCode."
+        }
       }
     },
     {
@@ -25,8 +27,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ISO standard currency code. Foreign key to Currency.CurrencyCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ISO standard currency code. Foreign key to Currency.CurrencyCode."
+        }
       }
     },
     {
@@ -40,8 +44,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     }
   ],
@@ -51,8 +57,10 @@
       "IndexColumns": "[CurrencyCode]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -63,8 +71,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -78,8 +88,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing CountryRegion.CountryRegionCode."
+        }
       }
     },
     {
@@ -91,8 +103,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Currency.CurrencyCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Currency.CurrencyCode."
+        }
       }
     }
   ],
@@ -103,12 +117,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping ISO currency codes to a country or region."
-  },
   "DataDelivery": {
     "ContentFile": "data/Sales.CountryRegionCurrency.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[CountryRegionCode],[CurrencyCode]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Cross-reference table mapping ISO currency codes to a country or region."
+    }
   }
 }

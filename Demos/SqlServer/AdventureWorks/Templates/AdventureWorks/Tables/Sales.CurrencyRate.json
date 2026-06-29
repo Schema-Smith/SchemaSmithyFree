@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Average exchange rate for the day."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Average exchange rate for the day."
+        }
       }
     },
     {
@@ -25,8 +27,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the exchange rate was obtained."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the exchange rate was obtained."
+        }
       }
     },
     {
@@ -39,8 +43,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for CurrencyRate records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for CurrencyRate records."
+        }
       }
     },
     {
@@ -53,8 +59,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Final exchange rate for the day."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Final exchange rate for the day."
+        }
       }
     },
     {
@@ -67,8 +75,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Exchange rate was converted from this currency code."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Exchange rate was converted from this currency code."
+        }
       }
     },
     {
@@ -82,8 +92,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -96,8 +108,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Exchange rate was converted to this currency code."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Exchange rate was converted to this currency code."
+        }
       }
     }
   ],
@@ -108,8 +122,10 @@
       "IndexColumns": "[CurrencyRateDate],[FromCurrencyCode],[ToCurrencyCode]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -120,8 +136,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -135,8 +153,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Currency.FromCurrencyCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Currency.FromCurrencyCode."
+        }
       }
     },
     {
@@ -148,8 +168,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Currency.ToCurrencyCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Currency.ToCurrencyCode."
+        }
       }
     }
   ],
@@ -160,12 +182,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Currency exchange rates."
-  },
   "DataDelivery": {
     "ContentFile": "data/Sales.CurrencyRate.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[CurrencyRateID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Currency exchange rates."
+    }
   }
 }

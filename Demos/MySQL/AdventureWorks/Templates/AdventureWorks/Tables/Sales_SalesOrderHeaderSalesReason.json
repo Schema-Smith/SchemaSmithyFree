@@ -26,7 +26,7 @@
       "Name": "FK_Sales_SalesOrderHeaderSalesReason_SalesReasonID",
       "IndexColumns": "`SalesReasonID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -36,7 +36,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`SalesOrderID`,`SalesReasonID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

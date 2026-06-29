@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Reviewer's comments"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Reviewer's comments"
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Reviewer's e-mail address."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Reviewer's e-mail address."
+        }
       }
     },
     {
@@ -41,8 +45,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -55,8 +61,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product identification number. Foreign key to Product.ProductID."
+        }
       }
     },
     {
@@ -69,8 +77,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for ProductReview records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for ProductReview records."
+        }
       }
     },
     {
@@ -84,8 +94,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product rating given by the reviewer. Scale is 1 to 5 with 5 as the highest rating."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product rating given by the reviewer. Scale is 1 to 5 with 5 as the highest rating."
+        }
       }
     },
     {
@@ -99,8 +111,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date review was submitted."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date review was submitted."
+        }
       }
     },
     {
@@ -113,8 +127,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Name of the reviewer."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Name of the reviewer."
+        }
       }
     }
   ],
@@ -125,8 +141,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "IncludeColumns": "[Comments]",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -137,8 +155,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -152,8 +172,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Product.ProductID."
+        }
       }
     }
   ],
@@ -171,12 +193,14 @@
   },
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Customer reviews of products they have purchased."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.ProductReview.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[ProductReviewID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Customer reviews of products they have purchased."
+    }
   }
 }

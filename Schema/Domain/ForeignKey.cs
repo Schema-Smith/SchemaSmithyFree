@@ -22,11 +22,11 @@ namespace Schema.Domain
         [JsonProperty(Order = 6)]
         public string RelatedColumns { get; set; } = "";
 
-        [SchemaProperty(Pattern = "NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT")]
+        [SchemaProperty(Pattern = "^(NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT)?$")]
         [JsonProperty(Order = 7)]
         public string DeleteAction { get; set; }
 
-        [SchemaProperty(Pattern = "NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT")]
+        [SchemaProperty(Pattern = "^(NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT)?$")]
         [JsonProperty(Order = 8)]
         public string UpdateAction { get; set; }
 

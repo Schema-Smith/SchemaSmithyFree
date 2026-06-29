@@ -136,7 +136,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -145,6 +144,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.suppliers.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "supplier_id"
+    "MatchColumns": "supplier_id",
+    "MergeUpdateDescendents": true
   }
 }

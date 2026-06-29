@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Schema.Domain;
 using Schema.Domain.MySQL;
+using Schema.Utility;
 
 using Schema.Delivery;
 namespace Schema.UnitTests.Domain.MySQL
@@ -96,6 +97,14 @@ namespace Schema.UnitTests.Domain.MySQL
 
             var json = JsonConvert.SerializeObject(table);
             Assert.That(json, Does.Contain("Insert/Update/Delete"));
+        }
+
+        [Test]
+        public void GenerateSchema_RowFormatPatternAcceptsMySqlCasing()
+        {
+            var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.MySQL.MySqlTable));
+            var pattern = schema["properties"]?["RowFormat"]?["pattern"]?.ToString();
+            Assert.That(System.Text.RegularExpressions.Regex.IsMatch("Dynamic", pattern!), Is.True);
         }
 
         [Test]

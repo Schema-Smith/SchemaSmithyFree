@@ -45,14 +45,14 @@
       "Name": "IX_EmployeeDepartmentHistory_DepartmentID",
       "IndexColumns": "`DepartmentID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_EmployeeDepartmentHistory_ShiftID",
       "IndexColumns": "`ShiftID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -62,7 +62,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`BusinessEntityID`,`StartDate`,`DepartmentID`,`ShiftID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

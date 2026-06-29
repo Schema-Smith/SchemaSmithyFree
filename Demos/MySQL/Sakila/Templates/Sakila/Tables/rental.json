@@ -52,21 +52,21 @@
       "Name": "idx_fk_customer_id",
       "IndexColumns": "`customer_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "idx_fk_inventory_id",
       "IndexColumns": "`inventory_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "idx_fk_staff_id",
       "IndexColumns": "`staff_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -76,7 +76,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rental_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -85,7 +85,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rental_date`,`inventory_id`,`customer_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

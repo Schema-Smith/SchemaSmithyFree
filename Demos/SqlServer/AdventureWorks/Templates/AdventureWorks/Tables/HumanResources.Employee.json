@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date of birth."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date of birth."
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Employee records.  Foreign key to BusinessEntity.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for Employee records.  Foreign key to BusinessEntity.BusinessEntityID."
+        }
       }
     },
     {
@@ -41,8 +45,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Inactive, 1 = Active"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "0 = Inactive, 1 = Active"
+        }
       }
     },
     {
@@ -56,8 +62,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "M = Male, F = Female"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "M = Male, F = Female"
+        }
       }
     },
     {
@@ -71,8 +79,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Employee hired on this date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Employee hired on this date."
+        }
       }
     },
     {
@@ -85,8 +95,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Work title such as Buyer or Sales Representative."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Work title such as Buyer or Sales Representative."
+        }
       }
     },
     {
@@ -99,8 +111,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Network login."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Network login."
+        }
       }
     },
     {
@@ -114,8 +128,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "M = Married, S = Single"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "M = Married, S = Single"
+        }
       }
     },
     {
@@ -129,8 +145,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -143,8 +161,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Unique national identification number such as a social security number."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique national identification number such as a social security number."
+        }
       }
     },
     {
@@ -159,8 +179,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "The depth of the employee in the corporate hierarchy."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "The depth of the employee in the corporate hierarchy."
+        }
       }
     },
     {
@@ -174,8 +196,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Where the employee is located in corporate hierarchy."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Where the employee is located in corporate hierarchy."
+        }
       }
     },
     {
@@ -189,8 +213,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     },
     {
@@ -204,8 +230,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Job classification. 0 = Hourly, not exempt from collective bargaining. 1 = Salaried, exempt from collective bargaining."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Job classification. 0 = Hourly, not exempt from collective bargaining. 1 = Salaried, exempt from collective bargaining."
+        }
       }
     },
     {
@@ -220,8 +248,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Number of available sick leave hours."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Number of available sick leave hours."
+        }
       }
     },
     {
@@ -236,8 +266,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Number of available vacation hours."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Number of available vacation hours."
+        }
       }
     }
   ],
@@ -248,8 +280,10 @@
       "IndexColumns": "[LoginID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -258,8 +292,10 @@
       "IndexColumns": "[NationalIDNumber]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -268,8 +304,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -277,8 +315,10 @@
       "IndexColumns": "[OrganizationLevel],[OrganizationNode]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -286,8 +326,10 @@
       "IndexColumns": "[OrganizationNode]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -298,8 +340,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -313,8 +357,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Person.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Person.BusinessEntityID."
+        }
       }
     }
   ],
@@ -325,12 +371,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Employee information such as salary, department, and title."
-  },
   "DataDelivery": {
     "ContentFile": "data/HumanResources.Employee.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[BusinessEntityID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Employee information such as salary, department, and title."
+    }
   }
 }

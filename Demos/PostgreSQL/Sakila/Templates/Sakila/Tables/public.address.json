@@ -113,7 +113,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -122,6 +121,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.address.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "address_id"
+    "MatchColumns": "address_id",
+    "MergeUpdateDescendents": true
   }
 }

@@ -187,7 +187,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "purchasing",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -196,6 +195,7 @@
   "DataDelivery": {
     "ContentFile": "data/purchasing.productvendor.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "productid,businessentityid"
+    "MatchColumns": "productid,businessentityid",
+    "MergeUpdateDescendents": true
   }
 }

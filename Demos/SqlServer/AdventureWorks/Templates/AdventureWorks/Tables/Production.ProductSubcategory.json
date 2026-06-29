@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Subcategory description."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Subcategory description."
+        }
       }
     },
     {
@@ -40,8 +44,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product category identification number. Foreign key to ProductCategory.ProductCategoryID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product category identification number. Foreign key to ProductCategory.ProductCategoryID."
+        }
       }
     },
     {
@@ -54,8 +60,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for ProductSubcategory records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for ProductSubcategory records."
+        }
       }
     },
     {
@@ -69,8 +77,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     }
   ],
@@ -81,8 +91,10 @@
       "IndexColumns": "[Name]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -91,8 +103,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -103,8 +117,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -118,8 +134,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ProductCategory.ProductCategoryID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing ProductCategory.ProductCategoryID."
+        }
       }
     }
   ],
@@ -130,12 +148,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Product subcategories. See ProductCategory table."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.ProductSubcategory.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[ProductSubcategoryID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Product subcategories. See ProductCategory table."
+    }
   }
 }

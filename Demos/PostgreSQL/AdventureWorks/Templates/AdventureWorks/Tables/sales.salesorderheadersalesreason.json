@@ -70,7 +70,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "sales",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -79,6 +78,7 @@
   "DataDelivery": {
     "ContentFile": "data/sales.salesorderheadersalesreason.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "salesorderid,salesreasonid"
+    "MatchColumns": "salesorderid,salesreasonid",
+    "MergeUpdateDescendents": true
   }
 }

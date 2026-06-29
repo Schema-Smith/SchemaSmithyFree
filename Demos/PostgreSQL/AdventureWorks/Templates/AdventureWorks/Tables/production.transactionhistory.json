@@ -122,7 +122,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "production",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -131,6 +130,7 @@
   "DataDelivery": {
     "ContentFile": "data/production.transactionhistory.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "transactionid"
+    "MatchColumns": "transactionid",
+    "MergeUpdateDescendents": true
   }
 }

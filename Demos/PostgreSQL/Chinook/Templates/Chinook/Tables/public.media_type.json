@@ -37,7 +37,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -46,6 +45,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.media_type.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "media_type_id"
+    "MatchColumns": "media_type_id",
+    "MergeUpdateDescendents": true
   }
 }

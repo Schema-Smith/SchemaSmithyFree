@@ -158,7 +158,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -167,6 +166,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.track.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "track_id"
+    "MatchColumns": "track_id",
+    "MergeUpdateDescendents": true
   }
 }

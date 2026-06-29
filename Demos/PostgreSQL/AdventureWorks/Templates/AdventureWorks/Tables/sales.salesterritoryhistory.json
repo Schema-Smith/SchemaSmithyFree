@@ -105,7 +105,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "sales",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -114,6 +113,7 @@
   "DataDelivery": {
     "ContentFile": "data/sales.salesterritoryhistory.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "businessentityid,startdate,territoryid"
+    "MatchColumns": "businessentityid,startdate,territoryid",
+    "MergeUpdateDescendents": true
   }
 }

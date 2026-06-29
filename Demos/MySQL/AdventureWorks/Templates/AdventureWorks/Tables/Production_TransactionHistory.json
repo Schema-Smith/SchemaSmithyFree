@@ -51,7 +51,7 @@
       "DataType": "int",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "AutoIncrement": 1
+      "AutoIncrement": true
     },
     {
       "Name": "`TransactionType`",
@@ -67,14 +67,14 @@
       "Name": "IX_TransactionHistory_ProductID",
       "IndexColumns": "`ProductID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_TransactionHistory_ReferenceOrderID_ReferenceOrderLineID",
       "IndexColumns": "`ReferenceOrderID`,`ReferenceOrderLineID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -84,7 +84,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`TransactionID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

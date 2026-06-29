@@ -45,14 +45,14 @@
       "Name": "EmailAddressID",
       "IndexColumns": "`EmailAddressID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_EmailAddress_EmailAddress",
       "IndexColumns": "`EmailAddress`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -62,7 +62,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`BusinessEntityID`,`EmailAddressID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

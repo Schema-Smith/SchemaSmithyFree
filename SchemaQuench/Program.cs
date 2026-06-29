@@ -88,5 +88,6 @@ public static class Program
         Console.WriteLine("  --PreviewTargets                 Validate, then list the databases/schemas each template would target (read-only). No deployment.");
         Console.WriteLine("  --ResumeQuench                   Resume from an existing checkpoint if one is present.");
         Console.WriteLine("  --CheckpointDirectory:<path>     Directory for checkpoint files (default: %TEMP%/schemaquench-checkpoints).");
+        Console.WriteLine("  --ForceReKindle                  Re-deploy the SchemaSmith helper procedures this run even if the in-database kindle stamp is current.");
     }
 }

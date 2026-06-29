@@ -71,21 +71,21 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductAssemblyID`,`ComponentID`,`StartDate`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Production_BillOfMaterials_ComponentID",
       "IndexColumns": "`ComponentID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_BillOfMaterials_UnitMeasureCode",
       "IndexColumns": "`UnitMeasureCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -95,7 +95,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`BillOfMaterialsID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

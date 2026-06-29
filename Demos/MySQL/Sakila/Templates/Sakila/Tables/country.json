@@ -32,7 +32,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`country_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

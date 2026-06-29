@@ -37,7 +37,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -46,6 +45,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.genre.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "genre_id"
+    "MatchColumns": "genre_id",
+    "MergeUpdateDescendents": true
   }
 }

@@ -41,7 +41,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`BusinessEntityID`,`RateChangeDate`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

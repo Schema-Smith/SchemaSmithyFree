@@ -58,7 +58,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`Name`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -67,7 +67,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rowguid`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -77,7 +77,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductModelID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

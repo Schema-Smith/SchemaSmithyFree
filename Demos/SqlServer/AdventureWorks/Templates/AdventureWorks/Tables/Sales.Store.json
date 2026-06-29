@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to Customer.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to Customer.BusinessEntityID."
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Demographic informationg about the store such as the number of employees, annual sales and store type."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Demographic informationg about the store such as the number of employees, annual sales and store type."
+        }
       }
     },
     {
@@ -41,8 +45,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -55,8 +61,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Name of the store."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Name of the store."
+        }
       }
     },
     {
@@ -70,8 +78,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     },
     {
@@ -85,8 +95,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ID of the sales person assigned to the customer. Foreign key to SalesPerson.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ID of the sales person assigned to the customer. Foreign key to SalesPerson.BusinessEntityID."
+        }
       }
     }
   ],
@@ -97,8 +109,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -106,8 +120,10 @@
       "IndexColumns": "[SalesPersonID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -118,8 +134,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -133,8 +151,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID"
+        }
       }
     },
     {
@@ -146,8 +166,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesPerson.SalesPersonID"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing SalesPerson.SalesPersonID"
+        }
       }
     }
   ],
@@ -161,18 +183,22 @@
       "Name": "[PXML_Store_Demographics]",
       "IsPrimary": true,
       "Column": "[Demographics]",
-      "ExtendedProperties": {
-        "MS_Description": "Primary XML index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary XML index."
+        }
       }
     }
   ],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Customers (resellers) of Adventure Works products."
-  },
   "DataDelivery": {
     "ContentFile": "data/Sales.Store.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[BusinessEntityID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Customers (resellers) of Adventure Works products."
+    }
   }
 }

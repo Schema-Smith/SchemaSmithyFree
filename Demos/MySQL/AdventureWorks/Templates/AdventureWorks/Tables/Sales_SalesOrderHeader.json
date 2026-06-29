@@ -191,63 +191,63 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rowguid`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Sales_SalesOrderHeader_BillToAddressID",
       "IndexColumns": "`BillToAddressID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Sales_SalesOrderHeader_CreditCardID",
       "IndexColumns": "`CreditCardID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Sales_SalesOrderHeader_CurrencyRateID",
       "IndexColumns": "`CurrencyRateID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Sales_SalesOrderHeader_ShipMethodID",
       "IndexColumns": "`ShipMethodID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Sales_SalesOrderHeader_ShipToAddressID",
       "IndexColumns": "`ShipToAddressID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Sales_SalesOrderHeader_TerritoryID",
       "IndexColumns": "`TerritoryID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_SalesOrderHeader_CustomerID",
       "IndexColumns": "`CustomerID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_SalesOrderHeader_SalesPersonID",
       "IndexColumns": "`SalesPersonID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -257,7 +257,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`SalesOrderID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

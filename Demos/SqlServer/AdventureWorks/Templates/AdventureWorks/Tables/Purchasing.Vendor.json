@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Vendor account (identification) number."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Vendor account (identification) number."
+        }
       }
     },
     {
@@ -26,8 +28,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Vendor no longer used. 1 = Vendor is actively used."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "0 = Vendor no longer used. 1 = Vendor is actively used."
+        }
       }
     },
     {
@@ -40,8 +44,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Vendor records.  Foreign key to BusinessEntity.BusinessEntityID"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for Vendor records.  Foreign key to BusinessEntity.BusinessEntityID"
+        }
       }
     },
     {
@@ -55,8 +61,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "1 = Superior, 2 = Excellent, 3 = Above average, 4 = Average, 5 = Below average"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "1 = Superior, 2 = Excellent, 3 = Above average, 4 = Average, 5 = Below average"
+        }
       }
     },
     {
@@ -70,8 +78,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -84,8 +94,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Company name."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Company name."
+        }
       }
     },
     {
@@ -99,8 +111,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = Do not use if another vendor is available. 1 = Preferred over other vendors supplying the same product."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "0 = Do not use if another vendor is available. 1 = Preferred over other vendors supplying the same product."
+        }
       }
     },
     {
@@ -114,8 +128,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Vendor URL."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Vendor URL."
+        }
       }
     }
   ],
@@ -126,8 +142,10 @@
       "IndexColumns": "[AccountNumber]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -138,8 +156,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -153,8 +173,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID"
+        }
       }
     }
   ],
@@ -165,12 +187,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Companies from whom Adventure Works Cycles purchases parts or other goods."
-  },
   "DataDelivery": {
     "ContentFile": "data/Purchasing.Vendor.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[BusinessEntityID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Companies from whom Adventure Works Cycles purchases parts or other goods."
+    }
   }
 }

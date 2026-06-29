@@ -72,21 +72,21 @@
       "Name": "idx_fk_address_id",
       "IndexColumns": "`address_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "idx_fk_store_id",
       "IndexColumns": "`store_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "idx_last_name",
       "IndexColumns": "`last_name`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -96,7 +96,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`customer_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

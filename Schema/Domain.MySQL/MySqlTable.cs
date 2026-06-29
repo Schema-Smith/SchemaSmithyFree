@@ -31,7 +31,7 @@ namespace Schema.Domain.MySQL
         [JsonProperty(Order = 100)]
         public string Engine { get; set; } = "InnoDB";
 
-        [SchemaProperty(Pattern = "DYNAMIC|COMPACT|COMPRESSED|REDUNDANT")]
+        [SchemaProperty(Pattern = "Dynamic|Compact|Compressed|Redundant|Fixed")]
         [JsonProperty(Order = 101)]
         public string RowFormat { get; set; }
 

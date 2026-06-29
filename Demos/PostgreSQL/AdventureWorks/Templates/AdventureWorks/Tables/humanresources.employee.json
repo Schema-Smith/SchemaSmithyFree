@@ -193,7 +193,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "humanresources",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -202,6 +201,7 @@
   "DataDelivery": {
     "ContentFile": "data/humanresources.employee.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "businessentityid"
+    "MatchColumns": "businessentityid",
+    "MergeUpdateDescendents": true
   }
 }

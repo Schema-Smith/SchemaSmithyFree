@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shipment tracking number supplied by the shipper."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Shipment tracking number supplied by the shipper."
+        }
       }
     },
     {
@@ -27,8 +29,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Per product subtotal. Computed as UnitPrice * (1 - UnitPriceDiscount) * OrderQty."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Per product subtotal. Computed as UnitPrice * (1 - UnitPriceDiscount) * OrderQty."
+        }
       }
     },
     {
@@ -42,8 +46,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -57,8 +63,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Quantity ordered per product."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Quantity ordered per product."
+        }
       }
     },
     {
@@ -71,8 +79,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Product sold to customer. Foreign key to Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Product sold to customer. Foreign key to Product.ProductID."
+        }
       }
     },
     {
@@ -86,8 +96,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     },
     {
@@ -100,8 +112,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. One incremental unique number per product sold."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. One incremental unique number per product sold."
+        }
       }
     },
     {
@@ -114,8 +128,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to SalesOrderHeader.SalesOrderID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to SalesOrderHeader.SalesOrderID."
+        }
       }
     },
     {
@@ -128,8 +144,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Promotional code. Foreign key to SpecialOffer.SpecialOfferID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Promotional code. Foreign key to SpecialOffer.SpecialOfferID."
+        }
       }
     },
     {
@@ -143,8 +161,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Selling price of a single product."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Selling price of a single product."
+        }
       }
     },
     {
@@ -159,8 +179,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Discount amount."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Discount amount."
+        }
       }
     }
   ],
@@ -171,8 +193,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -180,8 +204,10 @@
       "IndexColumns": "[ProductID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -192,8 +218,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -207,8 +235,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SalesOrderHeader.PurchaseOrderID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing SalesOrderHeader.PurchaseOrderID."
+        }
       }
     },
     {
@@ -220,8 +250,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Sales]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing SpecialOfferProduct.SpecialOfferIDProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing SpecialOfferProduct.SpecialOfferIDProductID."
+        }
       }
     }
   ],
@@ -232,12 +264,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Individual products associated with a specific sales order. See SalesOrderHeader."
-  },
   "DataDelivery": {
     "ContentFile": "data/Sales.SalesOrderDetail.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[SalesOrderID],[SalesOrderDetailID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Individual products associated with a specific sales order. See SalesOrderHeader."
+    }
   }
 }

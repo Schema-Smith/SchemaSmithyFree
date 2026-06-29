@@ -54,7 +54,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`Name`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -63,7 +63,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rowguid`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -73,7 +73,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ShipMethodID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

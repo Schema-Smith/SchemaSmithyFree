@@ -20,7 +20,7 @@
     {
       "Name": "FK_CustomerCustomerDemo",
       "IndexColumns": "`CustomerTypeID`",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -30,7 +30,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`CustomerID`,`CustomerTypeID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

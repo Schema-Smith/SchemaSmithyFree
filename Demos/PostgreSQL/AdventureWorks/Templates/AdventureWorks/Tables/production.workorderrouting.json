@@ -181,7 +181,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "production",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -190,6 +189,7 @@
   "DataDelivery": {
     "ContentFile": "data/production.workorderrouting.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "workorderid,productid,operationsequence"
+    "MatchColumns": "workorderid,productid,operationsequence",
+    "MergeUpdateDescendents": true
   }
 }

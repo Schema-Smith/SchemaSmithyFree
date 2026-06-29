@@ -66,14 +66,14 @@
       "Name": "IX_TransactionHistoryArchive_ProductID",
       "IndexColumns": "`ProductID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "IX_TransactionHistoryArchive_ReferenceOrderID_ReferenceOrderLine",
       "IndexColumns": "`ReferenceOrderID`,`ReferenceOrderLineID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -83,7 +83,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`TransactionID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

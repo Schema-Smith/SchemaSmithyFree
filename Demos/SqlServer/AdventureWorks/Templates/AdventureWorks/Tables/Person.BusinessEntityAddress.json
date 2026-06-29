@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to Address.AddressID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to Address.AddressID."
+        }
       }
     },
     {
@@ -25,8 +27,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to AddressType.AddressTypeID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to AddressType.AddressTypeID."
+        }
       }
     },
     {
@@ -39,8 +43,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key. Foreign key to BusinessEntity.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key. Foreign key to BusinessEntity.BusinessEntityID."
+        }
       }
     },
     {
@@ -54,8 +60,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -69,8 +77,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Used to support a merge replication sample."
+        }
       }
     }
   ],
@@ -81,8 +91,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support replication samples."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support replication samples."
+        }
       }
     },
     {
@@ -90,8 +102,10 @@
       "IndexColumns": "[AddressID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -99,8 +113,10 @@
       "IndexColumns": "[AddressTypeID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -111,8 +127,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -126,8 +144,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Address.AddressID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Address.AddressID."
+        }
       }
     },
     {
@@ -139,8 +159,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing AddressType.AddressTypeID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing AddressType.AddressTypeID."
+        }
       }
     },
     {
@@ -152,8 +174,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Person]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing BusinessEntity.BusinessEntityID."
+        }
       }
     }
   ],
@@ -164,12 +188,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Cross-reference table mapping customers, vendors, and employees to their addresses."
-  },
   "DataDelivery": {
     "ContentFile": "data/Person.BusinessEntityAddress.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[BusinessEntityID],[AddressID],[AddressTypeID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Cross-reference table mapping customers, vendors, and employees to their addresses."
+    }
   }
 }

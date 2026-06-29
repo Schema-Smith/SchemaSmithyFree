@@ -56,7 +56,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -65,6 +64,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.categories.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "category_id"
+    "MatchColumns": "category_id",
+    "MergeUpdateDescendents": true
   }
 }

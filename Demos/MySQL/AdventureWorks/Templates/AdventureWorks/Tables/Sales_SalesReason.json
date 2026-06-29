@@ -40,7 +40,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`SalesReasonID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

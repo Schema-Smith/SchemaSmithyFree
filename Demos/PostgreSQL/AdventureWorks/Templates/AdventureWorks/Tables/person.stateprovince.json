@@ -118,7 +118,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "person",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -127,6 +126,7 @@
   "DataDelivery": {
     "ContentFile": "data/person.stateprovince.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "stateprovinceid"
+    "MatchColumns": "stateprovinceid",
+    "MergeUpdateDescendents": true
   }
 }

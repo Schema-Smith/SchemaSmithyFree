@@ -34,14 +34,14 @@
       "Name": "FK_Production_ProductModelProductDescriptionCulture_CultureID",
       "IndexColumns": "`CultureID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Production_ProductModelProductDescriptionCulture_ProductDescr",
       "IndexColumns": "`ProductDescriptionID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -51,7 +51,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductModelID`,`ProductDescriptionID`,`CultureID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

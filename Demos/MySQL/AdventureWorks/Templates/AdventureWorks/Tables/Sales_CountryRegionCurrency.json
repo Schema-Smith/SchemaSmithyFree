@@ -30,7 +30,7 @@
       "Name": "IX_CountryRegionCurrency_CurrencyCode",
       "IndexColumns": "`CurrencyCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -40,7 +40,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`CountryRegionCode`,`CurrencyCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

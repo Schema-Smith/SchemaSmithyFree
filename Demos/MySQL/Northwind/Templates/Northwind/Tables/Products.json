@@ -82,14 +82,14 @@
       "Name": "CategoriesProducts",
       "IndexColumns": "`CategoryID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "CategoryID",
       "IndexColumns": "`CategoryID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -99,28 +99,28 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "ProductName",
       "IndexColumns": "`ProductName`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "SupplierID",
       "IndexColumns": "`SupplierID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "SuppliersProducts",
       "IndexColumns": "`SupplierID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

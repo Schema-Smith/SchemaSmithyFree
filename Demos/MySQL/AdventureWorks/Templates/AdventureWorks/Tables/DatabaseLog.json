@@ -6,7 +6,7 @@
       "DataType": "int",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "AutoIncrement": 1
+      "AutoIncrement": true
     },
     {
       "Name": "`DatabaseUser`",
@@ -73,7 +73,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`DatabaseLogID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

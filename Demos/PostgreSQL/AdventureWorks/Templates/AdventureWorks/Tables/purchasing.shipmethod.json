@@ -89,7 +89,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "purchasing",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -98,6 +97,7 @@
   "DataDelivery": {
     "ContentFile": "data/purchasing.shipmethod.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "shipmethodid"
+    "MatchColumns": "shipmethodid",
+    "MergeUpdateDescendents": true
   }
 }

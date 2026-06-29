@@ -32,7 +32,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`Name`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -42,7 +42,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`UnitMeasureCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

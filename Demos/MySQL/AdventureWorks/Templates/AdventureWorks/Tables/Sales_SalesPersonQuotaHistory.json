@@ -43,7 +43,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rowguid`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -53,7 +53,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`BusinessEntityID`,`QuotaDate`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

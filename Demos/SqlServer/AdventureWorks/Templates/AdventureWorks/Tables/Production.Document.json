@@ -12,8 +12,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Engineering change approval number."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Engineering change approval number."
+        }
       }
     },
     {
@@ -27,8 +29,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Complete document."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Complete document."
+        }
       }
     },
     {
@@ -43,8 +47,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Depth in the document hierarchy."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Depth in the document hierarchy."
+        }
       }
     },
     {
@@ -57,8 +63,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for Document records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for Document records."
+        }
       }
     },
     {
@@ -72,8 +80,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Document abstract."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Document abstract."
+        }
       }
     },
     {
@@ -86,8 +96,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "File extension indicating the document type. For example, .doc or .txt."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "File extension indicating the document type. For example, .doc or .txt."
+        }
       }
     },
     {
@@ -100,8 +112,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "File name of the document"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "File name of the document"
+        }
       }
     },
     {
@@ -115,8 +129,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "0 = This is a folder, 1 = This is a document."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "0 = This is a folder, 1 = This is a document."
+        }
       }
     },
     {
@@ -130,8 +146,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -144,8 +162,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Employee who controls the document.  Foreign key to Employee.BusinessEntityID"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Employee who controls the document.  Foreign key to Employee.BusinessEntityID"
+        }
       }
     },
     {
@@ -158,8 +178,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Revision number of the document. "
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Revision number of the document. "
+        }
       }
     },
     {
@@ -173,8 +195,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Required for FileStream."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "ROWGUIDCOL number uniquely identifying the record. Required for FileStream."
+        }
       }
     },
     {
@@ -188,8 +212,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "1 = Pending approval, 2 = Approved, 3 = Obsolete"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "1 = Pending approval, 2 = Approved, 3 = Obsolete"
+        }
       }
     },
     {
@@ -202,8 +228,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Title of the document."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Title of the document."
+        }
       }
     }
   ],
@@ -214,8 +242,10 @@
       "IndexColumns": "[DocumentLevel],[DocumentNode]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -224,8 +254,10 @@
       "IndexColumns": "[rowguid]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index. Used to support FileStream."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index. Used to support FileStream."
+        }
       }
     },
     {
@@ -233,8 +265,10 @@
       "IndexColumns": "[FileName],[Revision]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Unique nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Unique nonclustered index."
+        }
       }
     },
     {
@@ -245,8 +279,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     },
     {
@@ -268,8 +304,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[HumanResources]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Employee.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Employee.BusinessEntityID."
+        }
       }
     }
   ],
@@ -287,12 +325,14 @@
   },
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Product maintenance documents."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.Document.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[DocumentNode]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Product maintenance documents."
+    }
   }
 }

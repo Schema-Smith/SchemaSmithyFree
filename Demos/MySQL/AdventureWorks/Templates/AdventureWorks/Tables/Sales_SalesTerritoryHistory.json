@@ -50,14 +50,14 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rowguid`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Sales_SalesTerritoryHistory_TerritoryID",
       "IndexColumns": "`TerritoryID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -67,7 +67,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`BusinessEntityID`,`StartDate`,`TerritoryID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

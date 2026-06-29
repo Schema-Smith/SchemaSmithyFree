@@ -73,7 +73,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -82,6 +81,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.playlist_track.tabledata",
     "MergeType": "Insert",
-    "MatchColumns": "playlist_id,track_id"
+    "MatchColumns": "playlist_id,track_id",
+    "MergeUpdateDescendents": true
   }
 }

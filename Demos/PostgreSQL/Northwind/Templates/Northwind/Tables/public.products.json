@@ -138,7 +138,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -147,6 +146,7 @@
   "DataDelivery": {
     "ContentFile": "data/public.products.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "product_id"
+    "MatchColumns": "product_id",
+    "MergeUpdateDescendents": true
   }
 }

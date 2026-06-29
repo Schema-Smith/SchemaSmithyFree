@@ -38,7 +38,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`SystemInformationID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

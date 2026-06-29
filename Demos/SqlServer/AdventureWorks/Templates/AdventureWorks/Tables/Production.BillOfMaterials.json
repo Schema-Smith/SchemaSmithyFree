@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key for BillOfMaterials records."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key for BillOfMaterials records."
+        }
       }
     },
     {
@@ -25,8 +27,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Indicates the depth the component is from its parent (AssemblyID)."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Indicates the depth the component is from its parent (AssemblyID)."
+        }
       }
     },
     {
@@ -39,8 +43,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Component identification number. Foreign key to Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Component identification number. Foreign key to Product.ProductID."
+        }
       }
     },
     {
@@ -54,8 +60,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the component stopped being used in the assembly item."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date the component stopped being used in the assembly item."
+        }
       }
     },
     {
@@ -69,8 +77,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -85,8 +95,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Quantity of the component needed to create the assembly."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Quantity of the component needed to create the assembly."
+        }
       }
     },
     {
@@ -100,8 +112,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Parent product identification number. Foreign key to Product.ProductID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Parent product identification number. Foreign key to Product.ProductID."
+        }
       }
     },
     {
@@ -115,8 +129,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date the component started being used in the assembly item."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date the component started being used in the assembly item."
+        }
       }
     },
     {
@@ -129,8 +145,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Standard code identifying the unit of measure for the quantity."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Standard code identifying the unit of measure for the quantity."
+        }
       }
     }
   ],
@@ -142,8 +160,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Clustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Clustered index."
+        }
       }
     },
     {
@@ -151,8 +171,10 @@
       "IndexColumns": "[UnitMeasureCode]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -162,8 +184,10 @@
       "IndexColumns": "[BillOfMaterialsID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Nonclustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Nonclustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -177,8 +201,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ComponentID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Product.ComponentID."
+        }
       }
     },
     {
@@ -190,8 +216,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Product.ProductAssemblyID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Product.ProductAssemblyID."
+        }
       }
     },
     {
@@ -203,8 +231,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Production]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing UnitMeasure.UnitMeasureCode."
+        }
       }
     }
   ],
@@ -213,24 +243,30 @@
       "Name": "[CK_BillOfMaterials_BOMLevel]",
       "Expression": "[ProductAssemblyID] IS NULL AND [BOMLevel]=(0) AND [PerAssemblyQty]=(1.00) OR [ProductAssemblyID] IS NOT NULL AND [BOMLevel]>=(1)",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [ProductAssemblyID] IS NULL AND [BOMLevel] = (0) AND [PerAssemblyQty] = (1) OR [ProductAssemblyID] IS NOT NULL AND [BOMLevel] >= (1)"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [ProductAssemblyID] IS NULL AND [BOMLevel] = (0) AND [PerAssemblyQty] = (1) OR [ProductAssemblyID] IS NOT NULL AND [BOMLevel] >= (1)"
+        }
       }
     },
     {
       "Name": "[CK_BillOfMaterials_EndDate]",
       "Expression": "[EndDate]>[StartDate] OR [EndDate] IS NULL",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint EndDate] > [StartDate] OR [EndDate] IS NULL"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint EndDate] > [StartDate] OR [EndDate] IS NULL"
+        }
       }
     },
     {
       "Name": "[CK_BillOfMaterials_ProductAssemblyID]",
       "Expression": "[ProductAssemblyID]<>[ComponentID]",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [ProductAssemblyID] <> [ComponentID]"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [ProductAssemblyID] <> [ComponentID]"
+        }
       }
     }
   ],
@@ -240,12 +276,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "Items required to make bicycles and bicycle subassemblies. It identifies the heirarchical relationship between a parent product and its components."
-  },
   "DataDelivery": {
     "ContentFile": "data/Production.BillOfMaterials.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[BillOfMaterialsID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "Items required to make bicycles and bicycle subassemblies. It identifies the heirarchical relationship between a parent product and its components."
+    }
   }
 }

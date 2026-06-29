@@ -21,7 +21,8 @@ namespace Schema.Domain
         [JsonProperty(Order = 1)]
         public string Name { get; set; } = "";
 
-        [SchemaProperty(Required = true)]
+        // Not schema-required: a template may identify its target via SchemaIdentificationScript
+        // instead (and on MySQL that field is a backward-compat alias for this one).
         [JsonProperty(Order = 2)]
         public string DatabaseIdentificationScript { get; set; }
 

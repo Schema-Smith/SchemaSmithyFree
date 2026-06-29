@@ -37,7 +37,7 @@
       "Name": "idx_actor_last_name",
       "IndexColumns": "`last_name`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -47,7 +47,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`actor_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

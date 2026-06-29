@@ -115,7 +115,7 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 | `SkipIfReadOnly` | bool | `false` | No | When `true`, databases that are read-only are silently skipped instead of failing the quench. Enables Availability Group secondary handling on SQL Server and replica handling on other platforms. |
 | `ScriptFolders` | array | `[]` | No | Optional list of `TemplateFolder` definitions. When empty, the platform's default folder set is used. When non-empty, this array fully replaces the defaults -- so include every folder you want active. See [Custom Script Folders](#custom-script-folders). |
 | `ScriptTokens` | object | `{}` | No | Key-value pairs that override matching product-level tokens for this template. Template tokens take precedence over product tokens with the same key. |
-| `SchemaIdentificationScript` | string | | No | SQL Server / PostgreSQL only. Query returning one column, N rows; each row is a schema name to iterate over. Presence activates schema-template mode. See [Schema Templates](#schema-templates). |
+| `SchemaIdentificationScript` | string | | No | **SQL Server / PostgreSQL:** query returning one column, N rows; each row is a schema name to iterate over — presence activates schema-template mode (see [Schema Templates](#schema-templates)). **MySQL:** has no in-database schema axis (a schema *is* a database), so schema templates don't apply; the field is instead accepted as a **deprecated backward-compat alias** for `DatabaseIdentificationScript` — on load its value migrates into `DatabaseIdentificationScript` (only when that is empty) and a deprecation warning advises renaming. Use `DatabaseIdentificationScript` directly on MySQL. |
 | `CreateSchemaIfMissing` | bool | `false` | No | Schema templates only. When `true`, the engine creates any discovered schema that doesn't yet exist before running that iteration. See [Schema Templates](#schema-templates). |
 | `AllowParallel` | bool | `true` | No | Schema templates only. When `false`, iterations of this template run serially even when the global thread pool has capacity. See [Schema Templates](#schema-templates). |
 | `ContinueOnSchemaFailure` | bool | `true` | No | Schema templates only. When `false`, the first failing iteration aborts all subsequent iterations for this template. See [Schema Templates](#schema-templates). |
@@ -431,7 +431,7 @@ Each platform's table definition extends the shared properties with engine-speci
 | `CharacterSet` | string | `null` | Default character set for the table. |
 | `Collation` | string | `null` | Default collation for the table. |
 | `Comment` | string | `null` | Table comment. |
-| `AutoIncrementValue` | ulong | `null` | Initial auto-increment value. |
+| `AutoIncrementValue` | ulong | `null` | Initial auto-increment seed value. Applied at quench time using set-if-higher semantics: the seed is only raised, never lowered (MySQL clamps a below-current value to max+1, so skipping the statement avoids phantom DDL on every quench). |
 | `FullTextIndexes` | array | `[]` | Full-text index definitions (MySQL supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
 
 ### Minimal example (PostgreSQL)
@@ -1041,7 +1041,7 @@ SchemaQuench decodes these filenames transparently when reading definitions. You
 
 Schema templates fan a single declarative template out across multiple schemas inside one database. You write the template once -- tables, procedures, views, migration scripts -- and SchemaQuench runs it once per schema returned by the `SchemaIdentificationScript` query, injecting the active schema name as the `{{SchemaName}}` token at every step. The most common use is multi-tenant SaaS where each tenant owns their own schema, but any pattern that needs the same object shape replicated across schemas works the same way. For a full narrative walkthrough, see [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md).
 
-Schema templates are supported on **SQL Server and PostgreSQL only**. MySQL uses a database-per-tenant model instead -- there is no sub-database schema namespace to fan out across.
+Schema templates are supported on **SQL Server and PostgreSQL only**. MySQL uses a database-per-tenant model instead -- there is no sub-database schema namespace to fan out across. On MySQL the `SchemaIdentificationScript` field is still *accepted*, but only as a **deprecated backward-compat alias** for `DatabaseIdentificationScript` (MySQL conflates schema and database): its value migrates into `DatabaseIdentificationScript` when that field is empty, a deprecation warning advises renaming, and no schema fan-out occurs. New MySQL packages should use `DatabaseIdentificationScript` directly.
 
 ### Discovery query
 

@@ -40,14 +40,14 @@
       "Name": "OrderID",
       "IndexColumns": "`OrderID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "OrdersOrder_Details",
       "IndexColumns": "`OrderID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -57,21 +57,21 @@
       "UniqueConstraint": true,
       "IndexColumns": "`OrderID`,`ProductID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "ProductID",
       "IndexColumns": "`ProductID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "ProductsOrder_Details",
       "IndexColumns": "`ProductID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

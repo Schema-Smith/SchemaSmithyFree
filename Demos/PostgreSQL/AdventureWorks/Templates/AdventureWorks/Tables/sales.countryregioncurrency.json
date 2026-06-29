@@ -70,7 +70,6 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "sales",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
@@ -79,6 +78,7 @@
   "DataDelivery": {
     "ContentFile": "data/sales.countryregioncurrency.tabledata",
     "MergeType": "Insert/Update",
-    "MatchColumns": "countryregioncode,currencycode"
+    "MatchColumns": "countryregioncode,currencycode",
+    "MergeUpdateDescendents": true
   }
 }

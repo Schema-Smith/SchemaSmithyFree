@@ -37,8 +37,10 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
-  "FillFactor": 100
+  "FillFactor": 100,
+  "DataDelivery": {
+    "MergeUpdateDescendents": true
+  }
 }

@@ -11,8 +11,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Employee who created the purchase order. Foreign key to Employee.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Employee who created the purchase order. Foreign key to Employee.BusinessEntityID."
+        }
       }
     },
     {
@@ -27,8 +29,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shipping cost."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Shipping cost."
+        }
       }
     },
     {
@@ -42,8 +46,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Date and time the record was last updated."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Date and time the record was last updated."
+        }
       }
     },
     {
@@ -57,8 +63,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Purchase order creation date."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Purchase order creation date."
+        }
       }
     },
     {
@@ -71,8 +79,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Primary key."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key."
+        }
       }
     },
     {
@@ -86,8 +96,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Incremental number to track changes to the purchase order over time."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Incremental number to track changes to the purchase order over time."
+        }
       }
     },
     {
@@ -101,8 +113,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Estimated shipment date from the vendor."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Estimated shipment date from the vendor."
+        }
       }
     },
     {
@@ -115,8 +129,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Shipping method. Foreign key to ShipMethod.ShipMethodID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Shipping method. Foreign key to ShipMethod.ShipMethodID."
+        }
       }
     },
     {
@@ -131,8 +147,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Order current status. 1 = Pending; 2 = Approved; 3 = Rejected; 4 = Complete"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Order current status. 1 = Pending; 2 = Approved; 3 = Rejected; 4 = Complete"
+        }
       }
     },
     {
@@ -147,8 +165,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Purchase order subtotal. Computed as SUM(PurchaseOrderDetail.LineTotal)for the appropriate PurchaseOrderID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Purchase order subtotal. Computed as SUM(PurchaseOrderDetail.LineTotal)for the appropriate PurchaseOrderID."
+        }
       }
     },
     {
@@ -163,8 +183,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Tax amount."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Tax amount."
+        }
       }
     },
     {
@@ -179,8 +201,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Total due to vendor. Computed as Subtotal + TaxAmt + Freight."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Total due to vendor. Computed as Subtotal + TaxAmt + Freight."
+        }
       }
     },
     {
@@ -193,8 +217,10 @@
       "EncryptionType": "NONE",
       "EncryptionKey": "",
       "EncryptionAlgorithm": "",
-      "ExtendedProperties": {
-        "MS_Description": "Vendor with whom the purchase order is placed. Foreign key to Vendor.BusinessEntityID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Vendor with whom the purchase order is placed. Foreign key to Vendor.BusinessEntityID."
+        }
       }
     }
   ],
@@ -204,8 +230,10 @@
       "IndexColumns": "[EmployeeID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -213,8 +241,10 @@
       "IndexColumns": "[VendorID]",
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
-      "ExtendedProperties": {
-        "MS_Description": "Nonclustered index."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Nonclustered index."
+        }
       }
     },
     {
@@ -225,8 +255,10 @@
       "ShouldApplyExpression": "",
       "CompressionType": "NONE",
       "Clustered": true,
-      "ExtendedProperties": {
-        "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Primary key (clustered) constraint Clustered index created by a primary key constraint."
+        }
       }
     }
   ],
@@ -240,8 +272,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[HumanResources]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Employee.EmployeeID."
+        }
       }
     },
     {
@@ -253,8 +287,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Purchasing]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing ShipMethod.ShipMethodID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing ShipMethod.ShipMethodID."
+        }
       }
     },
     {
@@ -266,8 +302,10 @@
       "UpdateAction": "NO ACTION",
       "ShouldApplyExpression": "",
       "RelatedTableSchema": "[Purchasing]",
-      "ExtendedProperties": {
-        "MS_Description": "Foreign key constraint referencing Vendor.VendorID."
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Foreign key constraint referencing Vendor.VendorID."
+        }
       }
     }
   ],
@@ -276,8 +314,10 @@
       "Name": "[CK_PurchaseOrderHeader_ShipDate]",
       "Expression": "[ShipDate]>=[OrderDate] OR [ShipDate] IS NULL",
       "ShouldApplyExpression": "",
-      "ExtendedProperties": {
-        "MS_Description": "Check constraint [ShipDate] >= [OrderDate] OR [ShipDate] IS NULL"
+      "Extensions": {
+        "ExtendedProperties": {
+          "MS_Description": "Check constraint [ShipDate] >= [OrderDate] OR [ShipDate] IS NULL"
+        }
       }
     }
   ],
@@ -287,12 +327,14 @@
   "CompressionType": "NONE",
   "XmlIndexes": [],
   "Statistics": [],
-  "ExtendedProperties": {
-    "MS_Description": "General purchase order information. See PurchaseOrderDetail."
-  },
   "DataDelivery": {
     "ContentFile": "data/Purchasing.PurchaseOrderHeader.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "[PurchaseOrderID]"
+  },
+  "Extensions": {
+    "ExtendedProperties": {
+      "MS_Description": "General purchase order information. See PurchaseOrderDetail."
+    }
   }
 }

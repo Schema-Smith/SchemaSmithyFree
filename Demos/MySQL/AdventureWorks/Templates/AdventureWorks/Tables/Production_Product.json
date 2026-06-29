@@ -196,7 +196,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`Name`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -205,7 +205,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductNumber`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -214,35 +214,35 @@
       "UniqueConstraint": true,
       "IndexColumns": "`rowguid`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Production_Product_ProductModelID",
       "IndexColumns": "`ProductModelID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Production_Product_ProductSubcategoryID",
       "IndexColumns": "`ProductSubcategoryID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Production_Product_SizeUnitMeasureCode",
       "IndexColumns": "`SizeUnitMeasureCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
       "Name": "FK_Production_Product_WeightUnitMeasureCode",
       "IndexColumns": "`WeightUnitMeasureCode`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -252,7 +252,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

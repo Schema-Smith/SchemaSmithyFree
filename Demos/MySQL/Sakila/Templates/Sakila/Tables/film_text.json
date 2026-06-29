@@ -33,7 +33,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`film_id`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

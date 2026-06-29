@@ -121,17 +121,16 @@
   "ShouldApplyExpression": "",
   "OldName": "",
   "Schema": "public",
-  "MergeUpdateDescendents": true,
   "AccessMethod": "heap",
   "PersistenceType": "Logged",
   "FillFactor": 100,
-  "MergeDisableRules": true,
   "Statistics": [],
   "ExcludeConstraints": [],
   "DataDelivery": {
     "ContentFile": "data/public.payment.tabledata",
     "MergeType": "Insert/Update",
     "MatchColumns": "payment_id",
-    "MergeDisableRules": true
+    "MergeDisableRules": true,
+    "MergeUpdateDescendents": true
   }
 }

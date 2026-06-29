@@ -65,7 +65,7 @@
       "Name": "IX_ProductReview_ProductID_Name",
       "IndexColumns": "`ProductID`,`ReviewerName`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -75,7 +75,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`ProductReviewID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

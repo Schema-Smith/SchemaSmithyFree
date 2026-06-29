@@ -19,7 +19,7 @@
     {
       "Name": "FK_EmployeeTerritories_Territories",
       "IndexColumns": "`TerritoryID`",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     },
     {
@@ -29,7 +29,7 @@
       "UniqueConstraint": true,
       "IndexColumns": "`EmployeeID`,`TerritoryID`",
       "ShouldApplyExpression": "",
-      "Visible": 1,
+      "Visible": true,
       "IndexType": "BTREE"
     }
   ],

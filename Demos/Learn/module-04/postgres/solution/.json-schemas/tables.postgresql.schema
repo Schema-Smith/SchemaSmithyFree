@@ -147,11 +147,11 @@
           },
           "DeleteAction": {
             "type": "string",
-            "pattern": "NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT"
+            "pattern": "^(NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT)?$"
           },
           "UpdateAction": {
             "type": "string",
-            "pattern": "NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT"
+            "pattern": "^(NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT)?$"
           },
           "ShouldApplyExpression": {
             "type": "string"

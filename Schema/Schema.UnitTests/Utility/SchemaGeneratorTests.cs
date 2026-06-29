@@ -163,7 +163,9 @@ public class SchemaGeneratorTests
 
         var required = schema["required"]?.ToObject<List<string>>();
         Assert.That(required, Contains.Item("Name"));
-        Assert.That(required, Contains.Item("DatabaseIdentificationScript"));
+        // DatabaseIdentificationScript is no longer schema-required — a template may identify
+        // its target via SchemaIdentificationScript instead.
+        Assert.That(required, Does.Not.Contain("DatabaseIdentificationScript"));
     }
 
     [Test]
@@ -193,7 +195,7 @@ public class SchemaGeneratorTests
         Assert.That(mergeType?["pattern"]?.ToString(), Is.EqualTo("Insert|Insert/Update|Insert/Update/Delete"));
 
         var fkItems = schema["properties"]?["ForeignKeys"]?["items"];
-        Assert.That(fkItems?["properties"]?["DeleteAction"]?["pattern"]?.ToString(), Is.EqualTo("NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT"));
+        Assert.That(fkItems?["properties"]?["DeleteAction"]?["pattern"]?.ToString(), Is.EqualTo("^(NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT)?$"));
     }
 
     [Test]
@@ -264,6 +266,50 @@ public class SchemaGeneratorTests
             Assert.That(schema["properties"]?["Definition"]?["type"]?.ToString(), Is.EqualTo("string"));
             Assert.That(schema["properties"]?["Indexes"]?["type"]?.ToString(), Is.EqualTo("array"));
         });
+    }
+
+    // --- Fix A: FK action pattern accepts empty string ---
+
+    [Test]
+    public void ForeignKeyActionPattern_AcceptsEmptyString()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(ForeignKey));
+        var pattern = schema["properties"]?["UpdateAction"]?["pattern"]?.ToString();
+        Assert.That(pattern, Is.Not.Null, "UpdateAction should have a pattern");
+        Assert.That(System.Text.RegularExpressions.Regex.IsMatch("", pattern), Is.True,
+            "Empty string should match (use-DB-default / unspecified)");
+        Assert.That(System.Text.RegularExpressions.Regex.IsMatch("CASCADE", pattern), Is.True,
+            "CASCADE should still match");
+        Assert.That(System.Text.RegularExpressions.Regex.IsMatch("BOGUS", pattern), Is.False,
+            "Garbage value should not match");
+    }
+
+    [Test]
+    public void ForeignKeyDeleteActionPattern_AcceptsEmptyString()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(ForeignKey));
+        var pattern = schema["properties"]?["DeleteAction"]?["pattern"]?.ToString();
+        Assert.That(pattern, Is.Not.Null, "DeleteAction should have a pattern");
+        Assert.That(System.Text.RegularExpressions.Regex.IsMatch("", pattern), Is.True,
+            "Empty string should match");
+        Assert.That(System.Text.RegularExpressions.Regex.IsMatch("NO ACTION", pattern), Is.True,
+            "NO ACTION should still match");
+    }
+
+    // --- Fix B: SqlServerTemplate.ServerToQuench is not schema-required ---
+
+    [Test]
+    public void SqlServerTemplate_ServerToQuench_IsNotRequired()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(SqlServerTemplate));
+        var required = schema["required"]?.ToObject<List<string>>();
+        Assert.That(required, Is.Not.Null, "SqlServerTemplate should have required fields");
+        Assert.That(required, Does.Not.Contain("ServerToQuench"),
+            "ServerToQuench has a C# default so it must not be schema-required");
+        Assert.That(required, Contains.Item("Name"),
+            "Name (inherited) must remain required");
+        Assert.That(required, Does.Not.Contain("DatabaseIdentificationScript"),
+            "DatabaseIdentificationScript is no longer schema-required (SchemaIdentificationScript is a valid alternative)");
     }
 
     // --- MergeExtensionsDefinition tests ---
@@ -525,6 +571,34 @@ public class SchemaGeneratorTests
             Assert.That(indexProps?["Visible"], Is.Not.Null, "MySqlIndex adds Visible");
             Assert.That(fkProps?["RelatedTableSchema"], Is.Not.Null, "MySqlForeignKey adds RelatedTableSchema");
         });
+    }
+
+    [Test]
+    public void GenerateSchema_EmitsStringPatternForTemplateQuenchSlot()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.TemplateFolder));
+        var slot = schema["properties"]?["QuenchSlot"];
+        Assert.That(slot?["type"]?.ToString(), Is.EqualTo("string"));
+        Assert.That(slot?["pattern"]?.ToString(), Does.Contain("Objects"));
+    }
+
+    [Test]
+    public void GenerateSchema_MapsUnsignedLongToInteger()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.MySQL.MySqlTable));
+        var autoInc = schema["properties"]?["AutoIncrementValue"];
+        Assert.That(autoInc?["type"]?.ToString(), Is.EqualTo("integer"));
+    }
+
+    [Test]
+    public void GenerateSchema_DatabaseIdentificationScript_IsNotRequired()
+    {
+        // A template may identify its target via SchemaIdentificationScript instead, so
+        // DatabaseIdentificationScript must not be schema-required (only Name is).
+        var schema = SchemaGenerator.GenerateSchema(typeof(Template));
+        var required = schema["required"]?.ToObject<List<string>>() ?? new List<string>();
+        Assert.That(required, Does.Not.Contain("DatabaseIdentificationScript"));
+        Assert.That(required, Contains.Item("Name"));
     }
 
     [Test]
