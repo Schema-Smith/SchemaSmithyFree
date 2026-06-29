@@ -67,7 +67,8 @@ public class TableQuench_ProductLevelDropProtectionTests
 
                 // Env-level DropTablesRemovedFromProduct is true (SchemaQuench.settings.json default).
                 // Product-level is false → should veto the drop.
-                SetupSharedMocks();
+                // Clear first-quench call history so the DidNotReceive assertions below target only the second quench.
+                _environment.ClearReceivedCalls();
                 RunSchemaQuench();
 
                 _environment.DidNotReceive().Exit(2);
@@ -84,6 +85,7 @@ public class TableQuench_ProductLevelDropProtectionTests
             finally
             {
                 DropTablesAndCleanup(cmd);
+                FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = string.Empty;
                 Directory.Delete(tempDir, true);
                 LogFactory.Clear();
                 FactoryContainer.Unregister<IEnvironment>();
@@ -124,7 +126,8 @@ public class TableQuench_ProductLevelDropProtectionTests
                 File.Delete(Path.Combine(tempDir, "Templates", "Main", "Tables", "dbo.DropProtRemovable.json"));
 
                 // Both env-level and product-level are true → drop should execute.
-                SetupSharedMocks();
+                // Clear first-quench call history so the DidNotReceive assertions below target only the second quench.
+                _environment.ClearReceivedCalls();
                 RunSchemaQuench();
 
                 _environment.DidNotReceive().Exit(2);
@@ -141,6 +144,7 @@ public class TableQuench_ProductLevelDropProtectionTests
             finally
             {
                 DropTablesAndCleanup(cmd);
+                FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = string.Empty;
                 Directory.Delete(tempDir, true);
                 LogFactory.Clear();
                 FactoryContainer.Unregister<IEnvironment>();
