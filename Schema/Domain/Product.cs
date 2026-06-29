@@ -61,6 +61,9 @@ namespace Schema.Domain
         [JsonConverter(typeof(StringEnumConverter))]
         public CheckConstraintStyle CheckConstraintStyle { get; set; }
 
+        [JsonProperty(Order = 15)]
+        public bool DropTablesRemovedFromProduct { get; set; } = true;
+
         [JsonIgnore]
         public List<ProductFolder> BeforeFolders => ScriptFolders?.FindAll(f => f.QuenchSlot == ProductQuenchSlot.Before) ?? [];
 

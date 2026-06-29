@@ -238,5 +238,29 @@ namespace Schema.UnitTests.Domain
 
             Assert.That(deserialized.CheckConstraintStyle, Is.EqualTo(CheckConstraintStyle.TableLevel));
         }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_AbsentInJson_DefaultsTrue()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer" }""");
+            Assert.That(product.DropTablesRemovedFromProduct, Is.True);
+        }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropTablesRemovedFromProduct": false }""");
+            Assert.That(product.DropTablesRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropTablesRemovedFromProduct": true }""");
+            Assert.That(product.DropTablesRemovedFromProduct, Is.True);
+        }
     }
 }
