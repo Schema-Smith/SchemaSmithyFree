@@ -752,6 +752,8 @@ BEGIN TRY
                  MessageColumns = (SELECT STRING_AGG([ColumnName], ', ') WITHIN GROUP (ORDER BY [ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1)
             FROM #Tables T WITH (NOLOCK)
             WHERE NewTable = 0
+              AND @DropColumnsRemovedFromProduct = 1
+              AND ISNULL(T.[DropColumnsRemovedFromProduct], 1) = 1
               AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1)) T
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
