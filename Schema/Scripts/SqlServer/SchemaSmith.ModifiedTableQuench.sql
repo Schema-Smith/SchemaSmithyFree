@@ -2,11 +2,12 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.ModifiedTableQuench 
+CREATE OR ALTER PROCEDURE SchemaSmith.ModifiedTableQuench
   @ProductName NVARCHAR(50),
   @WhatIf BIT = 0,
   @DropUnknownIndexes BIT = 0,
-  @DropTablesRemovedFromProduct BIT = 1
+  @DropTablesRemovedFromProduct BIT = 1,
+  @DropColumnsRemovedFromProduct BIT = 1
 AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = '',

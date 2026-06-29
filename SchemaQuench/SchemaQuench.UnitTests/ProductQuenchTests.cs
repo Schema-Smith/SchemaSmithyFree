@@ -2441,6 +2441,31 @@ public class ProductQuenchTests
 
     #endregion
 
+    #region DropColumnsRemovedFromProduct cascade (env + product + template, defaultValue: true)
+
+    [Test]
+    public void DropColumnsRemoved_AllAbsent_DefaultTrue()
+    {
+        // Env unset, product null, template null -> default true (drop).
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, null, null, defaultValue: true), Is.True);
+    }
+
+    [Test]
+    public void DropColumnsRemoved_TemplateFalse_ResolvesToFalse()
+    {
+        // Template flag false -> resolved false.
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, null, false, defaultValue: true), Is.False);
+    }
+
+    [Test]
+    public void DropColumnsRemoved_EnvFalse_ResolvesToFalse()
+    {
+        // Env false + product/template null -> false.
+        Assert.That(ProductQuench.ResolveCascadedFlag(false, null, null, defaultValue: true), Is.False);
+    }
+
+    #endregion
+
     #region ResolveCascadedFlag + ConfigBool
 
     [Test] public void Cascade_AllAbsent_ReturnsDefault_True()  => Assert.That(ProductQuench.ResolveCascadedFlag(null,null,null,true), Is.True);

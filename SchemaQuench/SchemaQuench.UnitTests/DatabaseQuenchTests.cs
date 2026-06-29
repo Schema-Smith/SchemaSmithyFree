@@ -33,7 +33,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "TestTemplate" };
 
         var quench = new DatabaseQuench("server", product, template, "testdb",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         Assert.That(quench.QuenchSuccessful, Is.False);
         Assert.That(quench.Platform, Is.EqualTo(Platform.SqlServer));
@@ -47,7 +47,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "Tmpl" };
 
         var quench = new DatabaseQuench("myserver", product, template, "mydb",
-            true, "1", true, "1", "0", true, true, null);
+            true, "1", true, "1", "1", "0", true, true, null);
 
         Assert.That(quench.Platform, Is.EqualTo(Platform.MySQL));
         Assert.That(quench.ProductName, Is.EqualTo("Prod"));
@@ -62,7 +62,7 @@ public class DatabaseQuenchTests
 
         // Defaults: trackRunOnceMigrations=true, pruneObsoleteMigrationTracking=true
         var quench = new DatabaseQuench("server", product, template, "testdb",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         Assert.That(quench.QuenchSuccessful, Is.False);
         Assert.That(quench.Platform, Is.EqualTo(Platform.SqlServer));
@@ -76,7 +76,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "TestTemplate" };
 
         var quench = new DatabaseQuench("server", product, template, "testdb",
-            false, "0", false, "0", false, false, false, null,
+            false, "0", false, "0", "1", false, false, false, null,
             trackRunOnceMigrations: false, pruneObsoleteMigrationTracking: false);
 
         Assert.That(quench.Platform, Is.EqualTo(Platform.SqlServer));
@@ -89,7 +89,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "Tmpl" };
 
         var quench = new DatabaseQuench("myserver", product, template, "mydb",
-            true, "1", true, "1", "0", true, true, null,
+            true, "1", true, "1", "1", "0", true, true, null,
             trackRunOnceMigrations: false, pruneObsoleteMigrationTracking: true);
 
         Assert.That(quench.Platform, Is.EqualTo(Platform.MySQL));
@@ -154,7 +154,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "1", false, "0", "0", false, false, null);
+            false, "1", false, "0", "1", "0", false, false, null);
         Assert.That(quench.IsWhatIf, Is.True);
     }
 
@@ -163,7 +163,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         Assert.That(quench.IsWhatIf, Is.False);
     }
 
@@ -172,7 +172,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "true", false, "false", "false", false, false, null);
+            false, "true", false, "false", "false", "false", false, false, null);
         Assert.That(quench.IsWhatIf, Is.True);
     }
 
@@ -181,7 +181,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
         Assert.That(quench.IsWhatIf, Is.False);
     }
 
@@ -190,7 +190,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.MySQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "1", false, "0", "0", false, false, null);
+            false, "1", false, "0", "1", "0", false, false, null);
         Assert.That(quench.IsWhatIf, Is.True);
     }
 
@@ -203,7 +203,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         Assert.That(quench.FormatBooleanFlag(true), Is.EqualTo("1"));
         Assert.That(quench.FormatBooleanFlag(false), Is.EqualTo("0"));
@@ -214,7 +214,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         Assert.That(quench.FormatBooleanFlag(true), Is.EqualTo("true"));
         Assert.That(quench.FormatBooleanFlag(false), Is.EqualTo("false"));
@@ -225,7 +225,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.MySQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         Assert.That(quench.FormatBooleanFlag(true), Is.EqualTo("1"));
         Assert.That(quench.FormatBooleanFlag(false), Is.EqualTo("0"));
@@ -272,7 +272,7 @@ public class DatabaseQuenchTests
         var templateFilePath = System.IO.Path.Combine(templateDir, "Template.json");
         var template = new Template { Name = "T", FilePath = templateFilePath };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var scriptPath = System.IO.Path.Combine(templateDir, "Before Scripts", "01_setup.sql");
         var result = quench.GetRelativeScriptPath(scriptPath);
@@ -287,7 +287,7 @@ public class DatabaseQuenchTests
         var templateFilePath = System.IO.Path.Combine(templateDir, "Template.json");
         var template = new Template { Name = "T", FilePath = templateFilePath };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var scriptPath = System.IO.Path.Combine(templateDir, "After Scripts", "cleanup.sql");
         var result = quench.GetRelativeScriptPath(scriptPath);
@@ -303,7 +303,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("SchemaSmith.CompletedMigrationScripts"));
@@ -321,7 +321,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("\"SchemaSmith\".\"CompletedMigrationScripts\""));
@@ -336,7 +336,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.MySQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var sql = quench.GetDeleteCompletedScriptSql("MyProduct", "Before", "script.sql", "T", "");
         Assert.That(sql, Does.Contain("`SchemaSmith_CompletedMigrationScripts`"));
@@ -351,7 +351,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before", "T", "");
         Assert.That(sql, Does.Contain("WITH (NOLOCK)"));
@@ -364,7 +364,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before", "T", "tenant_acme");
         Assert.That(sql, Does.Not.Contain("NOLOCK"));
@@ -378,7 +378,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before", "TenantBody", "tenant_acme");
         Assert.That(sql, Does.Contain("INSERT SchemaSmith.CompletedMigrationScripts"));
@@ -392,7 +392,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before", "TenantBody", "tenant_acme");
         Assert.That(sql, Does.Contain("INSERT INTO \"SchemaSmith\".\"CompletedMigrationScripts\""));
@@ -405,7 +405,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.MySQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var sql = quench.GetInsertCompletedScriptSql("path/script.sql", "MyProduct", "Before", "T", "");
         Assert.That(sql, Does.Contain("INSERT INTO `SchemaSmith_CompletedMigrationScripts`"));
@@ -418,7 +418,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var sql = quench.GetClaimLegacyTrackingRowsSql("MyProduct", "Before", "Main", "",
             new[] { "scripts/a.sql", "scripts/b.sql" });
@@ -435,7 +435,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var sql = quench.GetClaimLegacyTrackingRowsSql("MyProduct", "Before", "Main", "",
             new[] { "scripts/a.sql", "scripts/b.sql" });
@@ -452,7 +452,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.MySQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var sql = quench.GetClaimLegacyTrackingRowsSql("MyProduct", "Before", "Main", "",
             new[] { "scripts/a.sql", "scripts/b.sql" });
@@ -469,7 +469,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var sql = quench.GetClaimLegacyTrackingRowsSql("O'Brien", "Before's", "Tem'plate", "schem'a",
             new[] { "scripts/O'Brien.sql" });
@@ -489,7 +489,7 @@ public class DatabaseQuenchTests
         var falseValue = platform == Platform.PostgreSQL ? "false" : "0";
         var product = new Product { Name = "Test", Platform = platform };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, falseValue, false, falseValue, falseValue, false, false, null);
+            false, falseValue, false, falseValue, falseValue, falseValue, false, false, null);
 
         var selectSql = quench.GetSelectCompletedScriptsSql("O'Brien", "Before's", "Tem'plate", "schem'a");
         var deleteSql = quench.GetDeleteCompletedScriptSql("O'Brien", "Before's", "scripts/O'Brien.sql", "Tem'plate", "schem'a");
@@ -657,7 +657,7 @@ public class DatabaseQuenchTests
         template.ScriptFolders.Add(GatedFolder("keep", TemplateQuenchSlot.Before, "KEEP", "keep.sql"));
         template.ScriptFolders.Add(GatedFolder("skip", TemplateQuenchSlot.Before, "SKIP", "skip.sql"));
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
 
         quench.ApplyFolderGates(GateCommand(sql => sql.Contains("KEEP") ? 1 : 0));
@@ -674,7 +674,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "T" };
         template.ScriptFolders.Add(GatedFolder("obj", TemplateQuenchSlot.Objects, "SKIP", "obj.sql"));
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
 
         quench.ApplyFolderGates(GateCommand(_ => 0));
@@ -693,7 +693,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "T" };
         template.ScriptFolders.Add(GatedFolder("plain", TemplateQuenchSlot.Before, null, "plain.sql"));
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
         var command = Substitute.For<IDbCommand>();
 
@@ -710,7 +710,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "T" };
         template.ScriptFolders.Add(GatedFolder("bad", TemplateQuenchSlot.Before, "BROKEN", "bad.sql"));
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
         var command = Substitute.For<IDbCommand>();
         command.ExecuteScalar().Returns(_ => throw new System.InvalidOperationException("syntax error"));
@@ -738,7 +738,7 @@ public class DatabaseQuenchTests
         gated.Scripts.Add(migration);
         template.ScriptFolders.Add(gated);
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
 
         quench.ApplyFolderGates(GateCommand(_ => 0)); // gate the folder off
@@ -766,7 +766,7 @@ public class DatabaseQuenchTests
         template.ScriptFolders.Add(keep);
         template.ScriptFolders.Add(GatedFolder("skip", TemplateQuenchSlot.Before, "SKIP", "skip.sql"));
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
 
         quench.ApplyFolderGates(GateCommand(sql => sql.Contains("KEEP") ? 1 : 0));
@@ -787,7 +787,7 @@ public class DatabaseQuenchTests
         template.ScriptFolders.Add(keep);
         template.ScriptFolders.Add(GatedFolder("skip", TemplateQuenchSlot.Before, "SKIP", "skip.sql"));
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
 
         quench.ApplyFolderGates(GateCommand(sql => sql.Contains("KEEP") ? 1 : 0));
@@ -802,7 +802,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "T" };
         template.ScriptFolders.Add(GatedFolder("eu", TemplateQuenchSlot.Before, "CHECK {{SchemaName}}", "eu.sql"));
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
 
         // Only the schema-substituted form should be the query; gate true for tenant_a.
@@ -821,7 +821,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var script = new SqlScript { Name = "test.sql" };
         script.Batches.Add("SELECT 1");
@@ -840,7 +840,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var script = new SqlScript { Name = "fail.sql" };
         script.Batches.Add("INVALID SQL");
@@ -861,7 +861,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var script = new SqlScript { Name = "test.sql" };
         script.Batches.Add("SELECT 1");
@@ -882,7 +882,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.MySQL };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var script = new SqlScript { Name = "multi.sql" };
         script.Batches.Add("SELECT 1");
@@ -904,7 +904,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var script = new SqlScript { Name = "001_maybe.sql", FilePath = "001_maybe.sql" };
         script.Batches.Add("RAISE EXCEPTION 'SCHEMASMITH: SHOULD NOT APPLY';");
@@ -927,7 +927,7 @@ public class DatabaseQuenchTests
     {
         var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var script = new SqlScript { Name = "001_bad.sql", FilePath = "001_bad.sql" };
         script.Batches.Add("SELECT 1/0;");
@@ -956,7 +956,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var scripts = new List<SqlScript>();
         for (var i = 0; i < 3; i++)
@@ -979,7 +979,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var script1 = new SqlScript { Name = "script1.sql" };
         script1.Batches.Add("SELECT 1");
@@ -1015,7 +1015,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         // Without mocked connection factory, Execute will fail to connect and set QuenchSuccessful = false
         quench.Execute();
@@ -1040,7 +1040,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         var ex = Assert.Throws<Exception>(() => quench.QuenchIndexedViews(mockCmd));
@@ -1062,7 +1062,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         Assert.Throws<Exception>(() => quench.QuenchIndexedViews(mockCmd));
@@ -1092,7 +1092,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexedViews(mockCmd);
@@ -1114,7 +1114,7 @@ public class DatabaseQuenchTests
         // (server-side handles the empty set); no C# early-return.
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexedViews(mockCmd);
@@ -1138,7 +1138,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexedViews(mockCmd);
@@ -1166,7 +1166,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexedViews(mockCmd);
@@ -1189,7 +1189,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexedViews(mockCmd);
@@ -1221,7 +1221,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         quench.PrepareIterationContent();
 
@@ -1240,7 +1240,7 @@ public class DatabaseQuenchTests
         };
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         quench.PrepareIterationContent();
 
@@ -1272,7 +1272,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
 
         var mockCmd = CreateMockCommand();
@@ -1318,7 +1318,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
 
         var mockCmd = CreateMockCommand();
@@ -1354,7 +1354,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_acme",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
         quench.PrepareIterationContent();
 
         var mockCmd = CreateMockCommand();
@@ -1379,7 +1379,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexedViews(mockCmd);
@@ -1403,7 +1403,7 @@ public class DatabaseQuenchTests
         });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexedViews(mockCmd);
@@ -1423,7 +1423,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "T", MaterializedViewSchema = "[{\"Name\":\"mv_test\"}]" };
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchMaterializedViews(mockCmd);
@@ -1442,7 +1442,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "T", MaterializedViewSchema = "[]" };
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchMaterializedViews(mockCmd);
@@ -1469,7 +1469,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
@@ -1484,7 +1484,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "O'Brien's DB", Platform = Platform.PostgreSQL };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
@@ -1500,7 +1500,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "T" };
         template.Tables.Add(new Table { Name = "[T1]" });
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
@@ -1515,7 +1515,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
         var template = new Template { Name = "T", IndexOnlyTableQuenches = true };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexesAndConstraints(mockCmd);
@@ -1530,7 +1530,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "O'Brien's DB", Platform = Platform.SqlServer };
         var template = new Template { Name = "T", IndexOnlyTableQuenches = false };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexesAndConstraints(mockCmd);
@@ -1545,7 +1545,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "O'Brien's DB", Platform = Platform.PostgreSQL };
         var template = new Template { Name = "T", IndexOnlyTableQuenches = true };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexesAndConstraints(mockCmd);
@@ -1560,7 +1560,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "O'Brien's DB", Platform = Platform.PostgreSQL };
         var template = new Template { Name = "T", IndexOnlyTableQuenches = false };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexesAndConstraints(mockCmd);
@@ -1576,7 +1576,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "T" };
         template.Tables.Add(new Table { Name = "[T1]" });
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchIndexesAndConstraints(mockCmd);
@@ -1592,7 +1592,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "T" };
         template.Tables.Add(new Table { Name = "[T1]" });
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchForeignKeys(mockCmd);
@@ -1608,7 +1608,7 @@ public class DatabaseQuenchTests
         var template = new Template { Name = "T" };
         template.Tables.Add(new Table { Name = "[T1]" });
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", "0", false, false, null);
+            false, "0", false, "0", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchForeignKeys(mockCmd);
@@ -1627,7 +1627,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         Assert.That(quench.SchemaName, Is.EqualTo(""));
     }
@@ -1638,7 +1638,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_acme",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         Assert.That(quench.SchemaName, Is.EqualTo("tenant_acme"));
     }
@@ -1651,7 +1651,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db", null,
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         Assert.That(quench.SchemaName, Is.EqualTo(""));
     }
@@ -1662,7 +1662,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var template = new Template { Name = "T" };
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_globex",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         Assert.That(quench.SchemaName, Is.EqualTo("tenant_globex"));
     }
@@ -1675,7 +1675,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "MyProduct", Platform = Platform.SqlServer };
         var template = new Template { Name = "TenantBody" };
         var quench = new DatabaseQuench("srv", product, template, "AppProd", "tenant_acme",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         var sql = quench.GetSelectCompletedScriptsSql(
             quench.ProductName, "Before", "TenantBody", quench.SchemaName);
@@ -1690,7 +1690,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "MyProduct", Platform = Platform.SqlServer };
         var template = new Template { Name = "Core" };
         var quench = new DatabaseQuench("srv", product, template, "AppProd",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         var sql = quench.GetSelectCompletedScriptsSql(
             quench.ProductName, "Before", "Core", quench.SchemaName);
@@ -1708,7 +1708,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "TenantBody" };
         var quench = new DatabaseQuench("srv", product, template, "AppProd", "tenant_acme",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         Assert.That(quench.LogPrefix, Is.EqualTo("[srv].[AppProd] [Schema: tenant_acme]"));
     }
@@ -1719,7 +1719,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "Core" };
         var quench = new DatabaseQuench("srv", product, template, "AppProd",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         Assert.That(quench.LogPrefix, Is.EqualTo("[srv].[AppProd]"));
     }
@@ -1732,7 +1732,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var template = new Template { Name = "Core" };
         var quench = new DatabaseQuench("srv", product, template, "AppProd", "",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         Assert.That(quench.LogPrefix, Is.EqualTo("[srv].[AppProd]"));
     }
@@ -1750,7 +1750,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "Core" };
         var quench = new DatabaseQuench("srv", product, template, "AppProd",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         Assert.That(quench.GetDebugFileName("Quench Missing Tables And Columns"),
             Is.EqualTo("SchemaQuench - Quench Missing Tables And Columns srv.AppProd.sql"));
@@ -1766,7 +1766,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.SqlServer };
         var template = new Template { Name = "TenantBody" };
         var quench = new DatabaseQuench("srv", product, template, "AppProd", "tenant_acme",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         Assert.That(quench.GetDebugFileName("Quench Missing Tables And Columns"),
             Is.EqualTo("SchemaQuench - Quench Missing Tables And Columns srv.AppProd.tenant_acme.sql"));
@@ -1780,7 +1780,7 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
         var template = new Template { Name = "Core" };
         var quench = new DatabaseQuench("srv", product, template, "AppProd", "",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
 
         Assert.That(quench.GetDebugFileName("Quench Indexes"),
             Is.EqualTo("SchemaQuench - Quench Indexes srv.AppProd.sql"));
@@ -1821,7 +1821,7 @@ public class DatabaseQuenchTests
         };
 
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
         quench.PrepareIterationContent();
 
         var substituted = GetIterationString(quench, "BaselineValidationScript");
@@ -1842,7 +1842,7 @@ public class DatabaseQuenchTests
         };
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
         quench.PrepareIterationContent();
 
         var captured = GetIterationString(quench, "BaselineValidationScript");
@@ -1864,7 +1864,7 @@ public class DatabaseQuenchTests
         };
 
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_globex",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
         quench.PrepareIterationContent();
 
         var substituted = GetIterationString(quench, "VersionStampScript");
@@ -1883,7 +1883,7 @@ public class DatabaseQuenchTests
         };
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "false", false, "false", "false", false, false, null);
+            false, "false", false, "false", "false", "false", false, false, null);
         quench.PrepareIterationContent();
 
         var captured = GetIterationString(quench, "VersionStampScript");
@@ -1906,7 +1906,7 @@ public class DatabaseQuenchTests
         };
 
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_acme",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
         quench.PrepareIterationContent();
 
         Assert.That(quench.IterationTableSchema, Does.Contain("\"Schema\":\"tenant_acme\""));
@@ -1926,7 +1926,7 @@ public class DatabaseQuenchTests
         };
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
         quench.PrepareIterationContent();
 
         Assert.That(quench.IterationTableSchema,
@@ -1951,7 +1951,7 @@ public class DatabaseQuenchTests
         };
 
         var quench = new DatabaseQuench("srv", product, template, "db", "tenant_a",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
         quench.PrepareIterationContent();
 
         var substituted = GetIterationString(quench, "VersionStampScript");
@@ -1972,7 +1972,7 @@ public class DatabaseQuenchTests
         RegisterMockConfig();
         var quench = new DatabaseQuench("srv", new Product { Name = "P", Platform = Platform.SqlServer },
             new Template { Name = "T" }, "db",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
         Assert.That(quench.ResolveArtifactDirectory(), Is.EqualTo(System.IO.Directory.GetCurrentDirectory()));
     }
 
@@ -1985,7 +1985,7 @@ public class DatabaseQuenchTests
 
         var quench = new DatabaseQuench("srv", new Product { Name = "P", Platform = Platform.SqlServer },
             new Template { Name = "T" }, "db",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
         Assert.That(quench.ResolveArtifactDirectory(), Is.EqualTo(@"C:\artifacts"));
     }
 
@@ -1997,7 +1997,7 @@ public class DatabaseQuenchTests
         product.ScriptTokens["AdminPassword"] = "supersecret";
         product.ScriptTokens["Region"] = "us-east";
         var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", false, false, false, null);
+            false, "0", false, "0", "1", false, false, false, null);
 
         var sensitive = quench.SensitiveTokenValues();
         Assert.That(sensitive.Select(kv => kv.Key), Does.Contain("AdminPassword"));
@@ -2048,7 +2048,7 @@ public class DatabaseQuenchTests
 
             var product = new Product { Name = "P", Platform = Platform.SqlServer };
             var quench = new DatabaseQuench("myserver", product, new Template { Name = "T" }, "mydb",
-                false, "0", false, "0", "0", false, false, null);
+                false, "0", false, "0", "1", "0", false, false, null);
 
             // Build a failed script with a distinctive batch body.
             var script = new SqlScript { Name = "fail.sql", FilePath = "Before Scripts/fail.sql" };
@@ -2119,7 +2119,7 @@ public class DatabaseQuenchTests
             product.ScriptTokens["AdminPassword"] = "supersecret1234";
 
             var quench = new DatabaseQuench("myserver", product, new Template { Name = "T" }, "mydb",
-                false, "0", false, "0", "0", false, false, null);
+                false, "0", false, "0", "1", "0", false, false, null);
 
             var script = new SqlScript { Name = "fail.sql", FilePath = "Before Scripts/fail.sql" };
             script.Batches.Add("EXEC dbo.SetPassword 'supersecret1234'");
@@ -2166,7 +2166,7 @@ public class DatabaseQuenchTests
         template.Tables.Add(new Schema.Domain.Table { Name = "Orders" });
 
         var quench = new DatabaseQuench("srv", product, template, "db",
-            false, "true", false, "false", "false", false, false, null);
+            false, "true", false, "false", "false", "false", false, false, null);
 
         var mockCmd = CreateMockCommand();
         // QuenchModifiedTables calls LogSqlScript with the debug filename as the first argument.
@@ -2216,7 +2216,7 @@ public class DatabaseQuenchTests
             template.Tables.Add(new Schema.Domain.Table { Name = "Orders" });
 
             var quench = new DatabaseQuench("srv", product, template, "db",
-                false, "true", false, "false", "false", false, false, null);
+                false, "true", false, "false", "false", "false", false, false, null);
 
             var mockCmd = CreateMockCommand();
 
@@ -2299,7 +2299,7 @@ public class DatabaseQuenchTests
 
             var quench = new DatabaseQuench("pghost", product, template, "pgdb",
                 suppressKindling: true, whatIfOnly: "false", runScriptsTwice: false,
-                dropRemovedTables: "false", dropUnknownIndexes: "false",
+                dropRemovedTables: "false", dropRemovedColumns: "false", dropUnknownIndexes: "false",
                 updateTables: true, deliverData: false, checkpointing: checkpointing);
 
             quench.Execute();
@@ -2320,6 +2320,61 @@ public class DatabaseQuenchTests
         {
             Schema.Utility.LogFactory.Clear();
         }
+    }
+
+    #endregion
+
+    #region QuenchModifiedTables — DropColumnsRemovedFromProduct param threading
+
+    [Test]
+    public void QuenchModifiedTables_SqlServer_ContainsDropColumnsRemovedFromProductParam()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        // internal ctor order: suppressKindling, whatIfOnly, runScriptsTwice, dropRemovedTables, dropRemovedColumns, dropUnknownIndexes, ...
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "1", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@DropColumnsRemovedFromProduct = 1"));
+    }
+
+    [Test]
+    public void QuenchModifiedTables_PostgreSQL_ContainsDropColumnsRemovedFromProductParam()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T" };
+        // internal ctor order: suppressKindling, whatIfOnly, runScriptsTwice, dropRemovedTables, dropRemovedColumns, dropUnknownIndexes, ...
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "true", "false", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("p_DropColumnsRemovedFromProduct := true"));
+    }
+
+    [Test]
+    public void QuenchModifiedTables_MySQL_ContainsDropColumnsRemovedFromProductParam()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.MySQL };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Schema.Domain.Table { Name = "[T1]" });
+        // internal ctor order: dropRemovedTables="0" -> arg4=0, dropRemovedColumns="1" -> arg5=1
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "1", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 1)
+        // dropRemoved=0, dropRemovedCols=1
+        Assert.That(mockCmd.CommandText, Does.EndWith(", 0, 1)"));
     }
 
     #endregion

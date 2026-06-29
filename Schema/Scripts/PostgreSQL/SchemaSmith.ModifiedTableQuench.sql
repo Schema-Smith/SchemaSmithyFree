@@ -5,7 +5,8 @@
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."ModifiedTableQuench"
   (p_WhatIf BOOLEAN = FALSE,
    p_DropUnknownIndexes BOOLEAN = FALSE,
-   p_DropTablesRemovedFromProduct BOOLEAN = TRUE)
+   p_DropTablesRemovedFromProduct BOOLEAN = TRUE,
+   p_DropColumnsRemovedFromProduct BOOLEAN = TRUE)
   LANGUAGE plpgsql
 AS $$
 DECLARE

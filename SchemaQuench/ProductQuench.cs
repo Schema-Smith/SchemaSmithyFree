@@ -1483,12 +1483,15 @@ public class ProductQuench
         var dropRemovedTables = FormatBooleanFlag(ResolveCascadedFlag(
             ConfigBool(_config, "DropTablesRemovedFromProduct"), _product.DropTablesRemovedFromProduct,
             template.DropTablesRemovedFromProduct, defaultValue: true));
+        var dropRemovedColumns = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropColumnsRemovedFromProduct"), _product.DropColumnsRemovedFromProduct,
+            template.DropColumnsRemovedFromProduct, defaultValue: true));
         var dropUnknownIndexes = ResolveCascadedFlag(
             ConfigBool(_config, "DropUnknownIndexes"), _product.DropUnknownIndexes,
             template.DropUnknownIndexes, defaultValue: false);
         var quench = new DatabaseQuench(unit.Server, _product, template, unit.DatabaseName, unit.SchemaName,
             suppressKindling, _whatIfOnly, _runScriptsTwice, dropRemovedTables,
-            dropUnknownIndexes,
+            dropRemovedColumns, dropUnknownIndexes,
             _updateTables && template.Tables.Count > 0, _deliverData, _checkpointing,
             _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _forceReKindle)
         {
