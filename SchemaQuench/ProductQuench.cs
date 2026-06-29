@@ -100,9 +100,6 @@ public class ProductQuench
     /// are <c>Trim()</c>med so a user-supplied <c>" tenant_acme"</c> matches <c>"tenant_acme"</c>
     /// instead of surfacing as an unknown-name error.
     /// </summary>
-    internal static bool ResolveDropTablesRemovedFromProduct(IConfiguration config, Product product) =>
-        config["DropTablesRemovedFromProduct"]?.ToLower() != "false" && product.DropTablesRemovedFromProduct;
-
     internal static IReadOnlyList<string> ReadFilterArray(IConfiguration config, string sectionKey)
     {
         var section = config.GetSection(sectionKey);
@@ -114,6 +111,9 @@ public class ProductQuench
     }
 
     private IReadOnlyList<string> ReadFilterArray(string sectionKey) => ReadFilterArray(_config, sectionKey);
+
+    internal static bool ResolveDropTablesRemovedFromProduct(IConfiguration config, Product product) =>
+        config["DropTablesRemovedFromProduct"]?.ToLower() != "false" && product.DropTablesRemovedFromProduct;
 
     /// <summary>
     /// Reads <c>Target.TemplateTargets</c> from configuration into the per-template override map.
