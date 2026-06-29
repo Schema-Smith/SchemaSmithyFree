@@ -99,7 +99,7 @@ jobs:
 
       - name: Publish tools
         run: |
-          for tool in SchemaQuench SchemaTongs DataTongs; do
+          for tool in SchemaQuench SchemaTongs DataTongs SchemaShears; do
             dotnet publish $tool/$tool.csproj -c Release -r ${{ matrix.rid }} --self-contained
           done
 
@@ -111,6 +111,7 @@ jobs:
             SchemaQuench/bin/Release/net10.0/${{ matrix.rid }}/publish/
             SchemaTongs/bin/Release/net10.0/${{ matrix.rid }}/publish/
             DataTongs/bin/Release/net10.0/${{ matrix.rid }}/publish/
+            SchemaShears/bin/Release/net10.0/${{ matrix.rid }}/publish/
           retention-days: 1
 
   sign-windows:
@@ -132,7 +133,7 @@ jobs:
       - name: Collect binaries to sign
         shell: pwsh
         run: |
-          $ours = @("SchemaQuench.exe", "SchemaTongs.exe", "DataTongs.exe")
+          $ours = @("SchemaQuench.exe", "SchemaTongs.exe", "DataTongs.exe", "SchemaShears.exe")
           $files = Get-ChildItem -Path bins -Recurse -File |
             Where-Object { $ours -contains $_.Name }
           $staging = New-Item -ItemType Directory -Force -Path sign-staging
@@ -161,7 +162,7 @@ jobs:
       - name: Copy signed binaries back
         shell: pwsh
         run: |
-          $ours = @("SchemaQuench.exe", "SchemaTongs.exe", "DataTongs.exe")
+          $ours = @("SchemaQuench.exe", "SchemaTongs.exe", "DataTongs.exe", "SchemaShears.exe")
           $signed = Get-ChildItem -Path sign-staging -File
           $targets = Get-ChildItem -Path bins -Recurse -File |
             Where-Object { $ours -contains $_.Name }
@@ -196,7 +197,7 @@ jobs:
         run: |
           VERSION="${{ needs.read-version.outputs.version }}"
           mkdir -p zip-staging
-          for tool in SchemaQuench SchemaTongs DataTongs; do
+          for tool in SchemaQuench SchemaTongs DataTongs SchemaShears; do
             src="bins/$tool/bin/Release/net10.0/${{ matrix.rid }}/publish"
             if [ -d "$src" ]; then
               cp "$src"/* zip-staging/ 2>/dev/null || true
@@ -231,14 +232,14 @@ jobs:
         run: |
           VERSION="${{ needs.read-version.outputs.version }}"
           mkdir -p tar-staging
-          for tool in SchemaQuench SchemaTongs DataTongs; do
+          for tool in SchemaQuench SchemaTongs DataTongs SchemaShears; do
             src="bins/$tool/bin/Release/net10.0/${{ matrix.rid }}/publish"
             if [ -d "$src" ]; then
               cp "$src"/* tar-staging/ 2>/dev/null || true
             fi
           done
           rm -f tar-staging/*.pdb
-          chmod 0755 tar-staging/SchemaQuench tar-staging/SchemaTongs tar-staging/DataTongs
+          chmod 0755 tar-staging/SchemaQuench tar-staging/SchemaTongs tar-staging/DataTongs tar-staging/SchemaShears
           echo "Tarball contents:"
           ls -la tar-staging/
           tar -czf "SchemaSmith-${VERSION}-${{ matrix.rid }}.tar.gz" -C tar-staging .
@@ -290,8 +291,8 @@ jobs:
         run: |
           RID="${{ steps.rid.outputs.rid }}"
           mkdir -p staging
-          # Copy the three CLI binaries
-          for tool in SchemaQuench SchemaTongs DataTongs; do
+          # Copy the four CLI binaries
+          for tool in SchemaQuench SchemaTongs DataTongs SchemaShears; do
             src="bins/$tool/bin/Release/net10.0/$RID/publish/$tool"
             if [ ! -f "$src" ]; then
               echo "::error::Missing binary $src"

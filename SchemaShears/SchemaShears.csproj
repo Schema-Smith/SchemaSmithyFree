@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<DefaultItemExcludes>$(DefaultItemExcludes);SchemaShears.UnitTests\**</DefaultItemExcludes>
+		<OutputType>Exe</OutputType>
+		<PublishTrimmed>false</PublishTrimmed>
+		<PublishSingleFile>true</PublishSingleFile>
+		<PublishAot>false</PublishAot>
+
+		<Product>SchemaShears Community</Product>
+		<Description>Builds an object-level subset (patch) package from a full SchemaSmith product</Description>
+		<ApplicationIcon>..\DataTongs\images\SchemaTongs.ico</ApplicationIcon>
+		<UserSecretsId>d4e5f6a7-b8c9-0123-defa-234567890123</UserSecretsId>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="Log4Net.config" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Log4Net.config" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="SchemaShears.UnitTests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Schema\Schema.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux'))">
+		<RuntimeHostConfigurationOption Include="System.Globalization.AppLocalIcu" Value="$(IcuVersion)" />
+		<PackageReference Include="Microsoft.ICU.ICU4C.Runtime" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="SchemaShears.settings.json">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+</Project>

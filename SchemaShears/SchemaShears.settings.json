@@ -1,0 +1,7 @@
+{
+    "SourcePath": "",        // Full product folder to carve the patch from
+    "ManifestPath": "",      // File listing product-relative paths to include (one per line; # comments allowed)
+    "AlwaysIncludePath": "", // Optional: file listing paths/folders always included regardless of the manifest
+    "OutputPath": "",        // Destination folder for the patch package
+    "Zip": false             // Also produce <OutputPath>.zip
+}
