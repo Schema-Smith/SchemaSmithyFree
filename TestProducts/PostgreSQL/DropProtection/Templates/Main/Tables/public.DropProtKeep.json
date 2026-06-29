@@ -1,0 +1,6 @@
+{
+    "Schema": "public",
+    "Name": "DropProtKeep",
+    "Columns": [{"Name": "Id","DataType": "INTEGER","Nullable": false}],
+    "Indexes": [{"Name": "PK_DropProtKeep","PrimaryKey": true,"Unique": true,"IndexColumns": "Id"}]
+}
