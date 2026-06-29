@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  READ-ONLY reference. This is an SSDT database project — the kind that builds a
+  .dacpac and publishes with SqlPackage. You do NOT build or publish it in this
+  lab; the course5-setup script already applied its end state to shop_from_dacpac.
+  It's here so you can see what an "already declarative" SQL Server source looks
+  like — object-per-file CREATE TABLE scripts plus a publish profile.
+-->
+<Project Sdk="Microsoft.Build.Sql/0.1.19-preview">
+  <PropertyGroup>
+    <Name>ShopDb</Name>
+    <DSP>Microsoft.Data.Tools.Schema.Sql.Sql160DatabaseSchemaProvider</DSP>
+    <ModelCollation>1033, CI</ModelCollation>
+  </PropertyGroup>
+  <ItemGroup>
+    <Build Include="Tables\Customer.sql" />
+    <Build Include="Tables\Product.sql" />
+    <Build Include="Tables\SalesOrder.sql" />
+    <Build Include="Tables\OrderItem.sql" />
+  </ItemGroup>
+</Project>
