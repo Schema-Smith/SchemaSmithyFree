@@ -1,0 +1,20 @@
+{
+    "Schema": "[dbo]",
+    "Name": "[ShearsKeep]",
+    "Columns": [
+        {
+            "Name": "[Id]",
+            "DataType": "INT",
+            "Nullable": false
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "[PK_ShearsKeep]",
+            "PrimaryKey": true,
+            "Unique": true,
+            "Clustered": true,
+            "IndexColumns": "[Id]"
+        }
+    ]
+}
