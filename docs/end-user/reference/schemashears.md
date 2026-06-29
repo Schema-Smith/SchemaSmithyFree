@@ -147,12 +147,12 @@ By default, SchemaShears suppresses all recognized drop categories. The emitted 
 ```json
 {
   "DropTablesRemovedFromProduct": false,
-  "DropColumnsRemovedFromTable": false,
-  "DropIndexesRemovedFromTable": false,
-  "DropForeignKeysRemovedFromTable": false,
-  "DropCheckConstraintsRemovedFromTable": false,
-  "DropExcludeConstraintsRemovedFromTable": false,
-  "DropStatisticsRemovedFromTable": false
+  "DropColumnsRemovedFromProduct": false,
+  "DropUnknownIndexes": false,
+  "DropForeignKeysRemovedFromProduct": false,
+  "DropCheckConstraintsRemovedFromProduct": false,
+  "DropExcludeConstraintsRemovedFromProduct": false,
+  "DropStatisticsRemovedFromProduct": false
 }
 ```
 
@@ -162,7 +162,7 @@ This is the correct posture for a patch: deploy what's in scope, leave everythin
 
 **Table-drop suppression (`DropTablesRemovedFromProduct: false`) is active now** -- SchemaQuench enforces it in the current release. A table absent from the patch will not be dropped.
 
-The remaining per-type flags (`DropColumnsRemovedFromTable`, `DropIndexesRemovedFromTable`, and so on) are written into the emitted `Product.json` **forward-compatibly**. They take effect as SchemaQuench's per-type drop-control rolls out. The user promise is: _a patch won't drop objects you didn't include_; the table-drop guard is the active enforcement today, and the per-type guards extend that protection as SchemaQuench gains per-type drop-control.
+The remaining per-type flags (`DropColumnsRemovedFromProduct`, `DropUnknownIndexes`, and so on) are written into the emitted `Product.json` **forward-compatibly**. They take effect as SchemaQuench's per-type drop-control rolls out. The user promise is: _a patch won't drop objects you didn't include_; the table-drop guard is the active enforcement today, and the per-type guards extend that protection as SchemaQuench gains per-type drop-control.
 
 ### Selectively re-enabling drops
 
