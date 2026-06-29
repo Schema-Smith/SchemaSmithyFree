@@ -70,6 +70,12 @@
     "ContinueOnDatabaseFailure": {
       "type": "boolean"
     },
+    "DropTablesRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropUnknownIndexes": {
+      "type": "boolean"
+    },
     "ServerToQuench": {
       "type": "integer"
     }
