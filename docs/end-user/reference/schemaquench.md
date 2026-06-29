@@ -772,12 +772,15 @@ When `DropTablesRemovedFromProduct` is `true` (the default), `ModifiedTableQuenc
 
 This keeps the database clean as tables are removed from the schema package over time.
 
-**Two control points — environment and package.** The setting is configurable at two independent levels, and both must be `true` (or absent, which defaults to `true`) for a table-drop-by-absence pass to run:
+**Three-tier cascade — environment → product → template.** The setting resolves across three tiers, evaluated in order from broadest to narrowest:
 
-- **Runtime / environment** — `DropTablesRemovedFromProduct` in `SchemaQuench.settings.json` (or the matching environment variable). Controls all products deployed in that environment.
-- **Package** — `DropTablesRemovedFromProduct` in `Product.json`. Controls a single package regardless of which environment it deploys to.
+- **Environment** — `DropTablesRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropTablesRemovedFromProduct` environment variable). Controls all products deployed in that environment.
+- **Product** — `DropTablesRemovedFromProduct` in `Product.json`. Controls a single product regardless of which environment it deploys to.
+- **Template** — `DropTablesRemovedFromProduct` in `Template.json`. Controls a single template within a product.
 
-A `false` at either level suppresses the drop pass. The effective behavior is the logical AND of both values — so a package can declare "never auto-drop my tables" in its own `Product.json` without requiring every operator to set the environment flag.
+**Explicit-false is sticky — environment guardrail.** A `false` set at any tier locks the effective value to `false` for all lower tiers. A `true` at a lower tier overrides an inherited `true` but can never override an ancestor's `false`. Absent (not set) means inherit from the tier above. This makes a higher-tier `false` a hard guardrail: an environment that sets `false` suppresses the drop pass regardless of what any product or template declares.
+
+A `false` at either the environment or product level suppresses the drop pass for all templates in that product — so a package can declare "never auto-drop my tables" in its own `Product.json` without requiring every operator to configure the environment flag, and an environment can suppress all auto-drops globally without requiring every package to opt out.
 
 **Environment guidance:**
 

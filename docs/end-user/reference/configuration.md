@@ -464,14 +464,15 @@ SchemaQuench --ConnectionString:"Host=prod-db;Database=mydb;Username=deploy;Pass
 
 ## DropTablesRemovedFromProduct
 
-Controls whether SchemaQuench drops tables that exist in the database but no longer appear in the schema package. Two control points compose to produce the effective value, and both must allow the drop for it to run.
+Controls whether SchemaQuench drops tables that exist in the database but no longer appear in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.
 
 | Scope | Where to set | Default |
 |---|---|---|
-| Environment / runtime | `DropTablesRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropTablesRemovedFromProduct` environment variable) | `true` |
-| Package | `DropTablesRemovedFromProduct` in `Product.json` | `true` |
+| Environment | `DropTablesRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropTablesRemovedFromProduct` environment variable) | `true` |
+| Product | `DropTablesRemovedFromProduct` in `Product.json` | `true` |
+| Template | `DropTablesRemovedFromProduct` in `Template.json` | (inherit) |
 
-The effective behavior is the logical AND of both values — a `false` at either level suppresses the drop pass. This lets a package declare that its absent tables must never be dropped without requiring every operator to configure the environment flag, or lets an environment turn off auto-drops globally regardless of what individual packages declare.
+A `false` at any tier is sticky — it locks the effective value to `false` for all lower tiers and cannot be re-enabled by a more-specific setting. Absent (not set) inherits from the tier above. A `true` at a lower tier overrides an inherited `true` but never an ancestor's `false`.
 
 ```json
 // SchemaQuench.settings.json — turn off auto-drop for this environment
@@ -483,9 +484,44 @@ The effective behavior is the logical AND of both values — a `false` at either
 { "DropTablesRemovedFromProduct": false }
 ```
 
-> **Note:** Default `true` at both levels preserves existing behavior — if you haven't set either, table-drop-by-absence works exactly as it always has.
+```json
+// Template.json — suppress auto-drop for this template only
+{ "DropTablesRemovedFromProduct": false }
+```
+
+> **Note:** All tiers absent preserves existing behavior — if you haven't set any, table-drop-by-absence works exactly as it always has.
 
 For full guidance — environment advice, the rollback-friendly removal pattern, and the recyclebin alternative — see [DropTablesRemovedFromProduct](schemaquench.md#droptablesremovedfromproduct) in the SchemaQuench reference.
+
+---
+
+## DropUnknownIndexes
+
+Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropUnknownIndexes` in `SchemaQuench.settings.json` (or `SmithySettings_DropUnknownIndexes` environment variable) | `false` |
+| Product | `DropUnknownIndexes` in `Product.json` | (inherit) |
+| Template | `DropUnknownIndexes` in `Template.json` | (inherit) |
+
+A `false` at any tier is sticky — it locks the effective value to `false` for all lower tiers and cannot be re-enabled by a more-specific setting. Absent inherits from the tier above. A `true` at a lower tier overrides an inherited `true` (or default `false`) but never an ancestor's explicit `false`.
+
+The environment tier is new in this release. Previously `DropUnknownIndexes` was settable only in `Product.json` and `Template.json`. It can now be set or suppressed in `SchemaQuench.settings.json` (or via environment variable) as a deployment-wide guardrail.
+
+```json
+// SchemaQuench.settings.json — suppress index drops for all products in this environment
+{ "DropUnknownIndexes": false }
+```
+
+```json
+// SchemaQuench.settings.json — enable index drops for all products in this environment
+{ "DropUnknownIndexes": true }
+```
+
+> **Note:** Default `false` at all tiers preserves existing behavior — if you haven't set any tier, index-drop-by-absence is off, consistent with prior releases. The environment tier adds an opt-in or opt-out guardrail without changing the per-package default.
+
+For package-side configuration and adoption guidance, see [DropUnknownIndexes](schema-packages.md#properties) in the Schema Packages reference.
 
 ---
 
