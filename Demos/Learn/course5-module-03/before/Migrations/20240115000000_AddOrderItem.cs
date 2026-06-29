@@ -24,9 +24,9 @@ public partial class AddOrderItem : Migration
             {
                 table.PrimaryKey("PK_OrderItem", x => x.OrderItemId);
                 table.ForeignKey("FK_OrderItem_SalesOrder", x => x.OrderId,
-                    "SalesOrder", "OrderId");
+                    "SalesOrder", "OrderId", onDelete: ReferentialAction.Cascade);
                 table.ForeignKey("FK_OrderItem_Product", x => x.ProductId,
-                    "Product", "ProductId");
+                    "Product", "ProductId", onDelete: ReferentialAction.Cascade);
             });
     }
 

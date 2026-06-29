@@ -44,7 +44,7 @@ public partial class CreateShop : Migration
             {
                 table.PrimaryKey("PK_SalesOrder", x => x.OrderId);
                 table.ForeignKey("FK_SalesOrder_Customer", x => x.CustomerId,
-                    "Customer", "CustomerId");
+                    "Customer", "CustomerId", onDelete: ReferentialAction.Cascade);
             });
     }
 
