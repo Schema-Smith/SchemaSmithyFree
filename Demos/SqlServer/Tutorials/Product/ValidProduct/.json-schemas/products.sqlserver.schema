@@ -74,6 +74,9 @@
     "CheckConstraintStyle": {
       "type": "string",
       "pattern": "ColumnLevel|TableLevel"
+    },
+    "DropTablesRemovedFromProduct": {
+      "type": "boolean"
     }
   },
   "additionalProperties": false,
