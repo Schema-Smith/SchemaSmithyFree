@@ -1,0 +1,12 @@
+{
+    "Name": "`CascIdx`",
+    "Engine": "InnoDB",
+    "Columns": [
+        {"Name": "`Id`","DataType": "INT","Nullable": false},
+        {"Name": "`Name`","DataType": "VARCHAR(100)","Nullable": true}
+    ],
+    "Indexes": [
+        {"Name": "PRIMARY","PrimaryKey": true,"IndexColumns": "`Id`"},
+        {"Name": "`IX_CascIdx_Name`","Unique": false,"IndexColumns": "`Name`"}
+    ]
+}

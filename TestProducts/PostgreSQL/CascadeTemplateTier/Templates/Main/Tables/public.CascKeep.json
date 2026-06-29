@@ -1,0 +1,6 @@
+{
+    "Schema": "public",
+    "Name": "CascKeep",
+    "Columns": [{"Name": "Id","DataType": "INTEGER","Nullable": false}],
+    "Indexes": [{"Name": "PK_CascKeep","PrimaryKey": true,"Unique": true,"IndexColumns": "Id"}]
+}

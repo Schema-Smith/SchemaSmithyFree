@@ -1,0 +1,12 @@
+{
+    "Schema": "public",
+    "Name": "CascIdx",
+    "Columns": [
+        {"Name": "Id","DataType": "INTEGER","Nullable": false},
+        {"Name": "Name","DataType": "VARCHAR(100)","Nullable": true}
+    ],
+    "Indexes": [
+        {"Name": "PK_CascIdx","PrimaryKey": true,"Unique": true,"IndexColumns": "Id"},
+        {"Name": "IX_CascIdx_Name","Unique": false,"IndexColumns": "Name"}
+    ]
+}
