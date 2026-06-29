@@ -39,6 +39,7 @@ BEGIN
         Collation VARCHAR(100) DEFAULT NULL,
         OldName VARCHAR(128) DEFAULT NULL,
         RowFormat VARCHAR(20) DEFAULT NULL,
+        AutoIncrementValue BIGINT UNSIGNED DEFAULT NULL,
         NewTable TINYINT DEFAULT 0,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
@@ -51,13 +52,14 @@ BEGIN
     -- The NOT EXISTS check against INFORMATION_SCHEMA is done separately via UPDATE
     -- to avoid a MySQL optimizer issue where correlated subqueries with function calls
     -- inside JSON_TABLE context don't re-evaluate correctly for all rows.
-    INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, NewTable, ShouldApply, ShouldApplyExpression, VariantName)
+    INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, NewTable, ShouldApply, ShouldApplyExpression, VariantName)
     SELECT
         SchemaSmith_SafeBacktickWrap(jt.Name) AS TableName,
         COALESCE(NULLIF(TRIM(jt.Engine), ''), 'InnoDB') AS Engine,
         NULLIF(TRIM(jt.Collation), '') AS Collation,
         SchemaSmith_SafeBacktickWrap(jt.OldName) AS OldName,
         NULLIF(TRIM(jt.RowFormat), '') AS RowFormat,
+        jt.AutoIncrementValue AS AutoIncrementValue,
         0 AS NewTable,
         1 AS ShouldApply,
         NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
@@ -68,6 +70,7 @@ BEGIN
         Collation VARCHAR(100) PATH '$.Collation',
         OldName VARCHAR(128) PATH '$.OldName',
         RowFormat VARCHAR(20) PATH '$.RowFormat',
+        AutoIncrementValue BIGINT UNSIGNED PATH '$.AutoIncrementValue',
         ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
         VariantName VARCHAR(128) PATH '$.VariantName'
     )) AS jt

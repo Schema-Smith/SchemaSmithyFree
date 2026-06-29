@@ -25,8 +25,9 @@ BEGIN
     -- 4. Engine changes
     -- 5. Collation changes
     -- 6. Row format changes
-    -- 7. ProductOwnership updates
-    -- 8. Drop tables removed from product (if enabled)
+    -- 7. Auto-increment seed changes
+    -- 8. ProductOwnership updates
+    -- 9. Drop tables removed from product (if enabled)
 
     DECLARE v_ConflictingTable VARCHAR(128);
     DECLARE v_ConflictingOwner VARCHAR(100);
@@ -910,6 +911,60 @@ BEGIN
         END;
     END IF;
 
+    -- =======================
+    -- STEP 7: ALTER TABLE AUTO_INCREMENT
+    -- =======================
+    -- Set auto-increment seed when declared value is higher than the live value (set-if-higher, idempotent).
+    -- COALESCE(ist.AUTO_INCREMENT, 0): MySQL returns NULL for AUTO_INCREMENT on an empty InnoDB table,
+    -- treating NULL as 0 ensures a declared seed is applied even on tables that have never had rows.
+    IF p_WhatIf = 1 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Set auto-increment seed');
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', t.TableName, ' AUTO_INCREMENT=', t.AutoIncrementValue)
+        FROM _SchemaSmith_Tables t
+        INNER JOIN INFORMATION_SCHEMA.TABLES ist
+            ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+        WHERE t.NewTable = 0
+          AND t.AutoIncrementValue IS NOT NULL
+          AND t.AutoIncrementValue > COALESCE(ist.AUTO_INCREMENT, 0);
+    ELSE
+        BEGIN
+            DECLARE v_AutoIncDone INT DEFAULT FALSE;
+            DECLARE v_AutoIncSql TEXT;
+            DECLARE cur_AutoIncChanges CURSOR FOR
+                SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', t.TableName, ' AUTO_INCREMENT=', t.AutoIncrementValue) AS AlterAutoIncStatement
+                FROM _SchemaSmith_Tables t
+                INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                    ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                    AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+                WHERE t.NewTable = 0
+                  AND t.AutoIncrementValue IS NOT NULL
+                  AND t.AutoIncrementValue > COALESCE(ist.AUTO_INCREMENT, 0);
+
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_AutoIncDone = TRUE;
+
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Set auto-increment seed');
+            SET v_AutoIncDone = FALSE;
+            OPEN cur_AutoIncChanges;
+
+            autoinc_changes_loop: LOOP
+                FETCH cur_AutoIncChanges INTO v_AutoIncSql;
+                IF v_AutoIncDone THEN
+                    LEAVE autoinc_changes_loop;
+                END IF;
+
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Set auto-increment: ', v_AutoIncSql));
+                SET @exec_sql = v_AutoIncSql;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+            END LOOP;
+
+            CLOSE cur_AutoIncChanges;
+        END;
+    END IF;
+
     -- Update ProductOwnership for managed tables (non-WhatIf mode only)
     IF p_WhatIf = 0 THEN
         INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
@@ -923,7 +978,7 @@ BEGIN
     END IF;
 
     -- =======================
-    -- STEP 7: DROP TABLES REMOVED FROM PRODUCT
+    -- STEP 8: DROP TABLES REMOVED FROM PRODUCT
     -- =======================
     -- Drop tables that are owned by this product but no longer in the definition
     IF p_DropTablesRemovedFromProduct = 1 THEN

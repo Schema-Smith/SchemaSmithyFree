@@ -46,13 +46,16 @@ BEGIN
                 ') ENGINE=', COALESCE(t.Engine, 'InnoDB'),
                 CASE WHEN t.RowFormat IS NOT NULL AND t.RowFormat != ''
                      THEN CONCAT(' ROW_FORMAT=', t.RowFormat)
+                     ELSE '' END,
+                CASE WHEN t.AutoIncrementValue IS NOT NULL
+                     THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
                      ELSE '' END
             ) AS CreateTableStatement
         FROM _SchemaSmith_Tables t
         INNER JOIN _SchemaSmith_Columns c ON c.TableName = t.TableName
         WHERE t.NewTable = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
-        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat;
+        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue;
 
     -- Cursor for non-generated columns on EXISTING tables
     DECLARE cur_NewColumns CURSOR FOR
