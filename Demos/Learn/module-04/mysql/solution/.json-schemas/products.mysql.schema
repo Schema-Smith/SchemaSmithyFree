@@ -77,6 +77,9 @@
     },
     "DropTablesRemovedFromProduct": {
       "type": "boolean"
+    },
+    "DropColumnsRemovedFromProduct": {
+      "type": "boolean"
     }
   },
   "additionalProperties": false,

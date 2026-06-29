@@ -76,6 +76,9 @@
     "DropUnknownIndexes": {
       "type": "boolean"
     },
+    "DropColumnsRemovedFromProduct": {
+      "type": "boolean"
+    },
     "ServerToQuench": {
       "type": "integer"
     }
