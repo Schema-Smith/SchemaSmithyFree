@@ -71,7 +71,9 @@ docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost 
 
 ## Step 4: Do it on PostgreSQL and MySQL
 
-Same three steps in `postgres/` and `mysql/`. Only the whitelist's dialect differs:
+Same three steps in `postgres/` and `mysql/`. The `before/` Flyway project is shown in its SQL Server
+form (Flyway migrations are written per engine); the PostgreSQL and MySQL sandbox databases were seeded
+to the identical end state, so the extract works the same on each. Only the whitelist's dialect differs:
 
 | | SQL Server | PostgreSQL | MySQL |
 | --- | --- | --- | --- |
