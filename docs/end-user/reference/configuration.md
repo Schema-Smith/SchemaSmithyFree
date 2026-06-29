@@ -495,6 +495,45 @@ For full guidance — environment advice, the rollback-friendly removal pattern,
 
 ---
 
+## DropColumnsRemovedFromProduct
+
+Controls whether SchemaQuench drops columns that exist in the database but no longer appear in the table JSON. Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropColumnsRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropColumnsRemovedFromProduct` environment variable) | `true` |
+| Product | `DropColumnsRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropColumnsRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropColumnsRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+A `false` at any tier is sticky — it locks the effective value to `false` for all lower tiers and cannot be re-enabled by a more-specific setting. Absent inherits from the tier above. A `true` at a lower tier overrides an inherited `true` but never an ancestor's explicit `false`. The table tier can only tighten (set its own `false` to protect its columns); a table `true` cannot re-enable column drops that a higher tier suppressed.
+
+```json
+// SchemaQuench.settings.json — suppress column drops for all products in this environment
+{ "DropColumnsRemovedFromProduct": false }
+```
+
+```json
+// Product.json — package declares its columns must never be auto-dropped
+{ "DropColumnsRemovedFromProduct": false }
+```
+
+```json
+// Template.json — suppress column drops for this template only
+{ "DropColumnsRemovedFromProduct": false }
+```
+
+```json
+// Tables/dbo.AuditLog.json — protect this table's columns regardless of higher-tier settings
+{ "Name": "AuditLog", "DropColumnsRemovedFromProduct": false }
+```
+
+> **Note:** All tiers absent preserves existing behavior — if you haven't set any, column-drop-by-absence works exactly as it always has (default `true`).
+
+For full guidance — environment advice, the four-tier cascade detail, and the rollback-friendly removal pattern — see [DropColumnsRemovedFromProduct](schemaquench.md#dropcolumnsremovedfromproduct) in the SchemaQuench reference.
+
+---
+
 ## DropUnknownIndexes
 
 Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.

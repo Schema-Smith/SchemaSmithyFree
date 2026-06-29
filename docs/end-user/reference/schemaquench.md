@@ -62,6 +62,7 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
 | `KindleTheForge` | bool | `true` | Deploy SchemaSmith helper procedures and the migration tracking table to each target database before quenching. |
 | `UpdateTables` | bool | `true` | Apply table structure changes (columns, indexes, constraints, foreign keys) from the schema package. |
 | `DropTablesRemovedFromProduct` | bool | `true` | Drop tables that exist in the database but aren't defined in the schema package. Also settable as a `Product.json` property — see [DropTablesRemovedFromProduct](#droptablesremovedfromproduct). |
+| `DropColumnsRemovedFromProduct` | bool | `true` | Drop columns that exist in the database but aren't defined in the schema package. Resolves across a four-tier cascade (env → product → template → table) with explicit-false-sticky semantics. See [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct). |
 | `DeliverData` | bool | `true` | Run the per-table `DataDelivery` step and the `TableData`-slot scripts. Set to `false` to ship a structure-only deployment that leaves reference data untouched -- pairs naturally with `UpdateTables: true` for "deploy schema, skip data" pipelines. |
 | `RunScriptsTwice` | bool | `false` | Run object scripts twice to verify idempotency. A CI/testing tool. |
 | `TrackRunOnceMigrations` | bool | `true` | Track run-once migration scripts. When `false`, all scripts run on every deployment. |
@@ -93,6 +94,7 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
   "KindleTheForge": true,
   "UpdateTables": true,
   "DropTablesRemovedFromProduct": true,
+  "DropColumnsRemovedFromProduct": true,
   "DeliverData": true,
   "RunScriptsTwice": false,
   "TrackRunOnceMigrations": true,
@@ -675,6 +677,7 @@ You can also pass the full schema tokens (`{{TableSchema}}`, `{{IndexedViewSchem
 | WhatIf | Default: off | Default: off | Default: off |
 | DropUnknownIndexes | Default: off | -- | -- |
 | DropTablesRemovedFromProduct | Default: on | -- | -- |
+| DropColumnsRemovedFromProduct | Default: on | -- | -- |
 | UpdateFillFactor | SQL Server / PG only -- Default: on | Default: off | Default: on |
 
 > **MySQL note:** `SchemaSmith_TableQuench` on MySQL has no `UpdateFillFactor` parameter -- fill factor is a SQL Server / PostgreSQL concept and the MySQL procedure simply omits it. The MySQL example above (six positional args) reflects the actual signature.
@@ -795,6 +798,63 @@ A `false` at either the environment or product level suppresses the drop pass fo
 4. After the retention period, either enable the setting for one deployment or add an explicit DROP in a migration script.
 
 For an alternative that keeps auto-drops on while still protecting data, see [Recyclebin -- Soft-Drop and Restore Hooks](recyclebin.md) (posture 2: drop-but-recoverable via the `SchemaSmith.CustomTableDrop` / `SchemaSmith.CustomTableRestore` hooks).
+
+---
+
+## DropColumnsRemovedFromProduct
+
+When you remove a column from a table JSON file, SchemaQuench needs to know what to do with the column that's already in the database. `DropColumnsRemovedFromProduct` is `true` by default — columns absent from the schema package are dropped, keeping the deployed database in sync with the product definition. Set it to `false` when that drop is unsafe: a production column that other systems still read, a column you want to retire gradually with a migration script rather than a hard drop, or any environment where you want human review before structural column removal happens.
+
+Before this setting existed, the only way to suppress column-drop-by-absence was to disable the entire table-update phase (`UpdateTables: false`), which also prevents column additions, type changes, and everything else the table quench does. `DropColumnsRemovedFromProduct` gives you a narrower knob.
+
+**Four-tier cascade — environment → product → template → table.** The setting resolves across four tiers, evaluated in order from broadest to narrowest:
+
+- **Environment** — `DropColumnsRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropColumnsRemovedFromProduct` environment variable). Controls all products deployed in that environment.
+- **Product** — `DropColumnsRemovedFromProduct` in `Product.json`. Controls a single product regardless of which environment it deploys to.
+- **Template** — `DropColumnsRemovedFromProduct` in `Template.json`. Controls a single template within a product.
+- **Table** — `DropColumnsRemovedFromProduct` in a table's `.json` file. Protects the columns of that one table only.
+
+The table tier introduces a per-table tightening option that `DropTablesRemovedFromProduct` (which has no table-level equivalent) does not have. A table can set its own `false` to protect its columns even when higher tiers permit drops. It cannot set `true` to re-enable a drop that a higher tier has suppressed — the table tier can only tighten, never loosen.
+
+**Explicit-false is sticky — hard guardrail in any direction.** A `false` at any tier locks the effective value to `false` for all lower tiers. A `true` at a lower tier overrides an inherited `true` but can never override an ancestor's explicit `false`. Absent (not set) inherits from the tier above. An environment that sets `false` suppresses column drops for the entire deployment; a product that sets `false` protects its own columns regardless of environment; a table that sets `false` protects its own columns regardless of template and product.
+
+**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, and MySQL. The `DropColumnsRemovedFromProduct` column in the parsed-JSON temp tables lets the per-engine `ModifiedTableQuench` procedure apply the table-tier override alongside the resolved env/product/template value — both must permit the drop before SchemaQuench removes a column.
+
+**Environment guidance:**
+
+- **CI and local dev** -- `true`. Detect and exercise column removals alongside the rest of schema reconciliation.
+- **Test/staging** -- `true`. Same rationale — staging should mirror production intent, including column drops.
+- **Production** -- Consider `false` at the environment level for teams that prefer explicit migration scripts to govern column removal. Dropping a column is a hard, data-losing operation and may break dependent queries or code that the deployment tool can't see.
+
+**Practical example — promote one package across risk tiers.**
+
+A common pattern: a single schema package moves through dev → staging → production. Column drops are welcome in dev and staging (reconciliation, fast feedback), but you want an explicit human step before they hit production:
+
+```json
+// SchemaQuench.settings.json (production environment)
+{ "DropColumnsRemovedFromProduct": false }
+```
+
+Dev and staging settings files omit the key (default `true`). The same package deploys to all three environments; production preserves the columns until a migration script does the removal explicitly and intentionally.
+
+**Protecting a single sensitive table.** When most tables should auto-drop columns but one carries data that must be retired carefully:
+
+```json
+// Tables/dbo.AuditLog.json
+{
+  "Name": "AuditLog",
+  "DropColumnsRemovedFromProduct": false,
+  ...
+}
+```
+
+Dev and staging drop removed columns freely on all other tables; `AuditLog` columns are never auto-dropped regardless of environment or template settings.
+
+**The rollback-friendly column removal pattern:**
+1. Remove the column from the table JSON.
+2. Keep `DropColumnsRemovedFromProduct: false` in the production config (or on the table).
+3. Write a migration script that archives or clears the column's data, then issues the `ALTER TABLE … DROP COLUMN` explicitly.
+4. Once the script has run in production, remove the table-level or environment-level override.
 
 ---
 
