@@ -1487,7 +1487,7 @@ public class ProductQuench
     {
         var quench = new DatabaseQuench(unit.Server, _product, template, unit.DatabaseName, unit.SchemaName,
             suppressKindling, _whatIfOnly, _runScriptsTwice, _dropRemovedTables,
-            _product.DropUnknownIndexes,
+            _product.DropUnknownIndexes ?? false, // TRANSITIONAL (cascade foundation): T3 replaces this with the env/product/template resolver.
             _updateTables && template.Tables.Count > 0, _deliverData, _checkpointing,
             _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _forceReKindle)
         {

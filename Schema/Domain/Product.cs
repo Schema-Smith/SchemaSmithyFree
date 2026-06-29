@@ -41,7 +41,7 @@ namespace Schema.Domain
         public string AfterBranchNameMask { get; set; } = "";
 
         [JsonProperty(Order = 9)]
-        public bool DropUnknownIndexes { get; set; }
+        public bool? DropUnknownIndexes { get; set; }
 
         [JsonProperty(Order = 10)]
         public string BaselineValidationScript { get; set; }

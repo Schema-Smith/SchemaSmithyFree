@@ -28,7 +28,7 @@ namespace Schema.UnitTests.Domain
             Assert.That(product.BranchNameFile, Is.EqualTo("{{repo_path}}/.git/HEAD"));
             Assert.That(product.BeforeBranchNameMask, Is.EqualTo("ref: refs/heads/"));
             Assert.That(product.AfterBranchNameMask, Is.EqualTo(""));
-            Assert.That(product.DropUnknownIndexes, Is.False);
+            Assert.That(product.DropUnknownIndexes, Is.Null);
             Assert.That(product.BaselineValidationScript, Is.Null);
             Assert.That(product.VersionStampScript, Is.Null);
             Assert.That(product.MinimumVersion, Is.Null);
@@ -261,6 +261,30 @@ namespace Schema.UnitTests.Domain
             var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
                 """{ "Name": "P", "Platform": "SqlServer", "DropTablesRemovedFromProduct": true }""");
             Assert.That(product.DropTablesRemovedFromProduct, Is.True);
+        }
+
+        [Test]
+        public void DropUnknownIndexes_AbsentInJson_IsNull()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer" }""");
+            Assert.That(product.DropUnknownIndexes, Is.Null);
+        }
+
+        [Test]
+        public void DropUnknownIndexes_ExplicitFalse_IsFalse()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropUnknownIndexes": false }""");
+            Assert.That(product.DropUnknownIndexes, Is.False);
+        }
+
+        [Test]
+        public void DropUnknownIndexes_ExplicitTrue_IsTrue()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropUnknownIndexes": true }""");
+            Assert.That(product.DropUnknownIndexes, Is.True);
         }
     }
 }

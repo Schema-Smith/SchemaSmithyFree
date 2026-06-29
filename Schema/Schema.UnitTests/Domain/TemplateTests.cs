@@ -419,6 +419,54 @@ namespace Schema.UnitTests.Domain
 
             Assert.That(template.BeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "s1" }));
         }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropTablesRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropTablesRemovedFromProduct": false }""");
+            Assert.That(template.DropTablesRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropTablesRemovedFromProduct": true }""");
+            Assert.That(template.DropTablesRemovedFromProduct, Is.True);
+        }
+
+        [Test]
+        public void DropUnknownIndexes_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropUnknownIndexes, Is.Null);
+        }
+
+        [Test]
+        public void DropUnknownIndexes_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropUnknownIndexes": false }""");
+            Assert.That(template.DropUnknownIndexes, Is.False);
+        }
+
+        [Test]
+        public void DropUnknownIndexes_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropUnknownIndexes": true }""");
+            Assert.That(template.DropUnknownIndexes, Is.True);
+        }
     }
 }
 

@@ -131,6 +131,12 @@ namespace Schema.Domain
         [DefaultValue(true)]
         public bool ContinueOnDatabaseFailure { get; set; } = true;
 
+        [JsonProperty(Order = 16)]
+        public bool? DropTablesRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 17)]
+        public bool? DropUnknownIndexes { get; set; }
+
         [JsonIgnore]
         public Product Product { get; set; }
 
