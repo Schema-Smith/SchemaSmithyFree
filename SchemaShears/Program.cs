@@ -18,13 +18,18 @@ public static class Program
         ConfigHelper.GetAppSettingsAndUserSecrets("SchemaShears", LogFactory.GetLogger("ProgressLog").Info);
 
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
+        var allowDropsRaw = CommandLineParser.ValueOfSwitch("AllowDrops", config["AllowDrops"]);
+        var allowDrops = (allowDropsRaw ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
         var request = new PatchBuildRequest
         {
             SourcePath = CommandLineParser.ValueOfSwitch("Source", config["SourcePath"]),
             ManifestPath = CommandLineParser.ValueOfSwitch("Manifest", config["ManifestPath"]),
             AlwaysIncludePath = CommandLineParser.ValueOfSwitch("AlwaysInclude", config["AlwaysIncludePath"]),
             OutputPath = CommandLineParser.ValueOfSwitch("Output", config["OutputPath"]),
-            Zip = CommandLineParser.ContainsSwitch("Zip") || string.Equals(config["Zip"], "true", StringComparison.OrdinalIgnoreCase)
+            Zip = CommandLineParser.ContainsSwitch("Zip") || string.Equals(config["Zip"], "true", StringComparison.OrdinalIgnoreCase),
+            AllowDrops = allowDrops
         };
 
         new PatchBuilder().Build(request);
@@ -43,5 +48,6 @@ public static class Program
         Console.WriteLine("  --AlwaysInclude:<path>   Optional file listing paths/folders always included.");
         Console.WriteLine("  --Output:<path>          Destination folder for the patch package.");
         Console.WriteLine("  --Zip                    Also produce <Output>.zip.");
+        Console.WriteLine("  --AllowDrops:<list>      Comma-separated drop categories to leave enabled (e.g. Columns,Indexes); empty suppresses all drops.");
     }
 }

@@ -9,6 +9,7 @@ public class PatchBuildRequest
     public string AlwaysIncludePath { get; set; }
     public string OutputPath { get; set; }
     public bool Zip { get; set; }
+    public string[] AllowDrops { get; set; }
 }
 
 public class PatchBuilder

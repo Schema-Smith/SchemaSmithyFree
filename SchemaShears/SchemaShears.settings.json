@@ -3,5 +3,6 @@
     "ManifestPath": "",      // File listing product-relative paths to include (one per line; # comments allowed)
     "AlwaysIncludePath": "", // Optional: file listing paths/folders always included regardless of the manifest
     "OutputPath": "",        // Destination folder for the patch package
-    "Zip": false             // Also produce <OutputPath>.zip
+    "Zip": false,            // Also produce <OutputPath>.zip
+    "AllowDrops": ""         // Comma-separated drop categories to leave enabled (e.g. "Columns,Indexes"); empty suppresses all drops
 }
