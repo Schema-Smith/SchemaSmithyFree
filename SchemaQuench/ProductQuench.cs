@@ -31,7 +31,6 @@ public class ProductQuench
     private readonly bool _runScriptsTwice;
     private readonly bool _skipKindling;
     private readonly bool _forceReKindle;
-    private readonly string _dropRemovedTables;
     private readonly bool _updateTables;
     private readonly bool _deliverData;
     private readonly bool _trackRunOnceMigrations;
@@ -68,7 +67,6 @@ public class ProductQuench
         // CLI-overridable (unlike the other kindling flags): ForceReKindle is an ad-hoc operational
         // gesture run on demand, not a sticky pipeline default, so a command-line switch is the natural UX.
         _forceReKindle = CommandLineParser.ContainsSwitch("ForceReKindle") || _config["ForceReKindle"]?.ToLower() == "true";
-        _dropRemovedTables = FormatBooleanFlag(ResolveDropTablesRemovedFromProduct(_config, _product));
         _updateTables = _config["UpdateTables"]?.ToLower() != "false";
         _deliverData = _config["DeliverData"]?.ToLower() != "false";
         _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
@@ -111,9 +109,6 @@ public class ProductQuench
     }
 
     private IReadOnlyList<string> ReadFilterArray(string sectionKey) => ReadFilterArray(_config, sectionKey);
-
-    internal static bool ResolveDropTablesRemovedFromProduct(IConfiguration config, Product product) =>
-        config["DropTablesRemovedFromProduct"]?.ToLower() != "false" && product.DropTablesRemovedFromProduct;
 
     internal static bool ResolveCascadedFlag(bool? env, bool? product, bool? template, bool defaultValue)
     {
@@ -1485,9 +1480,15 @@ public class ProductQuench
     /// </summary>
     private void RunOneWorkUnit(WorkUnit unit, Template template, bool suppressKindling)
     {
+        var dropRemovedTables = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropTablesRemovedFromProduct"), _product.DropTablesRemovedFromProduct,
+            template.DropTablesRemovedFromProduct, defaultValue: true));
+        var dropUnknownIndexes = ResolveCascadedFlag(
+            ConfigBool(_config, "DropUnknownIndexes"), _product.DropUnknownIndexes,
+            template.DropUnknownIndexes, defaultValue: false);
         var quench = new DatabaseQuench(unit.Server, _product, template, unit.DatabaseName, unit.SchemaName,
-            suppressKindling, _whatIfOnly, _runScriptsTwice, _dropRemovedTables,
-            _product.DropUnknownIndexes ?? false, // TRANSITIONAL (cascade foundation): T3 replaces this with the env/product/template resolver.
+            suppressKindling, _whatIfOnly, _runScriptsTwice, dropRemovedTables,
+            dropUnknownIndexes,
             _updateTables && template.Tables.Count > 0, _deliverData, _checkpointing,
             _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _forceReKindle)
         {

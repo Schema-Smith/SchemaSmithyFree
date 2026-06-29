@@ -2396,7 +2396,7 @@ public class ProductQuenchTests
 
     #endregion
 
-    #region ResolveDropTablesRemovedFromProduct (drop-protection Slice A)
+    #region DropTablesRemovedFromProduct cascade (env + product + template, defaultValue: true)
 
     private static IConfigurationRoot ConfigWith(params (string Key, string Value)[] pairs)
     {
@@ -2406,38 +2406,37 @@ public class ProductQuenchTests
     }
 
     [Test]
-    public void ResolveDropTablesRemoved_BothDefault_True()
+    public void DropTablesRemoved_AllAbsent_DefaultTrue()
     {
-        // Env unset (default true) AND product default true -> drop (today's behavior).
-        var config = ConfigWith();
-        var product = new Product { DropTablesRemovedFromProduct = true };
-        Assert.That(ProductQuench.ResolveDropTablesRemovedFromProduct(config, product), Is.True);
+        // Env unset, product null, template null -> default true.
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, null, null, defaultValue: true), Is.True);
     }
 
     [Test]
-    public void ResolveDropTablesRemoved_ProductFalse_EnvDefault_False()
+    public void DropTablesRemoved_ProductFalse_EnvAbsent_False()
     {
-        // The SchemaShears patch case: ambient env would drop, the package vetoes.
-        var config = ConfigWith();
-        var product = new Product { DropTablesRemovedFromProduct = false };
-        Assert.That(ProductQuench.ResolveDropTablesRemovedFromProduct(config, product), Is.False);
+        // The SchemaShears patch case: product vetoes the default-true ambient.
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, false, null, defaultValue: true), Is.False);
     }
 
     [Test]
-    public void ResolveDropTablesRemoved_EnvFalse_ProductTrue_False()
+    public void DropTablesRemoved_EnvFalse_ProductTrue_False()
     {
-        // Env false wins regardless of product (AND-cascade, false dominates).
-        var config = ConfigWith(("DropTablesRemovedFromProduct", "false"));
-        var product = new Product { DropTablesRemovedFromProduct = true };
-        Assert.That(ProductQuench.ResolveDropTablesRemovedFromProduct(config, product), Is.False);
+        // Env false wins regardless of product (false dominates).
+        Assert.That(ProductQuench.ResolveCascadedFlag(false, true, null, defaultValue: true), Is.False);
     }
 
     [Test]
-    public void ResolveDropTablesRemoved_BothFalse_False()
+    public void DropTablesRemoved_BothFalse_False()
     {
-        var config = ConfigWith(("DropTablesRemovedFromProduct", "false"));
-        var product = new Product { DropTablesRemovedFromProduct = false };
-        Assert.That(ProductQuench.ResolveDropTablesRemovedFromProduct(config, product), Is.False);
+        Assert.That(ProductQuench.ResolveCascadedFlag(false, false, null, defaultValue: true), Is.False);
+    }
+
+    [Test]
+    public void DropTablesRemoved_TemplateFalse_OverridesProductTrue_False()
+    {
+        // Template-level false suppresses even when env+product say true.
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, true, false, defaultValue: true), Is.False);
     }
 
     #endregion
