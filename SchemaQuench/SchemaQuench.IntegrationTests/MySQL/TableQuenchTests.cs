@@ -382,7 +382,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -443,7 +443,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -525,7 +525,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -603,7 +603,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -665,7 +665,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -743,7 +743,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -821,7 +821,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -1690,7 +1690,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@whatIf", 0);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -1920,7 +1920,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);

@@ -10,7 +10,8 @@ CREATE PROCEDURE SchemaSmith_MissingIndexesAndConstraintsQuench(
     IN p_ProductName VARCHAR(100),
     IN p_DatabaseName VARCHAR(128),
     IN p_WhatIf TINYINT,
-    IN p_DropUnknownIndexes TINYINT
+    IN p_DropUnknownIndexes TINYINT,
+    IN p_DropCheckConstraintsRemovedFromProduct TINYINT
 )
 SQL SECURITY DEFINER
 BEGIN
@@ -479,6 +480,73 @@ BEGIN
     END IF;
 
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ModifiedChecks;
+
+    -- =========================================================================
+    -- Drop check constraints removed from the product (by-absence), gated by the cascade flag
+    -- and per-table tightening. Scoped to the current quench's product tables. Table-level checks
+    -- absent from _SchemaSmith_CheckConstraints are dropped; a column-level CK_<table>_<column>
+    -- check is excluded only while its column still carries a CheckExpression (then it is owned by
+    -- the modify/create passes); once the CheckExpression is removed, the orphan is cleaned up here.
+    -- =========================================================================
+    IF p_DropCheckConstraintsRemovedFromProduct = 1 THEN
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ChecksToDropByAbsence;
+        CREATE TEMPORARY TABLE _SchemaSmith_ChecksToDropByAbsence (
+            TableName VARCHAR(128) NOT NULL,
+            ConstraintName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, ConstraintName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        INSERT INTO _SchemaSmith_ChecksToDropByAbsence (TableName, ConstraintName)
+        SELECT CONVERT(tc.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+               CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+        JOIN _SchemaSmith_Tables t
+            ON BINARY SchemaSmith_StripBacktickWrapping(t.TableName) = BINARY tc.TABLE_NAME
+            AND t.NewTable = 0
+            AND COALESCE(t.DropCheckConstraintsRemovedFromProduct, 1) = 1
+        WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND tc.CONSTRAINT_TYPE = 'CHECK'
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_CheckConstraints c
+              WHERE BINARY SchemaSmith_StripBacktickWrapping(c.TableName) = BINARY tc.TABLE_NAME
+                AND BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName) = BINARY tc.CONSTRAINT_NAME)
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_Columns col
+              WHERE BINARY SchemaSmith_StripBacktickWrapping(col.TableName) = BINARY tc.TABLE_NAME
+                AND col.CheckExpression IS NOT NULL AND TRIM(col.CheckExpression) != ''
+                AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName)));
+
+        IF p_WhatIf = 1 THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop check constraints removed from product');
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` DROP CHECK `', ConstraintName, '`')
+            FROM _SchemaSmith_ChecksToDropByAbsence;
+        ELSE
+            BEGIN
+                DECLARE v_AbsChkDone INT DEFAULT FALSE;
+                DECLARE v_AbsChkSql TEXT;
+                DECLARE cur_AbsChecks CURSOR FOR
+                    SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` DROP CHECK `', ConstraintName, '`')
+                    FROM _SchemaSmith_ChecksToDropByAbsence;
+                DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_AbsChkDone = TRUE;
+
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop check constraints removed from product');
+                SET v_AbsChkDone = FALSE;
+                OPEN cur_AbsChecks;
+                drop_abs_checks_loop: LOOP
+                    FETCH cur_AbsChecks INTO v_AbsChkSql;
+                    IF v_AbsChkDone THEN LEAVE drop_abs_checks_loop; END IF;
+                    SET @exec_sql = v_AbsChkSql;
+                    PREPARE stmt FROM @exec_sql;
+                    EXECUTE stmt;
+                    DEALLOCATE PREPARE stmt;
+                END LOOP;
+                CLOSE cur_AbsChecks;
+            END;
+        END IF;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ChecksToDropByAbsence;
+    END IF;
 
     -- =========================================================================
     -- STEP 4: Create missing check constraints (MySQL 8.0.16+)

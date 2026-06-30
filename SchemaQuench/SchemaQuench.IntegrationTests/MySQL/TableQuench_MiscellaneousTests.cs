@@ -369,7 +369,7 @@ VALUES ('OtherProduct', '', '{TestSchema}', 'TABLE', 'TableOwnedByOtherProduct')
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 1)"; // DropUnknown=1
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 1, 1)"; // DropUnknown=1
         cmd.ExecuteNonQuery();
 
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ForeignKeyQuench('{_productName}', '{TestSchema}', 0, 1, 1)"; // DropUnknown=1

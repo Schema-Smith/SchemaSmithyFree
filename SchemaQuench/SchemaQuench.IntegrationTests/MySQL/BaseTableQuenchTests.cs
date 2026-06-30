@@ -95,7 +95,7 @@ public class BaseTableQuenchTests
         ExecuteWithDeadlockRetry(cmd);
 
         // Step 4: Create missing indexes and constraints
-        cmd.CommandText = $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{_mainDb}', 0, 1)";
+        cmd.CommandText = $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{_mainDb}', 0, 1, 1)";
         ExecuteWithDeadlockRetry(cmd);
     }
 
