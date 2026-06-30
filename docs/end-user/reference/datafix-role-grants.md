@@ -1,6 +1,6 @@
 # Datafix Role Grants Reference
 
-Running a datafix through SchemaSmith means deploying under a *scoped* account — one with enough privilege to read, update, and back up data, but no ability to touch schema structure you didn't explicitly authorize. SchemaSmith itself performs no structural DDL under the datafix deployment profile; it executes the migration scripts you provide. Those scripts, however, often need targeted capabilities beyond basic reader/writer access — the most common being `CREATE TABLE` for rollback backup tables.
+Running a datafix through SchemaSmith means deploying under a *scoped* account — one with enough privilege to read, update, and back up data, but no ability to touch schema structure you didn't explicitly authorize. SchemaSmith itself performs no structural DDL under the datafix deployment profile; it executes the migration scripts you provide. Those scripts, however, often need targeted capabilities beyond basic reader/writer access — the most common being `CREATE TABLE` for rollback backup tables. The safe way to grant that is to give the deploy account *its own* schema (`datafix`) to create backup tables in: creating a table in a schema you own needs no rights over the product's own tables, so the account can back up and fix data without any power to alter or drop the schema it's deploying into.
 
 The grant sets below are the recommended starting point for a `datafix_user` account on each supported engine. They are scoped to the minimum required for the Course 6 lab scenario: a price-defect fix across three tenant databases (`shop_tenant_a`, `shop_tenant_b`, `shop_tenant_c`). Treat them as a baseline to tighten per environment — production accounts should carry only the grants that the specific fix has been proven to need.
 
@@ -20,20 +20,24 @@ CREATE LOGIN datafix_user WITH PASSWORD = 'DataFix!Demo123';
 USE shop_tenant_a;   -- substitute shop_tenant_b, shop_tenant_c for the other two
 GO
 CREATE USER datafix_user FOR LOGIN datafix_user;
+GO
 
--- Reader/writer on all objects in dbo (the default schema for this database)
+-- A dedicated schema the deploy user OWNS — backup tables land here
+CREATE SCHEMA datafix AUTHORIZATION datafix_user;
+GO
+
+-- Reader/writer on the product data (dbo) — note: no structural rights on dbo
 GRANT SELECT, INSERT, UPDATE ON SCHEMA::dbo TO datafix_user;
 
--- Backup table: both grants are required together (see note below)
-GRANT CREATE TABLE               TO datafix_user;
-GRANT ALTER        ON SCHEMA::dbo TO datafix_user;
+-- Create rollback-backup tables; they land in the owned 'datafix' schema
+GRANT CREATE TABLE TO datafix_user;
 
 -- Ancillary stored procedures and functions the fix may call
-GRANT EXECUTE      ON SCHEMA::dbo TO datafix_user;
+GRANT EXECUTE ON SCHEMA::dbo TO datafix_user;
 GO
 ```
 
-**`CREATE TABLE` + `ALTER ON SCHEMA::dbo` — why both are required.** `GRANT CREATE TABLE` authorizes the DDL statement itself, but SQL Server still needs to know *where* to place the table. Without `GRANT ALTER ON SCHEMA::dbo`, the engine rejects placement even though the CREATE TABLE statement is technically permitted: the user cannot modify the schema's ownership chain to accommodate the new object. The two grants are a paired unit for backup-table creation — neither is sufficient alone.
+**Why a dedicated `datafix` schema instead of `ALTER ON SCHEMA::dbo`.** `GRANT CREATE TABLE` authorizes the statement, but the new table still has to land *somewhere*. Creating it in `dbo` would additionally require `GRANT ALTER ON SCHEMA::dbo` — and that grant *also* lets the account drop and alter the product's own tables, a structural power a datafix account should never hold. Giving the account its own schema (`CREATE SCHEMA datafix AUTHORIZATION datafix_user`) sidesteps that entirely: it owns the schema, so `CREATE TABLE` there needs no rights over `dbo`. You get exactly the privilege you intend — back up and fix data, nothing structural on the product schema. This is also why it pays to verify what was actually granted: ask a DBA for "rights to create a table" and you may be handed `ALTER ON SCHEMA`, a drop capability in disguise.
 
 **tempdb access** is implicit for any authenticated login; no explicit grant is needed for `#temp` tables.
 
@@ -41,7 +45,7 @@ GO
 
 ## PostgreSQL
 
-PostgreSQL security is built around cluster-level roles rather than per-database logins. You create one `ROLE` with `LOGIN` privilege, then grant it access to each database and the objects within. Because grants on `ALL TABLES` only cover tables that exist at grant time, any tables created *after* the grant (including the backup table that the datafix script creates) are owned by `datafix_user` itself — so no additional grant is needed for tables the role creates.
+PostgreSQL security is built around cluster-level roles rather than per-database logins. You create one `ROLE` with `LOGIN` privilege, then grant it access to each database. As on SQL Server, the backup table goes in a schema the role *owns* (`datafix`) rather than in `public`: the role reads and writes the existing `public` tables but is given no `CREATE` on `public`, so it can neither add to nor drop the product's own tables. Note also that `GRANT … ON ALL TABLES` only covers tables existing at grant time — another reason the role's own backup table lives in a schema it owns rather than relying on a `public` grant.
 
 ```sql
 -- Cluster-level role (run connected to postgres or any maintenance database)
@@ -59,11 +63,12 @@ GRANT CONNECT   ON DATABASE shop_tenant_a TO datafix_user;
 -- Temp space: allows CREATE TEMPORARY TABLE within a session on this database
 GRANT TEMPORARY ON DATABASE shop_tenant_a TO datafix_user;
 
--- Schema access: USAGE to resolve object references; CREATE to place the backup table in public
-GRANT USAGE, CREATE ON SCHEMA public TO datafix_user;
-
--- Reader/writer on all existing tables in public
+-- Read/write the product data, but no CREATE in public (no structural rights there)
+GRANT USAGE ON SCHEMA public TO datafix_user;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO datafix_user;
+
+-- A dedicated schema the deploy user OWNS — backup tables go here
+CREATE SCHEMA datafix AUTHORIZATION datafix_user;
 
 -- Ancillary functions and procedures the fix may call
 GRANT EXECUTE ON ALL FUNCTIONS  IN SCHEMA public TO datafix_user;
@@ -101,6 +106,6 @@ FLUSH PRIVILEGES;
 | Capability | SQL Server | PostgreSQL | MySQL |
 |---|---|---|---|
 | Reader/writer on data | `GRANT SELECT, INSERT, UPDATE ON SCHEMA::dbo` | `GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public` | `GRANT SELECT, INSERT, UPDATE ON db.*` |
-| Backup table creation | `GRANT CREATE TABLE` + `GRANT ALTER ON SCHEMA::dbo` (paired — both required) | `GRANT USAGE, CREATE ON SCHEMA public` | `GRANT CREATE ON db.*` |
+| Backup table creation | `GRANT CREATE TABLE` + `CREATE SCHEMA datafix AUTHORIZATION datafix_user` (owns the schema) | `CREATE SCHEMA datafix AUTHORIZATION datafix_user` (owns it; no `CREATE` on `public`) | `GRANT CREATE ON db.*` |
 | Temp space | Implicit for authenticated logins | `GRANT TEMPORARY ON DATABASE` | `GRANT CREATE TEMPORARY TABLES ON db.*` |
 | Execute ancillary routines | `GRANT EXECUTE ON SCHEMA::dbo` | `GRANT EXECUTE ON ALL FUNCTIONS/PROCEDURES IN SCHEMA public` | `GRANT EXECUTE ON db.*` |
