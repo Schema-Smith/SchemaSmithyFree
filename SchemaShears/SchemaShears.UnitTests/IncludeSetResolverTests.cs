@@ -18,14 +18,14 @@ public class IncludeSetResolverTests
     [SetUp]
     public void SetUp()
     {
-        _source = Path.Combine(Path.GetTempPath(), "shears-" + System.Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(_source, "Templates", "Main", "Tables"));
-        _ordersRel = Path.Combine("Templates", "Main", "Tables", "dbo.Orders.json");
-        _mainTemplateRel = Path.Combine("Templates", "Main", "Template.json");
+        _source = Path.Join(Path.GetTempPath(), "shears-" + System.Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Join(_source, "Templates", "Main", "Tables"));
+        _ordersRel = Path.Join("Templates", "Main", "Tables", "dbo.Orders.json");
+        _mainTemplateRel = Path.Join("Templates", "Main", "Template.json");
         _productRel = "Product.json";
-        File.WriteAllText(Path.Combine(_source, _ordersRel), "{}");
-        File.WriteAllText(Path.Combine(_source, _mainTemplateRel), "{}");
-        File.WriteAllText(Path.Combine(_source, _productRel), "{}");
+        File.WriteAllText(Path.Join(_source, _ordersRel), "{}");
+        File.WriteAllText(Path.Join(_source, _mainTemplateRel), "{}");
+        File.WriteAllText(Path.Join(_source, _productRel), "{}");
     }
 
     [TearDown]

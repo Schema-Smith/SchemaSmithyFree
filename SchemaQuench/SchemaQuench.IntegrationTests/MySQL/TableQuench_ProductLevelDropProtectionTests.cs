@@ -37,7 +37,7 @@ public class TableQuench_ProductLevelDropProtectionTests
     [Test]
     public void ProductLevelFalse_VetoesDropEvenWhenEnvLevelTrue()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"DropProt_Suppress_{Guid.NewGuid():N}");
+        var tempDir = Path.Join(Path.GetTempPath(), $"DropProt_Suppress_{Guid.NewGuid():N}");
 
         lock (FactoryContainer.SharedLockObject)
         {
@@ -61,7 +61,7 @@ public class TableQuench_ProductLevelDropProtectionTests
                 Assert.That(TableExists(cmd, "DropProtRemovable"), Is.True, "Setup: DropProtRemovable should exist.");
 
                 // Remove the removable table's JSON from the temp package.
-                File.Delete(Path.Combine(tempDir, "Templates", "Main", "Tables", "DropProtRemovable.json"));
+                File.Delete(Path.Join(tempDir, "Templates", "Main", "Tables", "DropProtRemovable.json"));
 
                 // Env-level DropTablesRemovedFromProduct is true (SchemaQuench.settings.json default).
                 // Product-level is false → should veto the drop.
@@ -94,7 +94,7 @@ public class TableQuench_ProductLevelDropProtectionTests
     [Test]
     public void ProductLevelTrue_DropsRemovedTableWhenEnvLevelTrue()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"DropProt_Default_{Guid.NewGuid():N}");
+        var tempDir = Path.Join(Path.GetTempPath(), $"DropProt_Default_{Guid.NewGuid():N}");
 
         lock (FactoryContainer.SharedLockObject)
         {
@@ -121,7 +121,7 @@ public class TableQuench_ProductLevelDropProtectionTests
                 Assert.That(TableExists(cmd, "DropProtRemovable"), Is.True, "Setup: DropProtRemovable should exist.");
 
                 // Remove the removable table's JSON from the temp package.
-                File.Delete(Path.Combine(tempDir, "Templates", "Main", "Tables", "DropProtRemovable.json"));
+                File.Delete(Path.Join(tempDir, "Templates", "Main", "Tables", "DropProtRemovable.json"));
 
                 // Both env-level and product-level are true → drop should execute.
                 // Clear first-quench call history so the DidNotReceive assertions below target only the second quench.
@@ -173,14 +173,14 @@ public class TableQuench_ProductLevelDropProtectionTests
     {
         Directory.CreateDirectory(dest);
         foreach (var file in Directory.GetFiles(src))
-            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: true);
+            File.Copy(file, Path.Join(dest, Path.GetFileName(file)), overwrite: true);
         foreach (var dir in Directory.GetDirectories(src))
-            CopyDirectory(dir, Path.Combine(dest, Path.GetFileName(dir)));
+            CopyDirectory(dir, Path.Join(dest, Path.GetFileName(dir)));
     }
 
     private static void SetProductDropFlag(string packageDir, bool value)
     {
-        var path = Path.Combine(packageDir, "Product.json");
+        var path = Path.Join(packageDir, "Product.json");
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         json["DropTablesRemovedFromProduct"] = value;
         File.WriteAllText(path, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));

@@ -39,8 +39,8 @@ public class CascadeFoundationTests
     [Test]
     public void TemplateTierFalse_VetoesDropEvenWhenEnvAndProductAllowDrop()
     {
-        var tempSuppressed = Path.Combine(Path.GetTempPath(), $"CascTpl_Suppress_{Guid.NewGuid():N}");
-        var tempEnabled = Path.Combine(Path.GetTempPath(), $"CascTpl_Enable_{Guid.NewGuid():N}");
+        var tempSuppressed = Path.Join(Path.GetTempPath(), $"CascTpl_Suppress_{Guid.NewGuid():N}");
+        var tempEnabled = Path.Join(Path.GetTempPath(), $"CascTpl_Enable_{Guid.NewGuid():N}");
 
         lock (FactoryContainer.SharedLockObject)
         {
@@ -63,7 +63,7 @@ public class CascadeFoundationTests
                 Assert.That(TableExists(cmd, "CascKeep"), Is.True, "Setup A: CascKeep should exist.");
                 Assert.That(TableExists(cmd, "CascRemovable"), Is.True, "Setup A: CascRemovable should exist.");
 
-                File.Delete(Path.Combine(tempSuppressed, "Templates", "Main", "Tables", "dbo.CascRemovable.json"));
+                File.Delete(Path.Join(tempSuppressed, "Templates", "Main", "Tables", "dbo.CascRemovable.json"));
 
                 _environment.ClearReceivedCalls();
                 RunSchemaQuench();
@@ -93,7 +93,7 @@ public class CascadeFoundationTests
                 Assert.That(TableExists(cmd, "CascKeep"), Is.True, "Setup B: CascKeep should exist.");
                 Assert.That(TableExists(cmd, "CascRemovable"), Is.True, "Setup B: CascRemovable should exist.");
 
-                File.Delete(Path.Combine(tempEnabled, "Templates", "Main", "Tables", "dbo.CascRemovable.json"));
+                File.Delete(Path.Join(tempEnabled, "Templates", "Main", "Tables", "dbo.CascRemovable.json"));
 
                 _environment.ClearReceivedCalls();
                 RunSchemaQuench();
@@ -126,8 +126,8 @@ public class CascadeFoundationTests
     [Test]
     public void EnvDropUnknownIndexes_TrueDropsIndex_UnsetPreservesIndex()
     {
-        var tempDrop = Path.Combine(Path.GetTempPath(), $"CascIdx_Drop_{Guid.NewGuid():N}");
-        var tempPreserve = Path.Combine(Path.GetTempPath(), $"CascIdx_Preserve_{Guid.NewGuid():N}");
+        var tempDrop = Path.Join(Path.GetTempPath(), $"CascIdx_Drop_{Guid.NewGuid():N}");
+        var tempPreserve = Path.Join(Path.GetTempPath(), $"CascIdx_Preserve_{Guid.NewGuid():N}");
 
         lock (FactoryContainer.SharedLockObject)
         {
@@ -236,14 +236,14 @@ public class CascadeFoundationTests
     {
         Directory.CreateDirectory(dest);
         foreach (var file in Directory.GetFiles(src))
-            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: true);
+            File.Copy(file, Path.Join(dest, Path.GetFileName(file)), overwrite: true);
         foreach (var dir in Directory.GetDirectories(src))
-            CopyDirectory(dir, Path.Combine(dest, Path.GetFileName(dir)));
+            CopyDirectory(dir, Path.Join(dest, Path.GetFileName(dir)));
     }
 
     private static void SetTemplateDropFlag(string packageDir, bool value)
     {
-        var path = Path.Combine(packageDir, "Templates", "Main", "Template.json");
+        var path = Path.Join(packageDir, "Templates", "Main", "Template.json");
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         json["DropTablesRemovedFromProduct"] = value;
         File.WriteAllText(path, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
@@ -251,7 +251,7 @@ public class CascadeFoundationTests
 
     private static void RemoveSecondaryIndexFromTableJson(string packageDir)
     {
-        var path = Path.Combine(packageDir, "Templates", "Main", "Tables", "dbo.CascIdx.json");
+        var path = Path.Join(packageDir, "Templates", "Main", "Tables", "dbo.CascIdx.json");
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         var indexes = json["Indexes"]!.AsArray();
         // Keep only the PK (first entry); remove the secondary index.

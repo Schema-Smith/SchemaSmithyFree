@@ -17,14 +17,14 @@ public class PatchBuilderTests
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "shears-" + System.Guid.NewGuid().ToString("N"));
-        _source = Path.Combine(_root, "product");
-        _output = Path.Combine(_root, "patch");
-        var tables = Path.Combine(_source, "Templates", "Main", "Tables");
+        _root = Path.Join(Path.GetTempPath(), "shears-" + System.Guid.NewGuid().ToString("N"));
+        _source = Path.Join(_root, "product");
+        _output = Path.Join(_root, "patch");
+        var tables = Path.Join(_source, "Templates", "Main", "Tables");
         Directory.CreateDirectory(tables);
-        File.WriteAllText(Path.Combine(tables, "dbo.Orders.json"), "{ \"Name\": \"Orders\" }");
-        File.WriteAllText(Path.Combine(_source, "Templates", "Main", "Template.json"), "{}");
-        File.WriteAllText(Path.Combine(_source, "Product.json"), "{ \"Name\": \"Acme\" }");
+        File.WriteAllText(Path.Join(tables, "dbo.Orders.json"), "{ \"Name\": \"Orders\" }");
+        File.WriteAllText(Path.Join(_source, "Templates", "Main", "Template.json"), "{}");
+        File.WriteAllText(Path.Join(_source, "Product.json"), "{ \"Name\": \"Acme\" }");
     }
 
     [TearDown]
@@ -33,7 +33,7 @@ public class PatchBuilderTests
     [Test]
     public void Build_ProducesSubsetWithScaffoldingAndLatch()
     {
-        var manifest = Path.Combine(_root, "m.txt");
+        var manifest = Path.Join(_root, "m.txt");
         File.WriteAllText(manifest, "Templates/Main/Tables/dbo.Orders.json\n");
 
         new PatchBuilder().Build(new PatchBuildRequest
@@ -43,10 +43,10 @@ public class PatchBuilderTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(File.Exists(Path.Combine(_output, "Templates", "Main", "Tables", "dbo.Orders.json")), Is.True);
-            Assert.That(File.Exists(Path.Combine(_output, "Templates", "Main", "Template.json")), Is.True);
-            Assert.That(File.Exists(Path.Combine(_output, "patch-build-report.txt")), Is.True);
-            var product = JObject.Parse(File.ReadAllText(Path.Combine(_output, "Product.json")));
+            Assert.That(File.Exists(Path.Join(_output, "Templates", "Main", "Tables", "dbo.Orders.json")), Is.True);
+            Assert.That(File.Exists(Path.Join(_output, "Templates", "Main", "Template.json")), Is.True);
+            Assert.That(File.Exists(Path.Join(_output, "patch-build-report.txt")), Is.True);
+            var product = JObject.Parse(File.ReadAllText(Path.Join(_output, "Product.json")));
             Assert.That(product["DropTablesRemovedFromProduct"].Value<bool>(), Is.False);
         });
     }
@@ -54,9 +54,9 @@ public class PatchBuilderTests
     [Test]
     public void Build_SourceMissingProductJson_Throws()
     {
-        var bareSource = Path.Combine(_root, "bare");
+        var bareSource = Path.Join(_root, "bare");
         Directory.CreateDirectory(bareSource);
-        var manifest = Path.Combine(_root, "m.txt");
+        var manifest = Path.Join(_root, "m.txt");
         File.WriteAllText(manifest, "# empty-ish\n");
 
         Assert.Throws<PatchBuildException>(() => new PatchBuilder().Build(new PatchBuildRequest

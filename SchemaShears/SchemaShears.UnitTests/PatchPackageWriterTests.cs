@@ -18,13 +18,13 @@ public class PatchPackageWriterTests
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "shears-" + System.Guid.NewGuid().ToString("N"));
-        _source = Path.Combine(_root, "product");
-        _output = Path.Combine(_root, "patch");
-        _ordersRel = Path.Combine("Templates", "Main", "Tables", "dbo.Orders.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(_source, _ordersRel)));
-        File.WriteAllText(Path.Combine(_source, _ordersRel), "{ \"Name\": \"Orders\" }");
-        File.WriteAllText(Path.Combine(_source, "Product.json"), "{}");
+        _root = Path.Join(Path.GetTempPath(), "shears-" + System.Guid.NewGuid().ToString("N"));
+        _source = Path.Join(_root, "product");
+        _output = Path.Join(_root, "patch");
+        _ordersRel = Path.Join("Templates", "Main", "Tables", "dbo.Orders.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.Join(_source, _ordersRel)));
+        File.WriteAllText(Path.Join(_source, _ordersRel), "{ \"Name\": \"Orders\" }");
+        File.WriteAllText(Path.Join(_source, "Product.json"), "{}");
     }
 
     [TearDown]
@@ -43,9 +43,9 @@ public class PatchPackageWriterTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(File.Exists(Path.Combine(_output, _ordersRel)), Is.True);
-            Assert.That(File.ReadAllText(Path.Combine(_output, _ordersRel)), Is.EqualTo("{ \"Name\": \"Orders\" }"));
-            var report = File.ReadAllText(Path.Combine(_output, "patch-build-report.txt"));
+            Assert.That(File.Exists(Path.Join(_output, _ordersRel)), Is.True);
+            Assert.That(File.ReadAllText(Path.Join(_output, _ordersRel)), Is.EqualTo("{ \"Name\": \"Orders\" }"));
+            var report = File.ReadAllText(Path.Join(_output, "patch-build-report.txt"));
             Assert.That(report, Does.Contain("dbo.Orders.json"));
             Assert.That(report, Does.Contain("Manifest"));
             Assert.That(report, Does.Contain("Scaffolding"));
@@ -56,7 +56,7 @@ public class PatchPackageWriterTests
     public void Write_NonEmptyOutput_Throws()
     {
         Directory.CreateDirectory(_output);
-        File.WriteAllText(Path.Combine(_output, "stale.txt"), "x");
+        File.WriteAllText(Path.Join(_output, "stale.txt"), "x");
 
         var set = new Dictionary<string, IncludeReason> { ["Product.json"] = IncludeReason.Scaffolding };
 

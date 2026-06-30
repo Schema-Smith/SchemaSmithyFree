@@ -37,8 +37,8 @@ public class SchemaShearsSubsetSafetyTests
     [Test]
     public void PatchWithAllowDropsEmpty_ProtectsOmittedTable()
     {
-        var tempPatchDir = Path.Combine(Path.GetTempPath(), $"ShearsSubset_Protected_{Guid.NewGuid():N}");
-        var manifestFile = Path.Combine(Path.GetTempPath(), $"ShearsManifest_{Guid.NewGuid():N}.txt");
+        var tempPatchDir = Path.Join(Path.GetTempPath(), $"ShearsSubset_Protected_{Guid.NewGuid():N}");
+        var manifestFile = Path.Join(Path.GetTempPath(), $"ShearsManifest_{Guid.NewGuid():N}.txt");
 
         lock (FactoryContainer.SharedLockObject)
         {
@@ -104,8 +104,8 @@ public class SchemaShearsSubsetSafetyTests
     [Test]
     public void PatchWithAllowDropsTables_DropsOmittedTable()
     {
-        var tempPatchDir = Path.Combine(Path.GetTempPath(), $"ShearsSubset_Allowed_{Guid.NewGuid():N}");
-        var manifestFile = Path.Combine(Path.GetTempPath(), $"ShearsManifest_{Guid.NewGuid():N}.txt");
+        var tempPatchDir = Path.Join(Path.GetTempPath(), $"ShearsSubset_Allowed_{Guid.NewGuid():N}");
+        var manifestFile = Path.Join(Path.GetTempPath(), $"ShearsManifest_{Guid.NewGuid():N}.txt");
 
         lock (FactoryContainer.SharedLockObject)
         {

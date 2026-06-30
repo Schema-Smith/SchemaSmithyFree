@@ -41,8 +41,8 @@ public class ColumnCascadeTests
     [Test]
     public void EnvTier_FalseVetoesColumnDrop_AbsentAllowsDrop()
     {
-        var tempSuppressed = Path.Combine(Path.GetTempPath(), $"CascCol_EnvFalse_{Guid.NewGuid():N}");
-        var tempEnabled = Path.Combine(Path.GetTempPath(), $"CascCol_EnvAbsent_{Guid.NewGuid():N}");
+        var tempSuppressed = Path.Join(Path.GetTempPath(), $"CascCol_EnvFalse_{Guid.NewGuid():N}");
+        var tempEnabled = Path.Join(Path.GetTempPath(), $"CascCol_EnvAbsent_{Guid.NewGuid():N}");
 
         lock (FactoryContainer.SharedLockObject)
         {
@@ -126,8 +126,8 @@ public class ColumnCascadeTests
     [Test]
     public void ProductTier_FalseVetoesColumnDrop_AbsentAllowsDrop()
     {
-        var tempSuppressed = Path.Combine(Path.GetTempPath(), $"CascCol_ProdFalse_{Guid.NewGuid():N}");
-        var tempEnabled = Path.Combine(Path.GetTempPath(), $"CascCol_ProdAbsent_{Guid.NewGuid():N}");
+        var tempSuppressed = Path.Join(Path.GetTempPath(), $"CascCol_ProdFalse_{Guid.NewGuid():N}");
+        var tempEnabled = Path.Join(Path.GetTempPath(), $"CascCol_ProdAbsent_{Guid.NewGuid():N}");
 
         lock (FactoryContainer.SharedLockObject)
         {
@@ -205,7 +205,7 @@ public class ColumnCascadeTests
     [Test]
     public void TemplateTier_FalseVetoesColumnDrop()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"CascCol_TplFalse_{Guid.NewGuid():N}");
+        var tempDir = Path.Join(Path.GetTempPath(), $"CascCol_TplFalse_{Guid.NewGuid():N}");
 
         lock (FactoryContainer.SharedLockObject)
         {
@@ -261,7 +261,7 @@ public class ColumnCascadeTests
     [Test]
     public void Composition_TableTrueCannot_ReenableHigherTierFalse()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"CascCol_Compose_{Guid.NewGuid():N}");
+        var tempDir = Path.Join(Path.GetTempPath(), $"CascCol_Compose_{Guid.NewGuid():N}");
 
         lock (FactoryContainer.SharedLockObject)
         {
@@ -336,14 +336,14 @@ public class ColumnCascadeTests
     {
         Directory.CreateDirectory(dest);
         foreach (var file in Directory.GetFiles(src))
-            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: true);
+            File.Copy(file, Path.Join(dest, Path.GetFileName(file)), overwrite: true);
         foreach (var dir in Directory.GetDirectories(src))
-            CopyDirectory(dir, Path.Combine(dest, Path.GetFileName(dir)));
+            CopyDirectory(dir, Path.Join(dest, Path.GetFileName(dir)));
     }
 
     private static void SetProductColumnDropFlag(string packageDir, bool value)
     {
-        var path = Path.Combine(packageDir, "Product.json");
+        var path = Path.Join(packageDir, "Product.json");
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         json["DropColumnsRemovedFromProduct"] = value;
         File.WriteAllText(path, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
@@ -351,7 +351,7 @@ public class ColumnCascadeTests
 
     private static void SetTemplateColumnDropFlag(string packageDir, bool value)
     {
-        var path = Path.Combine(packageDir, "Templates", "Main", "Template.json");
+        var path = Path.Join(packageDir, "Templates", "Main", "Template.json");
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         json["DropColumnsRemovedFromProduct"] = value;
         File.WriteAllText(path, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
@@ -359,7 +359,7 @@ public class ColumnCascadeTests
 
     private static void SetTableColumnDropFlag(string packageDir, bool value)
     {
-        var path = Path.Combine(packageDir, "Templates", "Main", "Tables", "dbo.CascColTable.json");
+        var path = Path.Join(packageDir, "Templates", "Main", "Tables", "dbo.CascColTable.json");
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         json["DropColumnsRemovedFromProduct"] = value;
         File.WriteAllText(path, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
@@ -367,7 +367,7 @@ public class ColumnCascadeTests
 
     private static void RemoveOrphanColFromTableJson(string packageDir)
     {
-        var path = Path.Combine(packageDir, "Templates", "Main", "Tables", "dbo.CascColTable.json");
+        var path = Path.Join(packageDir, "Templates", "Main", "Tables", "dbo.CascColTable.json");
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         var columns = json["Columns"]!.AsArray();
         for (var i = columns.Count - 1; i >= 0; i--)

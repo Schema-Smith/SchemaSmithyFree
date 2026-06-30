@@ -17,9 +17,9 @@ public class DropSuppressionStampTests
     [SetUp]
     public void SetUp()
     {
-        _dir = Path.Combine(Path.GetTempPath(), "shears-suppress-" + Guid.NewGuid().ToString("N"));
+        _dir = Path.Join(Path.GetTempPath(), "shears-suppress-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_dir);
-        _productJson = Path.Combine(_dir, "Product.json");
+        _productJson = Path.Join(_dir, "Product.json");
         File.WriteAllText(_productJson, "{ \"Name\": \"Acme\", \"SomeFutureUnknownProperty\": 7 }");
     }
 
@@ -91,6 +91,6 @@ public class DropSuppressionStampTests
     public void Apply_MissingFile_ThrowsPatchBuildException()
     {
         Assert.Throws<PatchBuildException>(() =>
-            DropSuppressionStamp.Apply(Path.Combine(_dir, "nope.json"), Array.Empty<string>()));
+            DropSuppressionStamp.Apply(Path.Join(_dir, "nope.json"), Array.Empty<string>()));
     }
 }

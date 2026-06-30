@@ -17,10 +17,10 @@ public class PatchZipperTests
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "shears-" + System.Guid.NewGuid().ToString("N"));
-        _output = Path.Combine(_root, "patch");
+        _root = Path.Join(Path.GetTempPath(), "shears-" + System.Guid.NewGuid().ToString("N"));
+        _output = Path.Join(_root, "patch");
         Directory.CreateDirectory(_output);
-        File.WriteAllText(Path.Combine(_output, "Product.json"), "{}");
+        File.WriteAllText(Path.Join(_output, "Product.json"), "{}");
     }
 
     [TearDown]
