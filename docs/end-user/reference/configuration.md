@@ -553,6 +553,25 @@ For full guidance, see [DropForeignKeysRemovedFromProduct](schemaquench.md#dropf
 
 ---
 
+## DropCheckConstraintsRemovedFromProduct
+
+Controls whether SchemaQuench drops table-level CHECK constraints that exist in the database but no longer appear in the table JSON. Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropCheckConstraintsRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropCheckConstraintsRemovedFromProduct` environment variable) | `true` |
+| Product | `DropCheckConstraintsRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropCheckConstraintsRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropCheckConstraintsRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+Same explicit-false-sticky semantics as the other drop-control flags: a `false` at any tier locks the effective value for all lower tiers, and a table can tighten to `false` but never re-enable a higher-tier suppression. Only by-absence removal is gated (a modified check still reconciles), and column-level `CheckExpression` checks are out of scope. With the flag on, SQL Server and MySQL now drop orphaned table-level checks by absence, matching PostgreSQL.
+
+> **Note:** All tiers absent preserves existing behavior (default `true`).
+
+For full guidance, see [DropCheckConstraintsRemovedFromProduct](schemaquench.md#dropcheckconstraintsremovedfromproduct) in the SchemaQuench reference.
+
+---
+
 ## DropUnknownIndexes
 
 Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.

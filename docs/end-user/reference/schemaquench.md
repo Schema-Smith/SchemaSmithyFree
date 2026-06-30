@@ -870,6 +870,18 @@ It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropc
 
 ---
 
+## DropCheckConstraintsRemovedFromProduct
+
+When you remove a table-level CHECK constraint from a table's JSON, `DropCheckConstraintsRemovedFromProduct` controls whether SchemaQuench drops the constraint still in the database. It's `true` by default. Set it `false` to preserve an out-of-band check, or where you want review before a constraint is removed.
+
+It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct) — environment → product → template → table — with the same explicit-false-sticky semantics: a table can tighten to `false` to protect its own check constraints but can never re-enable a higher-tier suppression.
+
+**Table-level only; modified checks always reconcile.** This flag governs *table-level* checks (the `CheckConstraints` array). A column-level check — one driven by a column's `CheckExpression` — is reconciled by the column passes, not this flag. And only by-absence removal is gated: a check whose expression merely changed is always dropped and recreated so the new expression takes effect.
+
+**Cross-engine — closes a normalization gap.** Previously only PostgreSQL dropped an orphaned table-level check by absence; SQL Server and MySQL dropped a check only as a side effect of dropping its column, leaving a removed check in place. With this flag (default on), all three engines now reconcile orphaned table-level checks identically.
+
+---
+
 ## RunScriptsTwice
 
 When `RunScriptsTwice` is `true`, the Objects-slot scripts are executed twice in succession during step 3 of the database quench sequence. On the second pass, all scripts are reset to unquenched and processed through the dependency retry loop again. Both runs must succeed -- if either fails, the deployment fails.
