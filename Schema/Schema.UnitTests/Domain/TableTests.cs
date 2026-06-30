@@ -147,5 +147,29 @@ namespace Schema.UnitTests.Domain
             Assert.That(table.DropForeignKeysRemovedFromProduct, Is.True);
         }
 
+        [Test]
+        public void DropCheckConstraintsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T" }""");
+            Assert.That(table.DropCheckConstraintsRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropCheckConstraintsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T", "DropCheckConstraintsRemovedFromProduct": false }""");
+            Assert.That(table.DropCheckConstraintsRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropCheckConstraintsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T", "DropCheckConstraintsRemovedFromProduct": true }""");
+            Assert.That(table.DropCheckConstraintsRemovedFromProduct, Is.True);
+        }
+
     }
 }

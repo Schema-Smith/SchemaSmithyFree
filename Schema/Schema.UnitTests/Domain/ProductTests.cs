@@ -334,5 +334,29 @@ namespace Schema.UnitTests.Domain
                 """{ "Name": "P", "Platform": "SqlServer", "DropForeignKeysRemovedFromProduct": true }""");
             Assert.That(product.DropForeignKeysRemovedFromProduct, Is.True);
         }
+
+        [Test]
+        public void DropCheckConstraintsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer" }""");
+            Assert.That(product.DropCheckConstraintsRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropCheckConstraintsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropCheckConstraintsRemovedFromProduct": false }""");
+            Assert.That(product.DropCheckConstraintsRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropCheckConstraintsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropCheckConstraintsRemovedFromProduct": true }""");
+            Assert.That(product.DropCheckConstraintsRemovedFromProduct, Is.True);
+        }
     }
 }

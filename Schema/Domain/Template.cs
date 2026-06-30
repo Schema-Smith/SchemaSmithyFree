@@ -143,6 +143,9 @@ namespace Schema.Domain
         [JsonProperty(Order = 19)]
         public bool? DropForeignKeysRemovedFromProduct { get; set; }
 
+        [JsonProperty(Order = 20)]
+        public bool? DropCheckConstraintsRemovedFromProduct { get; set; }
+
         [JsonIgnore]
         public Product Product { get; set; }
 

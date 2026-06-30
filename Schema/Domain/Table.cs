@@ -49,6 +49,10 @@ namespace Schema.Domain
         [JsonProperty(Order = 86)]
         public bool? DropForeignKeysRemovedFromProduct { get; set; }
 
+        [SchemaProperty(Description = "When set, overrides the template- and product-level DropCheckConstraintsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
+        [JsonProperty(Order = 87)]
+        public bool? DropCheckConstraintsRemovedFromProduct { get; set; }
+
         [JsonProperty(Order = 90)]
         public string OldName { get; set; }
 
