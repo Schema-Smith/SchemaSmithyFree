@@ -491,6 +491,30 @@ namespace Schema.UnitTests.Domain
                 """{ "Name": "T", "DropColumnsRemovedFromProduct": true }""");
             Assert.That(template.DropColumnsRemovedFromProduct, Is.True);
         }
+
+        [Test]
+        public void DropForeignKeysRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropForeignKeysRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropForeignKeysRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropForeignKeysRemovedFromProduct": false }""");
+            Assert.That(template.DropForeignKeysRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropForeignKeysRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropForeignKeysRemovedFromProduct": true }""");
+            Assert.That(template.DropForeignKeysRemovedFromProduct, Is.True);
+        }
     }
 }
 

@@ -67,6 +67,9 @@ namespace Schema.Domain
         [JsonProperty(Order = 16)]
         public bool? DropColumnsRemovedFromProduct { get; set; }
 
+        [JsonProperty(Order = 17)]
+        public bool? DropForeignKeysRemovedFromProduct { get; set; }
+
         [JsonIgnore]
         public List<ProductFolder> BeforeFolders => ScriptFolders?.FindAll(f => f.QuenchSlot == ProductQuenchSlot.Before) ?? [];
 
