@@ -128,10 +128,9 @@ Apply the equivalent change to the PostgreSQL or MySQL `Template.json` if you're
 schemaquench --ConfigFile:quench.settings.json --PreviewTargets
 ```
 
-Output (identical on all three engines):
+Output — the failure message is identical on all three engines (the preceding `Locate Databases To Quench` line carries the engine's own server token):
 
 ```
-Locate Databases To Quench (localhost,11433)
 Template: Main [required]
   ERROR: matched 0 targets for required template 'Main' - no databases or schemas were discovered
 RESULT: FAIL (one or more required templates matched nothing)
