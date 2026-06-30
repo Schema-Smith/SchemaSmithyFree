@@ -2,9 +2,9 @@
 
 Running a datafix through SchemaSmith means deploying under a *scoped* account — one with enough privilege to read, update, and back up data, but no ability to touch schema structure you didn't explicitly authorize. SchemaSmith itself performs no structural DDL under the datafix deployment profile; it executes the migration scripts you provide. Those scripts, however, often need targeted capabilities beyond basic reader/writer access — the most common being `CREATE TABLE` for rollback backup tables.
 
-The grant sets below are the certified starting point for a `datafix_user` account on each supported engine. They are scoped to the minimum required for the Course 6 lab scenario: a price-defect fix across three tenant databases (`shop_tenant_a`, `shop_tenant_b`, `shop_tenant_c`). Treat them as a baseline to tighten per environment — production accounts should carry only the grants that the specific fix has been proven to need.
+The grant sets below are the recommended starting point for a `datafix_user` account on each supported engine. They are scoped to the minimum required for the Course 6 lab scenario: a price-defect fix across three tenant databases (`shop_tenant_a`, `shop_tenant_b`, `shop_tenant_c`). Treat them as a baseline to tighten per environment — production accounts should carry only the grants that the specific fix has been proven to need.
 
-> **Provisional note:** These grants were validated by the Course 6 lab across all three engines. The cert pass (Task 4) confirmed the minimal set; any grant listed here that proved unnecessary during certification has been removed.
+> **Provisional:** Treat these as the minimal baseline the Course 6 lab exercises across all three engines. Certify them against your own fix and environment — any grant a specific datafix doesn't actually exercise should be removed.
 
 ---
 
