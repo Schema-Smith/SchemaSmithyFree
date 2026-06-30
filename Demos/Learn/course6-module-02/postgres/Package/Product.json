@@ -1,0 +1,10 @@
+{
+  "Name": "Shop",
+  "MinimumVersion": "15",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "PostgreSQL"
+}

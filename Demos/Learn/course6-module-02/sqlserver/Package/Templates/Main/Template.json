@@ -1,0 +1,5 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] LIKE 'shop_tenant_%'",
+  "ScriptTokens": {}
+}
