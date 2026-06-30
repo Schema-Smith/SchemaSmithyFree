@@ -243,8 +243,10 @@ BEGIN
 
     -- =========================================================================
     -- STEP 4: Drop FKs owned by product but not in definition
+    -- Gated by DropForeignKeysRemovedFromProduct (decoupled from DropUnknownIndexes):
+    -- MySQL FK cleanup no longer requires enabling index drops.
     -- =========================================================================
-    IF p_DropUnknownIndexes = 1 THEN
+    IF p_DropForeignKeysRemovedFromProduct = 1 THEN
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKsToDrop;
         CREATE TEMPORARY TABLE _SchemaSmith_FKsToDrop (
             TableName VARCHAR(128) NOT NULL,
@@ -274,7 +276,12 @@ BEGIN
                 AND CONVERT(tc.TABLE_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
                 AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
                 AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
-          );
+          )
+          -- Per-table tightening: a table may set DropForeignKeysRemovedFromProduct:false to protect its own FKs.
+          AND COALESCE((SELECT t.DropForeignKeysRemovedFromProduct
+                          FROM _SchemaSmith_Tables t
+                          WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+                          LIMIT 1), 1) = 1;
 
         IF p_WhatIf = 1 THEN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unknown foreign keys');
