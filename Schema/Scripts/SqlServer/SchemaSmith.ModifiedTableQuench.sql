@@ -894,7 +894,29 @@ BEGIN TRY
                                   'DROP STATISTICS ' + sc.[Schema] + '.' + sc.[TableName] + '.' + sc.[StatisticName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #StatsChanges sc WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
+  -- Drop user-created statistics removed from the product (by-absence), gated by the cascade flag
+  -- and per-table tightening. Excludes stats already dropped by the modified pass (#StatsChanges,
+  -- still in the product by name) and the column-change pass (#StatisticsToDropForChanges) to avoid
+  -- a double DROP STATISTICS. Auto-created stats are already excluded from #ExistingStats.
+  RAISERROR('Drop Statistics No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping statistics ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + ']'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP STATISTICS ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #ExistingStats es WITH (NOLOCK)
+    JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = es.[Schema] AND t.[Name] = es.[TableName]
+    WHERE t.NewTable = 0
+      AND @DropStatisticsRemovedFromProduct = 1
+      AND ISNULL(t.[DropStatisticsRemovedFromProduct], 1) = 1
+      AND NOT EXISTS (SELECT * FROM #Statistics s WITH (NOLOCK)
+                        WHERE es.[Schema] = s.[Schema]
+                          AND es.[TableName] = s.[TableName]
+                          AND es.[StatsName] = SchemaSmith.fn_StripBracketWrapping(s.[StatisticName]))
+      AND NOT EXISTS (SELECT * FROM #StatisticsToDropForChanges sd WITH (NOLOCK)
+                        WHERE es.[Schema] = sd.[Schema]
+                          AND es.[TableName] = sd.[TableName]
+                          AND es.[StatsName] = sd.[StatName])
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
   RAISERROR('Collect Existing Check Constraints', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #ExistingCheckConstraints
   SELECT t.[Schema], [TableName] = t.[Name], [CheckName] = ck.[name], 
