@@ -21,6 +21,7 @@
     // "DropCheckConstraintsRemovedFromProduct": false, // Drop check constraints removed from the product definition — absent = inherit the product/template/table value (default: drop)
     // "DropExcludeConstraintsRemovedFromProduct": false, // Drop exclude constraints removed from the product definition (PostgreSQL only) — absent = inherit the product/template/table value (default: drop)
     // "DropStatisticsRemovedFromProduct": false, // Drop statistics removed from the product definition (SQL Server + PostgreSQL) — absent = inherit the product/template/table value (default: drop)
+    // "DropIndexesRemovedFromProduct": false, // Drop product-owned indexes removed from the product definition (distinct from DropUnknownIndexes, which targets out-of-band indexes) — absent = inherit the product/template/table value (default: drop)
     "UpdateTables": true, // Apply table structure changes (columns, indexes, constraints)
     "KindleTheForge": true, // Install SchemaSmith helper functions/procedures in target database
     "ForceReKindle": false, // Re-install helper objects regardless of kindle version — use after a failed/partial kindle or when debugging helper objects (CLI: --ForceReKindle)

@@ -91,6 +91,9 @@
     "DropStatisticsRemovedFromProduct": {
       "type": "boolean"
     },
+    "DropIndexesRemovedFromProduct": {
+      "type": "boolean"
+    },
     "ServerToQuench": {
       "type": "integer"
     }

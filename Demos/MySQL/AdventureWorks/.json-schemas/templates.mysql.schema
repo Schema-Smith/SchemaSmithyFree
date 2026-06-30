@@ -90,6 +90,9 @@
     },
     "DropStatisticsRemovedFromProduct": {
       "type": "boolean"
+    },
+    "DropIndexesRemovedFromProduct": {
+      "type": "boolean"
     }
   },
   "additionalProperties": false,
