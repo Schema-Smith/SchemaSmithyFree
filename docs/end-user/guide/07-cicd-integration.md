@@ -143,6 +143,27 @@ All four examples assume SchemaQuench is pre-installed on the runner or agent. S
 
 The same pattern works for any CLI-capable CI system — TeamCity, CircleCI, Bamboo, Buildkite, Concourse, Octopus Deploy, Harness, and others. Install SchemaQuench on the agent, set the credential environment variables from your CI's secret store, and invoke `schemaquench` from a script step. Nothing in the integration is platform-specific to the four examples above.
 
+## Pre-flight readiness checks
+
+Before a deployment run opens a single connection in anger, you can confirm the environment is actually ready for it. Two read-only switches run targeted diagnostics against your live servers and exit without deploying anything -- so a pipeline can fail fast on a bad connection string, an unpropagated firewall rule, a below-floor server, or a target roster that resolved to the wrong set, long before the deploy window opens.
+
+**`--TestConnection`** opens a connection to every configured server (primary plus any secondary servers), runs a liveness query, and validates that each server meets the product's declared `MinimumVersion` floor. Nothing is read, generated, or deployed. It exits `0` when every server connects and clears the floor, `2` on any connection failure or version violation.
+
+**`--PreviewTargets`** does everything `--TestConnection` does, then prints a read-only per-template report of the databases and schemas the deployment would target -- the exact set of work units a full quench would process, without processing any of them. A template marked `RequireAtLeastOneTarget` that resolves nothing fails the preview, so a misconfigured environment is caught here rather than at run time. Same exit codes: `0` on pass, `2` on any connection failure, version violation, or required-template match miss.
+
+Because both switches return `0` for go and `2` for stop, they drop straight into a pipeline as a readiness gate ahead of the deploy step:
+
+```bash
+# Readiness gate — abort the deploy if pre-flight fails
+schemaquench --TestConnection  || { echo "Pre-flight failed — aborting deploy"; exit 1; }
+schemaquench --PreviewTargets  || { echo "Target preview failed — aborting deploy"; exit 1; }
+
+# Only reached when both gates pass:
+schemaquench
+```
+
+This complements the WhatIf-in-PR pattern below: WhatIf validates *the change* against a disposable database during review, while pre-flight validates *the live target environment* immediately before a real deployment. For the full behavior of both switches -- secondary-server handling, the version-floor rules, and the target-report format -- see [SchemaQuench -- Pre-flight diagnostics](../reference/schemaquench.md#pre-flight-diagnostics).
+
 ## The WhatIf-in-PR pattern
 
 This is the most powerful CI pattern you can build with SchemaSmith. It catches deployment failures before code reaches your main branch -- not after.
