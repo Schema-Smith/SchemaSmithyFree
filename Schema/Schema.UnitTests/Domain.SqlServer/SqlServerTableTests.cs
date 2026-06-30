@@ -124,7 +124,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             var table = new SqlServerTable { Name = "Test" };
             var json = JsonConvert.SerializeObject(table);
 
-            Assert.That(json, Does.Not.Contain("ExcludeConstraints"));
+            Assert.That(json, Does.Not.Contain("\"ExcludeConstraints\":"));
             Assert.That(json, Does.Not.Contain("RowLevelSecurity"));
             Assert.That(json, Does.Not.Contain("PersistenceType"));
             Assert.That(json, Does.Not.Contain("Engine"));

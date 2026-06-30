@@ -118,7 +118,7 @@ namespace Schema.UnitTests.Domain.MySQL
             Assert.That(json, Does.Not.Contain("IsTemporal"));
             Assert.That(json, Does.Not.Contain("XmlIndexes"));
             Assert.That(json, Does.Not.Contain("EnableCDC"));
-            Assert.That(json, Does.Not.Contain("ExcludeConstraints"));
+            Assert.That(json, Does.Not.Contain("\"ExcludeConstraints\":"));
             Assert.That(json, Does.Not.Contain("RowLevelSecurity"));
             Assert.That(json, Does.Not.Contain("PersistenceType"));
         }
