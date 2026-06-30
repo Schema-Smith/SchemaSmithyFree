@@ -33,7 +33,7 @@ BEGIN TRY
 
   DROP TABLE IF EXISTS #TableDefinitions
   SELECT [Schema] = SchemaSmith.fn_SafeBracketWrap([Schema]), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL([CompressionType], 'NONE'),
-         [UpdateFillFactor] = ISNULL([UpdateFillFactor], 0), [Indexes], [XmlIndexes], [Statistics], [FullTextIndex]
+         [UpdateFillFactor] = ISNULL([UpdateFillFactor], 0), [Indexes], [XmlIndexes], [Statistics], [FullTextIndex], [DropIndexesRemovedFromProduct]
     INTO #TableDefinitions
     FROM OPENJSON(@TableDefinitions) WITH (
       [Schema] NVARCHAR(500) '$.Schema',
@@ -43,11 +43,12 @@ BEGIN TRY
 	  [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON,
 	  [XmlIndexes] NVARCHAR(MAX) '$.XmlIndexes' AS JSON,
 	  [Statistics] NVARCHAR(MAX) '$.Statistics' AS JSON,
-	  [FullTextIndex] NVARCHAR(MAX) '$.FullTextIndex' AS JSON
+	  [FullTextIndex] NVARCHAR(MAX) '$.FullTextIndex' AS JSON,
+	  [DropIndexesRemovedFromProduct] BIT '$.DropIndexesRemovedFromProduct'
       ) t;
   
   DROP TABLE IF EXISTS #Tables
-  SELECT [Schema], [Name], [CompressionType], [UpdateFillFactor],
+  SELECT [Schema], [Name], [CompressionType], [UpdateFillFactor], [DropIndexesRemovedFromProduct],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL THEN 1 ELSE 0 END) AS MissingTable
     INTO #Tables
     FROM #TableDefinitions WITH (NOLOCK)
@@ -424,6 +425,10 @@ BEGIN TRY
     INTO #IndexesToDrop
     FROM #IndexesRemovedFromProduct ir WITH (NOLOCK)
     JOIN sys.indexes i WITH (NOLOCK) ON i.[object_id] = OBJECT_ID([Schema] + '.' + [TableName]) AND i.[Name] = SchemaSmith.fn_StripBracketWrapping([IndexName])
+    -- Removed-from-product (ownership-stamped) drop is gated by the cascade flag + per-table
+    -- tightening; the unknown (@DropUnknownIndexes) and modified branches below are unaffected.
+    WHERE @DropIndexesRemovedFromProduct = 1
+      AND ISNULL((SELECT t.[DropIndexesRemovedFromProduct] FROM #Tables t WITH (NOLOCK) WHERE t.[Schema] = ir.[Schema] AND t.[Name] = ir.[TableName]), 1) = 1
   UNION
   -- Unknown indexes if we're dropping unknown
   SELECT [Schema] = CAST([xSchema] AS NVARCHAR(500)), [TableName] = CAST([xTableName] AS NVARCHAR(500)), [IndexName] = CAST([xIndexName] AS NVARCHAR(500)), IsConstraint, IsUnique, IsClustered

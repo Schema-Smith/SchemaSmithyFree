@@ -26,7 +26,8 @@
            (elem ->> 'DropForeignKeysRemovedFromProduct')::BOOLEAN AS "DropForeignKeysRemovedFromProduct",
            (elem ->> 'DropCheckConstraintsRemovedFromProduct')::BOOLEAN AS "DropCheckConstraintsRemovedFromProduct",
            (elem ->> 'DropExcludeConstraintsRemovedFromProduct')::BOOLEAN AS "DropExcludeConstraintsRemovedFromProduct",
-           (elem ->> 'DropStatisticsRemovedFromProduct')::BOOLEAN AS "DropStatisticsRemovedFromProduct"
+           (elem ->> 'DropStatisticsRemovedFromProduct')::BOOLEAN AS "DropStatisticsRemovedFromProduct",
+           (elem ->> 'DropIndexesRemovedFromProduct')::BOOLEAN AS "DropIndexesRemovedFromProduct"
     FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem;
 
     -- ShouldApply scoped by "_RowId" so each generated DELETE targets exactly the source row.

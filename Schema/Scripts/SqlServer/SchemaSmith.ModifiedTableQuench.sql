@@ -540,6 +540,10 @@ BEGIN TRY
     INTO #IndexesToDrop
     FROM #IndexesRemovedFromProduct ir WITH (NOLOCK)
     JOIN sys.indexes i WITH (NOLOCK) ON i.[object_id] = OBJECT_ID([Schema] + '.' + [TableName]) AND i.[Name] = SchemaSmith.fn_StripBracketWrapping([IndexName])
+    -- Removed-from-product (ownership-stamped) drop is gated by the cascade flag + per-table
+    -- tightening. The unknown (@DropUnknownIndexes) and modified branches below are unaffected.
+    WHERE @DropIndexesRemovedFromProduct = 1
+      AND ISNULL((SELECT t.[DropIndexesRemovedFromProduct] FROM #Tables t WITH (NOLOCK) WHERE t.[Schema] = ir.[Schema] AND t.[Name] = ir.[TableName]), 1) = 1
   UNION
   SELECT [Schema], [TableName], SchemaSmith.fn_StripBracketWrapping([IndexName]), [IsConstraint], [IsUnique], [IsClustered]
     FROM #IndexesToDropForColumnChanges WITH (NOLOCK)

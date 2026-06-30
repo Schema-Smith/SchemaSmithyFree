@@ -419,7 +419,9 @@ BEGIN
                             OR COALESCE(i."PrimaryKey", FALSE) != ei."PrimaryKey"
                             OR COALESCE(i."FilterExpression", '') != COALESCE(ei."FilterExpression", '')
                             OR COALESCE(i."AccessMethod", 'btree') != COALESCE(ei."AccessMethod", 'btree')))
-           OR EXISTS (SELECT 1 -- Index Removed from Product Definition
+           OR (p_DropIndexesRemovedFromProduct -- Index Removed from Product Definition (gated)
+               AND COALESCE((SELECT tt."DropIndexesRemovedFromProduct" FROM temp_tables tt WHERE tt."Schema" = ei."TableSchema" AND tt."Name" = ei."TableName"), TRUE)
+               AND EXISTS (SELECT 1
                         FROM temp_product_ownership tp
                         WHERE tp."IndexName" = ei."IndexName"
                           AND tp."Schema" = ei."TableSchema"
@@ -428,7 +430,7 @@ BEGIN
                                             FROM temp_indexes i
                                             WHERE i."TableSchema" = ei."TableSchema"
                                               AND i."TableName" = ei."TableName"
-                                              AND i."Name" = ei."IndexName"));
+                                              AND i."Name" = ei."IndexName")));
 
     RAISE NOTICE 'Drop Unknown, Removed, and Modified Indexes';
     SELECT STRING_AGG('RAISE NOTICE ''  Dropping ' || CASE WHEN "IsConstraint" THEN 'Constraint' ELSE 'Index' END || ' ' || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."IndexName" || ''';' || CHR(10) ||
