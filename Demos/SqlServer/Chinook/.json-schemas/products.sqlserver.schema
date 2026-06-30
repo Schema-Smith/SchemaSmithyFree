@@ -80,6 +80,9 @@
     },
     "DropColumnsRemovedFromProduct": {
       "type": "boolean"
+    },
+    "DropForeignKeysRemovedFromProduct": {
+      "type": "boolean"
     }
   },
   "additionalProperties": false,

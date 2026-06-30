@@ -79,6 +79,9 @@
     "DropColumnsRemovedFromProduct": {
       "type": "boolean"
     },
+    "DropForeignKeysRemovedFromProduct": {
+      "type": "boolean"
+    },
     "ServerToQuench": {
       "type": "integer"
     }
