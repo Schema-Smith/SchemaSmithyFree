@@ -171,5 +171,48 @@ namespace Schema.UnitTests.Domain
             Assert.That(table.DropCheckConstraintsRemovedFromProduct, Is.True);
         }
 
+        [Test]
+        public void DropExcludeConstraintsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T" }""");
+            Assert.That(table.DropExcludeConstraintsRemovedFromProduct, Is.Null);
+        }
+        [Test]
+        public void DropExcludeConstraintsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T", "DropExcludeConstraintsRemovedFromProduct": false }""");
+            Assert.That(table.DropExcludeConstraintsRemovedFromProduct, Is.False);
+        }
+        [Test]
+        public void DropExcludeConstraintsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T", "DropExcludeConstraintsRemovedFromProduct": true }""");
+            Assert.That(table.DropExcludeConstraintsRemovedFromProduct, Is.True);
+        }
+        [Test]
+        public void DropStatisticsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T" }""");
+            Assert.That(table.DropStatisticsRemovedFromProduct, Is.Null);
+        }
+        [Test]
+        public void DropStatisticsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T", "DropStatisticsRemovedFromProduct": false }""");
+            Assert.That(table.DropStatisticsRemovedFromProduct, Is.False);
+        }
+        [Test]
+        public void DropStatisticsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T", "DropStatisticsRemovedFromProduct": true }""");
+            Assert.That(table.DropStatisticsRemovedFromProduct, Is.True);
+        }
+
     }
 }

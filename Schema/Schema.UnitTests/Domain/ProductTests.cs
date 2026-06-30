@@ -358,5 +358,48 @@ namespace Schema.UnitTests.Domain
                 """{ "Name": "P", "Platform": "SqlServer", "DropCheckConstraintsRemovedFromProduct": true }""");
             Assert.That(product.DropCheckConstraintsRemovedFromProduct, Is.True);
         }
+
+        [Test]
+        public void DropExcludeConstraintsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer" }""");
+            Assert.That(product.DropExcludeConstraintsRemovedFromProduct, Is.Null);
+        }
+        [Test]
+        public void DropExcludeConstraintsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropExcludeConstraintsRemovedFromProduct": false }""");
+            Assert.That(product.DropExcludeConstraintsRemovedFromProduct, Is.False);
+        }
+        [Test]
+        public void DropExcludeConstraintsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropExcludeConstraintsRemovedFromProduct": true }""");
+            Assert.That(product.DropExcludeConstraintsRemovedFromProduct, Is.True);
+        }
+        [Test]
+        public void DropStatisticsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer" }""");
+            Assert.That(product.DropStatisticsRemovedFromProduct, Is.Null);
+        }
+        [Test]
+        public void DropStatisticsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropStatisticsRemovedFromProduct": false }""");
+            Assert.That(product.DropStatisticsRemovedFromProduct, Is.False);
+        }
+        [Test]
+        public void DropStatisticsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var product = Newtonsoft.Json.JsonConvert.DeserializeObject<Schema.Domain.Product>(
+                """{ "Name": "P", "Platform": "SqlServer", "DropStatisticsRemovedFromProduct": true }""");
+            Assert.That(product.DropStatisticsRemovedFromProduct, Is.True);
+        }
     }
 }

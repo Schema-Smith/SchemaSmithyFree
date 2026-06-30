@@ -53,6 +53,14 @@ namespace Schema.Domain
         [JsonProperty(Order = 87)]
         public bool? DropCheckConstraintsRemovedFromProduct { get; set; }
 
+        [SchemaProperty(Description = "When set, overrides the template- and product-level DropExcludeConstraintsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting. PostgreSQL only.")]
+        [JsonProperty(Order = 88)]
+        public bool? DropExcludeConstraintsRemovedFromProduct { get; set; }
+
+        [SchemaProperty(Description = "When set, overrides the template- and product-level DropStatisticsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
+        [JsonProperty(Order = 89)]
+        public bool? DropStatisticsRemovedFromProduct { get; set; }
+
         [JsonProperty(Order = 90)]
         public string OldName { get; set; }
 

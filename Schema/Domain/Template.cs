@@ -146,6 +146,12 @@ namespace Schema.Domain
         [JsonProperty(Order = 20)]
         public bool? DropCheckConstraintsRemovedFromProduct { get; set; }
 
+        [JsonProperty(Order = 21)]
+        public bool? DropExcludeConstraintsRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 22)]
+        public bool? DropStatisticsRemovedFromProduct { get; set; }
+
         [JsonIgnore]
         public Product Product { get; set; }
 
