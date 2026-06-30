@@ -239,6 +239,8 @@ BEGIN
                       'ALTER TABLE "' || ek."TableSchema" || '"."' || ek."TableName" || '" DROP CONSTRAINT IF EXISTS "' || ek."KeyName" || '" CASCADE;', CHR(10))
       INTO sql_script
       FROM temp_existing_foreignkeys ek
+      JOIN temp_tables tt ON tt."Schema" = ek."TableSchema"
+                         AND tt."Name" = ek."TableName"
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_fks fk
                           WHERE ek."TableSchema" = fk."TableSchema"
@@ -249,7 +251,16 @@ BEGIN
                             AND ek."RelatedTable" = fk."RelatedTable"
                             AND ek."RelatedColumns" = fk."RelatedColumns"
                             AND ek."DeleteAction" = fk."DeleteAction"
-                            AND ek."UpdateAction" = fk."UpdateAction");
+                            AND ek."UpdateAction" = fk."UpdateAction")
+        -- Split modified vs removed: a same-named FK whose definition changed is dropped
+        -- unconditionally (the create-missing pass recreates it); a FK whose name is gone
+        -- from the product is a by-absence removal, gated by the cascade flag.
+        AND (EXISTS (SELECT 1
+                       FROM temp_fks fk2
+                       WHERE ek."TableSchema" = fk2."TableSchema"
+                         AND ek."TableName" = fk2."TableName"
+                         AND ek."KeyName" = fk2."Name")
+             OR (p_DropForeignKeysRemovedFromProduct AND COALESCE(tt."DropForeignKeysRemovedFromProduct", TRUE)));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Drop Modified or Removed Check Constraints';
