@@ -236,7 +236,7 @@ The standard deployment profile. Structural changes land, helper procedures stay
 
 ### Datafix patch pipeline
 
-Migration scripts only. No DDL, no table quenching, no tracking inserts for run-once scripts. The deploy account needs no schema permissions.
+Migration scripts only. No DDL, no table quenching, no tracking inserts for run-once scripts — *SchemaSmith itself* performs no structural changes under this profile. Your migration scripts, though, often still need targeted rights: a fix that backs up the rows it changes needs `CREATE TABLE`. You can grant that without any power over your product tables by giving the deploy account its own schema to create backups in. See the [datafix-role grants reference](../reference/datafix-role-grants.md) for least-privilege grant sets on SQL Server, PostgreSQL, and MySQL.
 
 ```json
 {
