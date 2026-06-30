@@ -858,6 +858,18 @@ Dev and staging drop removed columns freely on all other tables; `AuditLog` colu
 
 ---
 
+## DropForeignKeysRemovedFromProduct
+
+When you remove a foreign key from a table's JSON, `DropForeignKeysRemovedFromProduct` controls whether SchemaQuench drops the constraint that's still in the database. It's `true` by default — foreign keys absent from the schema package are dropped, keeping the deployed database in sync. Set it `false` when an out-of-band foreign key must be preserved, or where you want human review before a constraint is removed.
+
+It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct) — environment → product → template → table — with the same explicit-false-sticky semantics: a `false` at any tier is a hard guardrail, and a table can tighten to `false` to protect its own foreign keys but can never re-enable a higher-tier suppression.
+
+**Only by-absence removal is gated.** A *modified* foreign key — one whose name still appears in the product but whose definition changed (columns, referenced table/columns, or `ON DELETE` / `ON UPDATE` action) — is always dropped and recreated so the new definition takes effect, regardless of this flag. The flag governs only the case where a foreign key has been removed from the product entirely.
+
+**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, and MySQL. On MySQL this flag also closes a gap: foreign-key cleanup previously required enabling `DropUnknownIndexes`, but is now governed solely by `DropForeignKeysRemovedFromProduct`, matching the other engines.
+
+---
+
 ## RunScriptsTwice
 
 When `RunScriptsTwice` is `true`, the Objects-slot scripts are executed twice in succession during step 3 of the database quench sequence. On the second pass, all scripts are reset to unquenched and processed through the dependency retry loop again. Both runs must succeed -- if either fails, the deployment fails.

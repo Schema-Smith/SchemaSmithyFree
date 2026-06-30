@@ -534,6 +534,25 @@ For full guidance — environment advice, the four-tier cascade detail, and the 
 
 ---
 
+## DropForeignKeysRemovedFromProduct
+
+Controls whether SchemaQuench drops foreign keys that exist in the database but no longer appear in the table JSON. Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropForeignKeysRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropForeignKeysRemovedFromProduct` environment variable) | `true` |
+| Product | `DropForeignKeysRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropForeignKeysRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropForeignKeysRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+Same explicit-false-sticky semantics as the other drop-control flags: a `false` at any tier locks the effective value for all lower tiers, and a table can tighten to `false` but never re-enable a higher-tier suppression. Only by-absence removal is gated — a foreign key whose definition merely changed is always dropped and recreated. On MySQL this flag also decouples foreign-key cleanup from `DropUnknownIndexes`, matching SQL Server and PostgreSQL.
+
+> **Note:** All tiers absent preserves existing behavior (default `true`).
+
+For full guidance, see [DropForeignKeysRemovedFromProduct](schemaquench.md#dropforeignkeysremovedfromproduct) in the SchemaQuench reference.
+
+---
+
 ## DropUnknownIndexes
 
 Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.
