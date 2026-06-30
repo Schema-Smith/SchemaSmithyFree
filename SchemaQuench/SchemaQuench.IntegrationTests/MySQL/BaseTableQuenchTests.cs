@@ -91,7 +91,7 @@ public class BaseTableQuenchTests
         ExecuteWithDeadlockRetry(cmd);
 
         // Step 3: Modify existing tables
-        cmd.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{_productName}', '{_mainDb}', 0, 0, 1, 1)";
+        cmd.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{_productName}', '{_mainDb}', 0, 0, 1, 1, 1, 1)";
         ExecuteWithDeadlockRetry(cmd);
 
         // Step 4: Create missing indexes and constraints

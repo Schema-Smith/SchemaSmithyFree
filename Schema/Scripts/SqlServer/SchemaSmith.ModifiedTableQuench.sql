@@ -9,7 +9,9 @@ CREATE OR ALTER PROCEDURE SchemaSmith.ModifiedTableQuench
   @DropTablesRemovedFromProduct BIT = 1,
   @DropColumnsRemovedFromProduct BIT = 1,
   @DropForeignKeysRemovedFromProduct BIT = 1,
-  @DropCheckConstraintsRemovedFromProduct BIT = 1
+  @DropCheckConstraintsRemovedFromProduct BIT = 1,
+  @DropExcludeConstraintsRemovedFromProduct BIT = 1,
+  @DropStatisticsRemovedFromProduct BIT = 1
 AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = '',

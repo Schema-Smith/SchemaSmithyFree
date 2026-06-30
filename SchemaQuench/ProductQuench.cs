@@ -1492,12 +1492,18 @@ public class ProductQuench
         var dropRemovedCheckConstraints = FormatBooleanFlag(ResolveCascadedFlag(
             ConfigBool(_config, "DropCheckConstraintsRemovedFromProduct"), _product.DropCheckConstraintsRemovedFromProduct,
             template.DropCheckConstraintsRemovedFromProduct, defaultValue: true));
+        var dropRemovedExcludeConstraints = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropExcludeConstraintsRemovedFromProduct"), _product.DropExcludeConstraintsRemovedFromProduct,
+            template.DropExcludeConstraintsRemovedFromProduct, defaultValue: true));
+        var dropRemovedStatistics = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropStatisticsRemovedFromProduct"), _product.DropStatisticsRemovedFromProduct,
+            template.DropStatisticsRemovedFromProduct, defaultValue: true));
         var dropUnknownIndexes = ResolveCascadedFlag(
             ConfigBool(_config, "DropUnknownIndexes"), _product.DropUnknownIndexes,
             template.DropUnknownIndexes, defaultValue: false);
         var quench = new DatabaseQuench(unit.Server, _product, template, unit.DatabaseName, unit.SchemaName,
             suppressKindling, _whatIfOnly, _runScriptsTwice, dropRemovedTables,
-            dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropUnknownIndexes,
+            dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropRemovedExcludeConstraints, dropRemovedStatistics, dropUnknownIndexes,
             _updateTables && template.Tables.Count > 0, _deliverData, _checkpointing,
             _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _forceReKindle)
         {
