@@ -85,6 +85,12 @@
     "DropCheckConstraintsRemovedFromProduct": {
       "type": "boolean"
     },
+    "DropExcludeConstraintsRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropStatisticsRemovedFromProduct": {
+      "type": "boolean"
+    },
     "ServerToQuench": {
       "type": "integer"
     }
