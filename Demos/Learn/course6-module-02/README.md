@@ -34,7 +34,7 @@ Validate Minimum Version
 RESULT: PASS (connections and minimum version validated)
 ```
 
-Exit code: `0`. PostgreSQL and MySQL produce the same shape (`connection succeeded` line, then `RESULT: PASS`) with their respective connection strings.
+Exit code: `0`. PostgreSQL and MySQL produce the same shape (`connection succeeded` line, then `RESULT: PASS`) with their respective connection identifiers.
 
 ## Scenario 2 — `--TestConnection` fail: raise the floor above the server
 
