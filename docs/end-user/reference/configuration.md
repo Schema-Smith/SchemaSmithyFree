@@ -572,6 +572,44 @@ For full guidance, see [DropCheckConstraintsRemovedFromProduct](schemaquench.md#
 
 ---
 
+## DropExcludeConstraintsRemovedFromProduct
+
+Controls whether SchemaQuench drops EXCLUDE constraints that exist in the database but no longer appear in the table JSON. EXCLUDE constraints are a **PostgreSQL** feature; this flag has no effect on SQL Server or MySQL. Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropExcludeConstraintsRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropExcludeConstraintsRemovedFromProduct` environment variable) | `true` |
+| Product | `DropExcludeConstraintsRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropExcludeConstraintsRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropExcludeConstraintsRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+Same explicit-false-sticky semantics as the other drop-control flags; only by-absence removal is gated (a modified exclude constraint still reconciles).
+
+> **Note:** All tiers absent preserves existing behavior (default `true`).
+
+For full guidance, see [DropExcludeConstraintsRemovedFromProduct](schemaquench.md#dropexcludeconstraintsremovedfromproduct) in the SchemaQuench reference.
+
+---
+
+## DropStatisticsRemovedFromProduct
+
+Controls whether SchemaQuench drops user-created statistics objects that exist in the database but no longer appear in the table JSON. Applies to **SQL Server and PostgreSQL** (MySQL has no separate statistics objects). Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropStatisticsRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropStatisticsRemovedFromProduct` environment variable) | `true` |
+| Product | `DropStatisticsRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropStatisticsRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropStatisticsRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+Same explicit-false-sticky semantics as the other drop-control flags; only by-absence removal is gated (a modified statistics object still reconciles), and auto-created statistics are never touched. With the flag on, SQL Server now drops orphaned user-created statistics by absence, matching PostgreSQL.
+
+> **Note:** All tiers absent preserves existing behavior (default `true`).
+
+For full guidance, see [DropStatisticsRemovedFromProduct](schemaquench.md#dropstatisticsremovedfromproduct) in the SchemaQuench reference.
+
+---
+
 ## DropUnknownIndexes
 
 Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.

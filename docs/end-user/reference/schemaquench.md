@@ -882,6 +882,24 @@ It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropc
 
 ---
 
+## DropExcludeConstraintsRemovedFromProduct
+
+When you remove an EXCLUDE constraint from a table's JSON, `DropExcludeConstraintsRemovedFromProduct` controls whether SchemaQuench drops the constraint still in the database. It's `true` by default.
+
+EXCLUDE constraints are a **PostgreSQL** feature, so this flag applies only to PostgreSQL — it is accepted but has no effect on SQL Server or MySQL. It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct), with the same explicit-false-sticky semantics, and gates only by-absence removal: an exclude constraint whose definition merely changed is always dropped and recreated.
+
+---
+
+## DropStatisticsRemovedFromProduct
+
+When you remove a statistics definition from a table's JSON, `DropStatisticsRemovedFromProduct` controls whether SchemaQuench drops the user-created statistics object still in the database. It's `true` by default.
+
+It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct), with the same explicit-false-sticky semantics. Only by-absence removal is gated — a statistics object whose definition changed is always dropped and recreated — and **auto-created statistics are never touched**, only the named statistics your product defines.
+
+**Cross-engine — closes a normalization gap.** Previously only PostgreSQL dropped an orphaned statistics object by absence; SQL Server dropped one only as a side effect of changing one of its columns. With this flag (default on), SQL Server and PostgreSQL now reconcile orphaned statistics identically. MySQL has no separate statistics objects, so the flag does not apply there.
+
+---
+
 ## RunScriptsTwice
 
 When `RunScriptsTwice` is `true`, the Objects-slot scripts are executed twice in succession during step 3 of the database quench sequence. On the second pass, all scripts are reset to unquenched and processed through the dependency retry loop again. Both runs must succeed -- if either fails, the deployment fails.
