@@ -214,5 +214,27 @@ namespace Schema.UnitTests.Domain
             Assert.That(table.DropStatisticsRemovedFromProduct, Is.True);
         }
 
+        [Test]
+        public void DropIndexesRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T" }""");
+            Assert.That(table.DropIndexesRemovedFromProduct, Is.Null);
+        }
+        [Test]
+        public void DropIndexesRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T", "DropIndexesRemovedFromProduct": false }""");
+            Assert.That(table.DropIndexesRemovedFromProduct, Is.False);
+        }
+        [Test]
+        public void DropIndexesRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "T", "DropIndexesRemovedFromProduct": true }""");
+            Assert.That(table.DropIndexesRemovedFromProduct, Is.True);
+        }
+
     }
 }

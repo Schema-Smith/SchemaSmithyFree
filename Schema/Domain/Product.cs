@@ -79,6 +79,9 @@ namespace Schema.Domain
         [JsonProperty(Order = 20)]
         public bool? DropStatisticsRemovedFromProduct { get; set; }
 
+        [JsonProperty(Order = 21)]
+        public bool? DropIndexesRemovedFromProduct { get; set; }
+
         [JsonIgnore]
         public List<ProductFolder> BeforeFolders => ScriptFolders?.FindAll(f => f.QuenchSlot == ProductQuenchSlot.Before) ?? [];
 

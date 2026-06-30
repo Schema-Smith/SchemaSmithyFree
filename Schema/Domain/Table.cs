@@ -61,6 +61,10 @@ namespace Schema.Domain
         [JsonProperty(Order = 89)]
         public bool? DropStatisticsRemovedFromProduct { get; set; }
 
+        [SchemaProperty(Description = "When set, overrides the template- and product-level DropIndexesRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
+        [JsonProperty(Order = 90)]
+        public bool? DropIndexesRemovedFromProduct { get; set; }
+
         [JsonProperty(Order = 90)]
         public string OldName { get; set; }
 

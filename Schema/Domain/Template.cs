@@ -152,6 +152,9 @@ namespace Schema.Domain
         [JsonProperty(Order = 22)]
         public bool? DropStatisticsRemovedFromProduct { get; set; }
 
+        [JsonProperty(Order = 23)]
+        public bool? DropIndexesRemovedFromProduct { get; set; }
+
         [JsonIgnore]
         public Product Product { get; set; }
 
