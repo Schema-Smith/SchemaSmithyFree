@@ -319,13 +319,24 @@ BEGIN
                       'DROP STATISTICS IF EXISTS "' || es."TableSchema" || '"."' || es."StatisticsName" || '" CASCADE;', CHR(10))
       INTO sql_script
       FROM temp_existing_statistics es
+      JOIN temp_tables tt ON tt."Schema" = es."TableSchema"
+                         AND tt."Name" = es."TableName"
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_statistics ts
                           WHERE es."TableSchema" = ts."TableSchema"
                             AND es."TableName" = ts."TableName"
                             AND es."StatisticsName" = ts."Name"
                             AND es."Kind" = COALESCE(NULLIF(ts."Kind", ''), 'NDISTINCT,DEPENDENCIES,MCV')
-                            AND es."StatisticsColumns" = ts."StatisticsColumns");
+                            AND es."StatisticsColumns" = ts."StatisticsColumns")
+        -- Split modified vs removed: a same-named statistics object whose definition changed is
+        -- dropped unconditionally (the create pass re-adds it); one whose name is gone from the
+        -- product is a by-absence removal, gated by the cascade flag + per-table tightening.
+        AND (EXISTS (SELECT 1
+                       FROM temp_statistics ts2
+                       WHERE es."TableSchema" = ts2."TableSchema"
+                         AND es."TableName" = ts2."TableName"
+                         AND es."StatisticsName" = ts2."Name")
+             OR (p_DropStatisticsRemovedFromProduct AND COALESCE(tt."DropStatisticsRemovedFromProduct", TRUE)));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Drop Modified or Removed Exclude Constraints';
@@ -333,6 +344,8 @@ BEGIN
                       'ALTER TABLE "' || ec."TableSchema" || '"."' || ec."TableName" || '" DROP CONSTRAINT IF EXISTS "' || ec."ExcludeName" || '" CASCADE;', CHR(10))
       INTO sql_script
       FROM temp_existing_excludes ec
+      JOIN temp_tables tt ON tt."Schema" = ec."TableSchema"
+                         AND tt."Name" = ec."TableName"
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_excludes c
                           WHERE ec."TableSchema" = c."TableSchema"
@@ -343,7 +356,16 @@ BEGIN
                                                          FROM JSON_ARRAY_ELEMENTS(c."ExcludeColumns"::JSON) AS celem)
                             AND ec."FilterExpression" = c."FilterExpression"
                             AND ec."Deferrable" = c."Deferrable"
-                            AND ec."InitiallyDeferred" = c."InitiallyDeferred");
+                            AND ec."InitiallyDeferred" = c."InitiallyDeferred")
+        -- Split modified vs removed: a same-named exclude constraint whose definition changed is
+        -- dropped unconditionally (the create pass re-adds it); one whose name is gone from the
+        -- product is a by-absence removal, gated by the cascade flag + per-table tightening.
+        AND (EXISTS (SELECT 1
+                       FROM temp_excludes c2
+                       WHERE ec."TableSchema" = c2."TableSchema"
+                         AND ec."TableName" = c2."TableName"
+                         AND ec."ExcludeName" = c2."Name")
+             OR (p_DropExcludeConstraintsRemovedFromProduct AND COALESCE(tt."DropExcludeConstraintsRemovedFromProduct", TRUE)));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Handle Renamed Indexes And Unique Constraints';
