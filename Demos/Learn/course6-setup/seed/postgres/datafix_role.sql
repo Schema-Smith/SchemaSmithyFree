@@ -1,9 +1,10 @@
 -- Course 6 setup — scoped datafix_user role + per-tenant grants (PostgreSQL).
--- Creates one cluster-level role and grants it the minimal privilege set in
--- each of the three tenant databases. Connect to the postgres maintenance
--- database first (or any superuser session); the \connect meta-commands switch
--- databases as the script progresses.
--- These grants are provisional: Task 4 certification may tighten the set.
+-- The deploy user gets reader/writer on the product data (public) and OWNS a
+-- dedicated 'datafix' schema where its rollback-backup tables land. It has NO
+-- CREATE on public, so it can only create within the schema it owns — it can
+-- neither add to nor drop the product's own (public) tables. Connect to the
+-- postgres maintenance database first; the \connect meta-commands switch DBs.
+-- These grants are provisional: certify against your own fix and tighten.
 
 -- Create the cluster-level role (idempotent guard)
 DO $$
@@ -16,40 +17,33 @@ $$;
 
 -- ── shop_tenant_a ────────────────────────────────────────────────────────────
 \connect shop_tenant_a
-
--- Allow the role to open a connection to this database
 GRANT CONNECT   ON DATABASE shop_tenant_a TO datafix_user;
-
--- Temp space: allows CREATE TEMPORARY TABLE inside this database session
 GRANT TEMPORARY ON DATABASE shop_tenant_a TO datafix_user;
-
--- Schema access: USAGE to see objects; CREATE to place the backup table in public
-GRANT USAGE, CREATE ON SCHEMA public TO datafix_user;
-
--- Reader/writer on existing tables (tables created after this grant need
--- DEFAULT PRIVILEGES or an explicit GRANT if the datafix user did not create them)
+-- Read/write the product data, but NO create rights in public (no structural rights there)
+GRANT USAGE ON SCHEMA public TO datafix_user;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO datafix_user;
-
+-- Dedicated schema the deploy user OWNS — backup tables go here (create within owned schema)
+CREATE SCHEMA IF NOT EXISTS datafix AUTHORIZATION datafix_user;
 -- Ancillary functions or procedures the fix script may call
 GRANT EXECUTE ON ALL FUNCTIONS  IN SCHEMA public TO datafix_user;
 GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA public TO datafix_user;
 
 -- ── shop_tenant_b ────────────────────────────────────────────────────────────
 \connect shop_tenant_b
-
 GRANT CONNECT   ON DATABASE shop_tenant_b TO datafix_user;
 GRANT TEMPORARY ON DATABASE shop_tenant_b TO datafix_user;
-GRANT USAGE, CREATE ON SCHEMA public TO datafix_user;
+GRANT USAGE ON SCHEMA public TO datafix_user;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO datafix_user;
+CREATE SCHEMA IF NOT EXISTS datafix AUTHORIZATION datafix_user;
 GRANT EXECUTE ON ALL FUNCTIONS  IN SCHEMA public TO datafix_user;
 GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA public TO datafix_user;
 
 -- ── shop_tenant_c ────────────────────────────────────────────────────────────
 \connect shop_tenant_c
-
 GRANT CONNECT   ON DATABASE shop_tenant_c TO datafix_user;
 GRANT TEMPORARY ON DATABASE shop_tenant_c TO datafix_user;
-GRANT USAGE, CREATE ON SCHEMA public TO datafix_user;
+GRANT USAGE ON SCHEMA public TO datafix_user;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO datafix_user;
+CREATE SCHEMA IF NOT EXISTS datafix AUTHORIZATION datafix_user;
 GRANT EXECUTE ON ALL FUNCTIONS  IN SCHEMA public TO datafix_user;
 GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA public TO datafix_user;
