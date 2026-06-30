@@ -900,6 +900,16 @@ It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropc
 
 ---
 
+## DropIndexesRemovedFromProduct
+
+When you remove an index from a table's JSON, `DropIndexesRemovedFromProduct` controls whether SchemaQuench drops the **product-owned** index still in the database — an index SchemaSmith created and tracks. It's `true` by default.
+
+This is distinct from [DropUnknownIndexes](#dropunknownindexes): that flag targets *out-of-band* indexes SchemaSmith never created, while this one targets indexes SchemaSmith owns that have dropped out of the definition. It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct), with the same explicit-false-sticky semantics: a table can tighten to `false` to protect its own indexes but cannot re-enable a higher-tier suppression.
+
+**Index types.** Applies to nonclustered/secondary indexes that SchemaSmith manages; a primary key is never dropped by this path. On SQL Server and PostgreSQL the flag gates the removed-from-product drop directly; on MySQL it adds per-table suppression to the managed-index cleanup.
+
+---
+
 ## RunScriptsTwice
 
 When `RunScriptsTwice` is `true`, the Objects-slot scripts are executed twice in succession during step 3 of the database quench sequence. On the second pass, all scripts are reset to unquenched and processed through the dependency retry loop again. Both runs must succeed -- if either fails, the deployment fails.
