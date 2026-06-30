@@ -263,6 +263,10 @@
       "type": "boolean",
       "description": "When set, overrides the template- and product-level DropForeignKeysRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting."
     },
+    "DropCheckConstraintsRemovedFromProduct": {
+      "type": "boolean",
+      "description": "When set, overrides the template- and product-level DropCheckConstraintsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting."
+    },
     "OldName": {
       "type": "string"
     },

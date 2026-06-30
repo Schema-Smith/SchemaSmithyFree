@@ -82,6 +82,9 @@
     "DropForeignKeysRemovedFromProduct": {
       "type": "boolean"
     },
+    "DropCheckConstraintsRemovedFromProduct": {
+      "type": "boolean"
+    },
     "ServerToQuench": {
       "type": "integer"
     }

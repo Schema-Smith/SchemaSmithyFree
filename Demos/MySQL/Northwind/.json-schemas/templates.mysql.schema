@@ -81,6 +81,9 @@
     },
     "DropForeignKeysRemovedFromProduct": {
       "type": "boolean"
+    },
+    "DropCheckConstraintsRemovedFromProduct": {
+      "type": "boolean"
     }
   },
   "additionalProperties": false,
