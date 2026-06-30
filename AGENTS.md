@@ -20,7 +20,7 @@ Quick reference for AI coding agents (Claude Code, Cursor, Copilot, Gemini, etc.
 
 ## Where things live
 
-- `SchemaQuench/`, `SchemaTongs/`, `DataTongs/` — the three CLI tools.
+- `SchemaQuench/`, `SchemaTongs/`, `DataTongs/`, `SchemaShears/` — the four CLI tools.
 - `Schema/` — shared library (domain model, data access, delivery, isolators, embedded scripts). Published as the `SchemaSmith.Schema` NuGet package for downstream consumers.
 - `TestProducts/`, `Demos/` — schema-package fixtures used by integration tests and demos.
 - `docs/end-user/` — user-facing documentation; rendered at schemasmith.com.

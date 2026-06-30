@@ -44,14 +44,14 @@ public class BaseTableQuenchTests
         var escapedJson = json.Replace("'", "''");
 
         cmd.CommandText = indexOnly
-            ? $"CALL SchemaSmith_IndexOnlyQuench('{prod}', '{_mainDb}', 0, 1); CALL SchemaSmith_FixupIndexOwnership('{prod}');"
+            ? $"CALL SchemaSmith_IndexOnlyQuench('{prod}', '{_mainDb}', 0, 1, 1); CALL SchemaSmith_FixupIndexOwnership('{prod}');"
             : $"CALL SchemaSmith_TableQuench('{prod}', '{_mainDb}', '{escapedJson}', {(whatIf ? 1 : 0)}, 0, {(dropTablesRemovedFromProduct ? 1 : 0)});";
 
         // For index only mode, we need to first parse the table JSON
         if (indexOnly)
         {
             cmd.CommandText = $"CALL SchemaSmith_ParseTableJson('{_mainDb}', '{escapedJson}'); " +
-                             $"CALL SchemaSmith_IndexOnlyQuench('{_productName}', '{_mainDb}', 0, 1);";
+                             $"CALL SchemaSmith_IndexOnlyQuench('{_productName}', '{_mainDb}', 0, 1, 1);";
         }
 
         var retry = true;
@@ -91,11 +91,11 @@ public class BaseTableQuenchTests
         ExecuteWithDeadlockRetry(cmd);
 
         // Step 3: Modify existing tables
-        cmd.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{_productName}', '{_mainDb}', 0, 0)";
+        cmd.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{_productName}', '{_mainDb}', 0, 0, 1, 1, 1, 1)";
         ExecuteWithDeadlockRetry(cmd);
 
         // Step 4: Create missing indexes and constraints
-        cmd.CommandText = $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{_mainDb}', 0, 1)";
+        cmd.CommandText = $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{_mainDb}', 0, 1, 1, 1)";
         ExecuteWithDeadlockRetry(cmd);
     }
 

@@ -1,0 +1,28 @@
+{
+    "Name": "`CascColTable`",
+    "Engine": "InnoDB",
+    "Columns": [
+        {
+            "Name": "`Id`",
+            "DataType": "INT",
+            "Nullable": false
+        },
+        {
+            "Name": "`KeepCol`",
+            "DataType": "INT",
+            "Nullable": true
+        },
+        {
+            "Name": "`OrphanCol`",
+            "DataType": "INT",
+            "Nullable": true
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "PRIMARY",
+            "PrimaryKey": true,
+            "IndexColumns": "`Id`"
+        }
+    ]
+}

@@ -5,7 +5,13 @@
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."ModifiedTableQuench"
   (p_WhatIf BOOLEAN = FALSE,
    p_DropUnknownIndexes BOOLEAN = FALSE,
-   p_DropTablesRemovedFromProduct BOOLEAN = TRUE)
+   p_DropTablesRemovedFromProduct BOOLEAN = TRUE,
+   p_DropColumnsRemovedFromProduct BOOLEAN = TRUE,
+   p_DropForeignKeysRemovedFromProduct BOOLEAN = TRUE,
+   p_DropCheckConstraintsRemovedFromProduct BOOLEAN = TRUE,
+   p_DropExcludeConstraintsRemovedFromProduct BOOLEAN = TRUE,
+   p_DropStatisticsRemovedFromProduct BOOLEAN = TRUE,
+   p_DropIndexesRemovedFromProduct BOOLEAN = TRUE)
   LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -237,6 +243,8 @@ BEGIN
                       'ALTER TABLE "' || ek."TableSchema" || '"."' || ek."TableName" || '" DROP CONSTRAINT IF EXISTS "' || ek."KeyName" || '" CASCADE;', CHR(10))
       INTO sql_script
       FROM temp_existing_foreignkeys ek
+      JOIN temp_tables tt ON tt."Schema" = ek."TableSchema"
+                         AND tt."Name" = ek."TableName"
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_fks fk
                           WHERE ek."TableSchema" = fk."TableSchema"
@@ -247,7 +255,16 @@ BEGIN
                             AND ek."RelatedTable" = fk."RelatedTable"
                             AND ek."RelatedColumns" = fk."RelatedColumns"
                             AND ek."DeleteAction" = fk."DeleteAction"
-                            AND ek."UpdateAction" = fk."UpdateAction");
+                            AND ek."UpdateAction" = fk."UpdateAction")
+        -- Split modified vs removed: a same-named FK whose definition changed is dropped
+        -- unconditionally (the create-missing pass recreates it); a FK whose name is gone
+        -- from the product is a by-absence removal, gated by the cascade flag.
+        AND (EXISTS (SELECT 1
+                       FROM temp_fks fk2
+                       WHERE ek."TableSchema" = fk2."TableSchema"
+                         AND ek."TableName" = fk2."TableName"
+                         AND ek."KeyName" = fk2."Name")
+             OR (p_DropForeignKeysRemovedFromProduct AND COALESCE(tt."DropForeignKeysRemovedFromProduct", TRUE)));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Drop Modified or Removed Check Constraints';
@@ -255,6 +272,8 @@ BEGIN
                       'ALTER TABLE "' || ec."TableSchema" || '"."' || ec."TableName" || '" DROP CONSTRAINT IF EXISTS "' || ec."CheckName" || '" CASCADE;', CHR(10))
       INTO sql_script
       FROM temp_existing_checks ec
+      JOIN temp_tables tt ON tt."Schema" = ec."TableSchema"
+                         AND tt."Name" = ec."TableName"
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_checks c
                           WHERE ec."TableSchema" = c."TableSchema"
@@ -268,7 +287,16 @@ BEGIN
                           WHERE col."TableSchema" = ec."TableSchema"
                             AND col."TableName" = ec."TableName"
                             AND NULLIF(col."CheckExpression", '') IS NOT NULL
-                            AND ec."CheckName" = 'CK_' || col."TableName" || '_' || col."Name");
+                            AND ec."CheckName" = 'CK_' || col."TableName" || '_' || col."Name")
+        -- Split modified vs removed: a same-named check whose expression changed is dropped
+        -- unconditionally (the create pass re-adds it); a check whose name is gone from the
+        -- product is a by-absence removal, gated by the cascade flag.
+        AND (EXISTS (SELECT 1
+                       FROM temp_checks c2
+                       WHERE ec."TableSchema" = c2."TableSchema"
+                         AND ec."TableName" = c2."TableName"
+                         AND ec."CheckName" = c2."Name")
+             OR (p_DropCheckConstraintsRemovedFromProduct AND COALESCE(tt."DropCheckConstraintsRemovedFromProduct", TRUE)));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Drop Modified Column Check Constraints';
@@ -292,13 +320,24 @@ BEGIN
                       'DROP STATISTICS IF EXISTS "' || es."TableSchema" || '"."' || es."StatisticsName" || '" CASCADE;', CHR(10))
       INTO sql_script
       FROM temp_existing_statistics es
+      JOIN temp_tables tt ON tt."Schema" = es."TableSchema"
+                         AND tt."Name" = es."TableName"
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_statistics ts
                           WHERE es."TableSchema" = ts."TableSchema"
                             AND es."TableName" = ts."TableName"
                             AND es."StatisticsName" = ts."Name"
                             AND es."Kind" = COALESCE(NULLIF(ts."Kind", ''), 'NDISTINCT,DEPENDENCIES,MCV')
-                            AND es."StatisticsColumns" = ts."StatisticsColumns");
+                            AND es."StatisticsColumns" = ts."StatisticsColumns")
+        -- Split modified vs removed: a same-named statistics object whose definition changed is
+        -- dropped unconditionally (the create pass re-adds it); one whose name is gone from the
+        -- product is a by-absence removal, gated by the cascade flag + per-table tightening.
+        AND (EXISTS (SELECT 1
+                       FROM temp_statistics ts2
+                       WHERE es."TableSchema" = ts2."TableSchema"
+                         AND es."TableName" = ts2."TableName"
+                         AND es."StatisticsName" = ts2."Name")
+             OR (p_DropStatisticsRemovedFromProduct AND COALESCE(tt."DropStatisticsRemovedFromProduct", TRUE)));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Drop Modified or Removed Exclude Constraints';
@@ -306,6 +345,8 @@ BEGIN
                       'ALTER TABLE "' || ec."TableSchema" || '"."' || ec."TableName" || '" DROP CONSTRAINT IF EXISTS "' || ec."ExcludeName" || '" CASCADE;', CHR(10))
       INTO sql_script
       FROM temp_existing_excludes ec
+      JOIN temp_tables tt ON tt."Schema" = ec."TableSchema"
+                         AND tt."Name" = ec."TableName"
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_excludes c
                           WHERE ec."TableSchema" = c."TableSchema"
@@ -316,7 +357,16 @@ BEGIN
                                                          FROM JSON_ARRAY_ELEMENTS(c."ExcludeColumns"::JSON) AS celem)
                             AND ec."FilterExpression" = c."FilterExpression"
                             AND ec."Deferrable" = c."Deferrable"
-                            AND ec."InitiallyDeferred" = c."InitiallyDeferred");
+                            AND ec."InitiallyDeferred" = c."InitiallyDeferred")
+        -- Split modified vs removed: a same-named exclude constraint whose definition changed is
+        -- dropped unconditionally (the create pass re-adds it); one whose name is gone from the
+        -- product is a by-absence removal, gated by the cascade flag + per-table tightening.
+        AND (EXISTS (SELECT 1
+                       FROM temp_excludes c2
+                       WHERE ec."TableSchema" = c2."TableSchema"
+                         AND ec."TableName" = c2."TableName"
+                         AND ec."ExcludeName" = c2."Name")
+             OR (p_DropExcludeConstraintsRemovedFromProduct AND COALESCE(tt."DropExcludeConstraintsRemovedFromProduct", TRUE)));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Handle Renamed Indexes And Unique Constraints';
@@ -369,7 +419,9 @@ BEGIN
                             OR COALESCE(i."PrimaryKey", FALSE) != ei."PrimaryKey"
                             OR COALESCE(i."FilterExpression", '') != COALESCE(ei."FilterExpression", '')
                             OR COALESCE(i."AccessMethod", 'btree') != COALESCE(ei."AccessMethod", 'btree')))
-           OR EXISTS (SELECT 1 -- Index Removed from Product Definition
+           OR (p_DropIndexesRemovedFromProduct -- Index Removed from Product Definition (gated)
+               AND COALESCE((SELECT tt."DropIndexesRemovedFromProduct" FROM temp_tables tt WHERE tt."Schema" = ei."TableSchema" AND tt."Name" = ei."TableName"), TRUE)
+               AND EXISTS (SELECT 1
                         FROM temp_product_ownership tp
                         WHERE tp."IndexName" = ei."IndexName"
                           AND tp."Schema" = ei."TableSchema"
@@ -378,7 +430,7 @@ BEGIN
                                             FROM temp_indexes i
                                             WHERE i."TableSchema" = ei."TableSchema"
                                               AND i."TableName" = ei."TableName"
-                                              AND i."Name" = ei."IndexName"));
+                                              AND i."Name" = ei."IndexName")));
 
     RAISE NOTICE 'Drop Unknown, Removed, and Modified Indexes';
     SELECT STRING_AGG('RAISE NOTICE ''  Dropping ' || CASE WHEN "IsConstraint" THEN 'Constraint' ELSE 'Index' END || ' ' || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."IndexName" || ''';' || CHR(10) ||
@@ -394,11 +446,15 @@ BEGIN
                       'ALTER TABLE "' || ec."TableSchema" || '"."' || ec."TableName" || '" DROP COLUMN IF EXISTS "' || ec."ColumnName" || '" CASCADE;', CHR(10))
       INTO sql_script
       FROM temp_existing_columns ec
+      JOIN temp_tables tt ON tt."Schema" = ec."TableSchema"
+                         AND tt."Name" = ec."TableName"
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_columns c
                           WHERE ec."TableSchema" = c."TableSchema"
                             AND ec."TableName" = c."TableName"
-                            AND ec."ColumnName" = c."Name");
+                            AND ec."ColumnName" = c."Name")
+        AND p_DropColumnsRemovedFromProduct
+        AND COALESCE(tt."DropColumnsRemovedFromProduct", TRUE);
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Fixup Any Modified Index Fill Factors';

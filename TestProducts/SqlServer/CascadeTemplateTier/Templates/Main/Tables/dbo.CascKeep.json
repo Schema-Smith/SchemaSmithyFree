@@ -1,0 +1,20 @@
+{
+    "Schema": "[dbo]",
+    "Name": "[CascKeep]",
+    "Columns": [
+        {
+            "Name": "[Id]",
+            "DataType": "INT",
+            "Nullable": false
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "[PK_CascKeep]",
+            "PrimaryKey": true,
+            "Unique": true,
+            "Clustered": true,
+            "IndexColumns": "[Id]"
+        }
+    ]
+}

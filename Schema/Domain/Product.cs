@@ -41,7 +41,7 @@ namespace Schema.Domain
         public string AfterBranchNameMask { get; set; } = "";
 
         [JsonProperty(Order = 9)]
-        public bool DropUnknownIndexes { get; set; }
+        public bool? DropUnknownIndexes { get; set; }
 
         [JsonProperty(Order = 10)]
         public string BaselineValidationScript { get; set; }
@@ -60,6 +60,27 @@ namespace Schema.Domain
         [JsonProperty(Order = 14)]
         [JsonConverter(typeof(StringEnumConverter))]
         public CheckConstraintStyle CheckConstraintStyle { get; set; }
+
+        [JsonProperty(Order = 15)]
+        public bool DropTablesRemovedFromProduct { get; set; } = true;
+
+        [JsonProperty(Order = 16)]
+        public bool? DropColumnsRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 17)]
+        public bool? DropForeignKeysRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 18)]
+        public bool? DropCheckConstraintsRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 19)]
+        public bool? DropExcludeConstraintsRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 20)]
+        public bool? DropStatisticsRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 21)]
+        public bool? DropIndexesRemovedFromProduct { get; set; }
 
         [JsonIgnore]
         public List<ProductFolder> BeforeFolders => ScriptFolders?.FindAll(f => f.QuenchSlot == ProductQuenchSlot.Before) ?? [];

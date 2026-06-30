@@ -1,0 +1,30 @@
+{
+    "Schema": "[dbo]",
+    "Name": "[CascColTable]",
+    "Columns": [
+        {
+            "Name": "[Id]",
+            "DataType": "INT",
+            "Nullable": false
+        },
+        {
+            "Name": "[KeepCol]",
+            "DataType": "INT",
+            "Nullable": true
+        },
+        {
+            "Name": "[OrphanCol]",
+            "DataType": "INT",
+            "Nullable": true
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "[PK_CascColTable]",
+            "PrimaryKey": true,
+            "Unique": true,
+            "Clustered": true,
+            "IndexColumns": "[Id]"
+        }
+    ]
+}

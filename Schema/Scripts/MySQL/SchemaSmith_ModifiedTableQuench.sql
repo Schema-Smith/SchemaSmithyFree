@@ -10,7 +10,11 @@ CREATE PROCEDURE SchemaSmith_ModifiedTableQuench(
     IN p_ProductName VARCHAR(100),
     IN p_DatabaseName VARCHAR(128),
     IN p_WhatIf TINYINT,
-    IN p_DropTablesRemovedFromProduct TINYINT
+    IN p_DropTablesRemovedFromProduct TINYINT,
+    IN p_DropColumnsRemovedFromProduct TINYINT,
+    IN p_DropCheckConstraintsRemovedFromProduct TINYINT,
+    IN p_DropExcludeConstraintsRemovedFromProduct TINYINT,
+    IN p_DropStatisticsRemovedFromProduct TINYINT
 )
 SQL SECURITY DEFINER
 BEGIN
@@ -507,7 +511,9 @@ BEGIN
             OR (dc.OldName IS NOT NULL AND BINARY dc.OldName = BINARY isc.COLUMN_NAME)
         )
     WHERE t.NewTable = 0
-      AND dc.ColumnName IS NULL;
+      AND dc.ColumnName IS NULL
+      AND p_DropColumnsRemovedFromProduct = 1
+      AND COALESCE(t.DropColumnsRemovedFromProduct, 1) = 1;
 
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unused columns');

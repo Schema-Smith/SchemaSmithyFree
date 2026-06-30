@@ -85,7 +85,7 @@ public class TableQuench_FullTextIndexTests
         command.ExecuteNonQuery();
 
         // Act - IndexOnlyQuench creates the FULLTEXT index
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - FULLTEXT index should exist
@@ -116,7 +116,7 @@ public class TableQuench_FullTextIndexTests
         command.ExecuteNonQuery();
 
         // Act - IndexOnlyQuench
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - FULLTEXT index should exist
@@ -147,7 +147,7 @@ public class TableQuench_FullTextIndexTests
         command.ExecuteNonQuery();
 
         // Act
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - FULLTEXT index should exist
@@ -181,7 +181,7 @@ public class TableQuench_FullTextIndexTests
         command.ExecuteNonQuery();
 
         // Act
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - FULLTEXT index should exist with 3 columns
@@ -229,7 +229,7 @@ public class TableQuench_FullTextIndexTests
             command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_testDb}', '{tableJson.Replace("'", "''")}')";
             command.ExecuteNonQuery();
 
-            command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+            command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
             command.ExecuteNonQuery();
 
             // Exactly one FULLTEXT index — the gated-true (non-ngram) variant was selected
@@ -263,7 +263,7 @@ public class TableQuench_FullTextIndexTests
         command.ExecuteNonQuery();
 
         // Act
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - FULLTEXT index should be tracked in ProductOwnership

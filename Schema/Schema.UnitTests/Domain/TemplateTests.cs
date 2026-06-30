@@ -81,8 +81,8 @@ namespace Schema.UnitTests.Domain
 
             Assert.That(json, Does.Not.Contain("FilePath"));
             Assert.That(json, Does.Not.Contain("TableSchema"));
-            Assert.That(json, Does.Not.Contain("Product"));
-            Assert.That(json, Does.Not.Contain("Tables"));
+            Assert.That(json, Does.Not.Contain("\"Product\":"));
+            Assert.That(json, Does.Not.Contain("\"Tables\":"));
             Assert.That(json, Does.Not.Contain("QueryTokens"));
             Assert.That(json, Does.Not.Contain("NonQueryTokens"));
             Assert.That(json, Does.Not.Contain("LoggableTokens"));
@@ -418,6 +418,191 @@ namespace Schema.UnitTests.Domain
             template.ScriptFolders.Add(folder);
 
             Assert.That(template.BeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "s1" }));
+        }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropTablesRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropTablesRemovedFromProduct": false }""");
+            Assert.That(template.DropTablesRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropTablesRemovedFromProduct": true }""");
+            Assert.That(template.DropTablesRemovedFromProduct, Is.True);
+        }
+
+        [Test]
+        public void DropUnknownIndexes_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropUnknownIndexes, Is.Null);
+        }
+
+        [Test]
+        public void DropUnknownIndexes_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropUnknownIndexes": false }""");
+            Assert.That(template.DropUnknownIndexes, Is.False);
+        }
+
+        [Test]
+        public void DropUnknownIndexes_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropUnknownIndexes": true }""");
+            Assert.That(template.DropUnknownIndexes, Is.True);
+        }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropColumnsRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropColumnsRemovedFromProduct": false }""");
+            Assert.That(template.DropColumnsRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropColumnsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropColumnsRemovedFromProduct": true }""");
+            Assert.That(template.DropColumnsRemovedFromProduct, Is.True);
+        }
+
+        [Test]
+        public void DropForeignKeysRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropForeignKeysRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropForeignKeysRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropForeignKeysRemovedFromProduct": false }""");
+            Assert.That(template.DropForeignKeysRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropForeignKeysRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropForeignKeysRemovedFromProduct": true }""");
+            Assert.That(template.DropForeignKeysRemovedFromProduct, Is.True);
+        }
+
+        [Test]
+        public void DropCheckConstraintsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropCheckConstraintsRemovedFromProduct, Is.Null);
+        }
+
+        [Test]
+        public void DropCheckConstraintsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropCheckConstraintsRemovedFromProduct": false }""");
+            Assert.That(template.DropCheckConstraintsRemovedFromProduct, Is.False);
+        }
+
+        [Test]
+        public void DropCheckConstraintsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropCheckConstraintsRemovedFromProduct": true }""");
+            Assert.That(template.DropCheckConstraintsRemovedFromProduct, Is.True);
+        }
+
+        [Test]
+        public void DropExcludeConstraintsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropExcludeConstraintsRemovedFromProduct, Is.Null);
+        }
+        [Test]
+        public void DropExcludeConstraintsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropExcludeConstraintsRemovedFromProduct": false }""");
+            Assert.That(template.DropExcludeConstraintsRemovedFromProduct, Is.False);
+        }
+        [Test]
+        public void DropExcludeConstraintsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropExcludeConstraintsRemovedFromProduct": true }""");
+            Assert.That(template.DropExcludeConstraintsRemovedFromProduct, Is.True);
+        }
+        [Test]
+        public void DropStatisticsRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropStatisticsRemovedFromProduct, Is.Null);
+        }
+        [Test]
+        public void DropStatisticsRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropStatisticsRemovedFromProduct": false }""");
+            Assert.That(template.DropStatisticsRemovedFromProduct, Is.False);
+        }
+        [Test]
+        public void DropStatisticsRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropStatisticsRemovedFromProduct": true }""");
+            Assert.That(template.DropStatisticsRemovedFromProduct, Is.True);
+        }
+
+        [Test]
+        public void DropIndexesRemovedFromProduct_AbsentInJson_IsNull()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T" }""");
+            Assert.That(template.DropIndexesRemovedFromProduct, Is.Null);
+        }
+        [Test]
+        public void DropIndexesRemovedFromProduct_ExplicitFalse_IsFalse()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropIndexesRemovedFromProduct": false }""");
+            Assert.That(template.DropIndexesRemovedFromProduct, Is.False);
+        }
+        [Test]
+        public void DropIndexesRemovedFromProduct_ExplicitTrue_IsTrue()
+        {
+            var template = Newtonsoft.Json.JsonConvert.DeserializeObject<Template>(
+                """{ "Name": "T", "DropIndexesRemovedFromProduct": true }""");
+            Assert.That(template.DropIndexesRemovedFromProduct, Is.True);
         }
     }
 }

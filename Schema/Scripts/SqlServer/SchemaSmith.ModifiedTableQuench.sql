@@ -2,11 +2,17 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.ModifiedTableQuench 
+CREATE OR ALTER PROCEDURE SchemaSmith.ModifiedTableQuench
   @ProductName NVARCHAR(50),
   @WhatIf BIT = 0,
   @DropUnknownIndexes BIT = 0,
-  @DropTablesRemovedFromProduct BIT = 1
+  @DropTablesRemovedFromProduct BIT = 1,
+  @DropColumnsRemovedFromProduct BIT = 1,
+  @DropForeignKeysRemovedFromProduct BIT = 1,
+  @DropCheckConstraintsRemovedFromProduct BIT = 1,
+  @DropExcludeConstraintsRemovedFromProduct BIT = 1,
+  @DropStatisticsRemovedFromProduct BIT = 1,
+  @DropIndexesRemovedFromProduct BIT = 1
 AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = '',
@@ -261,6 +267,8 @@ BEGIN TRY
     FROM #Tables t WITH (NOLOCK)
     JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.parent_object_id = OBJECT_ID(t.[Schema] + '.' + t.[Name])
     WHERE NOT EXISTS (SELECT * FROM #ForeignKeys fk2 WITH (NOLOCK) WHERE t.[Schema] = fk2.[Schema] AND t.[Name] = fk2.[TableName] AND fk.[name] = SchemaSmith.fn_StripBracketWrapping(fk2.[KeyName]))
+      AND @DropForeignKeysRemovedFromProduct = 1
+      AND ISNULL(t.[DropForeignKeysRemovedFromProduct], 1) = 1
 
   RAISERROR('Drop Foreign Keys No Longer Defined In The Product', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
@@ -532,6 +540,10 @@ BEGIN TRY
     INTO #IndexesToDrop
     FROM #IndexesRemovedFromProduct ir WITH (NOLOCK)
     JOIN sys.indexes i WITH (NOLOCK) ON i.[object_id] = OBJECT_ID([Schema] + '.' + [TableName]) AND i.[Name] = SchemaSmith.fn_StripBracketWrapping([IndexName])
+    -- Removed-from-product (ownership-stamped) drop is gated by the cascade flag + per-table
+    -- tightening. The unknown (@DropUnknownIndexes) and modified branches below are unaffected.
+    WHERE @DropIndexesRemovedFromProduct = 1
+      AND ISNULL((SELECT t.[DropIndexesRemovedFromProduct] FROM #Tables t WITH (NOLOCK) WHERE t.[Schema] = ir.[Schema] AND t.[Name] = ir.[TableName]), 1) = 1
   UNION
   SELECT [Schema], [TableName], SchemaSmith.fn_StripBracketWrapping([IndexName]), [IsConstraint], [IsUnique], [IsClustered]
     FROM #IndexesToDropForColumnChanges WITH (NOLOCK)
@@ -751,6 +763,8 @@ BEGIN TRY
                  MessageColumns = (SELECT STRING_AGG([ColumnName], ', ') WITHIN GROUP (ORDER BY [ColumnName]) FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1)
             FROM #Tables T WITH (NOLOCK)
             WHERE NewTable = 0
+              AND @DropColumnsRemovedFromProduct = 1
+              AND ISNULL(T.[DropColumnsRemovedFromProduct], 1) = 1
               AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1)) T
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
@@ -885,7 +899,29 @@ BEGIN TRY
                                   'DROP STATISTICS ' + sc.[Schema] + '.' + sc.[TableName] + '.' + sc.[StatisticName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #StatsChanges sc WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
+  -- Drop user-created statistics removed from the product (by-absence), gated by the cascade flag
+  -- and per-table tightening. Excludes stats already dropped by the modified pass (#StatsChanges,
+  -- still in the product by name) and the column-change pass (#StatisticsToDropForChanges) to avoid
+  -- a double DROP STATISTICS. Auto-created stats are already excluded from #ExistingStats.
+  RAISERROR('Drop Statistics No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping statistics ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + ']'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP STATISTICS ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #ExistingStats es WITH (NOLOCK)
+    JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = es.[Schema] AND t.[Name] = es.[TableName]
+    WHERE t.NewTable = 0
+      AND @DropStatisticsRemovedFromProduct = 1
+      AND ISNULL(t.[DropStatisticsRemovedFromProduct], 1) = 1
+      AND NOT EXISTS (SELECT * FROM #Statistics s WITH (NOLOCK)
+                        WHERE es.[Schema] = s.[Schema]
+                          AND es.[TableName] = s.[TableName]
+                          AND es.[StatsName] = SchemaSmith.fn_StripBracketWrapping(s.[StatisticName]))
+      AND NOT EXISTS (SELECT * FROM #StatisticsToDropForChanges sd WITH (NOLOCK)
+                        WHERE es.[Schema] = sd.[Schema]
+                          AND es.[TableName] = sd.[TableName]
+                          AND es.[StatsName] = sd.[StatName])
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
   RAISERROR('Collect Existing Check Constraints', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #ExistingCheckConstraints
   SELECT t.[Schema], [TableName] = t.[Name], [CheckName] = ck.[name], 
@@ -925,7 +961,26 @@ BEGIN TRY
                                   'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + cc.[CheckName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #CheckChanges cc WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
+  -- Drop table-level check constraints removed from the product (by-absence). Column-level checks
+  -- (CheckColumn IS NOT NULL) are owned by the column modify pass above; only table-level checks
+  -- absent from the product's CheckConstraints are dropped here, gated by the cascade flag + the
+  -- per-table tightening (a table may set DropCheckConstraintsRemovedFromProduct:false to protect its own).
+  RAISERROR('Drop Check Constraints No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping check constraint ' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + ec.[Schema] + '.' + ec.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + ec.[CheckName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #ExistingCheckConstraints ec WITH (NOLOCK)
+    JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
+    WHERE ec.[CheckColumn] IS NULL
+      AND t.NewTable = 0
+      AND @DropCheckConstraintsRemovedFromProduct = 1
+      AND ISNULL(t.[DropCheckConstraintsRemovedFromProduct], 1) = 1
+      AND NOT EXISTS (SELECT * FROM #CheckConstraints cc WITH (NOLOCK)
+                        WHERE ec.[Schema] = cc.[Schema]
+                          AND ec.[TableName] = cc.[TableName]
+                          AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
   RAISERROR('Alter Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ALTER COLUMN ' + cc.[ColumnName] + ' ' + 

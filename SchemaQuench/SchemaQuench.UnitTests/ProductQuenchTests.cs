@@ -2395,4 +2395,114 @@ public class ProductQuenchTests
     }
 
     #endregion
+
+    #region DropTablesRemovedFromProduct cascade (env + product + template, defaultValue: true)
+
+    private static IConfigurationRoot ConfigWith(params (string Key, string Value)[] pairs)
+    {
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(pairs.ToDictionary(p => p.Key, p => p.Value))
+            .Build();
+    }
+
+    [Test]
+    public void DropTablesRemoved_AllAbsent_DefaultTrue()
+    {
+        // Env unset, product null, template null -> default true.
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, null, null, defaultValue: true), Is.True);
+    }
+
+    [Test]
+    public void DropTablesRemoved_ProductFalse_EnvAbsent_False()
+    {
+        // The SchemaShears patch case: product vetoes the default-true ambient.
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, false, null, defaultValue: true), Is.False);
+    }
+
+    [Test]
+    public void DropTablesRemoved_EnvFalse_ProductTrue_False()
+    {
+        // Env false wins regardless of product (false dominates).
+        Assert.That(ProductQuench.ResolveCascadedFlag(false, true, null, defaultValue: true), Is.False);
+    }
+
+    [Test]
+    public void DropTablesRemoved_BothFalse_False()
+    {
+        Assert.That(ProductQuench.ResolveCascadedFlag(false, false, null, defaultValue: true), Is.False);
+    }
+
+    [Test]
+    public void DropTablesRemoved_TemplateFalse_OverridesProductTrue_False()
+    {
+        // Template-level false suppresses even when env+product say true.
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, true, false, defaultValue: true), Is.False);
+    }
+
+    #endregion
+
+    #region DropColumnsRemovedFromProduct cascade (env + product + template, defaultValue: true)
+
+    [Test]
+    public void DropColumnsRemoved_AllAbsent_DefaultTrue()
+    {
+        // Env unset, product null, template null -> default true (drop).
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, null, null, defaultValue: true), Is.True);
+    }
+
+    [Test]
+    public void DropColumnsRemoved_TemplateFalse_ResolvesToFalse()
+    {
+        // Template flag false -> resolved false.
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, null, false, defaultValue: true), Is.False);
+    }
+
+    [Test]
+    public void DropColumnsRemoved_EnvFalse_ResolvesToFalse()
+    {
+        // Env false + product/template null -> false.
+        Assert.That(ProductQuench.ResolveCascadedFlag(false, null, null, defaultValue: true), Is.False);
+    }
+
+    #endregion
+
+    #region DropForeignKeysRemovedFromProduct cascade (env + product + template, defaultValue: true)
+
+    [Test]
+    public void DropForeignKeysRemoved_TemplateFalse_ResolvesToFalse()
+    {
+        // Template false suppresses the default-true ambient — the SchemaShears patch case.
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, null, false, defaultValue: true), Is.False);
+    }
+
+    [Test]
+    public void DropForeignKeysRemoved_EnvFalse_ResolvesToFalse()
+    {
+        // Env false with product/template absent -> false (env dominates).
+        Assert.That(ProductQuench.ResolveCascadedFlag(false, null, null, defaultValue: true), Is.False);
+    }
+
+    [Test]
+    public void DropForeignKeysRemoved_AllAbsent_DefaultTrue()
+    {
+        // No env, no product flag, no template flag -> default true (drop by default).
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, null, null, defaultValue: true), Is.True);
+    }
+
+    #endregion
+
+    #region ResolveCascadedFlag + ConfigBool
+
+    [Test] public void Cascade_AllAbsent_ReturnsDefault_True()  => Assert.That(ProductQuench.ResolveCascadedFlag(null,null,null,true), Is.True);
+    [Test] public void Cascade_AllAbsent_ReturnsDefault_False() => Assert.That(ProductQuench.ResolveCascadedFlag(null,null,null,false), Is.False);
+    [Test] public void Cascade_EnvFalse_ProductTrue_StaysFalse() => Assert.That(ProductQuench.ResolveCascadedFlag(false,true,null,true), Is.False);
+    [Test] public void Cascade_EnvTrue_ProductFalse_False()      => Assert.That(ProductQuench.ResolveCascadedFlag(true,false,null,false), Is.False);
+    [Test] public void Cascade_DefaultFalse_EnvTrue_Enables()    => Assert.That(ProductQuench.ResolveCascadedFlag(true,null,null,false), Is.True);
+    [Test] public void Cascade_TemplateFalse_Tightens()          => Assert.That(ProductQuench.ResolveCascadedFlag(null,null,false,true), Is.False);
+    [Test] public void Cascade_TemplateTrue_CannotBeatAncestorFalse() => Assert.That(ProductQuench.ResolveCascadedFlag(false,null,true,false), Is.False);
+    [Test] public void ConfigBool_Absent_Null()  { var c = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string>()).Build(); Assert.That(ProductQuench.ConfigBool(c,"X"), Is.Null); }
+    [Test] public void ConfigBool_False_False()   { var c = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string>{["X"]="false"}).Build(); Assert.That(ProductQuench.ConfigBool(c,"X"), Is.False); }
+    [Test] public void ConfigBool_True_True()     { var c = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string>{["X"]="true"}).Build(); Assert.That(ProductQuench.ConfigBool(c,"X"), Is.True); }
+
+    #endregion
 }

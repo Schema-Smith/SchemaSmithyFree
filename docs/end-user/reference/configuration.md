@@ -462,6 +462,203 @@ SchemaQuench --ConnectionString:"Host=prod-db;Database=mydb;Username=deploy;Pass
 
 ---
 
+## DropTablesRemovedFromProduct
+
+Controls whether SchemaQuench drops tables that exist in the database but no longer appear in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropTablesRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropTablesRemovedFromProduct` environment variable) | `true` |
+| Product | `DropTablesRemovedFromProduct` in `Product.json` | `true` |
+| Template | `DropTablesRemovedFromProduct` in `Template.json` | (inherit) |
+
+A `false` at any tier is sticky — it locks the effective value to `false` for all lower tiers and cannot be re-enabled by a more-specific setting. Absent (not set) inherits from the tier above. A `true` at a lower tier overrides an inherited `true` but never an ancestor's `false`.
+
+```json
+// SchemaQuench.settings.json — turn off auto-drop for this environment
+{ "DropTablesRemovedFromProduct": false }
+```
+
+```json
+// Product.json — package declares its tables must never be auto-dropped
+{ "DropTablesRemovedFromProduct": false }
+```
+
+```json
+// Template.json — suppress auto-drop for this template only
+{ "DropTablesRemovedFromProduct": false }
+```
+
+> **Note:** All tiers absent preserves existing behavior — if you haven't set any, table-drop-by-absence works exactly as it always has.
+
+For full guidance — environment advice, the rollback-friendly removal pattern, and the recyclebin alternative — see [DropTablesRemovedFromProduct](schemaquench.md#droptablesremovedfromproduct) in the SchemaQuench reference.
+
+---
+
+## DropColumnsRemovedFromProduct
+
+Controls whether SchemaQuench drops columns that exist in the database but no longer appear in the table JSON. Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropColumnsRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropColumnsRemovedFromProduct` environment variable) | `true` |
+| Product | `DropColumnsRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropColumnsRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropColumnsRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+A `false` at any tier is sticky — it locks the effective value to `false` for all lower tiers and cannot be re-enabled by a more-specific setting. Absent inherits from the tier above. A `true` at a lower tier overrides an inherited `true` but never an ancestor's explicit `false`. The table tier can only tighten (set its own `false` to protect its columns); a table `true` cannot re-enable column drops that a higher tier suppressed.
+
+```json
+// SchemaQuench.settings.json — suppress column drops for all products in this environment
+{ "DropColumnsRemovedFromProduct": false }
+```
+
+```json
+// Product.json — package declares its columns must never be auto-dropped
+{ "DropColumnsRemovedFromProduct": false }
+```
+
+```json
+// Template.json — suppress column drops for this template only
+{ "DropColumnsRemovedFromProduct": false }
+```
+
+```json
+// Tables/dbo.AuditLog.json — protect this table's columns regardless of higher-tier settings
+{ "Name": "AuditLog", "DropColumnsRemovedFromProduct": false }
+```
+
+> **Note:** All tiers absent preserves existing behavior — if you haven't set any, column-drop-by-absence works exactly as it always has (default `true`).
+
+For full guidance — environment advice, the four-tier cascade detail, and the rollback-friendly removal pattern — see [DropColumnsRemovedFromProduct](schemaquench.md#dropcolumnsremovedfromproduct) in the SchemaQuench reference.
+
+---
+
+## DropForeignKeysRemovedFromProduct
+
+Controls whether SchemaQuench drops foreign keys that exist in the database but no longer appear in the table JSON. Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropForeignKeysRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropForeignKeysRemovedFromProduct` environment variable) | `true` |
+| Product | `DropForeignKeysRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropForeignKeysRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropForeignKeysRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+Same explicit-false-sticky semantics as the other drop-control flags: a `false` at any tier locks the effective value for all lower tiers, and a table can tighten to `false` but never re-enable a higher-tier suppression. Only by-absence removal is gated — a foreign key whose definition merely changed is always dropped and recreated. On MySQL this flag also decouples foreign-key cleanup from `DropUnknownIndexes`, matching SQL Server and PostgreSQL.
+
+> **Note:** All tiers absent preserves existing behavior (default `true`).
+
+For full guidance, see [DropForeignKeysRemovedFromProduct](schemaquench.md#dropforeignkeysremovedfromproduct) in the SchemaQuench reference.
+
+---
+
+## DropCheckConstraintsRemovedFromProduct
+
+Controls whether SchemaQuench drops table-level CHECK constraints that exist in the database but no longer appear in the table JSON. Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropCheckConstraintsRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropCheckConstraintsRemovedFromProduct` environment variable) | `true` |
+| Product | `DropCheckConstraintsRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropCheckConstraintsRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropCheckConstraintsRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+Same explicit-false-sticky semantics as the other drop-control flags: a `false` at any tier locks the effective value for all lower tiers, and a table can tighten to `false` but never re-enable a higher-tier suppression. Only by-absence removal is gated (a modified check still reconciles), and column-level `CheckExpression` checks are out of scope. With the flag on, SQL Server and MySQL now drop orphaned table-level checks by absence, matching PostgreSQL.
+
+> **Note:** All tiers absent preserves existing behavior (default `true`).
+
+For full guidance, see [DropCheckConstraintsRemovedFromProduct](schemaquench.md#dropcheckconstraintsremovedfromproduct) in the SchemaQuench reference.
+
+---
+
+## DropExcludeConstraintsRemovedFromProduct
+
+Controls whether SchemaQuench drops EXCLUDE constraints that exist in the database but no longer appear in the table JSON. EXCLUDE constraints are a **PostgreSQL** feature; this flag has no effect on SQL Server or MySQL. Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropExcludeConstraintsRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropExcludeConstraintsRemovedFromProduct` environment variable) | `true` |
+| Product | `DropExcludeConstraintsRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropExcludeConstraintsRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropExcludeConstraintsRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+Same explicit-false-sticky semantics as the other drop-control flags; only by-absence removal is gated (a modified exclude constraint still reconciles).
+
+> **Note:** All tiers absent preserves existing behavior (default `true`).
+
+For full guidance, see [DropExcludeConstraintsRemovedFromProduct](schemaquench.md#dropexcludeconstraintsremovedfromproduct) in the SchemaQuench reference.
+
+---
+
+## DropStatisticsRemovedFromProduct
+
+Controls whether SchemaQuench drops user-created statistics objects that exist in the database but no longer appear in the table JSON. Applies to **SQL Server and PostgreSQL** (MySQL has no separate statistics objects). Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropStatisticsRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropStatisticsRemovedFromProduct` environment variable) | `true` |
+| Product | `DropStatisticsRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropStatisticsRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropStatisticsRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+Same explicit-false-sticky semantics as the other drop-control flags; only by-absence removal is gated (a modified statistics object still reconciles), and auto-created statistics are never touched. With the flag on, SQL Server now drops orphaned user-created statistics by absence, matching PostgreSQL.
+
+> **Note:** All tiers absent preserves existing behavior (default `true`).
+
+For full guidance, see [DropStatisticsRemovedFromProduct](schemaquench.md#dropstatisticsremovedfromproduct) in the SchemaQuench reference.
+
+---
+
+## DropIndexesRemovedFromProduct
+
+Controls whether SchemaQuench drops a **product-owned** index (one SchemaSmith created and tracks) that no longer appears in the table JSON. Distinct from [DropUnknownIndexes](#dropunknownindexes), which targets out-of-band indexes SchemaSmith never managed. Four tiers compose to produce the effective value, resolved environment → product → template → table.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropIndexesRemovedFromProduct` in `SchemaQuench.settings.json` (or `SmithySettings_DropIndexesRemovedFromProduct` environment variable) | `true` |
+| Product | `DropIndexesRemovedFromProduct` in `Product.json` | (inherit) |
+| Template | `DropIndexesRemovedFromProduct` in `Template.json` | (inherit) |
+| Table | `DropIndexesRemovedFromProduct` in a table's `.json` file | (inherit) |
+
+Same explicit-false-sticky semantics as the other drop-control flags; a primary key is never dropped by this path. On SQL Server and PostgreSQL it gates the removed-from-product index drop directly; on MySQL it adds per-table suppression to the managed-index cleanup.
+
+> **Note:** All tiers absent preserves existing behavior (default `true`).
+
+For full guidance, see [DropIndexesRemovedFromProduct](schemaquench.md#dropindexesremovedfromproduct) in the SchemaQuench reference.
+
+---
+
+## DropUnknownIndexes
+
+Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropUnknownIndexes` in `SchemaQuench.settings.json` (or `SmithySettings_DropUnknownIndexes` environment variable) | `false` |
+| Product | `DropUnknownIndexes` in `Product.json` | (inherit) |
+| Template | `DropUnknownIndexes` in `Template.json` | (inherit) |
+
+A `false` at any tier is sticky — it locks the effective value to `false` for all lower tiers and cannot be re-enabled by a more-specific setting. Absent inherits from the tier above. A `true` at a lower tier overrides an inherited `true` (or default `false`) but never an ancestor's explicit `false`.
+
+The environment tier is new in this release. Previously `DropUnknownIndexes` was settable only in `Product.json` and `Template.json`. It can now be set or suppressed in `SchemaQuench.settings.json` (or via environment variable) as a deployment-wide guardrail.
+
+```json
+// SchemaQuench.settings.json — suppress index drops for all products in this environment
+{ "DropUnknownIndexes": false }
+```
+
+```json
+// SchemaQuench.settings.json — enable index drops for all products in this environment
+{ "DropUnknownIndexes": true }
+```
+
+> **Note:** Default `false` at all tiers preserves existing behavior — if you haven't set any tier, index-drop-by-absence is off, consistent with prior releases. The environment tier adds an opt-in or opt-out guardrail without changing the per-package default.
+
+For package-side configuration and adoption guidance, see [DropUnknownIndexes](schema-packages.md#properties) in the Schema Packages reference.
+
+---
+
 ## Related Documentation
 
 - [SchemaQuench Reference](schemaquench.md) -- Deployment engine settings and behavior

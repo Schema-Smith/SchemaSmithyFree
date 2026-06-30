@@ -23,6 +23,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\Schema\Schema.IntegrationTests\Schema.IntegrationTests.csproj" />
+		<ProjectReference Include="..\..\SchemaShears\SchemaShears.csproj" />
 		<ProjectReference Include="..\SchemaQuench.csproj" />
 	</ItemGroup>
 

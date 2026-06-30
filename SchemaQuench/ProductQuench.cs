@@ -31,7 +31,6 @@ public class ProductQuench
     private readonly bool _runScriptsTwice;
     private readonly bool _skipKindling;
     private readonly bool _forceReKindle;
-    private readonly string _dropRemovedTables;
     private readonly bool _updateTables;
     private readonly bool _deliverData;
     private readonly bool _trackRunOnceMigrations;
@@ -68,7 +67,6 @@ public class ProductQuench
         // CLI-overridable (unlike the other kindling flags): ForceReKindle is an ad-hoc operational
         // gesture run on demand, not a sticky pipeline default, so a command-line switch is the natural UX.
         _forceReKindle = CommandLineParser.ContainsSwitch("ForceReKindle") || _config["ForceReKindle"]?.ToLower() == "true";
-        _dropRemovedTables = FormatBooleanFlag(_config["DropTablesRemovedFromProduct"]?.ToLower() != "false");
         _updateTables = _config["UpdateTables"]?.ToLower() != "false";
         _deliverData = _config["DeliverData"]?.ToLower() != "false";
         _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
@@ -111,6 +109,26 @@ public class ProductQuench
     }
 
     private IReadOnlyList<string> ReadFilterArray(string sectionKey) => ReadFilterArray(_config, sectionKey);
+
+    internal static bool ResolveCascadedFlag(bool? env, bool? product, bool? template, bool defaultValue)
+    {
+        var effective = defaultValue;
+        var locked = false;
+        foreach (var level in new[] { env, product, template })
+        {
+            if (!level.HasValue) continue;
+            if (!level.Value) { effective = false; locked = true; }
+            else if (!locked) { effective = true; }
+        }
+        return effective;
+    }
+
+    internal static bool? ConfigBool(IConfiguration config, string key)
+    {
+        var raw = config[key];
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        return bool.TryParse(raw, out var parsed) ? parsed : (bool?)null;
+    }
 
     /// <summary>
     /// Reads <c>Target.TemplateTargets</c> from configuration into the per-template override map.
@@ -1462,9 +1480,33 @@ public class ProductQuench
     /// </summary>
     private void RunOneWorkUnit(WorkUnit unit, Template template, bool suppressKindling)
     {
+        var dropRemovedTables = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropTablesRemovedFromProduct"), _product.DropTablesRemovedFromProduct,
+            template.DropTablesRemovedFromProduct, defaultValue: true));
+        var dropRemovedColumns = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropColumnsRemovedFromProduct"), _product.DropColumnsRemovedFromProduct,
+            template.DropColumnsRemovedFromProduct, defaultValue: true));
+        var dropRemovedForeignKeys = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropForeignKeysRemovedFromProduct"), _product.DropForeignKeysRemovedFromProduct,
+            template.DropForeignKeysRemovedFromProduct, defaultValue: true));
+        var dropRemovedCheckConstraints = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropCheckConstraintsRemovedFromProduct"), _product.DropCheckConstraintsRemovedFromProduct,
+            template.DropCheckConstraintsRemovedFromProduct, defaultValue: true));
+        var dropRemovedExcludeConstraints = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropExcludeConstraintsRemovedFromProduct"), _product.DropExcludeConstraintsRemovedFromProduct,
+            template.DropExcludeConstraintsRemovedFromProduct, defaultValue: true));
+        var dropRemovedStatistics = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropStatisticsRemovedFromProduct"), _product.DropStatisticsRemovedFromProduct,
+            template.DropStatisticsRemovedFromProduct, defaultValue: true));
+        var dropRemovedIndexes = FormatBooleanFlag(ResolveCascadedFlag(
+            ConfigBool(_config, "DropIndexesRemovedFromProduct"), _product.DropIndexesRemovedFromProduct,
+            template.DropIndexesRemovedFromProduct, defaultValue: true));
+        var dropUnknownIndexes = ResolveCascadedFlag(
+            ConfigBool(_config, "DropUnknownIndexes"), _product.DropUnknownIndexes,
+            template.DropUnknownIndexes, defaultValue: false);
         var quench = new DatabaseQuench(unit.Server, _product, template, unit.DatabaseName, unit.SchemaName,
-            suppressKindling, _whatIfOnly, _runScriptsTwice, _dropRemovedTables,
-            _product.DropUnknownIndexes,
+            suppressKindling, _whatIfOnly, _runScriptsTwice, dropRemovedTables,
+            dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropRemovedExcludeConstraints, dropRemovedStatistics, dropRemovedIndexes, dropUnknownIndexes,
             _updateTables && template.Tables.Count > 0, _deliverData, _checkpointing,
             _trackRunOnceMigrations, _pruneObsoleteMigrationTracking, _forceReKindle)
         {

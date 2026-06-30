@@ -75,6 +75,7 @@ Already know what you're looking for? Jump straight to the details.
 | [SchemaQuench](reference/schemaquench.md) | Deployment engine — execution flow, slots, WhatIf, migration tracking |
 | [Recyclebin](reference/recyclebin.md) | Soft-drop and restore hooks for recoverable table removal across SQL Server, PostgreSQL, and MySQL |
 | [DataTongs](reference/datatongs.md) | Data extraction — MERGE generation, type handling, key detection |
+| [SchemaShears](reference/schemashears.md) | Patch builder — carve an object-level patch package from a full product via a manifest |
 | [Configuration](reference/configuration.md) | Shared CLI switches, config hierarchy, environment variables, logging |
 | [Schema Packages](reference/schema-packages.md) | Product/Template JSON, folder structure, table definition format |
 | [Custom Properties](reference/custom-properties.md) | Attach your own metadata via the `Extensions` carrier, driving tokens and governance |

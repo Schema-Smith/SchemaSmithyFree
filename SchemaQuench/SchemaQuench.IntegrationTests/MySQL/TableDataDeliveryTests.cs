@@ -440,7 +440,7 @@ public class TableDataDeliveryTests
                 var product = new Product { Name = "TestProduct", Platform = Platform.MySQL };
                 var quench = new DatabaseQuench("127.0.0.1", product, template, _testDb,
                     suppressKindling: true, whatIfOnly: "0", runScriptsTwice: false,
-                    dropRemovedTables: "0", dropUnknownIndexes: false, updateTables: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropRemovedExcludeConstraints: "1", dropRemovedStatistics: "1", dropRemovedIndexes: "1", dropUnknownIndexes: false, updateTables: false,
                     deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
                 quench.Execute();
 
@@ -528,7 +528,7 @@ public class TableDataDeliveryTests
                 var product = new Product { Name = "TestProduct", Platform = Platform.MySQL };
                 var quench = new DatabaseQuench("127.0.0.1", product, template, _testDb,
                     suppressKindling: true, whatIfOnly: "0", runScriptsTwice: false,
-                    dropRemovedTables: "0", dropUnknownIndexes: false, updateTables: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropRemovedExcludeConstraints: "1", dropRemovedStatistics: "1", dropRemovedIndexes: "1", dropUnknownIndexes: false, updateTables: false,
                     deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
                 quench.Execute();
 
@@ -658,7 +658,7 @@ public class TableDataDeliveryTests
                 var product = new Product { Name = "TestProduct", Platform = Platform.MySQL };
                 var quench = new DatabaseQuench("127.0.0.1", product, template, _testDb,
                     suppressKindling: false, whatIfOnly: "0", runScriptsTwice: false,
-                    dropRemovedTables: "0", dropUnknownIndexes: false, updateTables: true,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropRemovedExcludeConstraints: "1", dropRemovedStatistics: "1", dropRemovedIndexes: "1", dropUnknownIndexes: false, updateTables: true,
                     deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
                 quench.Execute();
 
@@ -764,7 +764,7 @@ public class TableDataDeliveryTests
                 var product = new Product { Name = "TestProduct", Platform = Platform.MySQL };
                 var quench = new DatabaseQuench("127.0.0.1", product, template, _testDb,
                     suppressKindling: true, whatIfOnly: "0", runScriptsTwice: false,
-                    dropRemovedTables: "0", dropUnknownIndexes: false, updateTables: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropRemovedExcludeConstraints: "1", dropRemovedStatistics: "1", dropRemovedIndexes: "1", dropUnknownIndexes: false, updateTables: false,
                     deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
                 quench.Execute();
 
@@ -823,3 +823,4 @@ public class TableDataDeliveryTests
 
     #endregion
 }
+

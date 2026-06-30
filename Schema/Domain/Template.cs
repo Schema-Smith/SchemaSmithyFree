@@ -131,6 +131,30 @@ namespace Schema.Domain
         [DefaultValue(true)]
         public bool ContinueOnDatabaseFailure { get; set; } = true;
 
+        [JsonProperty(Order = 16)]
+        public bool? DropTablesRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 17)]
+        public bool? DropUnknownIndexes { get; set; }
+
+        [JsonProperty(Order = 18)]
+        public bool? DropColumnsRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 19)]
+        public bool? DropForeignKeysRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 20)]
+        public bool? DropCheckConstraintsRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 21)]
+        public bool? DropExcludeConstraintsRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 22)]
+        public bool? DropStatisticsRemovedFromProduct { get; set; }
+
+        [JsonProperty(Order = 23)]
+        public bool? DropIndexesRemovedFromProduct { get; set; }
+
         [JsonIgnore]
         public Product Product { get; set; }
 

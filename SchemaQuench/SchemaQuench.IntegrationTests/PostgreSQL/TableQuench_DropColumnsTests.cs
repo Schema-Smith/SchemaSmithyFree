@@ -157,6 +157,25 @@ public class TableQuench_DropColumnsTests : BaseTableQuenchTests
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldSuppressDropWhenTableFlagIsFalse()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        // The suppressed table: OrphanedColumn was removed from JSON + flag = false → column survives
+        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'DropColumnsTests' AND table_name = 'DropColumnSuppressed' AND column_name = 'OrphanedColumn')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True, "OrphanedColumn should still exist (suppressed by table flag)");
+
+        // The control table: flag absent (inherits default = true) → column was dropped
+        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'DropColumnsTests' AND table_name = 'DropColumnControl' AND column_name = 'OrphanedColumn')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.False, "OrphanedColumn should be gone (no suppression flag)");
+
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -193,6 +212,9 @@ ALTER TABLE ""DropColumnsTests"".""DropColumnWithFKRef"" ADD CONSTRAINT ""FK_Dro
 ALTER TABLE ""DropColumnsTests"".""DropColumnWithFK"" ADD CONSTRAINT ""FK_DropColumnWithFK_Referencing"" FOREIGN KEY (""Column2"") REFERENCES ""DropColumnsTests"".""DropColumnWithFKRef"" (""Column1"");
 --TableQuench_ShouldHandleRemovingColumnWithComputedExpression
 CREATE TABLE ""DropColumnsTests"".""DropColumnWithComputed"" (""Column1"" INT NOT NULL, ""Column2"" INT, ""Column3"" INT GENERATED ALWAYS AS (""Column2"" * 3) STORED);
+--TableQuench_ShouldSuppressDropWhenTableFlagIsFalse
+CREATE TABLE ""DropColumnsTests"".""DropColumnSuppressed"" (""Column1"" INT NOT NULL, ""OrphanedColumn"" INT);
+CREATE TABLE ""DropColumnsTests"".""DropColumnControl"" (""Column1"" INT NOT NULL, ""OrphanedColumn"" INT);
 ";
         cmd.CommandTimeout = 300;
         cmd.ExecuteNonQuery();
@@ -307,6 +329,38 @@ CREATE TABLE ""DropColumnsTests"".""DropColumnWithComputed"" (""Column1"" INT NO
             ]
             """;
         RunTableQuenchProc(cmd, json);
+
+        // Second quench: exercises table-level DropColumnsRemovedFromProduct flag.
+        // DropColumnSuppressed carries "DropColumnsRemovedFromProduct": false → OrphanedColumn survives.
+        // DropColumnControl has no flag (null → inherits cascade default=true) → OrphanedColumn drops.
+        var flagJson = """
+            [
+            {
+                "Schema": "DropColumnsTests",
+                "Name": "DropColumnSuppressed",
+                "DropColumnsRemovedFromProduct": false,
+                "Columns": [
+                    {
+                      "Name": "Column1",
+                      "DataType": "INT",
+                      "Nullable": false
+                    }
+                ]
+            },
+            {
+                "Schema": "DropColumnsTests",
+                "Name": "DropColumnControl",
+                "Columns": [
+                    {
+                      "Name": "Column1",
+                      "DataType": "INT",
+                      "Nullable": false
+                    }
+                ]
+            }
+            ]
+            """;
+        RunTableQuenchProc(cmd, flagJson);
 
         conn.Close();
     }

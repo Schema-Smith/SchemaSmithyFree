@@ -63,7 +63,7 @@ services:
 
   demoserver:
     image: mysql:8.0
-    command: --log-bin-trust-function-creators=1 --max-connections=500
+    command: --log-bin-trust-function-creators=1 --max-connections=2000
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     environment:

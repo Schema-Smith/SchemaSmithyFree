@@ -7,6 +7,7 @@ CREATE OR REPLACE PROCEDURE "SchemaSmith"."IndexOnlyQuench"
  p_TableDefinitions TEXT,
  p_WhatIf BOOLEAN = FALSE,
  p_DropUnknownIndexes BOOLEAN = FALSE,
+ p_DropIndexesRemovedFromProduct BOOLEAN = TRUE,
  p_UpdateFillFactor BOOLEAN = TRUE)
     LANGUAGE plpgsql
 AS $$
@@ -24,7 +25,8 @@ BEGIN
            COALESCE((elem ->> 'ForceRowLevelSecurity')::BOOLEAN, false) AS "ForceRowLevelSecurity",
            COALESCE(elem ->> 'AccessMethod', '') AS "AccessMethod",
            COALESCE(elem ->> 'PersistenceType', '') AS "PersistenceType",
-           CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((elem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor"
+           CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((elem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
+           (elem ->> 'DropIndexesRemovedFromProduct')::BOOLEAN AS "DropIndexesRemovedFromProduct"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem;
 
     SELECT STRING_AGG('DELETE FROM temp_tables WHERE "Schema" = ''' || "Schema" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
@@ -185,7 +187,9 @@ BEGIN
                             OR COALESCE(i."NullsNotDistinct", false) != COALESCE(ei."NullsNotDistinct", false)
                             OR COALESCE(i."Deferrable", false) != COALESCE(ei."Deferrable", false)
                             OR COALESCE(i."InitiallyDeferred", false) != COALESCE(ei."InitiallyDeferred", false))
-           OR EXISTS (SELECT 1 -- Index Removed from Product Definition
+           OR (p_DropIndexesRemovedFromProduct -- Index Removed from Product Definition (gated)
+               AND COALESCE((SELECT tt."DropIndexesRemovedFromProduct" FROM temp_tables tt WHERE tt."Schema" = ei."TableSchema" AND tt."Name" = ei."TableName"), TRUE)
+               AND EXISTS (SELECT 1
                         FROM "SchemaSmith"."ProductOwnership" tp
                         WHERE tp."ProductName" = p_ProductName
                           AND tp."IndexName" = ei."IndexName"
@@ -195,7 +199,7 @@ BEGIN
                                             FROM temp_indexes i
                                             WHERE i."TableSchema" = ei."TableSchema"
                                               AND i."TableName" = ei."TableName"
-                                              AND i."Name" = ei."IndexName"));
+                                              AND i."Name" = ei."IndexName")));
 
     RAISE NOTICE 'Drop Unknown, Removed, and Modified Indexes';
     SELECT STRING_AGG('RAISE NOTICE ''  Dropping ' || CASE WHEN "IsConstraint" THEN 'Constraint' ELSE 'Index' END || ' ' || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."IndexName" || ''';' || CHR(10) ||
