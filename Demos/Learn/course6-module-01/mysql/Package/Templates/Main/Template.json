@@ -1,0 +1,11 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop_tenant_%'",
+  "ScriptFolders": [
+    {
+      "FolderPath": "After Scripts",
+      "QuenchSlot": "After"
+    }
+  ],
+  "ScriptTokens": {}
+}

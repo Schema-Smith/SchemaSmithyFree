@@ -1,0 +1,11 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datname LIKE 'shop_tenant_%'",
+  "ScriptFolders": [
+    {
+      "FolderPath": "After Scripts",
+      "QuenchSlot": "After"
+    }
+  ],
+  "ScriptTokens": {}
+}
