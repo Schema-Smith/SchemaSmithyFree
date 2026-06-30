@@ -10,7 +10,8 @@ CREATE OR REPLACE PROCEDURE "SchemaSmith"."ModifiedTableQuench"
    p_DropForeignKeysRemovedFromProduct BOOLEAN = TRUE,
    p_DropCheckConstraintsRemovedFromProduct BOOLEAN = TRUE,
    p_DropExcludeConstraintsRemovedFromProduct BOOLEAN = TRUE,
-   p_DropStatisticsRemovedFromProduct BOOLEAN = TRUE)
+   p_DropStatisticsRemovedFromProduct BOOLEAN = TRUE,
+   p_DropIndexesRemovedFromProduct BOOLEAN = TRUE)
   LANGUAGE plpgsql
 AS $$
 DECLARE

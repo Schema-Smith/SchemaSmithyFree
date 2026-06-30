@@ -311,7 +311,7 @@ VALUES ('{_productName}', '', '{TestSchema}', 'FOREIGN KEY', 'ModFKCascUpd.FK_Mo
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0, 1)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1)";
         cmd.ExecuteNonQuery();
 
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ForeignKeyQuench('{_productName}', '{TestSchema}', 0, 0, 1)";

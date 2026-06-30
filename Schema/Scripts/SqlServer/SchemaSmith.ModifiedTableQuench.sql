@@ -11,7 +11,8 @@ CREATE OR ALTER PROCEDURE SchemaSmith.ModifiedTableQuench
   @DropForeignKeysRemovedFromProduct BIT = 1,
   @DropCheckConstraintsRemovedFromProduct BIT = 1,
   @DropExcludeConstraintsRemovedFromProduct BIT = 1,
-  @DropStatisticsRemovedFromProduct BIT = 1
+  @DropStatisticsRemovedFromProduct BIT = 1,
+  @DropIndexesRemovedFromProduct BIT = 1
 AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = '',

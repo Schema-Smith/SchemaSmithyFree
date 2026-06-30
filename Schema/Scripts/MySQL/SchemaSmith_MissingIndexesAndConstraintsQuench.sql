@@ -11,7 +11,8 @@ CREATE PROCEDURE SchemaSmith_MissingIndexesAndConstraintsQuench(
     IN p_DatabaseName VARCHAR(128),
     IN p_WhatIf TINYINT,
     IN p_DropUnknownIndexes TINYINT,
-    IN p_DropCheckConstraintsRemovedFromProduct TINYINT
+    IN p_DropCheckConstraintsRemovedFromProduct TINYINT,
+    IN p_DropIndexesRemovedFromProduct TINYINT
 )
 SQL SECURITY DEFINER
 BEGIN

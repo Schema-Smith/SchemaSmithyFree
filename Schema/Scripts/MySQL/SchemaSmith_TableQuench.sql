@@ -33,7 +33,7 @@ BEGIN
     CALL SchemaSmith_ModifiedTableQuench(p_ProductName, p_DatabaseName, p_WhatIf, p_DropTablesRemovedFromProduct, 1, 1, 1, 1);
 
     -- Step 4: Create missing indexes and check constraints (no FKs)
-    CALL SchemaSmith_MissingIndexesAndConstraintsQuench(p_ProductName, p_DatabaseName, p_WhatIf, p_DropUnknownIndexes, 1);
+    CALL SchemaSmith_MissingIndexesAndConstraintsQuench(p_ProductName, p_DatabaseName, p_WhatIf, p_DropUnknownIndexes, 1, 1);
 
     -- Step 5: Create/modify/drop foreign keys
     CALL SchemaSmith_ForeignKeyQuench(p_ProductName, p_DatabaseName, p_WhatIf, p_DropUnknownIndexes, 1);

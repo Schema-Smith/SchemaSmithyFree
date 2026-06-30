@@ -261,7 +261,7 @@ VALUES ('{_productName}', '', '{TestSchema}', 'INDEX', 'ModifyIndexColumnListIO.
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0, 1)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1)";
         cmd.ExecuteNonQuery();
 
         // Index Only test
@@ -279,7 +279,7 @@ VALUES ('{_productName}', '', '{TestSchema}', 'INDEX', 'ModifyIndexColumnListIO.
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ParseTableJson('{TestSchema}', '{jsonIO.Replace("'", "''")}')";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_IndexOnlyQuench('{_productName}', '{TestSchema}', 0, 0)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_IndexOnlyQuench('{_productName}', '{TestSchema}', 0, 0, 1)";
         cmd.ExecuteNonQuery();
 
         conn.Close();

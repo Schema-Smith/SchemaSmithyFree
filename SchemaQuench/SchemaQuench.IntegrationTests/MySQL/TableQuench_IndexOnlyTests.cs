@@ -83,7 +83,7 @@ public class TableQuench_IndexOnlyTests
         command.ExecuteNonQuery();
 
         // Act - Call IndexOnlyQuench
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - Index should exist
@@ -118,7 +118,7 @@ public class TableQuench_IndexOnlyTests
         command.ExecuteNonQuery();
 
         // Act
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - Unique index should exist
@@ -161,7 +161,7 @@ public class TableQuench_IndexOnlyTests
         command.ExecuteNonQuery();
 
         // Act - IndexOnlyQuench should NOT add the column
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - new_column should NOT exist (IndexOnly doesn't touch columns)
@@ -215,7 +215,7 @@ public class TableQuench_IndexOnlyTests
         command.ExecuteNonQuery();
 
         // Act - Call with DropUnknownIndexes=1
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 1)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 1, 1)";
         command.ExecuteNonQuery();
 
         // Assert - idx_to_drop should be gone
@@ -269,7 +269,7 @@ public class TableQuench_IndexOnlyTests
         command.ExecuteNonQuery();
 
         // Act
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - Old name should be gone, new name should exist
@@ -322,7 +322,7 @@ public class TableQuench_IndexOnlyTests
         command.ExecuteNonQuery();
 
         // Act
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - Index should now have 2 columns
@@ -357,7 +357,7 @@ public class TableQuench_IndexOnlyTests
         command.ExecuteNonQuery();
 
         // Act - Call with WhatIf=1
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 1, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 1, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - Index should NOT exist
@@ -392,7 +392,7 @@ public class TableQuench_IndexOnlyTests
         command.ExecuteNonQuery();
 
         // Act
-        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0)";
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
         command.ExecuteNonQuery();
 
         // Assert - Index should be tracked in ProductOwnership

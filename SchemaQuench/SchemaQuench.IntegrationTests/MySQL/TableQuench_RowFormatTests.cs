@@ -118,7 +118,7 @@ VALUES ('{_productName}', '', '{TestSchema}', 'TABLE', 'TableToModifyRowFormat')
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0, 1)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1)";
         cmd.ExecuteNonQuery();
 
         conn.Close();

@@ -7,6 +7,7 @@ CREATE OR REPLACE PROCEDURE "SchemaSmith"."IndexOnlyQuench"
  p_TableDefinitions TEXT,
  p_WhatIf BOOLEAN = FALSE,
  p_DropUnknownIndexes BOOLEAN = FALSE,
+ p_DropIndexesRemovedFromProduct BOOLEAN = TRUE,
  p_UpdateFillFactor BOOLEAN = TRUE)
     LANGUAGE plpgsql
 AS $$

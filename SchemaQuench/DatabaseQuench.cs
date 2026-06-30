@@ -68,6 +68,7 @@ public class DatabaseQuench
     private readonly string _dropRemovedCheckConstraints;
     private readonly string _dropRemovedExcludeConstraints;
     private readonly string _dropRemovedStatistics;
+    private readonly string _dropRemovedIndexes;
     private readonly bool _updateTables;
     private readonly bool _deliverData;
     private readonly ICheckpointing _checkpointing;
@@ -212,7 +213,7 @@ public class DatabaseQuench
 
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         string schemaName, bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
-        string dropRemovedColumns, string dropRemovedForeignKeys, string dropRemovedCheckConstraints, string dropRemovedExcludeConstraints, string dropRemovedStatistics, bool dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
+        string dropRemovedColumns, string dropRemovedForeignKeys, string dropRemovedCheckConstraints, string dropRemovedExcludeConstraints, string dropRemovedStatistics, string dropRemovedIndexes, bool dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
         bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true, bool forceReKindle = false)
     {
         _server = server;
@@ -229,6 +230,7 @@ public class DatabaseQuench
         _dropRemovedCheckConstraints = dropRemovedCheckConstraints;
         _dropRemovedExcludeConstraints = dropRemovedExcludeConstraints;
         _dropRemovedStatistics = dropRemovedStatistics;
+        _dropRemovedIndexes = dropRemovedIndexes;
         _updateTables = updateTables;
         _deliverData = deliverData;
         _checkpointing = checkpointing;
@@ -243,10 +245,10 @@ public class DatabaseQuench
     // to the canonical constructor with empty schemaName.
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
-        string dropRemovedColumns, string dropRemovedForeignKeys, string dropRemovedCheckConstraints, string dropRemovedExcludeConstraints, string dropRemovedStatistics, bool dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
+        string dropRemovedColumns, string dropRemovedForeignKeys, string dropRemovedCheckConstraints, string dropRemovedExcludeConstraints, string dropRemovedStatistics, string dropRemovedIndexes, bool dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
         bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true, bool forceReKindle = false)
         : this(server, product, template, databaseName, "", suppressKindling, whatIfOnly, runScriptsTwice,
-            dropRemovedTables, dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropRemovedExcludeConstraints, dropRemovedStatistics, dropUnknownIndexes, updateTables, deliverData, checkpointing,
+            dropRemovedTables, dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropRemovedExcludeConstraints, dropRemovedStatistics, dropRemovedIndexes, dropUnknownIndexes, updateTables, deliverData, checkpointing,
             trackRunOnceMigrations, pruneObsoleteMigrationTracking, forceReKindle)
     {
     }
@@ -254,7 +256,7 @@ public class DatabaseQuench
     // Internal constructor for testing — allows direct injection of all parameters
     internal DatabaseQuench(string server, Product product, Template template, string databaseName,
         string schemaName, bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
-        string dropRemovedColumns, string dropRemovedForeignKeys, string dropRemovedCheckConstraints, string dropRemovedExcludeConstraints, string dropRemovedStatistics, string dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
+        string dropRemovedColumns, string dropRemovedForeignKeys, string dropRemovedCheckConstraints, string dropRemovedExcludeConstraints, string dropRemovedStatistics, string dropRemovedIndexes, string dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
         bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true, bool forceReKindle = false)
     {
         _server = server;
@@ -271,6 +273,7 @@ public class DatabaseQuench
         _dropRemovedCheckConstraints = dropRemovedCheckConstraints;
         _dropRemovedExcludeConstraints = dropRemovedExcludeConstraints;
         _dropRemovedStatistics = dropRemovedStatistics;
+        _dropRemovedIndexes = dropRemovedIndexes;
         _dropUnknownIndexes = dropUnknownIndexes;
         _updateTables = updateTables;
         _deliverData = deliverData;
@@ -283,10 +286,10 @@ public class DatabaseQuench
     // Convenience overload for tests pre-dating the schemaName parameter.
     internal DatabaseQuench(string server, Product product, Template template, string databaseName,
         bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
-        string dropRemovedColumns, string dropRemovedForeignKeys, string dropRemovedCheckConstraints, string dropRemovedExcludeConstraints, string dropRemovedStatistics, string dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
+        string dropRemovedColumns, string dropRemovedForeignKeys, string dropRemovedCheckConstraints, string dropRemovedExcludeConstraints, string dropRemovedStatistics, string dropRemovedIndexes, string dropUnknownIndexes, bool updateTables, bool deliverData, ICheckpointing checkpointing,
         bool trackRunOnceMigrations = true, bool pruneObsoleteMigrationTracking = true, bool forceReKindle = false)
         : this(server, product, template, databaseName, "", suppressKindling, whatIfOnly, runScriptsTwice,
-            dropRemovedTables, dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropRemovedExcludeConstraints, dropRemovedStatistics, dropUnknownIndexes, updateTables, deliverData, checkpointing,
+            dropRemovedTables, dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropRemovedExcludeConstraints, dropRemovedStatistics, dropRemovedIndexes, dropUnknownIndexes, updateTables, deliverData, checkpointing,
             trackRunOnceMigrations, pruneObsoleteMigrationTracking, forceReKindle)
     {
     }
@@ -1192,12 +1195,12 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
         switch (_product.Platform)
         {
             case Platform.SqlServer:
-                tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}";
+                tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}";
                 break;
             case Platform.PostgreSQL:
                 tableCommand.CommandText = $@"
 CALL ""SchemaSmith"".""ValidateTableOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
-CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_DropTablesRemovedFromProduct := {_dropRemovedTables}, p_DropColumnsRemovedFromProduct := {_dropRemovedColumns}, p_DropForeignKeysRemovedFromProduct := {_dropRemovedForeignKeys}, p_DropCheckConstraintsRemovedFromProduct := {_dropRemovedCheckConstraints}, p_DropExcludeConstraintsRemovedFromProduct := {_dropRemovedExcludeConstraints}, p_DropStatisticsRemovedFromProduct := {_dropRemovedStatistics});";
+CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_DropTablesRemovedFromProduct := {_dropRemovedTables}, p_DropColumnsRemovedFromProduct := {_dropRemovedColumns}, p_DropForeignKeysRemovedFromProduct := {_dropRemovedForeignKeys}, p_DropCheckConstraintsRemovedFromProduct := {_dropRemovedCheckConstraints}, p_DropExcludeConstraintsRemovedFromProduct := {_dropRemovedExcludeConstraints}, p_DropStatisticsRemovedFromProduct := {_dropRemovedStatistics}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes});";
                 break;
             case Platform.MySQL:
             {
@@ -1232,14 +1235,14 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
-                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}"
+                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}"
                     : $"EXEC [{_databaseName}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
                 break;
             }
             case Platform.PostgreSQL:
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
                     ? $@"
-CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{EscapeSqlLiteral(IterationTableSchema)}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()});
+CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{EscapeSqlLiteral(IterationTableSchema)}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()});
 CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 "
                     : $@"
@@ -1255,9 +1258,10 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
                 var dropRemovedChecks = _dropRemovedCheckConstraints == "1" ? 1 : 0;
+                var dropRemovedIndexes = _dropRemovedIndexes == "1" ? 1 : 0;
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
-                    ? $"CALL SchemaSmith_IndexOnlyQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown})"
-                    : $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown}, {dropRemovedChecks})";
+                    ? $"CALL SchemaSmith_IndexOnlyQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown}, {dropRemovedIndexes})"
+                    : $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown}, {dropRemovedChecks}, {dropRemovedIndexes})";
                 break;
             }
         }

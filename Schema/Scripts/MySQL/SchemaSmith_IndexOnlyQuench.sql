@@ -10,7 +10,8 @@ CREATE PROCEDURE SchemaSmith_IndexOnlyQuench(
     IN p_ProductName VARCHAR(100),
     IN p_DatabaseName VARCHAR(128),
     IN p_WhatIf TINYINT,
-    IN p_DropUnknownIndexes TINYINT
+    IN p_DropUnknownIndexes TINYINT,
+    IN p_DropIndexesRemovedFromProduct TINYINT
 )
 SQL SECURITY DEFINER
 BEGIN

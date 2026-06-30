@@ -7,6 +7,7 @@ CREATE OR ALTER PROCEDURE SchemaSmith.IndexOnlyQuench
   @TableDefinitions NVARCHAR(MAX),
   @WhatIf BIT = 0,
   @DropUnknownIndexes BIT = 0,
+  @DropIndexesRemovedFromProduct BIT = 1,
   @UpdateFillFactor BIT = 1
 AS
 BEGIN TRY
