@@ -533,12 +533,13 @@ public class TableQuenchTests
         command.AddParameterWithValue("@dropUnknown", 0);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ForeignKeyQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_ForeignKeyQuench(@productName, @databaseName, @whatIf, @dropUnknown, @dropRemovedFks)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
         command.AddParameterWithValue("@dropUnknown", 0);
+        command.AddParameterWithValue("@dropRemovedFks", 1);
         command.ExecuteNonQuery();
 
         // Verify FK was created
@@ -1927,12 +1928,13 @@ public class TableQuenchTests
         command.AddParameterWithValue("@dropUnknown", 0);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ForeignKeyQuench(@productName, @databaseName, @whatIf, @dropUnknown)";
+        command.CommandText = "CALL SchemaSmith_ForeignKeyQuench(@productName, @databaseName, @whatIf, @dropUnknown, @dropRemovedFks)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
         command.AddParameterWithValue("@dropUnknown", 0);
+        command.AddParameterWithValue("@dropRemovedFks", 1);
         command.ExecuteNonQuery();
 
         // Verify FK was created
@@ -1954,3 +1956,4 @@ public class TableQuenchTests
         command.ExecuteNonQuery();
     }
 }
+

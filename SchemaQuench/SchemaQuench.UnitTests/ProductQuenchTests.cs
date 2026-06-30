@@ -2466,6 +2466,31 @@ public class ProductQuenchTests
 
     #endregion
 
+    #region DropForeignKeysRemovedFromProduct cascade (env + product + template, defaultValue: true)
+
+    [Test]
+    public void DropForeignKeysRemoved_TemplateFalse_ResolvesToFalse()
+    {
+        // Template false suppresses the default-true ambient — the SchemaShears patch case.
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, null, false, defaultValue: true), Is.False);
+    }
+
+    [Test]
+    public void DropForeignKeysRemoved_EnvFalse_ResolvesToFalse()
+    {
+        // Env false with product/template absent -> false (env dominates).
+        Assert.That(ProductQuench.ResolveCascadedFlag(false, null, null, defaultValue: true), Is.False);
+    }
+
+    [Test]
+    public void DropForeignKeysRemoved_AllAbsent_DefaultTrue()
+    {
+        // No env, no product flag, no template flag -> default true (drop by default).
+        Assert.That(ProductQuench.ResolveCascadedFlag(null, null, null, defaultValue: true), Is.True);
+    }
+
+    #endregion
+
     #region ResolveCascadedFlag + ConfigBool
 
     [Test] public void Cascade_AllAbsent_ReturnsDefault_True()  => Assert.That(ProductQuench.ResolveCascadedFlag(null,null,null,true), Is.True);

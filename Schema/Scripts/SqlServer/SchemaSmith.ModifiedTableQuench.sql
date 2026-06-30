@@ -7,7 +7,8 @@ CREATE OR ALTER PROCEDURE SchemaSmith.ModifiedTableQuench
   @WhatIf BIT = 0,
   @DropUnknownIndexes BIT = 0,
   @DropTablesRemovedFromProduct BIT = 1,
-  @DropColumnsRemovedFromProduct BIT = 1
+  @DropColumnsRemovedFromProduct BIT = 1,
+  @DropForeignKeysRemovedFromProduct BIT = 1
 AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = '',

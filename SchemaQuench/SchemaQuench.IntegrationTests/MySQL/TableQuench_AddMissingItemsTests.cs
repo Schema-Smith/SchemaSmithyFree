@@ -564,7 +564,7 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyIndexIO` (`Id` INT NOT NULL);
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ForeignKeyQuench('{_productName}', '{TestSchema}', 0, 0)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ForeignKeyQuench('{_productName}', '{TestSchema}', 0, 0, 1)";
         cmd.ExecuteNonQuery();
 
         // Index Only
@@ -603,3 +603,4 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyIndexIO` (`Id` INT NOT NULL);
         catch { /* Ignore cleanup errors */ }
     }
 }
+

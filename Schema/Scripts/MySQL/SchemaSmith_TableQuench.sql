@@ -36,7 +36,7 @@ BEGIN
     CALL SchemaSmith_MissingIndexesAndConstraintsQuench(p_ProductName, p_DatabaseName, p_WhatIf, p_DropUnknownIndexes);
 
     -- Step 5: Create/modify/drop foreign keys
-    CALL SchemaSmith_ForeignKeyQuench(p_ProductName, p_DatabaseName, p_WhatIf, p_DropUnknownIndexes);
+    CALL SchemaSmith_ForeignKeyQuench(p_ProductName, p_DatabaseName, p_WhatIf, p_DropUnknownIndexes, 1);
 
     -- Cleanup temp tables
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Tables;

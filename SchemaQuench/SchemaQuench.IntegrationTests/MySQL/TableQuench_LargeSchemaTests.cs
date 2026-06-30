@@ -356,7 +356,7 @@ public class TableQuench_LargeSchemaTests : BaseTableQuenchTests
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ForeignKeyQuench('{_productName}', '{TestSchema}', 0, 0)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ForeignKeyQuench('{_productName}', '{TestSchema}', 0, 0, 1)";
         cmd.ExecuteNonQuery();
 
         conn.Close();
@@ -906,3 +906,4 @@ public class TableQuench_LargeSchemaTests : BaseTableQuenchTests
         catch { /* Ignore cleanup errors */ }
     }
 }
+
