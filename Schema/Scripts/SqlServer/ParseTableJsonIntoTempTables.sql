@@ -39,7 +39,7 @@
          [IsTemporal] = ISNULL([IsTemporal], 0), [UpdateFillFactor] = ISNULL([UpdateFillFactor], 0),
          [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints],
          [ShouldApplyExpression], [VariantName], [EnableCDC] = ISNULL([EnableCDC], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName]),
-         [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct]
+         [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct]
     INTO #TableDefinitions
     FROM OPENJSON(@TableDefinitions) WITH (
       [Schema] NVARCHAR(500) '$.Schema',
@@ -59,7 +59,8 @@
       [VariantName] NVARCHAR(128) '$.VariantName',
       [EnableCDC] BIT '$.EnableCDC',
       [DropColumnsRemovedFromProduct] BIT '$.DropColumnsRemovedFromProduct',
-      [DropForeignKeysRemovedFromProduct] BIT '$.DropForeignKeysRemovedFromProduct'
+      [DropForeignKeysRemovedFromProduct] BIT '$.DropForeignKeysRemovedFromProduct',
+      [DropCheckConstraintsRemovedFromProduct] BIT '$.DropCheckConstraintsRemovedFromProduct'
       ) t;
   
   -- Identify Tables to skip based on ShouldApply expression
@@ -73,7 +74,7 @@
   DROP TABLE IF EXISTS #Tables
   SELECT [Schema], [Name], [CompressionType], [IsTemporal], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
-         [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct]
+         [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct]
     INTO #Tables
     FROM #TableDefinitions WITH (NOLOCK);
   

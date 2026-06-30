@@ -932,7 +932,26 @@ BEGIN TRY
                                   'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + cc.[CheckName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #CheckChanges cc WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
+  -- Drop table-level check constraints removed from the product (by-absence). Column-level checks
+  -- (CheckColumn IS NOT NULL) are owned by the column modify pass above; only table-level checks
+  -- absent from the product's CheckConstraints are dropped here, gated by the cascade flag + the
+  -- per-table tightening (a table may set DropCheckConstraintsRemovedFromProduct:false to protect its own).
+  RAISERROR('Drop Check Constraints No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping check constraint ' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + ec.[Schema] + '.' + ec.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + ec.[CheckName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #ExistingCheckConstraints ec WITH (NOLOCK)
+    JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
+    WHERE ec.[CheckColumn] IS NULL
+      AND t.NewTable = 0
+      AND @DropCheckConstraintsRemovedFromProduct = 1
+      AND ISNULL(t.[DropCheckConstraintsRemovedFromProduct], 1) = 1
+      AND NOT EXISTS (SELECT * FROM #CheckConstraints cc WITH (NOLOCK)
+                        WHERE ec.[Schema] = cc.[Schema]
+                          AND ec.[TableName] = cc.[TableName]
+                          AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
   RAISERROR('Alter Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ALTER COLUMN ' + cc.[ColumnName] + ' ' + 
