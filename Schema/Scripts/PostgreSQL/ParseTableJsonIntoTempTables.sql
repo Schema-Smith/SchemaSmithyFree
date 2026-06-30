@@ -23,7 +23,8 @@
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((elem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
            COALESCE(NULLIF((elem ->> 'FillFactor')::INT2, 0), 100) AS "FillFactor",
            (elem ->> 'DropColumnsRemovedFromProduct')::BOOLEAN AS "DropColumnsRemovedFromProduct",
-           (elem ->> 'DropForeignKeysRemovedFromProduct')::BOOLEAN AS "DropForeignKeysRemovedFromProduct"
+           (elem ->> 'DropForeignKeysRemovedFromProduct')::BOOLEAN AS "DropForeignKeysRemovedFromProduct",
+           (elem ->> 'DropCheckConstraintsRemovedFromProduct')::BOOLEAN AS "DropCheckConstraintsRemovedFromProduct"
     FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem;
 
     -- ShouldApply scoped by "_RowId" so each generated DELETE targets exactly the source row.

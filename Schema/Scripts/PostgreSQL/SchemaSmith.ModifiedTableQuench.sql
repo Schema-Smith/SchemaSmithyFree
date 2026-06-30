@@ -269,6 +269,8 @@ BEGIN
                       'ALTER TABLE "' || ec."TableSchema" || '"."' || ec."TableName" || '" DROP CONSTRAINT IF EXISTS "' || ec."CheckName" || '" CASCADE;', CHR(10))
       INTO sql_script
       FROM temp_existing_checks ec
+      JOIN temp_tables tt ON tt."Schema" = ec."TableSchema"
+                         AND tt."Name" = ec."TableName"
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_checks c
                           WHERE ec."TableSchema" = c."TableSchema"
@@ -282,7 +284,16 @@ BEGIN
                           WHERE col."TableSchema" = ec."TableSchema"
                             AND col."TableName" = ec."TableName"
                             AND NULLIF(col."CheckExpression", '') IS NOT NULL
-                            AND ec."CheckName" = 'CK_' || col."TableName" || '_' || col."Name");
+                            AND ec."CheckName" = 'CK_' || col."TableName" || '_' || col."Name")
+        -- Split modified vs removed: a same-named check whose expression changed is dropped
+        -- unconditionally (the create pass re-adds it); a check whose name is gone from the
+        -- product is a by-absence removal, gated by the cascade flag.
+        AND (EXISTS (SELECT 1
+                       FROM temp_checks c2
+                       WHERE ec."TableSchema" = c2."TableSchema"
+                         AND ec."TableName" = c2."TableName"
+                         AND ec."CheckName" = c2."Name")
+             OR (p_DropCheckConstraintsRemovedFromProduct AND COALESCE(tt."DropCheckConstraintsRemovedFromProduct", TRUE)));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Drop Modified Column Check Constraints';
