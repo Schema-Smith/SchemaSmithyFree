@@ -60,6 +60,8 @@ The log shows it connect **as `datafix_user`**, filter **1 of 3** discovered dat
 
 ## Step 4 — Verify the canary
 
+SQL Server shown; adapt the schema/identifier style per the [per-engine notes](#per-engine-notes) below for PostgreSQL (`datafix.orderitem_pricefix_backup`, lowercase) and MySQL (`OrderItem_PriceFix_Backup` in the tenant db).
+
 ```sql
 -- backup captured the 10 originals (in the datafix schema the account owns)
 SELECT COUNT(*) FROM datafix.OrderItem_PriceFix_Backup;          -- 10

@@ -40,20 +40,42 @@ seed_db() {
   if echo "$out" | grep -qE 'READY|1'; then echo "PASS"; else echo "FAIL"; fail=1; fi
 }
 
+# Apply the scoped datafix_user role for an engine. One invocation handles all
+# three tenants; run AFTER the tenant tables exist (PostgreSQL grants ON ALL
+# TABLES only cover tables present at grant time). Idempotent.
+apply_role() {
+  local engine="$1" out=""
+  local file="$SCRIPT_DIR/seed/$engine/datafix_role.sql"
+  printf '  %-26s ' "datafix_user role"
+  if [ ! -f "$file" ]; then echo "MISSING"; fail=1; return 1; fi
+  case "$engine" in
+    sqlserver) docker exec -i learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d master" < "$file" >/dev/null 2>&1
+               out=$(docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -d master -Q \"SELECT 'READY' FROM sys.server_principals WHERE name='datafix_user'\"" 2>/dev/null) ;;
+    postgres)  docker exec -i learn-postgres psql -U postgres -d postgres < "$file" >/dev/null 2>&1
+               out=$(docker exec learn-postgres psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='datafix_user'" 2>/dev/null) ;;
+    mysql)     docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd < "$file" >/dev/null 2>&1
+               out=$(docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM mysql.user WHERE user='datafix_user'" 2>/dev/null) ;;
+  esac
+  if echo "$out" | grep -qE 'READY|1'; then echo "PASS"; else echo "FAIL"; fail=1; fi
+}
+
 tenants=("shop_tenant_a" "shop_tenant_b" "shop_tenant_c")
 
 echo "SQL Server"
 for db in "${tenants[@]}"; do seed_db sqlserver "$db"; done
+apply_role sqlserver
 
 echo "PostgreSQL"
 for db in "${tenants[@]}"; do seed_db postgres "$db"; done
+apply_role postgres
 
 echo "MySQL"
 for db in "${tenants[@]}"; do seed_db mysql "$db"; done
+apply_role mysql
 
 echo
 if [ "$fail" -eq 0 ]; then
-  echo "All 9 databases are seeded and ready (3 SQL Server, 3 PostgreSQL, 3 MySQL)."
+  echo "All 9 databases are seeded and the datafix_user role is created (3 SQL Server, 3 PostgreSQL, 3 MySQL)."
   exit 0
 else
   echo "One or more databases could not be seeded. Is the sandbox up? See Demos/Learn/README.md."

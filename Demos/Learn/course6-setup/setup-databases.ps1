@@ -37,20 +37,44 @@ function Initialize-Db {
     if (($out -join '') -match 'READY|1') { Write-Host 'PASS' } else { Write-Host 'FAIL'; $script:failed = $true }
 }
 
+# Apply the scoped datafix_user role for an engine. One invocation handles all
+# three tenants; run AFTER the tenant tables exist (PostgreSQL grants ON ALL
+# TABLES only cover tables present at grant time). Idempotent.
+function Set-DatafixRole {
+    param([string]$Engine)
+    $file = Join-Path $PSScriptRoot "seed/$Engine/datafix_role.sql"
+    Write-Host -NoNewline ("  {0,-26} " -f 'datafix_user role')
+    if (-not (Test-Path $file)) { Write-Host 'MISSING'; $script:failed = $true; return }
+    $sql = Get-Content $file -Raw
+    $out = ''
+    switch ($Engine) {
+        'sqlserver' { $sql | docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d master | Out-Null
+                      $out = docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -d master -Q "SELECT 'READY' FROM sys.server_principals WHERE name='datafix_user'" 2>$null }
+        'postgres'  { $sql | docker exec -i learn-postgres psql -U postgres -d postgres | Out-Null
+                      $out = docker exec learn-postgres psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='datafix_user'" 2>$null }
+        'mysql'     { $sql | docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd 2>$null | Out-Null
+                      $out = docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM mysql.user WHERE user='datafix_user'" 2>$null }
+    }
+    if (($out -join '') -match 'READY|1') { Write-Host 'PASS' } else { Write-Host 'FAIL'; $script:failed = $true }
+}
+
 $tenants = @('shop_tenant_a', 'shop_tenant_b', 'shop_tenant_c')
 
 Write-Host 'SQL Server'
 foreach ($db in $tenants) { Initialize-Db 'sqlserver' $db }
+Set-DatafixRole 'sqlserver'
 
 Write-Host 'PostgreSQL'
 foreach ($db in $tenants) { Initialize-Db 'postgres' $db }
+Set-DatafixRole 'postgres'
 
 Write-Host 'MySQL'
 foreach ($db in $tenants) { Initialize-Db 'mysql' $db }
+Set-DatafixRole 'mysql'
 
 Write-Host ''
 if (-not $failed) {
-    Write-Host 'All 9 databases are seeded and ready (3 SQL Server, 3 PostgreSQL, 3 MySQL).'
+    Write-Host 'All 9 databases are seeded and the datafix_user role is created (3 SQL Server, 3 PostgreSQL, 3 MySQL).'
     exit 0
 } else {
     Write-Host 'One or more databases could not be seeded. Is the sandbox up? See Demos/Learn/README.md.'

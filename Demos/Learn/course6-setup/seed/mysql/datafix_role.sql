@@ -2,7 +2,7 @@
 -- In MySQL a schema and a database are the same thing, so per-tenant grants
 -- target each shop_tenant_* database directly. Run as root or any account
 -- with GRANT OPTION on the target databases.
--- These grants are provisional: Task 4 certification may tighten the set.
+-- These grants are provisional: certify against your own fix and tighten.
 
 -- Create the user account (idempotent guard; CREATE USER IF NOT EXISTS requires MySQL 5.7.6+)
 CREATE USER IF NOT EXISTS 'datafix_user'@'%' IDENTIFIED BY 'DataFix!Demo123';

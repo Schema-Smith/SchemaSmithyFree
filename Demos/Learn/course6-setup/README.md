@@ -9,6 +9,12 @@ Orders from April and June 2026 carry the intended `ROUND(Product.UnitPrice * 0.
 The three tenant databases start equal so that Course 6 labs can canary the fix to `shop_tenant_a`
 first before rolling it out to `shop_tenant_b` and `shop_tenant_c`.
 
+The setup also creates a scoped **`datafix_user`** account on each engine — a least-privilege login
+that owns a dedicated `datafix` schema for its backup tables but has no power to alter or drop the
+product's own tables. The Module 1 lab deploys *as* this account. The grant scripts live in
+[`seed/<engine>/datafix_role.sql`](seed/) and are explained in the
+[datafix-role grants reference](../../../docs/end-user/reference/datafix-role-grants.md).
+
 ## Prerequisite
 
 The shared sandbox must be running. See [`Demos/Learn/README.md`](../README.md) for how to start it
@@ -37,16 +43,19 @@ SQL Server
   shop_tenant_a              PASS
   shop_tenant_b              PASS
   shop_tenant_c              PASS
+  datafix_user role          PASS
 PostgreSQL
   shop_tenant_a              PASS
   shop_tenant_b              PASS
   shop_tenant_c              PASS
+  datafix_user role          PASS
 MySQL
   shop_tenant_a              PASS
   shop_tenant_b              PASS
   shop_tenant_c              PASS
+  datafix_user role          PASS
 
-All 9 databases are seeded and ready (3 SQL Server, 3 PostgreSQL, 3 MySQL).
+All 9 databases are seeded and the datafix_user role is created (3 SQL Server, 3 PostgreSQL, 3 MySQL).
 ```
 
 ## Databases created
@@ -68,6 +77,10 @@ These are throwaway sandbox credentials — **never reuse them anywhere real.**
 | SQL Server | `localhost` | `11433` | `sa`       | `Learn!Passw0rd` |
 | PostgreSQL | `localhost` | `15432` | `postgres` | `Learn!Passw0rd` |
 | MySQL      | `localhost` | `13306` | `root`     | `Learn!Passw0rd` |
+
+The admin accounts above are for seeding and inspection. The Module 1 lab deploys *as* the scoped
+`datafix_user` account (password `DataFix!Demo123`) created by the setup — that's the whole point of
+the exercise.
 
 ## Verifying the bad batch
 
