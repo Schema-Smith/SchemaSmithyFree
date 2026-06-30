@@ -11,7 +11,8 @@ CREATE PROCEDURE SchemaSmith_ModifiedTableQuench(
     IN p_DatabaseName VARCHAR(128),
     IN p_WhatIf TINYINT,
     IN p_DropTablesRemovedFromProduct TINYINT,
-    IN p_DropColumnsRemovedFromProduct TINYINT
+    IN p_DropColumnsRemovedFromProduct TINYINT,
+    IN p_DropCheckConstraintsRemovedFromProduct TINYINT
 )
 SQL SECURITY DEFINER
 BEGIN

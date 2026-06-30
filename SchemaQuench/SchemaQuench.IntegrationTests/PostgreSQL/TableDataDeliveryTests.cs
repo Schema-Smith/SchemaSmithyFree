@@ -457,7 +457,7 @@ public class TableDataDeliveryTests
                 var product = new Product { Name = "TestProduct", Platform = Platform.PostgreSQL };
                 var quench = new DatabaseQuench(FactoryContainer.Resolve<IConfigurationRoot>()["Target:Server"], product, template, _testDb,
                     suppressKindling: true, whatIfOnly: "false", runScriptsTwice: false,
-                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropUnknownIndexes: false, updateTables: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropUnknownIndexes: false, updateTables: false,
                     deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
                 quench.Execute();
 
@@ -542,7 +542,7 @@ public class TableDataDeliveryTests
                 var product = new Product { Name = "TestProduct", Platform = Platform.PostgreSQL };
                 var quench = new DatabaseQuench(FactoryContainer.Resolve<IConfigurationRoot>()["Target:Server"], product, template, _testDb,
                     suppressKindling: true, whatIfOnly: "false", runScriptsTwice: false,
-                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropUnknownIndexes: false, updateTables: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropUnknownIndexes: false, updateTables: false,
                     deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
                 quench.Execute();
 
@@ -668,7 +668,7 @@ public class TableDataDeliveryTests
                 var product = new Product { Name = "TestProduct", Platform = Platform.PostgreSQL };
                 var quench = new DatabaseQuench(FactoryContainer.Resolve<IConfigurationRoot>()["Target:Server"], product, template, _testDb,
                     suppressKindling: true, whatIfOnly: "false", runScriptsTwice: false,
-                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropUnknownIndexes: false, updateTables: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropUnknownIndexes: false, updateTables: false,
                     deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
                 quench.Execute();
 
@@ -772,7 +772,7 @@ public class TableDataDeliveryTests
                 var product = new Product { Name = "TestProduct", Platform = Platform.PostgreSQL };
                 var quench = new DatabaseQuench(FactoryContainer.Resolve<IConfigurationRoot>()["Target:Server"], product, template, _testDb,
                     suppressKindling: true, whatIfOnly: "false", runScriptsTwice: false,
-                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropUnknownIndexes: false, updateTables: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropUnknownIndexes: false, updateTables: false,
                     deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
                 quench.Execute();
 
