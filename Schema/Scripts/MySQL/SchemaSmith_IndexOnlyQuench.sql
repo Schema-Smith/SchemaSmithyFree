@@ -301,6 +301,11 @@ BEGIN
         WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
           AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
           AND po.ObjectType COLLATE utf8mb4_unicode_ci = 'INDEX' COLLATE utf8mb4_unicode_ci
+          -- Removed-from-product per-table tightening (the outer IF still gates on DropUnknownIndexes;
+          -- that mis-gating is normalized in Index-B). p_DropIndexesRemovedFromProduct defaults on, so
+          -- this only adds suppression, no default behavior change.
+          AND p_DropIndexesRemovedFromProduct = 1
+          AND COALESCE(t.DropIndexesRemovedFromProduct, 1) = 1
           -- Never drop PRIMARY KEY
           AND UPPER(SUBSTRING_INDEX(po.ObjectName, '.', -1) COLLATE utf8mb4_unicode_ci) != 'PRIMARY' COLLATE utf8mb4_unicode_ci
           -- Not in current definition (LEFT JOIN produces NULL when not found)

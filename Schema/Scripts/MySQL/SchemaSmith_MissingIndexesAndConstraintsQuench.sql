@@ -773,6 +773,9 @@ BEGIN
         WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
           AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
           AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'INDEX' COLLATE utf8mb4_unicode_ci
+          -- Removed-from-product drop gated by the cascade flag + per-table tightening
+          AND p_DropIndexesRemovedFromProduct = 1
+          AND COALESCE(t.DropIndexesRemovedFromProduct, 1) = 1
           -- Never drop PRIMARY KEY
           AND UPPER(SUBSTRING_INDEX(po.ObjectName, '.', -1) COLLATE utf8mb4_unicode_ci) != _utf8mb4'PRIMARY' COLLATE utf8mb4_unicode_ci
           -- Not in current definition (LEFT JOIN produces NULL when not found)
