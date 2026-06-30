@@ -24,7 +24,7 @@ public class PatchBuilder
 
         if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
             throw new PatchBuildException($"Source product folder not found: '{request.SourcePath}'.");
-        if (!File.Exists(Path.Combine(request.SourcePath, "Product.json")))
+        if (!File.Exists(Path.Join(request.SourcePath, "Product.json")))
             throw new PatchBuildException($"Source folder is not a product (no Product.json): '{request.SourcePath}'.");
         if (string.IsNullOrWhiteSpace(request.OutputPath))
             throw new PatchBuildException("Output path is required.");
@@ -36,7 +36,7 @@ public class PatchBuilder
         log.Info($"SchemaShears: {includeSet.Count} files into '{request.OutputPath}' ({manifest.Count} from manifest).");
 
         PatchPackageWriter.Write(includeSet, request.SourcePath, request.OutputPath);
-        DropSuppressionStamp.Apply(Path.Combine(request.OutputPath, "Product.json"), request.AllowDrops ?? Array.Empty<string>());
+        DropSuppressionStamp.Apply(Path.Join(request.OutputPath, "Product.json"), request.AllowDrops ?? Array.Empty<string>());
 
         if (request.Zip)
         {

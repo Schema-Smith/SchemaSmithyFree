@@ -22,7 +22,7 @@ public static class AlwaysIncludeList
             if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal)) continue;
 
             var normalized = line.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
-            var absolute = Path.Combine(sourcePath, normalized);
+            var absolute = Path.Join(sourcePath, normalized);
 
             if (File.Exists(absolute))
             {

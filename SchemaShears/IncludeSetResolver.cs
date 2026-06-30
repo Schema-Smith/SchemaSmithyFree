@@ -33,8 +33,8 @@ public static class IncludeSetResolver
         var parts = relPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (parts.Length < 2 || parts[0] != "Templates") return;
 
-        var templateJson = Path.Combine("Templates", parts[1], "Template.json");
-        if (File.Exists(Path.Combine(sourcePath, templateJson)))
+        var templateJson = Path.Join("Templates", parts[1], "Template.json");
+        if (File.Exists(Path.Join(sourcePath, templateJson)))
             AddOrKeepStronger(set, templateJson, IncludeReason.Scaffolding);
     }
 

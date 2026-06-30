@@ -18,9 +18,9 @@ public static class PatchPackageWriter
 
         foreach (var (relPath, _) in includeSet)
         {
-            var dest = Path.Combine(outputPath, relPath);
+            var dest = Path.Join(outputPath, relPath);
             Directory.CreateDirectory(Path.GetDirectoryName(dest));
-            File.Copy(Path.Combine(sourcePath, relPath), dest, overwrite: true);
+            File.Copy(Path.Join(sourcePath, relPath), dest, overwrite: true);
         }
 
         var report = new StringBuilder();
@@ -29,6 +29,6 @@ public static class PatchPackageWriter
         foreach (var (relPath, reason) in includeSet.OrderBy(e => e.Key, System.StringComparer.Ordinal))
             report.AppendLine($"{reason,-13} {relPath}");
 
-        File.WriteAllText(Path.Combine(outputPath, "patch-build-report.txt"), report.ToString());
+        File.WriteAllText(Path.Join(outputPath, "patch-build-report.txt"), report.ToString());
     }
 }

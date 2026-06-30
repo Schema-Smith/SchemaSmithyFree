@@ -25,7 +25,7 @@ public static class PatchManifest
             if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal)) continue;
 
             var normalized = line.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
-            if (!File.Exists(Path.Combine(sourcePath, normalized)))
+            if (!File.Exists(Path.Join(sourcePath, normalized)))
                 throw new PatchBuildException($"Manifest path does not exist under source: '{line}'.");
 
             entries.Add(normalized);
