@@ -1,0 +1,45 @@
+# Sample workflow — copy into your own repository's .github/workflows/ and adjust the
+# paths to match where your package lives. It does NOT run inside this training repo
+# (only files under .github/workflows/ execute). No database, no credentials required.
+#
+# One matrix entry per content type per package. The GrantBirki/json-yaml-validate
+# action reads each .schema file (including any Extensions governance fragment you add)
+# and validates every matched JSON file against it on each pull request.
+name: validate-schemas
+on:
+  pull_request:
+    paths:
+      - '**/*.json'
+      - '**/.json-schemas/*.schema'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: sqlserver-product
+            schema: sqlserver/Package/.json-schemas/products.sqlserver.schema
+            files: sqlserver/Package/Product.json
+          - name: sqlserver-templates
+            schema: sqlserver/Package/.json-schemas/templates.sqlserver.schema
+            files: sqlserver/Package/Templates/*/Template.json
+          - name: sqlserver-tables
+            schema: sqlserver/Package/.json-schemas/tables.sqlserver.schema
+            files: sqlserver/Package/Templates/**/Tables/**/*.json
+          - name: postgres-tables
+            schema: postgres/Package/.json-schemas/tables.postgresql.schema
+            files: postgres/Package/Templates/**/Tables/**/*.json
+          - name: mysql-tables
+            schema: mysql/Package/.json-schemas/tables.mysql.schema
+            files: mysql/Package/Templates/**/Tables/**/*.json
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate ${{ matrix.name }}
+        uses: GrantBirki/json-yaml-validate@v3.3.0
+        with:
+          comment: "true"
+          use_gitignore: "false"
+          ajv_strict_mode: "false"
+          json_schema: ${{ matrix.schema }}
+          files: ${{ matrix.files }}
