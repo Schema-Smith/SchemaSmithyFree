@@ -54,9 +54,8 @@ that varies per environment is injected as an env var at run time, identical to 
   ```
 
   It creates the nine `ordersservice_{dev,staging,prod}` databases and reports `PASS` for each.
-<!-- TRAINING-RELEASE-PIN #288: the PostgreSQL "re-run is a no-op" step needs a SchemaQuench at/after the #287/#288 fix — on main now (build from source, or any release after v2.1.0). Stock installed v2.1.0 predates it and shows a string-default phantom change. At the next release, bump the pre-flight version above to that release and remove this marker. -->
 - The CLI is reachable. The commands below assume `schemaquench` is on your PATH
-  (`schemaquench --version` reports `SchemaQuench - Version: 2.1.0.0`). If you'd rather not put it on
+  (`schemaquench --version` reports `SchemaQuench - Version: 2.2.0.0`). If you'd rather not put it on
   the PATH, set `SCHEMAQUENCH` to the full path to the executable and substitute `$SCHEMAQUENCH` for
   `schemaquench` in every command below.
 

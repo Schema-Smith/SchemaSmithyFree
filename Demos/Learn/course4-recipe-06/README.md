@@ -14,8 +14,7 @@ Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships `install-recycleb
 ## Before you start
 
 - The [sandbox](../docker) is up and the Course 4 databases exist (run [`../course4-setup`](../course4-setup) once — it creates `cookbook_r6`).
-<!-- TRAINING-RELEASE-PIN #292 (+ #291): the PostgreSQL and MySQL recyclebin hooks need a SchemaQuench at/after #292 (MySQL CustomTableDrop/Restore parity) and #291 (PG CustomTableDrop syntax fix) — on main now (build from source, or any release after v2.1.0). Stock installed v2.1.0 has no MySQL hooks and a broken PostgreSQL hook; SQL Server works on v2.1.0. At the next release, bump the version note below to that release and remove this marker. -->
-- The CLI is on your PATH. **The PostgreSQL and MySQL recyclebin hooks need a `schemaquench` built from current `main`** (or any release after v2.1.0) — stock v2.1.0 has no MySQL hooks and a broken PostgreSQL hook. SQL Server works on `2.1.0`.
+- The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.2.0.0` or later). The PostgreSQL and MySQL recyclebin hooks require v2.2.0 or later — stock v2.1.0 had no MySQL hooks and a broken PostgreSQL hook; SQL Server worked on v2.1.0.
 
 ## Step 1: Deploy, then install the hooks
 

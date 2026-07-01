@@ -1,7 +1,5 @@
 # Course 6, Module 2 — Pre-flight diagnostics: `--TestConnection` and `--PreviewTargets` (lab)
 
-<!-- TRAINING-RELEASE-PIN #312 — this lab uses --TestConnection / --PreviewTargets, which ship in the release after v2.1.0. Certified against from-source `main`. At that release: bump the `schemaquench --version` pre-flight note and remove this sentinel + the release-coupled roadmap row. -->
-
 **Goal:** run SchemaQuench's two read-only pre-flight switches to validate a deployment before committing to the maintenance window — confirming connectivity, the minimum-version floor, and the exact target roster, then wire both checks as a CI gate that aborts on failure.
 
 ## The scenario
@@ -11,7 +9,7 @@ Your team is about to push a schema update to three tenant databases across a fl
 ## Before you start
 
 - The three-engine sandbox is up (`Demos/Learn/docker`) and `course6-setup` has been run — it seeds `shop_tenant_a`, `shop_tenant_b`, and `shop_tenant_c` on each engine.
-- `schemaquench --version` answers on your PATH, **built from `main`**. The `--TestConnection` and `--PreviewTargets` switches are not in stock v2.1.0 — they ship in the release after v2.1.0 (#312). If `schemaquench --help` does not list them, rebuild from `main`.
+- The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.2.0.0` or later). The `--TestConnection` and `--PreviewTargets` switches shipped in v2.2.0; if `schemaquench --help` does not list them, upgrade to v2.2.0 or later.
 
 ## Scenario 1 — `--TestConnection` pass
 
