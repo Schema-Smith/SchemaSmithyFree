@@ -28,7 +28,8 @@
             "type": "integer"
           },
           "QuenchSlot": {
-            "type": "integer"
+            "type": "string",
+            "pattern": "Before|After|None"
           },
           "ObjectType": {
             "type": "string",
@@ -73,6 +74,27 @@
     "CheckConstraintStyle": {
       "type": "string",
       "pattern": "ColumnLevel|TableLevel"
+    },
+    "DropTablesRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropColumnsRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropForeignKeysRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropCheckConstraintsRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropExcludeConstraintsRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropStatisticsRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropIndexesRemovedFromProduct": {
+      "type": "boolean"
     }
   },
   "additionalProperties": false,
