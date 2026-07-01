@@ -1,0 +1,8 @@
+{
+  "Name": "IdentityService",
+  "MinimumVersion": "2019",
+  "TemplateOrder": ["Main"],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}
