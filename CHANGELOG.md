@@ -4,6 +4,12 @@ All notable changes to SchemaSmith Community Edition are documented here.
 
 For full release details and download links, see [GitHub Releases](https://github.com/Schema-Smith/SchemaSmith/releases).
 
+## [Unreleased]
+
+### Fixed
+
+- **Hand-authored `Extensions` schema-fragment governance was only preserved at the table root on regeneration.** A custom JSON-Schema fragment added to the open `Extensions` bag in a generated `.json-schemas/*.schema` file — the documented way to enforce governance (required keys, value enums) on custom properties at PR time — survived regeneration only at the table's top level. A fragment authored at any deeper level — column, index, foreign key, check constraint, statistic, XML index, full-text index, exclude constraint, or the indexes of an indexed/materialized view — was silently discarded and rebuilt as an empty bag on every `--WriteSchemasOnly` run and every SchemaTongs extraction, contradicting the reference docs that instruct authoring column-level governance under `properties.Columns.items.properties.Extensions` and promise it survives the round-trip. The merge now carries over an authored `Extensions` fragment wherever it was defined — at every component level and across the table, materialized-view, and indexed-view schema variants — via a location-exact recursive merge, so nothing leaks across levels. Affected all three engines. — #320
+
 ## [v2.2.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.2.0) — 2026-06-30
 
 ### Added

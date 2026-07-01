@@ -69,6 +69,30 @@
     },
     "ContinueOnDatabaseFailure": {
       "type": "boolean"
+    },
+    "DropTablesRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropUnknownIndexes": {
+      "type": "boolean"
+    },
+    "DropColumnsRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropForeignKeysRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropCheckConstraintsRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropExcludeConstraintsRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropStatisticsRemovedFromProduct": {
+      "type": "boolean"
+    },
+    "DropIndexesRemovedFromProduct": {
+      "type": "boolean"
     }
   },
   "additionalProperties": false,

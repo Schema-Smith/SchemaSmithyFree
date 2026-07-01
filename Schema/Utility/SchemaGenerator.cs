@@ -33,13 +33,40 @@ public static class SchemaGenerator
     {
         if (existing == null) return generated;
 
-        var existingExtensions = existing["properties"]?["Extensions"];
-        if (existingExtensions == null) return generated;
-
-        if (generated["properties"] is JObject props)
-            props["Extensions"] = existingExtensions.DeepClone();
-
+        // Carry over a hand-authored Extensions fragment wherever the user defined one — table root,
+        // every collection element (columns, indexes, FKs, checks, statistics, ...), single-object
+        // components, and both branches of a SingleOrArray oneOf. Walk both trees in lockstep by
+        // structure so a fragment is only preserved at the location it was authored.
+        MergeExtensionsNode(generated, existing);
         return generated;
+    }
+
+    private static void MergeExtensionsNode(JToken generated, JToken existing)
+    {
+        if (generated is not JObject genObj || existing is not JObject exObj) return;
+
+        if (genObj["properties"] is JObject genProps && exObj["properties"] is JObject exProps)
+        {
+            // Preserve the authored fragment at this level (only where the current model still has the slot).
+            if (genProps["Extensions"] != null && exProps["Extensions"] is { } exExtensions)
+                genProps["Extensions"] = exExtensions.DeepClone();
+
+            // Recurse into every sibling property the two trees share.
+            foreach (var genProp in genProps.Properties())
+            {
+                if (genProp.Name == "Extensions") continue;
+                if (exProps[genProp.Name] is { } exChild)
+                    MergeExtensionsNode(genProp.Value, exChild);
+            }
+        }
+
+        // Descend through array element schemas and each SingleOrArray oneOf branch.
+        if (genObj["items"] is { } genItems && exObj["items"] is { } exItems)
+            MergeExtensionsNode(genItems, exItems);
+
+        if (genObj["oneOf"] is JArray genOneOf && exObj["oneOf"] is JArray exOneOf)
+            for (var i = 0; i < genOneOf.Count && i < exOneOf.Count; i++)
+                MergeExtensionsNode(genOneOf[i], exOneOf[i]);
     }
 
     private static JObject BuildObjectSchema(Type type, Func<Type, Type> elementTypeResolver)

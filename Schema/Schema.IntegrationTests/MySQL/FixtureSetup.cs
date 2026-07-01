@@ -80,7 +80,9 @@ public class FixtureSetup
 
         var mysqlProps = Schema.DataAccess.ConnectionString.ReadProperties(config, "MySQL:ConnectionProperties");
         var extraProps = string.Join("", mysqlProps.Select(p => $"{p.Key}={p.Value};"));
-        _connectionString = $"Server={server};Port={port};User={user};Password={password};AllowUserVariables=true;MaxPoolSize=100;{extraProps}";
+        // Non-pooled: the suite creates a unique database per test, and retained idle pool connections
+        // across those per-DB pools otherwise pile up past the MySQL server's max_connections ceiling.
+        _connectionString = $"Server={server};Port={port};User={user};Password={password};AllowUserVariables=true;Pooling=false;{extraProps}";
 
         _integrationSecondaryDb = GenerateUniqueDBName(config["ScriptTokens:SecondaryDB"] ?? "TestSecondary");
         _integrationMainDb = GenerateUniqueDBName(config["ScriptTokens:MainDB"] ?? "TestMain");
@@ -93,6 +95,8 @@ public class FixtureSetup
         config["Target:Password"] = password;
         foreach (var prop in mysqlProps)
             config[$"Target:ConnectionProperties:{prop.Key}"] = prop.Value;
+        // Product-side connections the quench opens per target DB are non-pooled too (same ceiling reason).
+        config["Target:ConnectionProperties:Pooling"] = "false";
         config["ScriptTokens:MainDB"] = _integrationMainDb;
         config["ScriptTokens:SecondaryDB"] = _integrationSecondaryDb;
 

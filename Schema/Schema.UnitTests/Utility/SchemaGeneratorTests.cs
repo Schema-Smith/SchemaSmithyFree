@@ -370,6 +370,148 @@ public class SchemaGeneratorTests
         Assert.That(merged["properties"]?["Extensions"], Is.Not.Null);
     }
 
+    // --- MergeExtensionsDefinition: deep-level preservation (every Extensions-bearing component) ---
+
+    // A user edits a regenerated .schema file, tightening the open Extensions bag into a governance
+    // fragment. On the next regeneration the fragment must survive at EVERY level it was authored,
+    // not just the table root. These build the "existing on-disk" schema by cloning the generated
+    // shape and injecting a distinctively-marked fragment, exactly as a round-trip would produce.
+
+    // SQL Server checks use the base CheckConstraint (no SqlServerCheckConstraint subclass); the base
+    // still carries Extensions via DynamicBase, so it exercises the check-constraint level fine.
+    private static readonly Func<Type, Type> FullSsResolver = SubclassResolver(
+        column: typeof(SqlServerColumn),
+        index: typeof(SqlServerIndex),
+        foreignKey: typeof(SqlServerForeignKey));
+
+    private static JObject Frag(string marker) => new()
+    {
+        ["type"] = "object",
+        ["required"] = new JArray(marker),
+        ["properties"] = new JObject { [marker] = new JObject { ["type"] = "string" } }
+    };
+
+    private static void InjectAtItems(JObject schema, string collection, JObject frag) =>
+        ((JObject)schema["properties"]![collection]!["items"]!["properties"]!)["Extensions"] = frag;
+
+    private static void AssertFrag(JToken ext, string marker)
+    {
+        Assert.That(ext, Is.Not.Null, $"Extensions fragment marked '{marker}' should be preserved");
+        Assert.That(ext!["required"]?[0]?.ToString(), Is.EqualTo(marker));
+        Assert.That(ext["properties"]?[marker], Is.Not.Null);
+    }
+
+    [Test]
+    public void MergeExtensions_PreservesColumnLevelFragment()
+    {
+        var generated = SchemaGenerator.GenerateSchema(typeof(SqlServerTable), FullSsResolver);
+        var existing = (JObject)generated.DeepClone();
+        InjectAtItems(existing, "Columns", Frag("Classification"));
+
+        var merged = SchemaGenerator.MergeExtensionsDefinition(generated, existing);
+
+        AssertFrag(merged["properties"]?["Columns"]?["items"]?["properties"]?["Extensions"], "Classification");
+    }
+
+    [Test]
+    public void MergeExtensions_PreservesIndexLevelFragment()
+    {
+        var generated = SchemaGenerator.GenerateSchema(typeof(SqlServerTable), FullSsResolver);
+        var existing = (JObject)generated.DeepClone();
+        InjectAtItems(existing, "Indexes", Frag("IndexGov"));
+
+        var merged = SchemaGenerator.MergeExtensionsDefinition(generated, existing);
+
+        AssertFrag(merged["properties"]?["Indexes"]?["items"]?["properties"]?["Extensions"], "IndexGov");
+    }
+
+    [Test]
+    public void MergeExtensions_PreservesForeignKeyLevelFragment()
+    {
+        var generated = SchemaGenerator.GenerateSchema(typeof(SqlServerTable), FullSsResolver);
+        var existing = (JObject)generated.DeepClone();
+        InjectAtItems(existing, "ForeignKeys", Frag("FkGov"));
+
+        var merged = SchemaGenerator.MergeExtensionsDefinition(generated, existing);
+
+        AssertFrag(merged["properties"]?["ForeignKeys"]?["items"]?["properties"]?["Extensions"], "FkGov");
+    }
+
+    [Test]
+    public void MergeExtensions_PreservesCheckConstraintLevelFragment()
+    {
+        var generated = SchemaGenerator.GenerateSchema(typeof(SqlServerTable), FullSsResolver);
+        var existing = (JObject)generated.DeepClone();
+        InjectAtItems(existing, "CheckConstraints", Frag("CheckGov"));
+
+        var merged = SchemaGenerator.MergeExtensionsDefinition(generated, existing);
+
+        AssertFrag(merged["properties"]?["CheckConstraints"]?["items"]?["properties"]?["Extensions"], "CheckGov");
+    }
+
+    [Test]
+    public void MergeExtensions_PreservesStatisticLevelFragment()
+    {
+        var generated = SchemaGenerator.GenerateSchema(typeof(SqlServerTable), FullSsResolver);
+        var existing = (JObject)generated.DeepClone();
+        InjectAtItems(existing, "Statistics", Frag("StatGov"));
+
+        var merged = SchemaGenerator.MergeExtensionsDefinition(generated, existing);
+
+        AssertFrag(merged["properties"]?["Statistics"]?["items"]?["properties"]?["Extensions"], "StatGov");
+    }
+
+    [Test]
+    public void MergeExtensions_PreservesFullTextIndexFragment_BothOneOfBranches()
+    {
+        // FullTextIndex is SingleOrArray -> a oneOf wrapper; the fragment lives on both the
+        // single-object branch and the array-items branch after a round-trip.
+        var generated = SchemaGenerator.GenerateSchema(typeof(SqlServerTable), FullSsResolver);
+        var existing = (JObject)generated.DeepClone();
+        var ftOneOf = (JArray)existing["properties"]!["FullTextIndex"]!["oneOf"]!;
+        ((JObject)ftOneOf[0]!["properties"]!)["Extensions"] = Frag("FtObj");
+        ((JObject)ftOneOf[1]!["items"]!["properties"]!)["Extensions"] = Frag("FtArr");
+
+        var merged = SchemaGenerator.MergeExtensionsDefinition(generated, existing);
+
+        var mergedOneOf = (JArray)merged["properties"]!["FullTextIndex"]!["oneOf"]!;
+        AssertFrag(mergedOneOf[0]["properties"]?["Extensions"], "FtObj");
+        AssertFrag(mergedOneOf[1]["items"]?["properties"]?["Extensions"], "FtArr");
+    }
+
+    [Test]
+    public void MergeExtensions_PreservesMultipleLevelsSimultaneously_NoCrossContamination()
+    {
+        var generated = SchemaGenerator.GenerateSchema(typeof(SqlServerTable), FullSsResolver);
+        var existing = (JObject)generated.DeepClone();
+        ((JObject)existing["properties"]!)["Extensions"] = Frag("TableGov");
+        InjectAtItems(existing, "Columns", Frag("ColGov"));
+        InjectAtItems(existing, "Indexes", Frag("IdxGov"));
+
+        var merged = SchemaGenerator.MergeExtensionsDefinition(generated, existing);
+
+        AssertFrag(merged["properties"]?["Extensions"], "TableGov");
+        AssertFrag(merged["properties"]?["Columns"]?["items"]?["properties"]?["Extensions"], "ColGov");
+        AssertFrag(merged["properties"]?["Indexes"]?["items"]?["properties"]?["Extensions"], "IdxGov");
+        // A level with no authored fragment must stay the empty generated bag — nothing leaks across levels.
+        var fkExt = merged["properties"]?["ForeignKeys"]?["items"]?["properties"]?["Extensions"];
+        Assert.That(fkExt, Is.Not.Null);
+        Assert.That(fkExt!["required"], Is.Null, "FK Extensions had no fragment; must stay empty");
+    }
+
+    [Test]
+    public void MergeExtensions_ExistingWithoutDeepFragments_LeavesGeneratedEmpty()
+    {
+        var generated = SchemaGenerator.GenerateSchema(typeof(SqlServerTable), FullSsResolver);
+        var existing = (JObject)generated.DeepClone(); // no fragments injected anywhere
+
+        var merged = SchemaGenerator.MergeExtensionsDefinition(generated, existing);
+
+        var colExt = merged["properties"]?["Columns"]?["items"]?["properties"]?["Extensions"] as JObject;
+        Assert.That(colExt, Is.Not.Null);
+        Assert.That(colExt!.Count, Is.EqualTo(0), "empty Extensions bag stays empty");
+    }
+
     // --- Test helper classes ---
     private class SimpleStringClass { public string Name { get; set; } }
     private class BoolClass { public bool IsActive { get; set; } }
