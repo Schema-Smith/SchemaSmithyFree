@@ -1,0 +1,14 @@
+{
+  "Schema": "public",
+  "Name": "customer",
+  "Extensions": { "OwningTeam": "Identity" },
+  "Columns": [
+    { "Name": "customer_id", "DataType": "integer", "Extensions": { "DataClassification": "Internal" } },
+    { "Name": "email", "DataType": "varchar(256)", "Extensions": { "DataClassification": "PII" } },
+    { "Name": "ssn", "DataType": "char(11)", "Extensions": { "DataClassification": "PII" } },
+    { "Name": "display_name", "DataType": "varchar(128)", "Extensions": { "DataClassification": "Internal" } }
+  ],
+  "Indexes": [
+    { "Name": "pk_customer", "PrimaryKey": true, "IndexColumns": "customer_id" }
+  ]
+}

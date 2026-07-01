@@ -1,0 +1,14 @@
+{
+  "Schema": "public",
+  "Name": "account",
+  "Extensions": { "OwningTeam": "Billing" },
+  "Columns": [
+    { "Name": "account_id", "DataType": "integer", "Extensions": { "DataClassification": "Internal" } },
+    { "Name": "customer_id", "DataType": "integer", "Extensions": { "DataClassification": "Internal" } },
+    { "Name": "balance", "DataType": "numeric(19,4)", "Extensions": { "DataClassification": "Financial" } },
+    { "Name": "opened_utc", "DataType": "timestamptz", "Extensions": { "DataClassification": "Internal" } }
+  ],
+  "Indexes": [
+    { "Name": "pk_account", "PrimaryKey": true, "IndexColumns": "account_id" }
+  ]
+}
