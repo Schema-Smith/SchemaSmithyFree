@@ -1,0 +1,12 @@
+{
+  "Name": "Shop",
+  "ValidationScript": "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = '{{DependencyDb}}') AND CAST(SUBSTRING_INDEX(VERSION(), '.', 1) AS UNSIGNED) >= 8",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {
+    "DependencyDb": "shop_tenant_a"
+  },
+  "ScriptFolders": [],
+  "Platform": "MySQL"
+}

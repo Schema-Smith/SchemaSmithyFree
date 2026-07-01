@@ -1,0 +1,11 @@
+{
+  "Schema": "dbo",
+  "Name": "LabWidget",
+  "Columns": [
+    { "Name": "WidgetId", "DataType": "INT" },
+    { "Name": "Name", "DataType": "NVARCHAR(100)" }
+  ],
+  "Indexes": [
+    { "Name": "PK_LabWidget", "PrimaryKey": true, "IndexColumns": "WidgetId" }
+  ]
+}

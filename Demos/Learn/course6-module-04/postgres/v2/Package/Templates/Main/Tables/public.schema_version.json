@@ -1,0 +1,11 @@
+{
+  "Schema": "public",
+  "Name": "schema_version",
+  "Columns": [
+    { "Name": "product", "DataType": "text" },
+    { "Name": "version", "DataType": "integer" }
+  ],
+  "Indexes": [
+    { "Name": "pk_schema_version", "PrimaryKey": true, "IndexColumns": "product" }
+  ]
+}

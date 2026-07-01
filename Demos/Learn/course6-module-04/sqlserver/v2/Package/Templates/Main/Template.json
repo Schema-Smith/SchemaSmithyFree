@@ -1,0 +1,7 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] LIKE 'shop_tenant_%'",
+  "BaselineValidationScript": "SELECT CAST(CASE WHEN OBJECT_ID('dbo.SchemaVersion') IS NULL THEN 1 WHEN COALESCE((SELECT MAX(Version) FROM dbo.SchemaVersion WHERE Product = 'Shop'), 0) <= 2 THEN 1 ELSE 0 END AS BIT)",
+  "VersionStampScript": "MERGE dbo.SchemaVersion AS t USING (SELECT 'Shop' AS Product, 2 AS Version) AS s ON t.Product = s.Product WHEN MATCHED THEN UPDATE SET Version = s.Version WHEN NOT MATCHED THEN INSERT (Product, Version) VALUES (s.Product, s.Version);",
+  "ScriptTokens": {}
+}

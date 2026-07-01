@@ -1,0 +1,12 @@
+{
+  "Name": "Shop",
+  "ValidationScript": "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = '{{DependencyDb}}') AND current_setting('server_version_num')::int >= 150000",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {
+    "DependencyDb": "shop_tenant_a"
+  },
+  "ScriptFolders": [],
+  "Platform": "PostgreSQL"
+}

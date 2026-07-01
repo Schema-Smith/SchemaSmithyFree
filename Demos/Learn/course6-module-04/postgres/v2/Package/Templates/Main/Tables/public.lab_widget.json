@@ -1,0 +1,11 @@
+{
+  "Schema": "public",
+  "Name": "lab_widget",
+  "Columns": [
+    { "Name": "widget_id", "DataType": "integer" },
+    { "Name": "name", "DataType": "varchar(100)" }
+  ],
+  "Indexes": [
+    { "Name": "pk_lab_widget", "PrimaryKey": true, "IndexColumns": "widget_id" }
+  ]
+}
