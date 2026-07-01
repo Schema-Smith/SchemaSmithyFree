@@ -1,7 +1,10 @@
 {
   "Name": "IdentityService",
+  "ValidationScript": "",
   "MinimumVersion": "2019",
-  "TemplateOrder": ["Main"],
+  "TemplateOrder": [
+    "Main"
+  ],
   "ScriptTokens": {},
   "ScriptFolders": [],
   "Platform": "SqlServer"
