@@ -14,7 +14,7 @@ This lab ships two package versions per engine — `v1/` and `v2/` — that diff
 - **Template `BaselineValidationScript`** (in `Template.json`) runs per target database, before that database's quench. It reads a **version registry** and passes only when the stamped version is at or below what this package expects (v1 requires ≤ 1, v2 requires ≤ 2). A falsy result aborts that database with `Invalid baseline for this release`.
 - **Template `VersionStampScript`** runs per database after a successful quench and records this package's version into the registry.
 
-The **version registry** (`SchemaVersion` / `schema_version`) is standing infrastructure — provisioned once when the database is stood up, *not* shipped inside the versioned package. Every release reads it (baseline) and writes it (stamp). This is why the lab provisions it in *Before you start*, and why the package itself manages only the business table (`LabWidget`).
+The **version registry** (`SchemaVersion` / `schema_version`) is standing infrastructure — provisioned once when the database is stood up, *not* shipped inside the versioned package. Every release reads it (baseline) and writes it (stamp). This is why the lab provisions it in *Before you start*, and why the package itself manages only the business table (`LabWidget`) — there is deliberately no `SchemaVersion` table file in the package, so it won't appear in your editor's package view.
 
 ## Before you start
 
@@ -97,6 +97,8 @@ UPDATE dbo.SchemaVersion SET Version = 1 WHERE Product = 'Shop';
 UPDATE dbo.SchemaVersion SET Version = 2 WHERE Product = 'Shop';
 ```
 
+(PostgreSQL: `UPDATE public.schema_version SET version = … WHERE product = 'Shop';`. MySQL: `UPDATE schema_version SET version = … WHERE product = 'Shop';`.)
+
 Run v1 across the fleet. `shop_tenant_a` aborts (`Invalid baseline for this release`) while `shop_tenant_b` and `shop_tenant_c` pass and re-stamp. The run continues past the blocked tenant and reports the failure; exit code 2. The gate is evaluated independently for each database.
 
 ## Scenario 6 — the same gates at product scope (note)
@@ -108,8 +110,8 @@ Run v1 across the fleet. `shop_tenant_a` aborts (`Invalid baseline for this rele
 To return to a clean first-deploy state:
 
 1. Re-run `course6-setup` (re-seeds the Shop tables).
-2. **Empty the version registry** — `course6-setup` does not touch it: `DELETE FROM dbo.SchemaVersion;` (and the PostgreSQL / MySQL equivalents) in each tenant, or drop and re-create it per *Before you start*.
-3. **Clear the checkpoint cache** — delete the `schemaquench-checkpoints` directory in your temp folder. SchemaQuench keeps per-run checkpoints there; if a database is reset out from under a checkpoint, the next run may skip steps it believes are already done.
+2. **Empty the version registry** — `course6-setup` does not touch it. In each tenant: `DELETE FROM dbo.SchemaVersion;` (SQL Server), `DELETE FROM public.schema_version;` (PostgreSQL), or `DELETE FROM schema_version;` (MySQL) — or drop and re-create it per *Before you start*.
+3. **Clear the checkpoint cache** — delete the `schemaquench-checkpoints` directory in your temp folder (`%TEMP%\schemaquench-checkpoints` on Windows, `$TMPDIR/schemaquench-checkpoints` or `/tmp/schemaquench-checkpoints` on macOS/Linux). SchemaQuench keeps per-run checkpoints there; if a database is reset out from under a checkpoint, the next run may skip steps it believes are already done.
 
 ## Cross-platform
 
