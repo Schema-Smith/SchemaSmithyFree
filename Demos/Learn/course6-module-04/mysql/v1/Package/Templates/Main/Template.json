@@ -1,7 +1,7 @@
 {
   "Name": "Main",
   "DatabaseIdentificationScript": "SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop_tenant_%'",
-  "BaselineValidationScript": "SELECT CASE WHEN (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'schema_version') = 0 THEN 1 WHEN COALESCE((SELECT MAX(version) FROM schema_version WHERE product = 'Shop'), 0) <= 1 THEN 1 ELSE 0 END",
+  "BaselineValidationScript": "SELECT COALESCE((SELECT MAX(version) FROM schema_version WHERE product = 'Shop'), 0) <= 1",
   "VersionStampScript": "INSERT INTO schema_version (product, version) VALUES ('Shop', 1) ON DUPLICATE KEY UPDATE version = VALUES(version)",
   "ScriptTokens": {}
 }

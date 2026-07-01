@@ -1,7 +1,7 @@
 {
   "Name": "Main",
   "DatabaseIdentificationScript": "SELECT datname FROM pg_database WHERE datname LIKE 'shop_tenant_%'",
-  "BaselineValidationScript": "SELECT CASE WHEN to_regclass('public.schema_version') IS NULL THEN true WHEN COALESCE((SELECT MAX(version) FROM public.schema_version WHERE product = 'Shop'), 0) <= 1 THEN true ELSE false END",
+  "BaselineValidationScript": "SELECT COALESCE((SELECT MAX(version) FROM public.schema_version WHERE product = 'Shop'), 0) <= 1",
   "VersionStampScript": "INSERT INTO public.schema_version (product, version) VALUES ('Shop', 1) ON CONFLICT (product) DO UPDATE SET version = EXCLUDED.version",
   "ScriptTokens": {}
 }

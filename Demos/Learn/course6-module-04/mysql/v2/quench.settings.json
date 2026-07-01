@@ -6,5 +6,7 @@
     "Password": "Learn!Passw0rd",
     "ConnectionProperties": {}
   },
-  "SchemaPackagePath": "./Package"
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./Package",
+  "KindleTheForge": true
 }
