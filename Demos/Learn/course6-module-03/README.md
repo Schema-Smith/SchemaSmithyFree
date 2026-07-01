@@ -68,6 +68,8 @@ Regenerate the schemas (database-free):
 SmithySettings_Product__Path="$(pwd)/sqlserver/Package" schematongs --WriteSchemasOnly
 ```
 
+(Run the equivalent for the `postgres/Package` and `mysql/Package` directories to regenerate those engines.)
+
 The **table-level** `Extensions` fragment survives the round-trip — your `OwningTeam` rule is still enforced. The **column-level** fragment is not yet preserved across regeneration (SchemaSmith [#320](https://github.com/Schema-Smith/SchemaSmith/issues/320)); re-apply it after regenerating until that fix ships in a released CLI. Table-level governance is regeneration-safe today; column-level governance is enforced at pull-request time today and becomes regeneration-safe once #320 releases.
 
 ## Scenario 5 — wire it into CI

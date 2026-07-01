@@ -27,9 +27,21 @@ jobs:
           - name: sqlserver-tables
             schema: sqlserver/Package/.json-schemas/tables.sqlserver.schema
             files: sqlserver/Package/Templates/**/Tables/**/*.json
+          - name: postgres-product
+            schema: postgres/Package/.json-schemas/products.postgresql.schema
+            files: postgres/Package/Product.json
+          - name: postgres-templates
+            schema: postgres/Package/.json-schemas/templates.postgresql.schema
+            files: postgres/Package/Templates/*/Template.json
           - name: postgres-tables
             schema: postgres/Package/.json-schemas/tables.postgresql.schema
             files: postgres/Package/Templates/**/Tables/**/*.json
+          - name: mysql-product
+            schema: mysql/Package/.json-schemas/products.mysql.schema
+            files: mysql/Package/Product.json
+          - name: mysql-templates
+            schema: mysql/Package/.json-schemas/templates.mysql.schema
+            files: mysql/Package/Templates/*/Template.json
           - name: mysql-tables
             schema: mysql/Package/.json-schemas/tables.mysql.schema
             files: mysql/Package/Templates/**/Tables/**/*.json
