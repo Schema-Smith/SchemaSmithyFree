@@ -25,6 +25,13 @@
 		<ProjectReference Include="..\Schema\Schema.csproj" />
 	</ItemGroup>
 
+	<!-- NJsonSchema (MIT) — SchemaQuench only, for the Validate JSON-schema lint check.
+	     Deliberately NOT referenced from Schema.csproj (keeps it out of the SchemaSmith.Schema
+	     NuGet consumed by SchemaForge). -->
+	<ItemGroup>
+		<PackageReference Include="NJsonSchema" />
+	</ItemGroup>
+
 	<!-- Bundle ICU into self-contained Linux publish output so the CLI works on minimal
 	     containers (ubuntu:24.04, fedora:latest) without system libicu. Linux-only:
 	     setting AppLocalIcu unconditionally forces app-local lookup on every host,

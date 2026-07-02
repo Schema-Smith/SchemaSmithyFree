@@ -16,6 +16,7 @@ public static class ValidationCheckRegistry
     {
         new DuplicationCheck(),
         new CoherenceCheck(),
-        new TokenCheck()
+        new TokenCheck(),
+        new JsonSchemaCheck()
     };
 }
