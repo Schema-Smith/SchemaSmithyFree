@@ -1,0 +1,14 @@
+{
+  "Target": {
+    "Server": "localhost,11433",
+    "User": "sa",
+    "Password": "Learn!Passw0rd",
+    "ConnectionProperties": { "TrustServerCertificate": "True" },
+    "TemplateTargets": {
+      "Main": { "Databases": [ "fleet_tenant_001", "fleet_tenant_006" ], "CreateIfMissing": true }
+    }
+  },
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./Package",
+  "KindleTheForge": true
+}
