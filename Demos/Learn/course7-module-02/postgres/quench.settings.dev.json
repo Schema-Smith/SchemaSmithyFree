@@ -1,0 +1,15 @@
+{
+  "Target": {
+    "Server": "localhost",
+    "Port": "15432",
+    "User": "postgres",
+    "Password": "Learn!Passw0rd",
+    "ConnectionProperties": {},
+    "TemplateTargets": {
+      "Main": { "Databases": [ "fleet_tenant_001", "fleet_tenant_002" ] }
+    }
+  },
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./Package",
+  "KindleTheForge": true
+}
