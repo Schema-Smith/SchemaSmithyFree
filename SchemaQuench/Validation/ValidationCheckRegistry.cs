@@ -14,6 +14,7 @@ public static class ValidationCheckRegistry
 {
     public static IReadOnlyList<ISchemaCheck> Default() => new List<ISchemaCheck>
     {
-        new DuplicationCheck()
+        new DuplicationCheck(),
+        new CoherenceCheck()
     };
 }
