@@ -158,11 +158,11 @@ By default, SchemaShears suppresses all recognized drop categories. The emitted 
 
 This is the correct posture for a patch: deploy what's in scope, leave everything else alone.
 
-### Enforcement today
+### Enforcement
 
-**Table-drop suppression (`DropTablesRemovedFromProduct: false`) is active now** -- SchemaQuench enforces it in the current release. A table absent from the patch will not be dropped.
+**All seven stamped flags are enforced.** As of v2.2.0, SchemaQuench's drop-control covers every category SchemaShears suppresses: a table absent from the patch is not dropped, and on the tables the patch does include, columns, foreign keys, check constraints, exclude constraints, and statistics that exist in the target but not in the table JSON are preserved -- along with out-of-band indexes (`DropUnknownIndexes` stays `false`). See the per-flag sections in the [SchemaQuench Reference](schemaquench.md#droptablesremovedfromproduct) for exact semantics.
 
-The remaining per-type flags (`DropColumnsRemovedFromProduct`, `DropUnknownIndexes`, and so on) are written into the emitted `Product.json` **forward-compatibly**. They take effect as SchemaQuench's per-type drop-control rolls out. The user promise is: _a patch won't drop objects you didn't include_; the table-drop guard is the active enforcement today, and the per-type guards extend that protection as SchemaQuench gains per-type drop-control.
+The user promise is: _a patch won't drop objects you didn't include_ -- unless you explicitly re-enable a category with `--AllowDrops`.
 
 ### Selectively re-enabling drops
 
