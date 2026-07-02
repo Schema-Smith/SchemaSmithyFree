@@ -40,7 +40,8 @@ schemaquench --ConfigFile:quench.settings.skip.json
 ```
 
 `001` deploys; `006` is skipped with that line and **not created**. The default never conjures a database
-you didn't ask for.
+you didn't ask for. (On PostgreSQL and MySQL the line is identical but for the host prefix — `[localhost]`
+without a port.)
 
 ## Step 2: Dry-run before you let it create anything
 
@@ -93,7 +94,8 @@ the roster, quench, done.
 schemaquench --ConfigFile:quench.settings.onboard.json
 ```
 
-No `Creating database` line this time. SchemaSmith's create is `IF NOT EXISTS` under the hood (a real
+No `Creating database` line this time — `006` already exists and is already in shape, so the whole roster
+comes back a no-op alongside `001`. SchemaSmith's create is `IF NOT EXISTS` under the hood (a real
 existence check on PostgreSQL), so a tenant that already exists is left exactly as-is. `CreateIfMissing`
 is safe to leave on permanently — it only ever fills gaps.
 
@@ -116,8 +118,16 @@ differs by engine:
 | PostgreSQL | `postgres` | `CREATEDB` | `42501: permission denied to create database` |
 | MySQL | `information_schema` | `CREATE` | `Access denied … to database 'fleet_tenant_006'` |
 
+The message shape is identical on all three engines — only the admin-database name and the underlying
+error differ (the last two columns above). On PostgreSQL you'll see `… admin database (postgres).
+Underlying error: 42501: permission denied to create database`; on MySQL `… admin database
+(information_schema). Underlying error: Access denied … to database 'fleet_tenant_006'`.
+
 A reader/writer principal without the create right lands here — with a message that names the database and
-the missing privilege, not a mystery failure.
+the missing privilege, not a mystery failure. The deploy account needs rights for *every* action the tool
+takes, reads included: it validates the server by querying the catalog before it provisions anything, so
+an account too restricted to even read the fleet fails at that earlier gate. The principal shown here can
+read the fleet but can't create — the realistic reader-without-`CREATE` case.
 
 ## Step 6: Do it on PostgreSQL and MySQL
 
