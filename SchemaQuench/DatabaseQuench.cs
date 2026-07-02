@@ -386,13 +386,17 @@ public class DatabaseQuench
                 }
 
                 // Step: Kindle the forge
+                // Intentionally NOT wrapped in `_checkpointing.Track` — mirrors the
+                // MissingTablesAndColumns un-wrap below. KindleForge is cheap and
+                // self-verifying (ForgeKindler compares the in-DB KindleStamp and no-ops when
+                // current), so it must always run. A checkpoint-skip here would mean a target
+                // database reset out-of-band (helpers/stamp dropped) but resumed against a
+                // stale checkpoint never gets its helpers reinstalled, surfacing later as
+                // "SchemaSmith_ParseTableJson does not exist" instead of a clear kindle.
                 if (!_suppressKindling)
                 {
-                    _checkpointing.Track(DbScope, "KindleForge", () =>
-                    {
-                        SafeProgressLog("  Kindling the forge");
-                        ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform, _forceReKindle);
-                    });
+                    SafeProgressLog("  Kindling the forge");
+                    ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform, _forceReKindle);
                 }
 
                 // Step: Validate baseline. Resolved against per-iteration tokens (BaselineValidationScript
