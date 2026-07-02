@@ -10,10 +10,13 @@ using SchemaQuench.Validation.Checks;
 namespace SchemaQuench.UnitTests.Validation.Checks;
 
 /// <summary>
-/// Slice 2.2: cross-object coherence (FK/index/ambiguity). Structural reference checks only —
-/// no type comparisons, no DeleteAction/UpdateAction checks (out of scope; those belong to
-/// JSON-schema lint). Covers FK local-column, related-table resolution (incl. schema defaulting
-/// and cross-schema ambiguity), related-column, cardinality, and index-column existence.
+/// Slice 2.2: cross-object coherence (FK/index). Structural reference checks only — no type
+/// comparisons, no DeleteAction/UpdateAction checks (out of scope; those belong to JSON-schema
+/// lint). Covers FK local-column, related-table resolution (incl. schema defaulting),
+/// related-column, cardinality, and index-column existence. No ambiguity check: FK targets always
+/// resolve to a concrete schema post schema-resolution (SchemaDefaultResolver.
+/// ResolveRelatedTableSchema runs inside Template.Load), so an unqualified reference is never
+/// actually ambiguous — it either resolves-and-exists (fine) or resolves-and-missing (SS-FK-002).
 /// </summary>
 [TestFixture]
 public class CoherenceCheckTests
@@ -100,35 +103,6 @@ public class CoherenceCheckTests
         Assert.That(findings, Has.Exactly(1).Items);
         Assert.That(findings[0].Severity, Is.EqualTo(Severity.Error));
         Assert.That(findings[0].Code, Is.EqualTo("SS-FK-002"));
-        Assert.That(findings[0].Category, Is.EqualTo("Coherence"));
-    }
-
-    [Test]
-    public void FkRelatedTableAmbiguousAcrossSchemas_IsError()
-    {
-        var order = new SqlServerTable
-        {
-            Name = "Order",
-            Schema = "dbo",
-            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" }, new SqlServerColumn { Name = "CustomerId", DataType = "int" } },
-            ForeignKeys =
-            {
-                new SqlServerForeignKey
-                {
-                    Name = "FK_Order_Customer",
-                    Columns = "CustomerId",
-                    RelatedTable = "Customer", // unqualified — no RelatedTableSchema, no dot prefix
-                    RelatedColumns = "Id"
-                }
-            }
-        };
-        var ctx = Context(TemplateWithTables("Main", order, Customer("dbo")), TemplateWithTables("Sales", Customer("sales")));
-
-        var findings = new CoherenceCheck().Run(ctx).ToList();
-
-        Assert.That(findings, Has.Exactly(1).Items);
-        Assert.That(findings[0].Severity, Is.EqualTo(Severity.Error));
-        Assert.That(findings[0].Code, Is.EqualTo("SS-FK-003"));
         Assert.That(findings[0].Category, Is.EqualTo("Coherence"));
     }
 
@@ -324,8 +298,38 @@ public class CoherenceCheckTests
     [Test]
     public void CleanPackage_NoFindings()
     {
-        var pkg = ValidationTestPackages.Minimal(Platform.SqlServer);
-        var ctx = new ValidationContext(pkg.Product, pkg.Templates, "pkg");
+        // A real, populated package — a table with a valid FK (local + related columns present,
+        // cardinality matching) AND a valid index — proving every remaining check is satisfied
+        // together, not just vacuously on an FK/index-free table.
+        var customer = new SqlServerTable
+        {
+            Name = "Customer",
+            Schema = "dbo",
+            Columns =
+            {
+                new SqlServerColumn { Name = "Id", DataType = "int" },
+                new SqlServerColumn { Name = "Name", DataType = "nvarchar" }
+            },
+            Indexes = { new SqlServerIndex { Name = "IX_Customer_Name", IndexColumns = "Name" } }
+        };
+        var order = new SqlServerTable
+        {
+            Name = "Order",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" }, new SqlServerColumn { Name = "CustomerId", DataType = "int" } },
+            ForeignKeys =
+            {
+                new SqlServerForeignKey
+                {
+                    Name = "FK_Order_Customer",
+                    Columns = "CustomerId",
+                    RelatedTable = "Customer",
+                    RelatedTableSchema = "dbo",
+                    RelatedColumns = "Id"
+                }
+            }
+        };
+        var ctx = Context(TemplateWithTables("Main", order, customer));
 
         var findings = new CoherenceCheck().Run(ctx).ToList();
 

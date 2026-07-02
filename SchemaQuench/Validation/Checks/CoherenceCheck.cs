@@ -11,16 +11,15 @@ namespace SchemaQuench.Validation.Checks;
 
 /// <summary>
 /// Structural cross-object reference checks the JSON schema can't express: FK local/related
-/// columns, related-table resolution (incl. schema defaulting and cross-schema ambiguity), FK
-/// column-count cardinality, and index-column existence. Deliberately NO type-agreement checks
-/// and NO DeleteAction/UpdateAction checks — those are out of scope for this check (see task
-/// brief); they belong to JSON-schema lint or a future slice.
+/// columns, related-table resolution (incl. schema defaulting), FK column-count cardinality, and
+/// index-column existence. Deliberately NO type-agreement checks and NO DeleteAction/UpdateAction
+/// checks — those are out of scope for this check (see task brief); they belong to JSON-schema
+/// lint or a future slice.
 /// </summary>
 public sealed class CoherenceCheck : ISchemaCheck
 {
     private const string LocalColumnCode = "SS-FK-001";
     private const string RelatedTableCode = "SS-FK-002";
-    private const string AmbiguousRelatedTableCode = "SS-FK-003";
     private const string RelatedColumnCode = "SS-FK-004";
     private const string CardinalityCode = "SS-FK-005";
     private const string IndexColumnCode = "SS-IDX-001";
@@ -36,19 +35,13 @@ public sealed class CoherenceCheck : ISchemaCheck
             .GroupBy(t => TableKey(t))
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Unqualified-name ambiguity is a cross-schema concept: how many DISTINCT schemas does
-        // this bare name appear in at all, regardless of which (schema,name) group it lands in.
-        var schemasByName = ctx.AllTables
-            .GroupBy(t => t.Name?.Trim().ToLowerInvariant() ?? "")
-            .ToDictionary(g => g.Key, g => g.Select(t => NormalizedSchema(t)).Distinct().ToList());
-
         var findings = new List<Finding>();
         foreach (var template in ctx.Templates)
         foreach (var table in template.Tables)
         {
             var location = $"Template '{template.Name}' / Table '{table.Name}'";
             foreach (var fk in table.ForeignKeys)
-                findings.AddRange(CheckForeignKey(table, fk, location, tablesByKey, schemasByName));
+                findings.AddRange(CheckForeignKey(table, fk, location, tablesByKey));
 
             foreach (var index in table.Indexes)
                 findings.AddRange(CheckIndex(table, index, location));
@@ -61,8 +54,7 @@ public sealed class CoherenceCheck : ISchemaCheck
         Table table,
         ForeignKey fk,
         string tableLocation,
-        IReadOnlyDictionary<(string Schema, string Name), List<Table>> tablesByKey,
-        IReadOnlyDictionary<string, List<string>> schemasByName)
+        IReadOnlyDictionary<(string Schema, string Name), List<Table>> tablesByKey)
     {
         var location = $"{tableLocation} / FK '{fk.Name}'";
         var localColumnNames = ColumnNames(table);
@@ -82,14 +74,7 @@ public sealed class CoherenceCheck : ISchemaCheck
             yield return new Finding(Severity.Error, CardinalityCode, Category, location,
                 $"{location}: Columns has {fkColumns.Count} entries but RelatedColumns has {fkRelatedColumns.Count} — FK column lists must be the same length.");
 
-        var (schema, name, wasUnqualified) = ResolveRelatedTarget(table, fk);
-
-        if (wasUnqualified && schemasByName.TryGetValue(name, out var schemas) && schemas.Count > 1)
-        {
-            yield return new Finding(Severity.Error, AmbiguousRelatedTableCode, Category, location,
-                $"{location}: RelatedTable '{fk.RelatedTable}' is unqualified and ambiguous — it exists in {schemas.Count} different schemas ({string.Join(", ", schemas)}); qualify it with a schema.");
-            yield break;
-        }
+        var (schema, name) = ResolveRelatedTarget(table, fk);
 
         if (!tablesByKey.TryGetValue((schema, name), out var relatedTables))
         {
@@ -125,14 +110,16 @@ public sealed class CoherenceCheck : ISchemaCheck
     }
 
     /// <summary>
-    /// Resolves a FK's target (schema, name) plus whether the reference was fully unqualified
-    /// (no RelatedTableSchema AND no "schema." prefix on RelatedTable — the only shape ambiguity
-    /// applies to). Schema precedence: RelatedTableSchema (SS/PG platform property) if set, else
-    /// a "schema." prefix parsed off RelatedTable, else the OWNING table's schema — this last
+    /// Resolves a FK's target (schema, name). Schema precedence: RelatedTableSchema (SS/PG
+    /// platform property — SchemaDefaultResolver.ResolveRelatedTableSchema always fills this
+    /// during Template.Load with a concrete schema, so it's never ambiguous) if set, else a
+    /// "schema." prefix parsed off RelatedTable, else the OWNING table's schema — this last
     /// default is what makes an unqualified same-schema reference work, including inside a
-    /// schema template where every table's schema is the same "{{SchemaName}}" token.
+    /// schema template where every table's schema is the same "{{SchemaName}}" token. On MySQL,
+    /// RelatedTableSchema is always null and MySqlTable.Schema is always null, so resolution
+    /// collapses to Name-only identity — consistent with the (schema,name) table lookup.
     /// </summary>
-    private static (string Schema, string Name, bool WasUnqualified) ResolveRelatedTarget(Table owningTable, ForeignKey fk)
+    private static (string Schema, string Name) ResolveRelatedTarget(Table owningTable, ForeignKey fk)
     {
         var relatedTableSchema = (fk as IDeliverableForeignKey)?.RelatedTableSchema;
         var hasExplicitSchemaProperty = !string.IsNullOrEmpty(relatedTableSchema);
@@ -146,9 +133,7 @@ public sealed class CoherenceCheck : ISchemaCheck
         var schema = hasExplicitSchemaProperty ? relatedTableSchema
             : prefixSchema ?? NormalizedSchema(owningTable);
 
-        var wasUnqualified = !hasExplicitSchemaProperty && !hasDotPrefix;
-
-        return (schema.Trim().ToLowerInvariant(), name, wasUnqualified);
+        return (schema.Trim().ToLowerInvariant(), name);
     }
 
     // IDeliverableTable.Schema is resolved uniformly across platforms (SchemaDefaultResolver
