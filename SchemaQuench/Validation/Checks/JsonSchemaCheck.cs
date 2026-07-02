@@ -37,10 +37,11 @@ namespace SchemaQuench.Validation.Checks;
 /// (an authored <c>enum</c>/<c>required</c> fragment) is enforced automatically because Pass 2
 /// validates against the COMMITTED file, not a freshly generated one.
 /// </para>
-/// The file/type/platform mapping and domain-type resolution mirror
-/// <see cref="Schema.Utility.RepositoryHelper"/>'s private <c>GetSchemaFileNames</c> /
-/// <c>GetTypeForSchemaFile</c> / <c>PlatformElementResolver</c> — duplicated here rather than
-/// exposed from <c>Schema/</c>, which this check must not modify.
+/// The file/type/platform mapping uses the public
+/// <see cref="Schema.Utility.RepositoryHelper.GetSchemaFileNames(Platform)"/> directly. The
+/// domain-type resolution mirrors <c>RepositoryHelper</c>'s private <c>GetTypeForSchemaFile</c> /
+/// <c>PlatformElementResolver</c> — duplicated here rather than exposed from <c>Schema/</c>,
+/// which this check must not modify.
 /// </summary>
 public sealed class JsonSchemaCheck : ISchemaCheck
 {
@@ -61,7 +62,7 @@ public sealed class JsonSchemaCheck : ISchemaCheck
         var staleTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var schemaByType = new Dictionary<string, JsonSchema>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var fileName in GetSchemaFileNames(ctx.Platform))
+        foreach (var fileName in RepositoryHelper.GetSchemaFileNames(ctx.Platform))
         {
             var schemaPath = Path.Combine(schemaDir, fileName);
             if (!file.Exists(schemaPath)) continue; // nothing committed for this type — nothing to check
@@ -196,20 +197,6 @@ public sealed class JsonSchemaCheck : ISchemaCheck
     // Duplicated rather than exposed: SchemaQuench must not reference Schema's private members,
     // and this check must not modify Schema/. Keep these in lockstep with RepositoryHelper if the
     // domain model's platform-subclass or schema-file-naming scheme ever changes. ----
-
-    private static string[] GetSchemaFileNames(Platform platform)
-    {
-        var platformName = platform.ToCanonicalString().ToLower();
-        var files = new List<string>
-        {
-            $"products.{platformName}.schema",
-            $"templates.{platformName}.schema",
-            $"tables.{platformName}.schema"
-        };
-        if (platform == Platform.PostgreSQL) files.Add($"materializedviews.{platformName}.schema");
-        if (platform == Platform.SqlServer) files.Add($"indexedviews.{platformName}.schema");
-        return files.ToArray();
-    }
 
     private static Type GetTypeForSchemaFile(string fileName, Platform platform)
     {
