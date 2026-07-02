@@ -34,7 +34,7 @@ The **version registry** (`SchemaVersion` / `schema_version`) is standing infras
    ```sql
    CREATE TABLE IF NOT EXISTS schema_version (product VARCHAR(128) NOT NULL PRIMARY KEY, version INT NOT NULL);
    ```
-3. The `quench.settings.json` files ship `"KindleTheForge": true`. The first deploy into a fresh database installs SchemaSmith's helper objects ("kindles the forge") — required, and already set for you.
+3. The `quench.settings.json` files carry `"KindleTheForge": true` (on by default; shown here for clarity). The first deploy into a fresh database installs SchemaSmith's helper objects ("kindles the forge") before it does anything else.
 4. The validation-script family is in the stable release; run the lab with the installed `schemaquench` (no from-source build needed). Each command below is run from an engine/version directory, e.g. `sqlserver/v1`.
 
 ## Scenario 1 — ValidationScript pass
