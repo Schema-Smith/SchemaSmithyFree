@@ -40,4 +40,14 @@ public class DataDelivery
     [SchemaProperty]
     [JsonProperty(Order = 7)]
     public bool MergeUpdateDescendents { get; set; }
+
+    [SchemaProperty]
+    [JsonProperty(Order = 8)]
+    public string ShouldApplyExpression { get; set; }
+
+    // Labels a conditional variant: the intent behind its ShouldApplyExpression, echoed in
+    // quench log messages when the delivery applies, and the round-trip identity key on re-extraction.
+    [SchemaProperty(MaxLength = 128, Description = "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and is the identity key that preserves N deliveries across re-extraction.")]
+    [JsonProperty(Order = 9)]
+    public string VariantName { get; set; }
 }
