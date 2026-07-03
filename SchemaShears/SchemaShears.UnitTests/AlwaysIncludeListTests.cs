@@ -35,6 +35,15 @@ public class AlwaysIncludeListTests
     }
 
     [Test]
+    public void Expand_ConfigFileItselfMissing_Throws()
+    {
+        var cfg = Path.Join(_root, "does-not-exist.txt");
+
+        var ex = Assert.Throws<PatchBuildException>(() => AlwaysIncludeList.Expand(cfg, _source));
+        Assert.That(ex.Message, Does.Contain("Always-include file not found"));
+    }
+
+    [Test]
     public void Expand_DirectoryEntry_ExpandsToAllFilesBeneath()
     {
         var cfg = Path.Join(_root, "always.txt");
@@ -67,5 +76,17 @@ public class AlwaysIncludeListTests
         File.WriteAllText(cfg, "Templates/Main/DoesNotExist\n");
 
         Assert.Throws<PatchBuildException>(() => AlwaysIncludeList.Expand(cfg, _source));
+    }
+
+    [Test]
+    public void Expand_BlankLinesAndComments_AreSkipped()
+    {
+        var cfg = Path.Join(_root, "always.txt");
+        File.WriteAllText(cfg, "# a comment\n\n   \nTemplates/Main/Procedures/SchemaSmith.CustomTableDrop.sql\n");
+
+        var result = AlwaysIncludeList.Expand(cfg, _source);
+
+        Assert.That(result.Single(), Is.EqualTo(
+            Path.Join("Templates", "Main", "Procedures", "SchemaSmith.CustomTableDrop.sql")));
     }
 }

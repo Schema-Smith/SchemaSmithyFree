@@ -52,4 +52,59 @@ public class IncludeSetResolverTests
 
         Assert.That(result[_productRel], Is.EqualTo(IncludeReason.Manifest));
     }
+
+    [Test]
+    public void Resolve_AlwaysIncludeEntry_GetsAlwaysIncludeReasonAndScaffolding()
+    {
+        var result = IncludeSetResolver.Resolve(new List<string>(), new[] { _ordersRel }, _source);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result[_ordersRel], Is.EqualTo(IncludeReason.AlwaysInclude));
+            Assert.That(result[_mainTemplateRel], Is.EqualTo(IncludeReason.Scaffolding));
+        });
+    }
+
+    [Test]
+    public void Resolve_ManifestWinsOverAlwaysInclude()
+    {
+        // Same path present in both lists: alwaysInclude is processed first (weaker precedence)
+        // but the stronger Manifest reason must not be downgraded by a later scaffolding/always-include pass.
+        var result = IncludeSetResolver.Resolve(new[] { _ordersRel }, new[] { _ordersRel }, _source);
+
+        Assert.That(result[_ordersRel], Is.EqualTo(IncludeReason.Manifest));
+    }
+
+    [Test]
+    public void Resolve_ManifestEntryUnderTemplatesWithoutTemplateJson_NoScaffoldingAdded()
+    {
+        var orphanRel = Path.Join("Templates", "Orphan", "dbo.Widget.json");
+        Directory.CreateDirectory(Path.Join(_source, "Templates", "Orphan"));
+        File.WriteAllText(Path.Join(_source, orphanRel), "{}");
+        // Deliberately no Template.json under Templates/Orphan.
+
+        var result = IncludeSetResolver.Resolve(new[] { orphanRel }, new List<string>(), _source);
+
+        var orphanTemplateJson = Path.Join("Templates", "Orphan", "Template.json");
+        Assert.Multiple(() =>
+        {
+            Assert.That(result[orphanRel], Is.EqualTo(IncludeReason.Manifest));
+            Assert.That(result.ContainsKey(orphanTemplateJson), Is.False);
+        });
+    }
+
+    [Test]
+    public void Resolve_ManifestEntryOutsideTemplates_NoScaffoldingAttempted()
+    {
+        var readmeRel = "Readme.txt";
+        File.WriteAllText(Path.Join(_source, readmeRel), "hi");
+
+        var result = IncludeSetResolver.Resolve(new[] { readmeRel }, new List<string>(), _source);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result[readmeRel], Is.EqualTo(IncludeReason.Manifest));
+            Assert.That(result.Count, Is.EqualTo(2)); // readme + Product.json scaffolding only
+        });
+    }
 }
