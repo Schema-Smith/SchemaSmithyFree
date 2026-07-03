@@ -1,0 +1,4 @@
+{
+  "Name": "[Widget]",
+  "Columns": [
+    { "Name": "[Id]", "DataType": "INT" },

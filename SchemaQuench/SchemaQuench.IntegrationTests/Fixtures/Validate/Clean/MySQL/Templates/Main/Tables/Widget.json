@@ -1,0 +1,12 @@
+{
+  "Name": "`Widget`",
+  "Columns": [
+    { "Name": "`Id`", "DataType": "int", "AutoIncrement": true },
+    { "Name": "`Label`", "DataType": "varchar(50)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "UniqueConstraint": true, "IndexColumns": "`Id`" }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": []
+}

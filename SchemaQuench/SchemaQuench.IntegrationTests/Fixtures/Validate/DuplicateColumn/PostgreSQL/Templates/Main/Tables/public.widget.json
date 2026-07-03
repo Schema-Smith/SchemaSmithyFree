@@ -1,0 +1,11 @@
+{
+  "Name": "widget",
+  "Columns": [
+    { "Name": "widget_id", "DataType": "int4" },
+    { "Name": "widget_id", "DataType": "int4" }
+  ],
+  "Indexes": [],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "Schema": "public"
+}
