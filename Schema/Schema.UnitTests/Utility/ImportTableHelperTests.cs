@@ -430,12 +430,18 @@ public class ImportTableHelperTests
                 new Schema.Delivery.DataDelivery { ContentFile = "prod.json", MergeType = "Insert", ShouldApplyExpression = "DB_NAME() = 'Prod'", VariantName = "prod" }
             ]
         };
-        var reimported = new Table { Name = "[dbo].[Ref]", DataDelivery = [] };
+        var reimported = new Table
+        {
+            Name = "[dbo].[Ref]",
+            DataDelivery = [new Schema.Delivery.DataDelivery { ContentFile = "stale.json", MergeType = "Insert" }]
+        };
 
         ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
 
         Assert.That(reimported.DataDelivery, Has.Count.EqualTo(2));
+        Assert.That(reimported.DataDelivery[0].VariantName, Is.EqualTo("dev"));
         Assert.That(reimported.DataDelivery[1].VariantName, Is.EqualTo("prod"));
+        Assert.That(reimported.DataDelivery, Has.None.Matches<Schema.Delivery.DataDelivery>(d => d.ContentFile == "stale.json"));
     }
 
     [Test]
@@ -470,5 +476,26 @@ public class ImportTableHelperTests
         Assert.That(reimported.DataDelivery, Has.Count.EqualTo(1));
         Assert.That(reimported.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
         Assert.That(reimported.DataDelivery[0].MatchColumns, Is.EqualTo("Id"));
+    }
+
+    [Test]
+    public void PreserveDataDelivery_BothPresentSingle_OriginalReplacesExtracted()
+    {
+        var original = new Table
+        {
+            Name = "[dbo].[Ref]",
+            DataDelivery = [new Schema.Delivery.DataDelivery { ContentFile = "authored.json", ShouldApplyExpression = "1=1", VariantName = "v" }]
+        };
+        var reimported = new Table
+        {
+            Name = "[dbo].[Ref]",
+            DataDelivery = [new Schema.Delivery.DataDelivery { ContentFile = "extracted.json" }]
+        };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.DataDelivery, Has.Count.EqualTo(1));
+        Assert.That(reimported.DataDelivery[0].ContentFile, Is.EqualTo("authored.json"));
+        Assert.That(reimported.DataDelivery[0].VariantName, Is.EqualTo("v"));
     }
 }

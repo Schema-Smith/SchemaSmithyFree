@@ -31,7 +31,8 @@ public static class ImportTableHelper
         else if (origDeliveries.Count == 1 && (tableObj.DataDelivery?.Count ?? 0) == 0)
             tableObj.DataDelivery = origDeliveries;
         else if (origDeliveries.Count == 1 && tableObj.DataDelivery is { Count: 1 })
-            // Both present: keep the freshly-extracted entry but carry the original's authored fields.
+            // Both present: the original replaces the extracted entry outright (no field merge) —
+            // DataDelivery is authored config, not something extraction can reconstruct, so the original is the truth.
             tableObj.DataDelivery[0] = origDeliveries[0];
 
         // Ensure MergeType default for backward compat on the surviving single delivery.
