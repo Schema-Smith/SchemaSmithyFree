@@ -21,16 +21,23 @@ public static class ImportTableHelper
     /// </summary>
     public static void PreserveDataDeliveryAndCustomProperties(Table tableObj, Table original)
     {
-        // Preserve data delivery properties. Minimal compile-fix for the list cardinality flip —
-        // full variant-list preservation (matching by VariantName, gate-aware absence handling) is
-        // a later task; this keeps existing single-delivery behavior identical.
-        tableObj.DataDelivery = original.DataDelivery;
-        // Ensure MergeType has a default for backward compat
-        foreach (var delivery in tableObj.DataDelivery ?? new List<Schema.Delivery.DataDelivery>())
-        {
-            if (string.IsNullOrWhiteSpace(delivery.MergeType))
-                delivery.MergeType = "None";
-        }
+        // Data delivery is authored config; extraction cannot reconstruct gated/variant deliveries, so
+        // the original list is the truth. Multi-entry variant sets survive wholesale; a gated single
+        // delivery survives even when absent on this target (absence is the gate's doing, not a drop);
+        // an ungated single delivery carries its original config onto the reimport.
+        var origDeliveries = original.DataDelivery ?? [];
+        if (origDeliveries.Count > 1)
+            tableObj.DataDelivery = origDeliveries;
+        else if (origDeliveries.Count == 1 && (tableObj.DataDelivery?.Count ?? 0) == 0)
+            tableObj.DataDelivery = origDeliveries;
+        else if (origDeliveries.Count == 1 && tableObj.DataDelivery is { Count: 1 })
+            // Both present: keep the freshly-extracted entry but carry the original's authored fields.
+            tableObj.DataDelivery[0] = origDeliveries[0];
+
+        // Ensure MergeType default for backward compat on the surviving single delivery.
+        if (tableObj.DataDelivery is { Count: 1 } && string.IsNullOrWhiteSpace(tableObj.DataDelivery[0].MergeType))
+            tableObj.DataDelivery[0].MergeType = "None";
+
         tableObj.OldName = original.OldName;
 
         // Copy dynamic (custom) properties at table level

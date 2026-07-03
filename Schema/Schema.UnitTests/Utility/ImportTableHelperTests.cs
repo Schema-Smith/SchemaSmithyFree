@@ -149,7 +149,9 @@ public class ImportTableHelperTests
 
         ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
 
-        Assert.That(newTable.DataDelivery, Is.Null);
+        // Table.DataDelivery defaults to an empty list (not null); with no original deliveries to
+        // preserve, the freshly-imported table simply keeps its own (empty) list.
+        Assert.That(newTable.DataDelivery, Is.Empty);
     }
 
     [Test]
@@ -414,5 +416,59 @@ public class ImportTableHelperTests
 
         Assert.That(reimported.Columns, Has.Count.EqualTo(1));
         Assert.That(newCol.ShouldApplyExpression, Is.EqualTo("1=1"));
+    }
+
+    [Test]
+    public void PreserveDataDelivery_MultiVariant_SurvivesReimportWholesale()
+    {
+        var original = new Table
+        {
+            Name = "[dbo].[Ref]",
+            DataDelivery =
+            [
+                new Schema.Delivery.DataDelivery { ContentFile = "dev.json",  MergeType = "Insert", ShouldApplyExpression = "DB_NAME() = 'Dev'",  VariantName = "dev" },
+                new Schema.Delivery.DataDelivery { ContentFile = "prod.json", MergeType = "Insert", ShouldApplyExpression = "DB_NAME() = 'Prod'", VariantName = "prod" }
+            ]
+        };
+        var reimported = new Table { Name = "[dbo].[Ref]", DataDelivery = [] };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.DataDelivery, Has.Count.EqualTo(2));
+        Assert.That(reimported.DataDelivery[1].VariantName, Is.EqualTo("prod"));
+    }
+
+    [Test]
+    public void PreserveDataDelivery_SingleGated_SurvivesWhenAbsentOnSource()
+    {
+        var original = new Table
+        {
+            Name = "[dbo].[Ref]",
+            DataDelivery = [new Schema.Delivery.DataDelivery { ContentFile = "seed.json", MergeType = "Insert", ShouldApplyExpression = "DB_NAME() = 'Dev'", VariantName = "dev-seed" }]
+        };
+        var reimported = new Table { Name = "[dbo].[Ref]", DataDelivery = [] };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.DataDelivery, Has.Count.EqualTo(1));
+        Assert.That(reimported.DataDelivery[0].ShouldApplyExpression, Is.EqualTo("DB_NAME() = 'Dev'"));
+    }
+
+    [Test]
+    public void PreserveDataDelivery_SingleUngated_PreservedFieldsFromOriginal()
+    {
+        // Ungated single delivery: today's behavior — original delivery config carries onto the reimport.
+        var original = new Table
+        {
+            Name = "[dbo].[Ref]",
+            DataDelivery = [new Schema.Delivery.DataDelivery { ContentFile = "data/Ref.tabledata", MergeType = "Insert/Update", MatchColumns = "Id" }]
+        };
+        var reimported = new Table { Name = "[dbo].[Ref]", DataDelivery = [] };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+
+        Assert.That(reimported.DataDelivery, Has.Count.EqualTo(1));
+        Assert.That(reimported.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+        Assert.That(reimported.DataDelivery[0].MatchColumns, Is.EqualTo("Id"));
     }
 }
