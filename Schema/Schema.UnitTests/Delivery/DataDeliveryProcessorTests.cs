@@ -29,7 +29,7 @@ public class DataDeliveryProcessorTests
     {
         public string Name { get; set; }
         public string Schema { get; set; }
-        public DataDelivery DataDelivery { get; set; }
+        public IReadOnlyList<DataDelivery> DataDeliveries { get; set; } = new List<DataDelivery>();
         public IReadOnlyList<IDeliverableColumn> DeliverableColumns { get; set; } = new List<IDeliverableColumn>();
         public IReadOnlyList<IDeliverableForeignKey> DeliverableForeignKeys { get; set; } = new List<IDeliverableForeignKey>();
     }
@@ -105,7 +105,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Config", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "None", ContentFile = "data.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "None", ContentFile = "data.json" } }
             }
         };
 
@@ -123,7 +123,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
 
@@ -131,6 +131,31 @@ public class DataDeliveryProcessorTests
 
         Assert.That(_executedScripts, Has.Count.EqualTo(1));
         Assert.That(_executedScripts[0], Does.Contain("Users"));
+    }
+
+    [Test]
+    public void DeliverTables_TwoDeliveriesOneTable_DeliversBothInOrder()
+    {
+        // Slice 1 (this task): every non-None delivery applies, ungated — gate evaluation
+        // (ShouldApplyExpression) is wired in a later task. Both deliveries fire regardless
+        // of the expression text below.
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Ref", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "a.json", ShouldApplyExpression = "1=1", VariantName = "a" },
+                    new DataDelivery { MergeType = "Insert", ContentFile = "b.json", ShouldApplyExpression = "1=1", VariantName = "b" }
+                }
+            }
+        };
+
+        processor.DeliverTables(MakeContext(tables));
+
+        Assert.That(_executedScripts, Has.Count.EqualTo(2));
     }
 
     [Test]
@@ -142,7 +167,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "InvalidType", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "InvalidType", ContentFile = "users.json" } }
             }
         };
 
@@ -156,12 +181,12 @@ public class DataDeliveryProcessorTests
         var parent = new TestTable
         {
             Name = "Customers", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "customers.json" }
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "customers.json" } }
         };
         var child = new TestTable
         {
             Name = "Orders", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "orders.json" },
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "orders.json" } },
             DeliverableColumns = new List<IDeliverableColumn>
             {
                 new TestColumn { Name = "CustomerId", Nullable = false }
@@ -186,12 +211,12 @@ public class DataDeliveryProcessorTests
         var parent = new TestTable
         {
             Name = "Employees", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "employees.json" }
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "employees.json" } }
         };
         var child = new TestTable
         {
             Name = "Tasks", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "tasks.json" },
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "tasks.json" } },
             DeliverableColumns = new List<IDeliverableColumn>
             {
                 new TestColumn { Name = "AssigneeId", Nullable = true }
@@ -219,7 +244,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -425,7 +450,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -450,7 +475,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -476,7 +501,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "public",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -504,7 +529,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -524,7 +549,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -547,7 +572,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -572,7 +597,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -594,7 +619,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -621,7 +646,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "custom_schema",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -680,7 +705,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Lookups", Schema = "{{SchemaName}}",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update", ContentFile = "lookups.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert/Update", ContentFile = "lookups.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -720,7 +745,7 @@ public class DataDeliveryProcessorTests
             {
                 Name = "Lookups", Schema = "{{SchemaName}}",
                 // No MatchColumns -> processor falls back to GetKeyColumns, which probes catalog.
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "lookups.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "lookups.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -745,7 +770,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables); // SchemaName defaults to ""
@@ -791,7 +816,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Orders", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "orders.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "orders.json" } }
             }
         };
 
@@ -823,12 +848,12 @@ public class DataDeliveryProcessorTests
         var parent = new TestTable
         {
             Name = "Employees", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "employees.json" }
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "employees.json" } }
         };
         var child = new TestTable
         {
             Name = "Tasks", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "tasks.json" },
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "tasks.json" } },
             DeliverableColumns = new List<IDeliverableColumn>
             {
                 new TestColumn { Name = "AssigneeId", Nullable = true }
@@ -866,7 +891,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Products", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "products.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "products.json" } }
             }
         };
 
@@ -889,7 +914,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
 
@@ -1032,11 +1057,14 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Lookups", Schema = "{{SchemaName}}",
-                DataDelivery = new DataDelivery
+                DataDeliveries = new List<DataDelivery>
                 {
-                    MergeType = "Insert/Update/Delete",
-                    ContentFile = "lookups.json",
-                    MergeFilter = "Target.Status = 'Active' AND Target.[Owner] = '{{SchemaName}}'"
+                    new DataDelivery
+                    {
+                        MergeType = "Insert/Update/Delete",
+                        ContentFile = "lookups.json",
+                        MergeFilter = "Target.Status = 'Active' AND Target.[Owner] = '{{SchemaName}}'"
+                    }
                 }
             }
         };
@@ -1081,11 +1109,14 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Lookups", Schema = "dbo",
-                DataDelivery = new DataDelivery
+                DataDeliveries = new List<DataDelivery>
                 {
-                    MergeType = "Insert/Update/Delete",
-                    ContentFile = "lookups.json",
-                    MergeFilter = "Target.Status = 'Active'"
+                    new DataDelivery
+                    {
+                        MergeType = "Insert/Update/Delete",
+                        ContentFile = "lookups.json",
+                        MergeFilter = "Target.Status = 'Active'"
+                    }
                 }
             }
         };
@@ -1121,11 +1152,14 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Lookups", Schema = "{{SchemaName}}",
-                DataDelivery = new DataDelivery
+                DataDeliveries = new List<DataDelivery>
                 {
-                    MergeType = "Insert/Update",
-                    ContentFile = "lookups.json",
-                    MergeFilter = null
+                    new DataDelivery
+                    {
+                        MergeType = "Insert/Update",
+                        ContentFile = "lookups.json",
+                        MergeFilter = null
+                    }
                 }
             }
         };
@@ -1165,7 +1199,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "{{SchemaName}}",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);

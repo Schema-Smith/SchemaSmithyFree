@@ -150,16 +150,16 @@ namespace Schema.UnitTests.Domain
             var json = JsonConvert.SerializeObject(new SqlServerTable
             {
                 Name = "Orders",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update", MatchColumns = "OrderId", MergeDisableTriggers = true },
+                DataDelivery = [new DataDelivery { MergeType = "Insert/Update", MatchColumns = "OrderId", MergeDisableTriggers = true }],
                 ShouldApplyExpression = "SELECT 1"
             });
 
             var result = PlatformDeserializer.DeserializeTable(json, Platform.SqlServer);
 
             Assert.That(result.Name, Is.EqualTo("Orders"));
-            Assert.That(result.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
-            Assert.That(result.DataDelivery.MatchColumns, Is.EqualTo("OrderId"));
-            Assert.That(result.DataDelivery.MergeDisableTriggers, Is.True);
+            Assert.That(result.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+            Assert.That(result.DataDelivery[0].MatchColumns, Is.EqualTo("OrderId"));
+            Assert.That(result.DataDelivery[0].MergeDisableTriggers, Is.True);
             Assert.That(result.ShouldApplyExpression, Is.EqualTo("SELECT 1"));
         }
 

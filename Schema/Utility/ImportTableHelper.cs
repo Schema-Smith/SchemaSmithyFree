@@ -21,11 +21,16 @@ public static class ImportTableHelper
     /// </summary>
     public static void PreserveDataDeliveryAndCustomProperties(Table tableObj, Table original)
     {
-        // Preserve data delivery properties
+        // Preserve data delivery properties. Minimal compile-fix for the list cardinality flip —
+        // full variant-list preservation (matching by VariantName, gate-aware absence handling) is
+        // a later task; this keeps existing single-delivery behavior identical.
         tableObj.DataDelivery = original.DataDelivery;
         // Ensure MergeType has a default for backward compat
-        if (tableObj.DataDelivery != null && string.IsNullOrWhiteSpace(tableObj.DataDelivery.MergeType))
-            tableObj.DataDelivery.MergeType = "None";
+        foreach (var delivery in tableObj.DataDelivery ?? new List<Schema.Delivery.DataDelivery>())
+        {
+            if (string.IsNullOrWhiteSpace(delivery.MergeType))
+                delivery.MergeType = "None";
+        }
         tableObj.OldName = original.OldName;
 
         // Copy dynamic (custom) properties at table level

@@ -185,11 +185,14 @@ public class TableDataDeliveryTests
             {
                 Name = _testTableName,
                 Schema = SchemaName,
-                DataDelivery = new DataDelivery
-                {
+                DataDelivery =
+                [
+                    new DataDelivery
+                    {
                     MergeType = "Insert/Update/Delete",
                     ContentFile = "testdata.json"
-                },
+                }
+                ],
                 Columns =
                 [
                     new Column { Name = "code", DataType = "VARCHAR(20)" },
@@ -205,7 +208,7 @@ public class TableDataDeliveryTests
             var tableData = fileWrapper.ReadAllText(contentFilePath);
             Assert.That(tableData, Does.Contain("T001"));
 
-            var mergeType = template.Tables[0].DataDelivery.MergeType;
+            var mergeType = template.Tables[0].DataDelivery[0].MergeType;
             var mergeUpdate = mergeType.Contains("Update", StringComparison.OrdinalIgnoreCase);
             var mergeDelete = mergeType.Contains("Delete", StringComparison.OrdinalIgnoreCase);
             var script = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, command, SchemaName, _testTableName,
@@ -237,8 +240,8 @@ public class TableDataDeliveryTests
 
         var tablesWithData = new List<Table> { table }
             .Where(t => t.DataDelivery != null &&
-                        !string.IsNullOrWhiteSpace(t.DataDelivery.MergeType) &&
-                        !t.DataDelivery.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase))
+                        t.DataDelivery.Any(d => !string.IsNullOrWhiteSpace(d.MergeType) &&
+                                     !d.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
         Assert.That(tablesWithData, Is.Empty);
@@ -251,13 +254,17 @@ public class TableDataDeliveryTests
         {
             Name = _testTableName,
             Schema = SchemaName,
-            DataDelivery = new DataDelivery { MergeType = "None", ContentFile = "data.json" }
+            DataDelivery =
+                [
+                    new DataDelivery
+                    { MergeType = "None", ContentFile = "data.json" }
+                ]
         };
 
         var tablesWithData = new List<Table> { table }
             .Where(t => t.DataDelivery != null &&
-                        !string.IsNullOrWhiteSpace(t.DataDelivery.MergeType) &&
-                        !t.DataDelivery.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase))
+                        t.DataDelivery.Any(d => !string.IsNullOrWhiteSpace(d.MergeType) &&
+                                     !d.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
         Assert.That(tablesWithData, Is.Empty);
@@ -413,11 +420,14 @@ public class TableDataDeliveryTests
                 {
                     Name = childTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update/Delete",
                         ContentFile = "child.tabledata"
-                    },
+                    }
+                ],
                     ForeignKeys =
                     [
                         new SqlServerForeignKey
@@ -433,11 +443,14 @@ public class TableDataDeliveryTests
                 {
                     Name = parentTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update/Delete",
                         ContentFile = "parent.tabledata"
                     }
+                ]
                 });
 
                 RegisterTargetConfig();
@@ -508,21 +521,27 @@ public class TableDataDeliveryTests
                 {
                     Name = "_nonexistent_table_xyz",
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update/Delete",
                         ContentFile = "bad.tabledata"
                     }
+                ]
                 });
                 template.Tables.Add(new SqlServerTable
                 {
                     Name = goodTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update/Delete",
                         ContentFile = "good.tabledata"
                     }
+                ]
                 });
 
                 RegisterTargetConfig();
@@ -602,11 +621,14 @@ public class TableDataDeliveryTests
                 {
                     Name = storeTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update",
                         ContentFile = "store.tabledata"
-                    },
+                    }
+                ],
                     Columns =
                     [
                         new Column { Name = "store_id", DataType = "INT" },
@@ -628,11 +650,14 @@ public class TableDataDeliveryTests
                 {
                     Name = staffTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update",
                         ContentFile = "staff.tabledata"
-                    },
+                    }
+                ],
                     Columns =
                     [
                         new Column { Name = "staff_id", DataType = "INT" },
@@ -747,11 +772,14 @@ public class TableDataDeliveryTests
                 {
                     Name = parentTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update/Delete",
                         ContentFile = "parent.tabledata"
                     }
+                ]
                 });
 
                 RegisterTargetConfig();

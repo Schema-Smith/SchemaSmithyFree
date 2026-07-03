@@ -26,7 +26,7 @@ public class DataDeliveryHelperTests
     {
         public string Name { get; set; }
         public string Schema { get; set; }
-        public DataDelivery DataDelivery { get; set; }
+        public IReadOnlyList<DataDelivery> DataDeliveries { get; set; } = new List<DataDelivery>();
         public IReadOnlyList<IDeliverableColumn> DeliverableColumns { get; set; } = new List<IDeliverableColumn>();
         public IReadOnlyList<IDeliverableForeignKey> DeliverableForeignKeys { get; set; } = new List<IDeliverableForeignKey>();
     }

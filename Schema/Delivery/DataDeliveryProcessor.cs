@@ -19,6 +19,15 @@ public class DataDeliveryProcessor : IDataDelivery
     public static IDataDelivery GetFromFactory()
         => FactoryContainer.ResolveOrCreate<IDataDelivery, DataDeliveryProcessor>();
 
+    // Applicable deliveries per table (non-None MergeType), in declared order. Gate evaluation is
+    // added in a later task; for now every non-None delivery applies unconditionally.
+    private static List<(int Index, DataDelivery Delivery)> ApplicableDeliveries(IDeliverableTable table) =>
+        (table.DataDeliveries ?? [])
+            .Select((d, i) => (Index: i, Delivery: d))
+            .Where(x => !string.IsNullOrEmpty(x.Delivery.MergeType) &&
+                        !x.Delivery.MergeType.Equals("None", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
     public void DeliverTables(DataDeliveryContext context)
     {
         if (context?.Tables == null || context.Tables.Count == 0) return;
@@ -29,9 +38,7 @@ public class DataDeliveryProcessor : IDataDelivery
         var logError = context.ProgressLogError ?? (_ => { });
 
         var tablesToDeliver = context.Tables
-            .Where(t => t.DataDelivery != null &&
-                        !string.IsNullOrEmpty(t.DataDelivery.MergeType) &&
-                        !t.DataDelivery.MergeType.Equals("None", StringComparison.OrdinalIgnoreCase))
+            .Where(DataDeliveryHelper.HasDeliverable)
             .OrderBy(t => DataDeliveryHelper.GetTableKey(t, platform))
             .ToList();
 
@@ -47,7 +54,8 @@ public class DataDeliveryProcessor : IDataDelivery
         }
 
         var cascadeErrors = ValidateDeleteCascade(context.Command, platform, context.DatabaseName,
-            tablesToDeliver.Where(t => (t.DataDelivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0)
+            tablesToDeliver.Where(t => ApplicableDeliveries(t).Any(x =>
+                    (x.Delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0))
                 .Select(t => (
                     Schema: GetSchemaOrDb(t, context.DatabaseName, platform, context.SchemaName),
                     TableName: DataDeliveryHelper.TrimIdentifierQuotes(t.Name, platform)
@@ -62,7 +70,7 @@ public class DataDeliveryProcessor : IDataDelivery
         var deliverySet = DataDeliveryHelper.BuildDeliveryTableSet(tablesToDeliver, platform);
 
         var tableEdges = new Dictionary<IDeliverableTable, (HashSet<string> RequiredDeps, List<string> DeferredColumns)>();
-        var tableDataMap = new Dictionary<IDeliverableTable, string>();
+        var tableDataMap = new Dictionary<(IDeliverableTable Table, int Index), string>();
         var contentFileErrors = new List<string>();
 
         foreach (var table in tablesToDeliver.ToList())
@@ -70,32 +78,35 @@ public class DataDeliveryProcessor : IDataDelivery
             tableEdges[table] = DataDeliveryHelper.ClassifyFKEdges(table, deliverySet, platform);
             var tableKey = DataDeliveryHelper.GetTableKey(table, platform);
 
-            var contentPath = ResolveContentFilePath(context.TemplateRootPath, table.DataDelivery.ContentFile);
-            if (contentPath == null)
+            foreach (var (index, delivery) in ApplicableDeliveries(table))
             {
-                contentFileErrors.Add($"{tableKey}: Unable to locate content file: '{table.DataDelivery.ContentFile}'");
-                continue;
-            }
-
-            if (context.ReadFileContent == null)
-            {
-                contentFileErrors.Add($"{tableKey}: No content file reader configured for '{contentPath}'");
-                continue;
-            }
-
-            try
-            {
-                var content = context.ReadFileContent(contentPath);
-                if (content == null)
+                var contentPath = ResolveContentFilePath(context.TemplateRootPath, delivery.ContentFile);
+                if (contentPath == null)
                 {
-                    contentFileErrors.Add($"{tableKey}: Content file not found: '{contentPath}'");
+                    contentFileErrors.Add($"{tableKey}: Unable to locate content file: '{delivery.ContentFile}'");
                     continue;
                 }
-                tableDataMap[table] = content;
-            }
-            catch (Exception ex)
-            {
-                contentFileErrors.Add($"{tableKey}: Error reading content file: '{contentPath}' - {ex.Message}");
+
+                if (context.ReadFileContent == null)
+                {
+                    contentFileErrors.Add($"{tableKey}: No content file reader configured for '{contentPath}'");
+                    continue;
+                }
+
+                try
+                {
+                    var content = context.ReadFileContent(contentPath);
+                    if (content == null)
+                    {
+                        contentFileErrors.Add($"{tableKey}: Content file not found: '{contentPath}'");
+                        continue;
+                    }
+                    tableDataMap[(table, index)] = content;
+                }
+                catch (Exception ex)
+                {
+                    contentFileErrors.Add($"{tableKey}: Error reading content file: '{contentPath}' - {ex.Message}");
+                }
             }
         }
 
@@ -107,11 +118,11 @@ public class DataDeliveryProcessor : IDataDelivery
         }
 
         var delivered = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
-        var pass2Tables = new List<IDeliverableTable>();
-        // Tracks table keys whose failing SQL has already been written to an artifact, so the
-        // retry/fallback architecture (a table can be attempted in the while loop AND again in the
-        // circular-fallback loop) writes exactly one artifact per failed table rather than one per
-        // attempt.
+        var pass2Units = new List<(IDeliverableTable Table, int Index, DataDelivery Delivery, List<string> DeferredColumns)>();
+        // Tracks artifact keys (table key + delivery variant/index) whose failing SQL has already
+        // been written to an artifact, so the retry/fallback architecture (a table can be attempted
+        // in the while loop AND again in the circular-fallback loop) writes exactly one artifact per
+        // failed (table, delivery) rather than one per attempt.
         var artifactWritten = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
         var lastCount = -1;
 
@@ -133,7 +144,7 @@ public class DataDeliveryProcessor : IDataDelivery
 
                 try
                 {
-                    DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Tables, false, artifactWritten);
+                    DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Units, false, artifactWritten);
                 }
                 catch
                 {
@@ -148,7 +159,7 @@ public class DataDeliveryProcessor : IDataDelivery
         {
             try
             {
-                DeliverTable(context, table, tableDataMap, new List<string>(), delivered, pass2Tables, true, artifactWritten);
+                DeliverTable(context, table, tableDataMap, new List<string>(), delivered, pass2Units, true, artifactWritten);
             }
             catch (Exception ex)
             {
@@ -156,19 +167,20 @@ public class DataDeliveryProcessor : IDataDelivery
             }
         }
 
-        foreach (var table in pass2Tables)
+        foreach (var (table, index, delivery, _) in pass2Units)
         {
             try
             {
                 var tableKey = DataDeliveryHelper.GetTableKey(table, platform);
+                var variantLabel = !string.IsNullOrWhiteSpace(delivery.VariantName) ? delivery.VariantName : index.ToString();
+                var artifactKey = $"{tableKey}#{variantLabel}";
                 log($"    Delivering {tableKey} (pass 2 - updating deferred FK columns)");
 
-                var delivery = table.DataDelivery;
                 var schemaOrDb = GetSchemaOrDb(table, context.DatabaseName, platform, context.SchemaName);
                 var keyColumns = string.IsNullOrWhiteSpace(delivery.MatchColumns)
                     ? helper.GetKeyColumns(context.Command, schemaOrDb, table.Name)
                     : delivery.MatchColumns;
-                var tableData = tableDataMap.TryGetValue(table, out var data) ? data : "";
+                var tableData = tableDataMap.TryGetValue((table, index), out var data) ? data : "";
                 var update = (delivery.MergeType ?? "").IndexOf("Update", StringComparison.OrdinalIgnoreCase) >= 0;
                 var delete = (delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0;
                 var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
@@ -185,8 +197,8 @@ public class DataDeliveryProcessor : IDataDelivery
                     }
                     catch (Exception ex)
                     {
-                        if (artifactWritten.Add(tableKey))
-                            context.WriteResolvedSqlArtifact?.Invoke(tableKey, mergeScript);
+                        if (artifactWritten.Add(artifactKey))
+                            context.WriteResolvedSqlArtifact?.Invoke(artifactKey, mergeScript);
                         logError($"    Error in pass 2 for {tableKey}: {ex.Message}");
                     }
                 }
@@ -199,14 +211,14 @@ public class DataDeliveryProcessor : IDataDelivery
     }
 
     private void DeliverTable(DataDeliveryContext context, IDeliverableTable table,
-        Dictionary<IDeliverableTable, string> tableDataMap, List<string> deferredColumns,
-        HashSet<string> delivered, List<IDeliverableTable> pass2Tables, bool isCircularFallback,
-        HashSet<string> artifactWritten)
+        Dictionary<(IDeliverableTable Table, int Index), string> tableDataMap, List<string> deferredColumns,
+        HashSet<string> delivered,
+        List<(IDeliverableTable Table, int Index, DataDelivery Delivery, List<string> DeferredColumns)> pass2Units,
+        bool isCircularFallback, HashSet<string> artifactWritten)
     {
         var platform = context.Platform;
         var helper = context.ScriptHelper;
         var log = context.ProgressLog ?? (_ => { });
-        var delivery = table.DataDelivery;
         var tableKey = DataDeliveryHelper.GetTableKey(table, platform);
         var schemaOrDb = GetSchemaOrDb(table, context.DatabaseName, platform, context.SchemaName);
 
@@ -217,53 +229,53 @@ public class DataDeliveryProcessor : IDataDelivery
             return;
         }
 
-        var keyColumns = string.IsNullOrWhiteSpace(delivery.MatchColumns)
-            ? helper.GetKeyColumns(context.Command, schemaOrDb, table.Name)
-            : delivery.MatchColumns;
-        var tableData = tableDataMap.TryGetValue(table, out var data) ? data : "";
-
-        if (deferredColumns.Count > 0 && !isCircularFallback)
+        foreach (var (index, delivery) in ApplicableDeliveries(table))
         {
-            log($"    Delivering {tableKey} (pass 1 - deferred columns as NULL)");
+            var variantLabel = !string.IsNullOrWhiteSpace(delivery.VariantName) ? delivery.VariantName : index.ToString();
+            var artifactKey = $"{tableKey}#{variantLabel}";
 
-            var mergeScript = BuildDeferredMergeScript(context, schemaOrDb, table, tableData, keyColumns, deferredColumns);
+            var keyColumns = string.IsNullOrWhiteSpace(delivery.MatchColumns)
+                ? helper.GetKeyColumns(context.Command, schemaOrDb, table.Name)
+                : delivery.MatchColumns;
+            var tableData = tableDataMap.TryGetValue((table, index), out var data) ? data : "";
 
-            if (!context.WhatIf)
+            if (deferredColumns.Count > 0 && !isCircularFallback)
             {
+                log($"    Delivering {tableKey} (pass 1 - deferred columns as NULL)");
+
+                var mergeScript = BuildDeferredMergeScript(context, schemaOrDb, table, delivery, tableData, keyColumns, deferredColumns);
+
                 try
                 {
                     context.ExecuteScript?.Invoke(table.Name, mergeScript);
                 }
                 catch
                 {
-                    if (artifactWritten.Add(tableKey))
-                        context.WriteResolvedSqlArtifact?.Invoke(tableKey, mergeScript);
+                    if (artifactWritten.Add(artifactKey))
+                        context.WriteResolvedSqlArtifact?.Invoke(artifactKey, mergeScript);
                     throw;
                 }
+
+                pass2Units.Add((table, index, delivery, deferredColumns));
             }
-
-            pass2Tables.Add(table);
-        }
-        else
-        {
-            log($"    Delivering {tableKey}");
-            var update = (delivery.MergeType ?? "").IndexOf("Update", StringComparison.OrdinalIgnoreCase) >= 0;
-            var delete = (delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0;
-            var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
-            var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
-                tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
-                delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum);
-
-            if (!context.WhatIf)
+            else
             {
+                log($"    Delivering {tableKey}");
+                var update = (delivery.MergeType ?? "").IndexOf("Update", StringComparison.OrdinalIgnoreCase) >= 0;
+                var delete = (delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0;
+                var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
+                var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
+                    tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
+                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum);
+
                 try
                 {
                     context.ExecuteScript?.Invoke(table.Name, mergeScript);
                 }
                 catch
                 {
-                    if (artifactWritten.Add(tableKey))
-                        context.WriteResolvedSqlArtifact?.Invoke(tableKey, mergeScript);
+                    if (artifactWritten.Add(artifactKey))
+                        context.WriteResolvedSqlArtifact?.Invoke(artifactKey, mergeScript);
                     throw;
                 }
             }
@@ -273,12 +285,12 @@ public class DataDeliveryProcessor : IDataDelivery
     }
 
     internal static string BuildDeferredMergeScript(DataDeliveryContext context, string schemaOrDb,
-        IDeliverableTable table, string tableData, string keyColumns, List<string> deferredColumns)
+        IDeliverableTable table, DataDelivery delivery, string tableData, string keyColumns, List<string> deferredColumns)
     {
         return DeferredMergeBuilder.Build(context.ScriptHelper, context.Command, context.Platform,
             schemaOrDb, table.Name, tableData, keyColumns,
-            table.DataDelivery.MergeDisableTriggers, deferredColumns,
-            table.DataDelivery.MergeDisableRules, table.DataDelivery.MergeUpdateDescendents,
+            delivery.MergeDisableTriggers, deferredColumns,
+            delivery.MergeDisableRules, delivery.MergeUpdateDescendents,
             context.PostgreSqlServerVersionNum);
     }
 
@@ -429,11 +441,13 @@ WHERE tc_p.TABLE_SCHEMA = '{schema.Replace("'", "''")}'
         var errors = new List<string>();
         foreach (var table in tables)
         {
-            var mergeType = table.DataDelivery?.MergeType;
-            if (string.IsNullOrEmpty(mergeType)) continue;
-            if (ValidMergeTypes.Any(v => v.Equals(mergeType, StringComparison.OrdinalIgnoreCase))) continue;
-            errors.Add($"Table {table.Name} has invalid MergeType '{mergeType}'. " +
-                       $"Valid values: {string.Join(", ", ValidMergeTypes)}");
+            foreach (var (_, delivery) in ApplicableDeliveries(table))
+            {
+                var mergeType = delivery.MergeType;
+                if (ValidMergeTypes.Any(v => v.Equals(mergeType, StringComparison.OrdinalIgnoreCase))) continue;
+                errors.Add($"Table {table.Name} has invalid MergeType '{mergeType}'. " +
+                           $"Valid values: {string.Join(", ", ValidMergeTypes)}");
+            }
         }
         return errors;
     }

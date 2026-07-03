@@ -281,17 +281,38 @@ public class ProductQuenchTests
     {
         // Arrange
         var template = new Template { Name = "TestTemplate" };
-        template.Tables.Add(new Table { Name = "table1", DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete" } });
-        template.Tables.Add(new Table { Name = "table2", DataDelivery = new DataDelivery { MergeType = "None" } });
-        template.Tables.Add(new Table { Name = "table3", DataDelivery = new DataDelivery { MergeType = "Insert/Update" } });
+        template.Tables.Add(new Table { Name = "table1", DataDelivery =
+                [
+                    new DataDelivery
+                    { MergeType = "Insert/Update/Delete" }
+                ] });
+        template.Tables.Add(new Table { Name = "table2", DataDelivery =
+                [
+                    new DataDelivery
+                    { MergeType = "None" }
+                ] });
+        template.Tables.Add(new Table { Name = "table3", DataDelivery =
+                [
+                    new DataDelivery
+                    { MergeType = "Insert/Update" }
+                ] });
         template.Tables.Add(new Table { Name = "table4", DataDelivery = null });
-        template.Tables.Add(new Table { Name = "table5", DataDelivery = new DataDelivery { MergeType = "Insert" } });
-        template.Tables.Add(new Table { Name = "table6", DataDelivery = new DataDelivery { MergeType = "" } });
+        template.Tables.Add(new Table { Name = "table5", DataDelivery =
+                [
+                    new DataDelivery
+                    { MergeType = "Insert" }
+                ] });
+        template.Tables.Add(new Table { Name = "table6", DataDelivery =
+                [
+                    new DataDelivery
+                    { MergeType = "" }
+                ] });
 
         // Act - Filter tables with data delivery
         var tablesWithData = template.Tables
-            .Where(t => t.DataDelivery != null && !string.IsNullOrWhiteSpace(t.DataDelivery.MergeType) &&
-                        !t.DataDelivery.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase))
+            .Where(t => t.DataDelivery != null &&
+                        t.DataDelivery.Any(d => !string.IsNullOrWhiteSpace(d.MergeType) &&
+                                     !d.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
         // Assert
@@ -315,11 +336,15 @@ public class ProductQuenchTests
             var table = new Table
             {
                 Name = "test_table",
-                DataDelivery = new DataDelivery { MergeType = "Replace", ContentFile = "TableData/test_data.json" }
+                DataDelivery =
+                [
+                    new DataDelivery
+                    { MergeType = "Replace", ContentFile = "TableData/test_data.json" }
+                ]
             };
 
             // Act - Load content file using ProductFileWrapper (simulating what DatabaseQuench does)
-            var contentPath = Path.Combine(tempDir, table.DataDelivery.ContentFile);
+            var contentPath = Path.Combine(tempDir, table.DataDelivery[0].ContentFile);
             var fileWrapper = ProductFileWrapper.GetFromFactory();
 
             // Assert
@@ -341,14 +366,17 @@ public class ProductQuenchTests
         var table = new Table
         {
             Name = "config_data",
-            DataDelivery = new DataDelivery
-            {
+            DataDelivery =
+                [
+                    new DataDelivery
+                    {
                 MergeType = "Insert/Update",
                 ContentFile = "TableData/config.json",
                 MatchColumns = "`key`,`environment`",
                 MergeFilter = "`active` = 1",
                 MergeDisableTriggers = true
             }
+                ]
         };
 
         // Act - Round-trip through JSON serialization
@@ -359,11 +387,11 @@ public class ProductQuenchTests
         Assert.That(deserialized, Has.Count.EqualTo(1));
         var result = deserialized[0];
         Assert.That(result.DataDelivery, Is.Not.Null);
-        Assert.That(result.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
-        Assert.That(result.DataDelivery.ContentFile, Is.EqualTo("TableData/config.json"));
-        Assert.That(result.DataDelivery.MatchColumns, Is.EqualTo("`key`,`environment`"));
-        Assert.That(result.DataDelivery.MergeFilter, Is.EqualTo("`active` = 1"));
-        Assert.That(result.DataDelivery.MergeDisableTriggers, Is.True);
+        Assert.That(result.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+        Assert.That(result.DataDelivery[0].ContentFile, Is.EqualTo("TableData/config.json"));
+        Assert.That(result.DataDelivery[0].MatchColumns, Is.EqualTo("`key`,`environment`"));
+        Assert.That(result.DataDelivery[0].MergeFilter, Is.EqualTo("`active` = 1"));
+        Assert.That(result.DataDelivery[0].MergeDisableTriggers, Is.True);
     }
 
     [Test]
@@ -373,11 +401,14 @@ public class ProductQuenchTests
         var table = new Table
         {
             Name = "lookup_values",
-            DataDelivery = new DataDelivery
-            {
+            DataDelivery =
+                [
+                    new DataDelivery
+                    {
                 MergeType = "Insert/Update/Delete",
                 ContentFile = "TableData/lookup_values.json"
-            },
+            }
+                ],
             Columns =
             [
                 new Column { Name = "id", DataType = "INT" },
@@ -399,10 +430,10 @@ public class ProductQuenchTests
 
         // Assert - Verify table properties for data delivery
         Assert.That(table.DataDelivery, Is.Not.Null);
-        Assert.That(table.DataDelivery.MergeType, Is.EqualTo("Insert/Update/Delete"));
-        Assert.That(table.DataDelivery.ContentFile, Is.EqualTo("TableData/lookup_values.json"));
-        Assert.That(!string.IsNullOrWhiteSpace(table.DataDelivery.MergeType) &&
-                    !table.DataDelivery.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase), Is.True);
+        Assert.That(table.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update/Delete"));
+        Assert.That(table.DataDelivery[0].ContentFile, Is.EqualTo("TableData/lookup_values.json"));
+        Assert.That(!string.IsNullOrWhiteSpace(table.DataDelivery[0].MergeType) &&
+                    !table.DataDelivery[0].MergeType.Equals("none", StringComparison.OrdinalIgnoreCase), Is.True);
     }
 }
 

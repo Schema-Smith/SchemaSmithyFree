@@ -20,7 +20,7 @@ public class ImportTableHelperTests
         var original = new SqlServerTable
         {
             Name = "Orders",
-            DataDelivery = new DataDelivery { ContentFile = "orders.csv", MergeType = "Insert/Update", MatchColumns = "OrderId", MergeFilter = "Active = 1", MergeDisableTriggers = true },
+            DataDelivery = [new DataDelivery { ContentFile = "orders.csv", MergeType = "Insert/Update", MatchColumns = "OrderId", MergeFilter = "Active = 1", MergeDisableTriggers = true }],
             OldName = "OldOrders"
         };
 
@@ -28,23 +28,23 @@ public class ImportTableHelperTests
 
         ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
 
-        Assert.That(newTable.DataDelivery.ContentFile, Is.EqualTo("orders.csv"));
-        Assert.That(newTable.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
-        Assert.That(newTable.DataDelivery.MatchColumns, Is.EqualTo("OrderId"));
-        Assert.That(newTable.DataDelivery.MergeFilter, Is.EqualTo("Active = 1"));
-        Assert.That(newTable.DataDelivery.MergeDisableTriggers, Is.True);
+        Assert.That(newTable.DataDelivery[0].ContentFile, Is.EqualTo("orders.csv"));
+        Assert.That(newTable.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+        Assert.That(newTable.DataDelivery[0].MatchColumns, Is.EqualTo("OrderId"));
+        Assert.That(newTable.DataDelivery[0].MergeFilter, Is.EqualTo("Active = 1"));
+        Assert.That(newTable.DataDelivery[0].MergeDisableTriggers, Is.True);
         Assert.That(newTable.OldName, Is.EqualTo("OldOrders"));
     }
 
     [Test]
     public void PreserveDataDeliveryAndCustomProperties_DefaultsMergeTypeToNone()
     {
-        var original = new SqlServerTable { Name = "Orders", DataDelivery = new DataDelivery { MergeType = null } };
+        var original = new SqlServerTable { Name = "Orders", DataDelivery = [new DataDelivery { MergeType = null }] };
         var newTable = new SqlServerTable { Name = "Orders" };
 
         ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
 
-        Assert.That(newTable.DataDelivery.MergeType, Is.EqualTo("None"));
+        Assert.That(newTable.DataDelivery[0].MergeType, Is.EqualTo("None"));
     }
 
     [Test]
@@ -98,15 +98,15 @@ public class ImportTableHelperTests
         var original = new PostgreSqlTable
         {
             Name = "orders",
-            DataDelivery = new PostgreSqlDataDelivery { MergeDisableRules = true, MergeUpdateDescendents = true }
+            DataDelivery = [new PostgreSqlDataDelivery { MergeDisableRules = true, MergeUpdateDescendents = true }]
         };
 
         var newTable = new PostgreSqlTable { Name = "orders" };
 
         ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
 
-        Assert.That(newTable.DataDelivery.MergeDisableRules, Is.True);
-        Assert.That(newTable.DataDelivery.MergeUpdateDescendents, Is.True);
+        Assert.That(newTable.DataDelivery[0].MergeDisableRules, Is.True);
+        Assert.That(newTable.DataDelivery[0].MergeUpdateDescendents, Is.True);
     }
 
     [Test]
