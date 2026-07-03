@@ -17,7 +17,8 @@ public class Log4NetConfigTests
         var asm = typeof(Program).Assembly;
         var resourceName = asm.GetManifestResourceNames().Single(n => n.EndsWith("Log4Net.config"));
         using var stream = asm.GetManifestResourceStream(resourceName)!;
-        var content = new StreamReader(stream).ReadToEnd();
+        using var reader = new StreamReader(stream);
+        var content = reader.ReadToEnd();
 
         Assert.That(content, Does.Contain("SchemaShears - Progress.log"));
         Assert.That(content, Does.Contain("SchemaShears - Errors.log"));

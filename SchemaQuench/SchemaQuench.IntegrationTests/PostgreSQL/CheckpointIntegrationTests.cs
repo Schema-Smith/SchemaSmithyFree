@@ -257,7 +257,7 @@ KindleForge
 [After Scripts]
 ";
                 var dbCheckpointPath = Path.Combine(_checkpointDir,
-                    $"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.{FileNameEncoder.Encode("")}.checkpoint");
+                    Path.GetFileName($"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.{FileNameEncoder.Encode("")}.checkpoint"));
                 File.WriteAllText(dbCheckpointPath, dbCheckpointContent);
 
                 // Simulate an out-of-band reset: drop the helper proc + kindle stamp WITHOUT

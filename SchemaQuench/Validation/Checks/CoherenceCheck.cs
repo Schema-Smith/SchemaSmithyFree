@@ -61,12 +61,9 @@ public sealed class CoherenceCheck : ISchemaCheck
         var fkColumns = SplitNames(fk.Columns);
         var fkRelatedColumns = SplitNames(fk.RelatedColumns);
 
-        foreach (var column in fkColumns)
-        {
-            if (!localColumnNames.Contains(column))
-                yield return new Finding(Severity.Error, LocalColumnCode, Category, location,
-                    $"{location}: local column '{column}' referenced in Columns does not exist on table '{table.Name}'.");
-        }
+        foreach (var column in fkColumns.Where(column => !localColumnNames.Contains(column)))
+            yield return new Finding(Severity.Error, LocalColumnCode, Category, location,
+                $"{location}: local column '{column}' referenced in Columns does not exist on table '{table.Name}'.");
 
         // Cardinality is a pure string-count comparison — independent of whether the related
         // table resolves, so it always runs.
@@ -87,12 +84,9 @@ public sealed class CoherenceCheck : ISchemaCheck
             relatedTables.SelectMany(ColumnNames),
             StringComparer.OrdinalIgnoreCase);
 
-        foreach (var column in fkRelatedColumns)
-        {
-            if (!relatedColumnNames.Contains(column))
-                yield return new Finding(Severity.Error, RelatedColumnCode, Category, location,
-                    $"{location}: related column '{column}' referenced in RelatedColumns does not exist on related table '{fk.RelatedTable}'.");
-        }
+        foreach (var column in fkRelatedColumns.Where(column => !relatedColumnNames.Contains(column)))
+            yield return new Finding(Severity.Error, RelatedColumnCode, Category, location,
+                $"{location}: related column '{column}' referenced in RelatedColumns does not exist on related table '{fk.RelatedTable}'.");
     }
 
     private static IEnumerable<Finding> CheckIndex(Table table, Index index, string tableLocation)
@@ -100,13 +94,10 @@ public sealed class CoherenceCheck : ISchemaCheck
         var location = $"{tableLocation} / Index '{index.Name}'";
         var localColumnNames = ColumnNames(table);
 
-        foreach (var rawColumn in SplitNames(index.IndexColumns))
-        {
-            var column = StripOrderingSuffix(rawColumn);
-            if (!localColumnNames.Contains(column))
-                yield return new Finding(Severity.Error, IndexColumnCode, Category, location,
-                    $"{location}: index column '{column}' referenced in IndexColumns does not exist on table '{table.Name}'.");
-        }
+        foreach (var column in SplitNames(index.IndexColumns).Select(StripOrderingSuffix)
+                     .Where(column => !localColumnNames.Contains(column)))
+            yield return new Finding(Severity.Error, IndexColumnCode, Category, location,
+                $"{location}: index column '{column}' referenced in IndexColumns does not exist on table '{table.Name}'.");
     }
 
     /// <summary>

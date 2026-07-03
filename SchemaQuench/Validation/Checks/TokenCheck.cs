@@ -132,9 +132,8 @@ public sealed class TokenCheck : ISchemaCheck
                 findings.Add(new Finding(Severity.Error, MalformedCode, Category, scannedFile,
                     $"{scannedFile}: contains an unmatched '{{{{' with no closing '}}}}'."));
 
-            foreach (var token in TokenHelper.GetTokensFromString(text))
+            foreach (var token in TokenHelper.GetTokensFromString(text).Where(t => TokenIdentifierPattern.IsMatch(t)))
             {
-                if (!TokenIdentifierPattern.IsMatch(token)) continue;
                 referenced.Add(token);
                 if (defined.Contains(token)) continue;
                 if (!flaggedUndefined.Add((scannedFile, token))) continue;
