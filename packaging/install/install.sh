@@ -8,14 +8,14 @@
 #   INSTALL_VERSION  — pin to a specific SchemaSmith version (default: latest)
 #   INSTALL_DIR      — install directory (default: /usr/local/bin if root, else ~/.local/bin)
 #
-# Installs the three SchemaSmith CLI tools (schemaquench, schematongs, datatongs)
+# Installs the four SchemaSmith CLI tools (schemaquench, schematongs, datatongs, schemashears)
 # from the matching GitHub Release bundle for the detected OS/arch. Verifies
 # SHA-256 against the release SHA256SUMS manifest before extraction.
 
 set -eu
 
 REPO="Schema-Smith/SchemaSmith"
-TOOLS="SchemaQuench SchemaTongs DataTongs"
+TOOLS="SchemaQuench SchemaTongs DataTongs SchemaShears"
 
 WORK=$(mktemp -d 2>/dev/null || mktemp -d -t schemasmith-install)
 trap 'rm -rf "$WORK"' EXIT INT TERM

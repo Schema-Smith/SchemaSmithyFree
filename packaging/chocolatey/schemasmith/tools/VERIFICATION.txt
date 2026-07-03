@@ -4,7 +4,8 @@ Verification is intended to assist the Chocolatey moderators and end users
 in verifying that this package's contents are trustworthy.
 
 This package is created and maintained by SchemaSmith Contributors. The
-embedded binaries (schemaquench.exe, schematongs.exe, datatongs.exe) are
+embedded binaries (schemaquench.exe, schematongs.exe, datatongs.exe,
+schemashears.exe) are
 built and signed by GitHub Actions on a tagged commit and published to
 the GitHub Release that this package's version corresponds to.
 
@@ -30,6 +31,7 @@ Contributors". You can verify the signature on your machine:
   signtool verify /pa /v "C:\ProgramData\chocolatey\lib\schemasmith\tools\schemaquench.exe"
   signtool verify /pa /v "C:\ProgramData\chocolatey\lib\schemasmith\tools\schematongs.exe"
   signtool verify /pa /v "C:\ProgramData\chocolatey\lib\schemasmith\tools\datatongs.exe"
+  signtool verify /pa /v "C:\ProgramData\chocolatey\lib\schemasmith\tools\schemashears.exe"
 
 Each command should report "Successfully verified" against a SchemaSmith
 Trusted Signing certificate. (signtool ships with the Windows SDK; if it

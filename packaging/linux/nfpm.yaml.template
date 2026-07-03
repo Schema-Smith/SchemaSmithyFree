@@ -4,7 +4,7 @@ platform: linux
 version: ${VERSION}
 maintainer: SchemaSmith Contributors <support@schemasmith.com>
 description: |
-  SchemaSmith CLI tools (schemaquench, schematongs, datatongs).
+  SchemaSmith CLI tools (schemaquench, schematongs, datatongs, schemashears).
   Schema package management for SQL Server, PostgreSQL, and MySQL:
   extract schemas, deploy changes, and manage data delivery scripts.
 vendor: SchemaSmith Contributors
@@ -35,6 +35,13 @@ contents:
       mode: 0755
   - src: /usr/lib/schemasmith/datatongs
     dst: /usr/bin/datatongs
+    type: symlink
+  - src: ./staging/SchemaShears
+    dst: /usr/lib/schemasmith/schemashears
+    file_info:
+      mode: 0755
+  - src: /usr/lib/schemasmith/schemashears
+    dst: /usr/bin/schemashears
     type: symlink
   - src: ./staging/libicudata.so.${ICU_VERSION}
     dst: /usr/lib/schemasmith/libicudata.so.${ICU_VERSION}

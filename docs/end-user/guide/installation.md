@@ -1,6 +1,6 @@
 # Installation
 
-Most database tooling ships with a runtime to install, a service to configure, and a license server to point at. SchemaSmith ships as three self-contained executables. Pick the channel that matches your environment and one command later you have `schemaquench`, `schematongs`, and `datatongs` on your PATH -- Windows, Linux, or macOS, no .NET runtime, no system dependencies, no fuss.
+Most database tooling ships with a runtime to install, a service to configure, and a license server to point at. SchemaSmith ships as four self-contained executables. Pick the channel that matches your environment and one command later you have `schemaquench`, `schematongs`, `datatongs`, and `schemashears` on your PATH -- Windows, Linux, or macOS, no .NET runtime, no system dependencies, no fuss.
 
 ## Pick Your Path
 
@@ -12,7 +12,7 @@ Most database tooling ships with a runtime to install, a service to configure, a
 | Other Linux | `install.sh` | Manual `.tar.gz` |
 | macOS | `install.sh` | Manual `.tar.gz` |
 
-Every channel installs the same three CLI commands and the same self-contained binaries. The choice is logistics -- what fits your environment's policies, your update workflow, your CI runners. Pick once and the channel handles installs and upgrades from there.
+Every channel installs the same four CLI commands and the same self-contained binaries. The choice is logistics -- what fits your environment's policies, your update workflow, your CI runners. Pick once and the channel handles installs and upgrades from there.
 
 ## Windows: Chocolatey
 
@@ -20,7 +20,7 @@ Every channel installs the same three CLI commands and the same self-contained b
 choco install schemasmith
 ```
 
-One command, three CLIs, signed binaries embedded. No .NET runtime, no checksum files to maintain. The package on the [Chocolatey community feed](https://community.chocolatey.org/packages/schemasmith) is named `schemasmith` and includes `schemaquench.exe`, `schematongs.exe`, and `datatongs.exe`. Upgrades flow through `choco upgrade schemasmith` like any other Chocolatey package.
+One command, four CLIs, signed binaries embedded. No .NET runtime, no checksum files to maintain. The package on the [Chocolatey community feed](https://community.chocolatey.org/packages/schemasmith) is named `schemasmith` and includes `schemaquench.exe`, `schematongs.exe`, `datatongs.exe`, and `schemashears.exe`. Upgrades flow through `choco upgrade schemasmith` like any other Chocolatey package.
 
 Every release republishes automatically when GitHub publishes the corresponding tag, so the version on Chocolatey tracks the version on the GitHub release page within minutes.
 
@@ -33,7 +33,7 @@ wget https://github.com/Schema-Smith/SchemaSmith/releases/download/v2.0.0/schema
 sudo dpkg -i schemasmith_2.0.0_amd64.deb
 ```
 
-Binaries land under `/usr/lib/schemasmith/` with symlinks in `/usr/bin/` so `schemaquench`, `schematongs`, and `datatongs` are immediately on PATH. Zero declared package dependencies -- the binaries are fully self-contained and bundle their own ICU runtime alongside the executables, so they work on minimal containers and hardened distros that ship without `libicu`.
+Binaries land under `/usr/lib/schemasmith/` with symlinks in `/usr/bin/` so `schemaquench`, `schematongs`, `datatongs`, and `schemashears` are immediately on PATH. Zero declared package dependencies -- the binaries are fully self-contained and bundle their own ICU runtime alongside the executables, so they work on minimal containers and hardened distros that ship without `libicu`.
 
 Both `amd64` and `arm64` builds are published with every release. Use `schemasmith_<version>_arm64.deb` on ARM hosts.
 
@@ -56,7 +56,7 @@ The universal Unix path. One command, any glibc-based Linux distro, any modern m
 curl -fsSL https://schemasmith.com/dl/install.sh | sh
 ```
 
-`install.sh` detects your OS and architecture, resolves the latest release without a GitHub API token, downloads the matching `.tar.gz` bundle, verifies SHA-256 against the release manifest, and installs the three CLI commands onto your PATH. The script is POSIX `sh` -- no bash-isms -- so it runs on whatever shell your container or distro happens to ship.
+`install.sh` detects your OS and architecture, resolves the latest release without a GitHub API token, downloads the matching `.tar.gz` bundle, verifies SHA-256 against the release manifest, and installs the four CLI commands onto your PATH. The script is POSIX `sh` -- no bash-isms -- so it runs on whatever shell your container or distro happens to ship.
 
 By default it installs to `/usr/local/bin` if you run it as root and `~/.local/bin` otherwise. Two environment variables let you override:
 
@@ -80,13 +80,13 @@ When policy or network constraints rule out the curl-pipe path, download the bun
 ```bash
 gh release download v2.0.0 --repo Schema-Smith/SchemaSmith --pattern 'SchemaSmith-2.0.0-linux-x64.tar.gz'
 tar -xzf SchemaSmith-2.0.0-linux-x64.tar.gz
-for tool in SchemaQuench SchemaTongs DataTongs; do
+for tool in SchemaQuench SchemaTongs DataTongs SchemaShears; do
     lower=$(echo "$tool" | tr '[:upper:]' '[:lower:]')
     sudo install -m 0755 "$tool" "/usr/local/bin/$lower"
 done
 ```
 
-The rename to lowercase matches the `schemaquench` / `schematongs` / `datatongs` command names the other channels install. PascalCase invocation also works on case-sensitive filesystems if you'd rather keep the binaries' original names.
+The rename to lowercase matches the `schemaquench` / `schematongs` / `datatongs` / `schemashears` command names the other channels install. PascalCase invocation also works on case-sensitive filesystems if you'd rather keep the binaries' original names.
 
 On Windows:
 

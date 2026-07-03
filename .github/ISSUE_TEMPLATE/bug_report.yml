@@ -16,6 +16,7 @@ body:
         - SchemaQuench (deploy)
         - SchemaTongs (extract)
         - DataTongs (data sync)
+        - SchemaShears (patch/subset packaging)
         - Other / Multiple
     validations:
       required: true
