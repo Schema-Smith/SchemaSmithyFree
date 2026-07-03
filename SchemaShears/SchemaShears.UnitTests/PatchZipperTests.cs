@@ -35,4 +35,14 @@ public class PatchZipperTests
         using var archive = ZipFile.OpenRead(zipPath);
         Assert.That(archive.Entries.Any(e => e.FullName.EndsWith("Product.json")), Is.True);
     }
+
+    [Test]
+    public void Zip_ZipAlreadyExists_Throws()
+    {
+        var zipPath = _output.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + ".zip";
+        File.WriteAllText(zipPath, "stale");
+
+        var ex = Assert.Throws<PatchBuildException>(() => PatchZipper.Zip(_output));
+        Assert.That(ex.Message, Does.Contain(zipPath));
+    }
 }

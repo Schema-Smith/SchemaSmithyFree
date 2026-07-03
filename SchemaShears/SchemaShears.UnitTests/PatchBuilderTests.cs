@@ -64,4 +64,72 @@ public class PatchBuilderTests
             SourcePath = bareSource, ManifestPath = manifest, OutputPath = _output
         }));
     }
+
+    [Test]
+    public void Build_SourcePathNullOrWhitespace_Throws()
+    {
+        var manifest = Path.Join(_root, "m.txt");
+        File.WriteAllText(manifest, "Templates/Main/Tables/dbo.Orders.json\n");
+
+        var ex = Assert.Throws<PatchBuildException>(() => new PatchBuilder().Build(new PatchBuildRequest
+        {
+            SourcePath = "   ", ManifestPath = manifest, OutputPath = _output
+        }));
+        Assert.That(ex.Message, Does.Contain("Source product folder not found"));
+    }
+
+    [Test]
+    public void Build_SourcePathDoesNotExist_Throws()
+    {
+        var manifest = Path.Join(_root, "m.txt");
+        File.WriteAllText(manifest, "Templates/Main/Tables/dbo.Orders.json\n");
+
+        var ex = Assert.Throws<PatchBuildException>(() => new PatchBuilder().Build(new PatchBuildRequest
+        {
+            SourcePath = Path.Join(_root, "does-not-exist"), ManifestPath = manifest, OutputPath = _output
+        }));
+        Assert.That(ex.Message, Does.Contain("Source product folder not found"));
+    }
+
+    [Test]
+    public void Build_OutputPathMissing_Throws()
+    {
+        var manifest = Path.Join(_root, "m.txt");
+        File.WriteAllText(manifest, "Templates/Main/Tables/dbo.Orders.json\n");
+
+        var ex = Assert.Throws<PatchBuildException>(() => new PatchBuilder().Build(new PatchBuildRequest
+        {
+            SourcePath = _source, ManifestPath = manifest, OutputPath = "  "
+        }));
+        Assert.That(ex.Message, Does.Contain("Output path is required"));
+    }
+
+    [Test]
+    public void Build_WithZipTrue_AlsoProducesZipFile()
+    {
+        var manifest = Path.Join(_root, "m.txt");
+        File.WriteAllText(manifest, "Templates/Main/Tables/dbo.Orders.json\n");
+
+        new PatchBuilder().Build(new PatchBuildRequest
+        {
+            SourcePath = _source, ManifestPath = manifest, OutputPath = _output, Zip = true
+        });
+
+        Assert.That(File.Exists(_output + ".zip"), Is.True);
+    }
+
+    [Test]
+    public void Build_WithAllowDrops_StampsProductJsonAccordingly()
+    {
+        var manifest = Path.Join(_root, "m.txt");
+        File.WriteAllText(manifest, "Templates/Main/Tables/dbo.Orders.json\n");
+
+        new PatchBuilder().Build(new PatchBuildRequest
+        {
+            SourcePath = _source, ManifestPath = manifest, OutputPath = _output, AllowDrops = new[] { "Columns" }
+        });
+
+        var product = JObject.Parse(File.ReadAllText(Path.Join(_output, "Product.json")));
+        Assert.That(product["DropColumnsRemovedFromProduct"], Is.Null);
+    }
 }

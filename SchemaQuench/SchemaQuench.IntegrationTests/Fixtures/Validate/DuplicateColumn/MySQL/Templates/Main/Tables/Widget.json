@@ -1,0 +1,10 @@
+{
+  "Name": "`Widget`",
+  "Columns": [
+    { "Name": "`Id`", "DataType": "int" },
+    { "Name": "`Id`", "DataType": "int" }
+  ],
+  "Indexes": [],
+  "ForeignKeys": [],
+  "CheckConstraints": []
+}

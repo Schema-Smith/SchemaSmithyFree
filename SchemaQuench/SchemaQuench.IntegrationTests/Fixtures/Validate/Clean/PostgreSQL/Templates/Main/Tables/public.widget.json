@@ -1,0 +1,13 @@
+{
+  "Name": "widget",
+  "Columns": [
+    { "Name": "widget_id", "DataType": "int4" },
+    { "Name": "label", "DataType": "varchar(50)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "widget_pkey", "PrimaryKey": true, "Unique": true, "IndexColumns": "widget_id" }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "Schema": "public"
+}

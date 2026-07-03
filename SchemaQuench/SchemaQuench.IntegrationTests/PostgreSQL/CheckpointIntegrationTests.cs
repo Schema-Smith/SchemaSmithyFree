@@ -9,6 +9,7 @@ using Schema.IntegrationTests;
 using Schema.Isolators;
 using Schema.Utility;
 using System;
+using System.Data;
 using System.IO;
 
 namespace SchemaQuench.IntegrationTests.PostgreSQL;
@@ -196,6 +197,114 @@ KindleForge
             FactoryContainer.Unregister<IEnvironment>();
             FactoryContainer.Unregister<Schema.Checkpointing.ICheckpointing>();
         }
+    }
+
+    [Test]
+    public void ShouldReKindleWhenDatabaseResetOutOfBandDespiteStaleCheckpoint()
+    {
+        // Regression test for #322: KindleForge is cheap and self-verifying (it reads the
+        // in-DB KindleStamp and no-ops when current), so it must always be evaluated —
+        // an out-of-band reset (helper procs / KindleStamp dropped, checkpoint dir untouched)
+        // must not leave it silently skipped on the next resume.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            // Real kindling for this test (not SkipKindlingForge) — the point is proving
+            // KindleForge actually re-runs on resume.
+            _environment.CommandLine.Returns("--ResumeQuench");
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", "ValidProduct");
+            FactoryContainer.Resolve<IConfigurationRoot>()["CheckpointDirectory"] = _checkpointDir;
+
+            var product = Product.Load();
+            using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+            conn.Open();
+            conn.ChangeDatabase(_mainDb);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandTimeout = 0;
+
+            try
+            {
+                // Ensure the forge is genuinely kindled (helper proc present) before the
+                // checkpoint claims the step already complete.
+                ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL, forceReKindle: true);
+                Assert.That(HelperProcExists(cmd), Is.True, "Setup: TableQuench must exist before simulating a reset.");
+
+                // Seed a database checkpoint claiming KindleForge already completed — same shape
+                // as ShouldResumeFromDatabaseCheckpoint: a prior quench ran and checkpointed it.
+                var dbCheckpointContent = $@"# SchemaQuench Database Checkpoint
+# Product: {product.Name}
+# Template: Main
+# Server: {_server}
+# Database: {_mainDb}
+# Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+
+[Completed Steps]
+KindleForge
+
+[Before Scripts]
+
+[Object Scripts]
+
+[After Tables Object Scripts]
+
+[Between Tables And Keys Scripts]
+
+[After Table Scripts]
+
+[Table Data Scripts]
+
+[After Scripts]
+";
+                var dbCheckpointPath = Path.Combine(_checkpointDir,
+                    Path.GetFileName($"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.{FileNameEncoder.Encode("")}.checkpoint"));
+                File.WriteAllText(dbCheckpointPath, dbCheckpointContent);
+
+                // Simulate an out-of-band reset: drop the helper proc + kindle stamp WITHOUT
+                // touching the checkpoint directory. TableQuench's exact signature isn't hard
+                // -coded — PostgreSQL requires the argument list for DROP PROCEDURE, so resolve
+                // it dynamically via regprocedure and drop by oid.
+                cmd.CommandText = @"
+                    DO $$
+                    DECLARE proc_oid oid;
+                    BEGIN
+                        SELECT p.oid INTO proc_oid FROM pg_proc p
+                          JOIN pg_namespace n ON n.oid = p.pronamespace
+                         WHERE n.nspname = 'SchemaSmith' AND p.proname = 'TableQuench';
+                        IF proc_oid IS NOT NULL THEN
+                            EXECUTE 'DROP PROCEDURE ' || proc_oid::regprocedure;
+                        END IF;
+                    END $$;";
+                cmd.ExecuteNonQuery();
+                cmd.CommandText = @"DROP TABLE IF EXISTS ""SchemaSmith"".""KindleStamp""";
+                cmd.ExecuteNonQuery();
+                Assert.That(HelperProcExists(cmd), Is.False, "Setup: reset must drop the helper proc.");
+
+                // Resume against the same checkpoint dir, which still lists KindleForge complete.
+                Program.Main([]);
+
+                Assert.That(HelperProcExists(cmd), Is.True,
+                    "KindleForge must always be evaluated on resume, even when the checkpoint marks it " +
+                    "complete, so an out-of-band database reset (#322) is repaired rather than silently skipped.");
+            }
+            finally
+            {
+                // Always leave the shared test database correctly kindled for the rest of the suite.
+                ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL, forceReKindle: true);
+
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+                FactoryContainer.Unregister<Schema.Checkpointing.ICheckpointing>();
+            }
+        }
+    }
+
+    private static bool HelperProcExists(IDbCommand cmd)
+    {
+        cmd.CommandText = @"
+            SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+             WHERE n.nspname = 'SchemaSmith' AND p.proname = 'TableQuench'";
+        return Convert.ToInt32(cmd.ExecuteScalar()) == 1;
     }
 
     private void SetupSharedMocks()

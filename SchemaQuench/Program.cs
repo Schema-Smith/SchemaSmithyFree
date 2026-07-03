@@ -6,6 +6,7 @@ using Schema.Checkpointing;
 using Schema.Domain;
 using Schema.Isolators;
 using Schema.Utility;
+using SchemaQuench.Validation;
 
 namespace SchemaQuench;
 
@@ -18,9 +19,23 @@ public static class Program
         var skipKindlingForge = args.Length > 0 && args[0] == "SkipKindlingForge";
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
-        ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", LogFactory.GetLogger("ProgressLog").Info);
+        var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", LogFactory.GetLogger("ProgressLog").Info);
 
         RegisterCheckpointing();
+
+        // Checked before ProductQuench is constructed: ProductQuench's constructor eagerly calls
+        // Product.Load(), which throws on a malformed package — that would crash Main before this
+        // gate ever ran. --Validate does its own loading via PackageLoader so a load failure is
+        // reported as a finding (SS-LOAD-001) instead of an unhandled exception.
+        if (CommandLineParser.ContainsSwitch("Validate"))
+        {
+            var validator = new SchemaPackageValidator(PackageLoader.LoadPackage, ValidationCheckRegistry.Default());
+            var result = validator.Validate(config["SchemaPackagePath"] ?? ".");
+            foreach (var line in ValidationReporter.Render(result.Findings))
+                LogFactory.GetLogger("ProgressLog").Info(line);
+            LogBackup.BackupLogsAndExit("SchemaQuench", result.HasErrors ? 2 : 0);
+            return;
+        }
 
         var productQuench = new ProductQuench();
 
@@ -84,6 +99,7 @@ public static class Program
 
     private static void ToolSpecificSwitches()
     {
+        Console.WriteLine("  --Validate                       Statically validate the schema package (no database connection), then exit.");
         Console.WriteLine("  --TestConnection                 Validate server connection(s) + minimum version, then exit. No deployment.");
         Console.WriteLine("  --PreviewTargets                 Validate, then list the databases/schemas each template would target (read-only). No deployment.");
         Console.WriteLine("  --ResumeQuench                   Resume from an existing checkpoint if one is present.");
