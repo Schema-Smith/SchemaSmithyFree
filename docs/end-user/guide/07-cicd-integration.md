@@ -145,24 +145,27 @@ The same pattern works for any CLI-capable CI system — TeamCity, CircleCI, Bam
 
 ## Pre-flight readiness checks
 
-Before a deployment run opens a single connection in anger, you can confirm the environment is actually ready for it. Two read-only switches run targeted diagnostics against your live servers and exit without deploying anything -- so a pipeline can fail fast on a bad connection string, an unpropagated firewall rule, a below-floor server, or a target roster that resolved to the wrong set, long before the deploy window opens.
+Before a deployment run opens a single connection in anger, you can confirm the package and the environment are actually ready for it. A family of read-only switches run targeted diagnostics and exit without deploying anything -- so a pipeline can fail fast on a broken package, a bad connection string, an unpropagated firewall rule, a below-floor server, or a target roster that resolved to the wrong set, long before the deploy window opens.
+
+**`--Validate`** is the only member of the family that needs no connection and no target at all -- it loads the schema package and statically lints it: malformed load, accidental duplicates, dangling foreign keys, undefined tokens, and JSON-schema violations, all caught from the files on disk. Because it needs nothing but the package itself, it's cheap enough to run on every pull request. It exits `0` clean (or warnings-only), `2` on any error. See [`--Validate` Reference](../reference/validate.md) for every check it runs.
 
 **`--TestConnection`** opens a connection to every configured server (primary plus any secondary servers), runs a liveness query, and validates that each server meets the product's declared `MinimumVersion` floor. Nothing is read, generated, or deployed. It exits `0` when every server connects and clears the floor, `2` on any connection failure or version violation.
 
 **`--PreviewTargets`** does everything `--TestConnection` does, then prints a read-only per-template report of the databases and schemas the deployment would target -- the exact set of work units a full quench would process, without processing any of them. A template marked `RequireAtLeastOneTarget` that resolves nothing fails the preview, so a misconfigured environment is caught here rather than at run time. Same exit codes: `0` on pass, `2` on any connection failure, version violation, or required-template match miss.
 
-Because both switches return `0` for go and `2` for stop, they drop straight into a pipeline as a readiness gate ahead of the deploy step:
+Because every switch in the family returns `0` for go and `2` for stop, they drop straight into a pipeline as a layered readiness gate ahead of the deploy step:
 
 ```bash
-# Readiness gate — abort the deploy if pre-flight fails
-schemaquench --TestConnection  || { echo "Pre-flight failed — aborting deploy"; exit 1; }
-schemaquench --PreviewTargets  || { echo "Target preview failed — aborting deploy"; exit 1; }
+# Readiness gate — abort the deploy if any pre-flight check fails
+schemaquench --Validate         || { echo "Package validation failed — aborting deploy"; exit 1; }
+schemaquench --TestConnection   || { echo "Pre-flight failed — aborting deploy"; exit 1; }
+schemaquench --PreviewTargets   || { echo "Target preview failed — aborting deploy"; exit 1; }
 
-# Only reached when both gates pass:
+# Only reached when every gate passes:
 schemaquench
 ```
 
-This complements the WhatIf-in-PR pattern below: WhatIf validates *the change* against a disposable database during review, while pre-flight validates *the live target environment* immediately before a real deployment. For the full behavior of both switches -- secondary-server handling, the version-floor rules, and the target-report format -- see [SchemaQuench -- Pre-flight diagnostics](../reference/schemaquench.md#pre-flight-diagnostics).
+This complements the WhatIf-in-PR pattern below: `--Validate` catches structural problems in the package itself with no database at all, WhatIf validates *the change* against a disposable database during review, and `--TestConnection`/`--PreviewTargets` validate *the live target environment* immediately before a real deployment. For the full behavior of the connection-based switches -- secondary-server handling, the version-floor rules, and the target-report format -- see [SchemaQuench -- Pre-flight diagnostics](../reference/schemaquench.md#pre-flight-diagnostics).
 
 ## The WhatIf-in-PR pattern
 
