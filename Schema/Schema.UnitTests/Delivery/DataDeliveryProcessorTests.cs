@@ -153,9 +153,25 @@ public class DataDeliveryProcessorTests
             }
         };
 
-        processor.DeliverTables(MakeContext(tables));
+        var context = MakeContext(tables);
+        // The shared [SetUp] mocks return identical content/scripts for both deliveries, which
+        // can't distinguish "ran two distinct deliveries in order" from "ran one twice". Make
+        // content encode the resolved content-file path, and echo that content (tableData, arg
+        // index 3) through BuildMergeScript's output so the emitted script reveals which
+        // delivery actually produced it.
+        context.ReadFileContent = path => $"CONTENT:{path}";
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .Returns(ci => $"MERGE INTO {ci.ArgAt<string>(2)} USING {ci.ArgAt<string>(3)}");
+
+        processor.DeliverTables(context);
 
         Assert.That(_executedScripts, Has.Count.EqualTo(2));
+        Assert.That(_executedScripts[0], Does.Contain("a.json").And.Not.Contain("b.json"),
+            "First executed script must be the a.json delivery, not a repeat of b.json.");
+        Assert.That(_executedScripts[1], Does.Contain("b.json").And.Not.Contain("a.json"),
+            "Second executed script must be the b.json delivery, not a repeat of a.json.");
     }
 
     [Test]
