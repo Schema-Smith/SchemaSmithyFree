@@ -59,6 +59,9 @@ jobs:
       - name: DataTongs Unit Tests
         run: dotnet test DataTongs/DataTongs.UnitTests/DataTongs.UnitTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --logger trx --results-directory TestResults
 
+      - name: SchemaShears Unit Tests
+        run: dotnet test SchemaShears/SchemaShears.UnitTests/SchemaShears.UnitTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --logger trx --results-directory TestResults
+
       - name: Upload Test Results
         uses: actions/upload-artifact@v7
         if: ${{ always() }}
