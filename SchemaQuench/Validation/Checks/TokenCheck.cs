@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using Schema.Isolators;
 using Schema.Utility;
@@ -45,9 +46,14 @@ public sealed class TokenCheck : ISchemaCheck
     //  - IndexedViewSchema      Schema/Domain/Template.cs:            tokens.Add(new("IndexedViewSchema", ...));
     //  - SchemaName             Schema/Domain/SchemaDefaultResolver.cs: SchemaNameToken = "{{SchemaName}}"
     //                           (substituted per-iteration during schema-template fan-out)
+    //  - repo_path              Schema/Domain/Product.cs:35: BranchNameFile defaults to
+    //                           "{{repo_path}}/.git/HEAD"
+    //  - BranchName             reserved token resolved outside the CLI's static view
+    //                           (branch-name derivation), alongside repo_path above
     private static readonly HashSet<string> BuiltInTokens = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ProductName", "TemplateName", "SchemaName", "TableSchema", "MaterializedViewSchema", "IndexedViewSchema"
+        "ProductName", "TemplateName", "SchemaName", "TableSchema", "MaterializedViewSchema", "IndexedViewSchema",
+        "repo_path", "BranchName"
     };
 
     // Table.GetCustomTokens(Extensions, baseName) prefixes an Extensions block's names with
@@ -56,6 +62,15 @@ public sealed class TokenCheck : ISchemaCheck
     // which object owns the block — a raw-text scan can't always tell which, so every prefix is
     // accepted for every Extensions-derived name (safety valve).
     private static readonly string[] ExtensionsPrefixes = { "", "Table.", "MaterializedView.", "IndexedView." };
+
+    // A well-formed "{{...}}" whose contents aren't a valid token identifier isn't a token
+    // reference at all — e.g. Postgres's 2-D text-array literal syntax
+    // '{{ns,http://schemas.example.com/ns}}'::text[] contains commas/colons/slashes that no
+    // real token name would ever have. Dots are allowed for the Extensions "Table."/
+    // "MaterializedView."/"IndexedView." prefixed forms. Only applies to undefined-token
+    // detection (SS-TOK-001) — a genuinely unmatched "{{" is still flagged by SS-TOK-002
+    // regardless of what's inside it.
+    private static readonly Regex TokenIdentifierPattern = new(@"^[A-Za-z_][A-Za-z0-9_.]*$", RegexOptions.Compiled);
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
     {
@@ -119,6 +134,7 @@ public sealed class TokenCheck : ISchemaCheck
 
             foreach (var token in TokenHelper.GetTokensFromString(text))
             {
+                if (!TokenIdentifierPattern.IsMatch(token)) continue;
                 referenced.Add(token);
                 if (defined.Contains(token)) continue;
                 if (!flaggedUndefined.Add((scannedFile, token))) continue;

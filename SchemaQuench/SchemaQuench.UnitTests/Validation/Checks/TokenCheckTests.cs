@@ -193,4 +193,46 @@ public class TokenCheckTests
 
         Assert.That(findings, Is.Empty);
     }
+
+    // ---- Demo-QA-sweep false positives (repo_path/BranchName + Postgres xpath array literals) ----
+
+    [Test]
+    public void RepoPathToken_NotFlagged()
+    {
+        // Product.BranchNameFile defaults to "{{repo_path}}/.git/HEAD" (Schema/Domain/Product.cs:35) —
+        // present verbatim in real demo Product.json files.
+        var productFile = Path.Combine(PackagePath, "Product.json");
+        JsonFiles(productFile);
+        FileContent(productFile, @"{ ""Name"": ""Acme"", ""BranchNameFile"": ""{{repo_path}}/.git/HEAD"" }");
+
+        var findings = new TokenCheck().Run(Context()).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void BranchNameToken_NotFlagged()
+    {
+        var scriptFile = Path.Combine(PackagePath, "Templates", "Main", "Before Scripts", "Init.sql");
+        SqlFiles(scriptFile);
+        FileContent(scriptFile, "SELECT '{{BranchName}}'");
+
+        var findings = new TokenCheck().Run(Context()).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void PostgresXpathArrayLiteral_NotFlagged()
+    {
+        // Legitimate Postgres 2-D text-array literal syntax, not a token reference — the raw
+        // "{{...}}" scan misreads it because the extracted content isn't a valid identifier.
+        var scriptFile = Path.Combine(PackagePath, "Templates", "Main", "Before Scripts", "Xpath.sql");
+        SqlFiles(scriptFile);
+        FileContent(scriptFile, "SELECT xpath('//ns', doc, '{{ns,http://schemas.example.com/ns}}'::text[])");
+
+        var findings = new TokenCheck().Run(Context()).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
 }
