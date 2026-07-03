@@ -1,0 +1,10 @@
+{
+  "Name": "Shop",
+  "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM sys.databases WHERE [Name] LIKE 'shop[_]patch[_]%') THEN 1 ELSE 0 END AS BIT)",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}

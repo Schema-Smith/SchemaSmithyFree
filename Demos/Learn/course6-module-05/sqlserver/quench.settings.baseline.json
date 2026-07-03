@@ -1,0 +1,17 @@
+{
+  "Target": {
+    "Server": "localhost,11433",
+    "User": "sa",
+    "Password": "Learn!Passw0rd",
+    "ConnectionProperties": {
+      "TrustServerCertificate": "True"
+    },
+    "Databases": [
+      "shop_patch_scratch",
+      "shop_patch_canary"
+    ]
+  },
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./baseline",
+  "KindleTheForge": true
+}

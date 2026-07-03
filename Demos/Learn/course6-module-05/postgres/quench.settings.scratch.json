@@ -1,0 +1,15 @@
+{
+  "Target": {
+    "Server": "localhost",
+    "Port": "15432",
+    "User": "postgres",
+    "Password": "Learn!Passw0rd",
+    "ConnectionProperties": {},
+    "Databases": [
+      "shop_patch_scratch"
+    ]
+  },
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./naive-subset",
+  "KindleTheForge": true
+}

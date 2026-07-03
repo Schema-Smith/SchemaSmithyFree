@@ -1,0 +1,10 @@
+{
+  "Name": "Shop",
+  "ValidationScript": "SELECT EXISTS(SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop\\_patch\\_%')",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "MySQL"
+}
