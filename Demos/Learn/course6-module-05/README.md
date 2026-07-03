@@ -23,7 +23,7 @@ fleet. Each engine folder ships:
 | `Package/` | The `Shop` product **after** the change — SchemaShears carves the patch from this. |
 | `naive-subset/` | A hand-carved subset (just the changed `OrderItem`, **unstamped**) — the disaster input. |
 | `patch-manifest.txt` | The list of changed files SchemaShears includes (produced by `git diff`). |
-| `quench.settings.{baseline,scratch,canary}.json` | Deploy settings for each step. |
+| `quench.settings.{baseline,scratch,canary,allowdrops}.json` | Deploy settings for each step. |
 
 ## Setup: stand up an owned fleet
 
@@ -102,6 +102,8 @@ Manifest      Templates\Main\Tables\dbo.OrderItem.json
 Scaffolding   Templates\Main\Template.json
 ```
 
+(PostgreSQL and MySQL reports name their own engine's file — `public.orderitem.json` and `OrderItem.json` respectively.)
+
 And it **stamps** the emitted `patch/Product.json` so the omitted objects can't be dropped — every drop
 category flips to `false`:
 
@@ -147,7 +149,7 @@ those categories enabled. Rebuild the patch allowing table drops, and deploy it 
 ```bash
 schemaquench --ConfigFile:quench.settings.baseline.json     # restore the owned fleet first
 schemashears --Source:Package --Manifest:patch-manifest.txt --Output:patch-allowdrops --AllowDrops:Tables
-SmithySettings_SchemaPackagePath=./patch-allowdrops schemaquench --ConfigFile:quench.settings.scratch.json
+schemaquench --ConfigFile:quench.settings.allowdrops.json   # SchemaPackagePath: ./patch-allowdrops
 ```
 
 Now `patch-allowdrops/Product.json` leaves `DropTablesRemovedFromProduct` alone (the other six stay `false`),
