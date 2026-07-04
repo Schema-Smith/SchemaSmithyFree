@@ -1,0 +1,64 @@
+{
+  "Name": "product",
+  "Columns": [
+    {
+      "Name": "name",
+      "DataType": "varchar(200)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "productid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "sku",
+      "DataType": "varchar(64)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "unitprice",
+      "DataType": "numeric(10, 2)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "discontinued",
+      "DataType": "boolean",
+      "ShouldApplyExpression": "'{{Edition}}' = 'Legacy'",
+      "VariantName": "Legacy",
+      "OldName": "",
+      "Nullable": true
+    },
+    {
+      "Name": "discontinued",
+      "DataType": "smallint",
+      "ShouldApplyExpression": "'{{Edition}}' = 'Modern'",
+      "VariantName": "Modern",
+      "OldName": "",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_product",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "productid",
+      "ShouldApplyExpression": "",
+      "VariantName": ""
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": ""
+}
