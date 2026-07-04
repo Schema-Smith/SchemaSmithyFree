@@ -28,6 +28,7 @@ public class JsonSchemaCheckTests
     private const string PackagePath = @"C:\pkg";
     private static readonly string SchemaDir = Path.Combine(PackagePath, ".json-schemas");
     private static readonly string TablesSchemaPath = Path.Combine(SchemaDir, "tables.sqlserver.schema");
+    private static readonly string ProductsSchemaPath = Path.Combine(SchemaDir, "products.sqlserver.schema");
 
     private IFile _mockFile;
     private IDirectory _mockDirectory;
@@ -64,11 +65,20 @@ public class JsonSchemaCheckTests
     private static JObject FreshTablesSchema() =>
         SchemaGenerator.GenerateSchema(typeof(SqlServerTable), SqlServerElementResolver());
 
+    // Product has no Column/Index/ForeignKey/CheckConstraint members needing platform-subclass
+    // resolution, so the identity resolver mirrors what JsonSchemaCheck's own
+    // PlatformElementResolver would do for it.
+    private static JObject FreshProductsSchema() =>
+        SchemaGenerator.GenerateSchema(typeof(Product), t => t);
+
     private static JObject ColumnItemsProperties(JObject tableSchema) =>
         (JObject)tableSchema["properties"]!["Columns"]!["items"]!["properties"]!;
 
     private void CommitTablesSchema(JObject schema) =>
         FileContent(TablesSchemaPath, schema.ToString(Formatting.None));
+
+    private void CommitProductsSchema(JObject schema) =>
+        FileContent(ProductsSchemaPath, schema.ToString(Formatting.None));
 
     private void JsonFiles(params string[] files) =>
         _mockDirectory.GetFiles(PackagePath, "*.json", SearchOption.AllDirectories).Returns(files);
@@ -185,6 +195,43 @@ public class JsonSchemaCheckTests
         Assert.That(findings[0].Category, Is.EqualTo("Staleness"));
         Assert.That(findings[0].Location, Is.EqualTo(TablesSchemaPath));
         Assert.That(findings.Any(f => f.Code == "SS-JSON-001"), Is.False);
+    }
+
+    // ---- Regression: #326 — a table named "Product" (MySQL-style file layout: no schema
+    // prefix, so the table file is just Tables/Product.json) must classify as a TABLE, never
+    // as the product manifest, purely on directory context. ----
+
+    [Test]
+    public void TableNamedProductUnderTablesFolder_ClassifiesAsTable_NotProductManifest()
+    {
+        CommitTablesSchema(FreshTablesSchema());
+        CommitProductsSchema(FreshProductsSchema());
+        var tableFile = TableFilePath("Product.json");
+        JsonFiles(tableFile);
+        FileContent(tableFile, @"{ ""Name"": ""Product"", ""Columns"": [ { ""Name"": ""Id"", ""DataType"": ""int"" } ] }");
+
+        var findings = new JsonSchemaCheck().Run(Context()).ToList();
+
+        // Valid table JSON, validated against the tables schema — if misclassified as the product
+        // manifest instead, this would spuriously fail with "missing required property
+        // 'ValidationScript'" (a Product-only required field).
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void RealRootProductJson_StillClassifiesAsProductManifest()
+    {
+        CommitProductsSchema(FreshProductsSchema());
+        var productFile = Path.Combine(PackagePath, "Product.json");
+        JsonFiles(productFile);
+        FileContent(productFile, @"{ ""Name"": ""Acme"" }"); // missing required ValidationScript
+
+        var findings = new JsonSchemaCheck().Run(Context()).ToList();
+
+        Assert.That(findings, Has.Exactly(1).Items);
+        Assert.That(findings[0].Code, Is.EqualTo("SS-JSON-001"));
+        Assert.That(findings[0].Location, Is.EqualTo(productFile));
+        Assert.That(findings[0].Message, Does.Contain("ValidationScript"));
     }
 
     // ---- Extra coverage beyond the brief's mandatory list ----

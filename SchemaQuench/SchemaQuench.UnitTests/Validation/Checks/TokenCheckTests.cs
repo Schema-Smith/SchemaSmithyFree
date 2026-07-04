@@ -194,6 +194,30 @@ public class TokenCheckTests
         Assert.That(findings, Is.Empty);
     }
 
+    // ---- Regression: #326 — a table named "Product" (MySQL-style file layout: no schema
+    // prefix, so the table file is just Tables/Product.json) must not have its ScriptTokens
+    // treated as product/template-level manifest tokens, purely on directory context. ----
+
+    [Test]
+    public void ScriptTokensInTableNamedProduct_NotRegisteredAsManifestTokens()
+    {
+        var tableFile = Path.Combine(PackagePath, "Templates", "Main", "Tables", "Product.json");
+        var scriptFile = Path.Combine(PackagePath, "Templates", "Main", "Before Scripts", "Init.sql");
+        JsonFiles(tableFile);
+        SqlFiles(scriptFile);
+        FileContent(tableFile, @"{ ""Name"": ""Product"", ""Columns"": [], ""ScriptTokens"": { ""TableLevelToken"": ""x"" } }");
+        FileContent(scriptFile, "SELECT '{{TableLevelToken}}'");
+
+        var findings = new TokenCheck().Run(Context()).ToList();
+
+        // If Tables/Product.json's ScriptTokens were wrongly registered as manifest-level (the
+        // bug), "TableLevelToken" would be considered defined and this reference would slip by
+        // undetected instead of being flagged as undefined.
+        Assert.That(findings, Has.Exactly(1).Items);
+        Assert.That(findings[0].Code, Is.EqualTo("SS-TOK-001"));
+        Assert.That(findings[0].Message, Does.Contain("TableLevelToken"));
+    }
+
     // ---- Demo-QA-sweep false positives (repo_path/BranchName + Postgres xpath array literals) ----
 
     [Test]
