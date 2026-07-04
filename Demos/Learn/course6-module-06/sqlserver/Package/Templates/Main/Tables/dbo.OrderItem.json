@@ -50,8 +50,8 @@
       "EncryptionAlgorithm": ""
     },
     {
-      "Name": "[UnitPrice]",
-      "DataType": "DECIMAL(10, 2)",
+      "Name": "[Quantity]",
+      "DataType": "INT",
       "ShouldApplyExpression": "",
       "OldName": "",
       "VariantName": "",
@@ -62,11 +62,11 @@
       "EncryptionAlgorithm": ""
     },
     {
-      "Name": "[Quantity]",
-      "DataType": "INT",
+      "Name": "[UnitPrice]",
+      "DataType": "DECIMAL(10, 2)",
       "ShouldApplyExpression": "",
-      "VariantName": "",
       "OldName": "",
+      "VariantName": "",
       "Collation": "",
       "DataMaskFunction": "",
       "EncryptionType": "NONE",
