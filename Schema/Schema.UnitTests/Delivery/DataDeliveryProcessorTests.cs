@@ -628,6 +628,44 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
+    public void DeliverTables_DeleteMergeType_GateFalse_DoesNotTriggerCascadeAbort()
+    {
+        // The single Delete delivery's gate evaluates false (ExecuteScalar -> 0), so it will NOT
+        // run in this environment. Even though the cascade query (ExecuteReader) would report a
+        // CASCADE-deleting FK on this table, a gated-off delivery must not abort the whole run
+        // (#278 false-abort fix). Under the pre-fix code, ValidateDeleteCascade runs over the
+        // ungated ApplicableDeliveries set and would throw before the gate is ever evaluated.
+        _mockCommand.ExecuteScalar().Returns(0);
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(true, false);
+        mockReader.GetString(0).Returns("FK_Orders_Users");
+        mockReader.GetString(1).Returns("Orders");
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json",
+                                       ShouldApplyExpression = "DB_NAME() = 'Prod'", VariantName = "prod-only" }
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.Platform = "SqlServer";
+
+        Assert.DoesNotThrow(() => processor.DeliverTables(context));
+
+        Assert.That(_executedScripts, Is.Empty, "Gated-off delivery must not execute");
+        _mockCommand.DidNotReceive().ExecuteReader();
+        Assert.That(_logs, Has.Some.Contains("Skipping data delivery").And.Some.Contains("prod-only"));
+    }
+
+    [Test]
     public void DeliverTables_NullReadFileContent_AbortsDelivery()
     {
         var processor = new DataDeliveryProcessor();

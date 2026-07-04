@@ -20,10 +20,12 @@ public class DataDeliveryProcessor : IDataDelivery
         => FactoryContainer.ResolveOrCreate<IDataDelivery, DataDeliveryProcessor>();
 
     // Deliveries per table with a real (non-None) MergeType, in declared order — ungated. Used
-    // only by the up-front MergeType/CASCADE validation passes, which must consider every
-    // configured delivery regardless of whether its gate currently passes. Actual delivery
-    // (which deliveries run) is decided by the gate-aware ResolveApplied local function in
-    // DeliverTables, whose result is threaded through the rest of the method.
+    // only by ValidateMergeTypes, which is config-validity checking (a bad MergeType string is
+    // invalid regardless of whether its gate currently passes) and so must consider every
+    // configured delivery. CASCADE validation is gate-aware (see DeliverTables) since it reflects
+    // what will actually run. Actual delivery (which deliveries run) is decided by the gate-aware
+    // ResolveApplied local function in DeliverTables, whose result is threaded through the rest of
+    // the method.
     private static List<(int Index, DataDelivery Delivery)> ApplicableDeliveries(IDeliverableTable table) =>
         (table.DataDeliveries ?? [])
             .Select((d, i) => (Index: i, Delivery: d))
@@ -59,27 +61,15 @@ public class DataDeliveryProcessor : IDataDelivery
             throw new InvalidOperationException("Data delivery aborted: Invalid MergeType values detected.");
         }
 
-        var cascadeErrors = ValidateDeleteCascade(context.Command, platform, context.DatabaseName,
-            tablesToDeliver.Where(t => ApplicableDeliveries(t).Any(x =>
-                    (x.Delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0))
-                .Select(t => (
-                    Schema: GetSchemaOrDb(t, context.DatabaseName, platform, context.SchemaName),
-                    TableName: DataDeliveryHelper.TrimIdentifierQuotes(t.Name, platform)
-                )).ToList());
-        if (cascadeErrors.Count > 0)
-        {
-            foreach (var error in cascadeErrors)
-                logError($"    {error}");
-            throw new InvalidOperationException("Data delivery aborted: Delete merge type with CASCADE delete detected.");
-        }
-
         // Gate-aware applicable deliveries per table: non-None MergeType AND a passing
         // ShouldApplyExpression (blank expression always applies). Evaluated once per table so
         // sequenced gate mocks/real scalar reads see each delivery's gate exactly once, and so
-        // the result can be threaded through the rest of the method (content resolution, FK
-        // edges, and the per-delivery deliver loop) instead of being recomputed. Runs in WhatIf
-        // too (read-only scalar) so WhatIf reporting accurately reflects deliver-vs-skip.
-        // A gate-eval exception propagates (fail-closed), aborting the run like FolderGate callers.
+        // the result can be threaded through the rest of the method (CASCADE validation, content
+        // resolution, FK edges, and the per-delivery deliver loop) instead of being recomputed.
+        // Runs in WhatIf too (read-only scalar) so WhatIf reporting accurately reflects
+        // deliver-vs-skip. A gate-eval exception propagates (fail-closed), aborting the run like
+        // FolderGate callers — and runs BEFORE the CASCADE check below, so a gate exception aborts
+        // the same way it always has.
         List<(int Index, DataDelivery Delivery)> ResolveApplied(IDeliverableTable table)
         {
             var applied = new List<(int, DataDelivery)>();
@@ -104,6 +94,26 @@ public class DataDeliveryProcessor : IDataDelivery
         }
 
         var appliedByTable = tablesToDeliver.ToDictionary(t => t, ResolveApplied);
+
+        // CASCADE validation is scoped to the gated-IN (applied) deliveries only — a delivery
+        // whose gate is false this run will never execute here, so its table must not be able to
+        // false-abort the whole run just because a CASCADE FK exists on it (#278). Unlike
+        // ValidateMergeTypes (config-validity, environment-independent, still checks every
+        // non-None delivery), this check must reflect what the deliver loop is actually about to do.
+        var cascadeErrors = ValidateDeleteCascade(context.Command, platform, context.DatabaseName,
+            tablesToDeliver.Where(t => appliedByTable[t].Any(x =>
+                    (x.Delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0))
+                .Select(t => (
+                    Schema: GetSchemaOrDb(t, context.DatabaseName, platform, context.SchemaName),
+                    TableName: DataDeliveryHelper.TrimIdentifierQuotes(t.Name, platform)
+                )).ToList());
+        if (cascadeErrors.Count > 0)
+        {
+            foreach (var error in cascadeErrors)
+                logError($"    {error}");
+            throw new InvalidOperationException("Data delivery aborted: Delete merge type with CASCADE delete detected.");
+        }
+
         tablesToDeliver = tablesToDeliver.Where(t => appliedByTable[t].Count > 0).ToList();
         if (tablesToDeliver.Count == 0) return;
 
