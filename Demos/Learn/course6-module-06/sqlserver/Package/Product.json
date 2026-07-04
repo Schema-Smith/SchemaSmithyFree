@@ -1,0 +1,8 @@
+{
+  "Name": "Shop",
+  "ValidationScript": "SELECT 1",
+  "TemplateOrder": [ "Main" ],
+  "ScriptTokens": { "Edition": "Modern" },
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}
