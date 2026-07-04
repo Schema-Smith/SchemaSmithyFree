@@ -19,14 +19,20 @@ public class DataDeliveryProcessor : IDataDelivery
     public static IDataDelivery GetFromFactory()
         => FactoryContainer.ResolveOrCreate<IDataDelivery, DataDeliveryProcessor>();
 
-    // Applicable deliveries per table (non-None MergeType), in declared order. Gate evaluation is
-    // added in a later task; for now every non-None delivery applies unconditionally.
+    // Deliveries per table with a real (non-None) MergeType, in declared order — ungated. Used
+    // only by the up-front MergeType/CASCADE validation passes, which must consider every
+    // configured delivery regardless of whether its gate currently passes. Actual delivery
+    // (which deliveries run) is decided by the gate-aware ResolveApplied local function in
+    // DeliverTables, whose result is threaded through the rest of the method.
     private static List<(int Index, DataDelivery Delivery)> ApplicableDeliveries(IDeliverableTable table) =>
         (table.DataDeliveries ?? [])
             .Select((d, i) => (Index: i, Delivery: d))
             .Where(x => !string.IsNullOrEmpty(x.Delivery.MergeType) &&
                         !x.Delivery.MergeType.Equals("None", StringComparison.OrdinalIgnoreCase))
             .ToList();
+
+    private static string VariantSuffix(DataDelivery d) =>
+        string.IsNullOrWhiteSpace(d.VariantName) ? "" : $" [{d.VariantName}]";
 
     public void DeliverTables(DataDeliveryContext context)
     {
@@ -67,6 +73,40 @@ public class DataDeliveryProcessor : IDataDelivery
             throw new InvalidOperationException("Data delivery aborted: Delete merge type with CASCADE delete detected.");
         }
 
+        // Gate-aware applicable deliveries per table: non-None MergeType AND a passing
+        // ShouldApplyExpression (blank expression always applies). Evaluated once per table so
+        // sequenced gate mocks/real scalar reads see each delivery's gate exactly once, and so
+        // the result can be threaded through the rest of the method (content resolution, FK
+        // edges, and the per-delivery deliver loop) instead of being recomputed. Runs in WhatIf
+        // too (read-only scalar) so WhatIf reporting accurately reflects deliver-vs-skip.
+        // A gate-eval exception propagates (fail-closed), aborting the run like FolderGate callers.
+        List<(int Index, DataDelivery Delivery)> ResolveApplied(IDeliverableTable table)
+        {
+            var applied = new List<(int, DataDelivery)>();
+            var idx = 0;
+            foreach (var d in table.DataDeliveries ?? [])
+            {
+                var i = idx++;
+                if (string.IsNullOrEmpty(d.MergeType) || d.MergeType.Equals("None", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                bool apply;
+                try { apply = GateEvaluator.ShouldApply(context.Command, d.ShouldApplyExpression); }
+                catch (Exception e)
+                {
+                    logError($"    Data delivery gate for {DataDeliveryHelper.GetTableKey(table, platform)}" +
+                             $"{VariantSuffix(d)} failed: {e.Message}");
+                    throw;
+                }
+                if (apply) applied.Add((i, d));
+                else log($"    Skipping data delivery for {DataDeliveryHelper.GetTableKey(table, platform)}{VariantSuffix(d)} — ShouldApplyExpression evaluated false");
+            }
+            return applied;
+        }
+
+        var appliedByTable = tablesToDeliver.ToDictionary(t => t, ResolveApplied);
+        tablesToDeliver = tablesToDeliver.Where(t => appliedByTable[t].Count > 0).ToList();
+        if (tablesToDeliver.Count == 0) return;
+
         var deliverySet = DataDeliveryHelper.BuildDeliveryTableSet(tablesToDeliver, platform);
 
         var tableEdges = new Dictionary<IDeliverableTable, (HashSet<string> RequiredDeps, List<string> DeferredColumns)>();
@@ -78,7 +118,7 @@ public class DataDeliveryProcessor : IDataDelivery
             tableEdges[table] = DataDeliveryHelper.ClassifyFKEdges(table, deliverySet, platform);
             var tableKey = DataDeliveryHelper.GetTableKey(table, platform);
 
-            foreach (var (index, delivery) in ApplicableDeliveries(table))
+            foreach (var (index, delivery) in appliedByTable[table])
             {
                 var contentPath = ResolveContentFilePath(context.TemplateRootPath, delivery.ContentFile);
                 if (contentPath == null)
@@ -144,7 +184,7 @@ public class DataDeliveryProcessor : IDataDelivery
 
                 try
                 {
-                    DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Units, false, artifactWritten);
+                    DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Units, false, artifactWritten, appliedByTable[table]);
                 }
                 catch
                 {
@@ -159,7 +199,7 @@ public class DataDeliveryProcessor : IDataDelivery
         {
             try
             {
-                DeliverTable(context, table, tableDataMap, new List<string>(), delivered, pass2Units, true, artifactWritten);
+                DeliverTable(context, table, tableDataMap, new List<string>(), delivered, pass2Units, true, artifactWritten, appliedByTable[table]);
             }
             catch (Exception ex)
             {
@@ -214,7 +254,8 @@ public class DataDeliveryProcessor : IDataDelivery
         Dictionary<(IDeliverableTable Table, int Index), string> tableDataMap, List<string> deferredColumns,
         HashSet<string> delivered,
         List<(IDeliverableTable Table, int Index, DataDelivery Delivery, List<string> DeferredColumns)> pass2Units,
-        bool isCircularFallback, HashSet<string> artifactWritten)
+        bool isCircularFallback, HashSet<string> artifactWritten,
+        List<(int Index, DataDelivery Delivery)> appliedDeliveries)
     {
         var platform = context.Platform;
         var helper = context.ScriptHelper;
@@ -229,7 +270,7 @@ public class DataDeliveryProcessor : IDataDelivery
             return;
         }
 
-        foreach (var (index, delivery) in ApplicableDeliveries(table))
+        foreach (var (index, delivery) in appliedDeliveries)
         {
             var variantLabel = !string.IsNullOrWhiteSpace(delivery.VariantName) ? delivery.VariantName : index.ToString();
             var artifactKey = $"{tableKey}#{variantLabel}";

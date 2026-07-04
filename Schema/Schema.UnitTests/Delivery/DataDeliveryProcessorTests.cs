@@ -136,9 +136,10 @@ public class DataDeliveryProcessorTests
     [Test]
     public void DeliverTables_TwoDeliveriesOneTable_DeliversBothInOrder()
     {
-        // Slice 1 (this task): every non-None delivery applies, ungated — gate evaluation
-        // (ShouldApplyExpression) is wired in a later task. Both deliveries fire regardless
-        // of the expression text below.
+        // Both deliveries carry a non-blank ShouldApplyExpression, so each is gate-evaluated
+        // against _mockCommand.ExecuteScalar() — make both gates pass so this test still
+        // exercises "two distinct deliveries fire in order", independent of gating.
+        _mockCommand.ExecuteScalar().Returns(1);
         var processor = new DataDeliveryProcessor();
         var tables = new List<IDeliverableTable>
         {
@@ -172,6 +173,76 @@ public class DataDeliveryProcessorTests
             "First executed script must be the a.json delivery, not a repeat of b.json.");
         Assert.That(_executedScripts[1], Does.Contain("b.json").And.Not.Contain("a.json"),
             "Second executed script must be the b.json delivery, not a repeat of a.json.");
+    }
+
+    // ---------- ShouldApplyExpression gate evaluation (#278) ----------
+
+    [Test]
+    public void DeliverTables_GateFalse_SkipsDeliveryAndLogs()
+    {
+        _mockCommand.ExecuteScalar().Returns(0); // gate evaluates false
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Seed", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "seed.json",
+                                       ShouldApplyExpression = "DB_NAME() = 'Dev'", VariantName = "dev-seed" }
+                }
+            }
+        };
+
+        processor.DeliverTables(MakeContext(tables));
+
+        Assert.That(_executedScripts, Is.Empty);
+        Assert.That(_logs, Has.Some.Contains("Skipping data delivery").And.Some.Contains("dev-seed"));
+    }
+
+    [Test]
+    public void DeliverTables_TwoVariants_OnlyGatePassingApplies()
+    {
+        // First variant's gate true, second false: use a sequenced scalar.
+        _mockCommand.ExecuteScalar().Returns(1, 0);
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Ref", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "dev.json",  ShouldApplyExpression = "DB_NAME()='Dev'",  VariantName = "dev" },
+                    new DataDelivery { MergeType = "Insert", ContentFile = "prod.json", ShouldApplyExpression = "DB_NAME()='Prod'", VariantName = "prod" }
+                }
+            }
+        };
+
+        processor.DeliverTables(MakeContext(tables));
+
+        Assert.That(_executedScripts, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void DeliverTables_GateThrows_PropagatesFailClosed()
+    {
+        _mockCommand.ExecuteScalar().Returns(_ => throw new Exception("bad gate"));
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Seed", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "seed.json", ShouldApplyExpression = "broken", VariantName = "x" }
+                }
+            }
+        };
+
+        Assert.Throws<Exception>(() => processor.DeliverTables(MakeContext(tables)));
     }
 
     [Test]
