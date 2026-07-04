@@ -223,13 +223,9 @@ public class ProductQuench
     /// <summary>
     /// Converts a scalar result to boolean.
     /// MySQL returns Int64 (0/1) from EXISTS(), SQL Server returns bool, PostgreSQL returns bool.
+    /// Delegates to the shared <see cref="Schema.Delivery.GateEvaluator"/>.
     /// </summary>
-    internal static bool ScalarToBool(object result) => result switch
-    {
-        null or DBNull => false,
-        bool b => b,
-        _ => Convert.ToInt64(result) != 0
-    };
+    internal static bool ScalarToBool(object result) => Schema.Delivery.GateEvaluator.ScalarToBool(result);
 
     internal static List<string> BuildMinimumVersionFailures(
         IEnumerable<(string Server, TargetVersionInfo Info)> detected,
