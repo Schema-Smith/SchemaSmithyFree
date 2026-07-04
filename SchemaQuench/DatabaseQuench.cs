@@ -1810,12 +1810,9 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
                 var header = $"Failed: {_server}.{_databaseName}" +
                              $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")}" +
                              $" [{sqlScript.LogPath}] — {sqlScript.Error?.Message}";
-                var content = ResolvedSqlArtifactWriter.BuildArtifact(header, sqlScript.Batches, FailingBatchIndex(sqlScript));
-                if (ScrubArtifactsEnabled)
-                    content = ResolvedSqlArtifactWriter.Scrub(content, SensitiveTokenValues());
-
                 var fileName = GetDebugFileName($"Failed {Path.GetFileNameWithoutExtension(sqlScript.Name)}");
-                var path = ResolvedSqlArtifactWriter.Write(directory, fileName, content);
+                var path = ResolvedSqlArtifactWriter.WriteFailureArtifact(directory, ScrubArtifactsEnabled,
+                    SensitiveTokenValues(), header, sqlScript.Batches, FailingBatchIndex(sqlScript), fileName);
                 SafeProgressLogError($"    Resolved SQL written to: {path}");
                 SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message} — resolved SQL: {path}");
             }
