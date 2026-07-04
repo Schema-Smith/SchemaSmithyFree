@@ -225,6 +225,67 @@ public class ResolvedSqlArtifactIntegrationTests
         }
     }
 
+    // ----- Generated-DDL failure (#327 S4.2) ------------------------------------------------------
+
+    /// <summary>
+    /// A generated-DDL failure (index referencing a nonexistent column, thrown by the server-side
+    /// SchemaSmith_IndexOnlyQuench proc) must surface with the same "Resolved SQL written to:"
+    /// wording as user-script / data-delivery failures — not the legacy "Debug Script:" wording —
+    /// and the failure must still produce a written artifact.
+    /// </summary>
+    /// <remarks>
+    /// Coverage limit (documented per #327 S4.2, no silent cap): unlike SQL Server/PostgreSQL, MySQL's
+    /// generated-DDL pipeline stages the resolved table JSON into session temp tables via a separate
+    /// <c>SchemaSmith_ParseTableJson</c> call (whose own debug artifact IS scrub-aware and contains the
+    /// sensitive-token marker), then the actually-failing statement is a scalar
+    /// <c>CALL SchemaSmith_IndexOnlyQuench(...)</c> with no embedded JSON. So the specific artifact
+    /// referenced by THIS failure's "Resolved SQL written to:" line never contains the marker on MySQL,
+    /// and asserting scrub-masking against it would be asserting against the wrong file. The
+    /// scrub-vs-unscrub behavior of <c>LogSqlScript</c> itself is platform-agnostic and is proven by the
+    /// deterministic unit tests (<c>LogSqlScript_ScrubEnabled...</c> / <c>LogSqlScript_ScrubDisabled...</c>
+    /// in DatabaseQuenchTests.cs) plus the SQL Server/PostgreSQL integration coverage above.
+    /// </remarks>
+    [Test]
+    public void GeneratedDdlFailure_SurfacesUnifiedWording_AndWritesArtifact()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var progressLogLines = new List<string>();
+            SetupSharedMocks(progressLogLines, null);
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("MySQL", "DdlArtifactProbeProduct");
+            FactoryContainer.Resolve<IConfigurationRoot>()["ArtifactPath"] = _artifactDir;
+            FactoryContainer.Resolve<IConfigurationRoot>()["ScrubArtifacts"] = null;
+
+            try
+            {
+                RunSchemaQuench();
+
+                _environment.Received(1).Exit(2);
+
+                var artifactFiles = Directory.GetFiles(_artifactDir, "*.sql");
+                Assert.That(artifactFiles, Has.Length.GreaterThan(0),
+                    "At least one .sql artifact file must be written to ArtifactPath for the generated-DDL failure.");
+
+                var progressOutput = string.Join("\n", progressLogLines);
+                Assert.That(progressOutput, Does.Contain("Resolved SQL written to:"),
+                    "Generated-DDL failure must surface with the unified 'Resolved SQL written to:' wording, not 'Debug Script:'.");
+                Assert.That(progressOutput, Does.Not.Contain("Debug Script:"),
+                    "The legacy 'Debug Script:' wording must no longer appear.");
+            }
+            finally
+            {
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+                var cfg = FactoryContainer.Resolve<IConfigurationRoot>();
+                cfg["ArtifactPath"] = null;
+                cfg["ScrubArtifacts"] = null;
+                cfg["SchemaPackagePath"] = null;
+            }
+        }
+    }
+
     // ----- Helpers -------------------------------------------------------------------------------
 
     private void SetupSharedMocks(List<string> progressCapture, List<string> errorCapture)

@@ -674,7 +674,7 @@ public class DatabaseQuench
         {
             SafeProgressLogError($"FAILED to quench:\r\n{e.Message}");
             if (!string.IsNullOrWhiteSpace(_debugFileLocation))
-                SafeProgressLogError($"Debug Script: '{_debugFileLocation}'");
+                SafeProgressLogError($"Resolved SQL written to: {_debugFileLocation}");
         }
     }
 
@@ -1545,7 +1545,8 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             var dir = ResolveArtifactDirectory();
             DirectoryWrapper.GetFromFactory().CreateDirectory(dir);
             var path = Path.Combine(dir, name);
-            FileWrapper.GetFromFactory().WriteAllText(path, sql);
+            var toWrite = ScrubArtifactsEnabled ? ResolvedSqlArtifactWriter.Scrub(sql, SensitiveTokenValues()) : sql;
+            FileWrapper.GetFromFactory().WriteAllText(path, toWrite);
             return path;
         }
         catch (Exception ex)
@@ -1898,7 +1899,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
                 if (!string.IsNullOrWhiteSpace(_debugFileLocation))
                 {
                     SafeProgressLogError("");
-                    SafeProgressLogError($"Debug Script: '{_debugFileLocation}'");
+                    SafeProgressLogError($"Resolved SQL written to: {_debugFileLocation}");
                 }
 
                 SafeErrorLogError("");

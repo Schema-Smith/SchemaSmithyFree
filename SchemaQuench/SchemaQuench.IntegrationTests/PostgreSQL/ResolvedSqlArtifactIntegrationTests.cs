@@ -229,6 +229,104 @@ public class ResolvedSqlArtifactIntegrationTests
         }
     }
 
+    // ----- Generated-DDL failure (#327 S4.2) ------------------------------------------------------
+
+    /// <summary>
+    /// A generated-DDL failure (index referencing a nonexistent column, thrown by the server-side
+    /// IndexOnlyQuench proc) must write a scrub-aware artifact and surface it with the same
+    /// "Resolved SQL written to:" wording as user-script / data-delivery failures — not the legacy
+    /// "Debug Script:" wording. DdlArtifactProbeProduct's table embeds a marker matching the
+    /// product's AdminPassword token value directly in the generated p_TableDefinitions JSON that
+    /// IndexOnlyQuench receives, so the written artifact — and the scrub check below — exercise the
+    /// real LogSqlScript code path (not just the CALL statement text).
+    /// </summary>
+    [Test]
+    public void GeneratedDdlFailure_WritesScrubAwareArtifact_WithUnifiedWording()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var progressLogLines = new List<string>();
+            SetupSharedMocks(progressLogLines, null);
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("PostgreSQL", "DdlArtifactProbeProduct");
+            FactoryContainer.Resolve<IConfigurationRoot>()["ArtifactPath"] = _artifactDir;
+            FactoryContainer.Resolve<IConfigurationRoot>()["ScrubArtifacts"] = null;
+
+            try
+            {
+                RunSchemaQuench();
+
+                _environment.Received(1).Exit(2);
+
+                var artifactFiles = Directory.GetFiles(_artifactDir, "*.sql");
+                Assert.That(artifactFiles, Has.Length.GreaterThan(0),
+                    "At least one .sql artifact file must be written to ArtifactPath for the generated-DDL failure.");
+
+                var progressOutput = string.Join("\n", progressLogLines);
+                Assert.That(progressOutput, Does.Contain("Resolved SQL written to:"),
+                    "Generated-DDL failure must surface with the unified 'Resolved SQL written to:' wording, not 'Debug Script:'.");
+                Assert.That(progressOutput, Does.Not.Contain("Debug Script:"),
+                    "The legacy 'Debug Script:' wording must no longer appear.");
+
+                var artifactContent = string.Join("\n", artifactFiles.Select(File.ReadAllText));
+                Assert.That(artifactContent, Does.Contain("sup3rs3cr3t_ddl_probe"),
+                    "Without ScrubArtifacts, the generated-DDL artifact must retain the raw resolved SQL.");
+            }
+            finally
+            {
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+                var cfg = FactoryContainer.Resolve<IConfigurationRoot>();
+                cfg["ArtifactPath"] = null;
+                cfg["ScrubArtifacts"] = null;
+                cfg["SchemaPackagePath"] = null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Same generated-DDL failure with ScrubArtifacts=true: the sensitive token value embedded in
+    /// the generated p_TableDefinitions JSON must be masked in the written artifact.
+    /// </summary>
+    [Test]
+    public void GeneratedDdlFailure_ScrubArtifacts_MasksSensitiveTokenInArtifact()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks(null, null);
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("PostgreSQL", "DdlArtifactProbeProduct");
+            FactoryContainer.Resolve<IConfigurationRoot>()["ArtifactPath"] = _artifactDir;
+            FactoryContainer.Resolve<IConfigurationRoot>()["ScrubArtifacts"] = "true";
+
+            try
+            {
+                RunSchemaQuench();
+
+                _environment.Received(1).Exit(2);
+
+                var artifactFiles = Directory.GetFiles(_artifactDir, "*.sql");
+                Assert.That(artifactFiles, Has.Length.GreaterThan(0),
+                    "Artifact file must be written even when ScrubArtifacts=true.");
+
+                var artifactContent = string.Join("\n", artifactFiles.Select(File.ReadAllText));
+                Assert.That(artifactContent, Does.Not.Contain("sup3rs3cr3t_ddl_probe"),
+                    "Sensitive token value must be masked in the generated-DDL artifact when ScrubArtifacts=true.");
+            }
+            finally
+            {
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+                var cfg = FactoryContainer.Resolve<IConfigurationRoot>();
+                cfg["ArtifactPath"] = null;
+                cfg["ScrubArtifacts"] = null;
+                cfg["SchemaPackagePath"] = null;
+            }
+        }
+    }
+
     // ----- Helpers -------------------------------------------------------------------------------
 
     private void SetupSharedMocks(List<string> progressCapture, List<string> errorCapture)

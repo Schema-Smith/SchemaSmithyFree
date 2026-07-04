@@ -1,0 +1,6 @@
+{
+    "Name": "Main",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "IndexOnlyTableQuenches": true,
+    "ScriptFolders": []
+}
