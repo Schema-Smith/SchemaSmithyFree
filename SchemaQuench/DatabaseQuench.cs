@@ -407,8 +407,16 @@ public class DatabaseQuench
                     {
                         SafeProgressLog("  Validate Baseline");
                         command.CommandText = _iteration.BaselineValidationScript;
-                        if (!Convert.ToBoolean(command.ExecuteScalar()))
-                            throw new Exception("Invalid baseline for this release");
+                        try
+                        {
+                            if (!Convert.ToBoolean(command.ExecuteScalar()))
+                                throw new Exception("Invalid baseline for this release");
+                        }
+                        catch (Exception ex)
+                        {
+                            WriteValidationFailureArtifact(command, "BaselineValidation", ex);
+                            throw;
+                        }
                     });
                 }
 
@@ -600,7 +608,15 @@ public class DatabaseQuench
                         {
                             SafeProgressLog("  Stamp version");
                             command.CommandText = _iteration.VersionStampScript;
-                            ExecuteNonQueryHandlingMessages(command);
+                            try
+                            {
+                                ExecuteNonQueryHandlingMessages(command);
+                            }
+                            catch (Exception ex)
+                            {
+                                WriteValidationFailureArtifact(command, "VersionStamp", ex);
+                                throw;
+                            }
                         });
                     }
                 }
@@ -1829,6 +1845,31 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     }
 
     private static int FailingBatchIndex(SqlScript script) => script.Batches.Count - 1;
+
+    /// <summary>
+    /// Shared artifact-on-failure wrap for the two single-statement validation scripts
+    /// (BaselineValidationScript, VersionStampScript). Mirrors <see cref="LogScriptErrors"/>'s
+    /// header/artifact-write shape but operates on a single already-resolved <c>command.CommandText</c>
+    /// rather than a <see cref="SqlScript"/> batch list — an artifact-write failure is swallowed (soft
+    /// log only) so it never masks the original exception being rethrown by the caller.
+    /// </summary>
+    private void WriteValidationFailureArtifact(IDbCommand command, string label, Exception error)
+    {
+        try
+        {
+            var header = $"Failed: {_server}.{_databaseName}" +
+                         $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")}" +
+                         $" [{label}] — {error.Message}";
+            var fileName = GetDebugFileName($"Failed {label}");
+            var path = ResolvedSqlArtifactWriter.WriteFailureArtifact(ResolveArtifactDirectory(), ScrubArtifactsEnabled,
+                SensitiveTokenValues(), header, new[] { command.CommandText }, 0, fileName);
+            SafeProgressLogError($"    Resolved SQL written to: {path}");
+        }
+        catch (Exception artifactEx)
+        {
+            SafeProgressLog($"    Could not write resolved-SQL artifact for '{label}': {artifactEx.Message}");
+        }
+    }
 
     /// <summary>
     /// Per-tenant log discipline (design §5.8): when this is a schema-template iteration, every log

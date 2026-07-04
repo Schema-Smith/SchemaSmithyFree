@@ -1,0 +1,6 @@
+{
+    "Name": "Main",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "VersionStampScript": "-- version_stamp_artifact_probe_marker AdminPassword={{AdminPassword}} Region={{Region}}\nRAISERROR('version_stamp_artifact_probe_error', 16, 1)",
+    "ScriptFolders": []
+}

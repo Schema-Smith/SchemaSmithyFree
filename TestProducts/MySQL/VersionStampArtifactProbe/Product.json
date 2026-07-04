@@ -1,0 +1,15 @@
+{
+    "Name": "VersionStampArtifactProbe",
+    "ValidationScript": "SELECT EXISTS(SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{{MainDB}}')",
+    "TemplateOrder": [
+        "Main"
+    ],
+    "ScriptFolders": [],
+    "ScriptTokens": {
+        "MainDB": "TestMain",
+        "ReleaseVersion": "",
+        "AdminPassword": "sup3rs3cr3t_stamp_probe",
+        "Region": "us-east"
+    },
+    "Platform": "MySQL"
+}
