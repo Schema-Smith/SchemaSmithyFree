@@ -318,6 +318,113 @@ public class ResolvedSqlArtifactIntegrationTests
         }
     }
 
+    // ----- Product-level script failure (#327 S4.3) -----------------------------------------------
+
+    /// <summary>
+    /// A failing PRODUCT-level Before script (Product.json ScriptFolders, not a template
+    /// MigrationScripts/Before script) must write a resolved-SQL artifact and surface it with the
+    /// same "Resolved SQL written to:" wording as template scripts / data delivery / generated DDL.
+    /// The Bogus template's empty DatabaseIdentificationScript makes it a no-op, so only the
+    /// product-level Before script executes.
+    /// </summary>
+    [Test]
+    public void ProductBeforeScriptFailure_WritesArtifactToArtifactPath_LogHasPath_NotRawSql()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var progressLogLines = new List<string>();
+            var errorLogLines = new List<string>();
+            SetupSharedMocks(progressLogLines, errorLogLines);
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("SqlServer", "ProductScriptArtifactProbe");
+            FactoryContainer.Resolve<IConfigurationRoot>()["ArtifactPath"] = _artifactDir;
+            FactoryContainer.Resolve<IConfigurationRoot>()["ScrubArtifacts"] = null;
+
+            try
+            {
+                // Unlike template script failures (caught in Program.Main -> Exit(2)), a product-level
+                // Before/After script failure propagates out of ProductQuench.QuenchProduct uncaught
+                // (matches ProductQuenchTests.ShouldThrowExceptionWhenAfterProductScripErrors).
+                var ex = Assert.Throws<Exception>(RunSchemaQuench);
+                Assert.That(ex!.ToString(), Contains.Substring("Product script quench FAILED"));
+
+                var artifactFiles = Directory.GetFiles(_artifactDir, "*.sql");
+                Assert.That(artifactFiles, Has.Length.GreaterThan(0),
+                    "At least one .sql artifact file must be written to ArtifactPath for the product-level Before script failure.");
+
+                var artifactContent = string.Join("\n", artifactFiles.Select(File.ReadAllText));
+                Assert.That(artifactContent, Does.Contain("product_before_artifact_probe_marker"),
+                    "Artifact must contain the distinctive product-level Before script marker.");
+
+                var progressOutput = string.Join("\n", progressLogLines);
+                Assert.That(progressOutput, Does.Contain("Resolved SQL written to:"),
+                    "Progress log must contain the 'Resolved SQL written to:' reference for the product-level script failure.");
+                Assert.That(progressOutput, Does.Contain(_artifactDir),
+                    "Progress log must contain the artifact directory path.");
+                Assert.That(progressOutput, Does.Not.Contain("product_before_artifact_probe_marker"),
+                    "Progress log must NOT contain the raw SQL marker — SQL must stay in the file, not the log.");
+
+                var errorOutput = string.Join("\n", errorLogLines);
+                Assert.That(errorOutput, Does.Not.Contain("product_before_artifact_probe_marker"),
+                    "Error log must NOT contain the raw SQL marker.");
+            }
+            finally
+            {
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+                var cfg = FactoryContainer.Resolve<IConfigurationRoot>();
+                cfg["ArtifactPath"] = null;
+                cfg["ScrubArtifacts"] = null;
+                cfg["SchemaPackagePath"] = null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Same product-level Before script failure with ScrubArtifacts=true: the sensitive product
+    /// token (AdminPassword) embedded in the script must be masked; the non-sensitive token
+    /// (Region) must remain visible.
+    /// </summary>
+    [Test]
+    public void ProductBeforeScriptFailure_ScrubArtifacts_MasksSensitiveTokenInArtifact()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks(null, null);
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("SqlServer", "ProductScriptArtifactProbe");
+            FactoryContainer.Resolve<IConfigurationRoot>()["ArtifactPath"] = _artifactDir;
+            FactoryContainer.Resolve<IConfigurationRoot>()["ScrubArtifacts"] = "true";
+
+            try
+            {
+                var ex = Assert.Throws<Exception>(RunSchemaQuench);
+                Assert.That(ex!.ToString(), Contains.Substring("Product script quench FAILED"));
+
+                var artifactFiles = Directory.GetFiles(_artifactDir, "*.sql");
+                Assert.That(artifactFiles, Has.Length.GreaterThan(0),
+                    "Artifact file must be written even when ScrubArtifacts=true.");
+
+                var artifactContent = string.Join("\n", artifactFiles.Select(File.ReadAllText));
+                Assert.That(artifactContent, Does.Not.Contain("sup3rs3cr3t_product_probe"),
+                    "Sensitive product token value must be masked in the artifact when ScrubArtifacts=true.");
+                Assert.That(artifactContent, Does.Contain("us-east"),
+                    "Non-sensitive token value (Region) must remain visible in the artifact.");
+            }
+            finally
+            {
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+                var cfg = FactoryContainer.Resolve<IConfigurationRoot>();
+                cfg["ArtifactPath"] = null;
+                cfg["ScrubArtifacts"] = null;
+                cfg["SchemaPackagePath"] = null;
+            }
+        }
+    }
+
     // ----- Helpers -------------------------------------------------------------------------------
 
     private void SetupSharedMocks(List<string> progressCapture, List<string> errorCapture)

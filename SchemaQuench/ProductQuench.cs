@@ -1527,6 +1527,7 @@ public class ProductQuench
         var initDb = GetInitDatabase(_product.Platform);
         var serverMsg = string.IsNullOrWhiteSpace(server) ? "" : $"[{server}].";
         var slot = isBefore ? "Before" : "After";
+        var failingBatchIndexes = new Dictionary<SqlScript, int>();
 
         foreach (var script in scriptList)
         {
@@ -1546,13 +1547,16 @@ public class ProductQuench
 
             _progressLog.Info($"{serverMsg}[{initDb}]    Quenching {script.LogPath}");
             var needDBReset = false;
+            var currentBatchIndex = -1;
             try
             {
                 script.CheckForUnresolvedTokens(initDb, serverMsg, _progressLog.Warn);
                 for (var i = 0; i < (_runScriptsTwice ? 2 : 1); i++)
                 {
-                    foreach (var batch in script.Batches)
+                    for (var batchIndex = 0; batchIndex < script.Batches.Count; batchIndex++)
                     {
+                        currentBatchIndex = batchIndex;
+                        var batch = script.Batches[batchIndex];
                         needDBReset = needDBReset || batch.ContainsIgnoringCase("USE ");
                         destCmd.CommandText = batch;
                         destCmd.ExecuteNonQuery();
@@ -1566,6 +1570,9 @@ public class ProductQuench
             catch (Exception ex)
             {
                 script.Error = ex;
+                // currentBatchIndex is the batch that was executing when the exception was thrown;
+                // -1 (never entered the batch loop, e.g. token-check threw first) falls back to the last batch.
+                failingBatchIndexes[script] = currentBatchIndex >= 0 ? currentBatchIndex : script.Batches.Count - 1;
             }
             finally
             {
@@ -1575,11 +1582,63 @@ public class ProductQuench
 
         if (scriptList.Any(x => !x.HasBeenQuenched))
         {
+            var directory = ResolveArtifactDirectory();
+            var scrub = ScrubArtifactsEnabled;
+            var sensitiveValues = SensitiveTokenValues();
+
             foreach (var sqlScript in scriptList.Where(s => !s.HasBeenQuenched))
+            {
                 _progressLog.Error($"{serverMsg}[{initDb}] Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}");
+
+                try
+                {
+                    var header = $"Failed: {serverMsg}[{initDb}] [{sqlScript.LogPath}] — {sqlScript.Error?.Message}";
+                    var fileName = GetProductDebugFileName($"Failed {Path.GetFileNameWithoutExtension(sqlScript.Name)}", server);
+                    var failingBatchIndex = failingBatchIndexes.GetValueOrDefault(sqlScript, sqlScript.Batches.Count - 1);
+                    var path = ResolvedSqlArtifactWriter.WriteFailureArtifact(directory, scrub, sensitiveValues,
+                        header, sqlScript.Batches, failingBatchIndex, fileName);
+                    _progressLog.Error($"{serverMsg}[{initDb}]    Resolved SQL written to: {path}");
+                }
+                catch (Exception artifactEx)
+                {
+                    // Degrade gracefully: the original script error is already logged above; losing the
+                    // artifact must not mask it.
+                    _progressLog.Error($"{serverMsg}[{initDb}]    Could not write resolved-SQL artifact for '{sqlScript.LogPath}': {artifactEx.Message}");
+                }
+            }
 
             throw new Exception($"{serverMsg}[{initDb}] Unable to quench one or more scripts");
         }
+    }
+
+    /// <summary>
+    /// Config resolution for the product-level resolved-SQL artifact surface (#327 S4.3), mirroring
+    /// <c>DatabaseQuench.ResolveArtifactDirectory</c> / <c>ScrubArtifactsEnabled</c> / <c>SensitiveTokenValues</c>.
+    /// ProductQuench cannot call those (internal to DatabaseQuench, a different class) so it resolves
+    /// config itself. Product-scoped only: template tokens don't apply to product-level Before/After scripts.
+    /// </summary>
+    private string ResolveArtifactDirectory()
+    {
+        var configured = _config["ArtifactPath"];
+        return string.IsNullOrWhiteSpace(configured) ? Directory.GetCurrentDirectory() : configured;
+    }
+
+    private bool ScrubArtifactsEnabled => _config["ScrubArtifacts"]?.ToLower() == "true";
+
+    private IReadOnlyList<KeyValuePair<string, string>> SensitiveTokenValues() =>
+        _product.ScriptTokens
+            .Where(kv => LogScrubber.ShouldScrubName(kv.Key, _logHygiene))
+            .ToList();
+
+    /// <summary>
+    /// Debug filename for a product-level script failure artifact. There is no database/schema scope
+    /// at this level (product Before/After scripts run before/around per-database template work), so
+    /// the product name + server stand in for the scope DatabaseQuench.GetDebugFileName uses.
+    /// </summary>
+    private string GetProductDebugFileName(string label, string server)
+    {
+        var serverSuffix = string.IsNullOrEmpty(server) ? "" : $" {server}";
+        return $"SchemaQuench - {label}{serverSuffix} {_product.Name}.sql";
     }
 
     private void ResetDb(IDbCommand destCmd)
