@@ -2,7 +2,8 @@
   "Name": "Main",
   "DatabaseIdentificationScript": "SELECT name FROM sys.databases WHERE name = 'cookbook_r5'",
   "ScriptTokens": {
-    "ProductTable": "<*SpecificTable*>dbo.Product"
+    "ProductTable": "<*SpecificTable*>dbo.Product",
+    "ProductSummaryView": "<*SpecificIndexedView*>dbo.vProductSummary"
   },
   "ScriptFolders": [
     { "FolderPath": "After Scripts", "QuenchSlot": "After" }

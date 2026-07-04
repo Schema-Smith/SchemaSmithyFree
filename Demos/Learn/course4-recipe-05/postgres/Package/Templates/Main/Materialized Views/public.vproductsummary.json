@@ -1,0 +1,8 @@
+{
+  "Name": "vproductsummary",
+  "Schema": "public",
+  "Definition": "SELECT name, count(*) AS productcount, sum(price) AS totalprice FROM public.product GROUP BY name",
+  "Indexes": [
+    { "Name": "ux_vproductsummary_name", "Unique": true, "IndexColumns": "name" }
+  ]
+}

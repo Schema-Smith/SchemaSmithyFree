@@ -1,0 +1,9 @@
+{
+  "Name": "[vProductSummary]",
+  "Schema": "[dbo]",
+  "Definition": "SELECT [Name], COUNT_BIG(*) AS ProductCount, SUM([Price]) AS TotalPrice FROM [dbo].[Product] GROUP BY [Name]",
+  "Indexes": [
+    { "Name": "[CIX_vProductSummary]", "Unique": true, "Clustered": true, "IndexColumns": "Name" },
+    { "Name": "[IX_vProductSummary_Count]", "IndexColumns": "ProductCount" }
+  ]
+}

@@ -66,6 +66,44 @@ docker exec learn-postgres psql -U postgres -d cookbook_r5 -tAc "SELECT column_n
 # → snapshotat, productid, name, price, sku
 ```
 
+## Same lever, for a view
+
+`<*SpecificTable*>` has view-model siblings: `<*SpecificIndexedView*>` (SQL Server) and
+`<*SpecificMaterializedView*>` (PostgreSQL). They resolve the same way — the token holds the view's full JSON
+model — but a view's model carries a `Definition` and an `Indexes` list rather than a `Columns` array, so the
+script it drives is **index-aware**. This package declares a `vProductSummary` view over `Product` and a second
+`[ALWAYS]` generator that reads its model:
+
+- **SQL Server** (`Inventory View Indexes [ALWAYS].sql`) — SQL Server maintains indexed views for you, so
+  there's nothing to rebuild or refresh. Instead the generator reads the view's declared `Indexes` and keeps a
+  governance inventory table (`dbo.IndexedViewInventory`) in sync with what you declared — name, uniqueness,
+  clustering, key columns. Declare another index on the view and re-quench: the inventory picks it up. (This is
+  the *describe* side of the lever — not every model drives generated DDL; sometimes you keep an honest record.)
+- **PostgreSQL** (`Refresh Materialized View [ALWAYS].sql`) — emits `REFRESH MATERIALIZED VIEW CONCURRENTLY`
+  when the model declares a unique index (Postgres *requires* one for a concurrent refresh), or a plain
+  `REFRESH` when it doesn't. The refresh mode is computed from the declared index model, so it can't drift.
+- **MySQL** — no indexed or materialized view type, so no view-model token and no view generator here (the
+  `Product` snapshot above still applies).
+
+```json
+// SQL Server  — Templates/Main/Template.json
+"ScriptTokens": { "ProductSummaryView": "<*SpecificIndexedView*>dbo.vProductSummary" }
+// PostgreSQL  — Templates/Main/Template.json
+"ScriptTokens": { "ProductSummaryView": "<*SpecificMaterializedView*>public.vproductsummary" }
+```
+
+Verify after deploy:
+
+```bash
+# SQL Server — the inventory reflects the view's declared indexes
+docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -W -d cookbook_r5 -Q \"SELECT IndexName, IsUnique, IsClustered, KeyColumns FROM dbo.IndexedViewInventory WHERE ViewName='vProductSummary'\""
+# → CIX_vProductSummary 1 1 Name ;  IX_vProductSummary_Count 0 0 ProductCount
+
+# PostgreSQL — the matview is populated, proving the concurrent refresh ran
+docker exec learn-postgres psql -U postgres -d cookbook_r5 -tAc "SELECT matviewname, ispopulated FROM pg_matviews WHERE matviewname='vproductsummary'"
+# → vproductsummary|t
+```
+
 ## Per-engine notes
 
 | | SQL Server | PostgreSQL | MySQL |
