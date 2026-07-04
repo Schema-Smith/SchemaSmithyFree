@@ -189,6 +189,7 @@ For deploying a partial package of migration scripts to fix a specific productio
 `ShouldApplyExpression` works at more than one level, and it helps to keep them straight:
 
 - **Within a table.** Columns, indexes, foreign keys, check constraints, statistics, and the other components inside a table file can each declare conditional variants -- same name, mutually exclusive expressions -- and the matching one is chosen per target. These variant sets are fully preserved when SchemaTongs re-extracts the table.
+- **A table's data.** A table's `DataDelivery` block works differently from the components above: it can be an array of gated deliveries, but *every* delivery whose gate passes applies -- not just one match. That's what makes additive patch slices possible alongside mutually-exclusive environment variants. See [Gating deliveries by environment](#gating-deliveries-by-environment) below.
 - **The whole table.** A table-level `ShouldApplyExpression` gates the entire table present-or-absent on a given target, and that gating round-trips through extraction too.
 - **A whole folder.** A product- or template-level script folder can carry a `ShouldApplyExpression`, so an entire folder of scripts deploys or is skipped per target -- a `MariaDB/` variant gated on `@@version`, a `Jobs/` folder skipped on Azure SQL, or `TableData/TestData/` kept out of production. Its tokens are resolved before evaluation, like every other gate. See [Conditional Deployment](../reference/schemaquench.md#shouldapplyexpression-and-conditional-deployment).
 
@@ -401,6 +402,37 @@ Foreign keys turn data loading into a graph problem. SchemaQuench solves it auto
 ```
 
 Self-referential tables, cross-table cycles broken by nullable columns, complex relational graphs -- all handled declaratively.
+
+### Gating deliveries by environment
+
+The `DataDelivery` block on a table doesn't have to be a single object. Make it an array and each entry becomes an independently-gated delivery, evaluated with the same `ShouldApplyExpression` you already know from components -- with one twist: **every** delivery whose gate passes applies, not just the first match. That covers three shapes teams reach for:
+
+- Seed or test rows that only merge into dev/test databases.
+- A rich dataset in dev and a lean reference set in production, one table, two mutually-exclusive gates.
+- Several deliveries with disjoint `MergeFilter`s that each own a slice of the table, all applying together as additive patch slices.
+
+```json
+"DataDelivery": [
+  {
+    "ContentFile": "data/dbo.PermissionTypes.core.tabledata",
+    "MergeType": "Insert/Update/Delete",
+    "MatchColumns": "[PermissionTypeID]",
+    "MergeFilter": "Category = 'Core'",
+    "ShouldApplyExpression": "DB_NAME() = 'AppMain'",
+    "VariantName": "Core permission types"
+  },
+  {
+    "ContentFile": "data/dbo.PermissionTypes.regional.tabledata",
+    "MergeType": "Insert/Update/Delete",
+    "MatchColumns": "[PermissionTypeID]",
+    "MergeFilter": "Category = 'Regional'",
+    "ShouldApplyExpression": "DB_NAME() = 'AppMain'",
+    "VariantName": "Regional permission types"
+  }
+]
+```
+
+Both deliveries share a gate, so on `AppMain` both apply -- but each is scoped to its own `Category` slice by `MergeFilter`, so neither delivery's delete pass touches the other's rows. Skip that discipline and you've got a foot-gun: two `Insert/Update/Delete` deliveries without disjoint filters will delete each other's data on every quench. See [Schema Packages -- Multiple Deliveries](../reference/schema-packages.md#multiple-deliveries) for the full pattern, the delete-overlap warning, and gate examples across all three engines.
 
 ### Hand-written scripts still welcome
 

@@ -1033,6 +1033,14 @@ Each table that participates in data delivery carries a `DataDelivery` block in 
 
 See [Schema Packages -- DataDelivery](schema-packages.md#datadelivery) for the full property reference and examples.
 
+### Gated deliveries and variants
+
+A table's `DataDelivery` block can also be an array of independently-gated deliveries, each with its own `ShouldApplyExpression`. SchemaQuench evaluates every delivery's gate against the target once per quench, before any content file is read, and every delivery whose gate passes applies -- not just the first match. A delivery whose gate evaluates false is logged as skipped and never touches the table; a delivery whose gate expression itself errors aborts the deployment (fail-closed), the same way a folder-level gate does.
+
+Gate evaluation also runs during `--WhatIf`, so a dry run reports the same deliver-vs-skip decisions a real quench would make. The `Insert/Update/Delete` CASCADE-FK check (below) only considers deliveries whose gate is currently passing -- a `Delete` variant that's gated off this run can't abort the deployment over a CASCADE FK it will never execute.
+
+See [Schema Packages -- Multiple Deliveries](schema-packages.md#multiple-deliveries) for the JSON shape, the three common gating patterns, and the delete-overlap warning for multi-delivery tables that mix `Insert/Update/Delete` with overlapping `MergeFilter`s.
+
 ### Two-pass FK-aware delivery
 
 Foreign keys turn "load the data" into a graph problem. SchemaQuench solves it automatically:
