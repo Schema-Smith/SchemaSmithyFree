@@ -246,6 +246,135 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
+    public void DeliverTables_SchemaTemplate_SubstitutesIterationSchemaIntoGateExpression()
+    {
+        // The gate expression is verbatim text handed to GateEvaluator.ShouldApply, which sets
+        // it as command.CommandText and executes it directly against the server — there is no
+        // engine-level token resolution between here and the database. Mirrors the MergeFilter
+        // bug (slice 7): if a schema-template Table.json's ShouldApplyExpression contains
+        // {{SchemaName}}, the literal token must not reach the server.
+        string capturedCommandText = null;
+        _mockCommand.ExecuteScalar().Returns(ci =>
+        {
+            capturedCommandText = _mockCommand.CommandText;
+            return 1;
+        });
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery
+                    {
+                        MergeType = "Insert",
+                        ContentFile = "lookups.json",
+                        ShouldApplyExpression = "SCHEMA_NAME() = '{{SchemaName}}'",
+                        VariantName = "tenant-gate"
+                    }
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SchemaName = "tenant_acme";
+
+        processor.DeliverTables(context);
+
+        Assert.That(capturedCommandText, Does.Contain("tenant_acme"),
+            "ShouldApplyExpression must have {{SchemaName}} substituted with the iteration's resolved schema.");
+        Assert.That(capturedCommandText, Does.Not.Contain("{{SchemaName}}"),
+            "Literal {{SchemaName}} must never reach the gate evaluation command text.");
+        Assert.That(_executedScripts, Has.Count.EqualTo(1), "Gate evaluated true, so the delivery must apply.");
+    }
+
+    [Test]
+    public void DeliverTables_RegularTemplate_GateExpressionPassedThroughUnchanged()
+    {
+        // Regression guard: regular templates (SchemaName empty) must not touch
+        // ShouldApplyExpression, mirroring DeliverTables_RegularTemplate_MergeFilterPassedThroughUnchanged.
+        string capturedCommandText = null;
+        _mockCommand.ExecuteScalar().Returns(ci =>
+        {
+            capturedCommandText = _mockCommand.CommandText;
+            return 1;
+        });
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery
+                    {
+                        MergeType = "Insert",
+                        ContentFile = "lookups.json",
+                        ShouldApplyExpression = "SCHEMA_NAME() = '{{SchemaName}}'",
+                        VariantName = "tenant-gate"
+                    }
+                }
+            }
+        };
+        var context = MakeContext(tables); // SchemaName defaults to ""
+
+        processor.DeliverTables(context);
+
+        Assert.That(capturedCommandText, Does.Contain("{{SchemaName}}"),
+            "Regular templates (blank SchemaName) must leave the gate expression's literal token unchanged.");
+    }
+
+    [Test]
+    public void DeliverTables_GatedDelivery_Applies_LogsVariantNameSuffix()
+    {
+        // Fix 2 (#278 QA finding): the apply/"Delivering" log line must echo VariantName the
+        // same way the skip line already does, for consistency and debuggability.
+        _mockCommand.ExecuteScalar().Returns(1);
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Seed", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "seed.json",
+                                       ShouldApplyExpression = "1=1", VariantName = "dev-seed" }
+                }
+            }
+        };
+
+        processor.DeliverTables(MakeContext(tables));
+
+        Assert.That(_logs, Has.Some.Match(@"Delivering dbo\.Seed \[dev-seed\]"));
+    }
+
+    [Test]
+    public void DeliverTables_UngatedDelivery_BlankVariantName_LogsPlainDeliveringLine()
+    {
+        // Regression guard: a single ungated delivery (blank VariantName) must keep logging the
+        // exact plain "Delivering {tableKey}" line — no suffix — so existing behavior/tests for
+        // the common case are unaffected.
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
+            }
+        };
+
+        processor.DeliverTables(MakeContext(tables));
+
+        Assert.That(_logs, Has.Some.EqualTo("    Delivering dbo.Users"));
+    }
+
+    [Test]
     public void DeliverTables_InvalidMergeType_ThrowsWithErrors()
     {
         var processor = new DataDeliveryProcessor();

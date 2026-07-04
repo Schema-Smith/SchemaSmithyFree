@@ -80,7 +80,8 @@ public class DataDeliveryProcessor : IDataDelivery
                 if (string.IsNullOrEmpty(d.MergeType) || d.MergeType.Equals("None", StringComparison.OrdinalIgnoreCase))
                     continue;
                 bool apply;
-                try { apply = GateEvaluator.ShouldApply(context.Command, d.ShouldApplyExpression); }
+                var gateExpression = ResolveGateExpression(d.ShouldApplyExpression, context.SchemaName);
+                try { apply = GateEvaluator.ShouldApply(context.Command, gateExpression); }
                 catch (Exception e)
                 {
                     logError($"    Data delivery gate for {DataDeliveryHelper.GetTableKey(table, platform)}" +
@@ -224,7 +225,7 @@ public class DataDeliveryProcessor : IDataDelivery
                 var tableKey = DataDeliveryHelper.GetTableKey(table, platform);
                 var variantLabel = !string.IsNullOrWhiteSpace(delivery.VariantName) ? delivery.VariantName : index.ToString();
                 var artifactKey = $"{tableKey}#{variantLabel}";
-                log($"    Delivering {tableKey} (pass 2 - updating deferred FK columns)");
+                log($"    Delivering {tableKey}{VariantSuffix(delivery)} (pass 2 - updating deferred FK columns)");
 
                 var schemaOrDb = GetSchemaOrDb(table, context.DatabaseName, platform, context.SchemaName);
                 var keyColumns = string.IsNullOrWhiteSpace(delivery.MatchColumns)
@@ -292,7 +293,7 @@ public class DataDeliveryProcessor : IDataDelivery
 
             if (deferredColumns.Count > 0 && !isCircularFallback)
             {
-                log($"    Delivering {tableKey} (pass 1 - deferred columns as NULL)");
+                log($"    Delivering {tableKey}{VariantSuffix(delivery)} (pass 1 - deferred columns as NULL)");
 
                 var mergeScript = BuildDeferredMergeScript(context, schemaOrDb, table, delivery, tableData, keyColumns, deferredColumns);
 
@@ -311,7 +312,7 @@ public class DataDeliveryProcessor : IDataDelivery
             }
             else
             {
-                log($"    Delivering {tableKey}");
+                log($"    Delivering {tableKey}{VariantSuffix(delivery)}");
                 var update = (delivery.MergeType ?? "").IndexOf("Update", StringComparison.OrdinalIgnoreCase) >= 0;
                 var delete = (delivery.MergeType ?? "").IndexOf("Delete", StringComparison.OrdinalIgnoreCase) >= 0;
                 var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
@@ -482,6 +483,21 @@ WHERE tc_p.TABLE_SCHEMA = '{schema.Replace("'", "''")}'
         if (string.IsNullOrEmpty(mergeFilter) || string.IsNullOrEmpty(iterationSchemaName))
             return mergeFilter;
         return mergeFilter.Replace("{{SchemaName}}", iterationSchemaName);
+    }
+
+    /// <summary>
+    /// Substitutes the <c>{{SchemaName}}</c> token in a delivery's <see cref="DataDelivery.ShouldApplyExpression"/>
+    /// with the iteration's resolved schema name, mirroring <see cref="ResolveMergeFilter"/>. Like
+    /// MergeFilter, the gate expression is verbatim text handed to <see cref="GateEvaluator.ShouldApply"/>,
+    /// which sets it as the command's CommandText and executes it directly — there is no engine-level
+    /// token resolution between here and the database. Regular templates pass an empty
+    /// <paramref name="iterationSchemaName"/> and the expression is returned unchanged.
+    /// </summary>
+    internal static string ResolveGateExpression(string shouldApplyExpression, string iterationSchemaName)
+    {
+        if (string.IsNullOrEmpty(shouldApplyExpression) || string.IsNullOrEmpty(iterationSchemaName))
+            return shouldApplyExpression;
+        return shouldApplyExpression.Replace("{{SchemaName}}", iterationSchemaName);
     }
 
     private static readonly string[] ValidMergeTypes =
