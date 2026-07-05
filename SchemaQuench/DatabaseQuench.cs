@@ -549,16 +549,12 @@ public class DatabaseQuench
                                 {
                                     try
                                     {
-                                        var content = ResolvedSqlArtifactWriter.BuildArtifact(
+                                        var path = ResolvedSqlArtifactWriter.WriteFailureArtifact(
+                                            ResolveArtifactDirectory(), ScrubArtifactsEnabled, SensitiveTokenValues(),
                                             $"Failed data delivery: {_server}.{_databaseName}" +
                                             $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")} [{label}]",
-                                            new List<string> { sql }, failingBatchIndex: 0);
-                                        if (ScrubArtifactsEnabled)
-                                            content = ResolvedSqlArtifactWriter.Scrub(content, SensitiveTokenValues());
-                                        var safeLabel = string.Concat(label.Select(c =>
-                                            Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
-                                        var path = ResolvedSqlArtifactWriter.Write(ResolveArtifactDirectory(),
-                                            GetDebugFileName($"Failed DataDelivery {safeLabel}"), content);
+                                            new List<string> { sql }, failingBatchIndex: 0, label,
+                                            safeLabel => GetDebugFileName($"Failed DataDelivery {safeLabel}"));
                                         SafeProgressLogError($"    Resolved SQL written to: {path}");
                                     }
                                     catch (Exception artifactEx)
