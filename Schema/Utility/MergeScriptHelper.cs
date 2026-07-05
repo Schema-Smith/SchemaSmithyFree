@@ -877,10 +877,12 @@ WHEN MATCHED AND ({updateCompare}) THEN
 """;
         }
 
+        var modernDelete = pgServerVersionNum == 0 || pgServerVersionNum >= 17;
+
         var insertColumns = GetInsertColumnsPostgreSql(cmd, tableSchema, tableName, jsonKeys);
         mergeSQL += $@"
 
- WHEN NOT MATCHED {(mergeDelete ? "BY TARGET " : "")}THEN -- BY TARGET is optional in newer PostgreSQL versions only adding for clarity when DELETE is also used (requires PostgreSQL v17+)
+ WHEN NOT MATCHED {(mergeDelete && modernDelete ? "BY TARGET " : "")}THEN -- BY TARGET is only valid on PostgreSQL v17+; emit it only when the modern WHEN NOT MATCHED BY SOURCE ... DELETE clause is also used
    INSERT (
  {insertColumns}
    ) {(!string.IsNullOrEmpty(identAndSeq) ? $"OVERRIDING {identAndSeq.Split("=")[2]} VALUE" : "")}
@@ -889,7 +891,6 @@ WHEN MATCHED AND ({updateCompare}) THEN
    )
  ";
 
-        var modernDelete = pgServerVersionNum == 0 || pgServerVersionNum >= 17;
         if (mergeDelete && modernDelete)
         {
             mergeSQL += $@"
