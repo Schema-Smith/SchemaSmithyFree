@@ -29,7 +29,7 @@ public class DataDeliveryProcessorTests
     {
         public string Name { get; set; }
         public string Schema { get; set; }
-        public DataDelivery DataDelivery { get; set; }
+        public IReadOnlyList<DataDelivery> DataDeliveries { get; set; } = new List<DataDelivery>();
         public IReadOnlyList<IDeliverableColumn> DeliverableColumns { get; set; } = new List<IDeliverableColumn>();
         public IReadOnlyList<IDeliverableForeignKey> DeliverableForeignKeys { get; set; } = new List<IDeliverableForeignKey>();
     }
@@ -105,7 +105,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Config", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "None", ContentFile = "data.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "None", ContentFile = "data.json" } }
             }
         };
 
@@ -123,7 +123,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
 
@@ -131,6 +131,247 @@ public class DataDeliveryProcessorTests
 
         Assert.That(_executedScripts, Has.Count.EqualTo(1));
         Assert.That(_executedScripts[0], Does.Contain("Users"));
+    }
+
+    [Test]
+    public void DeliverTables_TwoDeliveriesOneTable_DeliversBothInOrder()
+    {
+        // Both deliveries carry a non-blank ShouldApplyExpression, so each is gate-evaluated
+        // against _mockCommand.ExecuteScalar() — make both gates pass so this test still
+        // exercises "two distinct deliveries fire in order", independent of gating.
+        _mockCommand.ExecuteScalar().Returns(1);
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Ref", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "a.json", ShouldApplyExpression = "1=1", VariantName = "a" },
+                    new DataDelivery { MergeType = "Insert", ContentFile = "b.json", ShouldApplyExpression = "1=1", VariantName = "b" }
+                }
+            }
+        };
+
+        var context = MakeContext(tables);
+        // The shared [SetUp] mocks return identical content/scripts for both deliveries, which
+        // can't distinguish "ran two distinct deliveries in order" from "ran one twice". Make
+        // content encode the resolved content-file path, and echo that content (tableData, arg
+        // index 3) through BuildMergeScript's output so the emitted script reveals which
+        // delivery actually produced it.
+        context.ReadFileContent = path => $"CONTENT:{path}";
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .Returns(ci => $"MERGE INTO {ci.ArgAt<string>(2)} USING {ci.ArgAt<string>(3)}");
+
+        processor.DeliverTables(context);
+
+        Assert.That(_executedScripts, Has.Count.EqualTo(2));
+        Assert.That(_executedScripts[0], Does.Contain("a.json").And.Not.Contain("b.json"),
+            "First executed script must be the a.json delivery, not a repeat of b.json.");
+        Assert.That(_executedScripts[1], Does.Contain("b.json").And.Not.Contain("a.json"),
+            "Second executed script must be the b.json delivery, not a repeat of a.json.");
+    }
+
+    // ---------- ShouldApplyExpression gate evaluation (#278) ----------
+
+    [Test]
+    public void DeliverTables_GateFalse_SkipsDeliveryAndLogs()
+    {
+        _mockCommand.ExecuteScalar().Returns(0); // gate evaluates false
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Seed", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "seed.json",
+                                       ShouldApplyExpression = "DB_NAME() = 'Dev'", VariantName = "dev-seed" }
+                }
+            }
+        };
+
+        processor.DeliverTables(MakeContext(tables));
+
+        Assert.That(_executedScripts, Is.Empty);
+        Assert.That(_logs, Has.Some.Contains("Skipping data delivery").And.Some.Contains("dev-seed"));
+    }
+
+    [Test]
+    public void DeliverTables_TwoVariants_OnlyGatePassingApplies()
+    {
+        // First variant's gate true, second false: use a sequenced scalar.
+        _mockCommand.ExecuteScalar().Returns(1, 0);
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Ref", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "dev.json",  ShouldApplyExpression = "DB_NAME()='Dev'",  VariantName = "dev" },
+                    new DataDelivery { MergeType = "Insert", ContentFile = "prod.json", ShouldApplyExpression = "DB_NAME()='Prod'", VariantName = "prod" }
+                }
+            }
+        };
+
+        processor.DeliverTables(MakeContext(tables));
+
+        Assert.That(_executedScripts, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void DeliverTables_GateThrows_PropagatesFailClosed()
+    {
+        _mockCommand.ExecuteScalar().Returns(_ => throw new Exception("bad gate"));
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Seed", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "seed.json", ShouldApplyExpression = "broken", VariantName = "x" }
+                }
+            }
+        };
+
+        Assert.Throws<Exception>(() => processor.DeliverTables(MakeContext(tables)));
+    }
+
+    [Test]
+    public void DeliverTables_SchemaTemplate_SubstitutesIterationSchemaIntoGateExpression()
+    {
+        // The gate expression is verbatim text handed to GateEvaluator.ShouldApply, which sets
+        // it as command.CommandText and executes it directly against the server — there is no
+        // engine-level token resolution between here and the database. Mirrors the MergeFilter
+        // bug (slice 7): if a schema-template Table.json's ShouldApplyExpression contains
+        // {{SchemaName}}, the literal token must not reach the server.
+        string capturedCommandText = null;
+        _mockCommand.ExecuteScalar().Returns(ci =>
+        {
+            capturedCommandText = _mockCommand.CommandText;
+            return 1;
+        });
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery
+                    {
+                        MergeType = "Insert",
+                        ContentFile = "lookups.json",
+                        ShouldApplyExpression = "SCHEMA_NAME() = '{{SchemaName}}'",
+                        VariantName = "tenant-gate"
+                    }
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SchemaName = "tenant_acme";
+
+        processor.DeliverTables(context);
+
+        Assert.That(capturedCommandText, Does.Contain("tenant_acme"),
+            "ShouldApplyExpression must have {{SchemaName}} substituted with the iteration's resolved schema.");
+        Assert.That(capturedCommandText, Does.Not.Contain("{{SchemaName}}"),
+            "Literal {{SchemaName}} must never reach the gate evaluation command text.");
+        Assert.That(_executedScripts, Has.Count.EqualTo(1), "Gate evaluated true, so the delivery must apply.");
+    }
+
+    [Test]
+    public void DeliverTables_RegularTemplate_GateExpressionPassedThroughUnchanged()
+    {
+        // Regression guard: regular templates (SchemaName empty) must not touch
+        // ShouldApplyExpression, mirroring DeliverTables_RegularTemplate_MergeFilterPassedThroughUnchanged.
+        string capturedCommandText = null;
+        _mockCommand.ExecuteScalar().Returns(ci =>
+        {
+            capturedCommandText = _mockCommand.CommandText;
+            return 1;
+        });
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery
+                    {
+                        MergeType = "Insert",
+                        ContentFile = "lookups.json",
+                        ShouldApplyExpression = "SCHEMA_NAME() = '{{SchemaName}}'",
+                        VariantName = "tenant-gate"
+                    }
+                }
+            }
+        };
+        var context = MakeContext(tables); // SchemaName defaults to ""
+
+        processor.DeliverTables(context);
+
+        Assert.That(capturedCommandText, Does.Contain("{{SchemaName}}"),
+            "Regular templates (blank SchemaName) must leave the gate expression's literal token unchanged.");
+    }
+
+    [Test]
+    public void DeliverTables_GatedDelivery_Applies_LogsVariantNameSuffix()
+    {
+        // Fix 2 (#278 QA finding): the apply/"Delivering" log line must echo VariantName the
+        // same way the skip line already does, for consistency and debuggability.
+        _mockCommand.ExecuteScalar().Returns(1);
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Seed", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "seed.json",
+                                       ShouldApplyExpression = "1=1", VariantName = "dev-seed" }
+                }
+            }
+        };
+
+        processor.DeliverTables(MakeContext(tables));
+
+        Assert.That(_logs, Has.Some.Match(@"Delivering dbo\.Seed \[dev-seed\]"));
+    }
+
+    [Test]
+    public void DeliverTables_UngatedDelivery_BlankVariantName_LogsPlainDeliveringLine()
+    {
+        // Regression guard: a single ungated delivery (blank VariantName) must keep logging the
+        // exact plain "Delivering {tableKey}" line — no suffix — so existing behavior/tests for
+        // the common case are unaffected.
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
+            }
+        };
+
+        processor.DeliverTables(MakeContext(tables));
+
+        Assert.That(_logs, Has.Some.EqualTo("    Delivering dbo.Users"));
     }
 
     [Test]
@@ -142,7 +383,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "InvalidType", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "InvalidType", ContentFile = "users.json" } }
             }
         };
 
@@ -156,12 +397,12 @@ public class DataDeliveryProcessorTests
         var parent = new TestTable
         {
             Name = "Customers", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "customers.json" }
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "customers.json" } }
         };
         var child = new TestTable
         {
             Name = "Orders", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "orders.json" },
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "orders.json" } },
             DeliverableColumns = new List<IDeliverableColumn>
             {
                 new TestColumn { Name = "CustomerId", Nullable = false }
@@ -186,12 +427,12 @@ public class DataDeliveryProcessorTests
         var parent = new TestTable
         {
             Name = "Employees", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "employees.json" }
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "employees.json" } }
         };
         var child = new TestTable
         {
             Name = "Tasks", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "tasks.json" },
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "tasks.json" } },
             DeliverableColumns = new List<IDeliverableColumn>
             {
                 new TestColumn { Name = "AssigneeId", Nullable = true }
@@ -219,7 +460,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -425,7 +666,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -450,7 +691,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -476,7 +717,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "public",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -504,7 +745,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -516,6 +757,44 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
+    public void DeliverTables_DeleteMergeType_GateFalse_DoesNotTriggerCascadeAbort()
+    {
+        // The single Delete delivery's gate evaluates false (ExecuteScalar -> 0), so it will NOT
+        // run in this environment. Even though the cascade query (ExecuteReader) would report a
+        // CASCADE-deleting FK on this table, a gated-off delivery must not abort the whole run
+        // (#278 false-abort fix). Under the pre-fix code, ValidateDeleteCascade runs over the
+        // ungated ApplicableDeliveries set and would throw before the gate is ever evaluated.
+        _mockCommand.ExecuteScalar().Returns(0);
+        var mockReader = Substitute.For<IDataReader>();
+        mockReader.Read().Returns(true, false);
+        mockReader.GetString(0).Returns("FK_Orders_Users");
+        mockReader.GetString(1).Returns("Orders");
+        _mockCommand.ExecuteReader().Returns(mockReader);
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert/Update/Delete", ContentFile = "users.json",
+                                       ShouldApplyExpression = "DB_NAME() = 'Prod'", VariantName = "prod-only" }
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.Platform = "SqlServer";
+
+        Assert.DoesNotThrow(() => processor.DeliverTables(context));
+
+        Assert.That(_executedScripts, Is.Empty, "Gated-off delivery must not execute");
+        _mockCommand.DidNotReceive().ExecuteReader();
+        Assert.That(_logs, Has.Some.Contains("Skipping data delivery").And.Some.Contains("prod-only"));
+    }
+
+    [Test]
     public void DeliverTables_NullReadFileContent_AbortsDelivery()
     {
         var processor = new DataDeliveryProcessor();
@@ -524,7 +803,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -547,7 +826,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -572,7 +851,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -594,7 +873,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -621,7 +900,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "custom_schema",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -680,7 +959,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Lookups", Schema = "{{SchemaName}}",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update", ContentFile = "lookups.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert/Update", ContentFile = "lookups.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -720,7 +999,7 @@ public class DataDeliveryProcessorTests
             {
                 Name = "Lookups", Schema = "{{SchemaName}}",
                 // No MatchColumns -> processor falls back to GetKeyColumns, which probes catalog.
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "lookups.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "lookups.json" } }
             }
         };
         var context = MakeContext(tables);
@@ -745,7 +1024,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables); // SchemaName defaults to ""
@@ -791,7 +1070,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Orders", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "orders.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "orders.json" } }
             }
         };
 
@@ -823,12 +1102,12 @@ public class DataDeliveryProcessorTests
         var parent = new TestTable
         {
             Name = "Employees", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "employees.json" }
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "employees.json" } }
         };
         var child = new TestTable
         {
             Name = "Tasks", Schema = "dbo",
-            DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "tasks.json" },
+            DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "tasks.json" } },
             DeliverableColumns = new List<IDeliverableColumn>
             {
                 new TestColumn { Name = "AssigneeId", Nullable = true }
@@ -866,7 +1145,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Products", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "products.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "products.json" } }
             }
         };
 
@@ -889,7 +1168,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "dbo",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
 
@@ -1032,11 +1311,14 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Lookups", Schema = "{{SchemaName}}",
-                DataDelivery = new DataDelivery
+                DataDeliveries = new List<DataDelivery>
                 {
-                    MergeType = "Insert/Update/Delete",
-                    ContentFile = "lookups.json",
-                    MergeFilter = "Target.Status = 'Active' AND Target.[Owner] = '{{SchemaName}}'"
+                    new DataDelivery
+                    {
+                        MergeType = "Insert/Update/Delete",
+                        ContentFile = "lookups.json",
+                        MergeFilter = "Target.Status = 'Active' AND Target.[Owner] = '{{SchemaName}}'"
+                    }
                 }
             }
         };
@@ -1081,11 +1363,14 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Lookups", Schema = "dbo",
-                DataDelivery = new DataDelivery
+                DataDeliveries = new List<DataDelivery>
                 {
-                    MergeType = "Insert/Update/Delete",
-                    ContentFile = "lookups.json",
-                    MergeFilter = "Target.Status = 'Active'"
+                    new DataDelivery
+                    {
+                        MergeType = "Insert/Update/Delete",
+                        ContentFile = "lookups.json",
+                        MergeFilter = "Target.Status = 'Active'"
+                    }
                 }
             }
         };
@@ -1121,11 +1406,14 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Lookups", Schema = "{{SchemaName}}",
-                DataDelivery = new DataDelivery
+                DataDeliveries = new List<DataDelivery>
                 {
-                    MergeType = "Insert/Update",
-                    ContentFile = "lookups.json",
-                    MergeFilter = null
+                    new DataDelivery
+                    {
+                        MergeType = "Insert/Update",
+                        ContentFile = "lookups.json",
+                        MergeFilter = null
+                    }
                 }
             }
         };
@@ -1165,7 +1453,7 @@ public class DataDeliveryProcessorTests
             new TestTable
             {
                 Name = "Users", Schema = "{{SchemaName}}",
-                DataDelivery = new DataDelivery { MergeType = "Insert", ContentFile = "users.json" }
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "users.json" } }
             }
         };
         var context = MakeContext(tables);

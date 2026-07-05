@@ -34,6 +34,18 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
         var json = FileWrapper.GetFromFactory().ReadAllText(tableJsonFile);
         var table = JObject.Parse(json);
 
+        if (table["DataDelivery"] is JArray)
+        {
+            // The context has no variant identity to match an array element against
+            // (see DataDeliveryConfiguratorContext), so a hand-authored array of gated
+            // deliveries is always left untouched — extraction must never silently
+            // flatten or drop authored variants.
+            var arrayDisplayName = string.IsNullOrEmpty(context.TableSchema) ? context.TableName : $"{context.TableSchema}.{context.TableName}";
+            context.WarningLog?.Invoke($"    DataDelivery for '{arrayDisplayName}' is an authored array of gated variants. The extraction configurator has no variant identity to match an entry against, so the array was left untouched.");
+            context.ProgressLog?.Invoke($"    Data delivery config for {context.TableName} left untouched (array of gated variants).");
+            return;
+        }
+
         if (table["DataDelivery"] is not JObject delivery)
         {
             delivery = new JObject();

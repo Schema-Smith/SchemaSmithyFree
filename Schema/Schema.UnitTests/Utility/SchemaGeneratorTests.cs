@@ -189,7 +189,9 @@ public class SchemaGeneratorTests
     public void ShouldApplyConstraintsOnDomainProperties()
     {
         var schema = SchemaGenerator.GenerateSchema(typeof(Table));
-        var dataDelivery = schema["properties"]?["DataDelivery"];
+        // DataDelivery is SingleOrArray -> a oneOf wrapper; the object-shape branch (index 0)
+        // carries the per-property constraints, mirroring FullTextIndex's oneOf shape.
+        var dataDelivery = schema["properties"]?["DataDelivery"]?["oneOf"]?[0];
         var mergeType = dataDelivery?["properties"]?["MergeType"];
         Assert.That(mergeType?["type"]?.ToString(), Is.EqualTo("string"));
         Assert.That(mergeType?["pattern"]?.ToString(), Is.EqualTo("Insert|Insert/Update|Insert/Update/Delete"));
@@ -587,8 +589,13 @@ public class SchemaGeneratorTests
         var dataDelivery = schema["properties"]?["DataDelivery"];
 
         Assert.That(dataDelivery, Is.Not.Null);
-        Assert.That(dataDelivery["type"]?.ToString(), Is.EqualTo("object"));
-        Assert.That(dataDelivery["properties"]?["MergeType"]?["pattern"]?.ToString(),
+        // DataDelivery is SingleOrArray -> a oneOf wrapper (bare object OR array), matching the
+        // FullTextIndex shape (ShouldGenerateSingleOrArraySchemaForSqlServerFullTextIndex below).
+        var oneOf = dataDelivery!["oneOf"] as JArray;
+        Assert.That(oneOf, Is.Not.Null, "DataDelivery schema should accept single object OR array");
+        Assert.That(oneOf![0]?["type"]?.ToString(), Is.EqualTo("object"));
+        Assert.That(oneOf![1]?["type"]?.ToString(), Is.EqualTo("array"));
+        Assert.That(oneOf![0]?["properties"]?["MergeType"]?["pattern"]?.ToString(),
             Is.EqualTo("Insert|Insert/Update|Insert/Update/Delete"));
     }
 

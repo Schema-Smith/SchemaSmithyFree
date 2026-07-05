@@ -27,6 +27,22 @@ public class PostgreSqlConnectionFactoryTests
     }
 
     [Test]
+    public void GetDbConnection_CachesOneDataSourcePerConnectionString()
+    {
+        var factory = new PostgreSqlConnectionFactory();
+        var cs = $"Host=localhost;Database=cache_{System.Guid.NewGuid():N};Username=u;Password=p;";
+        var before = PostgreSqlConnectionFactory.CachedDataSourceCount;
+
+        using (factory.GetDbConnection(cs)) { }
+        var afterFirst = PostgreSqlConnectionFactory.CachedDataSourceCount;
+        using (factory.GetDbConnection(cs)) { } // same connection string -> reuse the cached data source
+        var afterSecond = PostgreSqlConnectionFactory.CachedDataSourceCount;
+
+        Assert.That(afterFirst, Is.EqualTo(before + 1), "a new connection string creates exactly one cached data source");
+        Assert.That(afterSecond, Is.EqualTo(afterFirst), "the same connection string reuses the cached data source (no per-call leak)");
+    }
+
+    [Test]
     public void GetFromFactory_ReturnsInstance()
     {
         var factory = PostgreSqlConnectionFactory.GetFromFactory();

@@ -2234,6 +2234,81 @@ public class DatabaseQuenchTests
         }
     }
 
+    [Test]
+    public void LogSqlScript_ScrubEnabled_MasksSensitiveTokenValue_InWrittenArtifact()
+    {
+        // #327 S4.2: the always-written generated-DDL debug artifact must be scrub-aware under the
+        // same ScrubArtifacts opt-in as user-script / data-delivery artifacts.
+        var mockConfig = Substitute.For<IConfigurationRoot>();
+        mockConfig["ArtifactPath"].Returns(@"C:\artifacts-test");
+        mockConfig["ScrubArtifacts"].Returns("true");
+        FactoryContainer.Register<IConfigurationRoot>(mockConfig);
+
+        var mockFile = Substitute.For<IFile>();
+        string capturedContent = null;
+        mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
+            .Do(ci => capturedContent = ci.ArgAt<string>(1));
+        FactoryContainer.Register<IFile>(mockFile);
+        FactoryContainer.Register<Schema.Isolators.IDirectory>(Substitute.For<Schema.Isolators.IDirectory>());
+
+        // Sensitive token value present verbatim in the generated CommandText via TableSchema.
+        var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
+        product.ScriptTokens["AdminPassword"] = "supersecret1234";
+        var template = new Template
+        {
+            Name = "T",
+            IndexOnlyTableQuenches = true, // SqlServer/PostgreSQL branches embed IterationTableSchema inline
+            TableSchema = "[{\"Name\":\"Orders\",\"Columns\":[{\"Name\":\"Seed\",\"Default\":\"supersecret1234\"}]}]"
+        };
+        template.Tables.Add(new Schema.Domain.Table { Name = "Orders" });
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "true", false, "false", "false", "false", "false", "false", "false", "false", "false", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(capturedContent, Is.Not.Null, "Expected WriteAllText to be called by LogSqlScript");
+        Assert.That(capturedContent, Does.Not.Contain("supersecret1234"),
+            "Sensitive token value must be scrubbed from the generated-DDL debug artifact when ScrubArtifacts=true");
+    }
+
+    [Test]
+    public void LogSqlScript_ScrubDisabled_LeavesSensitiveTokenValueIntact_InWrittenArtifact()
+    {
+        var mockConfig = Substitute.For<IConfigurationRoot>();
+        mockConfig["ArtifactPath"].Returns(@"C:\artifacts-test");
+        mockConfig["ScrubArtifacts"].Returns((string)null); // disabled (default)
+        FactoryContainer.Register<IConfigurationRoot>(mockConfig);
+
+        var mockFile = Substitute.For<IFile>();
+        string capturedContent = null;
+        mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
+            .Do(ci => capturedContent = ci.ArgAt<string>(1));
+        FactoryContainer.Register<IFile>(mockFile);
+        FactoryContainer.Register<Schema.Isolators.IDirectory>(Substitute.For<Schema.Isolators.IDirectory>());
+
+        var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
+        product.ScriptTokens["AdminPassword"] = "supersecret1234";
+        var template = new Template
+        {
+            Name = "T",
+            IndexOnlyTableQuenches = true, // SqlServer/PostgreSQL branches embed IterationTableSchema inline
+            TableSchema = "[{\"Name\":\"Orders\",\"Columns\":[{\"Name\":\"Seed\",\"Default\":\"supersecret1234\"}]}]"
+        };
+        template.Tables.Add(new Schema.Domain.Table { Name = "Orders" });
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "true", false, "false", "false", "false", "false", "false", "false", "false", "false", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchIndexesAndConstraints(mockCmd);
+
+        Assert.That(capturedContent, Is.Not.Null, "Expected WriteAllText to be called by LogSqlScript");
+        Assert.That(capturedContent, Does.Contain("supersecret1234"),
+            "Without ScrubArtifacts, the generated-DDL debug artifact keeps the raw resolved SQL (local debugging needs the real value)");
+    }
+
     #endregion
 
     #region Outer-Catch Debug-Path Surfacing (PG/MySQL)
@@ -2243,8 +2318,8 @@ public class DatabaseQuenchTests
     {
         // This test drives a PostgreSQL quench where the generated-SQL step
         // (QuenchMissingTablesAndColumns) throws. The outer catch in Execute() must log
-        // "Debug Script: '<path>'" when _debugFileLocation is set — surfacing the generated-SQL
-        // dump for PostgreSQL/MySQL users who have no InfoMessage handler.
+        // "Resolved SQL written to: <path>" when _debugFileLocation is set — surfacing the
+        // generated-SQL dump for PostgreSQL/MySQL users who have no InfoMessage handler.
         Schema.Utility.LogFactory.Clear();
         try
         {
@@ -2256,7 +2331,7 @@ public class DatabaseQuenchTests
             Schema.Utility.LogFactory.Register("ErrorLog", Substitute.For<log4net.ILog>());
 
             // File mock: LogSqlScript calls WriteAllText before the generated SQL executes.
-            // Capture its path — the outer-catch "Debug Script:" line must contain it.
+            // Capture its path — the outer-catch "Resolved SQL written to:" line must contain it.
             var mockFile = Substitute.For<IFile>();
             string debugPath = null;
             mockFile.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
@@ -2305,14 +2380,14 @@ public class DatabaseQuenchTests
             quench.Execute();
 
             var progressOutput = string.Join("\n", progressLogLines);
-            Assert.That(progressOutput, Does.Contain("Debug Script:"),
+            Assert.That(progressOutput, Does.Contain("Resolved SQL written to:"),
                 "Outer catch must surface the debug-file path for PostgreSQL/MySQL users");
             Assert.That(debugPath, Is.Not.Null,
                 "LogSqlScript must have been called (writing under ArtifactPath) before the failure");
             // _debugFileLocation must hold the FULL path returned by LogSqlScript, not a bare filename.
             // A bare filename would fail the StartsWith check below even though it contains the label.
             Assert.That(progressOutput, Does.Contain(debugPath),
-                "The surfaced 'Debug Script:' line must contain the full artifact path, not just the filename");
+                "The surfaced 'Resolved SQL written to:' line must contain the full artifact path, not just the filename");
             Assert.That(progressOutput, Does.Contain(@"C:\pg-artifacts"),
                 "The surfaced debug path must be rooted under the configured ArtifactPath");
         }

@@ -21,11 +21,10 @@ public interface IDeliverableTable
     string Schema { get; }
 
     /// <summary>
-    /// Data delivery configuration. Null when no data delivery is configured for this table.
-    /// PostgreSQL tables may return a subclass with additional properties (cast to access
-    /// MergeDisableRules, MergeUpdateDescendents).
+    /// Data delivery configurations for this table, in declared order. Empty when none configured.
+    /// Each entry is independently gated by its own ShouldApplyExpression (evaluated at quench).
     /// </summary>
-    DataDelivery DataDelivery { get; }
+    IReadOnlyList<DataDelivery> DataDeliveries { get; }
 
     /// <summary>Columns for nullability checks during FK dependency classification.</summary>
     IReadOnlyList<IDeliverableColumn> DeliverableColumns { get; }

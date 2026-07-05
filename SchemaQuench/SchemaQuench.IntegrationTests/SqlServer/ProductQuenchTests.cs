@@ -271,7 +271,7 @@ TRUNCATE TABLE SchemaSmith.TestLog";
 
             _progressLog.Received(1).Error(Arg.Is<string>(s => s.EndsWith("KABOOM!") && !s.Contains("Unable to quench")));
             _progressLog.Received(1).Error(Arg.Is<string>(s => s.EndsWith("KABOOM!") && s.Contains("Unable to quench")));
-            _progressLog.Received(1).Error(Arg.Is<string>(s => s.Contains("Debug Script:") && s.Contains("MigrationScripts")));
+            _progressLog.Received(1).Error(Arg.Is<string>(s => s.Contains("Resolved SQL written to:") && s.Contains("MigrationScripts")));
             _environment.Received(1).Exit(2);
             _environment.DidNotReceive().Exit(3);
 

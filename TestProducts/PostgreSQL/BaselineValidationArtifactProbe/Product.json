@@ -1,0 +1,15 @@
+{
+    "Name": "BaselineValidationArtifactProbe",
+    "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM pg_database WHERE datistemplate = false AND datname = '{{MainDB}}') THEN 1 ELSE 0 END AS BIT)",
+    "TemplateOrder": [
+        "Main"
+    ],
+    "ScriptFolders": [],
+    "ScriptTokens": {
+        "MainDB": "TestMain",
+        "ReleaseVersion": "",
+        "AdminPassword": "sup3rs3cr3t_baseline_probe",
+        "Region": "us-east"
+    },
+    "Platform": "PostgreSQL"
+}

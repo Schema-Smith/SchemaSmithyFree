@@ -435,6 +435,8 @@ For every table that produces output, DataTongs opens `Tables/<schema>.<table>.j
 
 Tables whose JSON file doesn't exist in the template are skipped with a warning. No file is created from scratch -- this tool configures existing tables, it doesn't scaffold new ones (use SchemaTongs for that).
 
+**Authored arrays of gated deliveries are left alone.** If a table's `DataDelivery` is already an array of two or more deliveries -- hand-authored gating or environment variants, see [Schema Packages -- Multiple Deliveries](schema-packages.md#multiple-deliveries) -- `--ConfigureDataDelivery` does not touch it. There's no single-delivery identity to reconcile extraction output against, so the array survives untouched and a warning is logged noting it was left as-is. Configure the single-object form first, then hand-edit it into a gated array once you need per-target variants or additive slices.
+
 ### Default MergeType derivation
 
 When a table's config doesn't set `MergeType` explicitly, the default is derived from the global `ShouldCast` flags:

@@ -195,14 +195,32 @@ jobs:
     steps:
       - name: Increase PostgreSQL max connections
         run: |
-          PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -c "ALTER SYSTEM SET max_connections = 2000;"
-          # shellcheck disable=SC2046  # docker restart accepts multiple IDs; word splitting is intentional
-          docker restart $(docker ps -q --filter "ancestor=postgres:latest")
-          sleep 5
-          for _ in $(seq 1 30); do
-            PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -c "SELECT 1" > /dev/null 2>&1 && break
-            sleep 2
-          done
+          apply_and_wait() {
+            PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -c "ALTER SYSTEM SET max_connections = 2000;"
+            # shellcheck disable=SC2046  # docker restart accepts multiple IDs; word splitting is intentional
+            docker restart $(docker ps -q --filter "ancestor=postgres:latest")
+            sleep 5
+            for _ in $(seq 1 30); do
+              PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -c "SELECT 1" > /dev/null 2>&1 && break
+              sleep 2
+            done
+          }
+          get_max_conn() {
+            PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -tAc "SHOW max_connections" 2>/dev/null | tr -d '[:space:]'
+          }
+          # max_connections is a postmaster-level setting: ALTER SYSTEM only takes effect after a
+          # restart, and restarting a service container can silently race — leaving PostgreSQL at the
+          # default 100 and starving the parallel fan-out tests ("too many clients already"). Apply,
+          # then VERIFY it actually took (retry once), and fail loudly in setup rather than mid-suite.
+          apply_and_wait
+          actual="$(get_max_conn)"
+          if [ "$actual" != "2000" ]; then
+            echo "max_connections=$actual after first apply; retrying"
+            apply_and_wait
+            actual="$(get_max_conn)"
+          fi
+          echo "PostgreSQL max_connections=$actual"
+          [ "$actual" = "2000" ] || { echo "ERROR: could not raise PostgreSQL max_connections to 2000 (got '$actual')"; exit 1; }
 
       - uses: actions/checkout@v6
 

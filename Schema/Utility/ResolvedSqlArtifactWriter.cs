@@ -54,4 +54,20 @@ public static class ResolvedSqlArtifactWriter
         FileWrapper.GetFromFactory().WriteAllText(path, content);
         return path;
     }
+
+    /// <summary>
+    /// Composition helper for script-failure surfaces: builds the artifact, optionally scrubs it, then
+    /// writes it to disk. Shared by every surface that needs the same BuildArtifact→Scrub→Write sequence
+    /// (DatabaseQuench today; ProductQuench and others in later Slice-4 tasks).
+    /// </summary>
+    /// <returns>The full path written, for surfacing in the log.</returns>
+    public static string WriteFailureArtifact(string directory, bool scrub,
+        IReadOnlyList<KeyValuePair<string, string>> sensitiveValues, string header, IReadOnlyList<string> batches,
+        int failingBatchIndex, string fileName)
+    {
+        var content = BuildArtifact(header, batches, failingBatchIndex);
+        if (scrub)
+            content = Scrub(content, sensitiveValues);
+        return Write(directory, fileName, content);
+    }
 }

@@ -58,7 +58,7 @@ namespace Schema.UnitTests.Domain.MySQL
                 Collation = "utf8mb4_unicode_ci",
                 Comment = "Main customer table",
                 AutoIncrementValue = 1000UL,
-                DataDelivery = new Schema.Delivery.DataDelivery { MergeType = "Insert/Update" }
+                DataDelivery = [new Schema.Delivery.DataDelivery { MergeType = "Insert/Update" }]
             };
 
             table.FullTextIndexes.Add(new FullTextIndex
@@ -78,7 +78,7 @@ namespace Schema.UnitTests.Domain.MySQL
             Assert.That(deserialized.Collation, Is.EqualTo("utf8mb4_unicode_ci"));
             Assert.That(deserialized.Comment, Is.EqualTo("Main customer table"));
             Assert.That(deserialized.AutoIncrementValue, Is.EqualTo(1000UL));
-            Assert.That(deserialized.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
+            Assert.That(deserialized.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
             Assert.That(deserialized.FullTextIndexes, Has.Count.EqualTo(1));
             Assert.That(deserialized.FullTextIndexes[0].Name, Is.EqualTo("ft_customer_name"));
             Assert.That(deserialized.FullTextIndexes[0].Parser, Is.EqualTo("ngram"));
@@ -92,7 +92,7 @@ namespace Schema.UnitTests.Domain.MySQL
             var table = new MySqlTable
             {
                 Name = "test",
-                DataDelivery = new Schema.Delivery.DataDelivery { MergeType = "Insert/Update/Delete" }
+                DataDelivery = [new Schema.Delivery.DataDelivery { MergeType = "Insert/Update/Delete" }]
             };
 
             var json = JsonConvert.SerializeObject(table);

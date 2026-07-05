@@ -146,12 +146,15 @@ public class ConfigureDataDeliveryTests
 
         var relativePath = Path.GetRelativePath(templateRoot, contentFilePath).Replace('\\', '/');
 
-        table.DataDelivery = new DataDelivery
-        {
+        table.DataDelivery =
+                [
+                    new DataDelivery
+                    {
             ContentFile = relativePath,
             MergeType = "Insert/Update",
             MergeDisableTriggers = false
-        };
+        }
+                ];
 
         JsonHelper.Write(Path.Combine(tablesDir, "country.json"), table);
 
@@ -159,9 +162,9 @@ public class ConfigureDataDeliveryTests
         Assert.Multiple(() =>
         {
             Assert.That(updatedTable.DataDelivery, Is.Not.Null);
-            Assert.That(updatedTable.DataDelivery!.ContentFile, Is.EqualTo("TableData/country.tabledata"));
-            Assert.That(updatedTable.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
-            Assert.That(updatedTable.DataDelivery.MergeDisableTriggers, Is.False);
+            Assert.That(updatedTable.DataDelivery[0].ContentFile, Is.EqualTo("TableData/country.tabledata"));
+            Assert.That(updatedTable.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+            Assert.That(updatedTable.DataDelivery[0].MergeDisableTriggers, Is.False);
         });
     }
 
@@ -189,14 +192,17 @@ public class ConfigureDataDeliveryTests
         CreateTableJson(tablesDir, "actor");
 
         var table = LoadTableJson(tablesDir, "actor");
-        table.DataDelivery = new DataDelivery
-        {
+        table.DataDelivery =
+                [
+                    new DataDelivery
+                    {
             ContentFile = "TableData/actor.tabledata",
             MergeType = "Insert/Update/Delete",
             MatchColumns = "`code`",
             MergeFilter = "active = 1",
             MergeDisableTriggers = true
-        };
+        }
+                ];
 
         JsonHelper.Write(Path.Combine(tablesDir, "actor.json"), table);
 
@@ -204,9 +210,9 @@ public class ConfigureDataDeliveryTests
         Assert.Multiple(() =>
         {
             Assert.That(updatedTable.DataDelivery, Is.Not.Null);
-            Assert.That(updatedTable.DataDelivery!.MatchColumns, Is.EqualTo("`code`"));
-            Assert.That(updatedTable.DataDelivery.MergeFilter, Is.EqualTo("active = 1"));
-            Assert.That(updatedTable.DataDelivery.MergeDisableTriggers, Is.True);
+            Assert.That(updatedTable.DataDelivery[0].MatchColumns, Is.EqualTo("`code`"));
+            Assert.That(updatedTable.DataDelivery[0].MergeFilter, Is.EqualTo("active = 1"));
+            Assert.That(updatedTable.DataDelivery[0].MergeDisableTriggers, Is.True);
         });
     }
 
@@ -220,25 +226,28 @@ public class ConfigureDataDeliveryTests
         var table = new MySqlTable
         {
             Name = "actor",
-            DataDelivery = new DataDelivery
-            {
+            DataDelivery =
+                [
+                    new DataDelivery
+                    {
                 MatchColumns = "`old_key`",
                 MergeFilter = "old_filter = 1"
             }
+                ]
         };
         JsonHelper.Write(tablePath, table);
 
         var loadedTable = LoadTableJson(tablesDir, "actor");
-        loadedTable.DataDelivery!.MatchColumns = null;
-        loadedTable.DataDelivery.MergeFilter = null;
+        loadedTable.DataDelivery[0].MatchColumns = null;
+        loadedTable.DataDelivery[0].MergeFilter = null;
         JsonHelper.Write(tablePath, loadedTable);
 
         var updatedTable = LoadTableJson(tablesDir, "actor");
         Assert.Multiple(() =>
         {
             Assert.That(updatedTable.DataDelivery, Is.Not.Null);
-            Assert.That(updatedTable.DataDelivery!.MatchColumns, Is.Null);
-            Assert.That(updatedTable.DataDelivery.MergeFilter, Is.Null);
+            Assert.That(updatedTable.DataDelivery[0].MatchColumns, Is.Null);
+            Assert.That(updatedTable.DataDelivery[0].MergeFilter, Is.Null);
         });
 
         var json = File.ReadAllText(tablePath);
@@ -274,34 +283,37 @@ public class ConfigureDataDeliveryTests
         var table = new MySqlTable
         {
             Name = "actor",
-            DataDelivery = new DataDelivery
-            {
+            DataDelivery =
+                [
+                    new DataDelivery
+                    {
                 ContentFile = "OldPath/actor.tabledata",
                 MergeType = "Insert/Update/Delete",
                 MergeDisableTriggers = true,
                 MatchColumns = "`old_key`",
                 MergeFilter = "old_filter = 1"
             }
+                ]
         };
         JsonHelper.Write(tablePath, table);
 
         var loadedTable = LoadTableJson(tablesDir, "actor");
-        loadedTable.DataDelivery!.ContentFile = "TableData/actor.tabledata";
-        loadedTable.DataDelivery.MergeType = "Insert/Update";
-        loadedTable.DataDelivery.MergeDisableTriggers = false;
-        loadedTable.DataDelivery.MatchColumns = "`new_key`";
-        loadedTable.DataDelivery.MergeFilter = "new_filter = 1";
+        loadedTable.DataDelivery[0].ContentFile = "TableData/actor.tabledata";
+        loadedTable.DataDelivery[0].MergeType = "Insert/Update";
+        loadedTable.DataDelivery[0].MergeDisableTriggers = false;
+        loadedTable.DataDelivery[0].MatchColumns = "`new_key`";
+        loadedTable.DataDelivery[0].MergeFilter = "new_filter = 1";
         JsonHelper.Write(tablePath, loadedTable);
 
         var updatedTable = LoadTableJson(tablesDir, "actor");
         Assert.Multiple(() =>
         {
             Assert.That(updatedTable.DataDelivery, Is.Not.Null);
-            Assert.That(updatedTable.DataDelivery!.ContentFile, Is.EqualTo("TableData/actor.tabledata"));
-            Assert.That(updatedTable.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
-            Assert.That(updatedTable.DataDelivery.MergeDisableTriggers, Is.False);
-            Assert.That(updatedTable.DataDelivery.MatchColumns, Is.EqualTo("`new_key`"));
-            Assert.That(updatedTable.DataDelivery.MergeFilter, Is.EqualTo("new_filter = 1"));
+            Assert.That(updatedTable.DataDelivery[0].ContentFile, Is.EqualTo("TableData/actor.tabledata"));
+            Assert.That(updatedTable.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+            Assert.That(updatedTable.DataDelivery[0].MergeDisableTriggers, Is.False);
+            Assert.That(updatedTable.DataDelivery[0].MatchColumns, Is.EqualTo("`new_key`"));
+            Assert.That(updatedTable.DataDelivery[0].MergeFilter, Is.EqualTo("new_filter = 1"));
         });
     }
 
@@ -326,11 +338,14 @@ public class ConfigureDataDeliveryTests
         JsonHelper.Write(tablePath, table);
 
         var loadedTable = LoadTableJson(tablesDir, "actor");
-        loadedTable.DataDelivery = new DataDelivery
-        {
+        loadedTable.DataDelivery =
+                [
+                    new DataDelivery
+                    {
             ContentFile = "TableData/actor.tabledata",
             MergeType = "Insert/Update"
-        };
+        }
+                ];
         JsonHelper.Write(tablePath, loadedTable);
 
         var updatedTable = LoadTableJson(tablesDir, "actor");
@@ -343,8 +358,8 @@ public class ConfigureDataDeliveryTests
             Assert.That(updatedMySqlTable.CharacterSet, Is.EqualTo("utf8mb4"));
             Assert.That(updatedTable.Columns, Has.Count.EqualTo(2));
             Assert.That(updatedTable.DataDelivery, Is.Not.Null);
-            Assert.That(updatedTable.DataDelivery!.ContentFile, Is.EqualTo("TableData/actor.tabledata"));
-            Assert.That(updatedTable.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
+            Assert.That(updatedTable.DataDelivery[0].ContentFile, Is.EqualTo("TableData/actor.tabledata"));
+            Assert.That(updatedTable.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
         });
     }
 

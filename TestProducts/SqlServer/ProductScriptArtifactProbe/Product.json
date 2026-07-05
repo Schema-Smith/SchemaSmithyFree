@@ -1,0 +1,17 @@
+{
+    "Name": "ProductScriptArtifactProbe",
+    "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}') THEN 1 ELSE 0 END AS BIT)",
+    "TemplateOrder": [
+        "Bogus"
+    ],
+    "ScriptFolders": [
+        { "FolderPath" : "Before", "QuenchSlot" : "Before" }
+    ],
+    "ScriptTokens": {
+        "MainDB": "TestMain",
+        "ReleaseVersion": "",
+        "AdminPassword": "sup3rs3cr3t_product_probe",
+        "Region": "us-east"
+    },
+    "Platform": "MSSQL"
+}

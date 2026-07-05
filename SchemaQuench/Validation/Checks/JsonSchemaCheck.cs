@@ -180,16 +180,20 @@ public sealed class JsonSchemaCheck : ISchemaCheck
     // on-disk layout Template.Load itself reads (Schema/Domain/Template.cs: LoadTables reads
     // "Tables", LoadIndexedViews reads "Indexed Views", LoadMaterializedViews reads
     // "Materialized Views" — note the spaces, unlike the compact .schema file name segments).
+    // Directory context takes precedence over file name: a file under a component folder is
+    // classified by that folder even if it happens to be named Product.json/Template.json (e.g.
+    // MySQL's schema-less <table>.json layout can produce Tables/Product.json for a table
+    // literally named "Product") — otherwise it would be misread as the manifest.
     private static string MapFileToType(string jsonFilePath)
     {
-        var fileName = Path.GetFileName(jsonFilePath);
-        if (fileName.Equals("Product.json", StringComparison.OrdinalIgnoreCase)) return "products";
-        if (fileName.Equals("Template.json", StringComparison.OrdinalIgnoreCase)) return "templates";
-
         var parent = Path.GetFileName(Path.GetDirectoryName(jsonFilePath) ?? "");
         if (parent.Equals("Tables", StringComparison.OrdinalIgnoreCase)) return "tables";
         if (parent.Equals("Indexed Views", StringComparison.OrdinalIgnoreCase)) return "indexedviews";
         if (parent.Equals("Materialized Views", StringComparison.OrdinalIgnoreCase)) return "materializedviews";
+
+        var fileName = Path.GetFileName(jsonFilePath);
+        if (fileName.Equals("Product.json", StringComparison.OrdinalIgnoreCase)) return "products";
+        if (fileName.Equals("Template.json", StringComparison.OrdinalIgnoreCase)) return "templates";
         return null;
     }
 

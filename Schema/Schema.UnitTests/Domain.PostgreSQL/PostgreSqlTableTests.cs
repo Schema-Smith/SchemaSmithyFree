@@ -33,7 +33,7 @@ namespace Schema.UnitTests.Domain.PostgreSQL
             Assert.That(table.Schema, Is.Null);
             Assert.That(table.Statistics, Is.Not.Null.And.Empty);
             Assert.That(table.ExcludeConstraints, Is.Not.Null.And.Empty);
-            Assert.That(table.DataDelivery, Is.Null);
+            Assert.That(table.DataDelivery, Is.Empty);
             Assert.That(table.RowLevelSecurity, Is.False);
             Assert.That(table.ForceRowLevelSecurity, Is.False);
             Assert.That(table.AccessMethod, Is.Null);
@@ -49,7 +49,7 @@ namespace Schema.UnitTests.Domain.PostgreSQL
             {
                 Name = "customer",
                 Schema = "sales",
-                DataDelivery = new PostgreSqlDataDelivery { MergeDisableRules = true, MergeUpdateDescendents = true },
+                DataDelivery = [new PostgreSqlDataDelivery { MergeDisableRules = true, MergeUpdateDescendents = true }],
                 RowLevelSecurity = true,
                 ForceRowLevelSecurity = true,
                 AccessMethod = "heap",
@@ -70,9 +70,9 @@ namespace Schema.UnitTests.Domain.PostgreSQL
             var deserialized = JsonConvert.DeserializeObject<PostgreSqlTable>(json);
 
             Assert.That(deserialized.Schema, Is.EqualTo("sales"));
-            Assert.That(deserialized.DataDelivery, Is.Not.Null);
-            Assert.That(deserialized.DataDelivery.MergeDisableRules, Is.True);
-            Assert.That(deserialized.DataDelivery.MergeUpdateDescendents, Is.True);
+            Assert.That(deserialized.DataDelivery, Is.Not.Empty);
+            Assert.That(deserialized.DataDelivery[0].MergeDisableRules, Is.True);
+            Assert.That(deserialized.DataDelivery[0].MergeUpdateDescendents, Is.True);
             Assert.That(deserialized.RowLevelSecurity, Is.True);
             Assert.That(deserialized.ForceRowLevelSecurity, Is.True);
             Assert.That(deserialized.AccessMethod, Is.EqualTo("heap"));

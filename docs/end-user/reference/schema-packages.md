@@ -683,6 +683,8 @@ Tables without a `DataDelivery` block are left alone. Tables that declare one ar
 | `MergeDisableTriggers` | bool | `false` | Wrap the merge with platform-appropriate trigger disable/enable. |
 | `MergeDisableRules` | bool | `false` | **PostgreSQL.** Disable rewrite rules on the table during the merge. |
 | `MergeUpdateDescendents` | bool | `false` | **PostgreSQL.** When `true`, the merge targets descendant partitions as well as the specified table. When `false` (the default), the merge uses `ONLY` so descendant tables are left untouched. |
+| `ShouldApplyExpression` | string | `""` | Optional SQL predicate evaluated against the target at deploy time. Blank or absent always applies -- today's unchanged behavior. When `DataDelivery` is an array of two or more deliveries, every entry must set one. See [Multiple Deliveries](#multiple-deliveries) below. |
+| `VariantName` | string | `""` | Optional label naming the intent behind a delivery's `ShouldApplyExpression`. Appears in the deployment log when that delivery is skipped or when its gate errors. Max 128 characters. |
 
 ### MergeType
 
@@ -693,6 +695,90 @@ Tables without a `DataDelivery` block are left alone. Tables that declare one ar
 | `Insert/Update/Delete` | Full sync. Missing rows inserted, changed rows updated, and target rows that don't exist in the source data are deleted. The demo products use this. When `MergeFilter` is set, deletes are scoped by the filter so rows outside it are never removed. |
 
 The chosen idiom is platform-specific -- `MERGE` on SQL Server and PostgreSQL, `INSERT ... ON DUPLICATE KEY UPDATE` with a conditional delete step on MySQL -- but the declarative contract is the same on every platform.
+
+### Multiple Deliveries
+
+A table's `DataDelivery` is either a single object (the form above, unchanged) or an **array of independently-gated deliveries**. Each array entry is a full `DataDelivery` object -- its own `ContentFile`, `MergeType`, `MergeFilter`, and the rest. This is the mechanism behind three common patterns:
+
+- **Environment-gated seed/test data.** Ship fixture or test rows that only land in dev or test databases.
+- **Per-environment variants.** A rich dataset for dev, a minimal reference set for production -- same table, mutually exclusive gates.
+- **Additive patch slices.** Several deliveries with disjoint `MergeFilter`s, each covering its own slice of the table, all applying together.
+
+Unlike the single-match variant pattern used elsewhere in the schema package (see [Full-Text Index](#full-text-index-sql-server)), data deliveries are **not** "one match wins": at quench time, **every** delivery whose `ShouldApplyExpression` passes applies, in declared order. That's what makes additive patch slices possible -- and it's why an array of two or more deliveries requires a `ShouldApplyExpression` on every entry (an ungated entry alongside others would always apply, defeating the point of gating); loading an array that omits one on any entry fails with a clear error before any deployment work begins.
+
+**Pattern 1 -- environment-gated seed data (SQL Server, bare-object form):**
+
+```json
+"DataDelivery": {
+  "ContentFile": "data/dbo.TestFixtures.tabledata",
+  "MergeType": "Insert/Update/Delete",
+  "MatchColumns": "[FixtureId]",
+  "ShouldApplyExpression": "DB_NAME() LIKE '%_dev' OR DB_NAME() LIKE '%_test'",
+  "VariantName": "Dev/test fixtures"
+}
+```
+
+A single delivery can carry a `ShouldApplyExpression` on its own -- no array required. This table's fixture rows only merge into databases whose name ends `_dev` or `_test`; everywhere else, delivery is skipped for this table.
+
+**Pattern 2 -- per-environment variants (PostgreSQL, mutually exclusive gates):**
+
+```json
+"DataDelivery": [
+  {
+    "ContentFile": "data/public.product_catalog.dev.tabledata",
+    "MergeType": "Insert/Update/Delete",
+    "MatchColumns": "product_id",
+    "ShouldApplyExpression": "current_database() = 'app_dev'",
+    "VariantName": "Rich dev catalog"
+  },
+  {
+    "ContentFile": "data/public.product_catalog.prod.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "product_id",
+    "ShouldApplyExpression": "current_database() <> 'app_dev'",
+    "VariantName": "Minimal prod reference set"
+  }
+]
+```
+
+The two gates are mutually exclusive, so exactly one variant applies per target -- a full catalog in dev, a lean reference set everywhere else -- from one table definition.
+
+**Pattern 3 -- additive patch slices (MySQL, same gate, disjoint filters):**
+
+```json
+"DataDelivery": [
+  {
+    "ContentFile": "data/StatusCodes.core.tabledata",
+    "MergeType": "Insert/Update/Delete",
+    "MatchColumns": "StatusCodeId",
+    "MergeFilter": "Category = 'Core'",
+    "ShouldApplyExpression": "DATABASE() = 'app_main'",
+    "VariantName": "Core status codes"
+  },
+  {
+    "ContentFile": "data/StatusCodes.regional.tabledata",
+    "MergeType": "Insert/Update/Delete",
+    "MatchColumns": "StatusCodeId",
+    "MergeFilter": "Category = 'Regional'",
+    "ShouldApplyExpression": "DATABASE() = 'app_main'",
+    "VariantName": "Regional status codes"
+  }
+]
+```
+
+Both deliveries share the same gate -- on `app_main`, both apply. Each is scoped to its own `Category` slice by `MergeFilter`, so the two additive deliveries never fight over the same rows.
+
+> **Warning:** When two or more deliveries apply together to the same table and more than one uses `Insert/Update/Delete`, each delivery's delete pass removes any target row outside its own `MergeFilter` -- including rows another applying delivery just wrote. Give every `Insert/Update/Delete` delivery in a multi-delivery table a `MergeFilter` disjoint from every other applying delivery's filter, as in Pattern 3 above. There is no engine-side guard against overlapping deletes across deliveries; disjoint filters are an authoring responsibility.
+
+A gated-off delivery is logged as skipped, distinct from a delivered or a failed one:
+
+```
+    Skipping data delivery for dbo.Orders [Dev/test fixtures] — ShouldApplyExpression evaluated false
+```
+
+In WhatIf mode, skipped deliveries are still logged individually with their `VariantName`, exactly as in a real run. Applied deliveries are reported as a single `Would DELIVER: <table>` line for the table, not broken out per delivery.
+
+See [Conditional Application](#conditional-application) for the general `ShouldApplyExpression` behavior (blank/absent evaluates as always-apply, fail-closed error handling). Data delivery gates are evaluated the same way -- once per delivery instead of once per table -- with one difference worth knowing: component-level gates (columns, indexes, and the rest) and script-folder gates have their tokens (including `{{SchemaName}}` on schema templates) resolved before evaluation; a `DataDelivery.ShouldApplyExpression` does not currently go through that resolution step, so write it in terms of things you can query directly on the target (database/server name, catalog lookups) rather than a `{{Token}}` placeholder.
 
 ### FK-aware delivery
 
@@ -974,7 +1060,9 @@ Dev uses synthetic data and a lean index set. Staging mirrors production's footp
 }
 ```
 
-The same property is available on tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views, statistics, exclude constraints, full-text indexes, and XML indexes. Combined with [Custom Properties](custom-properties.md) and the rest of the [Script Tokens](script-tokens.md) feature surface, you can express deployment-time decisions declaratively without ever writing a separate per-environment script file.
+The same property is available on tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views, statistics, exclude constraints, full-text indexes, XML indexes, and data deliveries. Combined with [Custom Properties](custom-properties.md) and the rest of the [Script Tokens](script-tokens.md) feature surface, you can express deployment-time decisions declaratively without ever writing a separate per-environment script file.
+
+Data deliveries are the one exception to "one match wins": when a table declares an array of deliveries, every one whose gate passes applies, in declared order -- see [Multiple Deliveries](#multiple-deliveries) for the pattern and the delete-overlap warning that comes with it.
 
 ---
 

@@ -55,13 +55,6 @@ namespace Schema.Domain.PostgreSQL
         [JsonProperty(Order = 102)]
         public List<ExcludeConstraint> ExcludeConstraints { get; set; } = [];
 
-        [JsonProperty(Order = 103)]
-        public new PostgreSqlDataDelivery DataDelivery
-        {
-            get => (PostgreSqlDataDelivery)base.DataDelivery;
-            set => base.DataDelivery = value;
-        }
-
         [JsonProperty(Order = 105)]
         public bool RowLevelSecurity { get; set; }
 
