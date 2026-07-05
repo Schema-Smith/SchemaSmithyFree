@@ -1,0 +1,27 @@
+{
+  "Name": "`StatusCode`",
+  "Columns": [
+    { "Name": "`Code`", "DataType": "CHAR(4)" },
+    { "Name": "`Label`", "DataType": "VARCHAR(48)" },
+    { "Name": "`Region`", "DataType": "CHAR(6)" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`Code`" }
+  ],
+  "DataDelivery": [
+    {
+      "ContentFile": "data/StatusCode.core.tabledata",
+      "MergeType": "Insert/Update",
+      "MatchColumns": "`Code`",
+      "ShouldApplyExpression": "DATABASE() = 'cookbook_r7_main'",
+      "VariantName": "Core status codes"
+    },
+    {
+      "ContentFile": "data/StatusCode.regional.tabledata",
+      "MergeType": "Insert/Update",
+      "MatchColumns": "`Code`",
+      "ShouldApplyExpression": "DATABASE() = 'cookbook_r7_main'",
+      "VariantName": "Regional status codes"
+    }
+  ]
+}

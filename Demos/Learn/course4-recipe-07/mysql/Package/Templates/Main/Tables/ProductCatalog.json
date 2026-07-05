@@ -1,0 +1,27 @@
+{
+  "Name": "`ProductCatalog`",
+  "Columns": [
+    { "Name": "`Sku`", "DataType": "CHAR(8)" },
+    { "Name": "`ProductName`", "DataType": "VARCHAR(64)" },
+    { "Name": "`Active`", "DataType": "TINYINT" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`Sku`" }
+  ],
+  "DataDelivery": [
+    {
+      "ContentFile": "data/ProductCatalog.dev.tabledata",
+      "MergeType": "Insert/Update",
+      "MatchColumns": "`Sku`",
+      "ShouldApplyExpression": "DATABASE() = 'cookbook_r7_dev'",
+      "VariantName": "Rich dev catalog"
+    },
+    {
+      "ContentFile": "data/ProductCatalog.main.tabledata",
+      "MergeType": "Insert/Update",
+      "MatchColumns": "`Sku`",
+      "ShouldApplyExpression": "DATABASE() <> 'cookbook_r7_dev'",
+      "VariantName": "Lean prod catalog"
+    }
+  ]
+}
