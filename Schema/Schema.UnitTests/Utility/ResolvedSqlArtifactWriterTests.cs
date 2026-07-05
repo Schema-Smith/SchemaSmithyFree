@@ -80,7 +80,7 @@ public class ResolvedSqlArtifactWriterTests
     [Test]
     public void WriteFailureArtifact_ScrubTrue_RedactsSensitiveValue_AndReturnsWrittenPath()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var tempDir = Directory.CreateTempSubdirectory("ss_artifact_").FullName;
         var fileName = "artifact.sql";
 
         try
@@ -95,7 +95,8 @@ public class ResolvedSqlArtifactWriterTests
                 failingBatchIndex: 0,
                 fileName: fileName);
 
-            Assert.That(returnedPath, Is.EqualTo(Path.Combine(tempDir, fileName)));
+            Assert.That(Path.GetDirectoryName(returnedPath), Is.EqualTo(tempDir));
+            Assert.That(Path.GetFileName(returnedPath), Is.EqualTo(fileName));
             var written = File.ReadAllText(returnedPath);
             Assert.That(written, Does.Not.Contain("hunter2secret"));
             Assert.That(written, Does.Contain(LogScrubber.Mask));
@@ -110,7 +111,7 @@ public class ResolvedSqlArtifactWriterTests
     [Test]
     public void WriteFailureArtifact_ScrubFalse_LeavesSensitiveValueIntact()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var tempDir = Directory.CreateTempSubdirectory("ss_artifact_").FullName;
         var fileName = "artifact.sql";
 
         try
@@ -125,7 +126,8 @@ public class ResolvedSqlArtifactWriterTests
                 failingBatchIndex: 0,
                 fileName: fileName);
 
-            Assert.That(returnedPath, Is.EqualTo(Path.Combine(tempDir, fileName)));
+            Assert.That(Path.GetDirectoryName(returnedPath), Is.EqualTo(tempDir));
+            Assert.That(Path.GetFileName(returnedPath), Is.EqualTo(fileName));
             var written = File.ReadAllText(returnedPath);
             Assert.That(written, Does.Contain("hunter2secret"));
         }

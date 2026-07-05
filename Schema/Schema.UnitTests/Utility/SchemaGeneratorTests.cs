@@ -591,9 +591,9 @@ public class SchemaGeneratorTests
         Assert.That(dataDelivery, Is.Not.Null);
         // DataDelivery is SingleOrArray -> a oneOf wrapper (bare object OR array), matching the
         // FullTextIndex shape (ShouldGenerateSingleOrArraySchemaForSqlServerFullTextIndex below).
-        var oneOf = dataDelivery["oneOf"] as JArray;
+        var oneOf = dataDelivery!["oneOf"] as JArray;
         Assert.That(oneOf, Is.Not.Null, "DataDelivery schema should accept single object OR array");
-        Assert.That(oneOf[0]?["type"]?.ToString(), Is.EqualTo("object"));
+        Assert.That(oneOf![0]?["type"]?.ToString(), Is.EqualTo("object"));
         Assert.That(oneOf[1]?["type"]?.ToString(), Is.EqualTo("array"));
         Assert.That(oneOf[0]?["properties"]?["MergeType"]?["pattern"]?.ToString(),
             Is.EqualTo("Insert|Insert/Update|Insert/Update/Delete"));
