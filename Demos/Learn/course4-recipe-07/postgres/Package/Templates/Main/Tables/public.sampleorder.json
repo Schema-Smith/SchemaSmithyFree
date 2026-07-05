@@ -1,0 +1,19 @@
+{
+  "Schema": "public",
+  "Name": "sampleorder",
+  "Columns": [
+    { "Name": "orderid", "DataType": "INT" },
+    { "Name": "customername", "DataType": "VARCHAR(64)" },
+    { "Name": "amount", "DataType": "NUMERIC(10,2)" }
+  ],
+  "Indexes": [
+    { "Name": "pk_sampleorder", "PrimaryKey": true, "IndexColumns": "orderid" }
+  ],
+  "DataDelivery": {
+    "ContentFile": "data/public.sampleorder.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "orderid",
+    "ShouldApplyExpression": "current_database() LIKE '%_dev' OR current_database() LIKE '%_test'",
+    "VariantName": "Dev/test sample orders"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "Schema": "public",
+  "Name": "statuscode",
+  "Columns": [
+    { "Name": "code", "DataType": "CHAR(4)" },
+    { "Name": "label", "DataType": "VARCHAR(48)" },
+    { "Name": "region", "DataType": "CHAR(6)" }
+  ],
+  "Indexes": [
+    { "Name": "pk_statuscode", "PrimaryKey": true, "IndexColumns": "code" }
+  ],
+  "DataDelivery": [
+    {
+      "ContentFile": "data/public.statuscode.core.tabledata",
+      "MergeType": "Insert/Update",
+      "MatchColumns": "code",
+      "ShouldApplyExpression": "current_database() = 'cookbook_r7_main'",
+      "VariantName": "Core status codes"
+    },
+    {
+      "ContentFile": "data/public.statuscode.regional.tabledata",
+      "MergeType": "Insert/Update",
+      "MatchColumns": "code",
+      "ShouldApplyExpression": "current_database() = 'cookbook_r7_main'",
+      "VariantName": "Regional status codes"
+    }
+  ]
+}

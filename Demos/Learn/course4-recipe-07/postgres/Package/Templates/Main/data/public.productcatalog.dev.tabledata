@@ -1,0 +1,8 @@
+[
+{"sku":"SKU-0001","productname":"Widget, Standard","active":true},
+{"sku":"SKU-0002","productname":"Widget, Deluxe","active":true},
+{"sku":"SKU-0003","productname":"Gadget, Compact","active":true},
+{"sku":"SKU-0004","productname":"Gadget, Pro","active":true},
+{"sku":"SKU-0005","productname":"Gizmo, Legacy","active":false},
+{"sku":"SKU-0006","productname":"Gizmo, Prototype","active":false}
+]

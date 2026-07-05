@@ -1,0 +1,28 @@
+{
+  "Schema": "public",
+  "Name": "productcatalog",
+  "Columns": [
+    { "Name": "sku", "DataType": "CHAR(8)" },
+    { "Name": "productname", "DataType": "VARCHAR(64)" },
+    { "Name": "active", "DataType": "BOOLEAN" }
+  ],
+  "Indexes": [
+    { "Name": "pk_productcatalog", "PrimaryKey": true, "IndexColumns": "sku" }
+  ],
+  "DataDelivery": [
+    {
+      "ContentFile": "data/public.productcatalog.dev.tabledata",
+      "MergeType": "Insert/Update",
+      "MatchColumns": "sku",
+      "ShouldApplyExpression": "current_database() = 'cookbook_r7_dev'",
+      "VariantName": "Rich dev catalog"
+    },
+    {
+      "ContentFile": "data/public.productcatalog.main.tabledata",
+      "MergeType": "Insert/Update",
+      "MatchColumns": "sku",
+      "ShouldApplyExpression": "current_database() <> 'cookbook_r7_dev'",
+      "VariantName": "Lean prod catalog"
+    }
+  ]
+}
