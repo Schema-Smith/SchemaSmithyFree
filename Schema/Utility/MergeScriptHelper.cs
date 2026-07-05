@@ -882,7 +882,7 @@ WHEN MATCHED AND ({updateCompare}) THEN
         var insertColumns = GetInsertColumnsPostgreSql(cmd, tableSchema, tableName, jsonKeys);
         mergeSQL += $@"
 
- WHEN NOT MATCHED {(mergeDelete && modernDelete ? "BY TARGET " : "")}THEN -- BY TARGET is only valid on PostgreSQL v17+; emit it only when the modern WHEN NOT MATCHED BY SOURCE ... DELETE clause is also used
+ WHEN NOT MATCHED {(mergeDelete && modernDelete ? "BY TARGET " : "")}THEN -- 'BY TARGET' requires PostgreSQL v17+; add it only when the v17 delete-on-absence clause is also emitted
    INSERT (
  {insertColumns}
    ) {(!string.IsNullOrEmpty(identAndSeq) ? $"OVERRIDING {identAndSeq.Split("=")[2]} VALUE" : "")}
