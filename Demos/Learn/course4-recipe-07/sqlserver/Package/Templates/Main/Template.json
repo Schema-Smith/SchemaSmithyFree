@@ -1,0 +1,5 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT name FROM sys.databases WHERE name IN ('cookbook_r7_dev', 'cookbook_r7_main')",
+  "ScriptFolders": []
+}

@@ -1,0 +1,28 @@
+{
+  "Schema": "dbo",
+  "Name": "ProductCatalog",
+  "Columns": [
+    { "Name": "Sku", "DataType": "CHAR(8)" },
+    { "Name": "ProductName", "DataType": "NVARCHAR(64)" },
+    { "Name": "Active", "DataType": "BIT" }
+  ],
+  "Indexes": [
+    { "Name": "PK_ProductCatalog", "PrimaryKey": true, "Clustered": true, "IndexColumns": "Sku" }
+  ],
+  "DataDelivery": [
+    {
+      "ContentFile": "data/dbo.ProductCatalog.dev.tabledata",
+      "MergeType": "Insert/Update",
+      "MatchColumns": "Sku",
+      "ShouldApplyExpression": "DB_NAME() = 'cookbook_r7_dev'",
+      "VariantName": "Rich dev catalog"
+    },
+    {
+      "ContentFile": "data/dbo.ProductCatalog.main.tabledata",
+      "MergeType": "Insert/Update",
+      "MatchColumns": "Sku",
+      "ShouldApplyExpression": "DB_NAME() <> 'cookbook_r7_dev'",
+      "VariantName": "Lean prod catalog"
+    }
+  ]
+}

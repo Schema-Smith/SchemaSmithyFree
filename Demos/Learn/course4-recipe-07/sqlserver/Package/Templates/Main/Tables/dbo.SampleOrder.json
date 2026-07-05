@@ -1,0 +1,19 @@
+{
+  "Schema": "dbo",
+  "Name": "SampleOrder",
+  "Columns": [
+    { "Name": "OrderId", "DataType": "INT" },
+    { "Name": "CustomerName", "DataType": "NVARCHAR(64)" },
+    { "Name": "Amount", "DataType": "DECIMAL(10,2)" }
+  ],
+  "Indexes": [
+    { "Name": "PK_SampleOrder", "PrimaryKey": true, "Clustered": true, "IndexColumns": "OrderId" }
+  ],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.SampleOrder.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "OrderId",
+    "ShouldApplyExpression": "DB_NAME() LIKE '%_dev' OR DB_NAME() LIKE '%_test'",
+    "VariantName": "Dev/test sample orders"
+  }
+}

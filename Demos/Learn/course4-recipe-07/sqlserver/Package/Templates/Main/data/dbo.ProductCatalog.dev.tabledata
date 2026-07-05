@@ -1,0 +1,8 @@
+[
+{"Sku":"SKU-0001","ProductName":"Widget, Standard","Active":1},
+{"Sku":"SKU-0002","ProductName":"Widget, Deluxe","Active":1},
+{"Sku":"SKU-0003","ProductName":"Gadget, Compact","Active":1},
+{"Sku":"SKU-0004","ProductName":"Gadget, Pro","Active":1},
+{"Sku":"SKU-0005","ProductName":"Gizmo, Legacy","Active":0},
+{"Sku":"SKU-0006","ProductName":"Gizmo, Prototype","Active":0}
+]

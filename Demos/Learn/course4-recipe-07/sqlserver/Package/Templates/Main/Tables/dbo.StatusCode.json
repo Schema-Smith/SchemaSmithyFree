@@ -1,0 +1,30 @@
+{
+  "Schema": "dbo",
+  "Name": "StatusCode",
+  "Columns": [
+    { "Name": "Code", "DataType": "CHAR(4)" },
+    { "Name": "Label", "DataType": "NVARCHAR(48)" },
+    { "Name": "Region", "DataType": "CHAR(6)" }
+  ],
+  "Indexes": [
+    { "Name": "PK_StatusCode", "PrimaryKey": true, "Clustered": true, "IndexColumns": "Code" }
+  ],
+  "DataDelivery": [
+    {
+      "ContentFile": "data/dbo.StatusCode.core.tabledata",
+      "MergeType": "Insert/Update/Delete",
+      "MatchColumns": "Code",
+      "MergeFilter": "Region = 'GLOBAL'",
+      "ShouldApplyExpression": "DB_NAME() = 'cookbook_r7_main'",
+      "VariantName": "Core status codes"
+    },
+    {
+      "ContentFile": "data/dbo.StatusCode.regional.tabledata",
+      "MergeType": "Insert/Update/Delete",
+      "MatchColumns": "Code",
+      "MergeFilter": "Region <> 'GLOBAL'",
+      "ShouldApplyExpression": "DB_NAME() = 'cookbook_r7_main'",
+      "VariantName": "Regional status codes"
+    }
+  ]
+}
