@@ -48,6 +48,15 @@ public class ResolvedSqlArtifactIntegrationTests
     }
 
     [SetUp]
+    public void SetUpClearPgPools() => NpgsqlConnection.ClearAllPools();
+
+    [TearDown]
+    public void TearDownClearPgPools() => NpgsqlConnection.ClearAllPools();
+
+    [OneTimeTearDown]
+    public void OneTimeTearDownClearPgPools() => NpgsqlConnection.ClearAllPools();
+
+    [SetUp]
     public void SetUp()
     {
         _artifactDir = Path.Combine(Path.GetTempPath(), $"SchemaQuench_Artifact_Test_{Guid.NewGuid():N}");
