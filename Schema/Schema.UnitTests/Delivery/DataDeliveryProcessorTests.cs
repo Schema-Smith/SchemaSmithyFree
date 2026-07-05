@@ -474,6 +474,33 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
+    public void DeliverTables_WhatIf_LogsWouldDeliverPerAppliedVariant()
+    {
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "eu.json", VariantName = "EU" },
+                    new DataDelivery { MergeType = "Insert", ContentFile = "us.json", VariantName = "US" }
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.WhatIf = true;
+
+        processor.DeliverTables(context);
+
+        Assert.That(_logs.Exists(l => l.Contains("Would DELIVER") && l.Contains("[EU]")),
+            "WhatIf must report a Would DELIVER line carrying the EU variant name.");
+        Assert.That(_logs.Exists(l => l.Contains("Would DELIVER") && l.Contains("[US]")),
+            "WhatIf must report a Would DELIVER line carrying the US variant name.");
+    }
+
+    [Test]
     public void ValidateDeleteCascade_MySql_EmptyTableList_ReturnsEmpty()
     {
         var errors = DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "MySQL", "testdb",

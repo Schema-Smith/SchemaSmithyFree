@@ -280,7 +280,8 @@ public class DataDeliveryProcessor : IDataDelivery
 
         if (context.WhatIf)
         {
-            log($"    Would DELIVER: {tableKey}");
+            foreach (var (_, delivery) in appliedDeliveries)
+                log($"    Would DELIVER: {tableKey}{VariantSuffix(delivery)}");
             delivered.Add(tableKey);
             return;
         }
