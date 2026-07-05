@@ -19,13 +19,11 @@ Unable to quench 'Before/01-seed-config.sql': Invalid column name 'Region'.
     Resolved SQL written to: C:\deploy\SchemaQuench - Failed 01-seed-config prod-db.TargetDB.sql
 ```
 
-> **Note:** On SQL Server, a failed *user or migration script* surfaced through the server's InfoMessage stream points `Resolved SQL written to:` at the source `.sql` file that failed, not a separately written copy -- the file on disk already is the resolved SQL. Every other surface (generated DDL, product scripts, validation scripts, data-delivery merges) writes a dedicated resolved-SQL artifact. Either way, the path after the colon is the file to open.
-
 > **Note:** Artifacts land in the `ArtifactPath` directory (default: the working directory you ran SchemaQuench from), not the log directory. That is deliberate — so zipping your logs for a support ticket does not sweep up raw SQL that may contain expanded sensitive values.
 
 ### 2. Open and read it
 
-The artifact is a plain `.sql` file. It contains a comment header identifying the server, database, schema, and which script failed, followed by every batch the engine sent, separated by `GO`. The batch SchemaQuench attempted last is marked (the source-script case above is the one exception -- there's no comment header or failing-batch marker, since the file is the original script rather than a written artifact):
+The artifact is a plain `.sql` file. It contains a comment header identifying the server, database, schema, and which script failed, followed by every batch the engine sent, separated by `GO`. The batch SchemaQuench attempted last is marked:
 
 ```sql
 -- >>> FAILING BATCH (#2) >>>

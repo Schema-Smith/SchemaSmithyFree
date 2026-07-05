@@ -352,9 +352,7 @@ Unable to quench 'Before/01-seed-config.sql': Invalid column name 'Region'.
     Resolved SQL written to: C:\deploy\SchemaQuench - Failed 01-seed-config prod-db.TargetDB.sql
 ```
 
-> **SQL Server:** A user or migration script whose failure surfaces through the server's InfoMessage stream points `Resolved SQL written to:` at the *source* `.sql` file, not a separately written artifact -- the source already holds the resolved SQL SchemaQuench sent. Every other surface (generated DDL, product scripts, validation scripts, data-delivery merges) writes a dedicated resolved-SQL artifact instead.
-
-Aside from that one case, every artifact is a `.sql` file with a comment header (server/database/schema, the failing script name, the error message), every batch the engine received, separated by `GO`, with the last-attempted batch marked `-- >>> FAILING BATCH (#N) >>>`. The failing-batch marker is a best-effort hint -- the engine marks the last batch it attempted, which is usually the one that caused the error.
+Every artifact is a `.sql` file with a comment header (server/database/schema, the failing script name, the error message), every batch the engine received, separated by `GO`, with the last-attempted batch marked `-- >>> FAILING BATCH (#N) >>>`. The failing-batch marker is a best-effort hint -- the engine marks the last batch it attempted, which is usually the one that caused the error.
 
 **Artifacts are raw by default** -- all token values are already expanded to their real values, so you can open the file, connect to the target, and reproduce the failure immediately without any further substitution.
 
