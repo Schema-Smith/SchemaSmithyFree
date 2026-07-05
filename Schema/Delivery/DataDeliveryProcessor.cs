@@ -175,6 +175,10 @@ public class DataDeliveryProcessor : IDataDelivery
         // in the while loop AND again in the circular-fallback loop) writes exactly one artifact per
         // failed (table, delivery) rather than one per attempt.
         var artifactWritten = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+        // Per-delivery success tracking: a table with multiple deliveries can be re-attempted
+        // (dependency retry loop + circular-fallback loop). A delivery that already succeeded on a
+        // prior attempt must not re-run when a *sibling* delivery's failure re-queues the table.
+        var deliverySucceeded = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
         var lastCount = -1;
 
         while (tablesToDeliver.Count > 0 && tablesToDeliver.Count != lastCount)
@@ -195,7 +199,7 @@ public class DataDeliveryProcessor : IDataDelivery
 
                 try
                 {
-                    DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Units, false, artifactWritten, appliedByTable[table]);
+                    DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Units, false, artifactWritten, deliverySucceeded, appliedByTable[table]);
                 }
                 catch
                 {
@@ -210,7 +214,7 @@ public class DataDeliveryProcessor : IDataDelivery
         {
             try
             {
-                DeliverTable(context, table, tableDataMap, new List<string>(), delivered, pass2Units, true, artifactWritten, appliedByTable[table]);
+                DeliverTable(context, table, tableDataMap, new List<string>(), delivered, pass2Units, true, artifactWritten, deliverySucceeded, appliedByTable[table]);
             }
             catch (Exception ex)
             {
@@ -265,7 +269,7 @@ public class DataDeliveryProcessor : IDataDelivery
         Dictionary<(IDeliverableTable Table, int Index), string> tableDataMap, List<string> deferredColumns,
         HashSet<string> delivered,
         List<(IDeliverableTable Table, int Index, DataDelivery Delivery, List<string> DeferredColumns)> pass2Units,
-        bool isCircularFallback, HashSet<string> artifactWritten,
+        bool isCircularFallback, HashSet<string> artifactWritten, HashSet<string> deliverySucceeded,
         List<(int Index, DataDelivery Delivery)> appliedDeliveries)
     {
         var platform = context.Platform;
@@ -285,6 +289,9 @@ public class DataDeliveryProcessor : IDataDelivery
         {
             var variantLabel = !string.IsNullOrWhiteSpace(delivery.VariantName) ? delivery.VariantName : index.ToString();
             var artifactKey = $"{tableKey}#{variantLabel}";
+
+            if (deliverySucceeded.Contains(artifactKey))
+                continue; // already delivered on a prior attempt of this table; don't re-run an idempotent sibling
 
             var keyColumns = string.IsNullOrWhiteSpace(delivery.MatchColumns)
                 ? helper.GetKeyColumns(context.Command, schemaOrDb, table.Name)
@@ -309,6 +316,7 @@ public class DataDeliveryProcessor : IDataDelivery
                 }
 
                 pass2Units.Add((table, index, delivery, deferredColumns));
+                deliverySucceeded.Add(artifactKey);
             }
             else
             {
@@ -330,6 +338,7 @@ public class DataDeliveryProcessor : IDataDelivery
                         context.WriteResolvedSqlArtifact?.Invoke(artifactKey, mergeScript);
                     throw;
                 }
+                deliverySucceeded.Add(artifactKey);
             }
         }
 
