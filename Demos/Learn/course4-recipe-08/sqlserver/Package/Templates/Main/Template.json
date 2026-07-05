@@ -1,0 +1,4 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT name FROM sys.databases WHERE name = 'cookbook_r8'"
+}

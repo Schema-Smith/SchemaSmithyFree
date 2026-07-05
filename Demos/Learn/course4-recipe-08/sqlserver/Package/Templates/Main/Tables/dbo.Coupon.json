@@ -1,0 +1,12 @@
+{
+  "Schema": "dbo",
+  "Name": "Coupon",
+  "Columns": [
+    { "Name": "CouponId", "DataType": "INT", "Nullable": false },
+    { "Name": "Code", "DataType": "NVARCHAR(50)", "Nullable": false },
+    { "Name": "DiscountPct", "DataType": "INT", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PK_Coupon", "PrimaryKey": true, "Clustered": true, "IndexColumns": "CouponId" }
+  ]
+}

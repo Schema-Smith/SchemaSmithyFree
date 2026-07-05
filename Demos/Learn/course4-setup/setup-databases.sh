@@ -41,6 +41,7 @@ databases=(
   cookbook_r4
   cookbook_r5
   cookbook_r6
+  cookbook_r8
 )
 
 echo "SQL Server"
@@ -54,7 +55,7 @@ for db in "${databases[@]}"; do confirm_db mysql "$db"; done
 
 echo
 if [ "$fail" -eq 0 ]; then
-  echo "All 21 databases are ready."
+  echo "All 24 databases are ready."
   exit 0
 else
   echo "One or more databases could not be created. Is the sandbox up? See Demos/Learn/README.md."
