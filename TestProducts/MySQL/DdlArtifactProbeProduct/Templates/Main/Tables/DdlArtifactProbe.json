@@ -1,0 +1,12 @@
+{
+    "Name": "`DdlArtifactProbe`",
+    "Engine": "InnoDB",
+    "Columns": [
+        {"Name": "`Id`","DataType": "INT","Nullable": false},
+        {"Name": "`Name`","DataType": "VARCHAR(100)","Nullable": true}
+    ],
+    "Indexes": [
+        {"Name": "PRIMARY","PrimaryKey": true,"IndexColumns": "`Id`"},
+        {"Name": "`IX_DdlArtifactProbe_sup3rs3cr3t_ddl_probe`","Unique": false,"IndexColumns": "`artifact_probe_ddl_nonexistent_column`"}
+    ]
+}

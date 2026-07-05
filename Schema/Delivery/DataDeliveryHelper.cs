@@ -12,6 +12,12 @@ namespace Schema.Delivery;
 /// </summary>
 internal static class DataDeliveryHelper
 {
+    // Membership: a table participates in delivery if any of its deliveries has a real (non-None) MergeType.
+    internal static bool HasDeliverable(IDeliverableTable t) =>
+        t.DataDeliveries != null && t.DataDeliveries.Any(d =>
+            !string.IsNullOrEmpty(d.MergeType) &&
+            !d.MergeType.Equals("None", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>
     /// Classifies FK edges for a table as either required (NOT NULL FK columns)
     /// or deferred (all-nullable FK columns).

@@ -21,11 +21,24 @@ public static class ImportTableHelper
     /// </summary>
     public static void PreserveDataDeliveryAndCustomProperties(Table tableObj, Table original)
     {
-        // Preserve data delivery properties
-        tableObj.DataDelivery = original.DataDelivery;
-        // Ensure MergeType has a default for backward compat
-        if (tableObj.DataDelivery != null && string.IsNullOrWhiteSpace(tableObj.DataDelivery.MergeType))
-            tableObj.DataDelivery.MergeType = "None";
+        // Data delivery is authored config; extraction cannot reconstruct gated/variant deliveries, so
+        // the original list is the truth. Multi-entry variant sets survive wholesale; a gated single
+        // delivery survives even when absent on this target (absence is the gate's doing, not a drop);
+        // an ungated single delivery carries its original config onto the reimport.
+        var origDeliveries = original.DataDelivery ?? [];
+        if (origDeliveries.Count > 1)
+            tableObj.DataDelivery = origDeliveries;
+        else if (origDeliveries.Count == 1 && (tableObj.DataDelivery?.Count ?? 0) == 0)
+            tableObj.DataDelivery = origDeliveries;
+        else if (origDeliveries.Count == 1 && tableObj.DataDelivery is { Count: 1 })
+            // Both present: the original replaces the extracted entry outright (no field merge) —
+            // DataDelivery is authored config, not something extraction can reconstruct, so the original is the truth.
+            tableObj.DataDelivery[0] = origDeliveries[0];
+
+        // Ensure MergeType default for backward compat on the surviving single delivery.
+        if (tableObj.DataDelivery is { Count: 1 } && string.IsNullOrWhiteSpace(tableObj.DataDelivery[0].MergeType))
+            tableObj.DataDelivery[0].MergeType = "None";
+
         tableObj.OldName = original.OldName;
 
         // Copy dynamic (custom) properties at table level

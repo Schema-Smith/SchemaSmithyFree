@@ -1,0 +1,6 @@
+{
+    "Name": "Main",
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{MainDB}}'",
+    "BaselineValidationScript": "-- baseline_validation_artifact_probe_marker AdminPassword={{AdminPassword}} Region={{Region}}\nSELECT CAST(0 AS BIT)",
+    "ScriptFolders": []
+}

@@ -78,6 +78,67 @@ public class ResolvedSqlArtifactWriterTests
     }
 
     [Test]
+    public void WriteFailureArtifact_ScrubTrue_RedactsSensitiveValue_AndReturnsWrittenPath()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("ss_artifact_").FullName;
+        var fileName = "artifact.sql";
+
+        try
+        {
+            var sensitive = new List<KeyValuePair<string, string>> { new("AdminPassword", "hunter2secret") };
+            var returnedPath = ResolvedSqlArtifactWriter.WriteFailureArtifact(
+                directory: tempDir,
+                scrub: true,
+                sensitiveValues: sensitive,
+                header: "Failed: srv.db [script 001.sql] — division by zero",
+                batches: new List<string> { "CREATE LOGIN x WITH PASSWORD = 'hunter2secret';" },
+                failingBatchIndex: 0,
+                fileName: fileName);
+
+            Assert.That(Path.GetDirectoryName(returnedPath), Is.EqualTo(tempDir));
+            Assert.That(Path.GetFileName(returnedPath), Is.EqualTo(fileName));
+            var written = File.ReadAllText(returnedPath);
+            Assert.That(written, Does.Not.Contain("hunter2secret"));
+            Assert.That(written, Does.Contain(LogScrubber.Mask));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Test]
+    public void WriteFailureArtifact_ScrubFalse_LeavesSensitiveValueIntact()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("ss_artifact_").FullName;
+        var fileName = "artifact.sql";
+
+        try
+        {
+            var sensitive = new List<KeyValuePair<string, string>> { new("AdminPassword", "hunter2secret") };
+            var returnedPath = ResolvedSqlArtifactWriter.WriteFailureArtifact(
+                directory: tempDir,
+                scrub: false,
+                sensitiveValues: sensitive,
+                header: "Failed: srv.db [script 001.sql] — division by zero",
+                batches: new List<string> { "CREATE LOGIN x WITH PASSWORD = 'hunter2secret';" },
+                failingBatchIndex: 0,
+                fileName: fileName);
+
+            Assert.That(Path.GetDirectoryName(returnedPath), Is.EqualTo(tempDir));
+            Assert.That(Path.GetFileName(returnedPath), Is.EqualTo(fileName));
+            var written = File.ReadAllText(returnedPath);
+            Assert.That(written, Does.Contain("hunter2secret"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Test]
     public void Write_CreatesDirectory_WhenMissing()
     {
         // Use a fresh GUID subdir under temp — guaranteed not to exist before this call.

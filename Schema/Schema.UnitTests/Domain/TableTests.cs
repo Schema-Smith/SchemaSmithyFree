@@ -25,7 +25,7 @@ namespace Schema.UnitTests.Domain
             Assert.That(table.CheckConstraints, Is.Not.Null);
             Assert.That(table.CheckConstraints, Is.Empty);
             Assert.That(table.ShouldApplyExpression, Is.Null);
-            Assert.That(table.DataDelivery, Is.Null);
+            Assert.That(table.DataDelivery, Is.Empty);
             Assert.That(table.OldName, Is.Null);
         }
 
@@ -34,17 +34,17 @@ namespace Schema.UnitTests.Domain
         {
             var table = new Table();
 
-            table.DataDelivery = new DataDelivery { MergeType = "None" };
-            Assert.That(table.DataDelivery.MergeType, Is.EqualTo("None"));
+            table.DataDelivery = [new DataDelivery { MergeType = "None" }];
+            Assert.That(table.DataDelivery[0].MergeType, Is.EqualTo("None"));
 
-            table.DataDelivery = new DataDelivery { MergeType = "Insert" };
-            Assert.That(table.DataDelivery.MergeType, Is.EqualTo("Insert"));
+            table.DataDelivery = [new DataDelivery { MergeType = "Insert" }];
+            Assert.That(table.DataDelivery[0].MergeType, Is.EqualTo("Insert"));
 
-            table.DataDelivery = new DataDelivery { MergeType = "Insert/Update" };
-            Assert.That(table.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
+            table.DataDelivery = [new DataDelivery { MergeType = "Insert/Update" }];
+            Assert.That(table.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
 
-            table.DataDelivery = new DataDelivery { MergeType = "Insert/Update/Delete" };
-            Assert.That(table.DataDelivery.MergeType, Is.EqualTo("Insert/Update/Delete"));
+            table.DataDelivery = [new DataDelivery { MergeType = "Insert/Update/Delete" }];
+            Assert.That(table.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update/Delete"));
         }
 
         [Test]
@@ -53,7 +53,7 @@ namespace Schema.UnitTests.Domain
             var table = new Table
             {
                 Name = "Customer",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update", MatchColumns = "Id" },
+                DataDelivery = [new DataDelivery { MergeType = "Insert/Update", MatchColumns = "Id" }],
                 Columns = new List<Column>
                 {
                     new Column { Name = "Id", DataType = "int", Nullable = false },
@@ -77,8 +77,8 @@ namespace Schema.UnitTests.Domain
             var deserialized = JsonConvert.DeserializeObject<Table>(json);
 
             Assert.That(deserialized.Name, Is.EqualTo("Customer"));
-            Assert.That(deserialized.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
-            Assert.That(deserialized.DataDelivery.MatchColumns, Is.EqualTo("Id"));
+            Assert.That(deserialized.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+            Assert.That(deserialized.DataDelivery[0].MatchColumns, Is.EqualTo("Id"));
             Assert.That(deserialized.Columns, Has.Count.EqualTo(2));
             Assert.That(deserialized.Columns[0].Name, Is.EqualTo("Id"));
             Assert.That(deserialized.Columns[1].Nullable, Is.True);

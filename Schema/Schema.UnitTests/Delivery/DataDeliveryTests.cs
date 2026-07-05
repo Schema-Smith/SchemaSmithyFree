@@ -37,4 +37,18 @@ public class DataDeliveryTests
         Assert.That(roundTripped.MergeFilter, Is.EqualTo("IsActive = 1"));
         Assert.That(roundTripped.MergeDisableTriggers, Is.True);
     }
+
+    [Test]
+    public void DataDelivery_ShouldApplyAndVariantName_RoundTripViaJson()
+    {
+        var json = "{\"ContentFile\":\"d.json\",\"MergeType\":\"Insert\"," +
+                   "\"ShouldApplyExpression\":\"DB_NAME() = 'Dev'\",\"VariantName\":\"dev-seed\"}";
+        var d = Newtonsoft.Json.JsonConvert.DeserializeObject<DataDelivery>(json);
+        Assert.That(d.ShouldApplyExpression, Is.EqualTo("DB_NAME() = 'Dev'"));
+        Assert.That(d.VariantName, Is.EqualTo("dev-seed"));
+
+        var reserialized = Newtonsoft.Json.JsonConvert.SerializeObject(d);
+        Assert.That(reserialized, Does.Contain("\"ShouldApplyExpression\":\"DB_NAME() = 'Dev'\""));
+        Assert.That(reserialized, Does.Contain("\"VariantName\":\"dev-seed\""));
+    }
 }

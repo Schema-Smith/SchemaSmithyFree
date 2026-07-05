@@ -188,9 +188,9 @@ namespace Schema.UnitTests.Domain
 
             var table = Table.Load(filePath, Platform.SqlServer);
 
-            Assert.That(table.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
-            Assert.That(table.DataDelivery.MatchColumns, Is.EqualTo("Id"));
-            Assert.That(table.DataDelivery.ContentFile, Is.EqualTo("Tables/test.tabledata"));
+            Assert.That(table.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+            Assert.That(table.DataDelivery[0].MatchColumns, Is.EqualTo("Id"));
+            Assert.That(table.DataDelivery[0].ContentFile, Is.EqualTo("Tables/test.tabledata"));
         }
 
         [Test]

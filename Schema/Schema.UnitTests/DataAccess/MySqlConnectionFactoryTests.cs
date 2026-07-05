@@ -27,6 +27,22 @@ public class MySqlConnectionFactoryTests
     }
 
     [Test]
+    public void GetDbConnection_CachesOneDataSourcePerConnectionString()
+    {
+        var factory = new MySqlConnectionFactory();
+        var cs = $"Server=localhost;Database=cache_{System.Guid.NewGuid():N};Uid=u;Pwd=p;";
+        var before = MySqlConnectionFactory.CachedDataSourceCount;
+
+        using (factory.GetDbConnection(cs)) { }
+        var afterFirst = MySqlConnectionFactory.CachedDataSourceCount;
+        using (factory.GetDbConnection(cs)) { } // same connection string -> reuse the cached data source
+        var afterSecond = MySqlConnectionFactory.CachedDataSourceCount;
+
+        Assert.That(afterFirst, Is.EqualTo(before + 1), "a new connection string creates exactly one cached data source");
+        Assert.That(afterSecond, Is.EqualTo(afterFirst), "the same connection string reuses the cached data source (no per-call leak)");
+    }
+
+    [Test]
     public void GetFromFactory_ReturnsInstance()
     {
         var factory = MySqlConnectionFactory.GetFromFactory();

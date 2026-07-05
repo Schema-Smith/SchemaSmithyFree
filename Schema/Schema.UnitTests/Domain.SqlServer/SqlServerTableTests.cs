@@ -97,12 +97,12 @@ namespace Schema.UnitTests.Domain.SqlServer
             var table = new SqlServerTable
             {
                 Name = "Test",
-                DataDelivery = new DataDelivery { MergeType = "Insert/Update", MatchColumns = "Id", MergeDisableTriggers = true }
+                DataDelivery = [new DataDelivery { MergeType = "Insert/Update", MatchColumns = "Id", MergeDisableTriggers = true }]
             };
 
-            Assert.That(table.DataDelivery.MergeType, Is.EqualTo("Insert/Update"));
-            Assert.That(table.DataDelivery.MatchColumns, Is.EqualTo("Id"));
-            Assert.That(table.DataDelivery.MergeDisableTriggers, Is.True);
+            Assert.That(table.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+            Assert.That(table.DataDelivery[0].MatchColumns, Is.EqualTo("Id"));
+            Assert.That(table.DataDelivery[0].MergeDisableTriggers, Is.True);
         }
 
         [Test]

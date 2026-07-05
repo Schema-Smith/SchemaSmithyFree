@@ -39,7 +39,19 @@ namespace Schema.Domain
         public string VariantName { get; set; }
 
         [JsonProperty(Order = 81)]
-        public DataDelivery DataDelivery { get; set; }
+        [JsonConverter(typeof(DataDeliveryListJsonConverter))]
+        [SchemaProperty(SingleOrArray = true)]
+        public List<DataDelivery> DataDelivery { get; set; } = [];
+
+        public bool ShouldSerializeDataDelivery() => DataDelivery is { Count: > 0 };
+
+        // Bridges the IDeliverableTable contract (plural DataDeliveries) to the domain model's
+        // DataDelivery list. An implicit (non-explicit) member so it is inherited by every platform
+        // subclass (SqlServerTable, PostgreSqlTable, MySqlTable) that declares IDeliverableTable —
+        // an explicit interface member here would not compile, since Table itself does not
+        // implement IDeliverableTable (only the platform subclasses do).
+        [JsonIgnore]
+        public IReadOnlyList<DataDelivery> DataDeliveries => DataDelivery ?? (IReadOnlyList<DataDelivery>)[];
 
         [SchemaProperty(Description = "When set, overrides the template- and product-level DropColumnsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
         [JsonProperty(Order = 85)]

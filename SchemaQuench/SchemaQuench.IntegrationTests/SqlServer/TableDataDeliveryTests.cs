@@ -5,8 +5,10 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using log4net;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using NSubstitute;
 using Schema.Checkpointing;
 using Schema.DataAccess;
 using Schema.Delivery;
@@ -185,11 +187,14 @@ public class TableDataDeliveryTests
             {
                 Name = _testTableName,
                 Schema = SchemaName,
-                DataDelivery = new DataDelivery
-                {
+                DataDelivery =
+                [
+                    new DataDelivery
+                    {
                     MergeType = "Insert/Update/Delete",
                     ContentFile = "testdata.json"
-                },
+                }
+                ],
                 Columns =
                 [
                     new Column { Name = "code", DataType = "VARCHAR(20)" },
@@ -205,7 +210,7 @@ public class TableDataDeliveryTests
             var tableData = fileWrapper.ReadAllText(contentFilePath);
             Assert.That(tableData, Does.Contain("T001"));
 
-            var mergeType = template.Tables[0].DataDelivery.MergeType;
+            var mergeType = template.Tables[0].DataDelivery[0].MergeType;
             var mergeUpdate = mergeType.Contains("Update", StringComparison.OrdinalIgnoreCase);
             var mergeDelete = mergeType.Contains("Delete", StringComparison.OrdinalIgnoreCase);
             var script = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, command, SchemaName, _testTableName,
@@ -237,8 +242,8 @@ public class TableDataDeliveryTests
 
         var tablesWithData = new List<Table> { table }
             .Where(t => t.DataDelivery != null &&
-                        !string.IsNullOrWhiteSpace(t.DataDelivery.MergeType) &&
-                        !t.DataDelivery.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase))
+                        t.DataDelivery.Any(d => !string.IsNullOrWhiteSpace(d.MergeType) &&
+                                     !d.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
         Assert.That(tablesWithData, Is.Empty);
@@ -251,13 +256,17 @@ public class TableDataDeliveryTests
         {
             Name = _testTableName,
             Schema = SchemaName,
-            DataDelivery = new DataDelivery { MergeType = "None", ContentFile = "data.json" }
+            DataDelivery =
+                [
+                    new DataDelivery
+                    { MergeType = "None", ContentFile = "data.json" }
+                ]
         };
 
         var tablesWithData = new List<Table> { table }
             .Where(t => t.DataDelivery != null &&
-                        !string.IsNullOrWhiteSpace(t.DataDelivery.MergeType) &&
-                        !t.DataDelivery.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase))
+                        t.DataDelivery.Any(d => !string.IsNullOrWhiteSpace(d.MergeType) &&
+                                     !d.MergeType.Equals("none", StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
         Assert.That(tablesWithData, Is.Empty);
@@ -413,11 +422,14 @@ public class TableDataDeliveryTests
                 {
                     Name = childTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update/Delete",
                         ContentFile = "child.tabledata"
-                    },
+                    }
+                ],
                     ForeignKeys =
                     [
                         new SqlServerForeignKey
@@ -433,11 +445,14 @@ public class TableDataDeliveryTests
                 {
                     Name = parentTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update/Delete",
                         ContentFile = "parent.tabledata"
                     }
+                ]
                 });
 
                 RegisterTargetConfig();
@@ -508,21 +523,27 @@ public class TableDataDeliveryTests
                 {
                     Name = "_nonexistent_table_xyz",
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update/Delete",
                         ContentFile = "bad.tabledata"
                     }
+                ]
                 });
                 template.Tables.Add(new SqlServerTable
                 {
                     Name = goodTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update/Delete",
                         ContentFile = "good.tabledata"
                     }
+                ]
                 });
 
                 RegisterTargetConfig();
@@ -602,11 +623,14 @@ public class TableDataDeliveryTests
                 {
                     Name = storeTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update",
                         ContentFile = "store.tabledata"
-                    },
+                    }
+                ],
                     Columns =
                     [
                         new Column { Name = "store_id", DataType = "INT" },
@@ -628,11 +652,14 @@ public class TableDataDeliveryTests
                 {
                     Name = staffTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update",
                         ContentFile = "staff.tabledata"
-                    },
+                    }
+                ],
                     Columns =
                     [
                         new Column { Name = "staff_id", DataType = "INT" },
@@ -747,11 +774,14 @@ public class TableDataDeliveryTests
                 {
                     Name = parentTable,
                     Schema = SchemaName,
-                    DataDelivery = new DataDelivery
+                    DataDelivery =
+                [
+                    new DataDelivery
                     {
                         MergeType = "Insert/Update/Delete",
                         ContentFile = "parent.tabledata"
                     }
+                ]
                 });
 
                 RegisterTargetConfig();
@@ -776,6 +806,296 @@ public class TableDataDeliveryTests
                 command.CommandText = $"IF OBJECT_ID('[{SchemaName}].[{parentTable}]', 'U') IS NOT NULL DROP TABLE [{SchemaName}].[{parentTable}]";
                 try { command.ExecuteNonQuery(); } catch { }
 
+                FactoryContainer.Register<IConfigurationRoot>(savedConfig);
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+                if (Directory.Exists(checkpointDir)) Directory.Delete(checkpointDir, true);
+            }
+        }
+    }
+
+    #endregion
+
+    #region ShouldApplyExpression Gating and Variant Tests (#278)
+
+    [Test]
+    public void DeliverTableData_ViaQuench_GatedDelivery_AppliesWhenTrue()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Join(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
+
+            try
+            {
+                Directory.CreateDirectory(tempDir);
+                File.WriteAllText(Path.Join(tempDir, "gated.tabledata"),
+                    @"[{""code"":""G001"",""name"":""Gated Row"",""value"":1.00,""active"":1}]");
+                File.WriteAllText(Path.Join(tempDir, "Template.json"), "{}");
+
+                var template = new Template { Name = "GateTrueTest", FilePath = Path.Join(tempDir, "Template.json") };
+                template.Tables.Add(new SqlServerTable
+                {
+                    Name = _testTableName,
+                    Schema = SchemaName,
+                    DataDelivery =
+                    [
+                        new DataDelivery
+                        {
+                            MergeType = "Insert/Update/Delete",
+                            ContentFile = "gated.tabledata",
+                            MatchColumns = "[code]",
+                            ShouldApplyExpression = $"DB_NAME() = '{_testDb}'",
+                            VariantName = "same-db"
+                        }
+                    ]
+                });
+
+                RegisterTargetConfig();
+
+                var product = new Product { Name = "TestProduct", Platform = Platform.SqlServer };
+                var quench = new DatabaseQuench(FactoryContainer.Resolve<IConfigurationRoot>()["Target:Server"], product, template, _testDb,
+                    suppressKindling: true, whatIfOnly: "0", runScriptsTwice: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropRemovedExcludeConstraints: "1", dropRemovedStatistics: "1", dropRemovedIndexes: "1", dropUnknownIndexes: false, updateTables: false,
+                    deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
+                quench.Execute();
+
+                Assert.That(quench.QuenchSuccessful, Is.True);
+
+                using var command = _connection.CreateCommand();
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{_testTableName}]";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1));
+            }
+            finally
+            {
+                FactoryContainer.Register<IConfigurationRoot>(savedConfig);
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+                if (Directory.Exists(checkpointDir)) Directory.Delete(checkpointDir, true);
+            }
+        }
+    }
+
+    [Test]
+    public void DeliverTableData_ViaQuench_GatedDelivery_SkippedWhenFalse_LogsSkip()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Join(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
+            var progressLog = Substitute.For<ILog>();
+
+            try
+            {
+                Directory.CreateDirectory(tempDir);
+                File.WriteAllText(Path.Join(tempDir, "gated.tabledata"),
+                    @"[{""code"":""G002"",""name"":""Should Not Land"",""value"":1.00,""active"":1}]");
+                File.WriteAllText(Path.Join(tempDir, "Template.json"), "{}");
+
+                var template = new Template { Name = "GateFalseTest", FilePath = Path.Join(tempDir, "Template.json") };
+                template.Tables.Add(new SqlServerTable
+                {
+                    Name = _testTableName,
+                    Schema = SchemaName,
+                    DataDelivery =
+                    [
+                        new DataDelivery
+                        {
+                            MergeType = "Insert/Update/Delete",
+                            ContentFile = "gated.tabledata",
+                            MatchColumns = "[code]",
+                            ShouldApplyExpression = "DB_NAME() = 'NoSuchDatabase_xyz_278'",
+                            VariantName = "wrong-env"
+                        }
+                    ]
+                });
+
+                RegisterTargetConfig();
+                LogFactory.Register("ProgressLog", progressLog);
+
+                var product = new Product { Name = "TestProduct", Platform = Platform.SqlServer };
+                var quench = new DatabaseQuench(FactoryContainer.Resolve<IConfigurationRoot>()["Target:Server"], product, template, _testDb,
+                    suppressKindling: true, whatIfOnly: "0", runScriptsTwice: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropRemovedExcludeConstraints: "1", dropRemovedStatistics: "1", dropRemovedIndexes: "1", dropUnknownIndexes: false, updateTables: false,
+                    deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
+                quench.Execute();
+
+                Assert.That(quench.QuenchSuccessful, Is.True);
+
+                using var command = _connection.CreateCommand();
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{_testTableName}]";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0));
+
+                progressLog.Received().Info(Arg.Is<string>(s =>
+                    s.Contains("Skipping data delivery") && s.Contains(_testTableName) && s.Contains("wrong-env")));
+            }
+            finally
+            {
+                LogFactory.Clear();
+                FactoryContainer.Register<IConfigurationRoot>(savedConfig);
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+                if (Directory.Exists(checkpointDir)) Directory.Delete(checkpointDir, true);
+            }
+        }
+    }
+
+    [Test]
+    public void DeliverTableData_ViaQuench_TwoVariants_OnlyActiveVariantApplies()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Join(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
+
+            try
+            {
+                Directory.CreateDirectory(tempDir);
+                File.WriteAllText(Path.Join(tempDir, "variantA.tabledata"),
+                    @"[{""code"":""VA1"",""name"":""Variant A Row"",""value"":1.00,""active"":1}]");
+                File.WriteAllText(Path.Join(tempDir, "variantB.tabledata"),
+                    @"[{""code"":""VB1"",""name"":""Variant B Row"",""value"":2.00,""active"":1}]");
+                File.WriteAllText(Path.Join(tempDir, "Template.json"), "{}");
+
+                var template = new Template { Name = "VariantTest", FilePath = Path.Join(tempDir, "Template.json") };
+                template.Tables.Add(new SqlServerTable
+                {
+                    Name = _testTableName,
+                    Schema = SchemaName,
+                    DataDelivery =
+                    [
+                        new DataDelivery
+                        {
+                            MergeType = "Insert/Update/Delete",
+                            ContentFile = "variantA.tabledata",
+                            MatchColumns = "[code]",
+                            ShouldApplyExpression = $"DB_NAME() = '{_testDb}'",
+                            VariantName = "active-variant"
+                        },
+                        new DataDelivery
+                        {
+                            MergeType = "Insert/Update/Delete",
+                            ContentFile = "variantB.tabledata",
+                            MatchColumns = "[code]",
+                            ShouldApplyExpression = "DB_NAME() = 'NoSuchDatabase_xyz_278'",
+                            VariantName = "inactive-variant"
+                        }
+                    ]
+                });
+
+                RegisterTargetConfig();
+
+                var product = new Product { Name = "TestProduct", Platform = Platform.SqlServer };
+                var quench = new DatabaseQuench(FactoryContainer.Resolve<IConfigurationRoot>()["Target:Server"], product, template, _testDb,
+                    suppressKindling: true, whatIfOnly: "0", runScriptsTwice: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropRemovedExcludeConstraints: "1", dropRemovedStatistics: "1", dropRemovedIndexes: "1", dropUnknownIndexes: false, updateTables: false,
+                    deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
+                quench.Execute();
+
+                Assert.That(quench.QuenchSuccessful, Is.True);
+
+                using var command = _connection.CreateCommand();
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{_testTableName}]";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1), "Only the active variant's row should have landed.");
+
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{_testTableName}] WHERE [code] = 'VA1'";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1));
+
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{_testTableName}] WHERE [code] = 'VB1'";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0));
+            }
+            finally
+            {
+                FactoryContainer.Register<IConfigurationRoot>(savedConfig);
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+                if (Directory.Exists(checkpointDir)) Directory.Delete(checkpointDir, true);
+            }
+        }
+    }
+
+    [Test]
+    public void DeliverTableData_ViaQuench_DisjointMergeFilters_EachDeliveryDeletesOnlyOwnSlice()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Join(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
+
+            try
+            {
+                using (var seedCommand = _connection.CreateCommand())
+                {
+                    seedCommand.CommandText = $@"
+                        INSERT INTO [{SchemaName}].[{_testTableName}] ([code], [name], [value], [active]) VALUES
+                        ('STALE1', 'Stale Slice 1', 0.00, 1),
+                        ('STALE2', 'Stale Slice 2', 0.00, 2)";
+                    seedCommand.ExecuteNonQuery();
+                }
+
+                Directory.CreateDirectory(tempDir);
+                File.WriteAllText(Path.Join(tempDir, "slice1.tabledata"),
+                    @"[{""code"":""S1A"",""name"":""Slice 1 A"",""value"":1.00,""active"":1},{""code"":""S1B"",""name"":""Slice 1 B"",""value"":1.00,""active"":1}]");
+                File.WriteAllText(Path.Join(tempDir, "slice2.tabledata"),
+                    @"[{""code"":""S2A"",""name"":""Slice 2 A"",""value"":2.00,""active"":2}]");
+                File.WriteAllText(Path.Join(tempDir, "Template.json"), "{}");
+
+                var template = new Template { Name = "DisjointMergeFilterTest", FilePath = Path.Join(tempDir, "Template.json") };
+                template.Tables.Add(new SqlServerTable
+                {
+                    Name = _testTableName,
+                    Schema = SchemaName,
+                    DataDelivery =
+                    [
+                        new DataDelivery
+                        {
+                            MergeType = "Insert/Update/Delete",
+                            ContentFile = "slice1.tabledata",
+                            MatchColumns = "[code]",
+                            MergeFilter = "[active] = 1",
+                            VariantName = "slice-1"
+                        },
+                        new DataDelivery
+                        {
+                            MergeType = "Insert/Update/Delete",
+                            ContentFile = "slice2.tabledata",
+                            MatchColumns = "[code]",
+                            MergeFilter = "[active] = 2",
+                            VariantName = "slice-2"
+                        }
+                    ]
+                });
+
+                RegisterTargetConfig();
+
+                var product = new Product { Name = "TestProduct", Platform = Platform.SqlServer };
+                var quench = new DatabaseQuench(FactoryContainer.Resolve<IConfigurationRoot>()["Target:Server"], product, template, _testDb,
+                    suppressKindling: true, whatIfOnly: "0", runScriptsTwice: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropRemovedExcludeConstraints: "1", dropRemovedStatistics: "1", dropRemovedIndexes: "1", dropUnknownIndexes: false, updateTables: false,
+                    deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
+                quench.Execute();
+
+                Assert.That(quench.QuenchSuccessful, Is.True);
+
+                using var command = _connection.CreateCommand();
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{_testTableName}]";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(3),
+                    "Each delivery's delete must be scoped to its own MergeFilter slice — neither should wipe the other's rows.");
+
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{_testTableName}] WHERE [code] = 'STALE1'";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0), "Stale row in slice 1 must be deleted by slice 1's delivery.");
+
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{_testTableName}] WHERE [code] = 'STALE2'";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0), "Stale row in slice 2 must be deleted by slice 2's delivery.");
+
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{_testTableName}] WHERE [active] = 1";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(2), "Slice 1 rows (S1A, S1B) must survive.");
+
+                command.CommandText = $"SELECT COUNT(*) FROM [{SchemaName}].[{_testTableName}] WHERE [active] = 2";
+                Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1), "Slice 2 row (S2A) must survive.");
+            }
+            finally
+            {
                 FactoryContainer.Register<IConfigurationRoot>(savedConfig);
                 if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
                 if (Directory.Exists(checkpointDir)) Directory.Delete(checkpointDir, true);

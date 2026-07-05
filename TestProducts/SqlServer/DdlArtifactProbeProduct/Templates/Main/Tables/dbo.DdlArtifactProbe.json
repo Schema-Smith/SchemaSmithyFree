@@ -1,0 +1,12 @@
+{
+    "Schema": "[dbo]",
+    "Name": "[DdlArtifactProbe]",
+    "Columns": [
+        { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+        { "Name": "[Name]", "DataType": "NVARCHAR(100)", "Nullable": true }
+    ],
+    "Indexes": [
+        { "Name": "[PK_DdlArtifactProbe]", "PrimaryKey": true, "Unique": true, "Clustered": true, "IndexColumns": "[Id]" },
+        { "Name": "[IX_DdlArtifactProbe_sup3rs3cr3t_ddl_probe]", "Unique": false, "Clustered": false, "IndexColumns": "[artifact_probe_ddl_nonexistent_column]" }
+    ]
+}
