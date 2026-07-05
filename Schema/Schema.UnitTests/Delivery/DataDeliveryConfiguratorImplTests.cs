@@ -13,11 +13,11 @@ namespace Schema.UnitTests.Delivery;
 public class DataDeliveryConfiguratorImplTests
 {
     // Explicitly-rooted base (not the drive-relative "C:" + "template" -> "C:template") so the
-    // downstream Path.Combine chain is unambiguous; the file system is mocked so the location is inert.
-    private static readonly string TemplateRoot = Path.Combine(Path.GetTempPath(), "ss_dd_configurator_template");
-    private static readonly string TablesDir = Path.Combine(TemplateRoot, "Tables");
-    private static readonly string TableJsonPath = Path.Combine(TablesDir, "dbo.TestTable.json");
-    private static readonly string ContentFilePath = Path.Combine(TemplateRoot, "Content", "dbo.TestTable.tabledata");
+    // downstream Path.Join chain is unambiguous; the file system is mocked so the location is inert.
+    private static readonly string TemplateRoot = Path.Join(Path.GetTempPath(), "ss_dd_configurator_template");
+    private static readonly string TablesDir = Path.Join(TemplateRoot, "Tables");
+    private static readonly string TableJsonPath = Path.Join(TablesDir, "dbo.TestTable.json");
+    private static readonly string ContentFilePath = Path.Join(TemplateRoot, "Content", "dbo.TestTable.tabledata");
 
     private IFile _file;
     private IDirectory _directory;

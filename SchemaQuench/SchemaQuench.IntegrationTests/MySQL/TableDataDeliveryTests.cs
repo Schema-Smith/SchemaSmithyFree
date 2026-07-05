@@ -831,18 +831,18 @@ public class TableDataDeliveryTests
     {
         lock (FactoryContainer.SharedLockObject)
         {
-            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-            var checkpointDir = Path.Combine(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Join(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
             var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
 
             try
             {
                 Directory.CreateDirectory(tempDir);
-                File.WriteAllText(Path.Combine(tempDir, "gated.tabledata"),
+                File.WriteAllText(Path.Join(tempDir, "gated.tabledata"),
                     @"[{""code"":""G001"",""name"":""Gated Row"",""value"":1.00,""active"":1}]");
-                File.WriteAllText(Path.Combine(tempDir, "Template.json"), "{}");
+                File.WriteAllText(Path.Join(tempDir, "Template.json"), "{}");
 
-                var template = new Template { Name = "GateTrueTest", FilePath = Path.Combine(tempDir, "Template.json") };
+                var template = new Template { Name = "GateTrueTest", FilePath = Path.Join(tempDir, "Template.json") };
                 template.Tables.Add(new MySqlTable
                 {
                     Name = _testTableName,
@@ -888,19 +888,19 @@ public class TableDataDeliveryTests
     {
         lock (FactoryContainer.SharedLockObject)
         {
-            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-            var checkpointDir = Path.Combine(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Join(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
             var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
             var progressLog = Substitute.For<ILog>();
 
             try
             {
                 Directory.CreateDirectory(tempDir);
-                File.WriteAllText(Path.Combine(tempDir, "gated.tabledata"),
+                File.WriteAllText(Path.Join(tempDir, "gated.tabledata"),
                     @"[{""code"":""G002"",""name"":""Should Not Land"",""value"":1.00,""active"":1}]");
-                File.WriteAllText(Path.Combine(tempDir, "Template.json"), "{}");
+                File.WriteAllText(Path.Join(tempDir, "Template.json"), "{}");
 
-                var template = new Template { Name = "GateFalseTest", FilePath = Path.Combine(tempDir, "Template.json") };
+                var template = new Template { Name = "GateFalseTest", FilePath = Path.Join(tempDir, "Template.json") };
                 template.Tables.Add(new MySqlTable
                 {
                     Name = _testTableName,
@@ -951,20 +951,20 @@ public class TableDataDeliveryTests
     {
         lock (FactoryContainer.SharedLockObject)
         {
-            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-            var checkpointDir = Path.Combine(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Join(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
             var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
 
             try
             {
                 Directory.CreateDirectory(tempDir);
-                File.WriteAllText(Path.Combine(tempDir, "variantA.tabledata"),
+                File.WriteAllText(Path.Join(tempDir, "variantA.tabledata"),
                     @"[{""code"":""VA1"",""name"":""Variant A Row"",""value"":1.00,""active"":1}]");
-                File.WriteAllText(Path.Combine(tempDir, "variantB.tabledata"),
+                File.WriteAllText(Path.Join(tempDir, "variantB.tabledata"),
                     @"[{""code"":""VB1"",""name"":""Variant B Row"",""value"":2.00,""active"":1}]");
-                File.WriteAllText(Path.Combine(tempDir, "Template.json"), "{}");
+                File.WriteAllText(Path.Join(tempDir, "Template.json"), "{}");
 
-                var template = new Template { Name = "VariantTest", FilePath = Path.Combine(tempDir, "Template.json") };
+                var template = new Template { Name = "VariantTest", FilePath = Path.Join(tempDir, "Template.json") };
                 template.Tables.Add(new MySqlTable
                 {
                     Name = _testTableName,
@@ -1024,8 +1024,8 @@ public class TableDataDeliveryTests
     {
         lock (FactoryContainer.SharedLockObject)
         {
-            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-            var checkpointDir = Path.Combine(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Join(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
             var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
 
             try
@@ -1040,13 +1040,13 @@ public class TableDataDeliveryTests
                 }
 
                 Directory.CreateDirectory(tempDir);
-                File.WriteAllText(Path.Combine(tempDir, "slice1.tabledata"),
+                File.WriteAllText(Path.Join(tempDir, "slice1.tabledata"),
                     @"[{""code"":""S1A"",""name"":""Slice 1 A"",""value"":1.00,""active"":1},{""code"":""S1B"",""name"":""Slice 1 B"",""value"":1.00,""active"":1}]");
-                File.WriteAllText(Path.Combine(tempDir, "slice2.tabledata"),
+                File.WriteAllText(Path.Join(tempDir, "slice2.tabledata"),
                     @"[{""code"":""S2A"",""name"":""Slice 2 A"",""value"":2.00,""active"":2}]");
-                File.WriteAllText(Path.Combine(tempDir, "Template.json"), "{}");
+                File.WriteAllText(Path.Join(tempDir, "Template.json"), "{}");
 
-                var template = new Template { Name = "DisjointMergeFilterTest", FilePath = Path.Combine(tempDir, "Template.json") };
+                var template = new Template { Name = "DisjointMergeFilterTest", FilePath = Path.Join(tempDir, "Template.json") };
                 template.Tables.Add(new MySqlTable
                 {
                     Name = _testTableName,

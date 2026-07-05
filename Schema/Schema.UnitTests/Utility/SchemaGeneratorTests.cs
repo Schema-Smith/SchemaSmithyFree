@@ -594,8 +594,8 @@ public class SchemaGeneratorTests
         var oneOf = dataDelivery!["oneOf"] as JArray;
         Assert.That(oneOf, Is.Not.Null, "DataDelivery schema should accept single object OR array");
         Assert.That(oneOf![0]?["type"]?.ToString(), Is.EqualTo("object"));
-        Assert.That(oneOf[1]?["type"]?.ToString(), Is.EqualTo("array"));
-        Assert.That(oneOf[0]?["properties"]?["MergeType"]?["pattern"]?.ToString(),
+        Assert.That(oneOf![1]?["type"]?.ToString(), Is.EqualTo("array"));
+        Assert.That(oneOf![0]?["properties"]?["MergeType"]?["pattern"]?.ToString(),
             Is.EqualTo("Insert|Insert/Update|Insert/Update/Delete"));
     }
 

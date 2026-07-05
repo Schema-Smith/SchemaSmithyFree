@@ -201,8 +201,8 @@ public class TokenCheckTests
     [Test]
     public void ScriptTokensInTableNamedProduct_NotRegisteredAsManifestTokens()
     {
-        var tableFile = Path.Combine(PackagePath, "Templates", "Main", "Tables", "Product.json");
-        var scriptFile = Path.Combine(PackagePath, "Templates", "Main", "Before Scripts", "Init.sql");
+        var tableFile = Path.Join(PackagePath, "Templates", "Main", "Tables", "Product.json");
+        var scriptFile = Path.Join(PackagePath, "Templates", "Main", "Before Scripts", "Init.sql");
         JsonFiles(tableFile);
         SqlFiles(scriptFile);
         FileContent(tableFile, @"{ ""Name"": ""Product"", ""Columns"": [], ""ScriptTokens"": { ""TableLevelToken"": ""x"" } }");

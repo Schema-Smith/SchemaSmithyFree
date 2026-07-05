@@ -28,7 +28,7 @@ public class JsonSchemaCheckTests
     private const string PackagePath = @"C:\pkg";
     private static readonly string SchemaDir = Path.Combine(PackagePath, ".json-schemas");
     private static readonly string TablesSchemaPath = Path.Combine(SchemaDir, "tables.sqlserver.schema");
-    private static readonly string ProductsSchemaPath = Path.Combine(SchemaDir, "products.sqlserver.schema");
+    private static readonly string ProductsSchemaPath = Path.Join(SchemaDir, "products.sqlserver.schema");
 
     private IFile _mockFile;
     private IDirectory _mockDirectory;
@@ -222,7 +222,7 @@ public class JsonSchemaCheckTests
     public void RealRootProductJson_StillClassifiesAsProductManifest()
     {
         CommitProductsSchema(FreshProductsSchema());
-        var productFile = Path.Combine(PackagePath, "Product.json");
+        var productFile = Path.Join(PackagePath, "Product.json");
         JsonFiles(productFile);
         FileContent(productFile, @"{ ""Name"": ""Acme"" }"); // missing required ValidationScript
 

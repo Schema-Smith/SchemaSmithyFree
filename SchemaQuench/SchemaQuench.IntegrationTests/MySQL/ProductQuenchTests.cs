@@ -344,7 +344,7 @@ public class ProductQuenchTests
             };
 
             // Act - Load content file using ProductFileWrapper (simulating what DatabaseQuench does)
-            var contentPath = Path.Combine(tempDir, table.DataDelivery[0].ContentFile);
+            var contentPath = Path.Join(tempDir, table.DataDelivery[0].ContentFile);
             var fileWrapper = ProductFileWrapper.GetFromFactory();
 
             // Assert
