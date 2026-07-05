@@ -62,6 +62,14 @@ public class DataDeliveryConfiguratorContext
     /// <summary>Per-table merge filter override.</summary>
     public string MergeFilterOverride { get; set; }
 
+    /// <summary>
+    /// Optional identity of the authored DataDelivery array variant this extraction targets.
+    /// When the table's DataDelivery is an array, the configurator reconciles the single matching
+    /// element (by VariantName) and leaves the rest untouched; blank means "single-object table or
+    /// no target variant" and preserves the leave-array-untouched behavior.
+    /// </summary>
+    public string VariantName { get; set; }
+
     /// <summary>Callback for logging progress messages.</summary>
     public System.Action<string> ProgressLog { get; set; }
 
