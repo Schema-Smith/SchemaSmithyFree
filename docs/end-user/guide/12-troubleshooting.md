@@ -12,20 +12,20 @@ A failed quench leaves two things for you: a log entry telling you what broke, a
 
 ### 1. Find the artifact
 
-Open the progress log (`SchemaQuench - Progress.log`) and search for `Resolved SQL written to:` (user scripts and data-delivery merges) or `Debug Script:` (generated quench SQL). Either line gives you the full path to the artifact file.
+Open the progress log (`SchemaQuench - Progress.log`) and search for `Resolved SQL written to:`. Every script surface -- user and migration scripts, generated quench DDL (table, index, foreign-key, view, and table-JSON steps), product-level `Before`/`After` scripts, validation scripts, and data-delivery merges -- reports its failure the same way, so one search string finds every kind of failure in the log.
 
 ```
 Unable to quench 'Before/01-seed-config.sql': Invalid column name 'Region'.
     Resolved SQL written to: C:\deploy\SchemaQuench - Failed 01-seed-config prod-db.TargetDB.sql
 ```
 
-Both line shapes tell you the same thing: here is the file that contains what the server actually ran.
+> **Note:** On SQL Server, a failed *user or migration script* surfaced through the server's InfoMessage stream points `Resolved SQL written to:` at the source `.sql` file that failed, not a separately written copy -- the file on disk already is the resolved SQL. Every other surface (generated DDL, product scripts, validation scripts, data-delivery merges) writes a dedicated resolved-SQL artifact. Either way, the path after the colon is the file to open.
 
 > **Note:** Artifacts land in the `ArtifactPath` directory (default: the working directory you ran SchemaQuench from), not the log directory. That is deliberate — so zipping your logs for a support ticket does not sweep up raw SQL that may contain expanded sensitive values.
 
 ### 2. Open and read it
 
-The artifact is a plain `.sql` file. It contains a comment header identifying the server, database, schema, and which script failed, followed by every batch the engine sent, separated by `GO`. The batch SchemaQuench attempted last is marked:
+The artifact is a plain `.sql` file. It contains a comment header identifying the server, database, schema, and which script failed, followed by every batch the engine sent, separated by `GO`. The batch SchemaQuench attempted last is marked (the source-script case above is the one exception -- there's no comment header or failing-batch marker, since the file is the original script rather than a written artifact):
 
 ```sql
 -- >>> FAILING BATCH (#2) >>>

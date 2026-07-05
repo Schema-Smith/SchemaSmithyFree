@@ -304,7 +304,7 @@ Both log files are overwritten at the start of each run. Previous runs are prese
 
 The console is a live mirror of the progress log, not a separate channel. Watching the console while a quench runs lets you follow startup, per-object progress, and completion in real time without tailing a file. Log4Net colorizes the console stream by level -- informational entries in green, warnings in yellow, errors in red -- so trouble catches your eye the moment it appears.
 
-When a script fails, you see a short error summary on the console and in the progress log (red, so it's hard to miss): the failing script path and the engine's error message, along with a `Debug Script:` pointer when a generated procedure is the source. That's enough to know what failed and where to look. The **full detail** -- the exception line numbers and the complete SQL batches SchemaSmith submitted -- lands in the error log only, so the console and progress stream don't drown in multi-KB failed-batch text during a rough deployment. When a run fails, the progress log tells you *what* broke; the error log tells you *exactly what SQL was sent* when it broke.
+When a script fails, you see a short error summary on the console and in the progress log (red, so it's hard to miss): the failing script path and the engine's error message, along with a `Resolved SQL written to:` pointer to the resolved-SQL artifact. That's enough to know what failed and where to look. The **full detail** -- the exception line numbers and the complete SQL batches SchemaSmith submitted -- lands in the error log only, so the console and progress stream don't drown in multi-KB failed-batch text during a rough deployment. When a run fails, the progress log tells you *what* broke; the error log tells you *exactly what SQL was sent* when it broke.
 
 > **Tip:** CI agents that capture stdout get the progress stream for free. If your pipeline step only saves stdout, you still have a readable transcript of successes and error summaries; archive the error log separately to keep the failed-batch detail.
 
@@ -345,21 +345,16 @@ C:\Tools\
 
 ### Failure artifacts
 
-When any script fails during a SchemaQuench deployment -- a user-authored script, a generated table-quench procedure, or a data-delivery merge -- SchemaQuench writes the exact token-expanded SQL the server rejected to a re-runnable `.sql` artifact file. The progress log tells you where:
+When any script fails during a SchemaQuench deployment -- a user or migration script, a generated table-quench procedure, a product-level `Before`/`After` script, a validation script (`BaselineValidationScript`, `VersionStampScript`), or a data-delivery merge -- SchemaQuench writes the exact token-expanded SQL the server rejected to a re-runnable `.sql` artifact file. Every surface reports it the same way in the progress log:
 
 ```
 Unable to quench 'Before/01-seed-config.sql': Invalid column name 'Region'.
     Resolved SQL written to: C:\deploy\SchemaQuench - Failed 01-seed-config prod-db.TargetDB.sql
 ```
 
-For generated procedures, the same file also appears in the `Debug Script:` log line when the procedure throws:
+> **SQL Server:** A user or migration script whose failure surfaces through the server's InfoMessage stream points `Resolved SQL written to:` at the *source* `.sql` file, not a separately written artifact -- the source already holds the resolved SQL SchemaQuench sent. Every other surface (generated DDL, product scripts, validation scripts, data-delivery merges) writes a dedicated resolved-SQL artifact instead.
 
-```
-FAILED to quench: ...
-Debug Script: 'C:\deploy\SchemaQuench - Quench Missing Tables And Columns prod-db.TargetDB.sql'
-```
-
-Both shapes point to the same kind of artifact: a `.sql` file with a comment header (server/database/schema, the failing script name, the error message), every batch the engine received, separated by `GO`, with the last-attempted batch marked `-- >>> FAILING BATCH (#N) >>>`. The failing-batch marker is a best-effort hint -- the engine marks the last batch it attempted, which is usually the one that caused the error.
+Aside from that one case, every artifact is a `.sql` file with a comment header (server/database/schema, the failing script name, the error message), every batch the engine received, separated by `GO`, with the last-attempted batch marked `-- >>> FAILING BATCH (#N) >>>`. The failing-batch marker is a best-effort hint -- the engine marks the last batch it attempted, which is usually the one that caused the error.
 
 **Artifacts are raw by default** -- all token values are already expanded to their real values, so you can open the file, connect to the target, and reproduce the failure immediately without any further substitution.
 
@@ -399,7 +394,7 @@ For a step-by-step walkthrough of working a failed deployment from artifact to f
 
 ### Debug SQL files
 
-When SchemaQuench runs one of its generated procedures against your target database, it dumps the exact SQL it sent to a companion `.sql` file. If the procedure throws, the progress log surfaces the file path via `Debug Script:` (see [Failure artifacts](#failure-artifacts) above). Open it in your query tool of choice, re-run the SQL by hand, and reproduce or narrow the problem without guessing what SchemaSmith actually executed.
+When SchemaQuench runs one of its generated procedures against your target database, it dumps the exact SQL it sent to a companion `.sql` file -- honoring `ScrubArtifacts` the same as any other failure artifact. If the procedure throws, the progress log surfaces the file path via the same `Resolved SQL written to:` line described in [Failure artifacts](#failure-artifacts) above. Open it in your query tool of choice, re-run the SQL by hand, and reproduce or narrow the problem without guessing what SchemaSmith actually executed.
 
 Generated procedures cover missing tables and columns, modified tables, indexes, foreign keys, materialized views, indexed views, and the table-JSON parse step. Debug files follow the pattern `SchemaQuench - <operation> <server>.<database>.sql`:
 
