@@ -577,4 +577,91 @@ public class MergeScriptHelperIntegrationTests
     }
 
     #endregion
+
+    #region Full-Sync Delivery Regression Tests (#329)
+
+    [Test]
+    public void BuildMergeScript_FullSyncDelivery_PreV17_OmitsByTarget_AndExecutes()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_fullsync_{Guid.NewGuid():N}"[..40];
+
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""public"".""{tableName}"" (
+    ""id"" INT PRIMARY KEY,
+    ""name"" VARCHAR(50) NOT NULL
+)";
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"INSERT INTO ""public"".""{tableName}"" (""id"", ""name"") VALUES (1, 'stale'), (99, 'orphan')";
+            command.ExecuteNonQuery();
+
+            var tableData = @"[{""id"":1,""name"":""fresh""},{""id"":2,""name"":""new""}]";
+
+            // Simulate a PostgreSQL 16 target. pgServerVersionNum is a major-version-only int
+            // throughout the codebase (TargetVersionDetector/VersionHelper divide PostgreSQL's raw
+            // current_setting('server_version_num') by 10000 before it's ever threaded through), so
+            // 16 (not the raw 160013 form) is what production callers (DatabaseQuench) actually pass.
+            var preV17Script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command,
+                "public", tableName, tableData, @"""id""",
+                mergeUpdate: true, mergeDelete: true, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: 16);
+
+            // Bare "BY TARGET" also appears in the emitted script's explanatory SQL comment
+            // regardless of version, so assert on the actual clause syntax, not the substring.
+            Assert.That(preV17Script, Does.Not.Contain("WHEN NOT MATCHED BY TARGET"),
+                "On PostgreSQL < 17, the INSERT clause must be a plain 'WHEN NOT MATCHED THEN' — 'BY TARGET' is v17+ only and errors with 42601 on 16.");
+
+            // The <17 script must still run (this is the whole point of the fix).
+            command.CommandText = preV17Script;
+            command.ExecuteNonQuery();
+
+            // Full-sync semantics: id=1 updated, id=2 inserted, id=99 (orphan) deleted.
+            command.CommandText = $@"SELECT COUNT(*) FROM ""public"".""{tableName}""";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(2),
+                "Full-sync should leave exactly the 2 source rows (orphan deleted).");
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""public"".""{tableName}""";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void BuildMergeScript_FullSyncDelivery_ModernVersion_UsesByTarget()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_modern_{Guid.NewGuid():N}"[..40];
+
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""public"".""{tableName}"" (
+    ""id"" INT PRIMARY KEY,
+    ""name"" VARCHAR(50) NOT NULL
+)";
+            command.ExecuteNonQuery();
+
+            var tableData = @"[{""id"":1,""name"":""fresh""}]";
+
+            // pgServerVersionNum: 0 => treat as modern (v17+); the emitted MERGE uses BY TARGET / BY SOURCE.
+            var modernScript = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command,
+                "public", tableName, tableData, @"""id""",
+                mergeUpdate: true, mergeDelete: true, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: 0);
+
+            Assert.That(modernScript, Does.Contain("WHEN NOT MATCHED BY TARGET"),
+                "On PostgreSQL 17+ the INSERT clause uses the explicit BY TARGET form.");
+            Assert.That(modernScript, Does.Contain("WHEN NOT MATCHED BY SOURCE"),
+                "On PostgreSQL 17+ the DELETE clause is the modern MERGE ... BY SOURCE form.");
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""public"".""{tableName}""";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    #endregion
 }
