@@ -1,0 +1,30 @@
+# Sample workflow — copy into your own repository's .github/workflows/ and adjust the
+# package path. It does NOT run inside this training repo (only files under
+# .github/workflows/ execute). No database, no credentials required.
+#
+# --Validate is a static, target-less semantic linter: it reads the package, checks
+# cross-object meaning (dangling foreign keys, ungated duplicate columns, undefined
+# tokens, stale editor schemas), and exits 2 on any error — failing the pull request.
+# It never connects to a database, so it is the cheapest gate in the pre-flight family;
+# run it first.
+name: validate-package
+on:
+  pull_request:
+    paths:
+      - '**/*.json'
+      - '**/*.sql'
+      - '**/.json-schemas/*.schema'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SchemaSmith
+        run: curl -fsSL https://schemasmith.com/dl/install.sh | bash
+      - name: Lint the package
+        run: schemaquench --Validate --SchemaPackagePath:./sqlserver/Package
+# NOTE (remove once --Validate ships in a stock release): --Validate merged to `main`
+# (SchemaSmith#324, PR #326) but is not yet in the 2.2.0 release. Until it ships, replace
+# the "Install SchemaSmith" step above with a build-from-source step (checkout the
+# SchemaSmith repo, `dotnet build -c Release`, and point at the built SchemaQuench).
+# The released-form step shown here is the target; keep it as the primary example.
