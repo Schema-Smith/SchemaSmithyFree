@@ -1,7 +1,7 @@
 # Course 4 — Database Setup
 
-These scripts create the eight cookbook databases on every sandbox engine (SQL Server, PostgreSQL,
-MySQL) — 24 databases in total. Each database is dedicated to one recipe so labs stay hermetic and
+These scripts create the nine cookbook databases on every sandbox engine (SQL Server, PostgreSQL,
+MySQL) — 27 databases in total. Each database is dedicated to one recipe so labs stay hermetic and
 do not clash with one another.
 
 ## Prerequisite
@@ -25,7 +25,7 @@ cd Demos\Learn\course4-setup
 .\setup-databases.ps1
 ```
 
-Both scripts print `PASS` or `FAIL` for each of the 24 databases:
+Both scripts print `PASS` or `FAIL` for each of the 27 databases:
 
 ```
 SQL Server
@@ -37,6 +37,7 @@ SQL Server
   cookbook_r5                PASS
   cookbook_r6                PASS
   cookbook_r8                PASS
+  cookbook_r9                PASS
 PostgreSQL
   cookbook_r1_prod           PASS
   ...
@@ -44,7 +45,7 @@ MySQL
   cookbook_r1_prod           PASS
   ...
 
-All 24 databases are ready.
+All 27 databases are ready.
 ```
 
 ## Databases created
@@ -58,14 +59,15 @@ All 24 databases are ready.
 | 5 — scripts write scripts | `cookbook_r5` | Script-generation recipe |
 | 6 — surviving a rebuild | `cookbook_r6` | Rebuild-survival recipe |
 | 8 — authoring recyclebin hooks | `cookbook_r8` | Custom drop/restore hook authoring recipe |
+| 9 — Extensions as a source of truth | `cookbook_r9` | Data-dictionary-from-metadata recipe |
 
 Each database is created on all three engines:
 
 | Engine     | Databases |
 | ---------- | --------- |
-| SQL Server | `cookbook_r1_prod`, `cookbook_r1_nonprod`, `cookbook_r2`, `cookbook_r3`, `cookbook_r4`, `cookbook_r5`, `cookbook_r6`, `cookbook_r8` |
-| PostgreSQL | `cookbook_r1_prod`, `cookbook_r1_nonprod`, `cookbook_r2`, `cookbook_r3`, `cookbook_r4`, `cookbook_r5`, `cookbook_r6`, `cookbook_r8` |
-| MySQL      | `cookbook_r1_prod`, `cookbook_r1_nonprod`, `cookbook_r2`, `cookbook_r3`, `cookbook_r4`, `cookbook_r5`, `cookbook_r6`, `cookbook_r8` |
+| SQL Server | `cookbook_r1_prod`, `cookbook_r1_nonprod`, `cookbook_r2`, `cookbook_r3`, `cookbook_r4`, `cookbook_r5`, `cookbook_r6`, `cookbook_r8`, `cookbook_r9` |
+| PostgreSQL | `cookbook_r1_prod`, `cookbook_r1_nonprod`, `cookbook_r2`, `cookbook_r3`, `cookbook_r4`, `cookbook_r5`, `cookbook_r6`, `cookbook_r8`, `cookbook_r9` |
+| MySQL      | `cookbook_r1_prod`, `cookbook_r1_nonprod`, `cookbook_r2`, `cookbook_r3`, `cookbook_r4`, `cookbook_r5`, `cookbook_r6`, `cookbook_r8`, `cookbook_r9` |
 
 ## Connection details
 

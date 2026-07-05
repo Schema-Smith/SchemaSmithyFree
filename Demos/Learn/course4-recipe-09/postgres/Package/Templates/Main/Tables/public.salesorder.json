@@ -1,0 +1,11 @@
+{
+  "Schema": "public",
+  "Name": "salesorder",
+  "Extensions": { "BusinessDomain": "Sales", "DataOwner": "revenue-team", "Description": "Customer orders", "RetentionPolicy": "10y" },
+  "Columns": [
+    { "Name": "orderid", "DataType": "INT", "Nullable": false, "Extensions": { "BusinessName": "Order Identifier", "SensitivityLevel": "Internal" } },
+    { "Name": "customerid", "DataType": "INT", "Nullable": false, "Extensions": { "BusinessName": "Customer Identifier", "SensitivityLevel": "Internal" } },
+    { "Name": "totalamount", "DataType": "DECIMAL(12,2)", "Nullable": false, "Extensions": { "BusinessName": "Order Total", "SensitivityLevel": "Confidential", "DataSteward": "finance" } }
+  ],
+  "Indexes": [ { "Name": "pk_salesorder", "PrimaryKey": true, "IndexColumns": "orderid" } ]
+}

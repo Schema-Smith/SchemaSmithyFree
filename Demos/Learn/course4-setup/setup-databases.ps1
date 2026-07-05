@@ -37,6 +37,7 @@ $databases = @(
     'cookbook_r5'
     'cookbook_r6'
     'cookbook_r8'
+    'cookbook_r9'
 )
 
 Write-Host 'SQL Server'
@@ -50,7 +51,7 @@ foreach ($db in $databases) { Confirm-Db 'mysql' $db }
 
 Write-Host ''
 if (-not $failed) {
-    Write-Host 'All 24 databases are ready.'
+    Write-Host 'All 27 databases are ready.'
     exit 0
 } else {
     Write-Host 'One or more databases could not be created. Is the sandbox up? See Demos/Learn/README.md.'
