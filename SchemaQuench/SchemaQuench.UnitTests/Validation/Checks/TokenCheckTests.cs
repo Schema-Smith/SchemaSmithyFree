@@ -77,6 +77,25 @@ public class TokenCheckTests
     }
 
     [Test]
+    public void UndefinedTokenInDataDeliveryShouldApplyExpression_IsError()
+    {
+        // Locks existing coverage: TokenCheck's raw-text pass scans every .json file under the
+        // package, including table files — so a {{token}} inside a DataDelivery gate is already
+        // caught, same as any other JSON field. Guards against a future TokenCheck folder-handling
+        // refactor silently dropping DataDelivery gates from the scan.
+        var tableFile = Path.Combine(PackagePath, "Templates", "Main", "Tables", "Customer.json");
+        JsonFiles(tableFile);
+        FileContent(tableFile, @"{ ""Name"": ""Customer"", ""Columns"": [], ""DataDelivery"": { ""ContentFile"": ""Customer.tabledata"", ""ShouldApplyExpression"": ""{{NotARealToken}}"" } }");
+
+        var findings = new TokenCheck().Run(Context()).ToList();
+
+        Assert.That(findings, Has.Exactly(1).Items);
+        Assert.That(findings[0].Code, Is.EqualTo("SS-TOK-001"));
+        Assert.That(findings[0].Message, Does.Contain("NotARealToken"));
+        Assert.That(findings[0].Location, Is.EqualTo(tableFile));
+    }
+
+    [Test]
     public void DefinedProductScriptToken_Referenced_NoFinding()
     {
         var productFile = Path.Combine(PackagePath, "Product.json");
