@@ -1,0 +1,14 @@
+{
+  "Target": {
+    "Server": "localhost,11433",
+    "User": "sa",
+    "Password": "Learn!Passw0rd",
+    "ConnectionProperties": { "TrustServerCertificate": "True" },
+    "Databases": ["diag_blackbox"]
+  },
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./baseline",
+  "KindleTheForge": true,
+  "ArtifactPath": "./artifacts",
+  "CheckpointDirectory": "./checkpoints"
+}
