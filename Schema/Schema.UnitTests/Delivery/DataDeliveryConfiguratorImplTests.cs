@@ -137,4 +137,138 @@ public class DataDeliveryConfiguratorImplTests
         _file.DidNotReceiveWithAnyArgs().WriteAllText(default, default);
         Assert.That(_warnings, Has.Some.Contains("array"));
     }
+
+    [Test]
+    public void Configure_ArrayWithMatchingVariant_ReconcilesThatElement_PreservesGateAndOtherVariants()
+    {
+        var tableJson = """
+            {
+              "Schema": "dbo",
+              "Name": "TestTable",
+              "Columns": [],
+              "DataDelivery": [
+                {
+                  "ContentFile": "Content/dbo.TestTable.eu.stale.tabledata",
+                  "MergeType": "Insert",
+                  "ShouldApplyExpression": "Target.Region == 'EU'",
+                  "VariantName": "EU"
+                },
+                {
+                  "ContentFile": "Content/dbo.TestTable.us.tabledata",
+                  "MergeType": "Insert",
+                  "ShouldApplyExpression": "Target.Region == 'US'",
+                  "VariantName": "US"
+                }
+              ]
+            }
+            """;
+        _file.ReadAllText(TableJsonPath).Returns(tableJson);
+
+        var context = MakeContext();
+        context.VariantName = "EU";
+
+        DataDeliveryConfiguratorImpl.GetFromFactory().Configure(context);
+
+        _file.Received(1).WriteAllText(TableJsonPath, Arg.Is<string>(s =>
+            s.ContainsIgnoringCase("\"ContentFile\": \"Content/dbo.TestTable.tabledata\"") &&
+            s.ContainsIgnoringCase("\"MergeType\": \"Insert/Update\"") &&
+            s.ContainsIgnoringCase("\"ShouldApplyExpression\": \"Target.Region == 'EU'\"") &&
+            s.ContainsIgnoringCase("\"VariantName\": \"EU\"") &&
+            s.ContainsIgnoringCase("\"ContentFile\": \"Content/dbo.TestTable.us.tabledata\"") &&
+            s.ContainsIgnoringCase("\"ShouldApplyExpression\": \"Target.Region == 'US'\"") &&
+            s.ContainsIgnoringCase("\"VariantName\": \"US\"")));
+    }
+
+    [Test]
+    public void Configure_ArrayWithVariantNotFound_LeavesArrayUntouched_Warns()
+    {
+        var tableJson = """
+            {
+              "Schema": "dbo",
+              "Name": "TestTable",
+              "Columns": [],
+              "DataDelivery": [
+                {
+                  "ContentFile": "Content/dbo.TestTable.eu.tabledata",
+                  "MergeType": "Insert",
+                  "ShouldApplyExpression": "Target.Region == 'EU'",
+                  "VariantName": "EU"
+                }
+              ]
+            }
+            """;
+        _file.ReadAllText(TableJsonPath).Returns(tableJson);
+
+        var context = MakeContext();
+        context.VariantName = "APAC";
+
+        DataDeliveryConfiguratorImpl.GetFromFactory().Configure(context);
+
+        _file.DidNotReceiveWithAnyArgs().WriteAllText(default, default);
+        Assert.That(_warnings, Has.Some.Matches<string>(w => w.ContainsIgnoringCase("APAC") && w.ContainsIgnoringCase("not found")));
+    }
+
+    [Test]
+    public void Configure_ArrayWithNoVariantProvided_LeavesArrayUntouched_Warns()
+    {
+        var tableJson = """
+            {
+              "Schema": "dbo",
+              "Name": "TestTable",
+              "Columns": [],
+              "DataDelivery": [
+                {
+                  "ContentFile": "Content/dbo.TestTable.eu.tabledata",
+                  "MergeType": "Insert",
+                  "ShouldApplyExpression": "Target.Region == 'EU'",
+                  "VariantName": "EU"
+                }
+              ]
+            }
+            """;
+        _file.ReadAllText(TableJsonPath).Returns(tableJson);
+
+        var context = MakeContext();
+        context.VariantName = null;
+
+        DataDeliveryConfiguratorImpl.GetFromFactory().Configure(context);
+
+        _file.DidNotReceiveWithAnyArgs().WriteAllText(default, default);
+        Assert.That(_warnings, Has.Some.Matches<string>(w => w.ContainsIgnoringCase("array") && w.ContainsIgnoringCase("left untouched")));
+    }
+
+    [Test]
+    public void Configure_ArrayWithAmbiguousVariant_LeavesArrayUntouched_Warns()
+    {
+        var tableJson = """
+            {
+              "Schema": "dbo",
+              "Name": "TestTable",
+              "Columns": [],
+              "DataDelivery": [
+                {
+                  "ContentFile": "Content/dbo.TestTable.eu1.tabledata",
+                  "MergeType": "Insert",
+                  "ShouldApplyExpression": "Target.Region == 'EU' && Target.Shard == 1",
+                  "VariantName": "EU"
+                },
+                {
+                  "ContentFile": "Content/dbo.TestTable.eu2.tabledata",
+                  "MergeType": "Insert",
+                  "ShouldApplyExpression": "Target.Region == 'EU' && Target.Shard == 2",
+                  "VariantName": "EU"
+                }
+              ]
+            }
+            """;
+        _file.ReadAllText(TableJsonPath).Returns(tableJson);
+
+        var context = MakeContext();
+        context.VariantName = "EU";
+
+        DataDeliveryConfiguratorImpl.GetFromFactory().Configure(context);
+
+        _file.DidNotReceiveWithAnyArgs().WriteAllText(default, default);
+        Assert.That(_warnings, Has.Some.Matches<string>(w => w.ContainsIgnoringCase("ambiguous")));
+    }
 }

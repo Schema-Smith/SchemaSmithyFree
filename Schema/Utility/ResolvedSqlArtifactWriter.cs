@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -69,5 +70,24 @@ public static class ResolvedSqlArtifactWriter
         if (scrub)
             content = Scrub(content, sensitiveValues);
         return Write(directory, fileName, content);
+    }
+
+    /// <summary>
+    /// Label-sanitizing overload: callers pass a raw <paramref name="label"/> (e.g. a
+    /// "schema.table#variant" delivery key) that may contain characters illegal in a filename.
+    /// The label is sanitized (invalid filename chars replaced with '_') and handed to
+    /// <paramref name="fileNameFromSafeLabel"/> to compose the final file name, before the shared
+    /// BuildArtifact→Scrub→Write sequence runs.
+    /// </summary>
+    /// <returns>The full path written, for surfacing in the log.</returns>
+    public static string WriteFailureArtifact(string directory, bool scrub,
+        IReadOnlyList<KeyValuePair<string, string>> sensitiveValues, string header,
+        IReadOnlyList<string> batches, int failingBatchIndex, string label,
+        Func<string, string> fileNameFromSafeLabel)
+    {
+        var safeLabel = string.Concat((label ?? "").Select(c =>
+            Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        return WriteFailureArtifact(directory, scrub, sensitiveValues, header, batches,
+            failingBatchIndex, fileNameFromSafeLabel(safeLabel));
     }
 }

@@ -139,6 +139,30 @@ public class ResolvedSqlArtifactWriterTests
     }
 
     [Test]
+    public void WriteFailureArtifact_LabelSanitizingOverload_SanitizesLabelIntoFileName_AndWritesContent()
+    {
+        var dir = Path.Join(Path.GetTempPath(), $"rsaw_{Guid.NewGuid():N}");
+        try
+        {
+            var path = ResolvedSqlArtifactWriter.WriteFailureArtifact(
+                dir, scrub: false, sensitiveValues: new List<KeyValuePair<string, string>>(),
+                header: "Failed data delivery: srv.db [dbo.Orders#EU/1]",
+                batches: new List<string> { "SELECT 1" }, failingBatchIndex: 0,
+                label: "dbo.Orders#EU/1",
+                fileNameFromSafeLabel: safe => $"Failed DataDelivery {safe}.sql");
+
+            Assert.That(Path.GetFileName(path), Does.Not.Contain("/"),
+                "The '/' in the label must be sanitized out of the filename.");
+            Assert.That(File.Exists(path), Is.True);
+            Assert.That(File.ReadAllText(path), Does.Contain("SELECT 1"));
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Test]
     public void Write_CreatesDirectory_WhenMissing()
     {
         // Use a fresh GUID subdir under temp — guaranteed not to exist before this call.

@@ -34,22 +34,49 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
         var json = FileWrapper.GetFromFactory().ReadAllText(tableJsonFile);
         var table = JObject.Parse(json);
 
-        if (table["DataDelivery"] is JArray)
-        {
-            // The context has no variant identity to match an array element against
-            // (see DataDeliveryConfiguratorContext), so a hand-authored array of gated
-            // deliveries is always left untouched — extraction must never silently
-            // flatten or drop authored variants.
-            var arrayDisplayName = string.IsNullOrEmpty(context.TableSchema) ? context.TableName : $"{context.TableSchema}.{context.TableName}";
-            context.WarningLog?.Invoke($"    DataDelivery for '{arrayDisplayName}' is an authored array of gated variants. The extraction configurator has no variant identity to match an entry against, so the array was left untouched.");
-            context.ProgressLog?.Invoke($"    Data delivery config for {context.TableName} left untouched (array of gated variants).");
-            return;
-        }
+        JObject delivery;
+        var isArrayElement = false;
 
-        if (table["DataDelivery"] is not JObject delivery)
+        if (table["DataDelivery"] is JArray array)
         {
-            delivery = new JObject();
-            table["DataDelivery"] = delivery;
+            var displayName = string.IsNullOrEmpty(context.TableSchema) ? context.TableName : $"{context.TableSchema}.{context.TableName}";
+
+            if (string.IsNullOrWhiteSpace(context.VariantName))
+            {
+                context.WarningLog?.Invoke($"    DataDelivery for '{displayName}' is an authored array of gated variants and no VariantName was provided for this extraction, so the array was left untouched.");
+                context.ProgressLog?.Invoke($"    Data delivery config for {context.TableName} left untouched (array of gated variants; no target VariantName).");
+                return;
+            }
+
+            var matches = array.OfType<JObject>()
+                .Where(e => string.Equals((string)e["VariantName"], context.VariantName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (matches.Count == 0)
+            {
+                context.WarningLog?.Invoke($"    DataDelivery variant '{context.VariantName}' was not found in the authored array for '{displayName}', so the array was left untouched (extraction never invents an ungated variant).");
+                context.ProgressLog?.Invoke($"    Data delivery config for {context.TableName} left untouched (variant '{context.VariantName}' not found).");
+                return;
+            }
+
+            if (matches.Count > 1)
+            {
+                context.WarningLog?.Invoke($"    DataDelivery variant '{context.VariantName}' matches {matches.Count} entries in the authored array for '{displayName}', so the array was left untouched (ambiguous reconciliation target).");
+                context.ProgressLog?.Invoke($"    Data delivery config for {context.TableName} left untouched (variant '{context.VariantName}' ambiguous).");
+                return;
+            }
+
+            delivery = matches[0];
+            isArrayElement = true;
+        }
+        else
+        {
+            if (table["DataDelivery"] is not JObject single)
+            {
+                single = new JObject();
+                table["DataDelivery"] = single;
+            }
+            delivery = single;
         }
 
         var changed = false;
@@ -75,13 +102,13 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
             changed |= SetBoolIfDifferent(delivery, "MergeUpdateDescendents", context.UpdateDescendents);
         }
 
-        if (!delivery.HasValues)
+        if (!isArrayElement && !delivery.HasValues)
             table.Remove("DataDelivery");
 
         if (changed)
         {
             FileWrapper.GetFromFactory().WriteAllText(tableJsonFile, table.ToString(Formatting.Indented));
-            context.ProgressLog?.Invoke($"    Updated data delivery config for {context.TableName}");
+            context.ProgressLog?.Invoke($"    Updated data delivery config for {context.TableName}{(isArrayElement ? $" [variant '{context.VariantName}']" : "")}");
         }
         else
         {

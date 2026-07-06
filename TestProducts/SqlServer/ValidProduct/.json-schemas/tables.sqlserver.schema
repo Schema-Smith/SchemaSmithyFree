@@ -240,7 +240,7 @@
             "VariantName": {
               "type": "string",
               "maxLength": 128,
-              "description": "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and is the identity key that preserves N deliveries across re-extraction."
+              "description": "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and identifies which array variant a DataTongs re-extraction reconciles."
             }
           },
           "additionalProperties": false
@@ -278,7 +278,7 @@
               "VariantName": {
                 "type": "string",
                 "maxLength": 128,
-                "description": "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and is the identity key that preserves N deliveries across re-extraction."
+                "description": "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and identifies which array variant a DataTongs re-extraction reconciles."
               }
             },
             "additionalProperties": false

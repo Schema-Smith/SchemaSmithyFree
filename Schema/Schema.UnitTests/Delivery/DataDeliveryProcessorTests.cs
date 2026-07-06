@@ -474,6 +474,33 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
+    public void DeliverTables_WhatIf_LogsWouldDeliverPerAppliedVariant()
+    {
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "eu.json", VariantName = "EU" },
+                    new DataDelivery { MergeType = "Insert", ContentFile = "us.json", VariantName = "US" }
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.WhatIf = true;
+
+        processor.DeliverTables(context);
+
+        Assert.That(_logs.Exists(l => l.Contains("Would DELIVER") && l.Contains("[EU]")),
+            "WhatIf must report a Would DELIVER line carrying the EU variant name.");
+        Assert.That(_logs.Exists(l => l.Contains("Would DELIVER") && l.Contains("[US]")),
+            "WhatIf must report a Would DELIVER line carrying the US variant name.");
+    }
+
+    [Test]
     public void ValidateDeleteCascade_MySql_EmptyTableList_ReturnsEmpty()
     {
         var errors = DataDeliveryProcessor.ValidateDeleteCascade(_mockCommand, "MySQL", "testdb",
@@ -1178,6 +1205,99 @@ public class DataDeliveryProcessorTests
 
         Assert.DoesNotThrow(() => processor.DeliverTables(context),
             "Null WriteResolvedSqlArtifact must not cause a NullReferenceException");
+    }
+
+    [Test]
+    public void DeliverTables_SucceededSiblingDelivery_NotReRunWhenLaterDeliveryFailsThenRetries()
+    {
+        var processor = new DataDeliveryProcessor();
+
+        // Embed the tableData in the generated script so delivery A and B are distinguishable.
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .Returns(ci => $"MERGE {ci.ArgAt<string>(3)}");
+
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "a.json" },
+                    new DataDelivery { MergeType = "Insert", ContentFile = "b.json" }
+                }
+            }
+        };
+
+        var executed = new List<string>();
+        var bHasThrown = false;
+        var context = new DataDeliveryContext
+        {
+            Tables = tables,
+            Platform = "SqlServer",
+            Command = _mockCommand,
+            DatabaseName = "TestDB",
+            TemplateRootPath = "/tmp",
+            ScriptHelper = _mockHelper,
+            ReadFileContent = path => path!.Replace('\\', '/').EndsWith("a.json") ? "[{\"Id\":1}]" : "[{\"Id\":2}]",
+            ExecuteScript = (name, script) =>
+            {
+                executed.Add(script);
+                if (script.Contains("\"Id\":2") && !bHasThrown) { bHasThrown = true; throw new Exception("B fails on first attempt"); }
+            },
+            ProgressLog = _ => { },
+            ProgressLogError = _ => { }
+        };
+
+        processor.DeliverTables(context);
+
+        Assert.That(executed.FindAll(s => s.Contains("\"Id\":1")).Count, Is.EqualTo(1),
+            "The succeeded first delivery must not re-run when the second delivery's failure re-queues the table.");
+        Assert.That(executed.FindAll(s => s.Contains("\"Id\":2")).Count, Is.EqualTo(2),
+            "The failing second delivery runs twice (fail, then success on retry).");
+    }
+
+    [Test]
+    public void DeliverTables_TwoAppliedDeliveries_SameVariantName_BothRun()
+    {
+        var processor = new DataDeliveryProcessor();
+        // Embed tableData (arg index 3) so the two deliveries' scripts are distinguishable.
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .Returns(ci => $"MERGE {ci.ArgAt<string>(3)}");
+
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "a.json", VariantName = "CHUNK" },
+                    new DataDelivery { MergeType = "Insert", ContentFile = "b.json", VariantName = "CHUNK" }
+                }
+            }
+        };
+
+        var executed = new List<string>();
+        var context = new DataDeliveryContext
+        {
+            Tables = tables, Platform = "SqlServer", Command = _mockCommand, DatabaseName = "TestDB",
+            TemplateRootPath = "/tmp", ScriptHelper = _mockHelper,
+            ReadFileContent = path => path!.Replace('\\', '/').EndsWith("a.json") ? "[{\"Id\":1}]" : "[{\"Id\":2}]",
+            ExecuteScript = (name, script) => executed.Add(script),
+            ProgressLog = _ => { }, ProgressLogError = _ => { }
+        };
+
+        processor.DeliverTables(context);
+
+        Assert.That(executed.FindAll(s => s.Contains("\"Id\":1")).Count, Is.EqualTo(1),
+            "first chunk runs");
+        Assert.That(executed.FindAll(s => s.Contains("\"Id\":2")).Count, Is.EqualTo(1),
+            "second delivery sharing the same VariantName must NOT be skipped (valid multi-chunk delivery)");
     }
 
     // ---------- ResolveContentFilePath separator normalization ----------

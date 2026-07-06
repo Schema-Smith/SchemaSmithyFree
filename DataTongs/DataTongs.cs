@@ -144,7 +144,8 @@ public class DataTongs
                 KeyColumns = t["KeyColumns"] ?? "",
                 SelectColumns = t["SelectColumns"] ?? "",
                 Filter = t["Filter"] ?? "",
-                MergeType = t["MergeType"] ?? ""
+                MergeType = t["MergeType"] ?? "",
+                VariantName = t["VariantName"] ?? ""
             })
             .Where(t => !string.IsNullOrWhiteSpace(t.TableName))
             .ToList();
@@ -293,6 +294,7 @@ public class DataTongs
                         MergeTypeOverride = table.MergeType,
                         KeyColumnsOverride = table.KeyColumns,
                         MergeFilterOverride = table.Filter,
+                        VariantName = table.VariantName,
                         ProgressLog = _progressLog.Info,
                         WarningLog = _progressLog.Warn
                     });
@@ -774,6 +776,7 @@ SELECT c.column_name, c.udt_name
         public string SelectColumns { get; set; } = "";
         public string Filter { get; set; } = "";
         public string MergeType { get; set; } = "";
+        public string VariantName { get; set; } = "";
     }
 
     internal class ColumnInfo

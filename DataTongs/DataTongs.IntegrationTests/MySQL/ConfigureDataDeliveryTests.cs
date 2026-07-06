@@ -4,11 +4,13 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
 using Schema.Delivery;
 using Schema.Domain;
 using Schema.Domain.MySQL;
 using Schema.IntegrationTests.MySQL;
+using Schema.Isolators;
 using Schema.Utility;
 
 namespace DataTongs.IntegrationTests.MySQL;
@@ -361,6 +363,110 @@ public class ConfigureDataDeliveryTests
             Assert.That(updatedTable.DataDelivery[0].ContentFile, Is.EqualTo("TableData/actor.tabledata"));
             Assert.That(updatedTable.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
         });
+    }
+
+    [Test]
+    [NonParallelizable]
+    public void ConfigureDataDelivery_ReconcilesMatchingVariantName_PreservesSiblingAndGates()
+    {
+        // Full DataTongs.CastData() -> DataDeliveryConfiguratorContext -> reconcile threading,
+        // proven through the real CastData() entry point (matching this file's real-filesystem
+        // convention, rather than the SqlServer/PostgreSQL suites' mocked-IFile convention).
+        EnsureDbConnection();
+        using var command = _connection.CreateCommand();
+
+        var tableName = $"variant_{Guid.NewGuid():N}".Substring(0, 20);
+        command.CommandText = $@"
+            CREATE TABLE `{_testDb}`.`{tableName}` (
+                id INT PRIMARY KEY,
+                name VARCHAR(50) NOT NULL
+            )";
+        command.ExecuteNonQuery();
+        command.CommandText = $"INSERT INTO `{_testDb}`.`{tableName}` VALUES (1, 'Test')";
+        command.ExecuteNonQuery();
+
+        try
+        {
+            var templateRoot = CreateTemplateStructure();
+            var tablesDir = Path.Join(templateRoot, "Tables");
+            var tableDataDir = Path.Join(templateRoot, "TableData");
+            var tablePath = Path.Join(tablesDir, $"{tableName}.json");
+
+            var tableJson = $$"""
+                {
+                  "Name": "{{tableName}}",
+                  "Columns": [
+                    { "Name": "id", "DataType": "int" },
+                    { "Name": "name", "DataType": "varchar" }
+                  ],
+                  "DataDelivery": [
+                    {
+                      "ContentFile": "TableData/{{tableName}}.eu.stale.tabledata",
+                      "MergeType": "Insert",
+                      "ShouldApplyExpression": "Target.Region == 'EU'",
+                      "VariantName": "EU"
+                    },
+                    {
+                      "ContentFile": "TableData/{{tableName}}.us.tabledata",
+                      "MergeType": "Insert",
+                      "ShouldApplyExpression": "Target.Region == 'US'",
+                      "VariantName": "US"
+                    }
+                  ]
+                }
+                """;
+            File.WriteAllText(tablePath, tableJson);
+
+            lock (FactoryContainer.SharedLockObject)
+            {
+                FactoryContainer.Unregister<IMergeScriptHelper>();
+                var originalConfig = FactoryContainer.Resolve<IConfigurationRoot>();
+                try
+                {
+                    var config = ConfigHelper.GetAppSettingsAndUserSecrets("test", null);
+                    config["Source:Server"] = config["MySQL:Server"] ?? "127.0.0.1";
+                    config["Source:Port"] = config["MySQL:Port"];
+                    config["Source:User"] = config["MySQL:User"];
+                    config["Source:Password"] = config["MySQL:Password"];
+                    config["Source:Database"] = _testDb;
+                    config["Tables:0:Name"] = tableName;
+                    config["Tables:0:VariantName"] = "EU";
+                    config["ShouldCast:OutputContentFiles"] = "true";
+                    config["ShouldCast:OutputScripts"] = "false";
+                    config["ShouldCast:ConfigureDataDelivery"] = "true";
+                    config["ShouldCast:MergeDelete"] = "false";
+                    config["ContentPath"] = tableDataDir;
+                    FactoryContainer.Register<IConfigurationRoot>(config);
+
+                    var tongs = new global::DataTongs.DataTongs(Platform.MySQL);
+                    tongs.CastData();
+                }
+                finally
+                {
+                    if (originalConfig != null)
+                        FactoryContainer.Register(originalConfig);
+                    else
+                        FactoryContainer.Unregister<IConfigurationRoot>();
+                }
+            }
+
+            var updatedJson = File.ReadAllText(tablePath);
+            Assert.Multiple(() =>
+            {
+                Assert.That(updatedJson, Does.Contain($"\"ContentFile\": \"TableData/{tableName}.tabledata\""));
+                Assert.That(updatedJson, Does.Contain("\"ShouldApplyExpression\": \"Target.Region == 'EU'\""));
+                Assert.That(updatedJson, Does.Contain("\"VariantName\": \"EU\""));
+                Assert.That(updatedJson, Does.Contain($"\"ContentFile\": \"TableData/{tableName}.us.tabledata\""));
+                Assert.That(updatedJson, Does.Contain("\"MergeType\": \"Insert\""));
+                Assert.That(updatedJson, Does.Contain("\"ShouldApplyExpression\": \"Target.Region == 'US'\""));
+                Assert.That(updatedJson, Does.Contain("\"VariantName\": \"US\""));
+            });
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName}`";
+            command.ExecuteNonQuery();
+        }
     }
 
     #endregion
