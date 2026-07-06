@@ -13,7 +13,10 @@ function Invoke-SqlFile {
     if (-not (Test-Path $File)) { Write-Host "    MISSING $File"; $script:failed = $true; return }
     $sql = Get-Content $File -Raw
     switch ($Engine) {
-        'sqlserver' { $sql | docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d $Db | Out-Null }
+        # SQL Server via docker cp + sqlcmd -i, not a PS stdin pipe: Windows PowerShell 5.1 injects a
+        # UTF-8 BOM into piped native-command input that sqlcmd rejects. psql/mysql tolerate it, so
+        # those keep the (simpler) stdin pipe.
+        'sqlserver' { docker cp $File learn-sqlserver:/tmp/seed.sql | Out-Null; docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d $Db -i /tmp/seed.sql | Out-Null }
         'postgres'  { $sql | docker exec -i learn-postgres psql -U postgres -d $Db -v ON_ERROR_STOP=1 | Out-Null }
         'mysql'     { $sql | docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd $Db 2>$null | Out-Null }
     }
@@ -48,7 +51,7 @@ function Set-DatafixRole {
     $sql = Get-Content $file -Raw
     $out = ''
     switch ($Engine) {
-        'sqlserver' { $sql | docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d master | Out-Null
+        'sqlserver' { docker cp $file learn-sqlserver:/tmp/seed.sql | Out-Null; docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d master -i /tmp/seed.sql | Out-Null
                       $out = docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -d master -Q "SELECT 'READY' FROM sys.server_principals WHERE name='datafix_user'" 2>$null }
         'postgres'  { $sql | docker exec -i learn-postgres psql -U postgres -d postgres | Out-Null
                       $out = docker exec learn-postgres psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='datafix_user'" 2>$null }

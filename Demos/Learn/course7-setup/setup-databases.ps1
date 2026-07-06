@@ -12,7 +12,10 @@ function Invoke-Seed {
     if (-not (Test-Path $file)) { Write-Host "  MISSING $file"; $script:failed = $true; return }
     $sql = Get-Content $file -Raw
     switch ($Engine) {
-        'sqlserver' { $sql | docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b | Out-Null }
+        # SQL Server via docker cp + sqlcmd -i, not a PS stdin pipe: Windows PowerShell 5.1 injects a
+        # UTF-8 BOM into piped native-command input that sqlcmd rejects. psql/mysql tolerate it, so
+        # those keep the (simpler) stdin pipe.
+        'sqlserver' { docker cp $file learn-sqlserver:/tmp/seed.sql | Out-Null; docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -i /tmp/seed.sql | Out-Null }
         'postgres'  { $sql | docker exec -i learn-postgres psql -U postgres -v ON_ERROR_STOP=1 | Out-Null }
         'mysql'     { $sql | docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd 2>$null | Out-Null }
     }
