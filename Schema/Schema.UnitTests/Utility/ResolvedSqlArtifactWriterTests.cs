@@ -141,7 +141,7 @@ public class ResolvedSqlArtifactWriterTests
     [Test]
     public void WriteFailureArtifact_LabelSanitizingOverload_SanitizesLabelIntoFileName_AndWritesContent()
     {
-        var dir = Path.Combine(Path.GetTempPath(), $"rsaw_{Guid.NewGuid():N}");
+        var dir = Path.Join(Path.GetTempPath(), $"rsaw_{Guid.NewGuid():N}");
         try
         {
             var path = ResolvedSqlArtifactWriter.WriteFailureArtifact(

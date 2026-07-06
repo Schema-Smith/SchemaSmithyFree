@@ -83,7 +83,7 @@ public class TokenCheckTests
         // package, including table files — so a {{token}} inside a DataDelivery gate is already
         // caught, same as any other JSON field. Guards against a future TokenCheck folder-handling
         // refactor silently dropping DataDelivery gates from the scan.
-        var tableFile = Path.Combine(PackagePath, "Templates", "Main", "Tables", "Customer.json");
+        var tableFile = Path.Join(PackagePath, "Templates", "Main", "Tables", "Customer.json");
         JsonFiles(tableFile);
         FileContent(tableFile, @"{ ""Name"": ""Customer"", ""Columns"": [], ""DataDelivery"": { ""ContentFile"": ""Customer.tabledata"", ""ShouldApplyExpression"": ""{{NotARealToken}}"" } }");
 

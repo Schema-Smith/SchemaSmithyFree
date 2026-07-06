@@ -388,9 +388,9 @@ public class ConfigureDataDeliveryTests
         try
         {
             var templateRoot = CreateTemplateStructure();
-            var tablesDir = Path.Combine(templateRoot, "Tables");
-            var tableDataDir = Path.Combine(templateRoot, "TableData");
-            var tablePath = Path.Combine(tablesDir, $"{tableName}.json");
+            var tablesDir = Path.Join(templateRoot, "Tables");
+            var tableDataDir = Path.Join(templateRoot, "TableData");
+            var tablePath = Path.Join(tablesDir, $"{tableName}.json");
 
             var tableJson = $$"""
                 {
