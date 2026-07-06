@@ -48,7 +48,7 @@ public class DataDelivery
     // Labels a conditional variant: the intent behind its ShouldApplyExpression. Appears in
     // delivery log lines whether the gate applies or skips; re-extraction preserves the whole
     // delivery array.
-    [SchemaProperty(MaxLength = 128, Description = "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and is the identity key that preserves N deliveries across re-extraction.")]
+    [SchemaProperty(MaxLength = 128, Description = "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and identifies which array variant a DataTongs re-extraction reconciles.")]
     [JsonProperty(Order = 9)]
     public string VariantName { get; set; }
 }
