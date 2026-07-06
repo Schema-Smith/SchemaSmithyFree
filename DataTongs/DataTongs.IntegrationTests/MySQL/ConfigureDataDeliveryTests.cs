@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
-using Microsoft.Extensions.Configuration;
+using DataTongs.IntegrationTests.Support;
 using Schema.DataAccess;
 using Schema.Delivery;
 using Schema.Domain;
@@ -420,10 +420,10 @@ public class ConfigureDataDeliveryTests
             lock (FactoryContainer.SharedLockObject)
             {
                 FactoryContainer.Unregister<IMergeScriptHelper>();
-                var originalConfig = FactoryContainer.Resolve<IConfigurationRoot>();
-                try
+                ConfigHelper.GetAppSettingsAndUserSecrets("test", null); // ensure the base config is registered before snapshot
+                using (var configScope = IsolatedConfigScope.Create())
                 {
-                    var config = ConfigHelper.GetAppSettingsAndUserSecrets("test", null);
+                    var config = configScope.Config;
                     config["Source:Server"] = config["MySQL:Server"] ?? "127.0.0.1";
                     config["Source:Port"] = config["MySQL:Port"];
                     config["Source:User"] = config["MySQL:User"];
@@ -436,17 +436,8 @@ public class ConfigureDataDeliveryTests
                     config["ShouldCast:ConfigureDataDelivery"] = "true";
                     config["ShouldCast:MergeDelete"] = "false";
                     config["ContentPath"] = tableDataDir;
-                    FactoryContainer.Register<IConfigurationRoot>(config);
 
-                    var tongs = new global::DataTongs.DataTongs(Platform.MySQL);
-                    tongs.CastData();
-                }
-                finally
-                {
-                    if (originalConfig != null)
-                        FactoryContainer.Register(originalConfig);
-                    else
-                        FactoryContainer.Unregister<IConfigurationRoot>();
+                    _dataTongs.CastData();
                 }
             }
 
