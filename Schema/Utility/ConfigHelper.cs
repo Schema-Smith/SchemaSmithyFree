@@ -15,8 +15,7 @@ public static class ConfigHelper
     public static void ConfigureLog4Net()
     {
         var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly() ?? Assembly.GetCallingAssembly());
-        var toolDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        GlobalContext.Properties["LogPath"] = (CommandLineParser.ValueOfSwitch("LogPath", null) ?? toolDir).TrimEnd('\\', '/');
+        GlobalContext.Properties["LogPath"] = ResolveLogPath();
         try
         {
             using var configStream = ResourceLoader.Load("Log4Net.config").ToStream();
@@ -26,6 +25,16 @@ public static class ConfigHelper
         {
             XmlConfigurator.Configure(logRepository); // use default config if not embedded
         }
+    }
+
+    public static string ResolveLogPath()
+    {
+        var toolDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var raw = CommandLineParser.ValueOfSwitch("LogPath", null) ?? toolDir;
+        // Path.GetFullPath resolves a relative path against the process CWD (the invocation
+        // directory) and leaves an absolute path unchanged — so the log4net property and the
+        // log backup step below always agree on one absolute directory (#331).
+        return Path.GetFullPath(raw).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
     // NOTE: No Platform constant — unified tools read platform from Product.Platform

@@ -115,6 +115,7 @@ public class LogBackupTests
     [Test]
     public void BackupLogsAndExit_UsesLogPathSwitch()
     {
+        var expectedBase = Path.GetFullPath("/custom/logs").TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         _mockEnvironment.CommandLine.Returns("app.exe --LogPath:/custom/logs");
         _mockDirectory.Exists(Arg.Any<string>()).Returns(false);
         _mockDirectory.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>())
@@ -123,7 +124,22 @@ public class LogBackupTests
         LogBackup.BackupLogsAndExit("TestApp");
 
         _mockDirectory.Received().CreateDirectory(Arg.Is<string>(s =>
-            s.Contains("/custom/logs") && s.Contains("TestApp.0001")));
+            s.Contains(expectedBase) && s.Contains("TestApp.0001")));
+    }
+
+    [Test]
+    public void BackupLogsAndExit_UsesResolvedLogPath()
+    {
+        var expectedBase = Path.GetFullPath("relbackup").TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        _mockEnvironment.CommandLine.Returns("app.exe --LogPath:relbackup");
+        _mockDirectory.Exists(Arg.Any<string>()).Returns(false);
+        _mockDirectory.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>()).Returns(Array.Empty<string>());
+
+        LogBackup.BackupLogsAndExit("TestApp");
+
+        _mockDirectory.Received().CreateDirectory(Arg.Is<string>(s =>
+            s == Path.Combine(expectedBase, "TestApp.0001")));
+        _mockDirectory.Received().GetFiles(expectedBase, "TestApp - *.log", SearchOption.TopDirectoryOnly);
     }
 
     [Test]

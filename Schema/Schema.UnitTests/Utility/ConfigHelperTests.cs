@@ -193,4 +193,24 @@ public class ConfigHelperTests
             System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
         Assert.That(field, Is.Null, "ConfigHelper should not have a Platform constant - platform is read from Product");
     }
+
+    [Test]
+    public void ResolveLogPath_RelativePath_ResolvesAgainstProcessCwd()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --LogPath:rellogs");
+
+        var resolved = ConfigHelper.ResolveLogPath();
+
+        Assert.That(Path.IsPathRooted(resolved), Is.True, "relative --LogPath must resolve to an absolute path");
+        Assert.That(resolved, Is.EqualTo(Path.GetFullPath("rellogs").TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
+    }
+
+    [Test]
+    public void ResolveLogPath_Unspecified_FallsBackToToolDir()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe");
+
+        var expected = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        Assert.That(ConfigHelper.ResolveLogPath(), Is.EqualTo(expected));
+    }
 }
