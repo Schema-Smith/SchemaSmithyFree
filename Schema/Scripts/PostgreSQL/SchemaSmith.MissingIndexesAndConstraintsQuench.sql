@@ -14,6 +14,15 @@ BEGIN
   -- AccessShare-locks every table in the database and deadlocks parallel template
   -- iterations against siblings creating their own tables. pg_catalog scoped to the
   -- named schema+table locks nothing it doesn't need.
+
+  -- #332: temp_existing_indexes is normally built by ModifiedTableQuench earlier in the
+  -- same session. On a checkpoint-resumed run the ModifiedTables step is skipped, so the
+  -- fresh session has no snapshot; rebuild it here when absent. Guarded so the normal path
+  -- keeps the snapshot ModifiedTableQuench already built.
+  IF to_regclass('pg_temp.temp_existing_indexes') IS NULL THEN
+    CALL "SchemaSmith"."BuildExistingIndexesSnapshot"();
+  END IF;
+
   RAISE NOTICE 'Add New Computed Columns';
   SELECT STRING_AGG('RAISE NOTICE ''  Add new computed columns to ' || tt."Schema" || '.' || tt."Name" || ' (' ||
                     (SELECT STRING_AGG(tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END, ', ')

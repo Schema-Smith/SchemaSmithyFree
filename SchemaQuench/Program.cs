@@ -48,6 +48,13 @@ public static class Program
             return;
         }
 
+        // --ResumeQuench is opt-in (#332): without it, discard any leftover checkpoint so a
+        // re-run starts fresh and is never influenced by a stale checkpoint. Checkpointing
+        // stays active for this run — a fresh failure still writes a checkpoint for a later
+        // --ResumeQuench. Uses the same FileCheckpointManager (and directory) the run will use.
+        if (!CommandLineParser.ContainsSwitch("ResumeQuench"))
+            CleanupCheckpoints();
+
         productQuench.QuenchProduct(skipKindlingForge);
 
         // Clean up checkpoint files only on a clean success — a failed run must preserve

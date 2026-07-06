@@ -14,6 +14,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ### Fixed
 
+- Fixed: on PostgreSQL, re-running a quench after a failed unique-index deploy (dirty data fixed) no longer crashes with `relation "temp_existing_indexes" does not exist`; the index/constraint phase rebuilds its session snapshot when a resumed run skipped the step that built it. `--ResumeQuench` is now a real opt-in — without it, a re-run discards any leftover checkpoint and starts fresh rather than silently resuming. #332
 - Fixed: a relative `--LogPath` no longer splits output — the active logs and the numbered backup subdirectory now resolve to the same absolute directory (the invocation directory). #331
 - **PostgreSQL full-sync data delivery (`Insert/Update/Delete`) generated v17-only syntax on older servers.** The MERGE `WHEN NOT MATCHED` INSERT clause emitted `BY TARGET` whenever a delete was requested, but `BY TARGET` is valid only on PostgreSQL 17+ — so a full-sync delivery to PostgreSQL 16 or earlier failed with `42601: syntax error at or near "BY"`. The `BY TARGET` keyword is now emitted only when the server is 17+ (matching the existing version gate on the accompanying `WHEN NOT MATCHED BY SOURCE ... DELETE` clause, which already falls back to a standalone DELETE below 17). PostgreSQL only. — #329
 

@@ -77,6 +77,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupTableOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupIndexOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.MissingTableAndColumnQuench.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.BuildExistingIndexesSnapshot.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ModifiedTableQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.MissingIndexesAndConstraintsQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ForeignKeyQuench.sql"));
@@ -170,8 +171,9 @@ public class ForgeKindlerTests
 
         // SqlServer: 22 = 21 prior + 1 for fn_ServerMajorVersion (version-aware codegen helper).
         Assert.That(sqlServer.Length, Is.EqualTo(22));
-        // PostgreSQL: 27 = 26 prior + 1 for ServerVersionNum (version-aware codegen helper).
-        Assert.That(postgres.Length, Is.EqualTo(27));
+        // PostgreSQL: 28 = 27 prior + 1 for BuildExistingIndexesSnapshot (shared temp_existing_indexes
+        // builder extracted so a checkpoint-resumed run can rebuild the snapshot, #332).
+        Assert.That(postgres.Length, Is.EqualTo(28));
         // MySQL: 20 = 19 prior + 1 for NormalizeCheckExpression (column/table check idempotency helper).
         Assert.That(mysql.Length, Is.EqualTo(20));
     }

@@ -319,6 +319,74 @@ KindleForge
         }
     }
 
+    [Test]
+    public void ShouldResumeSuccessfullyWhenModifiedTablesAlreadyCheckpointed()
+    {
+        // Parity guard for #332 (Rule 20): the PostgreSQL fix rebuilds temp_existing_indexes when a
+        // resumed run skipped the ModifiedTables step that normally builds it. MySQL re-parses its
+        // session temp tables via MySqlTempTablesExist + ParseMySqlTableJson inside the consuming
+        // steps, so seeding ModifiedTables complete and resuming must NOT crash here — no engine-code
+        // change required. Locks in cross-engine parity.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(FixtureSetup.Config);
+            FactoryContainer.Register(_environment);
+            LogFactory.Register("ErrorLog", _errorLog);
+            LogFactory.Register("ProgressLog", _progressLog);
+            _environment.CommandLine.Returns("--SkipKindlingForge --ResumeQuench");
+
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("MySQL", "ValidProduct");
+            config["CheckpointDirectory"] = _checkpointDir;
+            Directory.CreateDirectory(_checkpointDir);
+
+            var product = Product.Load();
+            var dbCheckpointContent = $@"# SchemaQuench Database Checkpoint
+# Product: {product.Name}
+# Template: Main
+# Server: {_server}
+# Database: {_mainDb}
+# Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+
+[Completed Steps]
+MissingTablesAndColumns
+ModifiedTables
+
+[Before Scripts]
+
+[Object Scripts]
+
+[After Tables Object Scripts]
+
+[Between Tables And Keys Scripts]
+
+[After Table Scripts]
+
+[Table Data Scripts]
+
+[After Scripts]
+";
+            var dbCheckpointPath = Path.Combine(_checkpointDir,
+                Path.GetFileName($"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.{FileNameEncoder.Encode("")}.checkpoint"));
+            File.WriteAllText(dbCheckpointPath, dbCheckpointContent);
+
+            try
+            {
+                Program.Main(["SkipKindlingForge"]);
+
+                // Parity signal: a resumed run that skipped ModifiedTables must not crash on missing
+                // session temp state — the run converges to a clean (zero) exit.
+                _environment.DidNotReceive().Exit(Arg.Is<int>(c => c != 0));
+            }
+            finally
+            {
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+                FactoryContainer.Unregister<ICheckpointing>();
+            }
+        }
+    }
+
     private static bool HelperProcExists(IDbCommand cmd)
     {
         cmd.CommandText = "SELECT COUNT(*) FROM information_schema.routines " +
