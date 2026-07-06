@@ -54,7 +54,7 @@ schemaquench --ConfigFile:quench.settings.json --LogPath:"$PWD/logs"
 
 ```powershell
 cd sqlserver          # or postgres, or mysql
-schemaquench --ConfigFile:quench.settings.json --LogPath:"$PWD/logs"
+schemaquench --ConfigFile:quench.settings.json --LogPath:"$PWD\logs"
 ```
 
 It exits `0` and forges the `Shop` schema (`Customer`, `Product`, `SalesOrder`, `OrderItem`) into
