@@ -1,0 +1,452 @@
+{
+  "type": "object",
+  "properties": {
+    "Name": {
+      "type": "string"
+    },
+    "Columns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "DataType": {
+            "type": "string"
+          },
+          "Nullable": {
+            "type": "boolean"
+          },
+          "Default": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "OldName": {
+            "type": "string"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "GenerationExpression": {
+            "type": "string"
+          },
+          "Collation": {
+            "type": "string"
+          },
+          "Generated": {
+            "type": "string"
+          },
+          "Virtual": {
+            "type": "boolean"
+          },
+          "Storage": {
+            "type": "string"
+          },
+          "Compression": {
+            "type": "string"
+          },
+          "CheckExpression": {
+            "type": "string"
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "DataType"
+        ]
+      }
+    },
+    "Indexes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "PrimaryKey": {
+            "type": "boolean"
+          },
+          "Unique": {
+            "type": "boolean"
+          },
+          "UniqueConstraint": {
+            "type": "boolean"
+          },
+          "IndexColumns": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "FilterExpression": {
+            "type": "string"
+          },
+          "Clustered": {
+            "type": "boolean"
+          },
+          "IncludeColumns": {
+            "type": "string"
+          },
+          "AccessMethod": {
+            "type": "string"
+          },
+          "FillFactor": {
+            "type": "integer",
+            "minimum": 0.0,
+            "maximum": 100.0
+          },
+          "NullsNotDistinct": {
+            "type": "boolean"
+          },
+          "Deferrable": {
+            "type": "boolean"
+          },
+          "InitiallyDeferred": {
+            "type": "boolean"
+          },
+          "UpdateFillFactor": {
+            "type": "boolean"
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "IndexColumns"
+        ]
+      }
+    },
+    "ForeignKeys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Columns": {
+            "type": "string"
+          },
+          "RelatedTable": {
+            "type": "string"
+          },
+          "RelatedColumns": {
+            "type": "string"
+          },
+          "DeleteAction": {
+            "type": "string",
+            "pattern": "^(NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT)?$"
+          },
+          "UpdateAction": {
+            "type": "string",
+            "pattern": "^(NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT)?$"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "RelatedTableSchema": {
+            "type": "string"
+          },
+          "Deferrable": {
+            "type": "boolean"
+          },
+          "InitiallyDeferred": {
+            "type": "boolean"
+          },
+          "MatchType": {
+            "type": "string",
+            "pattern": "FULL|PARTIAL|SIMPLE"
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "Columns",
+          "RelatedTable",
+          "RelatedColumns"
+        ]
+      }
+    },
+    "CheckConstraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Expression": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "Deferrable": {
+            "type": "boolean"
+          },
+          "InitiallyDeferred": {
+            "type": "boolean"
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "Expression"
+        ]
+      }
+    },
+    "ShouldApplyExpression": {
+      "type": "string"
+    },
+    "DataDelivery": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ContentFile": {
+              "type": "string"
+            },
+            "MergeType": {
+              "type": "string",
+              "pattern": "Insert|Insert/Update|Insert/Update/Delete"
+            },
+            "MatchColumns": {
+              "type": "string"
+            },
+            "MergeFilter": {
+              "type": "string"
+            },
+            "MergeDisableTriggers": {
+              "type": "boolean"
+            },
+            "MergeDisableRules": {
+              "type": "boolean"
+            },
+            "MergeUpdateDescendents": {
+              "type": "boolean"
+            },
+            "ShouldApplyExpression": {
+              "type": "string"
+            },
+            "VariantName": {
+              "type": "string",
+              "maxLength": 128,
+              "description": "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and is the identity key that preserves N deliveries across re-extraction."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ContentFile": {
+                "type": "string"
+              },
+              "MergeType": {
+                "type": "string",
+                "pattern": "Insert|Insert/Update|Insert/Update/Delete"
+              },
+              "MatchColumns": {
+                "type": "string"
+              },
+              "MergeFilter": {
+                "type": "string"
+              },
+              "MergeDisableTriggers": {
+                "type": "boolean"
+              },
+              "MergeDisableRules": {
+                "type": "boolean"
+              },
+              "MergeUpdateDescendents": {
+                "type": "boolean"
+              },
+              "ShouldApplyExpression": {
+                "type": "string"
+              },
+              "VariantName": {
+                "type": "string",
+                "maxLength": 128,
+                "description": "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and is the identity key that preserves N deliveries across re-extraction."
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
+    "VariantName": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+    },
+    "DropColumnsRemovedFromProduct": {
+      "type": "boolean",
+      "description": "When set, overrides the template- and product-level DropColumnsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting."
+    },
+    "DropForeignKeysRemovedFromProduct": {
+      "type": "boolean",
+      "description": "When set, overrides the template- and product-level DropForeignKeysRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting."
+    },
+    "DropCheckConstraintsRemovedFromProduct": {
+      "type": "boolean",
+      "description": "When set, overrides the template- and product-level DropCheckConstraintsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting."
+    },
+    "DropExcludeConstraintsRemovedFromProduct": {
+      "type": "boolean",
+      "description": "When set, overrides the template- and product-level DropExcludeConstraintsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting. PostgreSQL only."
+    },
+    "DropStatisticsRemovedFromProduct": {
+      "type": "boolean",
+      "description": "When set, overrides the template- and product-level DropStatisticsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting."
+    },
+    "DropIndexesRemovedFromProduct": {
+      "type": "boolean",
+      "description": "When set, overrides the template- and product-level DropIndexesRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting."
+    },
+    "OldName": {
+      "type": "string"
+    },
+    "Schema": {
+      "type": "string"
+    },
+    "Statistics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Kind": {
+            "type": "string"
+          },
+          "StatisticsColumns": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "StatisticsColumns"
+        ]
+      }
+    },
+    "ExcludeConstraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "AccessMethod": {
+            "type": "string"
+          },
+          "ExcludeColumns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "Column": {
+                  "type": "string"
+                },
+                "Operator": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "Column",
+                "Operator"
+              ]
+            }
+          },
+          "FilterExpression": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "Deferrable": {
+            "type": "boolean"
+          },
+          "InitiallyDeferred": {
+            "type": "boolean"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "ExcludeColumns"
+        ]
+      }
+    },
+    "RowLevelSecurity": {
+      "type": "boolean"
+    },
+    "ForceRowLevelSecurity": {
+      "type": "boolean"
+    },
+    "AccessMethod": {
+      "type": "string"
+    },
+    "PersistenceType": {
+      "type": "string"
+    },
+    "UpdateFillFactor": {
+      "type": "boolean"
+    },
+    "FillFactor": {
+      "type": "integer",
+      "minimum": 0.0,
+      "maximum": 100.0
+    },
+    "Extensions": {}
+  },
+  "additionalProperties": false,
+  "required": [
+    "Name"
+  ]
+}
