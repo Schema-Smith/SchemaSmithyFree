@@ -144,7 +144,8 @@ public class DataTongs
                 KeyColumns = t["KeyColumns"] ?? "",
                 SelectColumns = t["SelectColumns"] ?? "",
                 Filter = t["Filter"] ?? "",
-                MergeType = t["MergeType"] ?? ""
+                MergeType = t["MergeType"] ?? "",
+                VariantName = t["VariantName"] ?? ""
             })
             .Where(t => !string.IsNullOrWhiteSpace(t.TableName))
             .ToList();

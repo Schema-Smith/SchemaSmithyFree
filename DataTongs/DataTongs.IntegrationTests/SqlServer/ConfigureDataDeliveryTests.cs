@@ -350,6 +350,92 @@ public class ConfigureDataDeliveryTests
         }
     }
 
+    [Test]
+    [NonParallelizable]
+    public void ShouldReconcileMatchingVariantNameAndPreserveSiblingAndGates()
+    {
+        SetupTestTable();
+
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+
+        var tableJson = """
+            {
+              "Schema": "dbo",
+              "Name": "TestTable",
+              "Columns": [
+                { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+                { "Name": "[Name]", "DataType": "NVARCHAR(100)", "Nullable": false }
+              ],
+              "DataDelivery": [
+                {
+                  "ContentFile": "Content/dbo.TestTable.eu.stale.tabledata",
+                  "MergeType": "Insert",
+                  "ShouldApplyExpression": "Target.Region == 'EU'",
+                  "VariantName": "EU"
+                },
+                {
+                  "ContentFile": "Content/dbo.TestTable.us.tabledata",
+                  "MergeType": "Insert",
+                  "ShouldApplyExpression": "Target.Region == 'US'",
+                  "VariantName": "US"
+                }
+              ]
+            }
+            """;
+
+        directory.Exists(Arg.Any<string>()).Returns(true);
+        directory.GetFiles(Arg.Any<string>(), "*.json", SearchOption.TopDirectoryOnly)
+            .Returns(new[] { TableJsonPath });
+        file.Exists(TemplateJsonPath).Returns(true);
+        file.Exists(TableJsonPath).Returns(true);
+        file.ReadAllText(TableJsonPath).Returns(tableJson);
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            ResetStaticState();
+            LogFactory.Register("ErrorLog", errorLog);
+            LogFactory.Register("ProgressLog", progressLog);
+            FactoryContainer.Register(environment);
+            FactoryContainer.Register(file);
+            FactoryContainer.Register(directory);
+
+            var config = SetupSourceConfig();
+            config["Tables:0:Name"] = "dbo.TestTable";
+            config["Tables:0:VariantName"] = "EU";
+            config["ShouldCast:OutputContentFiles"] = "true";
+            config["ShouldCast:OutputScripts"] = "false";
+            config["ShouldCast:ConfigureDataDelivery"] = "true";
+            config["ShouldCast:MergeDelete"] = "false";
+            config["ContentPath"] = ContentDir;
+
+            var tongs = new DataTongs(Platform.SqlServer);
+            tongs.CastData();
+
+            file.Received(1).WriteAllText(
+                TableJsonPath,
+                Arg.Is<string>(s =>
+                    s.ContainsIgnoringCase("\"ContentFile\": \"Content/dbo.TestTable.tabledata\"") &&
+                    s.ContainsIgnoringCase("\"ShouldApplyExpression\": \"Target.Region == 'EU'\"") &&
+                    s.ContainsIgnoringCase("\"VariantName\": \"EU\"") &&
+                    s.ContainsIgnoringCase("\"ContentFile\": \"Content/dbo.TestTable.us.tabledata\"") &&
+                    s.ContainsIgnoringCase("\"MergeType\": \"Insert\"") &&
+                    s.ContainsIgnoringCase("\"ShouldApplyExpression\": \"Target.Region == 'US'\"") &&
+                    s.ContainsIgnoringCase("\"VariantName\": \"US\"")));
+
+            errorLog.DidNotReceive().Error(Arg.Any<string>());
+
+            FactoryContainer.Unregister<IEnvironment>();
+            FactoryContainer.Unregister<IFile>();
+            FactoryContainer.Unregister<IDirectory>();
+            RestoreConfig();
+            LogFactory.Clear();
+        }
+    }
+
     private IConfigurationRoot _originalConfig;
 
     private IConfigurationRoot SetupSourceConfig()
