@@ -43,5 +43,5 @@ BEGIN
       FROM temp_tables t
       JOIN pg_index idx ON idx.indrelid = ('"' || t."Schema" || '"' ||  '.' || '"' ||  t."Name" || '"')::regclass
       JOIN pg_class i ON i.oid = idx.indexrelid
-      LEFT JOIN pg_catalog.pg_constraint con ON con.contype = 'u' AND con.conrelid = idx.indrelid AND con.conname = i.relname;
+      LEFT JOIN pg_catalog.pg_constraint con ON con.contype IN ('p','u') AND con.conrelid = idx.indrelid AND con.conname = i.relname;
 END $$;
