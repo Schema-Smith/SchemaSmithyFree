@@ -511,7 +511,7 @@ The rewriter handles three identifier forms for the source schema:
 
 All collapse to `{{SchemaName}}.<name>`, preserving the original quoting style on the object name. References to any other schema are left untouched.
 
-> **Note:** The rewriter masks single-quoted string literals before substitution, so a source-schema name embedded inside a `'...'` literal is preserved verbatim. PostgreSQL dollar-quoted blocks (`$tag$...$tag$`) are not recognized as literals -- content inside them is treated as ordinary SQL and is subject to rewriting. This is a known v1 limitation; the unqualified-identifier audit (below) surfaces affected files for review.
+> **Note:** The rewriter masks single-quoted string literals before substitution, so a source-schema name embedded inside a `'...'` literal is preserved verbatim. PostgreSQL dollar-quoted blocks (`$tag$...$tag$`) are not recognized as literals -- content inside them is treated as ordinary SQL and is subject to rewriting. This is a known limitation; the unqualified-identifier audit (below) surfaces affected files for review.
 
 ### Unqualified ids
 
@@ -583,10 +583,10 @@ The round-trip property also drives the integration test suite: extract `tenant_
 
 For the end-to-end walkthrough, see [Migrating from manual duplication](../guide/10-multi-tenant-deployments.md#migrating-from-manual-duplication) in the Multi-Tenant Deployments guide.
 
-### Out of scope for v1
+### Current limitations
 
 - **One schema per run.** `Source.Schema` targets a single schema. To convert multiple canonical schemas, run SchemaTongs once per schema with different `Template.Name` values.
-- **No auto-qualification.** The conservative audit warning is the v1 contract. Unqualified identifiers are flagged for review; SchemaTongs never auto-prefixes them with `{{SchemaName}}.`.
+- **No auto-qualification.** The conservative audit warning is intentional. Unqualified identifiers are flagged for review; SchemaTongs never auto-prefixes them with `{{SchemaName}}.`.
 - **No multi-schema refs.** Stored procedures referencing three or more schemas with conditional logic may need manual review after the rewrite pass. The audit warning surfaces those files.
 
 ---

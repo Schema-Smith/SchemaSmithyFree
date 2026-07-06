@@ -566,7 +566,7 @@ The unqualified filenames match the naming convention for table JSON files in a 
 
 Running DataTongs twice against the same source schema and data produces identical output files. The extraction query orders rows by key columns, content files are deterministic JSON, and the merge script body is generated from that fixed row order. Clean diffs, honest reviews -- running DataTongs on an unchanged source is a no-op for both the files and the deployed data.
 
-### Out of scope for v1
+### Current limitations
 
 **Multi-schema extraction in one run.** Each DataTongs run in schema-template mode targets exactly one source schema. If a product's data spans multiple schemas (e.g., per-tenant tables in `{{SchemaName}}` and shared lookup tables in `dbo`), use two separate DataTongs runs -- one in schema-template mode for the per-tenant tables, one in regular mode for the shared schema. The two output directories land in different template folders and are managed independently.
 
