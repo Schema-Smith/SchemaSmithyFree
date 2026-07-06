@@ -1287,7 +1287,7 @@ ORDER BY c.ORDINAL_POSITION;
     {
         var keyColNames = ParseKeyColumnsMySql(keyColumns);
         var sb = new StringBuilder();
-        sb.AppendLine($"DELETE t FROM `{databaseName}`.`{tableName}` t");
+        sb.AppendLine($"DELETE Target FROM `{databaseName}`.`{tableName}` Target");
         sb.AppendLine("WHERE NOT EXISTS (");
         sb.AppendLine("  SELECT 1 FROM JSON_TABLE(");
         sb.AppendLine("    @json_data,");
@@ -1295,7 +1295,7 @@ ORDER BY c.ORDINAL_POSITION;
         sb.AppendLine($"      {jsonTableColumns}");
         sb.AppendLine("    )");
         sb.AppendLine("  ) AS jt");
-        sb.AppendLine($"  WHERE {string.Join(" AND ", keyColNames.Select(k => $"t.`{k}` = jt.`{k}`"))}");
+        sb.AppendLine($"  WHERE {string.Join(" AND ", keyColNames.Select(k => $"Target.`{k}` = jt.`{k}`"))}");
         sb.Append(")");
         if (!string.IsNullOrWhiteSpace(mergeFilter))
             sb.Append($"\nAND ({mergeFilter})");
