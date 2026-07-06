@@ -290,8 +290,9 @@ public class DataDeliveryProcessor : IDataDelivery
         {
             var variantLabel = !string.IsNullOrWhiteSpace(delivery.VariantName) ? delivery.VariantName : index.ToString();
             var artifactKey = $"{tableKey}#{variantLabel}";
+            var deliveryKey = $"{tableKey}#{index}";
 
-            if (deliverySucceeded.Contains(artifactKey))
+            if (deliverySucceeded.Contains(deliveryKey))
                 continue; // already delivered on a prior attempt of this table; don't re-run an idempotent sibling
 
             var keyColumns = string.IsNullOrWhiteSpace(delivery.MatchColumns)
@@ -317,7 +318,7 @@ public class DataDeliveryProcessor : IDataDelivery
                 }
 
                 pass2Units.Add((table, index, delivery, deferredColumns));
-                deliverySucceeded.Add(artifactKey);
+                deliverySucceeded.Add(deliveryKey);
             }
             else
             {
@@ -339,7 +340,7 @@ public class DataDeliveryProcessor : IDataDelivery
                         context.WriteResolvedSqlArtifact?.Invoke(artifactKey, mergeScript);
                     throw;
                 }
-                deliverySucceeded.Add(artifactKey);
+                deliverySucceeded.Add(deliveryKey);
             }
         }
 

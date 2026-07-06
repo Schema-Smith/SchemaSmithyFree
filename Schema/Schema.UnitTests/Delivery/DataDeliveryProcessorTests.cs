@@ -1259,6 +1259,47 @@ public class DataDeliveryProcessorTests
             "The failing second delivery runs twice (fail, then success on retry).");
     }
 
+    [Test]
+    public void DeliverTables_TwoAppliedDeliveries_SameVariantName_BothRun()
+    {
+        var processor = new DataDeliveryProcessor();
+        // Embed tableData (arg index 3) so the two deliveries' scripts are distinguishable.
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .Returns(ci => $"MERGE {ci.ArgAt<string>(3)}");
+
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Users", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery { MergeType = "Insert", ContentFile = "a.json", VariantName = "CHUNK" },
+                    new DataDelivery { MergeType = "Insert", ContentFile = "b.json", VariantName = "CHUNK" }
+                }
+            }
+        };
+
+        var executed = new List<string>();
+        var context = new DataDeliveryContext
+        {
+            Tables = tables, Platform = "SqlServer", Command = _mockCommand, DatabaseName = "TestDB",
+            TemplateRootPath = "/tmp", ScriptHelper = _mockHelper,
+            ReadFileContent = path => path!.Replace('\\', '/').EndsWith("a.json") ? "[{\"Id\":1}]" : "[{\"Id\":2}]",
+            ExecuteScript = (name, script) => executed.Add(script),
+            ProgressLog = _ => { }, ProgressLogError = _ => { }
+        };
+
+        processor.DeliverTables(context);
+
+        Assert.That(executed.FindAll(s => s.Contains("\"Id\":1")).Count, Is.EqualTo(1),
+            "first chunk runs");
+        Assert.That(executed.FindAll(s => s.Contains("\"Id\":2")).Count, Is.EqualTo(1),
+            "second delivery sharing the same VariantName must NOT be skipped (valid multi-chunk delivery)");
+    }
+
     // ---------- ResolveContentFilePath separator normalization ----------
     //
     // ContentFile paths may use either separator style; resolution normalizes both to the platform
