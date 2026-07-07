@@ -339,7 +339,7 @@ ModifiedTables
 
 [After Scripts]
 ";
-            var dbCheckpointPath = Path.Combine(_checkpointDir,
+            var dbCheckpointPath = Path.Join(_checkpointDir,
                 Path.GetFileName($"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.{FileNameEncoder.Encode("")}.checkpoint"));
             Directory.CreateDirectory(_checkpointDir);
             File.WriteAllText(dbCheckpointPath, dbCheckpointContent);
@@ -385,7 +385,7 @@ VALUES('After Scripts/Create TestSecondary.sql', '{product.Name}', 'After', 'Mai
             FactoryContainer.Resolve<IConfigurationRoot>()["CheckpointDirectory"] = _checkpointDir;
 
             var product = Product.Load();
-            var seeded = Path.Combine(_checkpointDir, $"{FileNameEncoder.Encode(product.Name)}.product.checkpoint");
+            var seeded = Path.Join(_checkpointDir, $"{FileNameEncoder.Encode(product.Name)}.product.checkpoint");
             Directory.CreateDirectory(_checkpointDir);
             File.WriteAllText(seeded, "# Seeded\n[Completed Templates]\nTemplate:Main\n");
 

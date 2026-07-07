@@ -138,7 +138,7 @@ public class LogBackupTests
         LogBackup.BackupLogsAndExit("TestApp");
 
         _mockDirectory.Received().CreateDirectory(Arg.Is<string>(s =>
-            s == Path.Combine(expectedBase, "TestApp.0001")));
+            s == Path.Join(expectedBase, "TestApp.0001")));
         _mockDirectory.Received().GetFiles(expectedBase, "TestApp - *.log", SearchOption.TopDirectoryOnly);
     }
 

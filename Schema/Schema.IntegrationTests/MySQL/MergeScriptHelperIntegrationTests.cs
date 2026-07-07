@@ -2,6 +2,7 @@
 
 using System.Data;
 using System;
+using System.Linq;
 
 using NUnit.Framework;
 using Schema.DataAccess;
@@ -549,9 +550,9 @@ CREATE TABLE `{_testDb}`.`{tableName.Replace("`", "``")}` (
             var script = MergeScriptHelper.BuildMergeScript(Platform.MySQL, command, _testDb, tableName,
                 tableData, "`id`", true, true, false, false, "Target.region = 'KEEP'");
 
-            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
+                         .Where(batch => !string.IsNullOrWhiteSpace(batch)))
             {
-                if (string.IsNullOrWhiteSpace(batch)) continue;
                 command.CommandText = batch;
                 command.ExecuteNonQuery();
             }

@@ -366,7 +366,7 @@ ModifiedTables
 
 [After Scripts]
 ";
-            var dbCheckpointPath = Path.Combine(_checkpointDir,
+            var dbCheckpointPath = Path.Join(_checkpointDir,
                 Path.GetFileName($"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.{FileNameEncoder.Encode("")}.checkpoint"));
             File.WriteAllText(dbCheckpointPath, dbCheckpointContent);
 
