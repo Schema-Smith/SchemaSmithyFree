@@ -67,9 +67,8 @@ public static class CommandLineParser
         get
         {
             var result = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
-            foreach (var argument in Arguments.Where(x => x.StartsWith("/") || x.StartsWith("-")))
+            foreach (var trimmed in Arguments.Where(x => x.StartsWith("/") || x.StartsWith("-")).Select(TrimKeyName))
             {
-                var trimmed = TrimKeyName(argument);
                 var eq = trimmed.IndexOf('=');
                 if (eq < 0) continue; // only '='-form switches are config overrides
                 var key = trimmed.Substring(0, eq).Replace("__", ":");
