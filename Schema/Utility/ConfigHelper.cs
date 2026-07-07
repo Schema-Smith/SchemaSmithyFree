@@ -66,6 +66,7 @@ public static class ConfigHelper
             FactoryContainer.Register(config);
             logLine?.Invoke(app);
 
+            ConfigurationLogger.LogCommandLine(config, logLine);
             ConfigurationLogger.LogConfiguration(config, logLine);
 
             return config;
