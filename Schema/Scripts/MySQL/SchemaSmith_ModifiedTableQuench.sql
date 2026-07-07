@@ -38,6 +38,10 @@ BEGIN
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'BEGIN ModifiedTableQuench');
 
+    -- Folded multi-clause ALTER/RENAME statements below can GROUP_CONCAT many clauses for a
+    -- wide table; raise the session limit so long clause lists aren't silently truncated.
+    SET SESSION group_concat_max_len = 1000000;
+
     -- =======================
     -- STEP 0: OWNERSHIP VALIDATION
     -- =======================
@@ -86,61 +90,76 @@ BEGIN
                 AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
           );
     ELSE
-        BEGIN
-            DECLARE v_TableRenameDone INT DEFAULT FALSE;
-            DECLARE v_TableRenameSql TEXT;
-            DECLARE v_OldTableName VARCHAR(128);
-            DECLARE v_NewTableName VARCHAR(128);
-            DECLARE cur_TableRenames CURSOR FOR
-                SELECT
-                    SchemaSmith_StripBacktickWrapping(t.OldName) AS OldTableName,
-                    SchemaSmith_StripBacktickWrapping(t.TableName) AS NewTableName,
-                    CONCAT('RENAME TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
-                           SchemaSmith_StripBacktickWrapping(t.OldName), '` TO `',
-                           p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', SchemaSmith_StripBacktickWrapping(t.TableName), '`') AS RenameSql
-                FROM _SchemaSmith_Tables t
-                WHERE t.OldName IS NOT NULL
-                  AND t.NewTable = 0
-                  AND EXISTS (
-                      SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                      WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
-                        AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.OldName)
-                  )
-                  AND NOT EXISTS (
-                      SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                      WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
-                        AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
-                  );
+        -- Materialize old/new name pairs once (avoids referencing _SchemaSmith_Tables via the
+        -- filter more than needed) so both the per-table messages, the folded RENAME TABLE
+        -- statement, and the ProductOwnership update read from the same snapshot.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TableRenames;
+        CREATE TEMPORARY TABLE _SchemaSmith_TableRenames (
+            OldTableName VARCHAR(128) NOT NULL,
+            NewTableName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (OldTableName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_TableRenameDone = TRUE;
+        INSERT INTO _SchemaSmith_TableRenames (OldTableName, NewTableName)
+        SELECT
+            SchemaSmith_StripBacktickWrapping(t.OldName),
+            SchemaSmith_StripBacktickWrapping(t.TableName)
+        FROM _SchemaSmith_Tables t
+        WHERE t.OldName IS NOT NULL
+          AND t.NewTable = 0
+          AND EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+              WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.OldName)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+              WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+          );
 
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle table renames');
-            SET v_TableRenameDone = FALSE;
-            OPEN cur_TableRenames;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle table renames');
 
-            table_rename_loop: LOOP
-                FETCH cur_TableRenames INTO v_OldTableName, v_NewTableName, v_TableRenameSql;
-                IF v_TableRenameDone THEN
-                    LEAVE table_rename_loop;
-                END IF;
+        -- Per-table progress messages, set-based (preserves the per-table log lines).
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Rename table `', OldTableName, '` to `', NewTableName, '`')
+        FROM _SchemaSmith_TableRenames;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Rename table `', v_OldTableName, '` to `', v_NewTableName, '`'));
-                SET @exec_sql = v_TableRenameSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
+        -- Fold ALL renamed table pairs into ONE multi-target RENAME TABLE statement.
+        -- HAVING COUNT(*) > 0 keeps the folded temp table empty (rather than one row holding a
+        -- NULL Stmt from an empty GROUP_CONCAT) when there are no renames to perform.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TableRenameStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_TableRenameStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_TableRenameStmts (Stmt)
+        SELECT CONCAT('RENAME TABLE ',
+                      GROUP_CONCAT(
+                          CONCAT('`', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', OldTableName, '` TO `',
+                                 p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', NewTableName, '`')
+                          ORDER BY OldTableName SEPARATOR ', '))
+        FROM _SchemaSmith_TableRenames
+        HAVING COUNT(*) > 0;
 
-                -- Update ProductOwnership for the renamed table
-                UPDATE SchemaSmith_ProductOwnership
-                SET ObjectName = v_NewTableName
-                WHERE ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
-                  AND ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
-                  AND ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'TABLE' COLLATE utf8mb4_unicode_ci
-                  AND ObjectName COLLATE utf8mb4_unicode_ci = v_OldTableName COLLATE utf8mb4_unicode_ci;
-            END LOOP;
+        SET @v_tablerename_id := (SELECT MIN(RowId) FROM _SchemaSmith_TableRenameStmts);
+        WHILE @v_tablerename_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_TableRenameStmts WHERE RowId = @v_tablerename_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_tablerename_id := (SELECT MIN(RowId) FROM _SchemaSmith_TableRenameStmts WHERE RowId > @v_tablerename_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TableRenameStmts;
 
-            CLOSE cur_TableRenames;
-        END;
+        -- Update ProductOwnership for the renamed tables (set-based join, one UPDATE for all pairs).
+        UPDATE SchemaSmith_ProductOwnership po
+        INNER JOIN _SchemaSmith_TableRenames r
+            ON po.ObjectName COLLATE utf8mb4_unicode_ci = r.OldTableName COLLATE utf8mb4_unicode_ci
+        SET po.ObjectName = r.NewTableName
+        WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
+          AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+          AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'TABLE' COLLATE utf8mb4_unicode_ci;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TableRenames;
     END IF;
 
     -- =======================
@@ -172,53 +191,71 @@ BEGIN
                 AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
           );
     ELSE
-        BEGIN
-            DECLARE v_ColRenameDone INT DEFAULT FALSE;
-            DECLARE v_ColRenameSql TEXT;
-            DECLARE cur_ColumnRenames CURSOR FOR
-                SELECT
-                    CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
-                           ' RENAME COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
-                           '` TO `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`') AS RenameSql
-                FROM _SchemaSmith_Columns c
-                INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
-                WHERE c.OldName IS NOT NULL
-                  AND c.NewColumn = 0
-                  AND t.NewTable = 0
-                  AND EXISTS (
-                      SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
-                      WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
-                        AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-                        AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.OldName)
-                  )
-                  AND NOT EXISTS (
-                      SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
-                      WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
-                        AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-                        AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
-                  );
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle column renames');
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_ColRenameDone = TRUE;
+        -- Per-column progress messages, set-based (preserves the per-column log lines and the
+        -- exact "ALTER TABLE ... RENAME COLUMN ..." single-column text, even though the
+        -- statement actually executed below folds multiple columns of the same table together).
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Rename column: ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                      ' RENAME COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
+                      '` TO `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`')
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        WHERE c.OldName IS NOT NULL
+          AND c.NewColumn = 0
+          AND t.NewTable = 0
+          AND EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
+              WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.OldName)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
+              WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+          );
 
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle column renames');
-            SET v_ColRenameDone = FALSE;
-            OPEN cur_ColumnRenames;
+        -- Materialize: fold each table's column renames into one multi-clause ALTER, then drain.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ColRenameStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_ColRenameStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_ColRenameStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName, ' ',
+                      GROUP_CONCAT(
+                          CONCAT('RENAME COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
+                                 '` TO `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`')
+                          ORDER BY c.ColumnName SEPARATOR ', '))
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        WHERE c.OldName IS NOT NULL
+          AND c.NewColumn = 0
+          AND t.NewTable = 0
+          AND EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
+              WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.OldName)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
+              WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+          )
+        GROUP BY c.TableName;
 
-            col_rename_loop: LOOP
-                FETCH cur_ColumnRenames INTO v_ColRenameSql;
-                IF v_ColRenameDone THEN
-                    LEAVE col_rename_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Rename column: ', v_ColRenameSql));
-                SET @exec_sql = v_ColRenameSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_ColumnRenames;
-        END;
+        SET @v_colrename_id := (SELECT MIN(RowId) FROM _SchemaSmith_ColRenameStmts);
+        WHILE @v_colrename_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_ColRenameStmts WHERE RowId = @v_colrename_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_colrename_id := (SELECT MIN(RowId) FROM _SchemaSmith_ColRenameStmts WHERE RowId > @v_colrename_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ColRenameStmts;
     END IF;
 
     -- =======================
@@ -279,81 +316,113 @@ BEGIN
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
           );
     ELSE
-        BEGIN
-            DECLARE v_ModifyDone INT DEFAULT FALSE;
-            DECLARE v_ModifySql TEXT;
-            DECLARE cur_ModifyColumns CURSOR FOR
-                SELECT
-                    CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
-                           ' MODIFY COLUMN ', c.ColumnScript) AS AlterColumnStatement
-                FROM _SchemaSmith_Columns c
-                INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
-                INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
-                    ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
-                    AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-                    AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
-                WHERE t.NewTable = 0
-                  AND c.NewColumn = 0
-                  -- Exclude columns where generated status is changing (regular->generated or generated->regular)
-                  AND NOT (
-                      -- Currently generated, wants to be regular
-                      ((isc.GENERATION_EXPRESSION IS NOT NULL AND isc.GENERATION_EXPRESSION != '')
-                       AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = ''))
-                      OR
-                      -- Currently regular, wants to be generated
-                      ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
-                       AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
-                  )
-                  AND (
-                      -- Normalize whitespace adjacent to structural delimiters and the DECIMAL/NUMERIC
-                      -- synonym so a hand-authored type that differs only by spacing/synonym is not a
-                      -- false "modified". Guarded for ENUM/SET, whose parenthesized content is string
-                      -- values where whitespace is meaningful (normalizing could miss a real change).
-                      CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
-                             OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
-                           THEN UPPER(isc.COLUMN_TYPE) != UPPER(c.DataType)
-                           ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
-                             != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') END
-                      OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)
-                      OR (isc.IS_NULLABLE = 'NO' AND c.IsNullable = 1)
-                      -- Default value changes (strip outer single quotes from JSON default for comparison,
-                      -- since GenerateTableJson wraps string/enum defaults in quotes for DDL but INFORMATION_SCHEMA stores raw values)
-                      OR (c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) != '' AND c.IsAutoIncrement = 0
-                          AND (isc.COLUMN_DEFAULT IS NULL OR BINARY isc.COLUMN_DEFAULT != BINARY
-                              CASE WHEN c.DefaultValue LIKE '''%'''
-                                   THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                                   ELSE c.DefaultValue END))
-                      OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND isc.COLUMN_DEFAULT IS NOT NULL)
-                      -- Collation changes (only when JSON specifies a collation)
-                      OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
-                      -- Generated expression changes (both sides are generated, but expression differs)
-                      OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
-                          AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
-                      -- AUTO_INCREMENT removal/addition (live EXTRA vs declared IsAutoIncrement) — parity with identity removal
-                      OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
-                  );
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Modify columns');
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_ModifyDone = TRUE;
+        -- Per-column progress messages, set-based (preserves the per-column "ALTER TABLE ...
+        -- MODIFY COLUMN ..." single-column text, even though execution below folds multiple
+        -- columns of the same table into one statement).
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Modify column: ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                      ' MODIFY COLUMN ', c.ColumnScript)
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+            AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+        WHERE t.NewTable = 0
+          AND c.NewColumn = 0
+          -- Exclude columns where generated status is changing (regular->generated or generated->regular)
+          AND NOT (
+              -- Currently generated, wants to be regular
+              ((isc.GENERATION_EXPRESSION IS NOT NULL AND isc.GENERATION_EXPRESSION != '')
+               AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = ''))
+              OR
+              -- Currently regular, wants to be generated
+              ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
+               AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
+          )
+          AND (
+              -- Normalize whitespace adjacent to structural delimiters and the DECIMAL/NUMERIC
+              -- synonym so a hand-authored type that differs only by spacing/synonym is not a
+              -- false "modified". Guarded for ENUM/SET, whose parenthesized content is string
+              -- values where whitespace is meaningful (normalizing could miss a real change).
+              CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
+                     OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
+                   THEN UPPER(isc.COLUMN_TYPE) != UPPER(c.DataType)
+                   ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
+                     != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') END
+              OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)
+              OR (isc.IS_NULLABLE = 'NO' AND c.IsNullable = 1)
+              -- Default value changes (strip outer single quotes from JSON default for comparison,
+              -- since GenerateTableJson wraps string/enum defaults in quotes for DDL but INFORMATION_SCHEMA stores raw values)
+              OR (c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) != '' AND c.IsAutoIncrement = 0
+                  AND (isc.COLUMN_DEFAULT IS NULL OR BINARY isc.COLUMN_DEFAULT != BINARY
+                      CASE WHEN c.DefaultValue LIKE '''%'''
+                           THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
+                           ELSE c.DefaultValue END))
+              OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND isc.COLUMN_DEFAULT IS NOT NULL)
+              -- Collation changes (only when JSON specifies a collation)
+              OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
+              -- Generated expression changes (both sides are generated, but expression differs)
+              OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
+                  AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
+              -- AUTO_INCREMENT removal/addition (live EXTRA vs declared IsAutoIncrement) — parity with identity removal
+              OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+          );
 
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Modify columns');
-            SET v_ModifyDone = FALSE;
-            OPEN cur_ModifyColumns;
+        -- Materialize: fold each table's column modifications into one multi-clause ALTER, then drain.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ModifyColStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_ModifyColStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_ModifyColStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName, ' ',
+                      GROUP_CONCAT(CONCAT('MODIFY COLUMN ', c.ColumnScript) ORDER BY c.ColumnName SEPARATOR ', '))
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+            AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+        WHERE t.NewTable = 0
+          AND c.NewColumn = 0
+          AND NOT (
+              ((isc.GENERATION_EXPRESSION IS NOT NULL AND isc.GENERATION_EXPRESSION != '')
+               AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = ''))
+              OR
+              ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
+               AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
+          )
+          AND (
+              CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
+                     OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
+                   THEN UPPER(isc.COLUMN_TYPE) != UPPER(c.DataType)
+                   ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
+                     != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') END
+              OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)
+              OR (isc.IS_NULLABLE = 'NO' AND c.IsNullable = 1)
+              OR (c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) != '' AND c.IsAutoIncrement = 0
+                  AND (isc.COLUMN_DEFAULT IS NULL OR BINARY isc.COLUMN_DEFAULT != BINARY
+                      CASE WHEN c.DefaultValue LIKE '''%'''
+                           THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
+                           ELSE c.DefaultValue END))
+              OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND isc.COLUMN_DEFAULT IS NOT NULL)
+              OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
+              OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
+                  AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
+              OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+          )
+        GROUP BY c.TableName;
 
-            modify_columns_loop: LOOP
-                FETCH cur_ModifyColumns INTO v_ModifySql;
-                IF v_ModifyDone THEN
-                    LEAVE modify_columns_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Modify column: ', v_ModifySql));
-                SET @exec_sql = v_ModifySql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_ModifyColumns;
-        END;
+        SET @v_modifycol_id := (SELECT MIN(RowId) FROM _SchemaSmith_ModifyColStmts);
+        WHILE @v_modifycol_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_ModifyColStmts WHERE RowId = @v_modifycol_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_modifycol_id := (SELECT MIN(RowId) FROM _SchemaSmith_ModifyColStmts WHERE RowId > @v_modifycol_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ModifyColStmts;
     END IF;
 
     -- =======================
@@ -402,62 +471,85 @@ BEGIN
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           );
     ELSE
-        BEGIN
-            DECLARE v_GenChangeDone INT DEFAULT FALSE;
-            DECLARE v_GenChangeTableName VARCHAR(128);
-            DECLARE v_GenChangeColName VARCHAR(128);
-            DECLARE v_GenChangeColScript TEXT;
-            DECLARE cur_GenStatusChanges CURSOR FOR
-                SELECT
-                    SchemaSmith_StripBacktickWrapping(c.TableName) AS TableName,
-                    SchemaSmith_StripBacktickWrapping(c.ColumnName) AS ColName,
-                    c.ColumnScript
-                FROM _SchemaSmith_Columns c
-                INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
-                INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
-                    ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
-                    AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-                    AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
-                WHERE t.NewTable = 0
-                  AND c.NewColumn = 0
-                  AND (
-                      -- Currently generated, wants to be regular
-                      ((isc.GENERATION_EXPRESSION IS NOT NULL AND isc.GENERATION_EXPRESSION != '')
-                       AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = ''))
-                      OR
-                      -- Currently regular, wants to be generated
-                      ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
-                       AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
-                  );
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Recreate columns (generated status changes)');
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_GenChangeDone = TRUE;
+        -- Per-column progress messages, set-based (preserves the per-column log line).
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Recreate column: ', SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+            AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+        WHERE t.NewTable = 0
+          AND c.NewColumn = 0
+          AND (
+              ((isc.GENERATION_EXPRESSION IS NOT NULL AND isc.GENERATION_EXPRESSION != '')
+               AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = ''))
+              OR
+              ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
+               AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
+          );
 
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Recreate columns (generated status changes)');
-            SET v_GenChangeDone = FALSE;
-            OPEN cur_GenStatusChanges;
+        -- Materialize DROP-phase then ADD-phase, folded per table. Two separate INSERTs (a
+        -- MySQL TEMPORARY table cannot be referenced twice in one statement); the DROP-phase
+        -- rows are inserted first so AUTO_INCREMENT RowId guarantees every column drop for a
+        -- table runs before that table's re-adds (mirrors the FK-drop/index-drop two-phase
+        -- ordering in SchemaSmith_ForeignKeyQuench).
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_GenStatusStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_GenStatusStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-            gen_status_loop: LOOP
-                FETCH cur_GenStatusChanges INTO v_GenChangeTableName, v_GenChangeColName, v_GenChangeColScript;
-                IF v_GenChangeDone THEN
-                    LEAVE gen_status_loop;
-                END IF;
+        INSERT INTO _SchemaSmith_GenStatusStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', SchemaSmith_StripBacktickWrapping(c.TableName), '` ',
+                      GROUP_CONCAT(CONCAT('DROP COLUMN `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`') ORDER BY c.ColumnName SEPARATOR ', '))
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+            AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+        WHERE t.NewTable = 0
+          AND c.NewColumn = 0
+          AND (
+              ((isc.GENERATION_EXPRESSION IS NOT NULL AND isc.GENERATION_EXPRESSION != '')
+               AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = ''))
+              OR
+              ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
+               AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
+          )
+        GROUP BY c.TableName;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Recreate column: ', v_GenChangeTableName, '.', v_GenChangeColName));
-                -- First DROP the column
-                SET @exec_sql = CONCAT('ALTER TABLE `', p_DatabaseName, '`.`', v_GenChangeTableName, '` DROP COLUMN `', v_GenChangeColName, '`');
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
+        INSERT INTO _SchemaSmith_GenStatusStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', SchemaSmith_StripBacktickWrapping(c.TableName), '` ',
+                      GROUP_CONCAT(CONCAT('ADD COLUMN ', c.ColumnScript) ORDER BY c.ColumnName SEPARATOR ', '))
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+            AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+        WHERE t.NewTable = 0
+          AND c.NewColumn = 0
+          AND (
+              ((isc.GENERATION_EXPRESSION IS NOT NULL AND isc.GENERATION_EXPRESSION != '')
+               AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = ''))
+              OR
+              ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
+               AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
+          )
+        GROUP BY c.TableName;
 
-                -- Then ADD it back with the new definition
-                SET @exec_sql = CONCAT('ALTER TABLE `', p_DatabaseName, '`.`', v_GenChangeTableName, '` ADD COLUMN ', v_GenChangeColScript);
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_GenStatusChanges;
-        END;
+        SET @v_genstatus_id := (SELECT MIN(RowId) FROM _SchemaSmith_GenStatusStmts);
+        WHILE @v_genstatus_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_GenStatusStmts WHERE RowId = @v_genstatus_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_genstatus_id := (SELECT MIN(RowId) FROM _SchemaSmith_GenStatusStmts WHERE RowId > @v_genstatus_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_GenStatusStmts;
     END IF;
 
     -- =======================
@@ -523,19 +615,25 @@ BEGIN
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unused columns');
         -- First, drop foreign keys that reference columns we're about to drop
-        -- Note: Uses a helper table with two separate INSERTs to avoid MySQL optimizer bug
-        -- where an OR in a JOIN against INFORMATION_SCHEMA.KEY_COLUMN_USAGE with multiple
-        -- temp table rows produces incorrect (empty) results.
+        -- Note: Uses a helper table keyed on (TableName, ConstraintName), same shape as
+        -- SchemaSmith_ForeignKeyQuench's _SchemaSmith_ModifiedFKs, with two separate INSERTs to
+        -- avoid the MySQL optimizer bug where an OR in a JOIN against
+        -- INFORMATION_SCHEMA.KEY_COLUMN_USAGE with multiple temp table rows produces incorrect
+        -- (empty) results. The PRIMARY KEY also dedupes a self-referencing FK that shows up in
+        -- both branches (an improvement over the original's per-branch-only DISTINCT, which
+        -- could otherwise attempt to drop the same FK twice and error on the second attempt).
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKsToDrop;
         CREATE TEMPORARY TABLE _SchemaSmith_FKsToDrop (
-            DropFKSql TEXT NOT NULL
+            TableName VARCHAR(128) NOT NULL,
+            ConstraintName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, ConstraintName)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
         -- Branch 1: FK source columns being dropped
-        INSERT INTO _SchemaSmith_FKsToDrop (DropFKSql)
-        SELECT DISTINCT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
-                               CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                               '` DROP FOREIGN KEY `', CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`')
+        INSERT IGNORE INTO _SchemaSmith_FKsToDrop (TableName, ConstraintName)
+        SELECT DISTINCT
+            CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+            CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
         FROM _SchemaSmith_ColumnsToDrop ctd
         INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
             ON CONVERT(kcu.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
@@ -548,10 +646,10 @@ BEGIN
             AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY';
 
         -- Branch 2: FK referenced (target) columns being dropped
-        INSERT IGNORE INTO _SchemaSmith_FKsToDrop (DropFKSql)
-        SELECT DISTINCT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
-                               CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                               '` DROP FOREIGN KEY `', CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`')
+        INSERT IGNORE INTO _SchemaSmith_FKsToDrop (TableName, ConstraintName)
+        SELECT DISTINCT
+            CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+            CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
         FROM _SchemaSmith_ColumnsToDrop ctd
         INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
             ON CONVERT(kcu.REFERENCED_TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
@@ -563,193 +661,225 @@ BEGIN
             AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4)
             AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY';
 
-        BEGIN
-            DECLARE v_DropFKDone INT DEFAULT FALSE;
-            DECLARE v_DropFKSql TEXT;
-            DECLARE cur_DropFKsForColumns CURSOR FOR
-                SELECT DropFKSql FROM _SchemaSmith_FKsToDrop;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Drop FK for column: ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName,
+                      '` DROP FOREIGN KEY `', ConstraintName, '`')
+        FROM _SchemaSmith_FKsToDrop;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropFKDone = TRUE;
+        -- Materialize: fold each table's FK drops into one multi-clause ALTER, then drain.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKDropForColStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_FKDropForColStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_FKDropForColStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                      GROUP_CONCAT(CONCAT('DROP FOREIGN KEY `', ConstraintName, '`') ORDER BY ConstraintName SEPARATOR ', '))
+        FROM _SchemaSmith_FKsToDrop
+        GROUP BY TableName;
 
-            SET v_DropFKDone = FALSE;
-            OPEN cur_DropFKsForColumns;
-
-            drop_fks_for_cols_loop: LOOP
-                FETCH cur_DropFKsForColumns INTO v_DropFKSql;
-                IF v_DropFKDone THEN
-                    LEAVE drop_fks_for_cols_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop FK for column: ', v_DropFKSql));
-                SET @exec_sql = v_DropFKSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_DropFKsForColumns;
-        END;
+        SET @v_fkcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKDropForColStmts);
+        WHILE @v_fkcol_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_FKDropForColStmts WHERE RowId = @v_fkcol_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_fkcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKDropForColStmts WHERE RowId > @v_fkcol_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKDropForColStmts;
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKsToDrop;
 
         -- Drop check constraints that reference columns being dropped
-        BEGIN
-            DECLARE v_DropCKDone INT DEFAULT FALSE;
-            DECLARE v_DropCKSql TEXT;
-            DECLARE cur_DropCKsForColumns CURSOR FOR
-                SELECT DISTINCT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
-                                       CONVERT(tc.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                                       '` DROP CONSTRAINT `', CONVERT(cc.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`') AS DropCKSql
-                FROM _SchemaSmith_ColumnsToDrop ctd
-                INNER JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
-                    ON CONVERT(cc.CONSTRAINT_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                    -- Check if constraint references this column (explicit COLLATE to avoid collation mismatch)
-                    AND CONVERT(cc.CHECK_CLAUSE USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                        LIKE CONCAT('%`', ctd.ColumnName COLLATE utf8mb4_unicode_ci, '`%')
-                INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                    ON CONVERT(tc.CONSTRAINT_SCHEMA USING utf8mb4) = CONVERT(cc.CONSTRAINT_SCHEMA USING utf8mb4)
-                    AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(cc.CONSTRAINT_NAME USING utf8mb4)
-                    AND CONVERT(tc.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
-                    AND tc.CONSTRAINT_TYPE = 'CHECK';
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CKsToDrop;
+        CREATE TEMPORARY TABLE _SchemaSmith_CKsToDrop (
+            TableName VARCHAR(128) NOT NULL,
+            ConstraintName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, ConstraintName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropCKDone = TRUE;
+        INSERT IGNORE INTO _SchemaSmith_CKsToDrop (TableName, ConstraintName)
+        SELECT DISTINCT
+            CONVERT(tc.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+            CONVERT(cc.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        FROM _SchemaSmith_ColumnsToDrop ctd
+        INNER JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+            ON CONVERT(cc.CONSTRAINT_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+            -- Check if constraint references this column (explicit COLLATE to avoid collation mismatch)
+            AND CONVERT(cc.CHECK_CLAUSE USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                LIKE CONCAT('%`', ctd.ColumnName COLLATE utf8mb4_unicode_ci, '`%')
+        INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            ON CONVERT(tc.CONSTRAINT_SCHEMA USING utf8mb4) = CONVERT(cc.CONSTRAINT_SCHEMA USING utf8mb4)
+            AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(cc.CONSTRAINT_NAME USING utf8mb4)
+            AND CONVERT(tc.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
+            AND tc.CONSTRAINT_TYPE = 'CHECK';
 
-            SET v_DropCKDone = FALSE;
-            OPEN cur_DropCKsForColumns;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Drop check constraint for column: ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName,
+                      '` DROP CONSTRAINT `', ConstraintName, '`')
+        FROM _SchemaSmith_CKsToDrop;
 
-            drop_cks_for_cols_loop: LOOP
-                FETCH cur_DropCKsForColumns INTO v_DropCKSql;
-                IF v_DropCKDone THEN
-                    LEAVE drop_cks_for_cols_loop;
-                END IF;
+        -- Materialize: fold each table's check-constraint drops into one multi-clause ALTER, then drain.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CKDropStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_CKDropStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_CKDropStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                      GROUP_CONCAT(CONCAT('DROP CONSTRAINT `', ConstraintName, '`') ORDER BY ConstraintName SEPARATOR ', '))
+        FROM _SchemaSmith_CKsToDrop
+        GROUP BY TableName;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop check constraint for column: ', v_DropCKSql));
-                SET @exec_sql = v_DropCKSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_DropCKsForColumns;
-        END;
+        SET @v_ckcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_CKDropStmts);
+        WHILE @v_ckcol_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_CKDropStmts WHERE RowId = @v_ckcol_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_ckcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_CKDropStmts WHERE RowId > @v_ckcol_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CKDropStmts;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CKsToDrop;
 
         -- Drop indexes that use columns being dropped
-        BEGIN
-            DECLARE v_DropIdxDone INT DEFAULT FALSE;
-            DECLARE v_DropIdxSql TEXT;
-            DECLARE cur_DropIdxsForColumns CURSOR FOR
-                SELECT DISTINCT CONCAT('DROP INDEX `', CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                                       '` ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
-                                       CONVERT(s.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`') AS DropIdxSql
-                FROM _SchemaSmith_ColumnsToDrop ctd
-                INNER JOIN INFORMATION_SCHEMA.STATISTICS s
-                    ON CONVERT(s.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                    AND CONVERT(s.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
-                    AND CONVERT(s.COLUMN_NAME USING utf8mb4) = CONVERT(ctd.ColumnName USING utf8mb4)
-                WHERE UPPER(s.INDEX_NAME) != 'PRIMARY';
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxsToDrop;
+        CREATE TEMPORARY TABLE _SchemaSmith_IdxsToDrop (
+            TableName VARCHAR(128) NOT NULL,
+            IndexName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, IndexName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropIdxDone = TRUE;
+        INSERT IGNORE INTO _SchemaSmith_IdxsToDrop (TableName, IndexName)
+        SELECT DISTINCT
+            CONVERT(s.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+            CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        FROM _SchemaSmith_ColumnsToDrop ctd
+        INNER JOIN INFORMATION_SCHEMA.STATISTICS s
+            ON CONVERT(s.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+            AND CONVERT(s.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
+            AND CONVERT(s.COLUMN_NAME USING utf8mb4) = CONVERT(ctd.ColumnName USING utf8mb4)
+        WHERE UPPER(s.INDEX_NAME) != 'PRIMARY';
 
-            SET v_DropIdxDone = FALSE;
-            OPEN cur_DropIdxsForColumns;
+        -- Message text preserves the original standalone "DROP INDEX ... ON ..." wording even
+        -- though the statement actually executed below uses the equivalent
+        -- "ALTER TABLE ... DROP INDEX ..." form so multiple indexes on the same table can fold
+        -- into one statement.
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Drop index for column: DROP INDEX `', IndexName, '` ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`')
+        FROM _SchemaSmith_IdxsToDrop;
 
-            drop_idxs_for_cols_loop: LOOP
-                FETCH cur_DropIdxsForColumns INTO v_DropIdxSql;
-                IF v_DropIdxDone THEN
-                    LEAVE drop_idxs_for_cols_loop;
-                END IF;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxDropStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_IdxDropStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_IdxDropStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                      GROUP_CONCAT(CONCAT('DROP INDEX `', IndexName, '`') ORDER BY IndexName SEPARATOR ', '))
+        FROM _SchemaSmith_IdxsToDrop
+        GROUP BY TableName;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop index for column: ', v_DropIdxSql));
-                SET @exec_sql = v_DropIdxSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_DropIdxsForColumns;
-        END;
+        SET @v_idxcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_IdxDropStmts);
+        WHILE @v_idxcol_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_IdxDropStmts WHERE RowId = @v_idxcol_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_idxcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_IdxDropStmts WHERE RowId > @v_idxcol_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxDropStmts;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxsToDrop;
 
         -- Drop generated columns that reference columns being dropped
-        BEGIN
-            DECLARE v_DropGenDone INT DEFAULT FALSE;
-            DECLARE v_DropGenSql TEXT;
-            DECLARE cur_DropGenCols CURSOR FOR
-                SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
-                              CONVERT(isc_gen.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                              '` DROP COLUMN `', CONVERT(isc_gen.COLUMN_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`') AS DropGenSql
-                FROM _SchemaSmith_ColumnsToDrop ctd
-                INNER JOIN INFORMATION_SCHEMA.COLUMNS isc_gen
-                    ON CONVERT(isc_gen.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                    AND CONVERT(isc_gen.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
-                    AND isc_gen.GENERATION_EXPRESSION IS NOT NULL
-                    AND isc_gen.GENERATION_EXPRESSION != ''
-                    -- Explicit COLLATE to avoid collation mismatch between INFORMATION_SCHEMA and temp table
-                    AND CONVERT(isc_gen.GENERATION_EXPRESSION USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                        LIKE CONCAT('%`', ctd.ColumnName COLLATE utf8mb4_unicode_ci, '`%')
-                -- Only drop generated columns that are also not in the definition
-                -- (use _SchemaSmith_DefinedColumns to avoid MySQL's "Can't reopen table" error)
-                LEFT JOIN _SchemaSmith_DefinedColumns dc_gen
-                    ON dc_gen.TableName = ctd.TableName
-                    AND BINARY dc_gen.ColumnName = BINARY isc_gen.COLUMN_NAME
-                WHERE dc_gen.ColumnName IS NULL;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_GenColsToDrop;
+        CREATE TEMPORARY TABLE _SchemaSmith_GenColsToDrop (
+            TableName VARCHAR(128) NOT NULL,
+            ColumnName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, ColumnName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropGenDone = TRUE;
+        -- INSERT IGNORE: a generated column referencing two-or-more dropped columns produces
+        -- multiple join rows for the same (TableName, ColumnName); the original loop had no
+        -- DISTINCT here either, but the folded form needs the PK to hold a single row per column.
+        INSERT IGNORE INTO _SchemaSmith_GenColsToDrop (TableName, ColumnName)
+        SELECT
+            CONVERT(isc_gen.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+            CONVERT(isc_gen.COLUMN_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        FROM _SchemaSmith_ColumnsToDrop ctd
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc_gen
+            ON CONVERT(isc_gen.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+            AND CONVERT(isc_gen.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
+            AND isc_gen.GENERATION_EXPRESSION IS NOT NULL
+            AND isc_gen.GENERATION_EXPRESSION != ''
+            -- Explicit COLLATE to avoid collation mismatch between INFORMATION_SCHEMA and temp table
+            AND CONVERT(isc_gen.GENERATION_EXPRESSION USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                LIKE CONCAT('%`', ctd.ColumnName COLLATE utf8mb4_unicode_ci, '`%')
+        -- Only drop generated columns that are also not in the definition
+        -- (use _SchemaSmith_DefinedColumns to avoid MySQL's "Can't reopen table" error)
+        LEFT JOIN _SchemaSmith_DefinedColumns dc_gen
+            ON dc_gen.TableName = ctd.TableName
+            AND BINARY dc_gen.ColumnName = BINARY isc_gen.COLUMN_NAME
+        WHERE dc_gen.ColumnName IS NULL;
 
-            SET v_DropGenDone = FALSE;
-            OPEN cur_DropGenCols;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Drop generated column: ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName,
+                      '` DROP COLUMN `', ColumnName, '`')
+        FROM _SchemaSmith_GenColsToDrop;
 
-            drop_gen_cols_loop: LOOP
-                FETCH cur_DropGenCols INTO v_DropGenSql;
-                IF v_DropGenDone THEN
-                    LEAVE drop_gen_cols_loop;
-                END IF;
+        -- Materialize: fold each table's generated-column drops into one multi-clause ALTER, then drain.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_GenColDropStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_GenColDropStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_GenColDropStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                      GROUP_CONCAT(CONCAT('DROP COLUMN `', ColumnName, '`') ORDER BY ColumnName SEPARATOR ', '))
+        FROM _SchemaSmith_GenColsToDrop
+        GROUP BY TableName;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop generated column: ', v_DropGenSql));
-                SET @exec_sql = v_DropGenSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_DropGenCols;
-        END;
+        SET @v_gencol_id := (SELECT MIN(RowId) FROM _SchemaSmith_GenColDropStmts);
+        WHILE @v_gencol_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_GenColDropStmts WHERE RowId = @v_gencol_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_gencol_id := (SELECT MIN(RowId) FROM _SchemaSmith_GenColDropStmts WHERE RowId > @v_gencol_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_GenColDropStmts;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_GenColsToDrop;
 
         -- Now drop the columns themselves
-        BEGIN
-            DECLARE v_DropColDone2 INT DEFAULT FALSE;
-            DECLARE v_DropColSql2 TEXT;
-            DECLARE cur_DropColumns CURSOR FOR
-                SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
-                              CONVERT(ctd.TableName USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                              '` DROP COLUMN `', CONVERT(ctd.ColumnName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`') AS DropColSql
-                FROM _SchemaSmith_ColumnsToDrop ctd
-                INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
-                    ON CONVERT(isc.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                    AND CONVERT(isc.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
-                    AND CONVERT(isc.COLUMN_NAME USING utf8mb4) = CONVERT(ctd.ColumnName USING utf8mb4)
-                -- Not a generated column (those were handled above)
-                WHERE (isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '');
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Drop column: ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
+                      CONVERT(ctd.TableName USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                      '` DROP COLUMN `', CONVERT(ctd.ColumnName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`')
+        FROM _SchemaSmith_ColumnsToDrop ctd
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON CONVERT(isc.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+            AND CONVERT(isc.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
+            AND CONVERT(isc.COLUMN_NAME USING utf8mb4) = CONVERT(ctd.ColumnName USING utf8mb4)
+        -- Not a generated column (those were handled above)
+        WHERE (isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '');
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropColDone2 = TRUE;
+        -- Materialize: fold each table's remaining column drops into one multi-clause ALTER, then drain.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ColDropStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_ColDropStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_ColDropStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
+                      CONVERT(ctd.TableName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '` ',
+                      GROUP_CONCAT(CONCAT('DROP COLUMN `', CONVERT(ctd.ColumnName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`') ORDER BY ctd.ColumnName SEPARATOR ', '))
+        FROM _SchemaSmith_ColumnsToDrop ctd
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON CONVERT(isc.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+            AND CONVERT(isc.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
+            AND CONVERT(isc.COLUMN_NAME USING utf8mb4) = CONVERT(ctd.ColumnName USING utf8mb4)
+        WHERE (isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
+        GROUP BY ctd.TableName;
 
-            SET v_DropColDone2 = FALSE;
-            OPEN cur_DropColumns;
-
-            drop_cols_loop: LOOP
-                FETCH cur_DropColumns INTO v_DropColSql2;
-                IF v_DropColDone2 THEN
-                    LEAVE drop_cols_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop column: ', v_DropColSql2));
-                SET @exec_sql = v_DropColSql2;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_DropColumns;
-        END;
+        SET @v_dropcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_ColDropStmts);
+        WHILE @v_dropcol_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_ColDropStmts WHERE RowId = @v_dropcol_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_dropcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_ColDropStmts WHERE RowId > @v_dropcol_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ColDropStmts;
     END IF;
 
     -- Clean up helper tables
@@ -1018,17 +1148,20 @@ BEGIN
                   WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
               );
         ELSE
-            -- Helper temp table + cursor mirrors the column-drop FK pattern above (avoids the MySQL
-            -- optimizer bug with INFORMATION_SCHEMA.KEY_COLUMN_USAGE joins and keeps DECLARE ordering).
+            -- Helper temp table mirrors the column-drop FK pattern above (avoids the MySQL
+            -- optimizer bug with INFORMATION_SCHEMA.KEY_COLUMN_USAGE joins), keyed on
+            -- (TableName, ConstraintName) like SchemaSmith_ForeignKeyQuench's approach.
             DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_InboundFKsToDrop;
             CREATE TEMPORARY TABLE _SchemaSmith_InboundFKsToDrop (
-                DropFKSql TEXT NOT NULL
+                TableName VARCHAR(128) NOT NULL,
+                ConstraintName VARCHAR(128) NOT NULL,
+                PRIMARY KEY (TableName, ConstraintName)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-            INSERT INTO _SchemaSmith_InboundFKsToDrop (DropFKSql)
-            SELECT DISTINCT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
-                                   CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                                   '` DROP FOREIGN KEY `', CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`')
+            INSERT IGNORE INTO _SchemaSmith_InboundFKsToDrop (TableName, ConstraintName)
+            SELECT DISTINCT
+                CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
             FROM SchemaSmith_ProductOwnership po
             INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
                 ON CONVERT(kcu.REFERENCED_TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
@@ -1051,33 +1184,31 @@ BEGIN
                   WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
               );
 
-            BEGIN
-                DECLARE v_DropInFKDone INT DEFAULT FALSE;
-                DECLARE v_DropInFKSql TEXT;
-                DECLARE cur_DropInboundFKs CURSOR FOR
-                    SELECT DropFKSql FROM _SchemaSmith_InboundFKsToDrop;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop inbound foreign keys referencing tables removed from product');
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Drop inbound FK: ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName,
+                          '` DROP FOREIGN KEY `', ConstraintName, '`')
+            FROM _SchemaSmith_InboundFKsToDrop;
 
-                DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropInFKDone = TRUE;
+            -- Materialize: fold each table's inbound FK drops into one multi-clause ALTER, then drain.
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_InboundFKDropStmts;
+            CREATE TEMPORARY TABLE _SchemaSmith_InboundFKDropStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+                ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            INSERT INTO _SchemaSmith_InboundFKDropStmts (Stmt)
+            SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                          GROUP_CONCAT(CONCAT('DROP FOREIGN KEY `', ConstraintName, '`') ORDER BY ConstraintName SEPARATOR ', '))
+            FROM _SchemaSmith_InboundFKsToDrop
+            GROUP BY TableName;
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop inbound foreign keys referencing tables removed from product');
-                SET v_DropInFKDone = FALSE;
-                OPEN cur_DropInboundFKs;
-
-                drop_inbound_fks_loop: LOOP
-                    FETCH cur_DropInboundFKs INTO v_DropInFKSql;
-                    IF v_DropInFKDone THEN
-                        LEAVE drop_inbound_fks_loop;
-                    END IF;
-
-                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop inbound FK: ', v_DropInFKSql));
-                    SET @exec_sql = v_DropInFKSql;
-                    PREPARE stmt FROM @exec_sql;
-                    EXECUTE stmt;
-                    DEALLOCATE PREPARE stmt;
-                END LOOP;
-
-                CLOSE cur_DropInboundFKs;
-            END;
+            SET @v_inboundfk_id := (SELECT MIN(RowId) FROM _SchemaSmith_InboundFKDropStmts);
+            WHILE @v_inboundfk_id IS NOT NULL DO
+                SELECT Stmt INTO @exec_sql FROM _SchemaSmith_InboundFKDropStmts WHERE RowId = @v_inboundfk_id;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+                SET @v_inboundfk_id := (SELECT MIN(RowId) FROM _SchemaSmith_InboundFKDropStmts WHERE RowId > @v_inboundfk_id);
+            END WHILE;
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_InboundFKDropStmts;
 
             DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_InboundFKsToDrop;
         END IF;
@@ -1114,68 +1245,93 @@ BEGIN
                   WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
               );
         ELSE
-            BEGIN
-                DECLARE v_DropTableDone INT DEFAULT FALSE;
-                DECLARE v_DropTableSql TEXT;
-                DECLARE v_DroppedTableName VARCHAR(128);
-                DECLARE cur_DropTables CURSOR FOR
-                    SELECT
-                        po.ObjectName AS TableName,
-                        CASE WHEN @has_custom_drop = 1
-                             THEN CONCAT('CALL SchemaSmith_CustomTableDrop(''', p_DatabaseName COLLATE utf8mb4_unicode_ci, ''', ''', po.ObjectName, ''')')
-                             ELSE CONCAT('DROP TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', po.ObjectName, '`')
-                             END AS DropSql
-                    FROM SchemaSmith_ProductOwnership po
-                    WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
-                      AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                      AND po.ObjectType = 'TABLE'
-                      -- Table exists
-                      AND EXISTS (
-                          SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                          WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                            AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
-                      )
-                      -- Not in current definition
-                      AND NOT EXISTS (
-                          SELECT 1 FROM _SchemaSmith_Tables t
-                          WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
-                      );
+            -- Materialize tables to drop: table name + the exact per-table drop statement
+            -- (CALL SchemaSmith_CustomTableDrop(...) when the hook is installed, else DROP TABLE).
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TablesToDrop;
+            CREATE TEMPORARY TABLE _SchemaSmith_TablesToDrop (
+                RowId INT AUTO_INCREMENT PRIMARY KEY,
+                TableName VARCHAR(128) NOT NULL,
+                DropSql TEXT NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-                DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropTableDone = TRUE;
+            INSERT INTO _SchemaSmith_TablesToDrop (TableName, DropSql)
+            SELECT
+                po.ObjectName,
+                CASE WHEN @has_custom_drop = 1
+                     THEN CONCAT('CALL SchemaSmith_CustomTableDrop(''', p_DatabaseName COLLATE utf8mb4_unicode_ci, ''', ''', po.ObjectName, ''')')
+                     ELSE CONCAT('DROP TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', po.ObjectName, '`')
+                     END
+            FROM SchemaSmith_ProductOwnership po
+            WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+              AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+              AND po.ObjectType = 'TABLE'
+              -- Table exists
+              AND EXISTS (
+                  SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+                  WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                    AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+              )
+              -- Not in current definition
+              AND NOT EXISTS (
+                  SELECT 1 FROM _SchemaSmith_Tables t
+                  WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+              );
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop tables removed from product');
-                SET v_DropTableDone = FALSE;
-                OPEN cur_DropTables;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop tables removed from product');
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Drop table: ', TableName)
+            FROM _SchemaSmith_TablesToDrop;
 
-                drop_tables_loop: LOOP
-                    FETCH cur_DropTables INTO v_DroppedTableName, v_DropTableSql;
-                    IF v_DropTableDone THEN
-                        LEAVE drop_tables_loop;
-                    END IF;
-
-                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop table: ', v_DroppedTableName));
-                    SET @exec_sql = v_DropTableSql;
+            IF @has_custom_drop = 1 THEN
+                -- The CustomTableDrop hook takes exactly one table per CALL, so multiple tables
+                -- can't fold into a single statement here. Drain via WHILE (still removes the
+                -- cursor, even though each row stays its own statement).
+                SET @v_droptbl_id := (SELECT MIN(RowId) FROM _SchemaSmith_TablesToDrop);
+                WHILE @v_droptbl_id IS NOT NULL DO
+                    SELECT DropSql INTO @exec_sql FROM _SchemaSmith_TablesToDrop WHERE RowId = @v_droptbl_id;
                     PREPARE stmt FROM @exec_sql;
                     EXECUTE stmt;
                     DEALLOCATE PREPARE stmt;
+                    SET @v_droptbl_id := (SELECT MIN(RowId) FROM _SchemaSmith_TablesToDrop WHERE RowId > @v_droptbl_id);
+                END WHILE;
+            ELSE
+                -- Fold ALL tables to drop into ONE multi-target DROP TABLE statement.
+                DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropTableFoldStmt;
+                CREATE TEMPORARY TABLE _SchemaSmith_DropTableFoldStmt (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+                    ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                INSERT INTO _SchemaSmith_DropTableFoldStmt (Stmt)
+                SELECT CONCAT('DROP TABLE ',
+                              GROUP_CONCAT(CONCAT('`', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`') ORDER BY TableName SEPARATOR ', '))
+                FROM _SchemaSmith_TablesToDrop
+                HAVING COUNT(*) > 0;
 
-                    -- Remove from ProductOwnership
-                    DELETE FROM SchemaSmith_ProductOwnership
-                    WHERE CONVERT(ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
-                      AND CONVERT(ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                      AND ObjectType = 'TABLE'
-                      AND CONVERT(ObjectName USING utf8mb4) = CONVERT(v_DroppedTableName USING utf8mb4);
+                SET @v_droptblfold_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropTableFoldStmt);
+                WHILE @v_droptblfold_id IS NOT NULL DO
+                    SELECT Stmt INTO @exec_sql FROM _SchemaSmith_DropTableFoldStmt WHERE RowId = @v_droptblfold_id;
+                    PREPARE stmt FROM @exec_sql;
+                    EXECUTE stmt;
+                    DEALLOCATE PREPARE stmt;
+                    SET @v_droptblfold_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropTableFoldStmt WHERE RowId > @v_droptblfold_id);
+                END WHILE;
+                DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropTableFoldStmt;
+            END IF;
 
-                    -- Also remove related indexes from ProductOwnership
-                    DELETE FROM SchemaSmith_ProductOwnership
-                    WHERE CONVERT(ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
-                      AND CONVERT(ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                      AND ObjectType = 'INDEX'
-                      AND CONVERT(SUBSTRING_INDEX(ObjectName, '.', 1) USING utf8mb4) = CONVERT(v_DroppedTableName USING utf8mb4);
-                END LOOP;
+            -- Remove dropped tables (and their indexes) from ProductOwnership, set-based.
+            DELETE po FROM SchemaSmith_ProductOwnership po
+            INNER JOIN _SchemaSmith_TablesToDrop d
+                ON CONVERT(po.ObjectName USING utf8mb4) = CONVERT(d.TableName USING utf8mb4)
+            WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+              AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+              AND po.ObjectType = 'TABLE';
 
-                CLOSE cur_DropTables;
-            END;
+            DELETE po FROM SchemaSmith_ProductOwnership po
+            INNER JOIN _SchemaSmith_TablesToDrop d
+                ON CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4) = CONVERT(d.TableName USING utf8mb4)
+            WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+              AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+              AND po.ObjectType = 'INDEX';
+
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TablesToDrop;
         END IF;
     END IF;
 
