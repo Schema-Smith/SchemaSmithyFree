@@ -12,15 +12,17 @@
   "DataDelivery": [
     {
       "ContentFile": "data/dbo.StatusCode.core.tabledata",
-      "MergeType": "Insert/Update",
+      "MergeType": "Insert/Update/Delete",
       "MatchColumns": "Code",
+      "MergeFilter": "Target.Region = 'GLOBAL'",
       "ShouldApplyExpression": "DB_NAME() = 'cookbook_r7_main'",
       "VariantName": "Core status codes"
     },
     {
       "ContentFile": "data/dbo.StatusCode.regional.tabledata",
-      "MergeType": "Insert/Update",
+      "MergeType": "Insert/Update/Delete",
       "MatchColumns": "Code",
+      "MergeFilter": "Target.Region IN ('EMEA','APAC')",
       "ShouldApplyExpression": "DB_NAME() = 'cookbook_r7_main'",
       "VariantName": "Regional status codes"
     }
