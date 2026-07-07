@@ -60,7 +60,8 @@ public static class ConfigHelper
 #if DEBUG
                 .AddUserSecrets(Assembly.GetCallingAssembly(), optional: true)
 #endif
-                .AddEnvironmentVariables("SmithySettings_");
+                .AddEnvironmentVariables("SmithySettings_")
+                .AddInMemoryCollection(CommandLineParser.ConfigOverrides);
 
             config = builder.Build();
             FactoryContainer.Register(config);

@@ -316,4 +316,86 @@ public class CommandLineParserTests
         Assert.That(switches.ContainsKey("key"), Is.True);
         Assert.That(switches["key"], Is.EqualTo("value"));
     }
+
+    [Test]
+    public void ConfigOverrides_FlatKey_EqualsForm()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --MinimumVersion=5");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides["MinimumVersion"], Is.EqualTo("5"));
+    }
+
+    [Test]
+    public void ConfigOverrides_NestedKey_DoubleUnderscoreBecomesColon()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Source__Server=myhost");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides["Source:Server"], Is.EqualTo("myhost"));
+    }
+
+    [Test]
+    public void ConfigOverrides_ValueMayContainColon()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Source__Server=host:1433");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides["Source:Server"], Is.EqualTo("host:1433"));
+    }
+
+    [Test]
+    public void ConfigOverrides_ValueMayContainEquals()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Target__ConnProp=Encrypt=true");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides["Target:ConnProp"], Is.EqualTo("Encrypt=true"));
+    }
+
+    [Test]
+    public void ConfigOverrides_QuotedValue_IsUnquoted()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Foo=\"a b\"");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides["Foo"], Is.EqualTo("a b"));
+    }
+
+    [Test]
+    public void ConfigOverrides_SlashPrefix_Supported()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe /Foo__Bar=1");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides["Foo:Bar"], Is.EqualTo("1"));
+    }
+
+    [Test]
+    public void ConfigOverrides_LegacyColonSwitch_IsNotAnOverride()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --LogPath:c:\\logs");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides, Is.Empty);
+    }
+
+    [Test]
+    public void ConfigOverrides_FlagSwitch_IsNotAnOverride()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --verbose");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides, Is.Empty);
+    }
+
+    [Test]
+    public void ConfigOverrides_EmptyKey_IsSkipped()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --=foo");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides, Is.Empty);
+    }
+
+    [Test]
+    public void ConfigOverrides_MixedSwitches_ReturnsOnlyEqualsForms()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --A=1 --B__C=2 --LogPath:x --flag");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides, Has.Count.EqualTo(2));
+        Assert.That(overrides["A"], Is.EqualTo("1"));
+        Assert.That(overrides["B:C"], Is.EqualTo("2"));
+    }
 }
