@@ -2,6 +2,7 @@
 
 using System.Data;
 using System;
+using System.Linq;
 
 using NUnit.Framework;
 using Schema.DataAccess;
@@ -128,7 +129,7 @@ CREATE TABLE `{_testDb}`.`{tableName.Replace("`", "``")}` (
         Assert.That(script, Does.Not.Contain("REPLACE INTO"));
         Assert.That(script, Does.Contain($"INSERT INTO `{_testDb}`.`actor`"));
         Assert.That(script, Does.Contain("ON DUPLICATE KEY UPDATE"));
-        Assert.That(script, Does.Contain($"DELETE t FROM `{_testDb}`.`actor` t"));
+        Assert.That(script, Does.Contain($"DELETE Target FROM `{_testDb}`.`actor` Target"));
         Assert.That(script, Does.Contain("NOT EXISTS"));
         Assert.That(script, Does.Contain("JSON_TABLE("));
         Assert.That(script, Does.Contain("`first_name` VARCHAR(45) PATH '$.first_name'"));
@@ -506,6 +507,67 @@ CREATE TABLE `{_testDb}`.`{tableName.Replace("`", "``")}` (
 
             command.CommandText = $"SELECT release_year FROM `{_testDb}`.`{tableName}` WHERE id = 3";
             Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0));
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void BuildMergeScript_FullSyncDelete_WithPortableMergeFilter_ScopesDeletionToFilterMatch()
+    {
+        // #333: a MergeFilter authored portably as `Target.<col>` must resolve on MySQL
+        // (previously failed with "Unknown column 'Target.region'" — delete aliased the table `t`).
+        // MergeFilter scopes which rows are even eligible for deletion (docs: schema-packages.md
+        // MergeFilter) — rows outside the filter's scope are never removed, regardless of whether
+        // they're present in the incoming source data.
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_merge_filter_{Guid.NewGuid():N}".Substring(0, 40);
+
+        try
+        {
+            command.CommandText = $@"
+                CREATE TABLE `{_testDb}`.`{tableName}` (
+                    id INT PRIMARY KEY,
+                    region VARCHAR(20) NOT NULL
+                )";
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"
+                INSERT INTO `{_testDb}`.`{tableName}` (id, region) VALUES
+                    (1, 'KEEP'),
+                    (2, 'KEEP'),
+                    (3, 'OTHER')";
+            command.ExecuteNonQuery();
+
+            // Source data only carries row 1 (region 'KEEP'). Row 2 is in-scope (region 'KEEP')
+            // but absent from source, so it must be deleted. Row 3 is out-of-scope (region
+            // 'OTHER') so it must survive even though it's also absent from source.
+            var tableData = @"[{""id"":1,""region"":""KEEP""}]";
+
+            var script = MergeScriptHelper.BuildMergeScript(Platform.MySQL, command, _testDb, tableName,
+                tableData, "`id`", true, true, false, false, "Target.region = 'KEEP'");
+
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
+                         .Where(batch => !string.IsNullOrWhiteSpace(batch)))
+            {
+                command.CommandText = batch;
+                command.ExecuteNonQuery();
+            }
+
+            command.CommandText = $"SELECT COUNT(*) FROM `{_testDb}`.`{tableName}`";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(2));
+
+            command.CommandText = $"SELECT region FROM `{_testDb}`.`{tableName}` WHERE id = 1";
+            Assert.That(command.ExecuteScalar()?.ToString(), Is.EqualTo("KEEP"));
+
+            command.CommandText = $"SELECT COUNT(*) FROM `{_testDb}`.`{tableName}` WHERE id = 2";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0));
+
+            command.CommandText = $"SELECT region FROM `{_testDb}`.`{tableName}` WHERE id = 3";
+            Assert.That(command.ExecuteScalar()?.ToString(), Is.EqualTo("OTHER"));
         }
         finally
         {

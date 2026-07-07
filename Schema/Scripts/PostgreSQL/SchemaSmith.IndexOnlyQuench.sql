@@ -95,41 +95,7 @@ BEGIN
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, false);
 
     RAISE NOTICE 'Collect Existing Indexes';
-    DROP TABLE IF EXISTS temp_existing_indexes;
-    CREATE TEMPORARY TABLE temp_existing_indexes AS
-      SELECT t."Schema" AS "TableSchema",
-             t."Name" AS "TableName",
-             i.relname AS "IndexName",
-             (SELECT STRING_AGG(a.attname || CASE WHEN (idx.indoption[idx] & 1) = 1 THEN ' DESC' ELSE '' END, ',' ORDER BY idx)
-                FROM pg_attribute a
-                CROSS JOIN LATERAL UNNEST(idx.indkey) WITH ORDINALITY AS u(element, idx)
-                WHERE a.attrelid = idx.indrelid
-                  AND idx <= idx.indnkeyatts
-                  AND a.attnum = element) AS "IndexColumns",
-             (SELECT STRING_AGG(a.attname, ',' ORDER BY idx)
-                FROM pg_attribute a
-                CROSS JOIN LATERAL UNNEST(idx.indkey) WITH ORDINALITY AS u(element, idx)
-                WHERE a.attrelid = idx.indrelid
-                  AND idx > idx.indnkeyatts
-                  AND a.attnum = element) AS "IncludeColumns",
-             idx.indisunique AS "Unique",
-             CAST(CASE WHEN EXISTS (SELECT * FROM pg_catalog.pg_constraint con WHERE con.contype = 'u' AND con.conrelid = idx.indrelid AND con.conname = i.relname)
-                       THEN TRUE ELSE FALSE END AS BOOLEAN) AS "UniqueConstraint",
-             idx.indisprimary AS "PrimaryKey",
-             idx.indisclustered AS "Clustered",
-             PG_GET_EXPR(idx.indpred, idx.indrelid) AS "FilterExpression",
-             (SELECT am.amname FROM pg_am am WHERE i.relam = am.oid AND i.relkind = 'i') AS "AccessMethod",
-             CASE WHEN 'fillfactor=100' = ANY(i.reloptions) THEN 100
-                  WHEN i.reloptions IS NULL THEN 90 -- Default for B-tree indexes
-                  ELSE (regexp_match(array_to_string(i.reloptions, ','), 'fillfactor=(\d+)') ) [1] ::int
-                  END AS "FillFactor",
-             idx.indnullsnotdistinct AS "NullsNotDistinct",
-             COALESCE(con.condeferrable, FALSE) AS "Deferrable",
-             COALESCE(con.condeferred, FALSE) AS "InitiallyDeferred"
-        FROM temp_tables t
-        JOIN pg_index idx ON idx.indrelid = ('"' || t."Schema" || '"' ||  '.' || '"' ||  t."Name" || '"')::regclass
-        JOIN pg_class i ON i.oid = idx.indexrelid
-        LEFT JOIN pg_catalog.pg_constraint con ON con.conrelid = idx.indrelid AND con.conname = i.relname AND con.contype IN ('p', 'u');
+    CALL "SchemaSmith"."BuildExistingIndexesSnapshot"();
 
     RAISE NOTICE 'Handle Renamed Indexes And Unique Constraints';
     SELECT STRING_AGG('RAISE NOTICE ''  Renaming ' || CASE WHEN ei."PrimaryKey" OR ei."UniqueConstraint" THEN 'Constraint' ELSE 'Index' END || ' ' || ei."TableSchema" || '.' || ei."TableName" || '.' || ei."IndexName" || ' to ' || i."Name" || ''';' || CHR(10) ||
@@ -235,11 +201,11 @@ BEGIN
                                      ELSE 'UNIQUE ' || CASE WHEN ti."NullsNotDistinct" THEN 'NULLS NOT DISTINCT ' ELSE '' END
                                      END ||
                                 '(' || "SchemaSmith"."QuoteIndexColumnList"(ti."IndexColumns") || ')' ||
-                                CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
-                                CASE WHEN ti."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END ||
                                 CASE WHEN COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
                                      THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
-                                     ELSE '' END || ';'
+                                     ELSE '' END ||
+                                CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
+                                CASE WHEN ti."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END || ';'
                            ELSE 'CREATE ' || CASE WHEN ti."Unique" THEN 'UNIQUE ' ELSE '' END || 'INDEX "' || ti."Name" || '" ON "' || ti."TableSchema" || '"."' || ti."TableName" || '" ' ||
                                 'USING ' || COALESCE(ti."AccessMethod", 'btree') || ' ' ||
                                 '(' || "SchemaSmith"."QuoteIndexColumnList"(ti."IndexColumns") || ')' ||

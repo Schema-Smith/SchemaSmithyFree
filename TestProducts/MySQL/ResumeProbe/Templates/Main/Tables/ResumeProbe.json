@@ -1,0 +1,12 @@
+{
+    "Name": "`ResumeProbe`",
+    "Engine": "InnoDB",
+    "Columns": [
+        {"Name": "`Id`","DataType": "INT","Nullable": false},
+        {"Name": "`Name`","DataType": "VARCHAR(100)","Nullable": true}
+    ],
+    "Indexes": [
+        {"Name": "PRIMARY","PrimaryKey": true,"IndexColumns": "`Id`"},
+        {"Name": "idx_ResumeProbe_Name","IndexColumns": "`Name`"}
+    ]
+}

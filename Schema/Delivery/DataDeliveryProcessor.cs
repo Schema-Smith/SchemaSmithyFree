@@ -210,6 +210,14 @@ public class DataDeliveryProcessor : IDataDelivery
             tablesToDeliver = remaining;
         }
 
+        // Deliveries that survive the dependency-retry while-loop and still fail here (or in pass 2)
+        // are PERMANENT failures — not transient dependency-ordering ones. They are logged (+ artifact
+        // written) per delivery below, but a permanent failure must also fail the whole deploy (exit 2)
+        // rather than shipping "green" with a silent data gap (#334). Accumulate them and throw one
+        // aggregate at the very end, after every deliverable table has been attempted ("deliver what
+        // you can, then fail").
+        var permanentFailures = new List<string>();
+
         foreach (var table in tablesToDeliver)
         {
             try
@@ -219,6 +227,7 @@ public class DataDeliveryProcessor : IDataDelivery
             catch (Exception ex)
             {
                 logError($"    Error delivering {DataDeliveryHelper.GetTableKey(table, context.Platform)}: {ex.Message}");
+                permanentFailures.Add(DataDeliveryHelper.GetTableKey(table, context.Platform));
             }
         }
 
@@ -255,13 +264,22 @@ public class DataDeliveryProcessor : IDataDelivery
                         if (artifactWritten.Add(artifactKey))
                             context.WriteResolvedSqlArtifact?.Invoke(artifactKey, mergeScript);
                         logError($"    Error in pass 2 for {tableKey}: {ex.Message}");
+                        permanentFailures.Add(tableKey);
                     }
                 }
             }
             catch (Exception ex)
             {
                 logError($"    Error in pass 2 for {DataDeliveryHelper.GetTableKey(table, platform)}: {ex.Message}");
+                permanentFailures.Add(DataDeliveryHelper.GetTableKey(table, platform));
             }
+        }
+
+        if (permanentFailures.Count > 0)
+        {
+            var failed = permanentFailures.Distinct().ToList();
+            throw new InvalidOperationException(
+                $"Data delivery failed for {failed.Count} table(s): {string.Join(", ", failed)}");
         }
     }
 

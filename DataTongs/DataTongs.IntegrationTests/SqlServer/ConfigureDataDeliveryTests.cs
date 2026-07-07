@@ -2,6 +2,8 @@
 
 using System;
 using System.IO;
+using System.Linq;
+using DataTongs.IntegrationTests.Support;
 using log4net;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
@@ -103,10 +105,7 @@ public class ConfigureDataDeliveryTests
 
             file.Received(1).WriteAllText(
                 TableJsonPath,
-                Arg.Is<string>(s =>
-                    s.ContainsIgnoringCase("\"DataDelivery\":") &&
-                    s.ContainsIgnoringCase("\"ContentFile\":") &&
-                    s.ContainsIgnoringCase("\"MergeType\": \"Insert/Update\"")));
+                Arg.Is<string>(s => DataDeliveryHas(s, "Content/dbo.TestTable.tabledata", "Insert/Update")));
 
             errorLog.DidNotReceive().Error(Arg.Any<string>());
 
@@ -418,13 +417,8 @@ public class ConfigureDataDeliveryTests
             file.Received(1).WriteAllText(
                 TableJsonPath,
                 Arg.Is<string>(s =>
-                    s.ContainsIgnoringCase("\"ContentFile\": \"Content/dbo.TestTable.tabledata\"") &&
-                    s.ContainsIgnoringCase("\"ShouldApplyExpression\": \"Target.Region == 'EU'\"") &&
-                    s.ContainsIgnoringCase("\"VariantName\": \"EU\"") &&
-                    s.ContainsIgnoringCase("\"ContentFile\": \"Content/dbo.TestTable.us.tabledata\"") &&
-                    s.ContainsIgnoringCase("\"MergeType\": \"Insert\"") &&
-                    s.ContainsIgnoringCase("\"ShouldApplyExpression\": \"Target.Region == 'US'\"") &&
-                    s.ContainsIgnoringCase("\"VariantName\": \"US\"")));
+                    DataDeliveryHasVariant(s, "EU", "Content/dbo.TestTable.tabledata", "Insert/Update", "Target.Region == 'EU'") &&
+                    DataDeliveryHasVariant(s, "US", "Content/dbo.TestTable.us.tabledata", "Insert", "Target.Region == 'US'")));
 
             errorLog.DidNotReceive().Error(Arg.Any<string>());
 
@@ -436,13 +430,37 @@ public class ConfigureDataDeliveryTests
         }
     }
 
-    private IConfigurationRoot _originalConfig;
+    private static bool DataDeliveryHas(string tableJson, string contentFile, string mergeType)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(tableJson);
+        if (!doc.RootElement.TryGetProperty("DataDelivery", out var dd)) return false;
+        var variants = dd.ValueKind == System.Text.Json.JsonValueKind.Array
+            ? dd.EnumerateArray()
+            : new[] { dd }.AsEnumerable();
+        return variants.Any(v =>
+            v.TryGetProperty("ContentFile", out var cf) && cf.GetString() == contentFile &&
+            v.TryGetProperty("MergeType", out var mt) && mt.GetString() == mergeType);
+    }
+
+    private static bool DataDeliveryHasVariant(string tableJson, string variantName, string contentFile, string mergeType, string shouldApply)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(tableJson);
+        if (!doc.RootElement.TryGetProperty("DataDelivery", out var dd)) return false;
+        var variants = dd.ValueKind == System.Text.Json.JsonValueKind.Array ? dd.EnumerateArray() : new[] { dd }.AsEnumerable();
+        return variants.Any(v =>
+            v.TryGetProperty("VariantName", out var vn) && vn.GetString() == variantName &&
+            v.TryGetProperty("ContentFile", out var cf) && cf.GetString() == contentFile &&
+            v.TryGetProperty("MergeType", out var mt) && mt.GetString() == mergeType &&
+            v.TryGetProperty("ShouldApplyExpression", out var sa) && sa.GetString() == shouldApply);
+    }
+
+    private IsolatedConfigScope _configScope;
 
     private IConfigurationRoot SetupSourceConfig()
     {
-        _originalConfig = FactoryContainer.Resolve<IConfigurationRoot>();
-
-        var config = ConfigHelper.GetAppSettingsAndUserSecrets("test", null);
+        ConfigHelper.GetAppSettingsAndUserSecrets("test", null); // ensure the base config is registered before snapshot
+        _configScope = IsolatedConfigScope.Create();
+        var config = _configScope.Config;
         config["Source:Server"] = config["SqlServer:Server"] ?? "127.0.0.1";
         config["Source:Port"] = config["SqlServer:Port"];
         config["Source:User"] = config["SqlServer:User"];
@@ -450,17 +468,13 @@ public class ConfigureDataDeliveryTests
         config["Source:Database"] = _integrationDb;
         foreach (var prop in ConnectionString.ReadProperties(config, "SqlServer:ConnectionProperties"))
             config[$"Source:ConnectionProperties:{prop.Key}"] = prop.Value;
-        FactoryContainer.Register<IConfigurationRoot>(config);
         return config;
     }
 
     private void RestoreConfig()
     {
-        if (_originalConfig != null)
-            FactoryContainer.Register<IConfigurationRoot>(_originalConfig);
-        else
-            FactoryContainer.Unregister<IConfigurationRoot>();
-        _originalConfig = null;
+        _configScope?.Dispose();
+        _configScope = null;
     }
 
     private static void ResetStaticState()

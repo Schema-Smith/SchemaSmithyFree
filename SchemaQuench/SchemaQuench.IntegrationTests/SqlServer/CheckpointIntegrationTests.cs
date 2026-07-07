@@ -352,6 +352,74 @@ KindleForge
         }
     }
 
+    [Test]
+    public void ShouldResumeSuccessfullyWhenModifiedTablesAlreadyCheckpointed()
+    {
+        // Parity guard for #332 (Rule 20): the PostgreSQL fix rebuilds temp_existing_indexes when a
+        // resumed run skipped the ModifiedTables step that normally builds it. SQL Server rebuilds
+        // its #-temp state per consuming step, so seeding ModifiedTables complete and resuming must
+        // NOT crash here — no engine-code change required. Locks in cross-engine parity.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks(); // sets "--SkipKindlingForge --ResumeQuench"
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", "ResumeProbe");
+            FactoryContainer.Resolve<IConfigurationRoot>()["CheckpointDirectory"] = _checkpointDir;
+
+            // Guard against a fresh (unkindled) CI database: SkipKindlingForge assumes
+            // _mainDb is already kindled, which is only true locally by test-run history.
+            // A no-op when already kindled, so it can't change the local-pass behavior.
+            using (var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
+            {
+                conn.Open();
+                conn.ChangeDatabase(_mainDb);
+                using var cmd = conn.CreateCommand();
+                ForgeKindler.KindleTheForge(cmd, Platform.SqlServer, forceReKindle: false);
+            }
+
+            var product = Product.Load();
+            var dbCheckpointContent = $@"# SchemaQuench Database Checkpoint
+# Product: {product.Name}
+# Template: Main
+# Server: {_server}
+# Database: {_mainDb}
+# Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+
+[Completed Steps]
+MissingTablesAndColumns
+ModifiedTables
+
+[Before Scripts]
+
+[Object Scripts]
+
+[After Tables Object Scripts]
+
+[Between Tables And Keys Scripts]
+
+[After Table Scripts]
+
+[Table Data Scripts]
+
+[After Scripts]
+";
+            var dbCheckpointPath = Path.Join(_checkpointDir,
+                Path.GetFileName($"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.{FileNameEncoder.Encode("")}.checkpoint"));
+            Directory.CreateDirectory(_checkpointDir);
+            File.WriteAllText(dbCheckpointPath, dbCheckpointContent);
+
+            RunSchemaQuench();
+
+            // Parity signal: a resumed run that skipped ModifiedTables must not crash on missing
+            // session temp state — the run converges to a clean (zero) exit.
+            _environment.DidNotReceive().Exit(Arg.Is<int>(c => c != 0));
+
+            LogFactory.Clear();
+            FactoryContainer.Unregister<IEnvironment>();
+            FactoryContainer.Unregister<Schema.Checkpointing.ICheckpointing>();
+        }
+    }
+
     private static bool HelperProcExists(IDbCommand cmd)
     {
         cmd.CommandText = "SELECT COUNT(*) FROM sys.procedures WHERE schema_id = SCHEMA_ID('SchemaSmith') AND name = 'TableQuench'";

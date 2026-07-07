@@ -299,6 +299,103 @@ KindleForge
         }
     }
 
+    [Test]
+    public void ShouldResumeSuccessfullyWhenModifiedTablesAlreadyCheckpointed()
+    {
+        // Regression for #332: temp_existing_indexes is built by the ModifiedTables step but
+        // consumed by IndexesAndConstraints. On resume with ModifiedTables checkpointed, the
+        // fresh session must rebuild the snapshot instead of crashing with
+        // 42P01 relation "temp_existing_indexes" does not exist.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks(); // sets "--SkipKindlingForge --ResumeQuench"
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", "ResumeProbe");
+            FactoryContainer.Resolve<IConfigurationRoot>()["CheckpointDirectory"] = _checkpointDir;
+
+            var product = Product.Load();
+            var dbCheckpointContent = $@"# SchemaQuench Database Checkpoint
+# Product: {product.Name}
+# Template: Main
+# Server: {_server}
+# Database: {_mainDb}
+# Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+
+[Completed Steps]
+MissingTablesAndColumns
+ModifiedTables
+
+[Before Scripts]
+
+[Object Scripts]
+
+[After Tables Object Scripts]
+
+[Between Tables And Keys Scripts]
+
+[After Table Scripts]
+
+[Table Data Scripts]
+
+[After Scripts]
+";
+            var dbCheckpointPath = Path.Join(_checkpointDir,
+                Path.GetFileName($"{FileNameEncoder.Encode(product.Name)}.{FileNameEncoder.Encode("Main")}.{FileNameEncoder.Encode(_server)}.{FileNameEncoder.Encode(_mainDb)}.{FileNameEncoder.Encode("")}.checkpoint"));
+            Directory.CreateDirectory(_checkpointDir);
+            File.WriteAllText(dbCheckpointPath, dbCheckpointContent);
+
+            // Guard against a fresh (unkindled) CI database: SkipKindlingForge assumes
+            // _mainDb is already kindled, which is only true locally by test-run history.
+            // A no-op when already kindled, so it can't change the local-pass behavior.
+            using (var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString))
+            {
+                conn.Open();
+                conn.ChangeDatabase(_mainDb);
+                using var cmd = conn.CreateCommand();
+                ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL, forceReKindle: false);
+                conn.Close();
+            }
+
+            RunSchemaQuench();
+
+            _errorLog.DidNotReceive().Error(Arg.Is<object>(o => o != null && o.ToString().Contains("temp_existing_indexes")));
+            _environment.DidNotReceive().Exit(Arg.Is<int>(c => c != 0));
+
+            LogFactory.Clear();
+            FactoryContainer.Unregister<IEnvironment>();
+            FactoryContainer.Unregister<Schema.Checkpointing.ICheckpointing>();
+        }
+    }
+
+    [Test]
+    public void ShouldStartFreshWhenNotResuming_EvenWithSeededCheckpoint()
+    {
+        // #332 Dimension 2: --ResumeQuench is opt-in. Without it, a leftover checkpoint from a
+        // prior failed run must be discarded so the run starts fresh (not silently resumed).
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            _environment.CommandLine.Returns("--SkipKindlingForge"); // NOTE: no --ResumeQuench
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", "ValidProduct");
+            FactoryContainer.Resolve<IConfigurationRoot>()["CheckpointDirectory"] = _checkpointDir;
+
+            var product = Product.Load();
+            var seeded = Path.Join(_checkpointDir, $"{FileNameEncoder.Encode(product.Name)}.product.checkpoint");
+            Directory.CreateDirectory(_checkpointDir);
+            File.WriteAllText(seeded, "# Seeded\n[Completed Templates]\nTemplate:Main\n");
+
+            RunSchemaQuench();
+
+            _progressLog.DidNotReceive().Info(Arg.Is<string>(s => s.Contains("Resuming from checkpoint")));
+            _progressLog.DidNotReceive().Info(Arg.Is<string>(s => s.Contains("previously completed per checkpoint")));
+
+            LogFactory.Clear();
+            FactoryContainer.Unregister<IEnvironment>();
+            FactoryContainer.Unregister<Schema.Checkpointing.ICheckpointing>();
+        }
+    }
+
     private static bool HelperProcExists(IDbCommand cmd)
     {
         cmd.CommandText = @"

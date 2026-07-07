@@ -597,7 +597,7 @@ public class MergeScriptHelperTests
         Assert.That(result, Does.Contain("INSERT INTO `testdb`.`testtable`"));
         Assert.That(result, Does.Contain("ON DUPLICATE KEY UPDATE"));
         // Should have a delete pass for rows not in source (MySQL multi-table delete syntax)
-        Assert.That(result, Does.Contain("DELETE t FROM `testdb`.`testtable` t"));
+        Assert.That(result, Does.Contain("DELETE Target FROM `testdb`.`testtable` Target"));
         Assert.That(result, Does.Contain("NOT EXISTS"));
     }
 
@@ -617,8 +617,8 @@ public class MergeScriptHelperTests
             tokenizeScripts: false, mergeFilter: null);
 
         // Delete pass should join on both key columns
-        Assert.That(result, Does.Contain("t.`id` = jt.`id`"));
-        Assert.That(result, Does.Contain("t.`code` = jt.`code`"));
+        Assert.That(result, Does.Contain("Target.`id` = jt.`id`"));
+        Assert.That(result, Does.Contain("Target.`code` = jt.`code`"));
     }
 
     [Test]
@@ -633,10 +633,32 @@ public class MergeScriptHelperTests
         var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
             "testdb", "testtable", "[]", "`id`",
             mergeUpdate: true, mergeDelete: true, disableTriggers: false,
-            tokenizeScripts: false, mergeFilter: "t.`category` = 'active'");
+            tokenizeScripts: false, mergeFilter: "Target.`category` = 'active'");
 
         // Delete pass should include the merge filter
-        Assert.That(result, Does.Contain("t.`category` = 'active'"));
+        Assert.That(result, Does.Contain("Target.`category` = 'active'"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_FullSyncDelete_UsesTargetAlias_ForPortableMergeFilter()
+    {
+        // #333: MySQL delete must alias the target `Target` (like SS/PG) so a portable
+        // MergeFilter `Target.<col>` resolves instead of failing "Unknown column 'Target.Region'".
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("Region", "varchar", 50L, null, null, null, "varchar(50)", "", null)
+        });
+
+        var script = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable", "[]", "`id`",
+            mergeUpdate: true, mergeDelete: true, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: "Target.Region = 'GLOBAL'");
+
+        Assert.That(script, Does.Contain("DELETE Target FROM"));
+        Assert.That(script, Does.Not.Contain("DELETE t FROM"));
+        Assert.That(script, Does.Contain("Target.`")); // key predicate now Target-aliased
+        Assert.That(script, Does.Contain("AND (Target.Region = 'GLOBAL')"));
     }
 
     [Test]
@@ -655,7 +677,7 @@ public class MergeScriptHelperTests
             tokenizeScripts: false, mergeFilter: null);
 
         Assert.That(result, Does.Not.Contain("REPLACE INTO"));
-        Assert.That(result, Does.Contain("DELETE t FROM `testdb`.`testtable` t"));
+        Assert.That(result, Does.Contain("DELETE Target FROM `testdb`.`testtable` Target"));
     }
 
     [Test]

@@ -16,9 +16,8 @@ public static class LogBackup
             var directory = DirectoryWrapper.GetFromFactory();
             var file = FileWrapper.GetFromFactory();
             var ext = 0;
-            var toolDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-            var cwd = CommandLineParser.ValueOfSwitch("LogPath", null) ?? toolDir;
+            var cwd = ConfigHelper.ResolveLogPath();
             backupDir = Path.Combine(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");
             while (directory.Exists(backupDir))
                 backupDir = Path.Combine(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");

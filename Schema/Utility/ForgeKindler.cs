@@ -217,6 +217,7 @@ public static class ForgeKindler
                 new("SchemaSmith.FixupTableOwnership.sql"),
                 new("SchemaSmith.FixupIndexOwnership.sql"),
                 new("SchemaSmith.MissingTableAndColumnQuench.sql"),
+                new("SchemaSmith.BuildExistingIndexesSnapshot.sql"),
                 new("SchemaSmith.ModifiedTableQuench.sql"),
                 new("SchemaSmith.MissingIndexesAndConstraintsQuench.sql"),
                 new("SchemaSmith.ForeignKeyQuench.sql"),

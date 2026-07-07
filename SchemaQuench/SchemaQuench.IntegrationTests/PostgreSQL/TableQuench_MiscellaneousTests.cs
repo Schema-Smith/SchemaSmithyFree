@@ -676,4 +676,117 @@ COMMIT;
 
         conn.Close();
     }
+
+    [Test]
+    public void ShouldNotRecreateDeferrablePrimaryKeyOnSecondIndexOnlyQuench()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"def_pk_{uniqueId}";
+        var pkName = $"pk_{tableName}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        // Pre-create the table with a DEFERRABLE primary key via raw DDL (a realistic pre-existing
+        // deferrable PK). The quench then only has to recognize it as unchanged, not create it.
+        cmd.CommandText = $@"
+CREATE TABLE public.{tableName} (id INT NOT NULL);
+ALTER TABLE public.{tableName} ADD CONSTRAINT ""{pkName}"" PRIMARY KEY (id) DEFERRABLE;";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+        {
+            "Schema": "public",
+            "Name": "{{tableName}}",
+            "Indexes": [
+                {"Name": "{{pkName}}", "PrimaryKey": true, "Unique": true, "IndexColumns": "id", "Deferrable": true}
+            ]
+        }
+        """;
+
+        cmd.CommandText = $@"
+SELECT c.oid::text, c.condeferrable
+FROM pg_constraint c
+JOIN pg_class t ON c.conrelid = t.oid
+JOIN pg_namespace n ON t.relnamespace = n.oid
+WHERE n.nspname = 'public' AND t.relname = '{tableName}' AND c.contype = 'p'";
+        string baselineOid;
+        using (var reader = cmd.ExecuteReader())
+        {
+            Assert.That(reader.Read(), Is.True, "Deferrable primary key should exist before quench");
+            baselineOid = reader.GetString(0);
+            Assert.That(reader.GetBoolean(1), Is.True, "Primary key should be DEFERRABLE before quench");
+        }
+
+        // The quench must be a no-op — the deferrable PK must NOT phantom drop/recreate.
+        RunTableQuenchProc(cmd, json, indexOnly: true);
+
+        cmd.CommandText = $@"
+SELECT c.oid::text, c.condeferrable
+FROM pg_constraint c
+JOIN pg_class t ON c.conrelid = t.oid
+JOIN pg_namespace n ON t.relnamespace = n.oid
+WHERE n.nspname = 'public' AND t.relname = '{tableName}' AND c.contype = 'p'";
+        using (var reader = cmd.ExecuteReader())
+        {
+            Assert.That(reader.Read(), Is.True, "Deferrable primary key should still exist after quench");
+            Assert.That(reader.GetString(0), Is.EqualTo(baselineOid), "Primary key must not be dropped/recreated by the quench (stable oid)");
+            Assert.That(reader.GetBoolean(1), Is.True, "Primary key should remain DEFERRABLE after quench");
+        }
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldCreateDeferrablePrimaryKeyFromScratch()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"def_pk_new_{uniqueId}";
+        var pkName = $"pk_{tableName}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        // Create the table with no primary key at all — the quench must ADD a brand new
+        // deferrable PK, exercising the "Add Missing Indexes" DDL-generation branch.
+        cmd.CommandText = $@"CREATE TABLE public.{tableName} (id INT NOT NULL)";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+        {
+            "Schema": "public",
+            "Name": "{{tableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT4", "Nullable": false}
+            ],
+            "Indexes": [
+                {"Name": "{{pkName}}", "PrimaryKey": true, "Unique": true, "IndexColumns": "id", "Deferrable": true, "InitiallyDeferred": true, "FillFactor": 90}
+            ]
+        }
+        """;
+
+        Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, json, productName: productName),
+            "Creating a deferrable primary key with a fillfactor from scratch should not raise a 42601 syntax error");
+
+        cmd.CommandText = $@"
+SELECT c.condeferrable, c.condeferred
+FROM pg_constraint c
+JOIN pg_class t ON c.conrelid = t.oid
+JOIN pg_namespace n ON t.relnamespace = n.oid
+WHERE n.nspname = 'public' AND t.relname = '{tableName}' AND c.conname = '{pkName}' AND c.contype = 'p'";
+        using var reader = cmd.ExecuteReader();
+        Assert.That(reader.Read(), Is.True, "Primary key constraint should exist");
+        Assert.That(reader.GetBoolean(0), Is.True, "Primary key should be DEFERRABLE");
+        Assert.That(reader.GetBoolean(1), Is.True, "Primary key should be INITIALLY DEFERRED");
+        reader.Close();
+
+        conn.Close();
+    }
 }
