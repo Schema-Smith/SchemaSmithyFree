@@ -29,8 +29,8 @@ public class FileCheckpointManager : ICheckpointing
     public FileCheckpointManager(string checkpointDirectory)
     {
         _checkpointDirectory = checkpointDirectory ?? throw new ArgumentNullException(nameof(checkpointDirectory));
-        if (!Directory.Exists(_checkpointDirectory))
-            Directory.CreateDirectory(_checkpointDirectory);
+        if (!DirectoryWrapper.GetFromFactory().Exists(_checkpointDirectory))
+            DirectoryWrapper.GetFromFactory().CreateDirectory(_checkpointDirectory);
     }
 
     public static ICheckpointing GetFromFactory()
@@ -142,7 +142,7 @@ public class FileCheckpointManager : ICheckpointing
     public ProductCheckpointSummary GetProductCheckpointSummary(string productName)
     {
         var filePath = GetProductCheckpointPath(productName);
-        if (!File.Exists(filePath)) return ProductCheckpointSummary.Empty;
+        if (!FileWrapper.GetFromFactory().Exists(filePath)) return ProductCheckpointSummary.Empty;
 
         var checkpoint = GetOrLoadProductCheckpoint(productName);
         return new ProductCheckpointSummary(
@@ -196,7 +196,7 @@ public class FileCheckpointManager : ICheckpointing
         if (!IsDatabaseScope(scope)) return DatabaseCheckpointSummary.Empty;
 
         var filePath = GetDatabaseCheckpointPath(scope.ProductName, scope.TemplateName, scope.Server, scope.DatabaseName, scope.SchemaName);
-        if (!File.Exists(filePath)) return DatabaseCheckpointSummary.Empty;
+        if (!FileWrapper.GetFromFactory().Exists(filePath)) return DatabaseCheckpointSummary.Empty;
 
         var checkpoint = GetOrLoadDatabaseCheckpoint(scope);
         return new DatabaseCheckpointSummary(
@@ -219,7 +219,7 @@ public class FileCheckpointManager : ICheckpointing
     private DatabaseCheckpoint LoadDatabaseCheckpoint(TrackingScope scope)
     {
         var filePath = GetDatabaseCheckpointPath(scope.ProductName, scope.TemplateName, scope.Server, scope.DatabaseName, scope.SchemaName);
-        if (!File.Exists(filePath))
+        if (!FileWrapper.GetFromFactory().Exists(filePath))
             return new DatabaseCheckpoint
             {
                 ProductName = scope.ProductName,
@@ -231,7 +231,7 @@ public class FileCheckpointManager : ICheckpointing
 
         try
         {
-            var content = File.ReadAllText(filePath);
+            var content = FileWrapper.GetFromFactory().ReadAllText(filePath);
             return ParseDatabaseCheckpoint(content, scope.ProductName, scope.TemplateName, scope.Server, scope.DatabaseName, scope.SchemaName);
         }
         catch
@@ -258,10 +258,10 @@ public class FileCheckpointManager : ICheckpointing
         var pattern = $"{FileNameEncoder.Encode(productName)}.*.checkpoint";
         try
         {
-            var files = Directory.GetFiles(_checkpointDirectory, pattern, SearchOption.TopDirectoryOnly);
+            var files = DirectoryWrapper.GetFromFactory().GetFiles(_checkpointDirectory, pattern, SearchOption.TopDirectoryOnly);
             foreach (var file in files.Where(f => !f.EndsWith(".product.checkpoint")))
             {
-                try { File.Delete(file); }
+                try { FileWrapper.GetFromFactory().Delete(file); }
                 catch { }
             }
         }
@@ -385,12 +385,12 @@ public class FileCheckpointManager : ICheckpointing
     private ProductCheckpoint LoadProductCheckpoint(string productName)
     {
         var filePath = GetProductCheckpointPath(productName);
-        if (!File.Exists(filePath))
+        if (!FileWrapper.GetFromFactory().Exists(filePath))
             return new ProductCheckpoint { ProductName = productName };
 
         try
         {
-            var content = File.ReadAllText(filePath);
+            var content = FileWrapper.GetFromFactory().ReadAllText(filePath);
             return ParseProductCheckpoint(content, productName);
         }
         catch
@@ -408,7 +408,7 @@ public class FileCheckpointManager : ICheckpointing
     private void DeleteProductCheckpoint(string productName)
     {
         var filePath = GetProductCheckpointPath(productName);
-        try { if (File.Exists(filePath)) File.Delete(filePath); }
+        try { if (FileWrapper.GetFromFactory().Exists(filePath)) FileWrapper.GetFromFactory().Delete(filePath); }
         catch { }
     }
 
@@ -514,7 +514,7 @@ public class FileCheckpointManager : ICheckpointing
         var lockObj = FileLocks.GetOrAdd(filePath, _ => new object());
         lock (lockObj)
         {
-            File.WriteAllText(filePath, content);
+            FileWrapper.GetFromFactory().WriteAllText(filePath, content);
         }
     }
 }

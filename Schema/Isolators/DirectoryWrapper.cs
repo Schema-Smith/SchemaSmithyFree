@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System.Collections.Generic;
 using System.IO;
 using Schema.Utility;
 
@@ -25,6 +26,16 @@ public class DirectoryWrapper : IDirectory
     public string[] GetDirectories(string path, string searchPattern, SearchOption searchOption)
     {
         return Directory.GetDirectories(LongPathSupport.MakeSafeLongFilePath(path), searchPattern, searchOption);
+    }
+
+    public IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption)
+    {
+        return Directory.EnumerateFiles(LongPathSupport.MakeSafeLongFilePath(path), searchPattern, searchOption);
+    }
+
+    public IEnumerable<string> EnumerateFileSystemEntries(string path, string searchPattern, SearchOption searchOption)
+    {
+        return Directory.EnumerateFileSystemEntries(LongPathSupport.MakeSafeLongFilePath(path), searchPattern, searchOption);
     }
 
     public void Delete(string path, bool recursive = false)

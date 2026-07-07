@@ -46,7 +46,7 @@ public static class Program
         var productPath = config["Product:Path"] ?? ".";
         var productFile = Path.Combine(productPath, "Product.json");
 
-        if (!File.Exists(productFile))
+        if (!FileWrapper.GetFromFactory().Exists(productFile))
             throw new Exception($"Product.json not found at '{productFile}'. Set 'Product:Path' to the product directory.");
 
         var product = Product.LoadForDisplay(productFile);

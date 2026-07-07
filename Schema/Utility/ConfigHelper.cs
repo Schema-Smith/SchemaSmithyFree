@@ -46,14 +46,14 @@ public static class ConfigHelper
             var config = FactoryContainer.Resolve<IConfigurationRoot>();
             if (config != null) return config;
 
-            var basePath = Directory.GetCurrentDirectory();
+            var basePath = DirectoryWrapper.GetFromFactory().GetCurrentDirectory();
             var settingsFile = CommandLineParser.ValueOfSwitch("ConfigFile", null) ?? $"{app}.settings.json";
             var builder = new ConfigurationBuilder()
                 .SetBasePath(basePath);
 
             // Check AppContext.BaseDirectory as fallback (test runners may not set CWD to the output directory)
             var appBasePath = AppContext.BaseDirectory;
-            if (!File.Exists(Path.Combine(basePath, settingsFile)) && File.Exists(Path.Combine(appBasePath, settingsFile)))
+            if (!FileWrapper.GetFromFactory().Exists(Path.Combine(basePath, settingsFile)) && FileWrapper.GetFromFactory().Exists(Path.Combine(appBasePath, settingsFile)))
                 builder.SetBasePath(appBasePath);
 
             builder.AddJsonFile(settingsFile, optional: true)
