@@ -14,6 +14,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ### Fixed
 
+- Fixed: PostgreSQL could not create a DEFERRABLE primary key or unique constraint from scratch — the generated DDL emitted the DEFERRABLE clause before the index WITH (fillfactor) clause, which PostgreSQL rejects (42601). The clauses are now emitted in the correct order.
 - Fixed: a DataDelivery that permanently fails at execution now fails the deploy (exit 2) on all engines (SQL Server, PostgreSQL, MySQL). Previously the error was logged and an artifact written but the deploy still reported success (exit 0), risking a silent data gap in CI/CD where the exit code is the gate. #334
 - Fixed: a PostgreSQL PRIMARY KEY … DEFERRABLE no longer phantom drop/recreates on every quench — the existing-index snapshot now reads a primary key's deferred status accurately. (Surfaced while consolidating the shared index-snapshot helper for #332.)
 - Fixed: on PostgreSQL, re-running a quench after a failed unique-index deploy (dirty data fixed) no longer crashes with `relation "temp_existing_indexes" does not exist`; the index/constraint phase rebuilds its session snapshot when a resumed run skipped the step that built it. `--ResumeQuench` is now a real opt-in — without it, a re-run discards any leftover checkpoint and starts fresh rather than silently resuming. #332

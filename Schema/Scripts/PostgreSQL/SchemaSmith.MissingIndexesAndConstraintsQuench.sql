@@ -53,11 +53,11 @@ BEGIN
                          THEN 'ALTER TABLE "' || ti."TableSchema" || '"."' || ti."TableName" || '" ADD CONSTRAINT "' || ti."Name" || '" ' ||
                               CASE WHEN ti."PrimaryKey" THEN 'PRIMARY KEY ' ELSE 'UNIQUE ' END ||
                               '(' || "SchemaSmith"."QuoteIndexColumnList"(ti."IndexColumns") || ')' ||
-                              CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
-                              CASE WHEN ti."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END ||
                               CASE WHEN COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
                                    THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
-                                   ELSE '' END || ';'
+                                   ELSE '' END ||
+                              CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
+                              CASE WHEN ti."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END || ';'
                          ELSE 'CREATE ' || CASE WHEN ti."Unique" THEN 'UNIQUE ' ELSE '' END || 'INDEX "' || ti."Name" || '" ON "' || ti."TableSchema" || '"."' || ti."TableName" || '" ' ||
                               'USING ' || COALESCE(ti."AccessMethod", 'btree') || ' ' ||
                               '(' || "SchemaSmith"."QuoteIndexColumnList"(ti."IndexColumns") || ')' ||
