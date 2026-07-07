@@ -583,21 +583,21 @@ public class TableDataDeliveryTests
         lock (FactoryContainer.SharedLockObject)
         {
             using var command = _connection.CreateCommand();
-            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-            var checkpointDir = Path.Combine(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Join(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
             var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
 
             try
             {
                 Directory.CreateDirectory(tempDir);
-                File.WriteAllText(Path.Combine(tempDir, "bad.tabledata"),
+                File.WriteAllText(Path.Join(tempDir, "bad.tabledata"),
                     @"[{""id"":1,""name"":""Bad Data""}]");
-                File.WriteAllText(Path.Combine(tempDir, "Template.json"), "{}");
+                File.WriteAllText(Path.Join(tempDir, "Template.json"), "{}");
 
                 var template = new Template
                 {
                     Name = "FailedDeliveryTest",
-                    FilePath = Path.Combine(tempDir, "Template.json")
+                    FilePath = Path.Join(tempDir, "Template.json")
                 };
 
                 // Delivery targets a table that does not exist -> execution throws -> permanent failure.
