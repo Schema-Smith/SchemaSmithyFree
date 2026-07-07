@@ -553,15 +553,78 @@ public class TableDataDeliveryTests
                     deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
                 quench.Execute();
 
-                // The good table should still have received its data even though the bad table failed.
+                // "Continues" now means "delivers what it can, then fails the run" (#334):
+                // the good table still receives its data even though the bad table failed...
                 command.CommandText = $"SELECT COUNT(*) FROM `{_testDb}`.`{goodTable}`";
                 Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1));
+                // ...but the permanently-failed delivery must fail the deploy (exit 2), not exit 0.
+                Assert.That(quench.QuenchSuccessful, Is.False,
+                    "a permanently-failed DataDelivery must fail the quench");
             }
             finally
             {
                 command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{goodTable}`";
                 command.ExecuteNonQuery();
 
+                FactoryContainer.Register<IConfigurationRoot>(savedConfig);
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+                if (Directory.Exists(checkpointDir)) Directory.Delete(checkpointDir, true);
+            }
+        }
+    }
+
+    [Test]
+    public void DeliverTableData_FailedDelivery_FailsTheQuench_MySql()
+    {
+        // #334: a DataDelivery that errors at execution on MySQL must fail the quench (exit 2),
+        // consistent with SQL Server / PostgreSQL — not exit 0 with the failure only logged.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            using var command = _connection.CreateCommand();
+            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            var checkpointDir = Path.Combine(Path.GetTempPath(), $"Checkpoint_{Guid.NewGuid():N}");
+            var savedConfig = FactoryContainer.Resolve<IConfigurationRoot>();
+
+            try
+            {
+                Directory.CreateDirectory(tempDir);
+                File.WriteAllText(Path.Combine(tempDir, "bad.tabledata"),
+                    @"[{""id"":1,""name"":""Bad Data""}]");
+                File.WriteAllText(Path.Combine(tempDir, "Template.json"), "{}");
+
+                var template = new Template
+                {
+                    Name = "FailedDeliveryTest",
+                    FilePath = Path.Combine(tempDir, "Template.json")
+                };
+
+                // Delivery targets a table that does not exist -> execution throws -> permanent failure.
+                template.Tables.Add(new MySqlTable
+                {
+                    Name = "_nonexistent_table_xyz",
+                    DataDelivery =
+                [
+                    new DataDelivery
+                    {
+                        MergeType = "Insert/Update/Delete",
+                        ContentFile = "bad.tabledata"
+                    }
+                ]
+                });
+
+                RegisterTargetConfig();
+
+                var product = new Product { Name = "TestProduct", Platform = Platform.MySQL };
+                var quench = new DatabaseQuench("127.0.0.1", product, template, _testDb,
+                    suppressKindling: true, whatIfOnly: "0", runScriptsTwice: false,
+                    dropRemovedTables: "0", dropRemovedColumns: "1", dropRemovedForeignKeys: "1", dropRemovedCheckConstraints: "1", dropRemovedExcludeConstraints: "1", dropRemovedStatistics: "1", dropRemovedIndexes: "1", dropUnknownIndexes: false, updateTables: false,
+                    deliverData: true, checkpointing: new FileCheckpointManager(checkpointDir));
+                quench.Execute();
+
+                Assert.That(quench.QuenchSuccessful, Is.False, "a failed DataDelivery must fail the quench");
+            }
+            finally
+            {
                 FactoryContainer.Register<IConfigurationRoot>(savedConfig);
                 if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
                 if (Directory.Exists(checkpointDir)) Directory.Delete(checkpointDir, true);

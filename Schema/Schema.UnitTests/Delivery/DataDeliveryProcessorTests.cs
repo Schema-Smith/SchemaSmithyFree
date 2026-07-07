@@ -1105,8 +1105,9 @@ public class DataDeliveryProcessorTests
         context.ExecuteScript = (name, script) => throw new Exception("Simulated DB failure");
         context.WriteResolvedSqlArtifact = (label, sql) => invocations.Add((label, sql));
 
-        // Act: delivery aborts after the failure (circular-fallback catch logs and swallows per-table)
-        processor.DeliverTables(context);
+        // Act: the permanent failure is logged + artifact-written per table, then aggregated into a
+        // single throw at the end so the deploy fails (#334). The artifact write happens before the throw.
+        Assert.Throws<InvalidOperationException>(() => processor.DeliverTables(context));
 
         // Assert: callback fired EXACTLY ONCE despite the table being attempted in both the while
         // loop and the circular-fallback loop, and carried the table key + generated merge SQL.
@@ -1154,7 +1155,8 @@ public class DataDeliveryProcessorTests
         };
         context.WriteResolvedSqlArtifact = (label, sql) => invocations.Add((label, sql));
 
-        processor.DeliverTables(context);
+        // The child's permanent deferred-merge failure is aggregated into a throw at the end (#334).
+        Assert.Throws<InvalidOperationException>(() => processor.DeliverTables(context));
 
         Assert.That(invocations, Has.Count.EqualTo(1),
             "Deferred-path failure must write exactly one artifact for the failing table");
@@ -1180,15 +1182,19 @@ public class DataDeliveryProcessorTests
         context.ExecuteScript = (name, script) => throw new Exception("DB error");
         context.WriteResolvedSqlArtifact = (_, _) => { };
 
-        processor.DeliverTables(context);
+        // The permanent failure aggregates into a throw at the end (#334); the per-table error log
+        // must still fire before that.
+        Assert.Throws<InvalidOperationException>(() => processor.DeliverTables(context));
 
         Assert.That(_logs, Has.Some.Contains("ERROR:").And.Some.Contains("Error delivering"));
     }
 
     [Test]
-    public void DeliverTables_OnMergeFailure_NullCallback_DoesNotThrow()
+    public void DeliverTables_OnMergeFailure_NullCallback_ThrowsAggregateNotNullRef()
     {
-        // Null-guard: WhatIf callers and any caller that didn't wire the callback must be unaffected.
+        // Null-guard: a caller that didn't wire the artifact callback must not hit a
+        // NullReferenceException on the failure path. The permanent delivery failure still fails the
+        // deploy (#334), but via the aggregate InvalidOperationException — never an NRE.
         var processor = new DataDeliveryProcessor();
         var tables = new List<IDeliverableTable>
         {
@@ -1203,8 +1209,8 @@ public class DataDeliveryProcessorTests
         context.ExecuteScript = (name, script) => throw new Exception("DB error");
         context.WriteResolvedSqlArtifact = null;
 
-        Assert.DoesNotThrow(() => processor.DeliverTables(context),
-            "Null WriteResolvedSqlArtifact must not cause a NullReferenceException");
+        Assert.Throws<InvalidOperationException>(() => processor.DeliverTables(context),
+            "A permanent delivery failure must fail the deploy via the aggregate exception, not an NRE");
     }
 
     [Test]
