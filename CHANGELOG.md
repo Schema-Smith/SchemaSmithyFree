@@ -14,6 +14,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ### Fixed
 
+- Fixed: the PostgreSQL materialized-view quench no longer errors `XX000: could not open relation with OID` under concurrent multi-tenant (schema-template) fan-out. Its drop-detection queries read `pg_matviews` database-wide and evaluated `pg_get_viewdef` on sibling tenants' materialized views, racing with a sibling's concurrent `DROP MATERIALIZED VIEW`; they are now scoped to the iteration's own schema so a tenant never inspects another tenant's views.
 - Fixed: PostgreSQL could not create a DEFERRABLE primary key or unique constraint from scratch — the generated DDL emitted the DEFERRABLE clause before the index WITH (fillfactor) clause, which PostgreSQL rejects (42601). The clauses are now emitted in the correct order.
 - Fixed: a DataDelivery that permanently fails at execution now fails the deploy (exit 2) on all engines (SQL Server, PostgreSQL, MySQL). Previously the error was logged and an artifact written but the deploy still reported success (exit 0), risking a silent data gap in CI/CD where the exit code is the gate. #334
 - Fixed: a PostgreSQL PRIMARY KEY … DEFERRABLE no longer phantom drop/recreates on every quench — the existing-index snapshot now reads a primary key's deferred status accurately. (Surfaced while consolidating the shared index-snapshot helper for #332.)
