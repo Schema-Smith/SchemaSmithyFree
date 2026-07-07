@@ -353,6 +353,12 @@ ModifiedTables
                 conn.Open();
                 conn.ChangeDatabase(_mainDb);
                 using var cmd = conn.CreateCommand();
+
+                // Guard against a fresh (unkindled) CI database: SkipKindlingForge assumes
+                // _mainDb is already kindled, which is only true locally by test-run history.
+                // A no-op when already kindled, so it can't change the local-pass behavior.
+                ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL, forceReKindle: false);
+
                 cmd.CommandText = @$"
 INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts"" (""ScriptPath"", ""ProductName"", ""QuenchSlot"", template_name, schema_name)
 VALUES('After Scripts/Create TestSecondary.sql', '{product.Name}', 'After', 'Main', '');";

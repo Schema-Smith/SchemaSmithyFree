@@ -340,6 +340,17 @@ KindleForge
             config["CheckpointDirectory"] = _checkpointDir;
             Directory.CreateDirectory(_checkpointDir);
 
+            // Guard against a fresh (unkindled) CI database: SkipKindlingForge assumes
+            // _mainDb is already kindled, which is only true locally by test-run history.
+            // A no-op when already kindled, so it can't change the local-pass behavior.
+            using (var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString))
+            {
+                conn.Open();
+                conn.ChangeDatabase(_mainDb);
+                using var cmd = conn.CreateCommand();
+                ForgeKindler.KindleTheForge(cmd, Platform.MySQL, forceReKindle: false);
+            }
+
             var product = Product.Load();
             var dbCheckpointContent = $@"# SchemaQuench Database Checkpoint
 # Product: {product.Name}

@@ -366,6 +366,17 @@ KindleForge
             FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", "ValidProduct");
             FactoryContainer.Resolve<IConfigurationRoot>()["CheckpointDirectory"] = _checkpointDir;
 
+            // Guard against a fresh (unkindled) CI database: SkipKindlingForge assumes
+            // _mainDb is already kindled, which is only true locally by test-run history.
+            // A no-op when already kindled, so it can't change the local-pass behavior.
+            using (var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
+            {
+                conn.Open();
+                conn.ChangeDatabase(_mainDb);
+                using var cmd = conn.CreateCommand();
+                ForgeKindler.KindleTheForge(cmd, Platform.SqlServer, forceReKindle: false);
+            }
+
             var product = Product.Load();
             var dbCheckpointContent = $@"# SchemaQuench Database Checkpoint
 # Product: {product.Name}
