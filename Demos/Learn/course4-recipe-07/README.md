@@ -82,20 +82,22 @@ The table is created everywhere; its rows only land where the name ends `_dev`/`
 
 dev gets six rows, main gets two. The gates are the environment switch, and the log tells you which variant won on each database.
 
-### Pattern 3 — additive slices (an array under the same gate)
+### Pattern 3 — authoritative slices (full-sync partitions under one gate)
 
-`StatusCode` builds its prod reference set from two slices that *both* apply — core global codes plus regional codes. Data deliveries aren't "one match wins": **every** delivery whose gate passes applies, in declared order. That's what makes them additive.
+`StatusCode` builds its prod reference set from two slices that *both* apply — core global codes plus regional codes. Data deliveries aren't "one match wins": **every** delivery whose gate passes applies, in declared order. And each slice is **authoritative** for its partition: `Insert/Update/Delete` with a disjoint `MergeFilter`, so a slice inserts, updates, *and deletes* only the rows it owns.
 
 ```json
 "DataDelivery": [
-  { "ContentFile": "data/dbo.StatusCode.core.tabledata",     "MergeType": "Insert/Update", "MatchColumns": "Code", "ShouldApplyExpression": "DB_NAME() = 'cookbook_r7_main'", "VariantName": "Core status codes" },
-  { "ContentFile": "data/dbo.StatusCode.regional.tabledata", "MergeType": "Insert/Update", "MatchColumns": "Code", "ShouldApplyExpression": "DB_NAME() = 'cookbook_r7_main'", "VariantName": "Regional status codes" }
+  { "ContentFile": "data/dbo.StatusCode.core.tabledata",     "MergeType": "Insert/Update/Delete", "MatchColumns": "Code", "MergeFilter": "Target.Region = 'GLOBAL'",        "ShouldApplyExpression": "DB_NAME() = 'cookbook_r7_main'", "VariantName": "Core status codes" },
+  { "ContentFile": "data/dbo.StatusCode.regional.tabledata", "MergeType": "Insert/Update/Delete", "MatchColumns": "Code", "MergeFilter": "Target.Region IN ('EMEA','APAC')", "ShouldApplyExpression": "DB_NAME() = 'cookbook_r7_main'", "VariantName": "Regional status codes" }
 ]
 ```
 
-On `cookbook_r7_main` both slices deliver — three core rows plus two regional rows, five total. On dev both skip. Re-run the whole deploy and every count holds: gated delivery is as idempotent as ungated.
+On `cookbook_r7_main` both slices deliver — three core (GLOBAL) rows plus two regional (EMEA/APAC), five total. On dev both skip. `Target` is the row already in the table, so each `MergeFilter` fences a slice's authority to its partition: the core slice governs `Region = 'GLOBAL'`, the regional slice governs `EMEA`/`APAC`, and neither can touch the other's rows.
 
-> **When slices need to be authoritative:** if a slice should *own* its partition — full-sync, deleting rows that fall out of it — you'd reach for `Insert/Update/Delete` plus a disjoint `MergeFilter` so each slice's delete only touches its own rows. This lab keeps the additive slices `Insert/Update` (each slice adds, none deletes); see the [DataDelivery reference](https://github.com/Schema-Smith/SchemaSmith/blob/main/docs/end-user/reference/schema-packages.md#multiple-deliveries) for the full-sync form.
+**Prove the partitioning.** Deploy the five rows, remove `HELD` from `dbo.StatusCode.core.tabledata`, and redeploy — `HELD` is deleted (it fell out of the GLOBAL source) while `EMEA` and `APAC` stay put (a different partition the core slice can't reach). Full-sync gives each slice authority; the disjoint filter keeps that authority in its lane.
+
+> **Portability.** The `MergeFilter` alias is `Target` (the row already in the table) on all three engines — `Target.Region` on SQL Server and MySQL, `"Target".region` (PostgreSQL folds unquoted names to lowercase). Full-sync delivery uses a partitioned `MERGE`; PostgreSQL handles it on 16 as well as 17 (this lab's sandbox runs 16.13).
 
 ## One rule and one caveat
 
