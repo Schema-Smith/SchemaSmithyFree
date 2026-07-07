@@ -27,6 +27,8 @@ BEGIN
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_Done = TRUE;
 
+    SET SESSION group_concat_max_len = 1000000;
+
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'BEGIN ForeignKeyQuench');
 
     -- =========================================================================
@@ -87,55 +89,46 @@ BEGIN
                       '` DROP FOREIGN KEY `', ConstraintName, '`')
         FROM _SchemaSmith_ModifiedFKs;
     ELSE
-        BEGIN
-            DECLARE v_FKModDone INT DEFAULT FALSE;
-            DECLARE v_FKModTable VARCHAR(128);
-            DECLARE v_FKModName VARCHAR(128);
-            DECLARE v_FKModSql TEXT;
+        -- Per-FK progress messages, set-based (preserves the per-FK log lines).
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop and recreate modified foreign keys');
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Drop modified FK: ', TableName, '.', ConstraintName)
+        FROM _SchemaSmith_ModifiedFKs;
 
-            DECLARE cur_ModifiedFKs CURSOR FOR
-                SELECT TableName, ConstraintName
-                FROM _SchemaSmith_ModifiedFKs;
+        -- Snapshot the folded drop statements once: each table's FK drops (Ord 0) then its
+        -- leftover auto-created index drops (Ord 1 — the index shares the FK name and survives
+        -- the FK drop). Reading INFORMATION_SCHEMA once into the temp table keeps it out of the
+        -- execution loop; Ord guarantees every FK drop runs before the matching index drop.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKModStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_FKModStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        -- Two separate INSERTs (not one UNION) because a MySQL TEMPORARY table cannot be
+        -- referenced twice in one statement. AUTO_INCREMENT RowId is monotonic across the two,
+        -- so the FK drops (inserted first) always get lower RowIds than the index drops.
+        INSERT INTO _SchemaSmith_FKModStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                      GROUP_CONCAT(CONCAT('DROP FOREIGN KEY `', ConstraintName, '`') ORDER BY ConstraintName SEPARATOR ', '))
+        FROM _SchemaSmith_ModifiedFKs
+        GROUP BY TableName;
+        INSERT INTO _SchemaSmith_FKModStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', m.TableName, '` ',
+                      GROUP_CONCAT(CONCAT('DROP INDEX `', m.ConstraintName, '`') ORDER BY m.ConstraintName SEPARATOR ', '))
+        FROM _SchemaSmith_ModifiedFKs m
+        JOIN INFORMATION_SCHEMA.STATISTICS s
+            ON BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY s.TABLE_NAME = BINARY m.TableName
+            AND BINARY s.INDEX_NAME = BINARY m.ConstraintName
+        GROUP BY m.TableName;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_FKModDone = TRUE;
-
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop and recreate modified foreign keys');
-            SET v_FKModDone = FALSE;
-            OPEN cur_ModifiedFKs;
-
-            drop_modified_fk_loop: LOOP
-                FETCH cur_ModifiedFKs INTO v_FKModTable, v_FKModName;
-                IF v_FKModDone THEN
-                    LEAVE drop_modified_fk_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop modified FK: ', v_FKModTable, '.', v_FKModName));
-                -- Drop the FK constraint
-                SET v_FKModSql = CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', v_FKModTable,
-                                        '` DROP FOREIGN KEY `', v_FKModName, '`');
-                SET @exec_sql = v_FKModSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-
-                -- Also drop the auto-created index with the same name if it exists
-                -- (MySQL auto-creates an index to support the FK if one doesn't exist)
-                IF EXISTS (
-                    SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-                    WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-                      AND BINARY s.TABLE_NAME = BINARY v_FKModTable
-                      AND BINARY s.INDEX_NAME = BINARY v_FKModName
-                ) THEN
-                    SET v_FKModSql = CONCAT('DROP INDEX `', v_FKModName, '` ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', v_FKModTable, '`');
-                    SET @exec_sql = v_FKModSql;
-                    PREPARE stmt FROM @exec_sql;
-                    EXECUTE stmt;
-                    DEALLOCATE PREPARE stmt;
-                END IF;
-            END LOOP;
-
-            CLOSE cur_ModifiedFKs;
-        END;
+        SET @v_fkmod_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKModStmts);
+        WHILE @v_fkmod_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_FKModStmts WHERE RowId = @v_fkmod_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_fkmod_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKModStmts WHERE RowId > @v_fkmod_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKModStmts;
     END IF;
 
     -- =========================================================================
@@ -165,62 +158,57 @@ BEGIN
               AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
         );
     ELSE
-        BEGIN
-            DECLARE v_FKDone INT DEFAULT FALSE;
-            DECLARE v_FKTable VARCHAR(128);
-            DECLARE v_FKName VARCHAR(128);
-            DECLARE v_FKVariant VARCHAR(128);
-            DECLARE v_FKSql TEXT;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing foreign keys');
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Create FK: ', SchemaSmith_StripBacktickWrapping(f.TableName), '.', SchemaSmith_StripBacktickWrapping(f.KeyName),
+            CASE WHEN COALESCE(f.VariantName, '') <> '' THEN CONCAT(' (variant: ', f.VariantName, ')') ELSE '' END)
+        FROM _SchemaSmith_ForeignKeys f
+        WHERE NOT EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.TableName)
+              AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
+              AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
+        );
 
-            DECLARE cur_MissingForeignKeys CURSOR FOR
-                SELECT
-                    f.TableName,
-                    f.KeyName,
-                    f.VariantName,
-                    CONCAT(
-                        'ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', f.TableName,
-                        ' ADD CONSTRAINT ', f.KeyName,
-                        ' FOREIGN KEY (', f.Columns, ')',
-                        ' REFERENCES ',
-                        CASE WHEN f.RelatedTableSchema IS NOT NULL AND f.RelatedTableSchema != ''
-                             THEN CONCAT('`', f.RelatedTableSchema, '`.')
-                             ELSE CONCAT('`', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.')
-                        END,
-                        f.RelatedTable, ' (', f.RelatedColumns, ')',
-                        ' ON DELETE ', f.DeleteAction,
-                        ' ON UPDATE ', f.UpdateAction
-                    ) AS CreateForeignKeyStatement
-                FROM _SchemaSmith_ForeignKeys f
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                    WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-                      AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.TableName)
-                      AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
-                      AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
-                );
+        -- Fold each table's missing-FK creates into one multi-clause ALTER, materialize, execute.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKCreateStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_FKCreateStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_FKCreateStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', f.TableName, ' ',
+                      GROUP_CONCAT(
+                          CONCAT(
+                              'ADD CONSTRAINT ', f.KeyName,
+                              ' FOREIGN KEY (', f.Columns, ')',
+                              ' REFERENCES ',
+                              CASE WHEN f.RelatedTableSchema IS NOT NULL AND f.RelatedTableSchema != ''
+                                   THEN CONCAT('`', f.RelatedTableSchema, '`.')
+                                   ELSE CONCAT('`', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.')
+                              END,
+                              f.RelatedTable, ' (', f.RelatedColumns, ')',
+                              ' ON DELETE ', f.DeleteAction,
+                              ' ON UPDATE ', f.UpdateAction)
+                          ORDER BY f.KeyName SEPARATOR ', '))
+        FROM _SchemaSmith_ForeignKeys f
+        WHERE NOT EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.TableName)
+              AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
+              AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
+        )
+        GROUP BY f.TableName;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_FKDone = TRUE;
-
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing foreign keys');
-            SET v_FKDone = FALSE;
-            OPEN cur_MissingForeignKeys;
-
-            create_fks_loop: LOOP
-                FETCH cur_MissingForeignKeys INTO v_FKTable, v_FKName, v_FKVariant, v_FKSql;
-                IF v_FKDone THEN
-                    LEAVE create_fks_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create FK: ', v_FKTable, '.', v_FKName,
-                    CASE WHEN COALESCE(v_FKVariant, '') <> '' THEN CONCAT(' (variant: ', v_FKVariant, ')') ELSE '' END));
-                SET @exec_sql = v_FKSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_MissingForeignKeys;
-        END;
+        SET @v_fkcreate_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKCreateStmts);
+        WHILE @v_fkcreate_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_FKCreateStmts WHERE RowId = @v_fkcreate_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_fkcreate_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKCreateStmts WHERE RowId > @v_fkcreate_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKCreateStmts;
     END IF;
 
     -- =========================================================================
@@ -290,54 +278,41 @@ BEGIN
                           '` DROP FOREIGN KEY `', ConstraintName, '`')
             FROM _SchemaSmith_FKsToDrop;
         ELSE
-            BEGIN
-                DECLARE v_FKDropDone2 INT DEFAULT FALSE;
-                DECLARE v_FKDropTable VARCHAR(128);
-                DECLARE v_FKDropName VARCHAR(128);
-                DECLARE v_FKDropSql2 TEXT;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unknown foreign keys');
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Drop unknown FK: ', TableName, '.', ConstraintName)
+            FROM _SchemaSmith_FKsToDrop;
 
-                DECLARE cur_DropFKs CURSOR FOR
-                    SELECT TableName, ConstraintName
-                    FROM _SchemaSmith_FKsToDrop;
+            -- Same folded pattern as STEP 1: FK drops (Ord 0) then leftover auto-index drops (Ord 1).
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKDropStmts;
+            CREATE TEMPORARY TABLE _SchemaSmith_FKDropStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+                ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            -- Two separate INSERTs (MySQL TEMPORARY table can't be referenced twice per statement);
+            -- FK drops inserted first get lower RowIds than the index drops.
+            INSERT INTO _SchemaSmith_FKDropStmts (Stmt)
+            SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                          GROUP_CONCAT(CONCAT('DROP FOREIGN KEY `', ConstraintName, '`') ORDER BY ConstraintName SEPARATOR ', '))
+            FROM _SchemaSmith_FKsToDrop
+            GROUP BY TableName;
+            INSERT INTO _SchemaSmith_FKDropStmts (Stmt)
+            SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', d.TableName, '` ',
+                          GROUP_CONCAT(CONCAT('DROP INDEX `', d.ConstraintName, '`') ORDER BY d.ConstraintName SEPARATOR ', '))
+            FROM _SchemaSmith_FKsToDrop d
+            JOIN INFORMATION_SCHEMA.STATISTICS s
+                ON BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY s.TABLE_NAME = BINARY d.TableName
+                AND BINARY s.INDEX_NAME = BINARY d.ConstraintName
+            GROUP BY d.TableName;
 
-                DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_FKDropDone2 = TRUE;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unknown foreign keys');
-                SET v_FKDropDone2 = FALSE;
-                OPEN cur_DropFKs;
-
-                drop_fks_loop: LOOP
-                    FETCH cur_DropFKs INTO v_FKDropTable, v_FKDropName;
-                    IF v_FKDropDone2 THEN
-                        LEAVE drop_fks_loop;
-                    END IF;
-
-                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop unknown FK: ', v_FKDropTable, '.', v_FKDropName));
-                    -- Drop the FK constraint
-                    SET v_FKDropSql2 = CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', v_FKDropTable,
-                                              '` DROP FOREIGN KEY `', v_FKDropName, '`');
-                    SET @exec_sql = v_FKDropSql2;
-                    PREPARE stmt FROM @exec_sql;
-                    EXECUTE stmt;
-                    DEALLOCATE PREPARE stmt;
-
-                    -- Also drop the auto-created index with the same name if it exists
-                    IF EXISTS (
-                        SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-                        WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-                          AND BINARY s.TABLE_NAME = BINARY v_FKDropTable
-                          AND BINARY s.INDEX_NAME = BINARY v_FKDropName
-                    ) THEN
-                        SET v_FKDropSql2 = CONCAT('DROP INDEX `', v_FKDropName, '` ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', v_FKDropTable, '`');
-                        SET @exec_sql = v_FKDropSql2;
-                        PREPARE stmt FROM @exec_sql;
-                        EXECUTE stmt;
-                        DEALLOCATE PREPARE stmt;
-                    END IF;
-                END LOOP;
-
-                CLOSE cur_DropFKs;
-            END;
+            SET @v_fkdrop_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKDropStmts);
+            WHILE @v_fkdrop_id IS NOT NULL DO
+                SELECT Stmt INTO @exec_sql FROM _SchemaSmith_FKDropStmts WHERE RowId = @v_fkdrop_id;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+                SET @v_fkdrop_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKDropStmts WHERE RowId > @v_fkdrop_id);
+            END WHILE;
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKDropStmts;
 
             -- Remove dropped FKs from ProductOwnership
             DELETE po FROM SchemaSmith_ProductOwnership po
