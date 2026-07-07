@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Schema.Isolators;
 
 namespace SchemaShears;
 
@@ -25,7 +26,7 @@ public static class DropSuppressionStamp
 
     public static void Apply(string productJsonPath, IReadOnlyCollection<string> allowDrops)
     {
-        if (!File.Exists(productJsonPath))
+        if (!FileWrapper.GetFromFactory().Exists(productJsonPath))
             throw new PatchBuildException($"Product.json not found in patch output: '{productJsonPath}'.");
 
         var unknown = allowDrops
@@ -39,7 +40,7 @@ public static class DropSuppressionStamp
                 $"Unknown drop category '{unknown[0]}'. Valid categories: {valid}.");
         }
 
-        var json = JObject.Parse(File.ReadAllText(productJsonPath));
+        var json = JObject.Parse(FileWrapper.GetFromFactory().ReadAllText(productJsonPath));
 
         foreach (var (category, flag) in CategoryToFlag)
         {
@@ -47,6 +48,6 @@ public static class DropSuppressionStamp
                 json[flag] = false;
         }
 
-        File.WriteAllText(productJsonPath, json.ToString(Formatting.Indented));
+        FileWrapper.GetFromFactory().WriteAllText(productJsonPath, json.ToString(Formatting.Indented));
     }
 }

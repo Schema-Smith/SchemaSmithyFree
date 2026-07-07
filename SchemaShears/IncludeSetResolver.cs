@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using System.IO;
+using Schema.Isolators;
 
 namespace SchemaShears;
 
@@ -34,7 +35,7 @@ public static class IncludeSetResolver
         if (parts.Length < 2 || parts[0] != "Templates") return;
 
         var templateJson = Path.Join("Templates", parts[1], "Template.json");
-        if (File.Exists(Path.Join(sourcePath, templateJson)))
+        if (FileWrapper.GetFromFactory().Exists(Path.Join(sourcePath, templateJson)))
             AddOrKeepStronger(set, templateJson, IncludeReason.Scaffolding);
     }
 

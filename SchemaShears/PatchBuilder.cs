@@ -2,6 +2,7 @@
 
 using System;
 using System.IO;
+using Schema.Isolators;
 using Schema.Utility;
 
 namespace SchemaShears;
@@ -22,9 +23,9 @@ public class PatchBuilder
     {
         var log = LogFactory.GetLogger("ProgressLog");
 
-        if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
+        if (string.IsNullOrWhiteSpace(request.SourcePath) || !DirectoryWrapper.GetFromFactory().Exists(request.SourcePath))
             throw new PatchBuildException($"Source product folder not found: '{request.SourcePath}'.");
-        if (!File.Exists(Path.Join(request.SourcePath, "Product.json")))
+        if (!FileWrapper.GetFromFactory().Exists(Path.Join(request.SourcePath, "Product.json")))
             throw new PatchBuildException($"Source folder is not a product (no Product.json): '{request.SourcePath}'.");
         if (string.IsNullOrWhiteSpace(request.OutputPath))
             throw new PatchBuildException("Output path is required.");

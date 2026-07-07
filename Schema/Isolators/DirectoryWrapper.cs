@@ -28,14 +28,18 @@ public class DirectoryWrapper : IDirectory
         return Directory.GetDirectories(LongPathSupport.MakeSafeLongFilePath(path), searchPattern, searchOption);
     }
 
+    // Unlike the single-path members, the enumerate methods do NOT long-path-prefix the search
+    // root: enumeration results inherit the root's form, and callers post-process the returned
+    // paths (e.g. Path.GetRelativePath), which breaks against a "\\?\"-prefixed result. Leaving the
+    // root unprefixed keeps results in caller-facing form and matches the raw BCL behavior callers had.
     public IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption)
     {
-        return Directory.EnumerateFiles(LongPathSupport.MakeSafeLongFilePath(path), searchPattern, searchOption);
+        return Directory.EnumerateFiles(path, searchPattern, searchOption);
     }
 
     public IEnumerable<string> EnumerateFileSystemEntries(string path, string searchPattern, SearchOption searchOption)
     {
-        return Directory.EnumerateFileSystemEntries(LongPathSupport.MakeSafeLongFilePath(path), searchPattern, searchOption);
+        return Directory.EnumerateFileSystemEntries(path, searchPattern, searchOption);
     }
 
     public void Delete(string path, bool recursive = false)

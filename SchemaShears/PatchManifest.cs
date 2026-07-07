@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Schema.Isolators;
 
 namespace SchemaShears;
 
@@ -15,17 +16,17 @@ public static class PatchManifest
 {
     public static IReadOnlyList<string> Read(string manifestPath, string sourcePath)
     {
-        if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
+        if (string.IsNullOrWhiteSpace(manifestPath) || !FileWrapper.GetFromFactory().Exists(manifestPath))
             throw new PatchBuildException($"Manifest file not found: '{manifestPath}'.");
 
         var entries = new List<string>();
-        foreach (var raw in File.ReadAllLines(manifestPath))
+        foreach (var raw in FileWrapper.GetFromFactory().ReadAllLines(manifestPath))
         {
             var line = raw.Trim();
             if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal)) continue;
 
             var normalized = line.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
-            if (!File.Exists(Path.Join(sourcePath, normalized)))
+            if (!FileWrapper.GetFromFactory().Exists(Path.Join(sourcePath, normalized)))
                 throw new PatchBuildException($"Manifest path does not exist under source: '{line}'.");
 
             entries.Add(normalized);
