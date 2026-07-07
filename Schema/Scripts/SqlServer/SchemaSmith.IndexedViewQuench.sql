@@ -277,10 +277,6 @@ BEGIN
         -- Create/update indexes
         IF @needsRecreate = 1 OR @needsIndexUpdate = 1
         BEGIN
-            DECLARE @idxName NVARCHAR(200), @idxUnique BIT, @idxClustered BIT,
-                    @idxColumns NVARCHAR(MAX), @idxInclude NVARCHAR(MAX),
-                    @idxCompression NVARCHAR(200), @idxFillFactor INT;
-
             -- For index updates on existing views, diff individual indexes
             IF @needsIndexUpdate = 1 AND @existingObjectId IS NOT NULL
             BEGIN
@@ -423,53 +419,51 @@ BEGIN
             -- Create missing indexes (clustered first, then nonclustered)
             -- For new views: all indexes are missing
             -- For index updates: only dropped/new indexes are missing (unchanged indexes still exist and are skipped)
-            DECLARE idx_cursor CURSOR LOCAL FAST_FORWARD FOR
-                SELECT
-                    [SchemaSmith].[fn_StripBracketWrapping](JSON_VALUE(idx.value, '$.Name')),
-                    CAST(ISNULL(JSON_VALUE(idx.value, '$.Unique'), 'false') AS BIT),
-                    CAST(ISNULL(JSON_VALUE(idx.value, '$.Clustered'), 'false') AS BIT),
-                    JSON_VALUE(idx.value, '$.IndexColumns'),
-                    JSON_VALUE(idx.value, '$.IncludeColumns'),
-                    JSON_VALUE(idx.value, '$.CompressionType'),
-                    CAST(ISNULL(JSON_VALUE(idx.value, '$.FillFactor'), '0') AS INT)
-                FROM OPENJSON(@indexJson) idx
-                ORDER BY CASE WHEN ISNULL(JSON_VALUE(idx.value, '$.Clustered'), 'false') = 'true' THEN 0 ELSE 1 END;
+            -- Create missing indexes (clustered first, then nonclustered) in one batch.
+            -- Already-existing indexes are skipped via the NOT EXISTS filter (unchanged during an
+            -- index-only update). FillFactor is emitted whenever > 0, matching the per-index form.
+            DECLARE @createIdxSql NVARCHAR(MAX);
+            SELECT @createIdxSql = STRING_AGG(CAST(
+                    'CREATE '
+                    + CASE WHEN v.IsUnique = 1 THEN 'UNIQUE ' ELSE '' END
+                    + CASE WHEN v.IsClustered = 1 THEN 'CLUSTERED ' ELSE '' END
+                    + 'INDEX ' + QUOTENAME(v.IdxName)
+                    + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
+                    + ' (' + v.IdxColumns + ')'
+                    + CASE WHEN v.IdxInclude IS NOT NULL THEN ' INCLUDE (' + v.IdxInclude + ')' ELSE '' END
+                    + CASE WHEN w.WithInner <> '' THEN ' WITH (' + w.WithInner + ')' ELSE '' END
+                  AS NVARCHAR(MAX)), '; ' + CHAR(13) + CHAR(10))
+                  WITHIN GROUP (ORDER BY CASE WHEN v.IsClustered = 1 THEN 0 ELSE 1 END)
+            FROM OPENJSON(@indexJson) idx
+            CROSS APPLY (VALUES (
+                [SchemaSmith].[fn_StripBracketWrapping](JSON_VALUE(idx.value, '$.Name')),
+                CAST(ISNULL(JSON_VALUE(idx.value, '$.Unique'), 'false') AS BIT),
+                CAST(ISNULL(JSON_VALUE(idx.value, '$.Clustered'), 'false') AS BIT),
+                JSON_VALUE(idx.value, '$.IndexColumns'),
+                JSON_VALUE(idx.value, '$.IncludeColumns'),
+                ISNULL(JSON_VALUE(idx.value, '$.CompressionType'), 'NONE'),
+                CAST(ISNULL(JSON_VALUE(idx.value, '$.FillFactor'), '0') AS INT)
+            )) AS v(IdxName, IsUnique, IsClustered, IdxColumns, IdxInclude, Compression, FillFactorV)
+            CROSS APPLY (VALUES (
+                CASE WHEN v.Compression <> 'NONE' AND v.FillFactorV > 0
+                        THEN 'DATA_COMPRESSION = ' + v.Compression + ', FILLFACTOR = ' + CAST(v.FillFactorV AS NVARCHAR(10))
+                     WHEN v.Compression <> 'NONE'
+                        THEN 'DATA_COMPRESSION = ' + v.Compression
+                     WHEN v.FillFactorV > 0
+                        THEN 'FILLFACTOR = ' + CAST(v.FillFactorV AS NVARCHAR(10))
+                     ELSE '' END
+            )) AS w(WithInner)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM sys.indexes si
+                WHERE si.object_id = OBJECT_ID(QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName))
+                AND si.name = v.IdxName
+            );
 
-            OPEN idx_cursor;
-            FETCH NEXT FROM idx_cursor INTO @idxName, @idxUnique, @idxClustered, @idxColumns, @idxInclude, @idxCompression, @idxFillFactor;
-            WHILE @@FETCH_STATUS = 0
+            IF @createIdxSql IS NOT NULL
             BEGIN
-                -- Skip indexes that already exist (unchanged during index-only update)
-                IF NOT EXISTS (
-                    SELECT 1 FROM sys.indexes si
-                    WHERE si.object_id = OBJECT_ID(QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName))
-                    AND si.name = @idxName
-                )
-                BEGIN
-                    SET @sql = 'CREATE ';
-                    IF @idxUnique = 1 SET @sql += 'UNIQUE ';
-                    IF @idxClustered = 1 SET @sql += 'CLUSTERED ';
-                    SET @sql += 'INDEX ' + QUOTENAME(@idxName) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName) + ' (' + @idxColumns + ')';
-                    IF @idxInclude IS NOT NULL SET @sql += ' INCLUDE (' + @idxInclude + ')';
-
-                    DECLARE @withOpts NVARCHAR(MAX) = '';
-                    IF @idxCompression IS NOT NULL AND @idxCompression != 'NONE'
-                        SET @withOpts += 'DATA_COMPRESSION = ' + @idxCompression;
-                    IF @idxFillFactor > 0 OR (@UpdateFillFactor = 1 AND @idxFillFactor > 0)
-                    BEGIN
-                        IF LEN(@withOpts) > 0 SET @withOpts += ', ';
-                        SET @withOpts += 'FILLFACTOR = ' + CAST(@idxFillFactor AS NVARCHAR(10));
-                    END;
-                    IF LEN(@withOpts) > 0 SET @sql += ' WITH (' + @withOpts + ')';
-
-                    EXEC [SchemaSmith].[PrintWithNoWait] @sql;
-                    IF @WhatIf = 0 EXEC sp_executesql @sql;
-                END;
-
-                FETCH NEXT FROM idx_cursor INTO @idxName, @idxUnique, @idxClustered, @idxColumns, @idxInclude, @idxCompression, @idxFillFactor;
+                EXEC [SchemaSmith].[PrintWithNoWait] @createIdxSql;
+                IF @WhatIf = 0 EXEC sp_executesql @createIdxSql;
             END;
-            CLOSE idx_cursor;
-            DEALLOCATE idx_cursor;
         END;
 
         FETCH NEXT FROM view_cursor INTO @ivSchema, @ivName, @defn, @indexJson, @variantName;
