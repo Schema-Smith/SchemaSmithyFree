@@ -30,7 +30,7 @@
           "VariantName": {
             "type": "string",
             "maxLength": 128,
-            "description": "Optional label for a conditional variant \u2014 names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
           "CheckExpression": {
             "type": "string"
@@ -82,8 +82,7 @@
         "additionalProperties": false,
         "required": [
           "Name",
-          "DataType",
-          "Extensions"
+          "DataType"
         ]
       }
     },
@@ -113,7 +112,7 @@
           "VariantName": {
             "type": "string",
             "maxLength": 128,
-            "description": "Optional label for a conditional variant \u2014 names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
           "FilterExpression": {
             "type": "string"
@@ -178,7 +177,7 @@
           "VariantName": {
             "type": "string",
             "maxLength": 128,
-            "description": "Optional label for a conditional variant \u2014 names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
           "RelatedTableSchema": {
             "type": "string"
@@ -211,7 +210,7 @@
           "VariantName": {
             "type": "string",
             "maxLength": 128,
-            "description": "Optional label for a conditional variant \u2014 names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
           "Extensions": {}
         },
@@ -226,37 +225,88 @@
       "type": "string"
     },
     "DataDelivery": {
-      "type": "object",
-      "properties": {
-        "ContentFile": {
-          "type": "string"
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ContentFile": {
+              "type": "string"
+            },
+            "MergeType": {
+              "type": "string",
+              "pattern": "Insert|Insert/Update|Insert/Update/Delete"
+            },
+            "MatchColumns": {
+              "type": "string"
+            },
+            "MergeFilter": {
+              "type": "string"
+            },
+            "MergeDisableTriggers": {
+              "type": "boolean"
+            },
+            "MergeDisableRules": {
+              "type": "boolean"
+            },
+            "MergeUpdateDescendents": {
+              "type": "boolean"
+            },
+            "ShouldApplyExpression": {
+              "type": "string"
+            },
+            "VariantName": {
+              "type": "string",
+              "maxLength": 128,
+              "description": "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and identifies which array variant a DataTongs re-extraction reconciles."
+            }
+          },
+          "additionalProperties": false
         },
-        "MergeType": {
-          "type": "string",
-          "pattern": "Insert|Insert/Update|Insert/Update/Delete"
-        },
-        "MatchColumns": {
-          "type": "string"
-        },
-        "MergeFilter": {
-          "type": "string"
-        },
-        "MergeDisableTriggers": {
-          "type": "boolean"
-        },
-        "MergeDisableRules": {
-          "type": "boolean"
-        },
-        "MergeUpdateDescendents": {
-          "type": "boolean"
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ContentFile": {
+                "type": "string"
+              },
+              "MergeType": {
+                "type": "string",
+                "pattern": "Insert|Insert/Update|Insert/Update/Delete"
+              },
+              "MatchColumns": {
+                "type": "string"
+              },
+              "MergeFilter": {
+                "type": "string"
+              },
+              "MergeDisableTriggers": {
+                "type": "boolean"
+              },
+              "MergeDisableRules": {
+                "type": "boolean"
+              },
+              "MergeUpdateDescendents": {
+                "type": "boolean"
+              },
+              "ShouldApplyExpression": {
+                "type": "string"
+              },
+              "VariantName": {
+                "type": "string",
+                "maxLength": 128,
+                "description": "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and identifies which array variant a DataTongs re-extraction reconciles."
+              }
+            },
+            "additionalProperties": false
+          }
         }
-      },
-      "additionalProperties": false
+      ]
     },
     "VariantName": {
       "type": "string",
       "maxLength": 128,
-      "description": "Optional label for a conditional variant \u2014 names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+      "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
     },
     "DropColumnsRemovedFromProduct": {
       "type": "boolean",
@@ -321,7 +371,7 @@
           "VariantName": {
             "type": "string",
             "maxLength": 128,
-            "description": "Optional label for a conditional variant \u2014 names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
           "Extensions": {}
         },
@@ -357,7 +407,7 @@
           "VariantName": {
             "type": "string",
             "maxLength": 128,
-            "description": "Optional label for a conditional variant \u2014 names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
           },
           "Extensions": {}
         },
@@ -394,7 +444,7 @@
             "VariantName": {
               "type": "string",
               "maxLength": 128,
-              "description": "Optional label for a conditional variant \u2014 names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+              "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
             },
             "Extensions": {}
           },
@@ -431,7 +481,7 @@
               "VariantName": {
                 "type": "string",
                 "maxLength": 128,
-                "description": "Optional label for a conditional variant \u2014 names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+                "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
               },
               "Extensions": {}
             },
@@ -471,7 +521,6 @@
   },
   "additionalProperties": false,
   "required": [
-    "Name",
-    "Extensions"
+    "Name"
   ]
 }
