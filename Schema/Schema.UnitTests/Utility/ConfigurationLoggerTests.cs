@@ -2,6 +2,8 @@
 
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
+using NSubstitute;
+using Schema.Isolators;
 using Schema.Utility;
 
 namespace Schema.UnitTests.Utility;
@@ -9,6 +11,119 @@ namespace Schema.UnitTests.Utility;
 [TestFixture]
 public class ConfigurationLoggerTests
 {
+    private IEnvironment _mockEnvironment;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _mockEnvironment = Substitute.For<IEnvironment>();
+        FactoryContainer.Register<IEnvironment>(_mockEnvironment);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        FactoryContainer.Clear();
+    }
+
+    private static IConfigurationRoot ConfigWith(params (string key, string value)[] entries)
+    {
+        var dict = new Dictionary<string, string>();
+        foreach (var (k, v) in entries) dict[k] = v;
+        return new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
+    }
+
+    [Test]
+    public void LogCommandLine_LogsHeaderAndSwitches()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --MinimumVersion=5 --Source__Server=myhost");
+        var logLines = new List<string>();
+
+        ConfigurationLogger.LogCommandLine(ConfigWith(), s => logLines.Add(s));
+
+        Assert.That(logLines, Has.Some.EqualTo("Command line:"));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.Contains("MinimumVersion") && s.Contains("5")));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.Contains("Source__Server") && s.Contains("myhost")));
+    }
+
+    [Test]
+    public void LogCommandLine_MasksSensitivelyNamedSwitch()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Source__Password=secret123");
+        var logLines = new List<string>();
+
+        ConfigurationLogger.LogCommandLine(ConfigWith(), s => logLines.Add(s));
+
+        Assert.That(logLines, Has.None.Matches<string>(s => s.Contains("secret123")));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.TrimStart() == "Source__Password: ***"));
+    }
+
+    [Test]
+    public void LogCommandLine_MasksConnectionStringSwitchWholesale()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --ConnectionString=Server=db;Password=secret");
+        var logLines = new List<string>();
+
+        ConfigurationLogger.LogCommandLine(ConfigWith(), s => logLines.Add(s));
+
+        Assert.That(logLines, Has.None.Matches<string>(s => s.Contains("secret")));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.TrimStart() == "ConnectionString: ***"));
+    }
+
+    [Test]
+    public void LogCommandLine_ScrubsEmbeddedPasswordInNonSensitiveSwitch()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Dsn=Server=db;Password=secret");
+        var logLines = new List<string>();
+
+        ConfigurationLogger.LogCommandLine(ConfigWith(), s => logLines.Add(s));
+
+        Assert.That(logLines, Has.None.Matches<string>(s => s.Contains("secret")));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.Contains("Server=db") && s.Contains("Password=***")));
+    }
+
+    [Test]
+    public void LogCommandLine_MasksCustomScrubToken()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --MyCustomFlag=sensitive");
+        var logLines = new List<string>();
+
+        ConfigurationLogger.LogCommandLine(ConfigWith(("LogHygiene:ScrubTokens:0", "MyCustomFlag")), s => logLines.Add(s));
+
+        Assert.That(logLines, Has.None.Matches<string>(s => s.Contains("sensitive")));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.TrimStart() == "MyCustomFlag: ***"));
+    }
+
+    [Test]
+    public void LogCommandLine_AllowTokenUnmasksDefaultSensitiveName()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Token=visible");
+        var logLines = new List<string>();
+
+        ConfigurationLogger.LogCommandLine(ConfigWith(("LogHygiene:AllowTokens:0", "Token")), s => logLines.Add(s));
+
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.TrimStart() == "Token: visible"));
+    }
+
+    [Test]
+    public void LogCommandLine_NoSwitches_LogsNone()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe");
+        var logLines = new List<string>();
+
+        ConfigurationLogger.LogCommandLine(ConfigWith(), s => logLines.Add(s));
+
+        Assert.That(logLines, Has.Some.EqualTo("Command line:"));
+        Assert.That(logLines, Has.Some.Matches<string>(s => s.TrimStart() == "(none)"));
+    }
+
+    [Test]
+    public void LogCommandLine_HandlesNullLogLine()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Foo=bar");
+        Assert.DoesNotThrow(() => ConfigurationLogger.LogCommandLine(ConfigWith(), null));
+    }
+
     [Test]
     public void LogConfiguration_LogsVersionLine()
     {

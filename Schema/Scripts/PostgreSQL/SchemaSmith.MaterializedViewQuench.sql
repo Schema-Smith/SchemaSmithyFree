@@ -86,7 +86,14 @@ BEGIN
   sql_script = '';
   SELECT STRING_AGG('DROP INDEX IF EXISTS "' || n.nspname || '"."' || i.relname || '";', CHR(10))
     INTO sql_script
-    FROM pg_matviews mv
+    -- Fence to this iteration's schema: pg_matviews.definition is pg_get_viewdef(oid), which OPENS
+    -- the relation. Reading a *sibling* tenant's mat-view definition races with that sibling's
+    -- concurrent DROP MATERIALIZED VIEW under parallel fan-out and errors XX000 "could not open
+    -- relation with OID". The OFFSET 0 fence guarantees the schema filter runs before pg_get_viewdef.
+    FROM (SELECT schemaname, matviewname, definition
+            FROM pg_matviews
+            WHERE p_SchemaName = '' OR schemaname = p_SchemaName
+            OFFSET 0) mv
     JOIN pg_class c ON c.relname = mv.matviewname
                    AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = mv.schemaname)
                    AND c.relkind = 'm'
@@ -117,7 +124,13 @@ BEGIN
   SELECT STRING_AGG('RAISE NOTICE ''  Dropping materialized view ' || mv.schemaname || '.' || mv.matviewname || ''';' || CHR(10) ||
                     'DROP MATERIALIZED VIEW IF EXISTS "' || mv.schemaname || '"."' || mv.matviewname || '";', CHR(10))
     INTO sql_script
-    FROM pg_matviews mv
+    -- Fence to this iteration's schema (see the note on the index-drop query above): keeps
+    -- pg_get_viewdef (mv.definition) off sibling tenants' mat-views, which race with their
+    -- concurrent DROP MATERIALIZED VIEW under parallel fan-out (XX000 could not open relation).
+    FROM (SELECT schemaname, matviewname, definition
+            FROM pg_matviews
+            WHERE p_SchemaName = '' OR schemaname = p_SchemaName
+            OFFSET 0) mv
     WHERE (
       -- View removed from product. Strict on template_name (legacy '' rows excluded).
       -- p_SchemaName non-empty (schema-template iteration) further restricts to the

@@ -80,7 +80,7 @@ SchemaSmith layers configuration so you can set sensible defaults in a file and 
 1. **Settings file** -- `<ToolName>.settings.json`
 2. **User secrets** -- .NET user secrets (debug builds only, not present in release builds)
 3. **Environment variables** -- prefixed with `SmithySettings_`
-4. **CLI switches** -- `--ConnectionString`, `--ConfigFile`, `--LogPath`
+4. **CLI switches** -- the named switches (`--ConnectionString`, `--ConfigFile`, `--LogPath`) plus the `--Key=value` override form described below
 
 This means a value set in the settings file can be overridden by an environment variable, and a CLI switch always wins.
 
@@ -110,6 +110,31 @@ SchemaQuench --ConnectionString:"Host=prod-server;Database=mydb;Username=deploy;
 ```
 
 The `--ConnectionString` switch bypasses all individual connection settings -- `Server`, `Port`, `User`, `Password`, and `ConnectionProperties` are all ignored when a full connection string is provided.
+
+### Overriding any setting
+
+Beyond the named switches, **any** configuration option can be set or overridden from the command line with a `--Key=value` switch. This is the same override reach the `SmithySettings_` environment variables give you, without touching a file or exporting a variable -- ideal for CI and one-off runs.
+
+The rule mirrors the environment-variable grammar exactly: an `=` separates the key from the value, and a double underscore (`__`) nests into the configuration hierarchy. Whatever you'd write after `SmithySettings_` you write after `--`:
+
+| Command-line switch | Maps to config key | Environment-variable equivalent |
+|---|---|---|
+| `--MinimumVersion=16` | `MinimumVersion` | `SmithySettings_MinimumVersion` |
+| `--Target__Server=prod-db` | `Target:Server` | `SmithySettings_Target__Server` |
+| `--Source__Password=s3cret` | `Source:Password` | `SmithySettings_Source__Password` |
+| `--Target__ConnectionProperties__Encrypt=true` | `Target:ConnectionProperties:Encrypt` | `SmithySettings_Target__ConnectionProperties__Encrypt` |
+
+```bash
+# Override just the server and skip cert validation for a single run
+SchemaQuench --Target__Server=staging-db --Target__ConnectionProperties__TrustServerCertificate=true
+```
+
+A `--Key=value` override sits at the top of the [configuration hierarchy](#configuration-hierarchy) -- it wins over the settings file, user secrets, and environment variables.
+
+Two things to keep in mind:
+
+- The `=` is required for an override. The named switches (`--LogPath`, `--ConfigFile`, `--ConnectionString`) accept a `:` separator, but nesting into arbitrary settings needs the `__`/`=` form so a value containing a colon (a Windows path, a `host:port`) is never mistaken for a key boundary.
+- `--ConnectionString` still bypasses the individual connection settings. If you pass both `--ConnectionString` and a `--Source__Server=` / `--Target__Server=` override, the full connection string wins for connecting.
 
 ---
 
@@ -232,7 +257,7 @@ When `--ConnectionString` is provided, all individual connection settings (`Serv
 
 ## Sensitive value masking
 
-Your credentials stay out of the logs. When a tool logs its active configuration at startup -- and when SchemaQuench logs its product and template script tokens -- it scrubs any value whose name matches a built-in sensitive-name set, so a log is safe to attach to a support ticket, paste into a CI artifact, or drop into a screenshot.
+Your credentials stay out of the logs. When a tool logs its active configuration at startup, its resolved command-line switches, and (for SchemaQuench) its product and template script tokens, it scrubs any value whose name matches a built-in sensitive-name set, so a log is safe to attach to a support ticket, paste into a CI artifact, or drop into a screenshot.
 
 The default sensitive-name patterns (case-insensitive, substring match) are `Password`, `Pwd`, `Secret`, `ApiKey`, `Token`, `ConnectionString`, and `Credential`. A matched value renders as `***` while its name still prints, so you can confirm the setting exists without exposing it. An embedded `Password=` / `Pwd=` inside a connection-string value is stripped even when the surrounding setting or token is not sensitively named -- one leaked connection string is one too many.
 
@@ -320,7 +345,20 @@ DataTongs --LogPath:D:\BuildLogs
 
 ### Startup configuration dump
 
-Immediately after loading configuration, every tool logs its complete active configuration to the progress log. This includes the tool name and version number, followed by every configuration key and its value (with passwords masked). This makes it straightforward to verify what settings were in effect for any given run.
+Immediately after loading configuration, every tool logs the resolved command-line switches followed by its complete active configuration to the progress log. This includes the tool name and version number, every switch passed on the command line, and every configuration key and its value (with sensitive values masked). This makes it straightforward to verify both the effective command line and the settings that were in effect for any given run.
+
+Sensitive switches are scrubbed the same way configuration values are -- a `--Target__Password=...` or `--ConnectionString=...` renders its value as `***` while the switch name still prints, honoring the same `LogHygiene` rules described in [Sensitive value masking](#sensitive-value-masking):
+
+```
+Command line:
+  ConfigFile: production.json
+  Target__Server: prod-db
+  Target__Password: ***
+
+Configuration:
+    Server: prod-db
+    Password: ***
+```
 
 ### Log backup rotation
 

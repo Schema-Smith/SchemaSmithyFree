@@ -47,6 +47,29 @@ public static class ConfigurationLogger
         logLine?.Invoke("");
     }
 
+    public static void LogCommandLine(IConfigurationRoot config, Action<string> logLine)
+    {
+        var hygiene = LogHygieneOptions.FromConfiguration(config);
+        logLine?.Invoke("Command line:");
+
+        var switches = CommandLineParser.SwitchesAndValues;
+        if (switches.Count == 0)
+        {
+            logLine?.Invoke("  (none)");
+        }
+        else
+        {
+            foreach (var entry in switches)
+            {
+                var value = LogScrubber.ScrubTokenValue(entry.Key, entry.Value ?? "", hygiene);
+                logLine?.Invoke($"  {entry.Key}: {value}");
+            }
+        }
+
+        logLine?.Invoke("");
+        logLine?.Invoke("");
+    }
+
     private static string TryIndexToItemName(string key, Dictionary<string, string> entries, KeyValuePair<string, string> entry, HashSet<string> arrayNameKeys)
     {
         if (int.TryParse(key, out _))

@@ -152,6 +152,36 @@ public class ConfigHelperTests
     }
 
     [Test]
+    public void GetAppSettingsAndUserSecrets_CommandLineOverrideWinsOverConfigFile()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, """{"MinimumVersion": "10", "Untouched": "keepme"}""");
+            _mockEnvironment.CommandLine.Returns($"app.exe --ConfigFile:{tempFile} --MinimumVersion=99");
+
+            var config = ConfigHelper.GetAppSettingsAndUserSecrets("TestApp", _ => { });
+
+            Assert.That(config["MinimumVersion"], Is.EqualTo("99"));
+            Assert.That(config["Untouched"], Is.EqualTo("keepme"));
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Test]
+    public void GetAppSettingsAndUserSecrets_CommandLineNestedOverride_UsesColonPath()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Source__Server=cli-host");
+
+        var config = ConfigHelper.GetAppSettingsAndUserSecrets("TestApp", _ => { });
+
+        Assert.That(config["Source:Server"], Is.EqualTo("cli-host"));
+    }
+
+    [Test]
     public void GetAppSettingsAndUserSecrets_HandlesNullLogLine()
     {
         // Should not throw when logLine is null

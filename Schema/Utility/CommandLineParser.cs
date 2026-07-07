@@ -55,6 +55,30 @@ public static class CommandLineParser
         }
     }
 
+    /// <summary>
+    /// Config overrides supplied on the command line. Any switch containing '=' is an override:
+    /// the key is the text before the first '=' (with '__' translated to the config path
+    /// separator ':'), the value is the remainder (trimmed of surrounding quotes/spaces).
+    /// '__' nesting mirrors the SmithySettings_ environment-variable grammar. Legacy ':'-form
+    /// named switches (no '=') are not overrides.
+    /// </summary>
+    public static Dictionary<string, string> ConfigOverrides
+    {
+        get
+        {
+            var result = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
+            foreach (var trimmed in Arguments.Where(x => x.StartsWith("/") || x.StartsWith("-")).Select(TrimKeyName))
+            {
+                var eq = trimmed.IndexOf('=');
+                if (eq < 0) continue; // only '='-form switches are config overrides
+                var key = trimmed.Substring(0, eq).Replace("__", ":");
+                if (key.Length == 0) continue;
+                result[key] = trimmed.Substring(eq + 1).Trim('"', ' ');
+            }
+            return result;
+        }
+    }
+
     public static bool ContainsSwitch(string switchName)
     {
         return SwitchesAndValues.ContainsKey(switchName);
@@ -127,6 +151,7 @@ public static class CommandLineParser
         Console.WriteLine("  --LogPath:<logpath>              Path to write logs and create backup directories. The default is current path.");
         Console.WriteLine("  --ConfigFile:<filepath>          Path and file name of the config file. The default is <toolname>.settings.json in the current path.");
         Console.WriteLine("  --ConnectionString:<connstr>     Override the connection string. Bypasses all connection settings in the config file.");
+        Console.WriteLine("  --<Key>=<value>                  Override any configuration option (nest with '__', e.g. --Source__Server=host). Logged at startup; sensitive values scrubbed.");
         toolSpecificSwitches?.Invoke();
         Console.WriteLine("  --help                           Show the command line options");
         EnvironmentWrapper.GetFromFactory().Exit(0);
