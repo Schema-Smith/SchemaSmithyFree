@@ -1,4 +1,5 @@
 <!-- TRAINING-RELEASE-PIN #278: conditional/multi data delivery — DataDelivery ShouldApplyExpression + VariantName + object-or-array (SchemaSmith#278, merged in PR #328). When this ships in a stock release: bump the pre-flight version string, drop the from-source caveat, re-cert against stock, then delete this sentinel + the release-coupled table row in training-roadmap.md. -->
+<!-- TRAINING-RELEASE-PIN #333: full-sync MergeFilter Target alias on MySQL (SchemaSmith#333, merged in PR #335). The StatusCode full-sync slices use a portable `Target.<col>` MergeFilter that fails on MySQL pre-#333. When #333 ships in a stock release: drop the from-source caveat, re-cert against stock, delete this sentinel + the release-coupled table row in training-roadmap.md. -->
 
 # Course 4, Recipe 7 — Conditional / multi-delivery data delivery (lab)
 
@@ -18,7 +19,7 @@ And `DataDelivery` is now either a single object (as before) or an **array** of 
 ## Before you start
 
 - **The sandbox is up.** SQL Server (`localhost,11433`), PostgreSQL (`localhost:15432`), MySQL (`localhost:13306`), all `…/Learn!Passw0rd`.
-- **From-source override.** Gated data delivery (SchemaSmith [#278](https://github.com/Schema-Smith/SchemaSmith/issues/278)) merged to `main` but isn't in the 2.2.0 release yet — build the CLI from source and use the built `SchemaQuench`/`SchemaTongs`. Once it ships in a stock release, use the installed CLI on your PATH.
+- **From-source override.** Two fixes this recipe uses merged to `main` but aren't in a stock release yet: gated data delivery (SchemaSmith [#278](https://github.com/Schema-Smith/SchemaSmith/issues/278)) and the portable full-sync `MergeFilter` alias on MySQL (SchemaSmith [#333](https://github.com/Schema-Smith/SchemaSmith/issues/333)). Build the CLI from source and use the built `SchemaQuench`/`SchemaTongs`. On a stock pre-#333 CLI the `Target.<col>` MergeFilter fails on MySQL with `Unknown column 'Target.…'`. Once both ship in a stock release, use the installed CLI on your PATH.
 - **Two databases per engine.** The lab creates `cookbook_r7_dev` and `cookbook_r7_main`; the template's `DatabaseIdentificationScript` targets both, so **one quench deploys to both** and the gates steer the data. Create them first (SQL Server shown):
   ```sql
   CREATE DATABASE cookbook_r7_dev;

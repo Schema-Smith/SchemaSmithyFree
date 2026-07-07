@@ -1,3 +1,4 @@
+<!-- TRAINING-RELEASE-PIN #332: PostgreSQL stale-checkpoint re-run (SchemaSmith#332, merged in PR #335). Beat-1's PostgreSQL dedupe re-green needs this — a stock pre-#335 CLI crashes `42P01: temp_existing_indexes` on the plain re-run. When #332 ships in a stock release: drop the from-source note below, re-cert against stock, delete this sentinel + the release-coupled table row in training-roadmap.md. -->
 # Course 8 · Module 3 — Index, constraint & FK failures
 
 Two induced incidents on one database (`diag_keys`), read end to end. This is the two phases *after*
@@ -9,6 +10,7 @@ error, recover.
 
 - The three-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
 - `schemaquench --version` answers on your PATH. New to the CLI? [Course 1, Module 1](https://learn.schemasmith.com/01-install-connect/).
+- **From-source override (Beat 1, PostgreSQL only).** The PostgreSQL stale-checkpoint fix (SchemaSmith [#332](https://github.com/Schema-Smith/SchemaSmith/issues/332)) merged to `main` but isn't in a stock release yet. Beat 1's *PostgreSQL* dedupe re-green needs it — on a stock pre-#332 CLI the plain re-run after the dup-key failure crashes with `42P01: relation "temp_existing_indexes" does not exist`. Build the CLI from source for that step (SQL Server and MySQL re-green on any recent CLI; both failures, and Beat 2 end to end, run everywhere). Once #332 ships in a stock release, use the installed CLI on your PATH.
 
 ## Step 1 — create the sandbox database
 
