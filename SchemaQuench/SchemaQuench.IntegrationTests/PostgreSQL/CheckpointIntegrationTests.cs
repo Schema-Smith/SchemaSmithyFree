@@ -310,7 +310,7 @@ KindleForge
         {
             SetupSharedMocks(); // sets "--SkipKindlingForge --ResumeQuench"
 
-            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", "ValidProduct");
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("PostgreSQL", "ResumeProbe");
             FactoryContainer.Resolve<IConfigurationRoot>()["CheckpointDirectory"] = _checkpointDir;
 
             var product = Product.Load();
@@ -344,25 +344,15 @@ ModifiedTables
             Directory.CreateDirectory(_checkpointDir);
             File.WriteAllText(dbCheckpointPath, dbCheckpointContent);
 
-            // Neutralize the unrelated run-once After-Script `Create TestSecondary.sql` (a literal
-            // CREATE DATABASE that leaks a cluster-level object across test runs) by pre-marking it
-            // complete in the migration-tracking table, mirroring ShouldQuenchValidProductSuccessfully.
-            // This keeps the exit-0 assertion focused on the #332 temp_existing_indexes convergence.
+            // Guard against a fresh (unkindled) CI database: SkipKindlingForge assumes
+            // _mainDb is already kindled, which is only true locally by test-run history.
+            // A no-op when already kindled, so it can't change the local-pass behavior.
             using (var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString))
             {
                 conn.Open();
                 conn.ChangeDatabase(_mainDb);
                 using var cmd = conn.CreateCommand();
-
-                // Guard against a fresh (unkindled) CI database: SkipKindlingForge assumes
-                // _mainDb is already kindled, which is only true locally by test-run history.
-                // A no-op when already kindled, so it can't change the local-pass behavior.
                 ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL, forceReKindle: false);
-
-                cmd.CommandText = @$"
-INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts"" (""ScriptPath"", ""ProductName"", ""QuenchSlot"", template_name, schema_name)
-VALUES('After Scripts/Create TestSecondary.sql', '{product.Name}', 'After', 'Main', '');";
-                cmd.ExecuteNonQuery();
                 conn.Close();
             }
 

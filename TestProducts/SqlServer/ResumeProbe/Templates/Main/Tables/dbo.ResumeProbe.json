@@ -1,0 +1,29 @@
+{
+    "Schema": "[dbo]",
+    "Name": "[ResumeProbe]",
+    "Columns": [
+        {
+            "Name": "[Id]",
+            "DataType": "INT",
+            "Nullable": false
+        },
+        {
+            "Name": "[Name]",
+            "DataType": "VARCHAR(100)",
+            "Nullable": true
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "[PK_ResumeProbe]",
+            "PrimaryKey": true,
+            "Unique": true,
+            "Clustered": true,
+            "IndexColumns": "[Id]"
+        },
+        {
+            "Name": "[IX_ResumeProbe_Name]",
+            "IndexColumns": "[Name]"
+        }
+    ]
+}

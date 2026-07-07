@@ -336,7 +336,7 @@ KindleForge
             _environment.CommandLine.Returns("--SkipKindlingForge --ResumeQuench");
 
             var config = FactoryContainer.Resolve<IConfigurationRoot>();
-            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("MySQL", "ValidProduct");
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("MySQL", "ResumeProbe");
             config["CheckpointDirectory"] = _checkpointDir;
             Directory.CreateDirectory(_checkpointDir);
 

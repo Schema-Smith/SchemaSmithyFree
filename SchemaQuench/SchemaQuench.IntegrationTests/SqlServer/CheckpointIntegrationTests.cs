@@ -363,7 +363,7 @@ KindleForge
         {
             SetupSharedMocks(); // sets "--SkipKindlingForge --ResumeQuench"
 
-            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", "ValidProduct");
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", "ResumeProbe");
             FactoryContainer.Resolve<IConfigurationRoot>()["CheckpointDirectory"] = _checkpointDir;
 
             // Guard against a fresh (unkindled) CI database: SkipKindlingForge assumes

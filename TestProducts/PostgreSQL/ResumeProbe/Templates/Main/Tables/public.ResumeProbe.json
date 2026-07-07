@@ -1,0 +1,12 @@
+{
+    "Schema": "public",
+    "Name": "ResumeProbe",
+    "Columns": [
+        {"Name": "Id","DataType": "INTEGER","Nullable": false},
+        {"Name": "Name","DataType": "VARCHAR(100)","Nullable": true}
+    ],
+    "Indexes": [
+        {"Name": "PK_ResumeProbe","PrimaryKey": true,"Unique": true,"IndexColumns": "Id"},
+        {"Name": "IX_ResumeProbe_Name","IndexColumns": "Name"}
+    ]
+}
