@@ -220,6 +220,12 @@ These entries apply to schema-template products (one iteration per tenant schema
 
 > **Note:** Setting `AllowParallel: false` on a production schema-template product with hundreds of tenants turns a 5-minute parallel run into a proportionally longer serial one. Use it for a debugging session, not permanently.
 
+#### Which target failed?
+
+**Symptom:** One of many parallel tenants or databases failed, and the failure is buried somewhere in the interleaved progress log -- you don't know which target to grep for.
+
+**Fix:** Read `SchemaQuench - Failures.log`. Whenever a run has any failure, SchemaQuench writes this consolidated, phase-grouped roll-up naming every failed scope -- the tenant (`[server].[database] [Schema: <name>]`), a per-server `Before`/`After` product script, or a product-level `Validate` phase -- each with its error, its resolved-SQL artifact path, and a captured tail of the lines leading up to it. A loud `*** FAILED` banner also marks each failure live in the progress stream, so `grep "*** FAILED"` jumps straight to the failed scopes. It's always on and adds nothing to a clean run; tune the captured-context depth with `FailureContextLines` (default `25`). See [Failure triage roll-up](../reference/error-codes-and-reporting.md#failure-triage-roll-up).
+
 #### WhatIf output is huge
 
 **Symptom:** Running in WhatIf mode against a multi-tenant or many-database product generates thousands of lines of output, making it hard to find the change you're actually looking at.
