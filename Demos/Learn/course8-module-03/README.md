@@ -37,7 +37,7 @@ incidents:
 Both are legal today because the constraints that would catch them aren't declared yet. That is the
 whole point: **a constraint you haven't declared can't protect you.** Each beat declares one.
 
-## Beat 1 — flipping an index to unique over duplicate data (`2601` / `23505` / `1062`)
+## Beat 1 — flipping an index to unique over duplicate data (`1505` / `23505` / `1062`)
 
 `beat1-broken/` changes `IX_Customer_Email` from non-unique to **unique**. Because a *changed* index
 is dropped in the modified-tables phase and rebuilt as "missing," the build lands one phase later —
@@ -51,7 +51,7 @@ Fails **the same way on all three** — exit `2` at `Quenching indexes and const
 
 | Engine | Error (in `SchemaQuench - Progress.log`, the `FAILED to quench:` block) |
 | --- | --- |
-| **SQL Server** | `The CREATE UNIQUE INDEX statement terminated because a duplicate key was found for the object name 'dbo.Customer' and the index name 'IX_Customer_Email'. The duplicate key value is (ana.f@shop.test).` (error `2601`) |
+| **SQL Server** | `The CREATE UNIQUE INDEX statement terminated because a duplicate key was found for the object name 'dbo.Customer' and the index name 'IX_Customer_Email'. The duplicate key value is (ana.f@shop.test).` (error `1505`) |
 | **PostgreSQL** | `23505: could not create unique index "ix_customer_email"` |
 | **MySQL** | `Duplicate entry 'ana.f@shop.test' for key 'Customer.IX_Customer_Email'` (error `1062`) |
 
@@ -114,7 +114,7 @@ Green on all three — the foreign key is created and trusted.
 | Path | Purpose |
 | --- | --- |
 | `baseline/` | Healthy `Shop` (no `SalesOrder` FK) + the run-once seed that arms both beats (duplicate emails; a resident orphan order). |
-| `beat1-broken/` | Baseline + `IX_Customer_Email` flipped to **unique** — the `2601`/`23505`/`1062` dup-key incident. Recovery is a data dedupe + redeploy. |
+| `beat1-broken/` | Baseline + `IX_Customer_Email` flipped to **unique** — the `1505`/`23505`/`1062` dup-key incident. Recovery is a data dedupe + redeploy. |
 | `beat2-broken/` | `beat1-broken` + `FK_SalesOrder_Customer` added — the `547`/`23503`/`1452` orphan incident. Recovery is a data reparent + redeploy. |
 | `quench.settings.<state>.json` | One per package, all targeting `diag_keys`, lab-local `artifacts`/`checkpoints`. |
 

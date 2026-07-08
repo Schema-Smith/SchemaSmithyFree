@@ -48,7 +48,7 @@ The same failure carries a different code on each engine. SQL Server usually pri
 | --- | --- | --- | --- |
 | Foreign-key violation (orphan) | `547` | `23503` | `1452` |
 | NOT NULL violation | `515` | `23502` | `1048` |
-| Duplicate / unique-key | `2601` / `2627` | `23505` | `1062` |
+| Duplicate / unique-key | `1505` (index build) / `2601` / `2627` | `23505` | `1062` |
 | String or binary truncation | `8152` | `22001` | `1406` |
 | Type / conversion mismatch | `245` / `8115` | `22P02` | `1366` |
 | Deadlock (retried automatically) | `1205` | `40P01` | — (message-matched) |

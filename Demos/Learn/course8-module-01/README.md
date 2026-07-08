@@ -37,7 +37,7 @@ schemaquench --ConfigFile:quench.settings.after.json --LogPath:"$PWD/logs"
 
 | Engine | `FAILED to quench:` block |
 | --- | --- |
-| **SQL Server** | `The CREATE UNIQUE INDEX statement terminated because a duplicate key was found for the object name 'dbo.Customer' and the index name 'IX_Customer_Email'. The duplicate key value is (ana.f@shop.test).` (error `2601`) |
+| **SQL Server** | `The CREATE UNIQUE INDEX statement terminated because a duplicate key was found for the object name 'dbo.Customer' and the index name 'IX_Customer_Email'. The duplicate key value is (ana.f@shop.test).` (error `1505`) |
 | **PostgreSQL** | `23505: could not create unique index "ix_customer_email"` |
 | **MySQL** | `Duplicate entry 'ana.f@shop.test' for key 'Customer.IX_Customer_Email'` (error `1062`) |
 
