@@ -1,0 +1,43 @@
+{
+  "Name": "`EventCategory`",
+  "Columns": [
+    {
+      "Name": "`Code`",
+      "DataType": "varchar(30)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Description`",
+      "DataType": "varchar(120)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": "",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`Code`",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "FullTextIndexes": []
+}
