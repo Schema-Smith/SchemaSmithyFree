@@ -704,7 +704,10 @@ public class DatabaseQuench
                 SafeProgressLogError($"Resolved SQL written to: {_debugFileLocation}");
             LastFailure = FailureCtx.ToRecord(e.Message,
                 string.IsNullOrWhiteSpace(_debugFileLocation) ? null : _debugFileLocation);
-            SafeProgressLogError($"*** FAILED [Template:{_template?.Name}] — {e.Message} ***");
+            // Terse greppable scope marker; the error text is on the inline "FAILED to quench" line
+            // above and in the end-of-run roll-up, so it is not restated here (avoids duplicating
+            // error content into the progress stream, which exact-count log assertions rely on).
+            SafeProgressLogError($"*** FAILED [Template:{_template?.Name}] ***");
         }
     }
 

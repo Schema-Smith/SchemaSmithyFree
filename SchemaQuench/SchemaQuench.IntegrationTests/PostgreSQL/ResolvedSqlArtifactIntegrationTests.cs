@@ -126,6 +126,58 @@ public class ResolvedSqlArtifactIntegrationTests
     }
 
     /// <summary>
+    /// Failure Triage (#338): a tenant-scope failure emits the loud live <c>*** FAILED</c> banner
+    /// and an end-of-run phase-grouped roll-up (both echoed to the progress log), naming the failed
+    /// scope and template. The plain-text roll-up is the triage complement to the resolved-SQL
+    /// artifact — it tells the operator WHICH target failed without grepping the interleaved stream.
+    /// </summary>
+    [Test]
+    public void FailureTriage_TenantFailure_EmitsBannerAndRollup()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var progressLogLines = new List<string>();
+            var failureLogLines = new List<string>();
+            SetupSharedMocks(progressLogLines, null);
+            var failureLog = Substitute.For<ILog>();
+            failureLog.When(l => l.Info(Arg.Any<object>()))
+                .Do(ci => failureLogLines.Add(ci.Arg<object>().ToString()!));
+            LogFactory.Register("FailureLog", failureLog);
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] =
+                TestHelper.GetTestProductPath("PostgreSQL", ProductName);
+            FactoryContainer.Resolve<IConfigurationRoot>()["ArtifactPath"] = _artifactDir;
+
+            try
+            {
+                RunSchemaQuench();
+
+                _environment.Received(1).Exit(2);
+
+                // Live greppable banner in the progress stream.
+                var progressOutput = string.Join("\n", progressLogLines);
+                Assert.That(progressOutput, Does.Contain("*** FAILED [Template:"),
+                    "A loud live *** FAILED banner must name the failed template scope.");
+
+                // Phase-grouped end-of-run roll-up in the FailureLog (SchemaQuench - Failures.log).
+                var failureOutput = string.Join("\n", failureLogLines);
+                Assert.That(failureOutput, Does.Contain("failure(s):"),
+                    "The end-of-run roll-up header (N failure(s): …) must be written to the FailureLog.");
+                Assert.That(failureOutput, Does.Contain("─── FAILED"),
+                    "The roll-up must render a per-failure entry in the FailureLog.");
+            }
+            finally
+            {
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+                var cfg = FactoryContainer.Resolve<IConfigurationRoot>();
+                cfg["ArtifactPath"] = null;
+                cfg["SchemaPackagePath"] = null;
+            }
+        }
+    }
+
+    /// <summary>
     /// When ScrubArtifacts=true, the sensitive token value (AdminPassword) is masked in the
     /// written artifact; a non-sensitive token's value (Region) still appears.
     /// </summary>

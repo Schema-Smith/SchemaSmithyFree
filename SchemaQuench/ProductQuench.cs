@@ -635,8 +635,10 @@ public class ProductQuench
         _rollupEmitted = true;
         var report = FailureReportWriter.Render(_failureRecords.ToArray());
         if (string.IsNullOrEmpty(report)) return;
+        // Roll-up goes to the FailureLog logger (SchemaQuench - Failures.log + its own console
+        // appender) — NOT through _progressLog — so it reaches the console once at end of run without
+        // duplicating error content into the progress stream that exact-count assertions depend on.
         LogFactory.GetLogger("FailureLog").Info(report);
-        _progressLog.Error(report);
     }
 
     internal static readonly string[] SpecialTokenTags = ["TableSchema_", "ObjectScripts_", "QueryTokens_", "MaterializedViewSchema_", "IndexedViewSchema_"];
