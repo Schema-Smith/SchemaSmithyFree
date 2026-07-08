@@ -45,6 +45,7 @@ namespace Schema.UnitTests.Domain
             {
                 Name = "Default",
                 DatabaseIdentificationScript = "SELECT DB_NAME()",
+                IdentificationDatabase = "ControlDb",
                 VersionStampScript = "EXEC UpdateVersion",
                 IndexOnlyTableQuenches = true,
                 UpdateFillFactor = false,
@@ -58,6 +59,7 @@ namespace Schema.UnitTests.Domain
 
             Assert.That(deserialized.Name, Is.EqualTo("Default"));
             Assert.That(deserialized.DatabaseIdentificationScript, Is.EqualTo("SELECT DB_NAME()"));
+            Assert.That(deserialized.IdentificationDatabase, Is.EqualTo("ControlDb"));
             Assert.That(deserialized.VersionStampScript, Is.EqualTo("EXEC UpdateVersion"));
             Assert.That(deserialized.IndexOnlyTableQuenches, Is.True);
             Assert.That(deserialized.UpdateFillFactor, Is.False);
@@ -98,6 +100,7 @@ namespace Schema.UnitTests.Domain
                 FilePath = "/some/path",
                 TableSchema = "schema_json",
                 DatabaseIdentificationScript = "SELECT DB_NAME()",
+                IdentificationDatabase = "ControlDb",
                 VersionStampScript = "EXEC UpdateVersion",
                 ScriptTokens = new Dictionary<string, string> { { "DB", "TestDB" } },
             };
@@ -115,6 +118,7 @@ namespace Schema.UnitTests.Domain
             Assert.That(clone.FilePath, Is.EqualTo("/some/path"));
             Assert.That(clone.TableSchema, Is.EqualTo("schema_json"));
             Assert.That(clone.DatabaseIdentificationScript, Is.EqualTo("SELECT DB_NAME()"));
+            Assert.That(clone.IdentificationDatabase, Is.EqualTo("ControlDb"));
             Assert.That(clone.VersionStampScript, Is.EqualTo("EXEC UpdateVersion"));
             Assert.That(clone.Product, Is.SameAs(product));
             Assert.That(clone.Tables, Has.Count.EqualTo(1));
