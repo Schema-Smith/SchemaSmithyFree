@@ -326,6 +326,76 @@ SELECT SchemaSmith.fn_StripParenWrapping([definition])
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldAddMultipleColumnsAndIndexesToExistingTableInOneQuench()
+    {
+        // A large convergence refactor folds multiple per-table ALTER/CREATE INDEX operations into
+        // one batched statement (STRING_AGG). This exercises that fold path directly: 2+ new columns
+        // AND 2+ new non-PK indexes land on the SAME table in a SINGLE quench run.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN COLUMNPROPERTY(OBJECT_ID('dbo.AddMyMultipleItems'), 'Column1', 'ColumnId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN COLUMNPROPERTY(OBJECT_ID('dbo.AddMyMultipleItems'), 'Column2', 'ColumnId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'AddMyMultipleItems' AND COLUMN_NAME = 'Column1'";
+        using (var reader = cmd.ExecuteReader())
+        {
+            Assert.That(reader.Read(), Is.True);
+            Assert.That(reader.GetString(0), Is.EqualTo("varchar"));
+            Assert.That(reader.GetString(1), Is.EqualTo("YES"));
+        }
+
+        cmd.CommandText = "SELECT DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'AddMyMultipleItems' AND COLUMN_NAME = 'Column2'";
+        using (var reader = cmd.ExecuteReader())
+        {
+            Assert.That(reader.Read(), Is.True);
+            Assert.That(reader.GetString(0), Is.EqualTo("int"));
+            Assert.That(reader.GetString(1), Is.EqualTo("YES"));
+        }
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN INDEXPROPERTY(OBJECT_ID('dbo.AddMyMultipleItems'), 'IDX_MultiColumn1', 'IndexId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN INDEXPROPERTY(OBJECT_ID('dbo.AddMyMultipleItems'), 'IDX_MultiColumn2', 'IndexId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        conn.Close();
+    }
+
+    [Test]
+    public void TableQuench_ShouldBootstrapTableWithMultipleColumnsAndIndexesInOneQuench()
+    {
+        // Same fold path, but for a table that does not pre-exist: the table itself, its non-key
+        // columns, and its indexes are all created together from a single JSON table definition.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN OBJECT_ID('dbo.AddMyMultipleItemsBootstrap') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN COLUMNPROPERTY(OBJECT_ID('dbo.AddMyMultipleItemsBootstrap'), 'Column1', 'ColumnId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN COLUMNPROPERTY(OBJECT_ID('dbo.AddMyMultipleItemsBootstrap'), 'Column2', 'ColumnId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN INDEXPROPERTY(OBJECT_ID('dbo.AddMyMultipleItemsBootstrap'), 'IDX_BootstrapColumn1', 'IndexId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT CAST(CASE WHEN INDEXPROPERTY(OBJECT_ID('dbo.AddMyMultipleItemsBootstrap'), 'IDX_BootstrapColumn2', 'IndexId') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -365,6 +435,9 @@ CREATE TABLE dbo.AddMyVariantIndex (Id INT NOT NULL, Col1 INT NOT NULL, Col2 INT
 CREATE TABLE dbo.AddMyVariantFK (Id INT NOT NULL PRIMARY KEY, Col1 INT NULL, Col2 INT NULL)
 --TableQuench_ShouldKeepOneVariantWhenTwoSameNameCheckConstraintsHaveMutuallyExclusiveShouldApply
 CREATE TABLE dbo.AddMyVariantCheck (Id INT NOT NULL, Col1 INT NULL)
+--TableQuench_ShouldAddMultipleColumnsAndIndexesToExistingTableInOneQuench
+CREATE TABLE dbo.AddMyMultipleItems (Id INT NOT NULL)
+--TableQuench_ShouldBootstrapTableWithMultipleColumnsAndIndexesInOneQuench (table created entirely by the quench)
 
 
 --Index Only
@@ -747,6 +820,32 @@ CREATE TABLE dbo.AddMyIndexIO (Id INT NOT NULL)
                       "Expression": "[Col1]<0",
                       "ShouldApplyExpression": "0=1"
                     }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddMyMultipleItems]",
+                "Columns": [
+                    { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+                    { "Name": "[Column1]", "DataType": "VARCHAR(50)", "Nullable": true },
+                    { "Name": "[Column2]", "DataType": "INT", "Nullable": true }
+                ],
+                "Indexes": [
+                    { "Name": "[IDX_MultiColumn1]", "IndexColumns": "[Column1]" },
+                    { "Name": "[IDX_MultiColumn2]", "IndexColumns": "[Column2]" }
+                ]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[AddMyMultipleItemsBootstrap]",
+                "Columns": [
+                    { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+                    { "Name": "[Column1]", "DataType": "VARCHAR(50)", "Nullable": true },
+                    { "Name": "[Column2]", "DataType": "INT", "Nullable": true }
+                ],
+                "Indexes": [
+                    { "Name": "[IDX_BootstrapColumn1]", "IndexColumns": "[Column1]" },
+                    { "Name": "[IDX_BootstrapColumn2]", "IndexColumns": "[Column2]" }
                 ]
             }
             ]

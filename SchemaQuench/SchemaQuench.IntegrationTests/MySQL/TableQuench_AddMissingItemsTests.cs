@@ -357,6 +357,94 @@ public class TableQuench_AddMissingItemsTests : BaseTableQuenchTests
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldAddMultipleColumnsAndIndexesToExistingTableInOneQuench()
+    {
+        // A large convergence refactor folds multiple per-table operations into one statement
+        // (MySQL: GROUP_CONCAT multi-clause ALTER TABLE ... ADD COLUMN a, ADD COLUMN b, ADD INDEX x, ...).
+        // This exercises that fold path directly: 2+ new columns AND 2+ new non-PK indexes land on
+        // the SAME table in a SINGLE quench run.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyMultipleItems'
+              AND COLUMN_NAME = 'Column1'
+              AND DATA_TYPE = 'varchar'
+              AND IS_NULLABLE = 'YES'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1));
+
+        cmd.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyMultipleItems'
+              AND COLUMN_NAME = 'Column2'
+              AND DATA_TYPE = 'int'
+              AND IS_NULLABLE = 'YES'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1));
+
+        cmd.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyMultipleItems'
+              AND INDEX_NAME = 'IDX_MultiColumn1'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThan(0));
+
+        cmd.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyMultipleItems'
+              AND INDEX_NAME = 'IDX_MultiColumn2'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThan(0));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void TableQuench_ShouldBootstrapTableWithMultipleColumnsAndIndexesInOneQuench()
+    {
+        // Same fold path, but for a table that does not pre-exist: the table itself, its non-key
+        // columns, and its indexes are all created together from a single JSON table definition.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyMultipleItemsBootstrap'
+              AND COLUMN_NAME = 'Column1'
+              AND DATA_TYPE = 'varchar'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1));
+
+        cmd.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyMultipleItemsBootstrap'
+              AND COLUMN_NAME = 'Column2'
+              AND DATA_TYPE = 'int'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1));
+
+        cmd.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyMultipleItemsBootstrap'
+              AND INDEX_NAME = 'IDX_BootstrapColumn1'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThan(0));
+
+        cmd.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'AddMyMultipleItemsBootstrap'
+              AND INDEX_NAME = 'IDX_BootstrapColumn2'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThan(0));
+
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -396,6 +484,9 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyVariantIndex` (`Id` INT NOT NULL
 CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyVariantFK` (`Id` INT NOT NULL PRIMARY KEY, `col1` INT NULL, `col2` INT NULL, KEY ix_variant_col1 (`col1`), KEY ix_variant_col2 (`col2`));
 -- TableQuench_ShouldKeepOneVariantWhenTwoSameNameCheckConstraintsHaveMutuallyExclusiveShouldApply
 CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyVariantCheck` (`Id` INT NOT NULL, `col1` INT NULL);
+-- TableQuench_ShouldAddMultipleColumnsAndIndexesToExistingTableInOneQuench
+CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyMultipleItems` (`Id` INT NOT NULL);
+-- TableQuench_ShouldBootstrapTableWithMultipleColumnsAndIndexesInOneQuench (table created entirely by the quench)
 
 -- Index Only
 CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyIndexIO` (`Id` INT NOT NULL);
@@ -547,6 +638,30 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`AddMyIndexIO` (`Id` INT NOT NULL);
                       "Expression": "`col1` < 0",
                       "ShouldApplyExpression": "false"
                     }
+                ]
+            },
+            {
+                "Name": "AddMyMultipleItems",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "Column1", "DataType": "VARCHAR(50)", "Nullable": true },
+                    { "Name": "Column2", "DataType": "INT", "Nullable": true }
+                ],
+                "Indexes": [
+                    { "Name": "IDX_MultiColumn1", "IndexColumns": "Column1" },
+                    { "Name": "IDX_MultiColumn2", "IndexColumns": "Column2" }
+                ]
+            },
+            {
+                "Name": "AddMyMultipleItemsBootstrap",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "Column1", "DataType": "VARCHAR(50)", "Nullable": true },
+                    { "Name": "Column2", "DataType": "INT", "Nullable": true }
+                ],
+                "Indexes": [
+                    { "Name": "IDX_BootstrapColumn1", "IndexColumns": "Column1" },
+                    { "Name": "IDX_BootstrapColumn2", "IndexColumns": "Column2" }
                 ]
             }
             ]

@@ -237,6 +237,60 @@ SELECT pg_get_constraintdef(con.oid, true)
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_ShouldAddMultipleColumnsAndIndexesToExistingTableInOneQuench()
+    {
+        // A large convergence refactor folds multiple per-table ALTER/CREATE INDEX operations into
+        // one batched statement (STRING_AGG). This exercises that fold path directly: 2+ new columns
+        // AND 2+ new non-PK indexes land on the SAME table in a SINGLE quench run.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'AddMissingItemsTests' AND table_name = 'AddMyMultipleItems' AND column_name = 'Column1' AND data_type = 'character varying' AND is_nullable = 'YES')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'AddMissingItemsTests' AND table_name = 'AddMyMultipleItems' AND column_name = 'Column2' AND data_type = 'integer' AND is_nullable = 'YES')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'AddMissingItemsTests' AND tablename = 'AddMyMultipleItems' AND indexname = 'IDX_MultiColumn1')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'AddMissingItemsTests' AND tablename = 'AddMyMultipleItems' AND indexname = 'IDX_MultiColumn2')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        conn.Close();
+    }
+
+    [Test]
+    public void TableQuench_ShouldBootstrapTableWithMultipleColumnsAndIndexesInOneQuench()
+    {
+        // Same fold path, but for a table that does not pre-exist: the table itself, its non-key
+        // columns, and its indexes are all created together from a single JSON table definition.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'AddMissingItemsTests' AND table_name = 'AddMyMultipleItemsBootstrap')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'AddMissingItemsTests' AND table_name = 'AddMyMultipleItemsBootstrap' AND column_name = 'Column1')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'AddMissingItemsTests' AND table_name = 'AddMyMultipleItemsBootstrap' AND column_name = 'Column2')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'AddMissingItemsTests' AND tablename = 'AddMyMultipleItemsBootstrap' AND indexname = 'IDX_BootstrapColumn1')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'AddMissingItemsTests' AND tablename = 'AddMyMultipleItemsBootstrap' AND indexname = 'IDX_BootstrapColumn2')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -266,6 +320,9 @@ CREATE TABLE ""AddMissingItemsTests"".""AddMyVariantIndex"" (""Id"" INT NOT NULL
 CREATE TABLE ""AddMissingItemsTests"".""AddMyVariantFK"" (""Id"" INT NOT NULL PRIMARY KEY, ""col1"" INT, ""col2"" INT);
 --TableQuench_ShouldKeepOneVariantWhenTwoSameNameCheckConstraintsHaveMutuallyExclusiveShouldApply
 CREATE TABLE ""AddMissingItemsTests"".""AddMyVariantCheck"" (""Id"" INT NOT NULL, ""col1"" INT);
+--TableQuench_ShouldAddMultipleColumnsAndIndexesToExistingTableInOneQuench
+CREATE TABLE ""AddMissingItemsTests"".""AddMyMultipleItems"" (""Id"" INT NOT NULL);
+--TableQuench_ShouldBootstrapTableWithMultipleColumnsAndIndexesInOneQuench (table created entirely by the quench)
 
 
 --Index Only
@@ -480,6 +537,32 @@ CREATE TABLE ""AddMissingItemsTests"".""AddMyIndexIO"" (""Id"" INT NOT NULL);
                       "Expression": "col1 < 0",
                       "ShouldApplyExpression": "0=1"
                     }
+                ]
+            },
+            {
+                "Schema": "AddMissingItemsTests",
+                "Name": "AddMyMultipleItems",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "Column1", "DataType": "VARCHAR(50)", "Nullable": true },
+                    { "Name": "Column2", "DataType": "INT", "Nullable": true }
+                ],
+                "Indexes": [
+                    { "Name": "IDX_MultiColumn1", "IndexColumns": "Column1" },
+                    { "Name": "IDX_MultiColumn2", "IndexColumns": "Column2" }
+                ]
+            },
+            {
+                "Schema": "AddMissingItemsTests",
+                "Name": "AddMyMultipleItemsBootstrap",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "Column1", "DataType": "VARCHAR(50)", "Nullable": true },
+                    { "Name": "Column2", "DataType": "INT", "Nullable": true }
+                ],
+                "Indexes": [
+                    { "Name": "IDX_BootstrapColumn1", "IndexColumns": "Column1" },
+                    { "Name": "IDX_BootstrapColumn2", "IndexColumns": "Column2" }
                 ]
             }
             ]
