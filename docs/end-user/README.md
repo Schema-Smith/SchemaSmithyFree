@@ -80,6 +80,7 @@ Already know what you're looking for? Jump straight to the details.
 | [Schema Packages](reference/schema-packages.md) | Product/Template JSON, folder structure, table definition format |
 | [Custom Properties](reference/custom-properties.md) | Attach your own metadata via the `Extensions` carrier, driving tokens and governance |
 | [Script Tokens](reference/script-tokens.md) | Token syntax, resolution order, overrides, environment variables |
+| [Error Codes & Reporting](reference/error-codes-and-reporting.md) | Per-platform error codes, the three reporting channels, where each engine logs faults, `VerboseLogging` |
 
 ---
 

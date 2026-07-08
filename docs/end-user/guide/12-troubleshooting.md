@@ -2,7 +2,7 @@
 
 When something goes wrong, let's figure out what happened. This chapter helps you find the answer fast. Issues are organized by symptom so you can jump directly to what you're seeing.
 
-For background on how the tools work, see the individual reference pages: [SchemaTongs](../reference/schematongs.md), [SchemaQuench](../reference/schemaquench.md), [DataTongs](../reference/datatongs.md), [Custom Properties](../reference/custom-properties.md), [Script Tokens](../reference/script-tokens.md), and [Configuration](../reference/configuration.md).
+For background on how the tools work, see the individual reference pages: [SchemaTongs](../reference/schematongs.md), [SchemaQuench](../reference/schemaquench.md), [DataTongs](../reference/datatongs.md), [Custom Properties](../reference/custom-properties.md), [Script Tokens](../reference/script-tokens.md), and [Configuration](../reference/configuration.md). For per-platform error codes and how each engine reports faults, see [Error Codes & Reporting](../reference/error-codes-and-reporting.md).
 
 ---
 
