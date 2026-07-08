@@ -774,8 +774,12 @@ BEGIN
             DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropFKForIdxStmts;
             CREATE TEMPORARY TABLE _SchemaSmith_DropFKForIdxStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
                 ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            -- DISTINCT: one DROP FOREIGN KEY per FK. A composite FK yields multiple KEY_COLUMN_USAGE
+            -- rows (one per column), and several dropped indexes on the same referenced table re-join
+            -- the same FK; both would otherwise emit a duplicate DROP FOREIGN KEY (error 1091 on the
+            -- second). The original per-row cursor had the same latent duplication.
             INSERT INTO _SchemaSmith_DropFKForIdxStmts (LogMsg, Stmt)
-            SELECT
+            SELECT DISTINCT
                 CONCAT('  Drop FK for index: ',
                        CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', kcu.TableName, '` DROP FOREIGN KEY `', tc.ConstraintName, '`')),
                 CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', kcu.TableName, '` DROP FOREIGN KEY `', tc.ConstraintName, '`')
