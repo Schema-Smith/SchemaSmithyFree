@@ -15,12 +15,12 @@ public class DirectoryWrapperTests
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "schemasmith-dirwrapper-" + Guid.NewGuid().ToString("N"));
+        _root = Path.Join(Path.GetTempPath(), "schemasmith-dirwrapper-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
-        Directory.CreateDirectory(Path.Combine(_root, "sub"));
-        File.WriteAllText(Path.Combine(_root, "top.sql"), "x");
-        File.WriteAllText(Path.Combine(_root, "top.txt"), "x");
-        File.WriteAllText(Path.Combine(_root, "sub", "nested.sql"), "x");
+        Directory.CreateDirectory(Path.Join(_root, "sub"));
+        File.WriteAllText(Path.Join(_root, "top.sql"), "x");
+        File.WriteAllText(Path.Join(_root, "top.txt"), "x");
+        File.WriteAllText(Path.Join(_root, "sub", "nested.sql"), "x");
     }
 
     [TearDown]

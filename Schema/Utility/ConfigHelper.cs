@@ -53,7 +53,7 @@ public static class ConfigHelper
 
             // Check AppContext.BaseDirectory as fallback (test runners may not set CWD to the output directory)
             var appBasePath = AppContext.BaseDirectory;
-            if (!FileWrapper.GetFromFactory().Exists(Path.Combine(basePath, settingsFile)) && FileWrapper.GetFromFactory().Exists(Path.Combine(appBasePath, settingsFile)))
+            if (!FileWrapper.GetFromFactory().Exists(Path.Join(basePath, settingsFile)) && FileWrapper.GetFromFactory().Exists(Path.Join(appBasePath, settingsFile)))
                 builder.SetBasePath(appBasePath);
 
             builder.AddJsonFile(settingsFile, optional: true)
