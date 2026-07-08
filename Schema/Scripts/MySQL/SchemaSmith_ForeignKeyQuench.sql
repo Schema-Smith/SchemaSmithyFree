@@ -21,9 +21,6 @@ BEGIN
     -- avoiding the add-drop-readd cycle for circular FK dependencies.
 
     DECLARE v_Done INT DEFAULT FALSE;
-    DECLARE v_Sql TEXT;
-    DECLARE v_TableName VARCHAR(128);
-    DECLARE v_KeyName VARCHAR(128);
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_Done = TRUE;
 

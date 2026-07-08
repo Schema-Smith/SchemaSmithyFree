@@ -24,11 +24,6 @@ BEGIN
     -- It reads from the _SchemaSmith_Indexes and _SchemaSmith_FullTextIndexes
     -- temp tables populated by ParseTableJson.
 
-    DECLARE v_Done INT DEFAULT FALSE;
-    DECLARE v_Sql TEXT;
-    DECLARE v_TableName VARCHAR(128);
-    DECLARE v_IndexName VARCHAR(128);
-    DECLARE v_Variant VARCHAR(128);
 
     SET SESSION group_concat_max_len = 1000000;
 
