@@ -31,6 +31,13 @@ public class DatabaseQuench
     public bool QuenchSuccessful { get; private set; }
 
     /// <summary>
+    /// Set to a non-null <see cref="FailureRecord"/> when <see cref="Execute"/> fails, so the
+    /// dispatching <c>ProductQuench.RunOneWorkUnit</c> can collect this tenant's failure (with its
+    /// captured context tail) into the end-of-run roll-up. Null on success.
+    /// </summary>
+    public FailureRecord LastFailure { get; private set; }
+
+    /// <summary>
     /// Override-origin signal. True when this iteration's schema came from a
     /// <c>TemplateTargets:&lt;Template&gt;:Schemas</c> override. Drives the
     /// skip-missing branch in <see cref="EnsureSchemaExists(System.Data.IDbCommand)"/>:
@@ -81,6 +88,14 @@ public class DatabaseQuench
     private Exception _infoMessageException;
     private StatusMessageMonitor _statusMonitor;
     private readonly object _lockObject = new();
+
+    // Per-tenant failure-capture buffer (lazily built on the first logged line so it binds the
+    // stable LogPrefix/template scope). Every tenant log line funnels through the Safe* wrappers,
+    // so appending there captures the lead-up context for a failure with engine parity for free.
+    private FailureContext _failureContext;
+    private FailureContext FailureCtx => _failureContext ??= new FailureContext(
+        $"Template:{_template?.Name}", LogPrefix,
+        FailureContext.ResolveCapacity(FactoryContainer.ResolveOrCreate<IConfigurationRoot>()));
     private int _postgreSqlServerVersionNum; // 0 until detected; only meaningful when Platform == PostgreSQL
 
     // Per-iteration content built by PrepareIterationContent at the start of Execute(). For schema-
@@ -687,6 +702,9 @@ public class DatabaseQuench
             SafeProgressLogError($"FAILED to quench:\r\n{e.Message}");
             if (!string.IsNullOrWhiteSpace(_debugFileLocation))
                 SafeProgressLogError($"Resolved SQL written to: {_debugFileLocation}");
+            LastFailure = FailureCtx.ToRecord(e.Message,
+                string.IsNullOrWhiteSpace(_debugFileLocation) ? null : _debugFileLocation);
+            SafeProgressLogError($"*** FAILED [Template:{_template?.Name}] — {e.Message} ***");
         }
     }
 
@@ -1895,12 +1913,20 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
     private void SafeProgressLog(string msg)
     {
-        lock (_lockObject) _progressLog.Info($"{LogPrefix} {msg}");
+        lock (_lockObject)
+        {
+            _progressLog.Info($"{LogPrefix} {msg}");
+            FailureCtx.Log(msg);
+        }
     }
 
     private void SafeProgressLogError(string msg)
     {
-        lock (_lockObject) _progressLog.Error($"{LogPrefix} {msg}");
+        lock (_lockObject)
+        {
+            _progressLog.Error($"{LogPrefix} {msg}");
+            FailureCtx.Log(msg);
+        }
     }
 
     private void SafeErrorLogError(string msg)
