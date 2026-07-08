@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
@@ -41,6 +42,11 @@ public class ProductQuench
     private readonly IReadOnlyDictionary<string, TemplateTarget> _templateTargets;
     private readonly ICheckpointing _checkpointing;
     private bool _updateFailed;
+
+    // Thread-safe collection of every scope failure (tenant work units today; product/server
+    // phases as their capture is added), rendered once into the end-of-run roll-up.
+    private readonly ConcurrentBag<FailureRecord> _failureRecords = new();
+    private bool _rollupEmitted;
     private bool _anyFailure;
 
     /// <summary>
@@ -604,6 +610,23 @@ public class ProductQuench
         }
 
         _progressLog.Info($"Completed quench of {_product.Name}");
+        EmitFailureRollup();
+    }
+
+    /// <summary>
+    /// Renders the collected <see cref="FailureRecord"/>s into the phase-grouped end-of-run roll-up
+    /// and writes it to the FailureLog logger (<c>SchemaQuench - Failures.log</c>) + echoes it to the
+    /// progress console. Idempotent and a no-op on a clean run (empty render — zero added noise).
+    /// Called at normal completion and immediately before each abort-path log backup + exit.
+    /// </summary>
+    internal void EmitFailureRollup()
+    {
+        if (_rollupEmitted) return;
+        _rollupEmitted = true;
+        var report = FailureReportWriter.Render(_failureRecords.ToArray());
+        if (string.IsNullOrEmpty(report)) return;
+        LogFactory.GetLogger("FailureLog").Info(report);
+        _progressLog.Error(report);
     }
 
     internal static readonly string[] SpecialTokenTags = ["TableSchema_", "ObjectScripts_", "QueryTokens_", "MaterializedViewSchema_", "IndexedViewSchema_"];
@@ -861,6 +884,7 @@ public class ProductQuench
             _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
             _updateFailed = true;
             _anyFailure = true;
+            EmitFailureRollup();
             LogBackup.BackupLogsAndExit("SchemaQuench", 2);
             return;
         }
@@ -894,6 +918,7 @@ public class ProductQuench
         // just because its rejection happened during discovery.
         if (!ShouldAbortOnFailure(template)) return;
 
+        EmitFailureRollup();
         LogBackup.BackupLogsAndExit("SchemaQuench", 2);
     }
 
@@ -946,6 +971,7 @@ public class ProductQuench
             _progressLog.Error(message);
             _errorLog.Error(message);
             _anyFailure = true;
+            EmitFailureRollup();
             LogBackup.BackupLogsAndExit("SchemaQuench", 2);
             return false;
         }
@@ -1515,6 +1541,7 @@ public class ProductQuench
         quench.Execute();
         if (!quench.QuenchSuccessful)
         {
+            if (quench.LastFailure != null) _failureRecords.Add(quench.LastFailure);
             // Throw so the dispatcher records this failure. In continue mode the dispatcher
             // proceeds to the next unit; in abort mode it drains in-flight units and stops.
             var schemaSuffix = string.IsNullOrEmpty(unit.SchemaName) ? "" : $" [Schema: {unit.SchemaName}]";
