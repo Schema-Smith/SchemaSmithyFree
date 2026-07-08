@@ -525,7 +525,12 @@ public class ProductQuench
                 _progressLog.Info("Validate Server");
                 command.CommandText = _product.ValidationScript;
                 if (!ScalarToBool(command.ExecuteScalar()))
+                {
+                    _failureRecords.Add(new FailureRecord("Validate", "Product",
+                        "Invalid server for this product", Array.Empty<string>(), null));
+                    EmitFailureRollup();
                     throw new Exception("Invalid server for this product");
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(_product.BaselineValidationScript))
@@ -533,7 +538,12 @@ public class ProductQuench
                 _progressLog.Info("Validate Baseline");
                 command.CommandText = _product.BaselineValidationScript;
                 if (!ScalarToBool(command.ExecuteScalar()))
+                {
+                    _failureRecords.Add(new FailureRecord("Validate", "Product",
+                        "Invalid baseline for this release", Array.Empty<string>(), null));
+                    EmitFailureRollup();
                     throw new Exception("Invalid baseline for this release");
+                }
             }
 
             if (_product.QueryTokens.Count > 0)
@@ -728,6 +738,7 @@ public class ProductQuench
         if (_updateFailed)
         {
             _anyFailure = true;
+            EmitFailureRollup();
             throw new Exception("Product script quench FAILED");
         }
     }
@@ -1617,14 +1628,15 @@ public class ProductQuench
             {
                 _progressLog.Error($"{serverMsg}[{initDb}] Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}");
 
+                string artifactPath = null;
                 try
                 {
                     var header = $"Failed: {serverMsg}[{initDb}] [{sqlScript.LogPath}] — {sqlScript.Error?.Message}";
                     var fileName = GetProductDebugFileName($"Failed {Path.GetFileNameWithoutExtension(sqlScript.Name)}", server);
                     var failingBatchIndex = failingBatchIndexes.GetValueOrDefault(sqlScript, sqlScript.Batches.Count - 1);
-                    var path = ResolvedSqlArtifactWriter.WriteFailureArtifact(directory, scrub, sensitiveValues,
+                    artifactPath = ResolvedSqlArtifactWriter.WriteFailureArtifact(directory, scrub, sensitiveValues,
                         header, sqlScript.Batches, failingBatchIndex, fileName);
-                    _progressLog.Error($"{serverMsg}[{initDb}]    Resolved SQL written to: {path}");
+                    _progressLog.Error($"{serverMsg}[{initDb}]    Resolved SQL written to: {artifactPath}");
                 }
                 catch (Exception artifactEx)
                 {
@@ -1632,6 +1644,12 @@ public class ProductQuench
                     // artifact must not mask it.
                     _progressLog.Error($"{serverMsg}[{initDb}]    Could not write resolved-SQL artifact for '{sqlScript.LogPath}': {artifactEx.Message}");
                 }
+
+                // Server-scope failure capture (Before/After product scripts) → end-of-run roll-up.
+                _failureRecords.Add(new FailureRecord(
+                    isBefore ? "BeforeScripts" : "AfterScripts", $"[{server}]",
+                    sqlScript.Error?.Message ?? $"Unable to quench '{sqlScript.LogPath}'",
+                    new[] { $"Unable to quench '{sqlScript.LogPath}'" }, artifactPath));
             }
 
             throw new Exception($"{serverMsg}[{initDb}] Unable to quench one or more scripts");
