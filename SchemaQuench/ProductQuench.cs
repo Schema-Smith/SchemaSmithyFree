@@ -362,6 +362,69 @@ public class ProductQuench
     }
 
     /// <summary>
+    /// Resolves <see cref="Template.IdentificationDatabase"/> through the product + template
+    /// non-query token set (so a <c>{{ControlDb}}</c>-style token gives per-environment control),
+    /// returning null/empty when unset (⇒ enumeration uses the platform init database).
+    /// </summary>
+    internal string ResolveIdentificationDatabase(Template template)
+    {
+        if (string.IsNullOrWhiteSpace(template.IdentificationDatabase)) return null;
+        var tokens = _product.NonQueryTokens.Concat(template.NonQueryTokens).ToList();
+        return SqlScript.TokenReplace(template.IdentificationDatabase, tokens, _product.Platform);
+    }
+
+    /// <summary>
+    /// Opens the command used to run <see cref="Template.DatabaseIdentificationScript"/> for
+    /// enumeration. When the template sets <see cref="Template.IdentificationDatabase"/>, the
+    /// connection targets that database (e.g. a control-plane registry DB) instead of the platform
+    /// init database — the only way a PostgreSQL fleet can read a registry table at enumeration
+    /// time. A <c>--ConnectionString</c> override on the primary server is re-targeted to the
+    /// identification database (mirroring <see cref="ComposeAdminDbConnectionString"/>). When unset,
+    /// this is exactly <see cref="GetCommand"/> (init DB) — today's behavior. Provisioning and
+    /// existence checks are NOT affected; they stay on the init database via
+    /// <see cref="GetCommandForAdminDb"/>.
+    /// </summary>
+    internal virtual IDbCommand GetCommandForIdentification(string server, Template template)
+    {
+        if (string.IsNullOrWhiteSpace(ResolveIdentificationDatabase(template)))
+            return GetCommand(server);
+
+        var connectionString = ComposeIdentificationConnectionString(server, template);
+        var factory = DbConnectionFactory.ForPlatform(_product.Platform);
+        var connection = factory.GetDbConnection(connectionString);
+        try
+        {
+            connection.Open();
+        }
+        catch (Exception e)
+        {
+            throw new Exception($"Unable to connect to {server} [IdentificationDatabase: {ResolveIdentificationDatabase(template)}]{(!string.IsNullOrWhiteSpace(_config["Target:User"]) ? $" with user {_config["Target:User"]}" : "")}", e);
+        }
+        var command = connection.CreateCommand();
+        command.CommandTimeout = 0;
+        return command;
+    }
+
+    /// <summary>
+    /// Composes the connection string for the enumeration command when
+    /// <see cref="Template.IdentificationDatabase"/> is set — targeting that (token-resolved)
+    /// database. A <c>--ConnectionString</c> override on the primary server is re-targeted to it via
+    /// <see cref="ConnectionString.RetargetDatabase"/>; otherwise the string is built from
+    /// <c>Target:*</c> config with the identification database substituted for the init database.
+    /// Extracted as a seam so the composition is unit-testable without opening a connection.
+    /// </summary>
+    internal virtual string ComposeIdentificationConnectionString(string server, Template template)
+    {
+        var identificationDb = ResolveIdentificationDatabase(template);
+        var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
+        if (!string.IsNullOrEmpty(connectionStringOverride) && server == _primaryServer)
+            return ConnectionString.RetargetDatabase(connectionStringOverride, identificationDb, _product.Platform);
+
+        var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        return ConnectionString.Build(_product.Platform, server, identificationDb, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
+    }
+
+    /// <summary>
     /// Opens an admin-database command against <paramref name="server"/> for DB-axis provisioning.
     /// When a <c>--ConnectionString</c> override is in effect AND the server is the primary server,
     /// the override is re-targeted to the platform's init database
@@ -1122,7 +1185,7 @@ public class ProductQuench
             _progressLog.Info($"Locate Databases To Quench ({server})");
             try
             {
-                using var command = GetCommand(server);
+                using var command = GetCommandForIdentification(server, template);
                 try
                 {
                     command.CommandText = template.DatabaseIdentificationScript;
