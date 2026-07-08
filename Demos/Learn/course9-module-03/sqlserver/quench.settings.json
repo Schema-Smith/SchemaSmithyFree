@@ -1,0 +1,8 @@
+{
+  "Target": { "Databases": ["orders"], "ConnectionProperties": { "TrustServerCertificate": "True" } },
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./package",
+  "KindleTheForge": true,
+  "ArtifactPath": "./artifacts",
+  "CheckpointDirectory": "./checkpoints"
+}

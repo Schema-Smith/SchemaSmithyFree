@@ -1,0 +1,59 @@
+{
+  "Name": "product",
+  "Columns": [
+    {
+      "Name": "productid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "sku",
+      "DataType": "text",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "name",
+      "DataType": "text",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "categoryid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_product",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "productid",
+      "ShouldApplyExpression": "",
+      "VariantName": ""
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_product_category",
+      "Columns": "categoryid",
+      "RelatedTable": "category",
+      "RelatedColumns": "categoryid",
+      "DeleteAction": "",
+      "UpdateAction": "",
+      "ShouldApplyExpression": "",
+      "VariantName": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": ""
+}
