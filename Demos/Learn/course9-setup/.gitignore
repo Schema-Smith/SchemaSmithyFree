@@ -1,0 +1,6 @@
+# Learner-generated run output. Logs and checkpoints are per-run and transient
+# (logs carry timestamps; a checkpoint only exists mid-failure), so keep them
+# out of the lab. Resolved-SQL artifacts are already ignored repo-wide
+# (root .gitignore: "SchemaQuench - *.sql").
+*/logs/
+*/checkpoints/
