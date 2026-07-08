@@ -26,17 +26,19 @@ SchemaSmith writes two logs per run — a progress log (everything that happened
 
 ## VerboseLogging
 
-`VerboseLogging` is a top-level configuration switch (a boolean, default `false`) that affects **SQL Server only** — it gates whether low-severity SQL Server informational messages reach the log. In practice, though, it rarely changes what you see, and it's worth understanding why before you reach for it.
+`VerboseLogging` is a top-level configuration switch (a boolean, default `false`) that affects **SQL Server only**. SQL Server scripts commonly emit `PRINT` statements and low-severity warnings; SchemaSmith suppresses that chatter by default so the deployment log stays readable, and `VerboseLogging` is the dial that brings it back when you want to see it.
 
-SchemaSmith emits its own progress with an always-surface flag (SQL Server `State 100`), so the engine's progress is visible whether or not `VerboseLogging` is on. Turning it on does not reveal hidden phase progress, and it does not surface `PRINT` output from your own scripts. On PostgreSQL and MySQL the switch has no effect at all — those engines surface their notices by default.
+With it off (the default), a `PRINT` or a low-severity `RAISERROR` from one of your scripts is filtered out of the log. Turn it on and those messages surface. It affects **your scripts' output only** — SchemaSmith's own phase progress always shows regardless (the engine emits its progress with an always-surface flag), so turning `VerboseLogging` on won't reveal any hidden SchemaSmith progress; it only unmutes your scripts.
 
-> **Note:** You get full deployment progress on all three engines out of the box. `VerboseLogging` is a niche SQL Server dial for low-severity informational output, not a "show me more" switch you need for normal diagnosis.
+> **PostgreSQL and MySQL:** the switch has no effect. PostgreSQL surfaces its `RAISE NOTICE` output by default, and MySQL user scripts have no progress channel at all — so there's nothing for the dial to gate on either engine.
 
-Set it in the settings file, as an environment variable, or on the command line:
+Set it in the settings file (`"VerboseLogging": true`), as an environment variable (`SmithySettings_VerboseLogging=true`), or on the command line:
 
 ```bash
-SchemaQuench --VerboseLogging:true
+SchemaQuench --VerboseLogging=true
 ```
+
+> **Note:** Use the `=` form on the command line. `--VerboseLogging=true` is the config-override syntax and takes effect; the colon form `--VerboseLogging:true` is silently ignored for configuration settings (it applies only to the tool's named switches like `--ConfigFile` and `--LogPath`). The settings-file and environment-variable forms always work.
 
 ## Per-platform error codes
 

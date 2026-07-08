@@ -55,13 +55,27 @@ for the fault is engine-specific.* Three doors:
   that a monitor polls every ~200 ms, because MySQL runs on a single connection and can't push a
   notice on the busy line. Confirm it's there: `DESCRIBE diag_dialects.SchemaSmith_StatusMessages`.
 
-## A note on `VerboseLogging`
+## Demo 2 — turning up the volume with `VerboseLogging`
 
-You'll see `VerboseLogging` in the config (top-level, default `false`, **SQL-Server-only**). It gates
-low-severity SQL Server `InfoMessage` output — but in practice it **rarely changes anything**, because
-SchemaSmith's own progress is emitted with `RAISERROR(@msg, 10, 100)` — **State 100 always surfaces**,
-gate or no gate. The tool deliberately makes its progress always-visible. So you get full progress on
-all three engines by default; `VerboseLogging` is a dial you'll seldom need to reach for.
+SQL Server user scripts love to talk — `PRINT` statements, low-severity warnings. SchemaSmith
+**suppresses that noise by default** and gives you one dial to bring it back: `VerboseLogging`
+(top-level config, default `false`, **SQL-Server-only**). The `verbose/` package adds a script that
+`PRINT`s a line every deploy. Deploy it twice:
+
+```
+schemaquench --ConfigFile:quench.settings.verbose.json --LogPath:"$PWD/logs-plain"
+schemaquench --ConfigFile:quench.settings.verbose.json --LogPath:"$PWD/logs-verbose" --VerboseLogging=true
+```
+
+- **SQL Server** — the `PRINT` line is **absent** from the plain log and **present** in the verbose one.
+  That's the dial: your script's output, suppressed by default, surfaced on demand.
+- **PostgreSQL** — a `RAISE NOTICE` shows in **both** logs. `VerboseLogging` has no effect here; PostgreSQL surfaces its notices by default.
+- **MySQL** — the report line appears in **neither**. MySQL user scripts have no progress channel at all — the `SchemaSmith_StatusMessages` sidecar is the *engine's* channel, not yours.
+
+> **Note:** Use the `=` form — `--VerboseLogging=true` — to set it on the command line, or put `"VerboseLogging": true` in your settings file. The colon form (`--VerboseLogging:true`) is silently ignored for config settings; the `=` form is the config-override syntax.
+
+`VerboseLogging` doesn't touch SchemaSmith's own progress — the tool always shows you its phases — it's
+purely a valve for the low-severity chatter your SQL Server scripts produce.
 
 ## The capstone — your runbook
 

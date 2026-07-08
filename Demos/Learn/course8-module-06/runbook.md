@@ -47,7 +47,7 @@ Each database hands errors back through a different door:
 | **Channel** | `InfoMessage` events | `Notice` stream | `SchemaSmith_StatusMessages` sidecar table (polled) |
 | **Fault detail** | ProgressLog **and Errors.log** (with `at Line: N`) | ProgressLog (SQLSTATE) | ProgressLog |
 | **Errors.log** | populated | **empty** | **empty** |
-| **`VerboseLogging`** | a config dial, but SchemaSmith's progress always surfaces (State 100) — rarely changes anything | no effect | no effect |
+| **`VerboseLogging`** | surfaces your scripts' `PRINT`/low-severity output (suppressed by default); use `=true` on the CLI | no effect | no effect |
 
 **Rule of thumb:** on SQL Server, `Errors.log` gives you the fault + line fast. On PostgreSQL and
 MySQL, read the `Progress.log` — `Errors.log` will be empty.
