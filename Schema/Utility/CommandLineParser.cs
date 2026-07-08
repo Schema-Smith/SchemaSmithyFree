@@ -56,11 +56,15 @@ public static class CommandLineParser
     }
 
     /// <summary>
-    /// Config overrides supplied on the command line. Any switch containing '=' is an override:
-    /// the key is the text before the first '=' (with '__' translated to the config path
-    /// separator ':'), the value is the remainder (trimmed of surrounding quotes/spaces).
-    /// '__' nesting mirrors the SmithySettings_ environment-variable grammar. Legacy ':'-form
-    /// named switches (no '=') are not overrides.
+    /// Config overrides supplied on the command line. Any switch that carries a value —
+    /// <c>--Key=value</c> or <c>--Key:value</c> — is an override. The value boundary is the first
+    /// '=' if the switch has one, else the first ':'; the key is the text before it (with '__'
+    /// translated to the config path separator ':'), the value is the remainder (trimmed of
+    /// surrounding quotes/spaces). '__' nesting mirrors the SmithySettings_ environment-variable
+    /// grammar, and because '=' wins over ':' a ':'-nested key can still carry a value
+    /// (<c>--Target:Server=host</c>). A bare flag (no '=' or ':') is not an override. Reserved
+    /// named switches (LogPath / ConfigFile / ConnectionString) also appear here but are inert —
+    /// they are consumed via their own switch, never read from configuration.
     /// </summary>
     public static Dictionary<string, string> ConfigOverrides
     {
@@ -69,11 +73,14 @@ public static class CommandLineParser
             var result = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
             foreach (var trimmed in Arguments.Where(x => x.StartsWith("/") || x.StartsWith("-")).Select(TrimKeyName))
             {
-                var eq = trimmed.IndexOf('=');
-                if (eq < 0) continue; // only '='-form switches are config overrides
-                var key = trimmed.Substring(0, eq).Replace("__", ":");
+                // Value boundary: the first '=' if present, else the first ':'. '=' wins so a
+                // ':'-nested key (e.g. Target:Server) can still carry an '='-delimited value.
+                var sep = trimmed.IndexOf('=');
+                if (sep < 0) sep = trimmed.IndexOf(':');
+                if (sep < 0) continue; // a bare flag (no value) is not a config override
+                var key = trimmed.Substring(0, sep).Replace("__", ":");
                 if (key.Length == 0) continue;
-                result[key] = trimmed.Substring(eq + 1).Trim('"', ' ');
+                result[key] = trimmed.Substring(sep + 1).Trim('"', ' ');
             }
             return result;
         }
@@ -151,7 +158,7 @@ public static class CommandLineParser
         Console.WriteLine("  --LogPath:<logpath>              Path to write logs and create backup directories. The default is current path.");
         Console.WriteLine("  --ConfigFile:<filepath>          Path and file name of the config file. The default is <toolname>.settings.json in the current path.");
         Console.WriteLine("  --ConnectionString:<connstr>     Override the connection string. Bypasses all connection settings in the config file.");
-        Console.WriteLine("  --<Key>=<value>                  Override any configuration option (nest with '__', e.g. --Source__Server=host). Logged at startup; sensitive values scrubbed.");
+        Console.WriteLine("  --<Key>=<value>                  Override any configuration option (also --<Key>:<value>; nest with '__', e.g. --Source__Server=host). Logged at startup; sensitive values scrubbed.");
         toolSpecificSwitches?.Invoke();
         Console.WriteLine("  --help                           Show the command line options");
         EnvironmentWrapper.GetFromFactory().Exit(0);

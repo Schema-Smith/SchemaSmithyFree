@@ -20,14 +20,19 @@ BEGIN
     -- It reads from the _SchemaSmith_Indexes and _SchemaSmith_CheckConstraints
     -- temp tables populated by ParseTableJson.
     -- Foreign keys are handled separately by SchemaSmith_ForeignKeyQuench.
-
-    DECLARE v_Done INT DEFAULT FALSE;
-    DECLARE v_Sql TEXT;
-    DECLARE v_TableName VARCHAR(128);
-    DECLARE v_IndexName VARCHAR(128);
-    DECLARE v_ConstraintName VARCHAR(128);
-
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_Done = TRUE;
+    --
+    -- Execution model: each per-row DDL loop materializes its statements (plus the exact
+    -- per-object progress message) into an AUTO_INCREMENT temp table, then a WHILE loop
+    -- drains it by ascending RowId (SELECT ... INTO + PREPARE/EXECUTE). This replaces the
+    -- old cursors and matches the materialize-then-WHILE idiom used by ForeignKeyQuench.
+    -- Detection queries (STEP 1..STEP 7) read LIVE INFORMATION_SCHEMA because each must see
+    -- current catalog state relative to THIS proc's own earlier mutations (e.g. STEP 3 must
+    -- see indexes STEP 2 just dropped; STEP 7 must see objects STEP 3/4/4.5 just created).
+    --
+    -- Crash-safety is localized to STEP 8 only: its ProductOwnership x INFORMATION_SCHEMA.STATISTICS
+    -- query is the one the roadmap identifies as a segfault trigger when run frequently, so
+    -- STEP 8 snapshots STATISTICS / KEY_COLUMN_USAGE / TABLE_CONSTRAINTS into temp tables
+    -- RIGHT BEFORE its detection (current, post-create/drop/rename state) and reads those.
 
     SET SESSION group_concat_max_len = 1000000;
 
@@ -49,45 +54,36 @@ BEGIN
           AND c.NewColumn = 1
         ORDER BY c.TableName, c.DependencyLevel, c.OrdinalPosition;
     ELSE
-        BEGIN
-            DECLARE v_GenDone INT DEFAULT FALSE;
-            DECLARE v_GenSql TEXT;
-            DECLARE v_GenVariant VARCHAR(128);
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Add missing generated columns');
 
-            DECLARE cur_GeneratedColumns CURSOR FOR
-                SELECT
-                    c.VariantName,
-                    CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
-                           ' ADD COLUMN ', c.ColumnScript) AS AlterTableStatement
-                FROM _SchemaSmith_Columns c
-                INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
-                WHERE c.GeneratedExpression IS NOT NULL
-                  AND TRIM(c.GeneratedExpression) != ''
-                  AND c.NewColumn = 1
-                ORDER BY c.TableName, c.DependencyLevel, c.OrdinalPosition;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_GenColStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_GenColStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_GenColStmts (LogMsg, Stmt)
+        SELECT
+            CONCAT('  Add generated column: ',
+                   CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                          ' ADD COLUMN ', c.ColumnScript),
+                   CASE WHEN COALESCE(c.VariantName, '') <> '' THEN CONCAT(' (variant: ', c.VariantName, ')') ELSE '' END),
+            CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                   ' ADD COLUMN ', c.ColumnScript)
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        WHERE c.GeneratedExpression IS NOT NULL
+          AND TRIM(c.GeneratedExpression) != ''
+          AND c.NewColumn = 1
+        ORDER BY c.TableName, c.DependencyLevel, c.OrdinalPosition;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_GenDone = TRUE;
-
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Add missing generated columns');
-            SET v_GenDone = FALSE;
-            OPEN cur_GeneratedColumns;
-
-            gen_cols_loop: LOOP
-                FETCH cur_GeneratedColumns INTO v_GenVariant, v_GenSql;
-                IF v_GenDone THEN
-                    LEAVE gen_cols_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Add generated column: ', v_GenSql,
-                    CASE WHEN COALESCE(v_GenVariant, '') <> '' THEN CONCAT(' (variant: ', v_GenVariant, ')') ELSE '' END));
-                SET @exec_sql = v_GenSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_GeneratedColumns;
-        END;
+        SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_GenColStmts);
+        WHILE @ss_id IS NOT NULL DO
+            SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_GenColStmts WHERE RowId = @ss_id;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_GenColStmts WHERE RowId > @ss_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_GenColStmts;
     END IF;
 
     -- =========================================================================
@@ -153,48 +149,39 @@ BEGIN
                       '` RENAME INDEX `', OldIndexName, '` TO `', NewIndexName, '`')
         FROM _SchemaSmith_IndexRenames;
     ELSE
-        BEGIN
-            DECLARE v_RenameDone INT DEFAULT FALSE;
-            DECLARE v_RenameTable VARCHAR(128);
-            DECLARE v_OldName VARCHAR(128);
-            DECLARE v_NewName VARCHAR(128);
-            DECLARE v_RenameSql TEXT;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle index renames');
 
-            DECLARE cur_Renames CURSOR FOR
-                SELECT TableName, OldIndexName, NewIndexName
-                FROM _SchemaSmith_IndexRenames;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RenameStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_RenameStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_RenameStmts (LogMsg, Stmt)
+        SELECT
+            CONCAT('  Rename index: ', TableName, '.', OldIndexName, ' -> ', NewIndexName),
+            CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName,
+                   '` RENAME INDEX `', OldIndexName, '` TO `', NewIndexName, '`')
+        FROM _SchemaSmith_IndexRenames;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_RenameDone = TRUE;
+        SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_RenameStmts);
+        WHILE @ss_id IS NOT NULL DO
+            SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_RenameStmts WHERE RowId = @ss_id;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_RenameStmts WHERE RowId > @ss_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RenameStmts;
 
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle index renames');
-            SET v_RenameDone = FALSE;
-            OPEN cur_Renames;
-
-            rename_loop: LOOP
-                FETCH cur_Renames INTO v_RenameTable, v_OldName, v_NewName;
-                IF v_RenameDone THEN
-                    LEAVE rename_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Rename index: ', v_RenameTable, '.', v_OldName, ' -> ', v_NewName));
-                SET v_RenameSql = CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', v_RenameTable,
-                                         '` RENAME INDEX `', v_OldName, '` TO `', v_NewName, '`');
-                SET @exec_sql = v_RenameSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-
-                -- Update ProductOwnership with new name
-                UPDATE SchemaSmith_ProductOwnership
-                SET ObjectName = CONCAT(v_RenameTable, '.', v_NewName)
-                WHERE BINARY ProductName = BINARY p_ProductName
-                  AND BINARY ObjectSchema = BINARY p_DatabaseName
-                  AND ObjectType = 'INDEX'
-                  AND BINARY ObjectName = BINARY CONCAT(v_RenameTable, '.', v_OldName);
-            END LOOP;
-
-            CLOSE cur_Renames;
-        END;
+        -- Update ProductOwnership with the new names. Done set-based after the renames: the
+        -- STEP 1 "new name doesn't exist" filter rules out rename chains (a->b where b is itself
+        -- a live index), so no old name equals another rename's new name and one pass suffices.
+        UPDATE SchemaSmith_ProductOwnership po
+        INNER JOIN _SchemaSmith_IndexRenames r
+            ON BINARY po.ObjectName = BINARY CONCAT(r.TableName, '.', r.OldIndexName)
+        SET po.ObjectName = CONCAT(r.TableName, '.', r.NewIndexName)
+        WHERE BINARY po.ProductName = BINARY p_ProductName
+          AND BINARY po.ObjectSchema = BINARY p_DatabaseName
+          AND po.ObjectType = 'INDEX';
     END IF;
 
     -- =========================================================================
@@ -254,38 +241,27 @@ BEGIN
         SELECT CONNECTION_ID(), CONCAT('DROP INDEX `', IndexName, '` ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`')
         FROM _SchemaSmith_ModifiedIndexes;
     ELSE
-        BEGIN
-            DECLARE v_ModDone INT DEFAULT FALSE;
-            DECLARE v_ModTable VARCHAR(128);
-            DECLARE v_ModIndex VARCHAR(128);
-            DECLARE v_ModSql TEXT;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop and recreate modified indexes');
 
-            DECLARE cur_ModifiedIndexes CURSOR FOR
-                SELECT TableName, IndexName
-                FROM _SchemaSmith_ModifiedIndexes;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropModIdxStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_DropModIdxStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_DropModIdxStmts (LogMsg, Stmt)
+        SELECT
+            CONCAT('  Drop and recreate index: ', TableName, '.', IndexName),
+            CONCAT('DROP INDEX `', IndexName, '` ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`')
+        FROM _SchemaSmith_ModifiedIndexes;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_ModDone = TRUE;
-
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop and recreate modified indexes');
-            SET v_ModDone = FALSE;
-            OPEN cur_ModifiedIndexes;
-
-            drop_modified_loop: LOOP
-                FETCH cur_ModifiedIndexes INTO v_ModTable, v_ModIndex;
-                IF v_ModDone THEN
-                    LEAVE drop_modified_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop and recreate index: ', v_ModTable, '.', v_ModIndex));
-                SET v_ModSql = CONCAT('DROP INDEX `', v_ModIndex, '` ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', v_ModTable, '`');
-                SET @exec_sql = v_ModSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_ModifiedIndexes;
-        END;
+        SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropModIdxStmts);
+        WHILE @ss_id IS NOT NULL DO
+            SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_DropModIdxStmts WHERE RowId = @ss_id;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropModIdxStmts WHERE RowId > @ss_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropModIdxStmts;
     END IF;
 
     -- =========================================================================
@@ -320,67 +296,54 @@ BEGIN
                 AND CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
           );
     ELSE
-        BEGIN
-            DECLARE v_CreateDone INT DEFAULT FALSE;
-            DECLARE v_CreateTable VARCHAR(128);
-            DECLARE v_CreateIndex VARCHAR(128);
-            DECLARE v_CreateVariant VARCHAR(128);
-            DECLARE v_CreateSql TEXT;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing indexes');
 
-            DECLARE cur_MissingIndexes CURSOR FOR
-                SELECT
-                    i.TableName,
-                    i.IndexName,
-                    i.VariantName,
-                    CONCAT(
-                        'CREATE ',
-                        CASE WHEN UPPER(i.IndexType) = 'SPATIAL' THEN 'SPATIAL '
-                             WHEN i.IsUnique = 1 AND i.IsPrimaryKey = 0 THEN 'UNIQUE '
-                             ELSE '' END,
-                        'INDEX ', i.IndexName,
-                        ' ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', i.TableName,
-                        ' (', i.IndexColumns, ')',
-                        CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
-                             WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
-                             ELSE '' END,
-                        CASE WHEN i.IsVisible = 0 THEN ' INVISIBLE' ELSE '' END
-                    ) AS CreateIndexStatement
-                FROM _SchemaSmith_Indexes i
-                WHERE i.IsPrimaryKey = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM _SchemaSmith_IndexRenames r
-                      WHERE r.TableName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
-                        AND r.NewIndexName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
-                  )
-                  AND NOT EXISTS (
-                      SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-                      WHERE CONVERT(s.TABLE_SCHEMA USING utf8mb4) COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
-                        AND CONVERT(s.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
-                        AND CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
-                  );
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CreateIdxStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_CreateIdxStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        -- Detection reads LIVE INFORMATION_SCHEMA.STATISTICS so a just-dropped modified index
+        -- (STEP 2) is correctly seen as missing here and recreated.
+        INSERT INTO _SchemaSmith_CreateIdxStmts (LogMsg, Stmt)
+        SELECT
+            CONCAT('  Create index: ', SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName),
+                CASE WHEN COALESCE(i.VariantName, '') <> '' THEN CONCAT(' (variant: ', i.VariantName, ')') ELSE '' END),
+            CONCAT(
+                'CREATE ',
+                CASE WHEN UPPER(i.IndexType) = 'SPATIAL' THEN 'SPATIAL '
+                     WHEN i.IsUnique = 1 AND i.IsPrimaryKey = 0 THEN 'UNIQUE '
+                     ELSE '' END,
+                'INDEX ', i.IndexName,
+                ' ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', i.TableName,
+                ' (', i.IndexColumns, ')',
+                CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
+                     WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
+                     ELSE '' END,
+                CASE WHEN i.IsVisible = 0 THEN ' INVISIBLE' ELSE '' END
+            )
+        FROM _SchemaSmith_Indexes i
+        WHERE i.IsPrimaryKey = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_IndexRenames r
+              WHERE r.TableName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
+                AND r.NewIndexName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
+              WHERE CONVERT(s.TABLE_SCHEMA USING utf8mb4) COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+                AND CONVERT(s.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
+                AND CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
+          );
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_CreateDone = TRUE;
-
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing indexes');
-            SET v_CreateDone = FALSE;
-            OPEN cur_MissingIndexes;
-
-            create_indexes_loop: LOOP
-                FETCH cur_MissingIndexes INTO v_CreateTable, v_CreateIndex, v_CreateVariant, v_CreateSql;
-                IF v_CreateDone THEN
-                    LEAVE create_indexes_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create index: ', v_CreateTable, '.', v_CreateIndex,
-                    CASE WHEN COALESCE(v_CreateVariant, '') <> '' THEN CONCAT(' (variant: ', v_CreateVariant, ')') ELSE '' END));
-                SET @exec_sql = v_CreateSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_MissingIndexes;
-        END;
+        SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_CreateIdxStmts);
+        WHILE @ss_id IS NOT NULL DO
+            SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_CreateIdxStmts WHERE RowId = @ss_id;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_CreateIdxStmts WHERE RowId > @ss_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CreateIdxStmts;
     END IF;
 
     -- =========================================================================
@@ -446,38 +409,27 @@ BEGIN
         SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` DROP CHECK `', ConstraintName, '`')
         FROM _SchemaSmith_ModifiedChecks;
     ELSE
-        BEGIN
-            DECLARE v_DropChkDone INT DEFAULT FALSE;
-            DECLARE v_DropChkTable VARCHAR(128);
-            DECLARE v_DropChkName VARCHAR(128);
-            DECLARE v_DropChkSql TEXT;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop modified check constraints');
 
-            DECLARE cur_ModifiedChecks CURSOR FOR
-                SELECT TableName, ConstraintName,
-                       CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` DROP CHECK `', ConstraintName, '`') AS DropCheckSql
-                FROM _SchemaSmith_ModifiedChecks;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropModChkStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_DropModChkStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_DropModChkStmts (LogMsg, Stmt)
+        SELECT
+            CONCAT('  Drop modified check constraint: ', TableName, '.', ConstraintName),
+            CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` DROP CHECK `', ConstraintName, '`')
+        FROM _SchemaSmith_ModifiedChecks;
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropChkDone = TRUE;
-
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop modified check constraints');
-            SET v_DropChkDone = FALSE;
-            OPEN cur_ModifiedChecks;
-
-            drop_modified_checks_loop: LOOP
-                FETCH cur_ModifiedChecks INTO v_DropChkTable, v_DropChkName, v_DropChkSql;
-                IF v_DropChkDone THEN
-                    LEAVE drop_modified_checks_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop modified check constraint: ', v_DropChkTable, '.', v_DropChkName));
-                SET @exec_sql = v_DropChkSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_ModifiedChecks;
-        END;
+        SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropModChkStmts);
+        WHILE @ss_id IS NOT NULL DO
+            SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_DropModChkStmts WHERE RowId = @ss_id;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropModChkStmts WHERE RowId > @ss_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropModChkStmts;
     END IF;
 
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ModifiedChecks;
@@ -523,27 +475,24 @@ BEGIN
             SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` DROP CHECK `', ConstraintName, '`')
             FROM _SchemaSmith_ChecksToDropByAbsence;
         ELSE
-            BEGIN
-                DECLARE v_AbsChkDone INT DEFAULT FALSE;
-                DECLARE v_AbsChkSql TEXT;
-                DECLARE cur_AbsChecks CURSOR FOR
-                    SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` DROP CHECK `', ConstraintName, '`')
-                    FROM _SchemaSmith_ChecksToDropByAbsence;
-                DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_AbsChkDone = TRUE;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop check constraints removed from product');
 
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop check constraints removed from product');
-                SET v_AbsChkDone = FALSE;
-                OPEN cur_AbsChecks;
-                drop_abs_checks_loop: LOOP
-                    FETCH cur_AbsChecks INTO v_AbsChkSql;
-                    IF v_AbsChkDone THEN LEAVE drop_abs_checks_loop; END IF;
-                    SET @exec_sql = v_AbsChkSql;
-                    PREPARE stmt FROM @exec_sql;
-                    EXECUTE stmt;
-                    DEALLOCATE PREPARE stmt;
-                END LOOP;
-                CLOSE cur_AbsChecks;
-            END;
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropAbsChkStmts;
+            CREATE TEMPORARY TABLE _SchemaSmith_DropAbsChkStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+                ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            INSERT INTO _SchemaSmith_DropAbsChkStmts (Stmt)
+            SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` DROP CHECK `', ConstraintName, '`')
+            FROM _SchemaSmith_ChecksToDropByAbsence;
+
+            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropAbsChkStmts);
+            WHILE @ss_id IS NOT NULL DO
+                SELECT Stmt INTO @exec_sql FROM _SchemaSmith_DropAbsChkStmts WHERE RowId = @ss_id;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+                SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropAbsChkStmts WHERE RowId > @ss_id);
+            END WHILE;
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropAbsChkStmts;
         END IF;
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ChecksToDropByAbsence;
@@ -567,54 +516,41 @@ BEGIN
               AND tc.CONSTRAINT_TYPE = 'CHECK'
         );
     ELSE
-        BEGIN
-            DECLARE v_CheckDone INT DEFAULT FALSE;
-            DECLARE v_CheckTable VARCHAR(128);
-            DECLARE v_CheckName VARCHAR(128);
-            DECLARE v_CheckVariant VARCHAR(128);
-            DECLARE v_CheckSql TEXT;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing check constraints');
 
-            DECLARE cur_MissingCheckConstraints CURSOR FOR
-                SELECT
-                    c.TableName,
-                    c.ConstraintName,
-                    c.VariantName,
-                    CONCAT(
-                        'ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
-                        ' ADD CONSTRAINT ', c.ConstraintName,
-                        ' CHECK (', c.Expression, ')'
-                    ) AS CreateCheckConstraintStatement
-                FROM _SchemaSmith_CheckConstraints c
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                    WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-                      AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-                      AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
-                      AND tc.CONSTRAINT_TYPE = 'CHECK'
-                );
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CreateChkStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_CreateChkStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        -- Detection reads LIVE INFORMATION_SCHEMA.TABLE_CONSTRAINTS so a just-dropped modified
+        -- table check (STEP 3.5) is correctly seen as missing here and recreated.
+        INSERT INTO _SchemaSmith_CreateChkStmts (LogMsg, Stmt)
+        SELECT
+            CONCAT('  Create check constraint: ', c.TableName, '.', c.ConstraintName,
+                CASE WHEN COALESCE(c.VariantName, '') <> '' THEN CONCAT(' (variant: ', c.VariantName, ')') ELSE '' END),
+            CONCAT(
+                'ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                ' ADD CONSTRAINT ', c.ConstraintName,
+                ' CHECK (', c.Expression, ')'
+            )
+        FROM _SchemaSmith_CheckConstraints c
+        WHERE NOT EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
+              AND tc.CONSTRAINT_TYPE = 'CHECK'
+        );
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_CheckDone = TRUE;
-
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing check constraints');
-            SET v_CheckDone = FALSE;
-            OPEN cur_MissingCheckConstraints;
-
-            create_checks_loop: LOOP
-                FETCH cur_MissingCheckConstraints INTO v_CheckTable, v_CheckName, v_CheckVariant, v_CheckSql;
-                IF v_CheckDone THEN
-                    LEAVE create_checks_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create check constraint: ', v_CheckTable, '.', v_CheckName,
-                    CASE WHEN COALESCE(v_CheckVariant, '') <> '' THEN CONCAT(' (variant: ', v_CheckVariant, ')') ELSE '' END));
-                SET @exec_sql = v_CheckSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_MissingCheckConstraints;
-        END;
+        SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_CreateChkStmts);
+        WHILE @ss_id IS NOT NULL DO
+            SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_CreateChkStmts WHERE RowId = @ss_id;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_CreateChkStmts WHERE RowId > @ss_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CreateChkStmts;
     END IF;
 
     -- =========================================================================
@@ -640,60 +576,50 @@ BEGIN
               AND tc.CONSTRAINT_TYPE = 'CHECK'
         );
     ELSE
-        BEGIN
-            DECLARE v_ColCheckDone INT DEFAULT FALSE;
-            DECLARE v_ColCheckTable VARCHAR(128);
-            DECLARE v_ColCheckName VARCHAR(128);
-            DECLARE v_ColCheckVariant VARCHAR(128);
-            DECLARE v_ColCheckSql TEXT;
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing column check constraints');
 
-            DECLARE cur_MissingColCheckConstraints CURSOR FOR
-                SELECT
-                    SchemaSmith_StripBacktickWrapping(c.TableName),
-                    CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName)),
-                    c.VariantName,
-                    CONCAT(
-                        'ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
-                        ' ADD CONSTRAINT `CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`',
-                        ' CHECK (', c.CheckExpression, ')'
-                    ) AS CreateColCheckStatement
-                FROM _SchemaSmith_Columns c
-                WHERE c.CheckExpression IS NOT NULL
-                  AND TRIM(c.CheckExpression) != ''
-                  AND NOT EXISTS (
-                    SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                    WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-                      AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-                      AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
-                      AND tc.CONSTRAINT_TYPE = 'CHECK'
-                );
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CreateColChkStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_CreateColChkStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        -- Detection reads LIVE INFORMATION_SCHEMA.TABLE_CONSTRAINTS so a just-dropped modified
+        -- column check (STEP 3.5) is correctly seen as missing here and recreated.
+        INSERT INTO _SchemaSmith_CreateColChkStmts (LogMsg, Stmt)
+        SELECT
+            CONCAT('  Create column check constraint: ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.',
+                   CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName)),
+                CASE WHEN COALESCE(c.VariantName, '') <> '' THEN CONCAT(' (variant: ', c.VariantName, ')') ELSE '' END),
+            CONCAT(
+                'ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                ' ADD CONSTRAINT `CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`',
+                ' CHECK (', c.CheckExpression, ')'
+            )
+        FROM _SchemaSmith_Columns c
+        WHERE c.CheckExpression IS NOT NULL
+          AND TRIM(c.CheckExpression) != ''
+          AND NOT EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+              AND tc.CONSTRAINT_TYPE = 'CHECK'
+        );
 
-            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_ColCheckDone = TRUE;
-
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing column check constraints');
-            SET v_ColCheckDone = FALSE;
-            OPEN cur_MissingColCheckConstraints;
-
-            create_col_checks_loop: LOOP
-                FETCH cur_MissingColCheckConstraints INTO v_ColCheckTable, v_ColCheckName, v_ColCheckVariant, v_ColCheckSql;
-                IF v_ColCheckDone THEN
-                    LEAVE create_col_checks_loop;
-                END IF;
-
-                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Create column check constraint: ', v_ColCheckTable, '.', v_ColCheckName,
-                    CASE WHEN COALESCE(v_ColCheckVariant, '') <> '' THEN CONCAT(' (variant: ', v_ColCheckVariant, ')') ELSE '' END));
-                SET @exec_sql = v_ColCheckSql;
-                PREPARE stmt FROM @exec_sql;
-                EXECUTE stmt;
-                DEALLOCATE PREPARE stmt;
-            END LOOP;
-
-            CLOSE cur_MissingColCheckConstraints;
-        END;
+        SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_CreateColChkStmts);
+        WHILE @ss_id IS NOT NULL DO
+            SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_CreateColChkStmts WHERE RowId = @ss_id;
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_CreateColChkStmts WHERE RowId > @ss_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CreateColChkStmts;
     END IF;
 
     -- =========================================================================
     -- STEP 7: Update ProductOwnership for managed objects
+    -- Reads LIVE INFORMATION_SCHEMA so it confirms objects created THIS run (STEP 3/4/4.5).
     -- =========================================================================
     IF p_WhatIf = 0 THEN
         -- Track indexes
@@ -742,6 +668,52 @@ BEGIN
     -- STEP 8: Drop unknown indexes (owned by product but not in definition)
     -- =========================================================================
     IF p_DropUnknownIndexes = 1 THEN
+        -- Crash-safe snapshot for STEP 8 ONLY. Taken HERE (after STEP 0..7's creates/drops/renames)
+        -- so it reflects the current catalog state, exactly what the original live reads saw at this
+        -- point. STEP 8's ProductOwnership x STATISTICS detection is the frequent-run segfault trigger
+        -- the roadmap identifies, so it (and its FK-drop join) read these snapshots instead of live
+        -- INFORMATION_SCHEMA. SEQ_IN_INDEX = 1 yields one row per index (NON_UNIQUE is index-level),
+        -- collapsing the original LEFT JOIN s + EXISTS s2 into a single snapshot reference (no 1137).
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Step8Idx;
+        CREATE TEMPORARY TABLE _SchemaSmith_Step8Idx (
+            TableName VARCHAR(128) NOT NULL,
+            IndexName VARCHAR(128) NOT NULL,
+            NonUnique TINYINT DEFAULT 0,
+            PRIMARY KEY (TableName, IndexName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_Step8Idx (TableName, IndexName, NonUnique)
+        SELECT CONVERT(s.TABLE_NAME USING utf8mb4), CONVERT(s.INDEX_NAME USING utf8mb4), s.NON_UNIQUE
+        FROM INFORMATION_SCHEMA.STATISTICS s
+        WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND s.SEQ_IN_INDEX = 1;
+
+        -- FK rows referencing a product table (for the FK-before-index drop join). Same-schema FKs.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Step8KCU;
+        CREATE TEMPORARY TABLE _SchemaSmith_Step8KCU (
+            TableName VARCHAR(128) NOT NULL,
+            ConstraintName VARCHAR(128) NOT NULL,
+            ReferencedTableName VARCHAR(128) DEFAULT NULL,
+            KEY ix_s8kcu (ReferencedTableName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_Step8KCU (TableName, ConstraintName, ReferencedTableName)
+        SELECT CONVERT(kcu.TABLE_NAME USING utf8mb4), CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4), CONVERT(kcu.REFERENCED_TABLE_NAME USING utf8mb4)
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+        WHERE BINARY kcu.REFERENCED_TABLE_SCHEMA = BINARY p_DatabaseName
+          AND BINARY kcu.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND kcu.REFERENCED_TABLE_NAME IS NOT NULL;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Step8TC;
+        CREATE TEMPORARY TABLE _SchemaSmith_Step8TC (
+            TableName VARCHAR(128) NOT NULL,
+            ConstraintName VARCHAR(128) NOT NULL,
+            KEY ix_s8tc (TableName, ConstraintName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_Step8TC (TableName, ConstraintName)
+        SELECT CONVERT(tc.TABLE_NAME USING utf8mb4), CONVERT(tc.CONSTRAINT_NAME USING utf8mb4)
+        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+        WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY';
+
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexesToDrop;
         CREATE TEMPORARY TABLE _SchemaSmith_IndexesToDrop (
             TableName VARCHAR(128) NOT NULL,
@@ -752,21 +724,21 @@ BEGIN
 
         -- Find indexes owned by product but not in current definition
         -- IMPORTANT: Only consider indexes on tables that ARE in the current definition (_SchemaSmith_Tables)
-        -- This prevents dropping indexes on tables not included in the current JSON
+        -- This prevents dropping indexes on tables not included in the current JSON.
+        -- Reads _SchemaSmith_Step8Idx (single LEFT JOIN): existence == ei.IndexName IS NOT NULL,
+        -- IsUnique == (ei.NonUnique = 0) -- collapses the original STATISTICS s + s2 references.
         INSERT INTO _SchemaSmith_IndexesToDrop (TableName, IndexName, IsUnique)
         SELECT
             SUBSTRING_INDEX(po.ObjectName, '.', 1) AS TableName,
             SUBSTRING_INDEX(po.ObjectName, '.', -1) AS IndexName,
-            COALESCE(s.NON_UNIQUE = 0, 0) AS IsUnique
+            COALESCE(ei.NonUnique = 0, 0) AS IsUnique
         FROM SchemaSmith_ProductOwnership po
         -- Join with _SchemaSmith_Tables to only consider indexes on tables in the current definition
         INNER JOIN _SchemaSmith_Tables t
             ON CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
-        LEFT JOIN INFORMATION_SCHEMA.STATISTICS s
-            ON CONVERT(s.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-            AND CONVERT(s.TABLE_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
-            AND CONVERT(s.INDEX_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
-            AND s.SEQ_IN_INDEX = 1
+        LEFT JOIN _SchemaSmith_Step8Idx ei
+            ON CONVERT(ei.TableName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+            AND CONVERT(ei.IndexName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
         LEFT JOIN _SchemaSmith_Indexes i
             ON CONVERT(SchemaSmith_StripBacktickWrapping(i.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
             AND CONVERT(SchemaSmith_StripBacktickWrapping(i.IndexName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
@@ -787,12 +759,7 @@ BEGIN
                 AND r.OldIndexName = SUBSTRING_INDEX(po.ObjectName, '.', -1)
           )
           -- Verify index actually exists
-          AND EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s2
-              WHERE CONVERT(s2.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                AND CONVERT(s2.TABLE_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
-                AND CONVERT(s2.INDEX_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
-          );
+          AND ei.IndexName IS NOT NULL;
 
         IF p_WhatIf = 1 THEN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unknown indexes');
@@ -800,82 +767,66 @@ BEGIN
             SELECT CONNECTION_ID(), CONCAT('DROP INDEX `', IndexName, '` ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`')
             FROM _SchemaSmith_IndexesToDrop;
         ELSE
-            -- First, drop any foreign keys that reference unique indexes we're about to drop
-            BEGIN
-                DECLARE v_FKDropDone INT DEFAULT FALSE;
-                DECLARE v_FKDropSql TEXT;
-                DECLARE cur_FKsToDropForIndexes CURSOR FOR
-                    SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`',
-                                  CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                                  '` DROP FOREIGN KEY `', CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`') AS DropFKSql
-                    FROM _SchemaSmith_IndexesToDrop itd
-                    JOIN INFORMATION_SCHEMA.STATISTICS s
-                        ON CONVERT(s.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                        AND CONVERT(s.TABLE_NAME USING utf8mb4) = CONVERT(itd.TableName USING utf8mb4)
-                        AND CONVERT(s.INDEX_NAME USING utf8mb4) = CONVERT(itd.IndexName USING utf8mb4)
-                        AND s.SEQ_IN_INDEX = 1
-                    JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-                        ON CONVERT(kcu.REFERENCED_TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                        AND CONVERT(kcu.REFERENCED_TABLE_NAME USING utf8mb4) = CONVERT(itd.TableName USING utf8mb4)
-                    JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                        ON CONVERT(tc.TABLE_SCHEMA USING utf8mb4) = CONVERT(kcu.TABLE_SCHEMA USING utf8mb4)
-                        AND CONVERT(tc.TABLE_NAME USING utf8mb4) = CONVERT(kcu.TABLE_NAME USING utf8mb4)
-                        AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4)
-                        AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
-                    WHERE itd.IsUnique = 1;
+            -- First, drop any foreign keys that reference unique indexes we're about to drop.
+            -- FK drops MUST complete before the index drops below (a FK backed by a unique index
+            -- blocks dropping that index); these are two sequential loops, preserving that order.
+            -- Reads the STEP 8 snapshots (Step8Idx existence bridge, Step8KCU, Step8TC).
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropFKForIdxStmts;
+            CREATE TEMPORARY TABLE _SchemaSmith_DropFKForIdxStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
+                ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            -- DISTINCT: one DROP FOREIGN KEY per FK. A composite FK yields multiple KEY_COLUMN_USAGE
+            -- rows (one per column), and several dropped indexes on the same referenced table re-join
+            -- the same FK; both would otherwise emit a duplicate DROP FOREIGN KEY (error 1091 on the
+            -- second). The original per-row cursor had the same latent duplication.
+            INSERT INTO _SchemaSmith_DropFKForIdxStmts (LogMsg, Stmt)
+            SELECT DISTINCT
+                CONCAT('  Drop FK for index: ',
+                       CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', kcu.TableName, '` DROP FOREIGN KEY `', tc.ConstraintName, '`')),
+                CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', kcu.TableName, '` DROP FOREIGN KEY `', tc.ConstraintName, '`')
+            FROM _SchemaSmith_IndexesToDrop itd
+            JOIN _SchemaSmith_Step8Idx ei
+                ON CONVERT(ei.TableName USING utf8mb4) = CONVERT(itd.TableName USING utf8mb4)
+                AND CONVERT(ei.IndexName USING utf8mb4) = CONVERT(itd.IndexName USING utf8mb4)
+            JOIN _SchemaSmith_Step8KCU kcu
+                ON CONVERT(kcu.ReferencedTableName USING utf8mb4) = CONVERT(itd.TableName USING utf8mb4)
+            JOIN _SchemaSmith_Step8TC tc
+                ON CONVERT(tc.TableName USING utf8mb4) = CONVERT(kcu.TableName USING utf8mb4)
+                AND CONVERT(tc.ConstraintName USING utf8mb4) = CONVERT(kcu.ConstraintName USING utf8mb4)
+            WHERE itd.IsUnique = 1;
 
-                DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_FKDropDone = TRUE;
-
-                SET v_FKDropDone = FALSE;
-                OPEN cur_FKsToDropForIndexes;
-
-                drop_fks_for_indexes_loop: LOOP
-                    FETCH cur_FKsToDropForIndexes INTO v_FKDropSql;
-                    IF v_FKDropDone THEN
-                        LEAVE drop_fks_for_indexes_loop;
-                    END IF;
-
-                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop FK for index: ', v_FKDropSql));
-                    SET @exec_sql = v_FKDropSql;
-                    PREPARE stmt FROM @exec_sql;
-                    EXECUTE stmt;
-                    DEALLOCATE PREPARE stmt;
-                END LOOP;
-
-                CLOSE cur_FKsToDropForIndexes;
-            END;
+            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropFKForIdxStmts);
+            WHILE @ss_id IS NOT NULL DO
+                SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_DropFKForIdxStmts WHERE RowId = @ss_id;
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+                SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropFKForIdxStmts WHERE RowId > @ss_id);
+            END WHILE;
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropFKForIdxStmts;
 
             -- Now drop the unknown indexes
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unknown indexes');
-            BEGIN
-                DECLARE v_DropDone INT DEFAULT FALSE;
-                DECLARE v_DropTable VARCHAR(128);
-                DECLARE v_DropIndex VARCHAR(128);
-                DECLARE v_DropSql TEXT;
-                DECLARE cur_DropIndexes CURSOR FOR
-                    SELECT TableName, IndexName, CONCAT('DROP INDEX `', IndexName, '` ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`') AS DropIndexSql
-                    FROM _SchemaSmith_IndexesToDrop;
 
-                DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_DropDone = TRUE;
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropIdxStmts;
+            CREATE TEMPORARY TABLE _SchemaSmith_DropIdxStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
+                ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            INSERT INTO _SchemaSmith_DropIdxStmts (LogMsg, Stmt)
+            SELECT
+                CONCAT('  Drop unknown index: ', TableName, '.', IndexName),
+                CONCAT('DROP INDEX `', IndexName, '` ON `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`')
+            FROM _SchemaSmith_IndexesToDrop;
 
-                SET v_DropDone = FALSE;
-                OPEN cur_DropIndexes;
-
-                drop_indexes_loop: LOOP
-                    FETCH cur_DropIndexes INTO v_DropTable, v_DropIndex, v_DropSql;
-                    IF v_DropDone THEN
-                        LEAVE drop_indexes_loop;
-                    END IF;
-
-                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Drop unknown index: ', v_DropTable, '.', v_DropIndex));
-                    SET @exec_sql = v_DropSql;
-                    PREPARE stmt FROM @exec_sql;
-                    EXECUTE stmt;
-                    DEALLOCATE PREPARE stmt;
-                END LOOP;
-
-                CLOSE cur_DropIndexes;
-            END;
+            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropIdxStmts);
+            WHILE @ss_id IS NOT NULL DO
+                SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_DropIdxStmts WHERE RowId = @ss_id;
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+                SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropIdxStmts WHERE RowId > @ss_id);
+            END WHILE;
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropIdxStmts;
 
             -- Remove dropped indexes from ProductOwnership
             DELETE po FROM SchemaSmith_ProductOwnership po
@@ -887,6 +838,9 @@ BEGIN
         END IF;
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexesToDrop;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Step8Idx;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Step8KCU;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Step8TC;
     END IF;
 
     -- Cleanup temporary tables

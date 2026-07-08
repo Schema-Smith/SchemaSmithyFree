@@ -53,6 +53,8 @@ public class ZipDirectoryWrapper : IDirectory
     // Other IDirectory methods not used for zip access
     IDirectoryInfo IDirectory.CreateDirectory(string path) => throw new NotImplementedException();
     public string[] GetDirectories(string path, string searchPattern, SearchOption searchOption) => throw new NotImplementedException();
+    public IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption) => throw new NotImplementedException();
+    public IEnumerable<string> EnumerateFileSystemEntries(string path, string searchPattern, SearchOption searchOption) => throw new NotImplementedException();
     public void Delete(string path, bool recursive = false) => throw new NotImplementedException();
     public void Move(string sourceDirName, string destDirName) => throw new NotImplementedException();
     public string GetCurrentDirectory() => throw new NotImplementedException();

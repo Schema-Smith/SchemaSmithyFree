@@ -46,6 +46,9 @@ public static class ConfigHelper
             var config = FactoryContainer.Resolve<IConfigurationRoot>();
             if (config != null) return config;
 
+            // Config bootstrap must read the REAL current directory, not a mockable isolator:
+            // tests register a mock IDirectory for other components, and a mock's null
+            // GetCurrentDirectory() would break ConfigurationBuilder.SetBasePath here.
             var basePath = Directory.GetCurrentDirectory();
             var settingsFile = CommandLineParser.ValueOfSwitch("ConfigFile", null) ?? $"{app}.settings.json";
             var builder = new ConfigurationBuilder()
@@ -53,7 +56,7 @@ public static class ConfigHelper
 
             // Check AppContext.BaseDirectory as fallback (test runners may not set CWD to the output directory)
             var appBasePath = AppContext.BaseDirectory;
-            if (!File.Exists(Path.Combine(basePath, settingsFile)) && File.Exists(Path.Combine(appBasePath, settingsFile)))
+            if (!File.Exists(Path.Join(basePath, settingsFile)) && File.Exists(Path.Join(appBasePath, settingsFile)))
                 builder.SetBasePath(appBasePath);
 
             builder.AddJsonFile(settingsFile, optional: true)

@@ -142,6 +142,10 @@ File naming:
 - One public type per file; the file name matches the type name.
 - Test files sit in the corresponding `*.UnitTests` or `*.IntegrationTests` project, mirroring the namespace structure of the type under test.
 
+### SQL Script Conventions
+
+Stored-procedure and function scripts under `Schema/Scripts/{SqlServer,PostgreSQL,MySQL}/` follow the [SQL script conventions](docs/development/sql-script-conventions.md) — dynamic-SQL aggregate-to-string over row-by-row cursor loops, with engine-specific idioms (MySQL's single-statement `PREPARE` limitation, the `INFORMATION_SCHEMA`-snapshot rule, and the cursor/loop allow-list). Reviewers check new SQL against this guide.
+
 ### Copyright Headers
 
 New files in the codebase need a copyright header on the first line:

@@ -111,65 +111,48 @@ BEGIN TRY
     END
     ELSE
     BEGIN
-        -- Step 2: ADD COLUMN for any columns missing on an existing table.
-        DECLARE col_cur CURSOR LOCAL FAST_FORWARD FOR
-            SELECT ColumnName, DataType, Nullable, [Default]
-              FROM @v_Columns c
-             WHERE NOT EXISTS (
-                 SELECT 1 FROM sys.columns sc
-                  WHERE sc.object_id = OBJECT_ID(@v_QualifiedName)
-                    AND sc.name = c.ColumnNameBare
-             )
-             ORDER BY OrdinalPos;
+        -- Step 2: ADD COLUMN for any columns missing on an existing table (one multi-column ALTER).
+        DECLARE @v_AddColumns NVARCHAR(MAX) =
+            (SELECT STRING_AGG(CAST(
+                ColumnName + ' ' + DataType +
+                CASE WHEN Nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END +
+                CASE WHEN RTRIM(ISNULL([Default], '')) <> '' THEN ' DEFAULT ' + [Default] ELSE '' END
+              AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY OrdinalPos)
+               FROM @v_Columns c
+              WHERE NOT EXISTS (
+                  SELECT 1 FROM sys.columns sc
+                   WHERE sc.object_id = OBJECT_ID(@v_QualifiedName)
+                     AND sc.name = c.ColumnNameBare
+              ));
 
-        DECLARE @c_ColumnName NVARCHAR(500), @c_DataType NVARCHAR(200),
-                @c_Nullable BIT, @c_Default NVARCHAR(MAX);
-
-        OPEN col_cur;
-        FETCH NEXT FROM col_cur INTO @c_ColumnName, @c_DataType, @c_Nullable, @c_Default;
-        WHILE @@FETCH_STATUS = 0
+        IF @v_AddColumns IS NOT NULL
         BEGIN
-            SET @v_SQL = 'ALTER TABLE ' + @v_QualifiedName + ' ADD ' + @c_ColumnName + ' ' + @c_DataType +
-                         CASE WHEN @c_Nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END +
-                         CASE WHEN RTRIM(ISNULL(@c_Default, '')) <> '' THEN ' DEFAULT ' + @c_Default ELSE '' END;
+            SET @v_SQL = 'ALTER TABLE ' + @v_QualifiedName + ' ADD ' + @v_AddColumns;
             EXEC(@v_SQL);
-            FETCH NEXT FROM col_cur INTO @c_ColumnName, @c_DataType, @c_Nullable, @c_Default;
         END
-        CLOSE col_cur;
-        DEALLOCATE col_cur;
     END;
 
     -- Step 3: CREATE INDEX for any non-PK indexes missing on the table.
     -- (PK indexes were attached at CREATE TABLE time; if the table already existed before
     -- this refactor, the legacy CREATE TABLE attached its own PK constraint.)
-    DECLARE idx_cur CURSOR LOCAL FAST_FORWARD FOR
-        SELECT IndexName, IndexNameBare, [Unique], [Clustered], IndexColumns
-          FROM @v_Indexes i
-         WHERE PrimaryKey = 0
-           AND NOT EXISTS (
-               SELECT 1 FROM sys.indexes si
-                WHERE si.object_id = OBJECT_ID(@v_QualifiedName)
-                  AND si.name = i.IndexNameBare
-           )
-         ORDER BY OrdinalPos;
+    SET @v_SQL =
+        (SELECT STRING_AGG(CAST(
+            'CREATE ' +
+            CASE WHEN [Unique] = 1 THEN 'UNIQUE ' ELSE '' END +
+            CASE WHEN [Clustered] = 1 THEN 'CLUSTERED ' ELSE 'NONCLUSTERED ' END +
+            'INDEX ' + IndexName +
+            ' ON ' + @v_QualifiedName + ' (' + IndexColumns + ')'
+          AS NVARCHAR(MAX)), ';' + CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY OrdinalPos)
+           FROM @v_Indexes i
+          WHERE PrimaryKey = 0
+            AND NOT EXISTS (
+                SELECT 1 FROM sys.indexes si
+                 WHERE si.object_id = OBJECT_ID(@v_QualifiedName)
+                   AND si.name = i.IndexNameBare
+            ));
 
-    DECLARE @i_IndexName NVARCHAR(500), @i_IndexNameBare NVARCHAR(500),
-            @i_Unique BIT, @i_Clustered BIT, @i_IndexColumns NVARCHAR(MAX);
-
-    OPEN idx_cur;
-    FETCH NEXT FROM idx_cur INTO @i_IndexName, @i_IndexNameBare, @i_Unique, @i_Clustered, @i_IndexColumns;
-    WHILE @@FETCH_STATUS = 0
-    BEGIN
-        SET @v_SQL = 'CREATE ' +
-                     CASE WHEN @i_Unique = 1 THEN 'UNIQUE ' ELSE '' END +
-                     CASE WHEN @i_Clustered = 1 THEN 'CLUSTERED ' ELSE 'NONCLUSTERED ' END +
-                     'INDEX ' + @i_IndexName +
-                     ' ON ' + @v_QualifiedName + ' (' + @i_IndexColumns + ')';
+    IF @v_SQL IS NOT NULL
         EXEC(@v_SQL);
-        FETCH NEXT FROM idx_cur INTO @i_IndexName, @i_IndexNameBare, @i_Unique, @i_Clustered, @i_IndexColumns;
-    END
-    CLOSE idx_cur;
-    DEALLOCATE idx_cur;
 END TRY
 BEGIN CATCH
     THROW;

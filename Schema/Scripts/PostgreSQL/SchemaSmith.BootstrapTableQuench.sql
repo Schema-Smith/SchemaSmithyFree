@@ -28,8 +28,6 @@ DECLARE
     v_col_nullable BOOLEAN;
     v_col_default TEXT;
     v_idx_name TEXT;
-    v_idx_unique BOOLEAN;
-    v_idx_pk BOOLEAN;
     v_idx_cols TEXT;
 BEGIN
     v_schema := TRIM(BOTH FROM (v_def->>'Schema'));
@@ -71,36 +69,31 @@ BEGIN
     v_sql := 'CREATE TABLE IF NOT EXISTS "' || v_schema || '"."' || v_name || '" (' || v_column_list || v_pk_clause || ')';
     EXECUTE v_sql;
 
-    -- Step 2: ADD COLUMN IF NOT EXISTS per declared column. PostgreSQL has native
-    -- IF NOT EXISTS support for ADD COLUMN since 9.6.
-    FOR v_col IN SELECT * FROM jsonb_array_elements(v_def->'Columns')
-    LOOP
-        v_col_name := v_col->>'Name';
-        v_col_type := v_col->>'DataType';
-        v_col_nullable := COALESCE((v_col->>'Nullable')::boolean, false);
-        v_col_default := v_col->>'Default';
+    -- Step 2: ADD COLUMN IF NOT EXISTS folded into one multi-clause ALTER (PG has native
+    -- IF NOT EXISTS support for ADD COLUMN since 9.6). Declared-column order preserved.
+    SELECT string_agg(
+             'ADD COLUMN IF NOT EXISTS "' || (col->>'Name') || '" ' || (col->>'DataType') ||
+             CASE WHEN COALESCE((col->>'Nullable')::boolean, false) THEN ' NULL' ELSE ' NOT NULL' END ||
+             CASE WHEN COALESCE(TRIM(col->>'Default'), '') <> '' THEN ' DEFAULT ' || (col->>'Default') ELSE '' END,
+             ', ' ORDER BY ord)
+      INTO v_sql
+      FROM jsonb_array_elements(v_def->'Columns') WITH ORDINALITY AS t(col, ord);
+    IF v_sql IS NOT NULL THEN
+        EXECUTE 'ALTER TABLE "' || v_schema || '"."' || v_name || '" ' || v_sql;
+    END IF;
 
-        v_sql := 'ALTER TABLE "' || v_schema || '"."' || v_name || '" ADD COLUMN IF NOT EXISTS "' ||
-                 v_col_name || '" ' || v_col_type ||
-                 CASE WHEN v_col_nullable THEN ' NULL' ELSE ' NOT NULL' END ||
-                 CASE WHEN COALESCE(TRIM(v_col_default), '') <> '' THEN ' DEFAULT ' || v_col_default ELSE '' END;
+    -- Step 3: CREATE INDEX IF NOT EXISTS for non-PK indexes, folded into one batch
+    -- (PG supports IF NOT EXISTS natively and runs a multi-statement EXECUTE string). Order preserved.
+    SELECT string_agg(
+             'CREATE ' ||
+             CASE WHEN COALESCE((idx->>'Unique')::boolean, false) THEN 'UNIQUE ' ELSE '' END ||
+             'INDEX IF NOT EXISTS "' || (idx->>'Name') || '" ON "' ||
+             v_schema || '"."' || v_name || '" (' || (idx->>'IndexColumns') || ')',
+             '; ' ORDER BY ord)
+      INTO v_sql
+      FROM jsonb_array_elements(v_def->'Indexes') WITH ORDINALITY AS t(idx, ord)
+      WHERE COALESCE((idx->>'PrimaryKey')::boolean, false) = false;
+    IF v_sql IS NOT NULL THEN
         EXECUTE v_sql;
-    END LOOP;
-
-    -- Step 3: CREATE INDEX IF NOT EXISTS for non-PK indexes. PG supports IF NOT EXISTS natively.
-    FOR v_idx IN SELECT * FROM jsonb_array_elements(v_def->'Indexes')
-    LOOP
-        v_idx_pk := COALESCE((v_idx->>'PrimaryKey')::boolean, false);
-        IF v_idx_pk THEN CONTINUE; END IF;
-
-        v_idx_name := v_idx->>'Name';
-        v_idx_unique := COALESCE((v_idx->>'Unique')::boolean, false);
-        v_idx_cols := v_idx->>'IndexColumns';
-
-        v_sql := 'CREATE ' ||
-                 CASE WHEN v_idx_unique THEN 'UNIQUE ' ELSE '' END ||
-                 'INDEX IF NOT EXISTS "' || v_idx_name || '" ON "' ||
-                 v_schema || '"."' || v_name || '" (' || v_idx_cols || ')';
-        EXECUTE v_sql;
-    END LOOP;
+    END IF;
 END $$;

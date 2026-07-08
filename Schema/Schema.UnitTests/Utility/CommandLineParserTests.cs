@@ -366,9 +366,42 @@ public class CommandLineParserTests
     }
 
     [Test]
-    public void ConfigOverrides_LegacyColonSwitch_IsNotAnOverride()
+    public void ConfigOverrides_ColonForm_FlatKey()
     {
+        _mockEnvironment.CommandLine.Returns("app.exe --MaxThreads:8");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides["MaxThreads"], Is.EqualTo("8"));
+    }
+
+    [Test]
+    public void ConfigOverrides_ColonForm_NestedKey_DoubleUnderscoreBecomesColon()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Source__Server:myhost");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides["Source:Server"], Is.EqualTo("myhost"));
+    }
+
+    [Test]
+    public void ConfigOverrides_EqualsTakesPrecedenceOverColon_SoColonNestsAndEqualsIsTheValue()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Target:Server=host");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides["Target:Server"], Is.EqualTo("host"));
+    }
+
+    [Test]
+    public void ConfigOverrides_ColonForm_ValueRetainsTrailingColons()
+    {
+        // First ':' is the value boundary; a colon in the value (e.g. a host:port or c:\path) survives.
         _mockEnvironment.CommandLine.Returns("app.exe --LogPath:c:\\logs");
+        var overrides = CommandLineParser.ConfigOverrides;
+        Assert.That(overrides["LogPath"], Is.EqualTo("c:\\logs"));
+    }
+
+    [Test]
+    public void ConfigOverrides_BareFlag_IsNotAnOverride()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --WhatIf");
         var overrides = CommandLineParser.ConfigOverrides;
         Assert.That(overrides, Is.Empty);
     }
@@ -390,12 +423,14 @@ public class CommandLineParserTests
     }
 
     [Test]
-    public void ConfigOverrides_MixedSwitches_ReturnsOnlyEqualsForms()
+    public void ConfigOverrides_MixedSwitches_IncludesEqualsAndColon_ExcludesBareFlags()
     {
         _mockEnvironment.CommandLine.Returns("app.exe --A=1 --B__C=2 --LogPath:x --flag");
         var overrides = CommandLineParser.ConfigOverrides;
-        Assert.That(overrides, Has.Count.EqualTo(2));
+        // '='-form (A, B:C), ':'-form (LogPath) all count; the bare flag does not.
+        Assert.That(overrides, Has.Count.EqualTo(3));
         Assert.That(overrides["A"], Is.EqualTo("1"));
         Assert.That(overrides["B:C"], Is.EqualTo("2"));
+        Assert.That(overrides["LogPath"], Is.EqualTo("x"));
     }
 }
