@@ -118,6 +118,7 @@ BEGIN
             ON BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
             AND BINARY s.TABLE_NAME = BINARY m.TableName
             AND BINARY s.INDEX_NAME = BINARY m.ConstraintName
+            AND s.SEQ_IN_INDEX = 1
         GROUP BY m.TableName;
 
         SET @v_fkmod_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKModStmts);
@@ -302,6 +303,7 @@ BEGIN
                 ON BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
                 AND BINARY s.TABLE_NAME = BINARY d.TableName
                 AND BINARY s.INDEX_NAME = BINARY d.ConstraintName
+                AND s.SEQ_IN_INDEX = 1
             GROUP BY d.TableName;
 
             SET @v_fkdrop_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKDropStmts);
