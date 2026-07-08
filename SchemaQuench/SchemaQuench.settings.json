@@ -28,5 +28,6 @@
     "CheckpointDirectory": "", // Directory for checkpoint files to enable resuming interrupted quenches
     "DeliverData": true, // Execute data delivery (Table Data scripts and merge scripts)
     "VerboseLogging": false, // Include PRINT messages and other informational messages in the logged output from the table updates and other scripts
+    "FailureContextLines": 25, // Lines of per-scope context captured and shown for each failure in SchemaQuench - Failures.log (0 = disable capture)
     "ScriptTokens": {}
 }

@@ -1,6 +1,8 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
 
 namespace SchemaQuench.UnitTests;
@@ -8,6 +10,38 @@ namespace SchemaQuench.UnitTests;
 [TestFixture]
 public class FailureContextTests
 {
+    private static IConfigurationRoot ConfigWith(string failureContextLines)
+    {
+        var values = new Dictionary<string, string>();
+        if (failureContextLines != null) values["FailureContextLines"] = failureContextLines;
+        return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+    }
+
+    [Test]
+    public void ResolveCapacity_ParsesConfiguredValue()
+    {
+        Assert.That(FailureContext.ResolveCapacity(ConfigWith("40")), Is.EqualTo(40));
+    }
+
+    [Test]
+    public void ResolveCapacity_DefaultsWhenAbsentOrUnparseable()
+    {
+        Assert.That(FailureContext.ResolveCapacity(ConfigWith(null)), Is.EqualTo(FailureContext.DefaultCapacity));
+        Assert.That(FailureContext.ResolveCapacity(ConfigWith("garbage")), Is.EqualTo(FailureContext.DefaultCapacity));
+    }
+
+    [Test]
+    public void ResolveCapacity_FloorsNegativeToZero()
+    {
+        Assert.That(FailureContext.ResolveCapacity(ConfigWith("-5")), Is.EqualTo(0));
+    }
+
+    [Test]
+    public void ResolveCapacity_ZeroDisablesCapture()
+    {
+        Assert.That(FailureContext.ResolveCapacity(ConfigWith("0")), Is.EqualTo(0));
+    }
+
     [Test]
     public void Log_KeepsOnlyLastCapacityLines()
     {

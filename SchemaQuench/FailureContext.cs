@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 
 namespace SchemaQuench;
 
@@ -46,5 +47,18 @@ public sealed class FailureContext
     {
         lock (_lock)
             return new FailureRecord(_phase, _scopeKey, error, new List<string>(_lines), artifactPath);
+    }
+
+    /// <summary>
+    /// Reads the per-scope capture depth from config (<c>FailureContextLines</c>): defaults to 25
+    /// when absent or unparseable, floored at 0 (0 disables capture).
+    /// </summary>
+    public const int DefaultCapacity = 25;
+
+    public static int ResolveCapacity(IConfigurationRoot config)
+    {
+        if (!int.TryParse(config["FailureContextLines"], out var lines))
+            return DefaultCapacity;
+        return lines < 0 ? 0 : lines;
     }
 }
