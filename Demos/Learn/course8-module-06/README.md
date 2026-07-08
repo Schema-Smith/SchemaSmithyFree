@@ -1,0 +1,78 @@
+# Course 8 · Module 6 — Per-engine dialects & your runbook (finale)
+
+The **finale** of Course 8. You've read SQL Server logs all course. Now the same failure lands on
+PostgreSQL and MySQL — and the error isn't where you expected, because **each database hands it back
+through a different door**. This module shows all three doors, then has you assemble everything into a
+team diagnostic runbook.
+
+## Prerequisites
+
+- The three-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
+- `schemaquench --version` answers on your PATH. Uses only long-shipped features.
+
+## Step 1 — create the sandbox database
+
+**macOS / Linux:** `cd Demos/Learn/course8-module-06 && bash setup-databases.sh`
+**Windows:** `cd Demos\Learn\course8-module-06 ; .\setup-databases.ps1`
+
+Prints `PASS` per engine once `diag_dialects` exists.
+
+## Step 2 — deploy the baseline (green)
+
+```
+cd sqlserver            # or postgres, or mysql
+schemaquench --ConfigFile:quench.settings.baseline.json --LogPath:"$PWD/logs"
+```
+
+Exits `0`, forges `Shop`, and seeds customers — two of them (`CustomerId` 1 & 7) share the email
+`ana.f@shop.test`. Harmless under the non-unique `IX_Customer_Email`. That's the setup for the one
+failure we'll read three ways.
+
+## Demo 1 — the same failure, three doors
+
+`channels-broken/` flips `IX_Customer_Email` to **unique**. Deploying over the duplicates fails at the
+index phase — the *same* failure on every engine, surfaced differently:
+
+```
+schemaquench --ConfigFile:quench.settings.channels-broken.json --LogPath:"$PWD/logs"
+```
+
+Read the `Progress.log` **and** the `Errors.log` on each engine:
+
+| Engine | `Progress.log` | `Errors.log` |
+| --- | --- | --- |
+| **SQL Server** | `The CREATE UNIQUE INDEX statement terminated… duplicate key… (ana.f@shop.test)` | **populated** — same message + `at Line: 2` |
+| **PostgreSQL** | `23505: could not create unique index "ix_customer_email"` | **empty** |
+| **MySQL** | `Duplicate entry 'ana.f@shop.test' for key 'Customer.IX_Customer_Email'` (`1062`) | **empty** |
+
+That's the headline: **only SQL Server populates `Errors.log`** (with the fault + line number). On
+PostgreSQL and MySQL the detail is in the `Progress.log`, and `Errors.log` is empty. *Where you look
+for the fault is engine-specific.* Three doors:
+
+- **SQL Server** — an `InfoMessage` event stream. Severity > 10 → both logs (with the line number).
+- **PostgreSQL** — a `Notice` stream. The SQLSTATE (`23505`) is printed literally; `Errors.log` stays empty.
+- **MySQL** — no async event at all. Progress rides a **`SchemaSmith_StatusMessages`** sidecar table
+  that a monitor polls every ~200 ms, because MySQL runs on a single connection and can't push a
+  notice on the busy line. Confirm it's there: `DESCRIBE diag_dialects.SchemaSmith_StatusMessages`.
+
+## A note on `VerboseLogging`
+
+You'll see `VerboseLogging` in the config (top-level, default `false`, **SQL-Server-only**). It gates
+low-severity SQL Server `InfoMessage` output — but in practice it **rarely changes anything**, because
+SchemaSmith's own progress is emitted with `RAISERROR(@msg, 10, 100)` — **State 100 always surfaces**,
+gate or no gate. The tool deliberately makes its progress always-visible. So you get full progress on
+all three engines by default; `VerboseLogging` is a dial you'll seldom need to reach for.
+
+## The capstone — your runbook
+
+Open [`runbook.md`](runbook.md). It's a fill-in team diagnostic runbook that pulls together everything
+from Course 8: the phase map, the core loop, the "whose problem is it" per-item lines, the per-engine
+evidence table, the per-platform error codes, and the recovery decision tree — plus a blank incident
+log to grow over time. Copy it into your own repo. That's the deliverable: a one-page answer to
+"the deploy failed — now what?" on any of the three engines.
+
+## Course 8 complete
+
+You can now locate any failure's phase, read its artifact, name whose problem it is, and recover it —
+on SQL Server, PostgreSQL, or MySQL. For the lookup tables, see the SchemaSmith end-user reference
+(error codes & reporting channels). That's the course.
