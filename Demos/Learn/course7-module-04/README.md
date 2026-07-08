@@ -177,5 +177,5 @@ rest. And `--ResumeQuench` turns a partial failure into a one-tenant fix-up inst
 what it takes to run SchemaSmith as fleet infrastructure — not just to deploy the fleet, but to operate it
 on the day something goes wrong.
 
-That's the end of Course 7. You can now stand up, steer, grow, and safely operate a database-per-tenant
-fleet of any size with one toolset and one workflow.
+Next up — Module 5, the diagnostic capstone: when a fleet-wide run comes back with more than one tenant
+failed, in different phases, you'll locate each tenant's evidence, name the phase, and resume with intent.
