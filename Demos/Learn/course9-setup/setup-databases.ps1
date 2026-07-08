@@ -17,7 +17,7 @@ function Invoke-Seed {
     switch ($Engine) {
         'sqlserver' { docker cp $file learn-sqlserver:/tmp/seed.sql | Out-Null; docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -i /tmp/seed.sql | Out-Null }
         'postgres'  { docker cp $file learn-postgres:/tmp/seed.sql | Out-Null; docker exec learn-postgres psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/seed.sql | Out-Null }
-        'mysql'     { docker cp $file learn-mysql:/tmp/seed.sql | Out-Null; docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e 'source /tmp/seed.sql' 2>$null | Out-Null }
+        'mysql'     { docker cp $file learn-mysql:/tmp/seed.sql | Out-Null; docker exec learn-mysql sh -c 'mysql -uroot -pLearn!Passw0rd < /tmp/seed.sql' 2>$null | Out-Null }
     }
 }
 

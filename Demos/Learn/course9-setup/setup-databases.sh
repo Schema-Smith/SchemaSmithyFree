@@ -18,7 +18,7 @@ apply_seed() {
   case "$engine" in
     sqlserver) docker cp "$file" learn-sqlserver:/tmp/seed.sql >/dev/null; docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -i /tmp/seed.sql >/dev/null 2>&1 ;;
     postgres)  docker cp "$file" learn-postgres:/tmp/seed.sql >/dev/null; docker exec learn-postgres psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/seed.sql >/dev/null 2>&1 ;;
-    mysql)     docker cp "$file" learn-mysql:/tmp/seed.sql >/dev/null; docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e 'source /tmp/seed.sql' >/dev/null 2>&1 ;;
+    mysql)     docker cp "$file" learn-mysql:/tmp/seed.sql >/dev/null; docker exec learn-mysql sh -c 'mysql -uroot -pLearn!Passw0rd < /tmp/seed.sql' >/dev/null 2>&1 ;;
   esac
 }
 
