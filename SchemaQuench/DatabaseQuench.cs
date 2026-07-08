@@ -95,7 +95,7 @@ public class DatabaseQuench
     private FailureContext _failureContext;
     private FailureContext FailureCtx => _failureContext ??= new FailureContext(
         $"Template:{_template?.Name}", LogPrefix,
-        FailureContext.ResolveCapacity(FactoryContainer.ResolveOrCreate<IConfigurationRoot>()));
+        FailureContext.ResolveCapacity(FactoryContainer.Resolve<IConfigurationRoot>()));
     private int _postgreSqlServerVersionNum; // 0 until detected; only meaningful when Platform == PostgreSQL
 
     // Per-iteration content built by PrepareIterationContent at the start of Execute(). For schema-

@@ -57,7 +57,7 @@ public sealed class FailureContext
 
     public static int ResolveCapacity(IConfigurationRoot config)
     {
-        if (!int.TryParse(config["FailureContextLines"], out var lines))
+        if (config == null || !int.TryParse(config["FailureContextLines"], out var lines))
             return DefaultCapacity;
         return lines < 0 ? 0 : lines;
     }

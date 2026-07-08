@@ -31,6 +31,12 @@ public class FailureContextTests
     }
 
     [Test]
+    public void ResolveCapacity_NullConfig_ReturnsDefault()
+    {
+        Assert.That(FailureContext.ResolveCapacity(null), Is.EqualTo(FailureContext.DefaultCapacity));
+    }
+
+    [Test]
     public void ResolveCapacity_FloorsNegativeToZero()
     {
         Assert.That(FailureContext.ResolveCapacity(ConfigWith("-5")), Is.EqualTo(0));
