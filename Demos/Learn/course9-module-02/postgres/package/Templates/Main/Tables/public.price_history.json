@@ -1,0 +1,56 @@
+{
+  "Name": "price_history",
+  "Columns": [
+    {
+      "Name": "history_id",
+      "DataType": "int4",
+      "Generated": "GENERATED ALWAYS AS IDENTITY",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "product_ref",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "recorded_at",
+      "DataType": "timestamptz",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "attributes",
+      "DataType": "jsonb",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "tags",
+      "DataType": "text[]",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_price_history",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "history_id",
+      "ShouldApplyExpression": "",
+      "VariantName": ""
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": ""
+}
