@@ -1,0 +1,6 @@
+[
+{"region_code":"NA","name":"North America","active":true},
+{"region_code":"EMEA","name":"Europe, Middle East & Africa","active":true},
+{"region_code":"LEGACY","name":"Legacy Region","active":false},
+{"region_code":"APAC","name":"Asia-Pacific","active":true}
+]

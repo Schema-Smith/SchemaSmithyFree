@@ -1,0 +1,10 @@
+{
+  "Name": "Catalog",
+  "ValidationScript": "SELECT TRUE",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "PostgreSQL"
+}

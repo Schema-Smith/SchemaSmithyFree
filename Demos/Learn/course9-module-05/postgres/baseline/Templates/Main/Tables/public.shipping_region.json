@@ -1,0 +1,47 @@
+{
+  "Name": "shipping_region",
+  "Columns": [
+    {
+      "Name": "region_code",
+      "DataType": "text",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "name",
+      "DataType": "text",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "active",
+      "DataType": "boolean",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_shipping_region",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "region_code",
+      "ShouldApplyExpression": "",
+      "VariantName": ""
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "DataDelivery": {
+    "ContentFile": "data/public.shipping_region.tabledata",
+    "MergeType": "Insert/Update/Delete",
+    "MatchColumns": "region_code"
+  },
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": ""
+}

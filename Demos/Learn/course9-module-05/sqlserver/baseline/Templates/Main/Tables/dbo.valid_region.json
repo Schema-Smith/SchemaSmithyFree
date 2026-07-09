@@ -1,0 +1,24 @@
+{
+  "Name": "[valid_region]",
+  "Columns": [
+    { "Name": "[RegionCode]", "DataType": "NVARCHAR(6)", "ShouldApplyExpression": "", "OldName": "", "VariantName": "", "Collation": "", "DataMaskFunction": "", "EncryptionType": "NONE", "EncryptionKey": "", "EncryptionAlgorithm": "" },
+    { "Name": "[RegionName]", "DataType": "NVARCHAR(100)", "Nullable": true, "ShouldApplyExpression": "", "OldName": "", "VariantName": "", "Collation": "", "DataMaskFunction": "", "EncryptionType": "NONE", "EncryptionKey": "", "EncryptionAlgorithm": "" }
+  ],
+  "Indexes": [
+    { "Name": "[PK_valid_region]", "PrimaryKey": true, "Unique": true, "IndexColumns": "[RegionCode]", "ShouldApplyExpression": "", "VariantName": "", "CompressionType": "NONE", "Clustered": true }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": [],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.valid_region.tabledata",
+    "MergeType": "Insert/Update/Delete",
+    "MatchColumns": "RegionCode"
+  }
+}
