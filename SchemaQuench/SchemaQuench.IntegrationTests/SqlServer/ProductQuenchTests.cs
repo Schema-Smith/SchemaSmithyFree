@@ -162,6 +162,9 @@ TRUNCATE TABLE SchemaSmith.TestLog";
             var json = JObject.Parse(File.ReadAllText(jsonPath));
             Assert.That(json.SelectToken("run.outcome")?.Value<string>(), Is.EqualTo("Success"));
             Assert.That(json.SelectToken("run.mode")?.Value<string>(), Is.EqualTo("Quench"));
+            // A fresh (non-resumed) run must report resumedFromCheckpoint=false — regression guard
+            // for reading the checkpoint at emit time, which would see this run's own completions.
+            Assert.That(json.SelectToken("run.resumedFromCheckpoint")?.Value<bool>(), Is.False);
             var targets = (JArray)json.SelectToken("targets");
             Assert.That(targets, Is.Not.Null.And.Not.Empty);
 

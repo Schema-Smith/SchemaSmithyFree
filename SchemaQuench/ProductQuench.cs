@@ -77,6 +77,10 @@ public class ProductQuench
     // normal-completion write.
     private DateTime _startedUtc;
     private bool _summaryWritten;
+    // Captured pre-run (before this run marks any of its own steps complete) so the report
+    // reflects whether the run RESUMED — reading the checkpoint at emit time would see this
+    // run's own in-progress completions and report true for nearly every run.
+    private bool _resumedFromCheckpoint;
 
     // Thread-safe collection of every work unit's outcome + duration (#243 Deployment Summary
     // Report, slice E4a). Passive capture only — a later slice (E4d) assembles this into the
@@ -643,6 +647,7 @@ public class ProductQuench
         RemoveOldTableQuenchScripts();
 
         var summary = _checkpointing.GetProductCheckpointSummary(_product.Name);
+        _resumedFromCheckpoint = summary.HasAnyCompleted;
         if (summary.HasAnyCompleted)
             _progressLog.Info($"Resuming from checkpoint (Before Scripts: {summary.TotalBeforeScripts} across {summary.ServersWithBeforeScripts} server(s), Templates: {summary.CompletedTemplates}, After Scripts: {summary.TotalAfterScripts} across {summary.ServersWithAfterScripts} server(s))");
 
@@ -786,7 +791,7 @@ public class ProductQuench
         try
         {
             var mode = IsWhatIfOnly ? RunMode.WhatIf : RunMode.Quench;
-            var resumed = _checkpointing?.GetProductCheckpointSummary(_product.Name)?.HasAnyCompleted ?? false;
+            var resumed = _resumedFromCheckpoint;
             var summary = DeploymentSummaryAssembler.Assemble(
                 _product.Name, _product.Platform.ToString(), ToolVersion(),
                 _startedUtc, DateTime.UtcNow, mode, outcome, exitCode, resumed,
