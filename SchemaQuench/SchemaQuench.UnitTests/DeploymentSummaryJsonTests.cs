@@ -2,6 +2,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using SchemaQuench.Reporting;
@@ -195,5 +197,82 @@ public class DeploymentSummaryJsonTests
         Assert.That(slot.SelectToken("slot")?.Value<string>(), Is.EqualTo("ModifiedTables"));
         Assert.That(slot.SelectToken("totalMs")?.Value<long>(), Is.EqualTo(41230));
         Assert.That(slot.SelectToken("targetCount")?.Value<int>(), Is.EqualTo(5));
+    }
+
+    [Test]
+    public void Serialize_EmitsPerTargetSlotShape_NotAggregateShape()
+    {
+        var json = JObject.Parse(DeploymentSummaryJson.Serialize(BuildFullyPopulatedSummary()));
+
+        var slot = json.SelectToken("targets[0].slots[0]");
+        Assert.That(slot, Is.Not.Null);
+        // Per-target TargetSlotTiming shape: {slot, durationMs, scriptsRun} ...
+        Assert.That(slot.SelectToken("slot")?.Value<string>(), Is.EqualTo("ModifiedTables"));
+        Assert.That(slot.SelectToken("durationMs")?.Value<long>(), Is.EqualTo(8021));
+        Assert.That(slot.SelectToken("scriptsRun")?.Value<int>(), Is.EqualTo(0));
+        // ... explicitly NOT the aggregate SlotTiming shape ({totalMs, targetCount}) — guards the
+        // confusable TargetSlotTiming-vs-SlotTiming pair against a future rename.
+        Assert.That(slot.SelectToken("totalMs"), Is.Null);
+        Assert.That(slot.SelectToken("targetCount"), Is.Null);
+    }
+
+    [Test]
+    public void Serialize_EmitsObjectChangeCountKeys_WithForeignKeysCamelCasing()
+    {
+        var json = JObject.Parse(DeploymentSummaryJson.Serialize(BuildFullyPopulatedSummary()));
+
+        foreach (var key in new[] { "tables", "indexes", "constraints", "foreignKeys", "procedures", "views", "functions" })
+            Assert.That(json.SelectToken($"objectChanges.created.{key}"), Is.Not.Null, $"created.{key} missing");
+        foreach (var key in new[] { "tables", "columns" })
+            Assert.That(json.SelectToken($"objectChanges.modified.{key}"), Is.Not.Null, $"modified.{key} missing");
+        foreach (var key in new[] { "tables", "indexes", "constraints", "foreignKeys" })
+            Assert.That(json.SelectToken($"objectChanges.dropped.{key}"), Is.Not.Null, $"dropped.{key} missing");
+
+        // PascalCase ForeignKeys must NOT leak through the camelCase resolver.
+        Assert.That(json.SelectToken("objectChanges.created.ForeignKeys"), Is.Null);
+        Assert.That(json.SelectToken("objectChanges.dropped.ForeignKeys"), Is.Null);
+    }
+
+    [Test]
+    public void Serialize_EmitsMigrationScriptFields()
+    {
+        var json = JObject.Parse(DeploymentSummaryJson.Serialize(BuildFullyPopulatedSummary()));
+
+        var script = json.SelectToken("migrationScripts[0]");
+        Assert.That(script, Is.Not.Null);
+        Assert.That(script.SelectToken("path")?.Value<string>(), Is.EqualTo("After Scripts/01_seed.sql"));
+        Assert.That(script.SelectToken("slot")?.Value<string>(), Is.EqualTo("After"));
+        Assert.That(script.SelectToken("template")?.Value<string>(), Is.EqualTo("TenantSchema"));
+        Assert.That(script.SelectToken("schema")?.Value<string>(), Is.EqualTo("sales"));
+        Assert.That(script.SelectToken("server")?.Value<string>(), Is.EqualTo("primary"));
+        Assert.That(script.SelectToken("database")?.Value<string>(), Is.EqualTo("TenantA"));
+        Assert.That(script.SelectToken("outcome")?.Value<string>(), Is.EqualTo("Ran"));
+    }
+
+    [Test]
+    public void Serialize_EmitsUtcTimestampsAsIso8601WithZ()
+    {
+        var raw = DeploymentSummaryJson.Serialize(BuildFullyPopulatedSummary());
+
+        // Read with DateParseHandling.None so JObject preserves the on-the-wire string form — the
+        // default JObject.Parse re-interprets ISO dates into DateTime tokens and reformats them in
+        // the local culture, hiding what a consumer's parser actually receives.
+        using var reader = new JsonTextReader(new StringReader(raw)) { DateParseHandling = DateParseHandling.None };
+        var json = JObject.Load(reader);
+
+        Assert.That(json.SelectToken("run.startedUtc")?.Value<string>(), Is.EqualTo("2026-07-08T14:22:03Z"));
+        Assert.That(json.SelectToken("run.finishedUtc")?.Value<string>(), Is.EqualTo("2026-07-08T14:23:31Z"));
+    }
+
+    [Test]
+    public void Serialize_EmitsWhatIfAsJsonNull_WhenAbsent()
+    {
+        var summary = BuildFullyPopulatedSummary() with { WhatIf = null };
+
+        var json = JObject.Parse(DeploymentSummaryJson.Serialize(summary));
+
+        var whatIf = json.SelectToken("whatIf");
+        Assert.That(whatIf, Is.Not.Null, "whatIf key must remain present in the contract");
+        Assert.That(whatIf.Type, Is.EqualTo(JTokenType.Null));
     }
 }
