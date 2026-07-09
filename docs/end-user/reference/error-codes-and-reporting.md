@@ -24,6 +24,14 @@ SchemaSmith writes two logs per run — a progress log (everything that happened
 
 > **PostgreSQL and MySQL:** the errors log is **empty**. The fault detail — including the SQLSTATE on PostgreSQL — is in the *progress* log only. Don't go looking in the errors log; it won't be there.
 
+## Failure triage roll-up
+
+When a run has failures, SchemaQuench writes a third log — `SchemaQuench - Failures.log` — that answers "*which* targets failed?" at a glance. A deployment fans out to many `(server, database, schema)` targets in parallel and shares one interleaved progress log; the roll-up pulls every failure back into one consolidated, phase-grouped list.
+
+Each entry names the failed **scope** — a tenant (`[server].[db] [Schema: x]`), a per-server `Before`/`After` product script (`[server]`), or a product-level `Validate` phase — along with the engine error, the resolved-SQL artifact path, and a captured tail of the log lines leading up to the failure. A loud `*** FAILED` banner also marks each failure live in the progress stream, so you can grep `*** FAILED` to jump straight to the failed scopes; the roll-up block echoes to the console at the end of the run.
+
+It's always on and adds nothing to a clean run (no banner, no roll-up, an empty `Failures.log`). The captured-context depth is the `FailureContextLines` setting — default `25`, or `0` to disable context capture while still listing the failed scopes and their errors. See [configuration.md](configuration.md#failure-triage-roll-up).
+
 ## VerboseLogging
 
 `VerboseLogging` is a top-level configuration switch (a boolean, default `false`) that affects **SQL Server only**. SQL Server scripts commonly emit `PRINT` statements and low-severity warnings; SchemaSmith suppresses that chatter by default so the deployment log stays readable, and `VerboseLogging` is the dial that brings it back when you want to see it.

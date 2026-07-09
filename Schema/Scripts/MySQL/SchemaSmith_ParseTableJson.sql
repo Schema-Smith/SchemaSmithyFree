@@ -228,13 +228,13 @@ BEGIN
         CASE
             WHEN GeneratedExpression IS NOT NULL AND TRIM(GeneratedExpression) != '' THEN
                 CONCAT(
-                    UPPER(DataType), ' ',
+                    SchemaSmith_UpperDataType(DataType), ' ',
                     'GENERATED ALWAYS AS (', GeneratedExpression, ') ',
                     COALESCE(UPPER(GeneratedType), 'VIRTUAL')
                 )
             ELSE
                 CONCAT(
-                    UPPER(DataType),
+                    SchemaSmith_UpperDataType(DataType),
                     CASE WHEN CharacterSet IS NOT NULL AND TRIM(CharacterSet) != ''
                          THEN CONCAT(' CHARACTER SET ', CharacterSet) ELSE '' END,
                     CASE WHEN Collation IS NOT NULL AND TRIM(Collation) != ''

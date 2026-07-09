@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
@@ -41,6 +42,11 @@ public class ProductQuench
     private readonly IReadOnlyDictionary<string, TemplateTarget> _templateTargets;
     private readonly ICheckpointing _checkpointing;
     private bool _updateFailed;
+
+    // Thread-safe collection of every scope failure (tenant work units today; product/server
+    // phases as their capture is added), rendered once into the end-of-run roll-up.
+    private readonly ConcurrentBag<FailureRecord> _failureRecords = new();
+    private bool _rollupEmitted;
     private bool _anyFailure;
 
     /// <summary>
@@ -356,6 +362,69 @@ public class ProductQuench
     }
 
     /// <summary>
+    /// Resolves <see cref="Template.IdentificationDatabase"/> through the product + template
+    /// non-query token set (so a <c>{{ControlDb}}</c>-style token gives per-environment control),
+    /// returning null/empty when unset (⇒ enumeration uses the platform init database).
+    /// </summary>
+    internal string ResolveIdentificationDatabase(Template template)
+    {
+        if (string.IsNullOrWhiteSpace(template.IdentificationDatabase)) return null;
+        var tokens = _product.NonQueryTokens.Concat(template.NonQueryTokens).ToList();
+        return SqlScript.TokenReplace(template.IdentificationDatabase, tokens, _product.Platform);
+    }
+
+    /// <summary>
+    /// Opens the command used to run <see cref="Template.DatabaseIdentificationScript"/> for
+    /// enumeration. When the template sets <see cref="Template.IdentificationDatabase"/>, the
+    /// connection targets that database (e.g. a control-plane registry DB) instead of the platform
+    /// init database — the only way a PostgreSQL fleet can read a registry table at enumeration
+    /// time. A <c>--ConnectionString</c> override on the primary server is re-targeted to the
+    /// identification database (mirroring <see cref="ComposeAdminDbConnectionString"/>). When unset,
+    /// this is exactly <see cref="GetCommand"/> (init DB) — today's behavior. Provisioning and
+    /// existence checks are NOT affected; they stay on the init database via
+    /// <see cref="GetCommandForAdminDb"/>.
+    /// </summary>
+    internal virtual IDbCommand GetCommandForIdentification(string server, Template template)
+    {
+        if (string.IsNullOrWhiteSpace(ResolveIdentificationDatabase(template)))
+            return GetCommand(server);
+
+        var connectionString = ComposeIdentificationConnectionString(server, template);
+        var factory = DbConnectionFactory.ForPlatform(_product.Platform);
+        var connection = factory.GetDbConnection(connectionString);
+        try
+        {
+            connection.Open();
+        }
+        catch (Exception e)
+        {
+            throw new Exception($"Unable to connect to {server} [IdentificationDatabase: {ResolveIdentificationDatabase(template)}]{(!string.IsNullOrWhiteSpace(_config["Target:User"]) ? $" with user {_config["Target:User"]}" : "")}", e);
+        }
+        var command = connection.CreateCommand();
+        command.CommandTimeout = 0;
+        return command;
+    }
+
+    /// <summary>
+    /// Composes the connection string for the enumeration command when
+    /// <see cref="Template.IdentificationDatabase"/> is set — targeting that (token-resolved)
+    /// database. A <c>--ConnectionString</c> override on the primary server is re-targeted to it via
+    /// <see cref="ConnectionString.RetargetDatabase"/>; otherwise the string is built from
+    /// <c>Target:*</c> config with the identification database substituted for the init database.
+    /// Extracted as a seam so the composition is unit-testable without opening a connection.
+    /// </summary>
+    internal virtual string ComposeIdentificationConnectionString(string server, Template template)
+    {
+        var identificationDb = ResolveIdentificationDatabase(template);
+        var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
+        if (!string.IsNullOrEmpty(connectionStringOverride) && server == _primaryServer)
+            return ConnectionString.RetargetDatabase(connectionStringOverride, identificationDb, _product.Platform);
+
+        var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        return ConnectionString.Build(_product.Platform, server, identificationDb, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
+    }
+
+    /// <summary>
     /// Opens an admin-database command against <paramref name="server"/> for DB-axis provisioning.
     /// When a <c>--ConnectionString</c> override is in effect AND the server is the primary server,
     /// the override is re-targeted to the platform's init database
@@ -519,7 +588,12 @@ public class ProductQuench
                 _progressLog.Info("Validate Server");
                 command.CommandText = _product.ValidationScript;
                 if (!ScalarToBool(command.ExecuteScalar()))
+                {
+                    _failureRecords.Add(new FailureRecord("Validate", "Product",
+                        "Invalid server for this product", Array.Empty<string>(), null));
+                    EmitFailureRollup();
                     throw new Exception("Invalid server for this product");
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(_product.BaselineValidationScript))
@@ -527,7 +601,12 @@ public class ProductQuench
                 _progressLog.Info("Validate Baseline");
                 command.CommandText = _product.BaselineValidationScript;
                 if (!ScalarToBool(command.ExecuteScalar()))
+                {
+                    _failureRecords.Add(new FailureRecord("Validate", "Product",
+                        "Invalid baseline for this release", Array.Empty<string>(), null));
+                    EmitFailureRollup();
                     throw new Exception("Invalid baseline for this release");
+                }
             }
 
             if (_product.QueryTokens.Count > 0)
@@ -604,6 +683,25 @@ public class ProductQuench
         }
 
         _progressLog.Info($"Completed quench of {_product.Name}");
+        EmitFailureRollup();
+    }
+
+    /// <summary>
+    /// Renders the collected <see cref="FailureRecord"/>s into the phase-grouped end-of-run roll-up
+    /// and writes it to the FailureLog logger (<c>SchemaQuench - Failures.log</c>) + echoes it to the
+    /// progress console. Idempotent and a no-op on a clean run (empty render — zero added noise).
+    /// Called at normal completion and immediately before each abort-path log backup + exit.
+    /// </summary>
+    internal void EmitFailureRollup()
+    {
+        if (_rollupEmitted) return;
+        _rollupEmitted = true;
+        var report = FailureReportWriter.Render(_failureRecords.ToArray());
+        if (string.IsNullOrEmpty(report)) return;
+        // Roll-up goes to the FailureLog logger (SchemaQuench - Failures.log + its own console
+        // appender) — NOT through _progressLog — so it reaches the console once at end of run without
+        // duplicating error content into the progress stream that exact-count assertions depend on.
+        LogFactory.GetLogger("FailureLog").Info(report);
     }
 
     internal static readonly string[] SpecialTokenTags = ["TableSchema_", "ObjectScripts_", "QueryTokens_", "MaterializedViewSchema_", "IndexedViewSchema_"];
@@ -705,6 +803,7 @@ public class ProductQuench
         if (_updateFailed)
         {
             _anyFailure = true;
+            EmitFailureRollup();
             throw new Exception("Product script quench FAILED");
         }
     }
@@ -861,6 +960,7 @@ public class ProductQuench
             _errorLog.Error($"Target filter rejection for template '{template.Name}': {ex.Message}");
             _updateFailed = true;
             _anyFailure = true;
+            EmitFailureRollup();
             LogBackup.BackupLogsAndExit("SchemaQuench", 2);
             return;
         }
@@ -894,6 +994,7 @@ public class ProductQuench
         // just because its rejection happened during discovery.
         if (!ShouldAbortOnFailure(template)) return;
 
+        EmitFailureRollup();
         LogBackup.BackupLogsAndExit("SchemaQuench", 2);
     }
 
@@ -946,6 +1047,7 @@ public class ProductQuench
             _progressLog.Error(message);
             _errorLog.Error(message);
             _anyFailure = true;
+            EmitFailureRollup();
             LogBackup.BackupLogsAndExit("SchemaQuench", 2);
             return false;
         }
@@ -1083,7 +1185,7 @@ public class ProductQuench
             _progressLog.Info($"Locate Databases To Quench ({server})");
             try
             {
-                using var command = GetCommand(server);
+                using var command = GetCommandForIdentification(server, template);
                 try
                 {
                     command.CommandText = template.DatabaseIdentificationScript;
@@ -1515,6 +1617,7 @@ public class ProductQuench
         quench.Execute();
         if (!quench.QuenchSuccessful)
         {
+            if (quench.LastFailure != null) _failureRecords.Add(quench.LastFailure);
             // Throw so the dispatcher records this failure. In continue mode the dispatcher
             // proceeds to the next unit; in abort mode it drains in-flight units and stops.
             var schemaSuffix = string.IsNullOrEmpty(unit.SchemaName) ? "" : $" [Schema: {unit.SchemaName}]";
@@ -1590,14 +1693,15 @@ public class ProductQuench
             {
                 _progressLog.Error($"{serverMsg}[{initDb}] Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}");
 
+                string artifactPath = null;
                 try
                 {
                     var header = $"Failed: {serverMsg}[{initDb}] [{sqlScript.LogPath}] — {sqlScript.Error?.Message}";
                     var fileName = GetProductDebugFileName($"Failed {Path.GetFileNameWithoutExtension(sqlScript.Name)}", server);
                     var failingBatchIndex = failingBatchIndexes.GetValueOrDefault(sqlScript, sqlScript.Batches.Count - 1);
-                    var path = ResolvedSqlArtifactWriter.WriteFailureArtifact(directory, scrub, sensitiveValues,
+                    artifactPath = ResolvedSqlArtifactWriter.WriteFailureArtifact(directory, scrub, sensitiveValues,
                         header, sqlScript.Batches, failingBatchIndex, fileName);
-                    _progressLog.Error($"{serverMsg}[{initDb}]    Resolved SQL written to: {path}");
+                    _progressLog.Error($"{serverMsg}[{initDb}]    Resolved SQL written to: {artifactPath}");
                 }
                 catch (Exception artifactEx)
                 {
@@ -1605,6 +1709,12 @@ public class ProductQuench
                     // artifact must not mask it.
                     _progressLog.Error($"{serverMsg}[{initDb}]    Could not write resolved-SQL artifact for '{sqlScript.LogPath}': {artifactEx.Message}");
                 }
+
+                // Server-scope failure capture (Before/After product scripts) → end-of-run roll-up.
+                _failureRecords.Add(new FailureRecord(
+                    isBefore ? "BeforeScripts" : "AfterScripts", $"[{server}]",
+                    sqlScript.Error?.Message ?? $"Unable to quench '{sqlScript.LogPath}'",
+                    new[] { $"Unable to quench '{sqlScript.LogPath}'" }, artifactPath));
             }
 
             throw new Exception($"{serverMsg}[{initDb}] Unable to quench one or more scripts");

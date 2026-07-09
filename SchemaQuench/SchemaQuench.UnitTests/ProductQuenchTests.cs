@@ -1773,6 +1773,73 @@ public class ProductQuenchTests
         });
     }
 
+    // ----- Fleet: IdentificationDatabase (enumeration DB override) -------------------------------
+
+    [Test]
+    public void ResolveIdentificationDatabase_Unset_ReturnsNull()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            Assert.That(quench.InvokeResolveIdentificationDatabase(new Template()), Is.Null);
+            Assert.That(quench.InvokeResolveIdentificationDatabase(new Template { IdentificationDatabase = "   " }), Is.Null);
+        });
+    }
+
+    [Test]
+    public void ResolveIdentificationDatabase_Literal_ReturnedUnchanged()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+            Assert.That(quench.InvokeResolveIdentificationDatabase(new Template { IdentificationDatabase = "RegistryDb" }),
+                Is.EqualTo("RegistryDb")));
+    }
+
+    [Test]
+    public void ResolveIdentificationDatabase_Token_ResolvedFromTemplateTokens()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var template = new Template
+            {
+                IdentificationDatabase = "{{ControlDb}}",
+                NonQueryTokens = new Dictionary<string, string> { { "ControlDb", "Registry_Prod" } }
+            };
+            Assert.That(quench.InvokeResolveIdentificationDatabase(template), Is.EqualTo("Registry_Prod"));
+        });
+    }
+
+    [Test]
+    public void ComposeIdentificationConnectionString_NoOverride_TargetsIdentificationDb()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var built = quench.InvokeComposeIdentificationConnectionString("primary",
+                new Template { IdentificationDatabase = "RegistryDb" });
+            Assert.That(built, Does.Contain("primary"));
+            Assert.That(built, Does.Contain("Initial Catalog=RegistryDb").Or.Contain("Database=RegistryDb"),
+                $"Enumeration connection must target the IdentificationDatabase (not the init DB). Got: {built}");
+        });
+    }
+
+    [Test]
+    public void ComposeIdentificationConnectionString_OverrideOnPrimary_RetargetsToIdentificationDb()
+    {
+        // The --ConnectionString override on the primary is re-targeted to the IdentificationDatabase
+        // for the enumeration command — NOT the override's own Database=, and NOT the init DB (the
+        // admin/provisioning path keeps the init DB; that is asserted by the ComposeAdminDb tests).
+        var env = Substitute.For<IEnvironment>();
+        env.CommandLine.Returns(
+            "schemaquench.exe --ConnectionString=\"Server=primary;Database=tenant_a;User Id=sa;Password=secret\"");
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var built = quench.InvokeComposeIdentificationConnectionString("primary",
+                new Template { IdentificationDatabase = "RegistryDb" });
+            Assert.That(built, Does.Contain("Initial Catalog=RegistryDb").Or.Contain("Database=RegistryDb"),
+                $"Override must be re-targeted to the IdentificationDatabase. Got: {built}");
+            Assert.That(built, Does.Not.Contain("=tenant_a"),
+                "The override's original Database=tenant_a must be replaced.");
+        }, environment: env);
+    }
+
     [Test]
     public void ComposeAdminDbConnectionString_OverrideOnPrimary_RetargetsToInitDb()
     {
@@ -2334,6 +2401,12 @@ public class ProductQuenchTests
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             return (string)method!.Invoke(this, new object[] { server })!;
         }
+
+        // Fleet IdentificationDatabase seams (internal on the base, visible to this assembly).
+        public string InvokeResolveIdentificationDatabase(Template template) => ResolveIdentificationDatabase(template);
+
+        public string InvokeComposeIdentificationConnectionString(string server, Template template) =>
+            ComposeIdentificationConnectionString(server, template);
 
         private static IDbCommand MakeReaderCommand(string[] rows)
         {

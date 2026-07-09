@@ -116,13 +116,14 @@ public class CascadeFoundationTests
         }
     }
 
-    // DropUnknownIndexes is now env-config-overridable. MySQL tracks index ownership via
-    // SchemaSmith_ProductOwnership, so "unknown" means owned by the product but removed from
-    // the current definition. The two scenarios:
-    // A) env true  → a product-owned index removed from the JSON is dropped.
-    // B) env absent → the same index survives (SchemaSmith does not drop it without the flag).
+    // Index-B (#270) brought MySQL to SS/PG parity: a product-OWNED index removed from the JSON is
+    // reconciled by DEFAULT, gated by DropIndexesRemovedFromProduct — NOT coupled to DropUnknownIndexes
+    // (which now governs out-of-band, unowned indexes). MySQL tracks index ownership via
+    // SchemaSmith_ProductOwnership. The two scenarios:
+    // A) default config → a product-owned index removed from the JSON is dropped.
+    // B) env DropIndexesRemovedFromProduct=false → the same index survives.
     [Test]
-    public void EnvDropUnknownIndexes_TrueDropsIndex_UnsetPreservesIndex()
+    public void EnvDropIndexesRemovedFromProduct_DefaultDrops_FalsePreserves()
     {
         var tempDrop = Path.Join(Path.GetTempPath(), $"CascIdx_Drop_{Guid.NewGuid():N}");
         var tempPreserve = Path.Join(Path.GetTempPath(), $"CascIdx_Preserve_{Guid.NewGuid():N}");
@@ -139,7 +140,7 @@ public class CascadeFoundationTests
 
             try
             {
-                // --- Part A: env DropUnknownIndexes=true → product-owned index removed from JSON is dropped ---
+                // --- Part A: default config → product-owned index removed from JSON is dropped ---
                 // Deploy the full fixture (PK + secondary index) to establish product ownership.
                 CopyFixtureTo("CascadeIndexEnv", tempDrop);
 
@@ -152,8 +153,8 @@ public class CascadeFoundationTests
                 // Remove the secondary index from the JSON — it remains in SchemaSmith_ProductOwnership.
                 RemoveSecondaryIndexFromTableJson(tempDrop);
 
-                // Re-quench with env DropUnknownIndexes=true — the product-owned removed index should be dropped.
-                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["DropUnknownIndexes"] = "true";
+                // Re-quench with DEFAULT config — the product-owned removed index drops by default (no
+                // DropUnknownIndexes needed; DropIndexesRemovedFromProduct defaults on).
                 _environment.ClearReceivedCalls();
                 RunSchemaQuench();
 
@@ -161,17 +162,16 @@ public class CascadeFoundationTests
                 _environment.DidNotReceive().Exit(3);
 
                 Assert.That(IndexExists(cmd, "CascIdx", "IX_CascIdx_Name"), Is.False,
-                    "Env DropUnknownIndexes=true must drop IX_CascIdx_Name removed from the product definition.");
+                    "Removed-from-product index must drop by default (DropIndexesRemovedFromProduct on).");
                 Assert.That(IndexExists(cmd, "CascIdx", "PRIMARY"), Is.True,
                     "PRIMARY must not be dropped.");
 
                 DropCascadeIndexEnvTables(cmd);
 
-                // --- Part B: env DropUnknownIndexes absent → product-owned removed index survives ---
+                // --- Part B: env DropIndexesRemovedFromProduct=false → product-owned removed index survives ---
                 CopyFixtureTo("CascadeIndexEnv", tempPreserve);
 
                 FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["SchemaPackagePath"] = tempPreserve;
-                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["DropUnknownIndexes"] = string.Empty;
 
                 _environment.ClearReceivedCalls();
                 RunSchemaQuench();
@@ -182,7 +182,8 @@ public class CascadeFoundationTests
                 // Remove the secondary index from the JSON — it remains in SchemaSmith_ProductOwnership.
                 RemoveSecondaryIndexFromTableJson(tempPreserve);
 
-                // Re-quench with env DropUnknownIndexes absent — the product-owned removed index must survive.
+                // Re-quench with env DropIndexesRemovedFromProduct=false — the removed index must survive.
+                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["DropIndexesRemovedFromProduct"] = "false";
                 _environment.ClearReceivedCalls();
                 RunSchemaQuench();
 
@@ -190,7 +191,7 @@ public class CascadeFoundationTests
                 _environment.DidNotReceive().Exit(3);
 
                 Assert.That(IndexExists(cmd, "CascIdx", "IX_CascIdx_Name"), Is.True,
-                    "Env DropUnknownIndexes absent must preserve IX_CascIdx_Name even when removed from the product definition.");
+                    "Env DropIndexesRemovedFromProduct=false must preserve IX_CascIdx_Name.");
                 Assert.That(IndexExists(cmd, "CascIdx", "PRIMARY"), Is.True,
                     "PRIMARY must still exist.");
             }
@@ -199,6 +200,7 @@ public class CascadeFoundationTests
                 DropCascadeIndexEnvTables(cmd);
                 FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["SchemaPackagePath"] = string.Empty;
                 FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["DropUnknownIndexes"] = string.Empty;
+                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["DropIndexesRemovedFromProduct"] = string.Empty;
                 if (Directory.Exists(tempDrop)) Directory.Delete(tempDrop, true);
                 if (Directory.Exists(tempPreserve)) Directory.Delete(tempPreserve, true);
                 LogFactory.Clear();

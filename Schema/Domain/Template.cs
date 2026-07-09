@@ -27,6 +27,21 @@ namespace Schema.Domain
         public string DatabaseIdentificationScript { get; set; }
 
         /// <summary>
+        /// Optional: re-targets which database the <see cref="DatabaseIdentificationScript"/>
+        /// enumeration query connects to. Empty/absent (the default) uses the platform init
+        /// database (<c>master</c> / <c>postgres</c> / <c>information_schema</c>) — today's
+        /// behavior. Point it at a control-plane registry database to read a tenant roster from a
+        /// registry table at enumeration time; this is the only way to reach such a table on
+        /// PostgreSQL, which cannot cross-database-query. Token-resolvable for per-environment
+        /// control. Affects ONLY the enumeration connection — provisioning and existence checks
+        /// stay on the init database, and <see cref="SchemaIdentificationScript"/> (schema
+        /// discovery) already runs against the target database. (Serialized at Order 16 to pair
+        /// conceptually with DatabaseIdentificationScript without renumbering existing properties.)
+        /// </summary>
+        [JsonProperty(Order = 16, NullValueHandling = NullValueHandling.Ignore)]
+        public string IdentificationDatabase { get; set; }
+
+        /// <summary>
         /// Schema templates (SQL Server / PostgreSQL only): a query returning one column,
         /// N rows; each row is a schema name to iterate over. When set, the engine fans the
         /// template out across the returned schemas, exposing the active name as the
@@ -276,6 +291,7 @@ namespace Schema.Domain
                 FilePath = FilePath,
                 TableSchema = TableSchema,
                 DatabaseIdentificationScript = DatabaseIdentificationScript,
+                IdentificationDatabase = IdentificationDatabase,
                 VersionStampScript = VersionStampScript,
                 Product = Product,
                 ScriptTokens = new Dictionary<string, string>(ScriptTokens),

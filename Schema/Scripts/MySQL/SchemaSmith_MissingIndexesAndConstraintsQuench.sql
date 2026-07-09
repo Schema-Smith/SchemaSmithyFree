@@ -665,9 +665,13 @@ BEGIN
     END IF;
 
     -- =========================================================================
-    -- STEP 8: Drop unknown indexes (owned by product but not in definition)
+    -- STEP 8: Drop indexes not in the definition — two disjoint axes, matching SQL Server / PostgreSQL:
+    --   * removed-from-product (owned by this product, no longer in the JSON) — gated by
+    --     p_DropIndexesRemovedFromProduct (default on) + per-table tightening.
+    --   * out-of-band (in the catalog, NOT owned by this product) — gated by p_DropUnknownIndexes
+    --     (default off).
     -- =========================================================================
-    IF p_DropUnknownIndexes = 1 THEN
+    IF p_DropUnknownIndexes = 1 OR p_DropIndexesRemovedFromProduct = 1 THEN
         -- Crash-safe snapshot for STEP 8 ONLY. Taken HERE (after STEP 0..7's creates/drops/renames)
         -- so it reflects the current catalog state, exactly what the original live reads saw at this
         -- point. STEP 8's ProductOwnership x STATISTICS detection is the frequent-run segfault trigger
@@ -722,44 +726,77 @@ BEGIN
             PRIMARY KEY (TableName, IndexName)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-        -- Find indexes owned by product but not in current definition
+        -- AXIS 1 — removed-from-product: indexes OWNED by this product but no longer in the
+        -- definition. Gated by p_DropIndexesRemovedFromProduct (env/product) + per-table tightening.
         -- IMPORTANT: Only consider indexes on tables that ARE in the current definition (_SchemaSmith_Tables)
-        -- This prevents dropping indexes on tables not included in the current JSON.
+        -- so an index on a table not in the current JSON is never dropped.
         -- Reads _SchemaSmith_Step8Idx (single LEFT JOIN): existence == ei.IndexName IS NOT NULL,
         -- IsUnique == (ei.NonUnique = 0) -- collapses the original STATISTICS s + s2 references.
-        INSERT INTO _SchemaSmith_IndexesToDrop (TableName, IndexName, IsUnique)
-        SELECT
-            SUBSTRING_INDEX(po.ObjectName, '.', 1) AS TableName,
-            SUBSTRING_INDEX(po.ObjectName, '.', -1) AS IndexName,
-            COALESCE(ei.NonUnique = 0, 0) AS IsUnique
-        FROM SchemaSmith_ProductOwnership po
-        -- Join with _SchemaSmith_Tables to only consider indexes on tables in the current definition
-        INNER JOIN _SchemaSmith_Tables t
-            ON CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
-        LEFT JOIN _SchemaSmith_Step8Idx ei
-            ON CONVERT(ei.TableName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
-            AND CONVERT(ei.IndexName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
-        LEFT JOIN _SchemaSmith_Indexes i
-            ON CONVERT(SchemaSmith_StripBacktickWrapping(i.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
-            AND CONVERT(SchemaSmith_StripBacktickWrapping(i.IndexName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
-        WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
-          AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
-          AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'INDEX' COLLATE utf8mb4_unicode_ci
-          -- Removed-from-product drop gated by the cascade flag + per-table tightening
-          AND p_DropIndexesRemovedFromProduct = 1
-          AND COALESCE(t.DropIndexesRemovedFromProduct, 1) = 1
-          -- Never drop PRIMARY KEY
-          AND UPPER(SUBSTRING_INDEX(po.ObjectName, '.', -1) COLLATE utf8mb4_unicode_ci) != _utf8mb4'PRIMARY' COLLATE utf8mb4_unicode_ci
-          -- Not in current definition (LEFT JOIN produces NULL when not found)
-          AND i.IndexName IS NULL
-          -- Not a renamed index
-          AND NOT EXISTS (
-              SELECT 1 FROM _SchemaSmith_IndexRenames r
-              WHERE r.TableName = SUBSTRING_INDEX(po.ObjectName, '.', 1)
-                AND r.OldIndexName = SUBSTRING_INDEX(po.ObjectName, '.', -1)
-          )
-          -- Verify index actually exists
-          AND ei.IndexName IS NOT NULL;
+        IF p_DropIndexesRemovedFromProduct = 1 THEN
+            INSERT INTO _SchemaSmith_IndexesToDrop (TableName, IndexName, IsUnique)
+            SELECT
+                SUBSTRING_INDEX(po.ObjectName, '.', 1) AS TableName,
+                SUBSTRING_INDEX(po.ObjectName, '.', -1) AS IndexName,
+                COALESCE(ei.NonUnique = 0, 0) AS IsUnique
+            FROM SchemaSmith_ProductOwnership po
+            -- Join with _SchemaSmith_Tables to only consider indexes on tables in the current definition
+            INNER JOIN _SchemaSmith_Tables t
+                ON CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+            LEFT JOIN _SchemaSmith_Step8Idx ei
+                ON CONVERT(ei.TableName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+                AND CONVERT(ei.IndexName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
+            LEFT JOIN _SchemaSmith_Indexes i
+                ON CONVERT(SchemaSmith_StripBacktickWrapping(i.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+                AND CONVERT(SchemaSmith_StripBacktickWrapping(i.IndexName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
+            WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
+              AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+              AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'INDEX' COLLATE utf8mb4_unicode_ci
+              -- Per-table tightening (the env/product gate is the enclosing IF)
+              AND COALESCE(t.DropIndexesRemovedFromProduct, 1) = 1
+              -- Never drop PRIMARY KEY
+              AND UPPER(SUBSTRING_INDEX(po.ObjectName, '.', -1) COLLATE utf8mb4_unicode_ci) != _utf8mb4'PRIMARY' COLLATE utf8mb4_unicode_ci
+              -- Not in current definition (LEFT JOIN produces NULL when not found)
+              AND i.IndexName IS NULL
+              -- Not a renamed index
+              AND NOT EXISTS (
+                  SELECT 1 FROM _SchemaSmith_IndexRenames r
+                  WHERE r.TableName = SUBSTRING_INDEX(po.ObjectName, '.', 1)
+                    AND r.OldIndexName = SUBSTRING_INDEX(po.ObjectName, '.', -1)
+              )
+              -- Verify index actually exists
+              AND ei.IndexName IS NOT NULL;
+        END IF;
+
+        -- AXIS 2 — out-of-band: an index present in the catalog on a current-quench table that is
+        -- NOT in the definition AND NOT owned by this product (e.g. hand-created via DDL). Gated by
+        -- p_DropUnknownIndexes. Crash-safe: reads the Step8Idx snapshot + temp/real tables only —
+        -- never INFORMATION_SCHEMA in this set-based DML (#337). INSERT IGNORE dedupes against any
+        -- removed-from-product row already queued (shared PK on _SchemaSmith_IndexesToDrop).
+        IF p_DropUnknownIndexes = 1 THEN
+            INSERT IGNORE INTO _SchemaSmith_IndexesToDrop (TableName, IndexName, IsUnique)
+            SELECT CONVERT(ei.TableName USING utf8mb4), CONVERT(ei.IndexName USING utf8mb4), COALESCE(ei.NonUnique = 0, 0)
+            FROM _SchemaSmith_Step8Idx ei
+            INNER JOIN _SchemaSmith_Tables t
+                ON CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(ei.TableName USING utf8mb4)
+            WHERE UPPER(ei.IndexName COLLATE utf8mb4_unicode_ci) != _utf8mb4'PRIMARY' COLLATE utf8mb4_unicode_ci
+              AND NOT EXISTS (
+                  SELECT 1 FROM _SchemaSmith_Indexes i
+                  WHERE CONVERT(SchemaSmith_StripBacktickWrapping(i.TableName) USING utf8mb4) = CONVERT(ei.TableName USING utf8mb4)
+                    AND CONVERT(SchemaSmith_StripBacktickWrapping(i.IndexName) USING utf8mb4) = CONVERT(ei.IndexName USING utf8mb4)
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM SchemaSmith_ProductOwnership po
+                  WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
+                    AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+                    AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'INDEX' COLLATE utf8mb4_unicode_ci
+                    AND po.ObjectName COLLATE utf8mb4_unicode_ci = CONCAT(ei.TableName, '.', ei.IndexName) COLLATE utf8mb4_unicode_ci
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM _SchemaSmith_IndexRenames r
+                  WHERE CONVERT(r.TableName USING utf8mb4) = CONVERT(ei.TableName USING utf8mb4)
+                    AND CONVERT(r.OldIndexName USING utf8mb4) = CONVERT(ei.IndexName USING utf8mb4)
+              );
+        END IF;
 
         IF p_WhatIf = 1 THEN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unknown indexes');

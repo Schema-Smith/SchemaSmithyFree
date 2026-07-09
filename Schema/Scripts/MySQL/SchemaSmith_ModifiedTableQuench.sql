@@ -290,11 +290,13 @@ BEGIN
           AND (
               -- Normalize whitespace adjacent to structural delimiters and the DECIMAL/NUMERIC
               -- synonym so a hand-authored type that differs only by spacing/synonym is not a
-              -- false "modified". Guarded for ENUM/SET, whose parenthesized content is string
-              -- values where whitespace is meaningful (normalizing could miss a real change).
+              -- false "modified". ENUM/SET take a separate branch: their parenthesized values are
+              -- case-sensitive DATA, so they compare keyword-case-insensitively but
+              -- value-case-sensitively (BINARY) via SchemaSmith_UpperDataType — the whitespace/
+              -- synonym normalization would wrongly fold a real value-case change.
               CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
                      OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
-                   THEN UPPER(isc.COLUMN_TYPE) != UPPER(c.DataType)
+                   THEN BINARY SchemaSmith_UpperDataType(isc.COLUMN_TYPE) != BINARY SchemaSmith_UpperDataType(c.DataType)
                    ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
                      != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') END
               OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)
@@ -345,11 +347,13 @@ BEGIN
           AND (
               -- Normalize whitespace adjacent to structural delimiters and the DECIMAL/NUMERIC
               -- synonym so a hand-authored type that differs only by spacing/synonym is not a
-              -- false "modified". Guarded for ENUM/SET, whose parenthesized content is string
-              -- values where whitespace is meaningful (normalizing could miss a real change).
+              -- false "modified". ENUM/SET take a separate branch: their parenthesized values are
+              -- case-sensitive DATA, so they compare keyword-case-insensitively but
+              -- value-case-sensitively (BINARY) via SchemaSmith_UpperDataType — the whitespace/
+              -- synonym normalization would wrongly fold a real value-case change.
               CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
                      OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
-                   THEN UPPER(isc.COLUMN_TYPE) != UPPER(c.DataType)
+                   THEN BINARY SchemaSmith_UpperDataType(isc.COLUMN_TYPE) != BINARY SchemaSmith_UpperDataType(c.DataType)
                    ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
                      != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') END
               OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)
@@ -396,7 +400,7 @@ BEGIN
           AND (
               CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
                      OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
-                   THEN UPPER(isc.COLUMN_TYPE) != UPPER(c.DataType)
+                   THEN BINARY SchemaSmith_UpperDataType(isc.COLUMN_TYPE) != BINARY SchemaSmith_UpperDataType(c.DataType)
                    ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
                      != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') END
               OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)

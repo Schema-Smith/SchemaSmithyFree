@@ -1,0 +1,6 @@
+{
+    "Name": "FleetControlDb",
+    "DatabaseIdentificationScript": "SELECT db_name FROM dbo.fleet_registry",
+    "IdentificationDatabase": "schemasmith_fleet_control_ss",
+    "ScriptFolders": []
+}

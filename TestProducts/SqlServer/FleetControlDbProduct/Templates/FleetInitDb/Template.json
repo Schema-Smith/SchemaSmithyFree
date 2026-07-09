@@ -1,0 +1,5 @@
+{
+    "Name": "FleetInitDb",
+    "DatabaseIdentificationScript": "SELECT [name] AS db_name FROM sys.databases WHERE [name] = '{{MainDB}}'",
+    "ScriptFolders": []
+}

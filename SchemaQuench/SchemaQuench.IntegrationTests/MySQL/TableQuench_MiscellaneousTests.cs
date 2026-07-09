@@ -168,13 +168,16 @@ public class TableQuench_MiscellaneousTests : BaseTableQuenchTests
               AND INDEX_NAME = 'IDX_DropMe'";
         Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(0));
 
-        // IDX_Custom should still exist (not owned by product)
+        // IDX_Custom is not owned by the product (out-of-band). With DropUnknownIndexes=1 (this
+        // fixture's flag), MySQL now drops out-of-band indexes too — parity with SQL Server /
+        // PostgreSQL (#270 Index-B). Before Index-B, MySQL never dropped an unowned index.
         cmd.CommandText = $@"
             SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
             WHERE TABLE_SCHEMA = '{TestSchema}'
               AND TABLE_NAME = 'IndexNoLongerInProduct'
               AND INDEX_NAME = 'IDX_Custom'";
-        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThan(0));
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(0),
+            "Out-of-band index must be dropped with DropUnknownIndexes=1 (Index-B parity).");
 
         conn.Close();
     }

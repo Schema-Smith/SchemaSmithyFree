@@ -124,6 +124,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith_ServerVersionNum.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_NormalizeIndexColumns.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_NormalizeCheckExpression.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_UpperDataType.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_GenerateTableJson.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_ParseTableJson.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_MissingTableAndColumnQuench.sql"));
@@ -174,8 +175,8 @@ public class ForgeKindlerTests
         // PostgreSQL: 28 = 27 prior + 1 for BuildExistingIndexesSnapshot (shared temp_existing_indexes
         // builder extracted so a checkpoint-resumed run can rebuild the snapshot, #332).
         Assert.That(postgres.Length, Is.EqualTo(28));
-        // MySQL: 20 = 19 prior + 1 for NormalizeCheckExpression (column/table check idempotency helper).
-        Assert.That(mysql.Length, Is.EqualTo(20));
+        // MySQL: 21 = 20 prior + 1 for UpperDataType (enum/set literal-case-preserving type upcaser).
+        Assert.That(mysql.Length, Is.EqualTo(21));
     }
 
     [Test]

@@ -1,0 +1,5 @@
+{
+    "Name": "FleetInitDb",
+    "DatabaseIdentificationScript": "SELECT datname AS db_name FROM pg_database WHERE datname = '{{MainDB}}'",
+    "ScriptFolders": []
+}

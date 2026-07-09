@@ -906,7 +906,7 @@ When you remove an index from a table's JSON, `DropIndexesRemovedFromProduct` co
 
 This is distinct from [DropUnknownIndexes](#dropunknownindexes): that flag targets *out-of-band* indexes SchemaSmith never created, while this one targets indexes SchemaSmith owns that have dropped out of the definition. It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct), with the same explicit-false-sticky semantics: a table can tighten to `false` to protect its own indexes but cannot re-enable a higher-tier suppression.
 
-**Index types.** Applies to nonclustered/secondary indexes that SchemaSmith manages; a primary key is never dropped by this path. On SQL Server and PostgreSQL the flag gates the removed-from-product drop directly; on MySQL it adds per-table suppression to the managed-index cleanup.
+**Index types.** Applies to nonclustered/secondary indexes that SchemaSmith manages; a primary key is never dropped by this path. All three engines gate the removed-from-product drop directly through this flag — MySQL previously coupled it to `DropUnknownIndexes` (so a removed index survived unless that flag was on) and is now brought to parity with SQL Server and PostgreSQL: a product-owned index removed from the definition is dropped by default.
 
 ---
 

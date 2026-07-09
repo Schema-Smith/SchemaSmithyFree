@@ -244,6 +244,7 @@ public static class ForgeKindler
                 new("SchemaSmith_ServerVersionNum.sql"),
                 new("SchemaSmith_NormalizeIndexColumns.sql"),
                 new("SchemaSmith_NormalizeCheckExpression.sql"),
+                new("SchemaSmith_UpperDataType.sql"),
                 new("SchemaSmith_GenerateTableJson.sql"),
                 new("SchemaSmith_ParseTableJson.sql"),
                 new("SchemaSmith_MissingTableAndColumnQuench.sql"),

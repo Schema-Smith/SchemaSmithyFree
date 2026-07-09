@@ -333,6 +333,12 @@ When a script fails, you see a short error summary on the console and in the pro
 
 > **Tip:** CI agents that capture stdout get the progress stream for free. If your pipeline step only saves stdout, you still have a readable transcript of successes and error summaries; archive the error log separately to keep the failed-batch detail.
 
+### Failure triage roll-up
+
+When a run finishes with one or more failures, SchemaQuench writes a third log alongside the progress and error logs — `SchemaQuench - Failures.log` — a consolidated, phase-grouped summary of *which* targets failed, so a single failure among many parallel targets isn't buried in one interleaved stream. Each failure is recorded with its scope, the engine error, the `Resolved SQL written to:` artifact path, and a captured tail of the lines leading up to it; a loud `*** FAILED` banner also marks each failure live on the console. A clean run writes nothing extra. The full behavior is described in [Error Codes & Reporting](error-codes-and-reporting.md#failure-triage-roll-up).
+
+`FailureContextLines` (a SchemaQuench setting, default `25`) controls how many lines of lead-up context each failure captures. Set it to `0` to disable context capture entirely — the roll-up still lists the failed scopes and their errors. Set it in the settings file (`"FailureContextLines": 25`), as an environment variable (`SmithySettings_FailureContextLines=40`), or on the command line (`--FailureContextLines=40`).
+
 ### Log file location
 
 By default, logs are written to the tool's executable directory. Override this with `--LogPath`:
@@ -652,7 +658,7 @@ Controls whether SchemaQuench drops a **product-owned** index (one SchemaSmith c
 | Template | `DropIndexesRemovedFromProduct` in `Template.json` | (inherit) |
 | Table | `DropIndexesRemovedFromProduct` in a table's `.json` file | (inherit) |
 
-Same explicit-false-sticky semantics as the other drop-control flags; a primary key is never dropped by this path. On SQL Server and PostgreSQL it gates the removed-from-product index drop directly; on MySQL it adds per-table suppression to the managed-index cleanup.
+Same explicit-false-sticky semantics as the other drop-control flags; a primary key is never dropped by this path. All three engines gate the removed-from-product index drop directly through this flag — MySQL previously coupled it to `DropUnknownIndexes` and is now at parity with SQL Server and PostgreSQL (a product-owned index removed from the definition drops by default).
 
 > **Note:** All tiers absent preserves existing behavior (default `true`).
 
@@ -662,7 +668,7 @@ For full guidance, see [DropIndexesRemovedFromProduct](schemaquench.md#dropindex
 
 ## DropUnknownIndexes
 
-Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.
+Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package — *out-of-band* indexes SchemaSmith never created (distinct from [DropIndexesRemovedFromProduct](#dropindexesremovedfromproduct), which handles product-owned indexes removed from the definition). Three tiers compose to produce the effective value, resolved environment → product → template. Identical on all three engines — MySQL previously never dropped an out-of-band index and is now at parity with SQL Server and PostgreSQL.
 
 | Scope | Where to set | Default |
 |---|---|---|

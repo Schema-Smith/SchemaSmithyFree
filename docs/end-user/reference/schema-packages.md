@@ -107,6 +107,7 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 |---|---|---|---|---|
 | `Name` | string | | Yes | Template name. Must match the containing directory name. Automatically added as a `{{TemplateName}}` script token. |
 | `DatabaseIdentificationScript` | string | | Yes | SQL query that returns one or more database names. SchemaQuench reads the first column of each row. Supports token replacement. |
+| `IdentificationDatabase` | string | | No | Re-targets which database the `DatabaseIdentificationScript` runs against. Empty (the default) uses the platform init database. Point it at a control-plane registry database to enumerate a roster from a registry table. Token-resolvable. See [Template settings intent](#template-settings-intent). |
 | `VersionStampScript` | string | | No | SQL executed per database after that database's quench completes successfully. |
 | `UpdateFillFactor` | bool | `true` | No | When `true`, the table quench updates index fill factors to match the JSON definitions. OR'd with table-level and index-level `UpdateFillFactor` settings. |
 | `IndexOnlyTableQuenches` | bool | `false` | No | When `true`, the table quench only manages indexes, statistics, XML/full-text indexes. Skips table creation, column changes, and foreign key management. Tables that don't exist are silently skipped. |
@@ -126,6 +127,20 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 **UpdateFillFactor** -- Three levels (template, table, index) are OR'd together: if any level is true for a given index, its fill factor gets updated. Template defaults to `true` (enforce from the start for new products). For teams managing existing drift, set template-level to `false` and enable per-index or per-table as you verify alignment.
 
 **RequireAtLeastOneTarget** -- A safety net for misconfigured `DatabaseIdentificationScript` (and `SchemaIdentificationScript`) queries. When discovery returns zero targets and `RequireAtLeastOneTarget` is `true` (the default), SchemaQuench aborts immediately rather than silently deploying nothing. Set to `false` only for templates that legitimately target zero databases (or zero `(database, schema)` pairs) in some environments.
+
+**IdentificationDatabase** -- By default a template's `DatabaseIdentificationScript` runs against the platform init database (`master` / `postgres` / `information_schema`), which is right for catalog-convention discovery like `SELECT datname FROM pg_database WHERE datname LIKE 'tenant_%'`. But when your fleet roster lives in a **control-plane registry table** -- `FleetRegistry.dbo.Tenants` -- the discovery query has to run against that registry database, not the init database. Set `IdentificationDatabase` to the registry database and author the script against it:
+
+```json
+{
+  "Name": "TenantBody",
+  "DatabaseIdentificationScript": "SELECT db_name FROM dbo.Tenants WHERE active = 1",
+  "IdentificationDatabase": "FleetRegistry"
+}
+```
+
+The value is token-resolvable (`"IdentificationDatabase": "{{ControlDb}}"`), so a dev fleet can resolve it to `FleetRegistry_Dev` and production to `FleetRegistry_Prod` from the same package. The re-target is scoped to the enumeration query alone: database provisioning and existence checks still run against the init database, and `SchemaIdentificationScript` (schema discovery) is unaffected.
+
+> **PostgreSQL:** this is the only way to read a registry table at enumeration time. A PostgreSQL connection is bound to a single database and cannot cross-database-query, so without `IdentificationDatabase` a registry-table roster is unreachable -- the init database (`postgres`) has no access to a table in another database.
 
 **SkipIfReadOnly** -- Enables graceful handling of read-only replicas. On SQL Server, this is the Availability Group secondary handling. On PostgreSQL and MySQL, the same flag covers logical/physical replicas exposed as databases. With `SkipIfReadOnly: true`, read-only databases are silently skipped and the deployment continues with the writable primaries. Independent of `RequireAtLeastOneTarget` -- a template can require at least one target while still skipping individual read-only databases within the result set.
 
