@@ -1,4 +1,5 @@
 <!-- TRAINING-RELEASE-PIN #332: PostgreSQL stale-checkpoint re-run (SchemaSmith#332, merged in PR #335). The dedupe re-green needs this — a stock pre-#335 CLI crashes `42P01: temp_existing_indexes` on the PostgreSQL re-run. When #332 ships in a stock release: drop the from-source note below, re-cert against stock, delete this sentinel + the release-coupled table row in training-roadmap.md. -->
+<!-- TRAINING-RELEASE-PIN #338: Deployment Failure Triage (SchemaQuench - Failures.log roll-up + *** FAILED banner) merged to main in PR #340, not in stock 2.2.0. When a release includes #338: drop the from-source note, re-cert on stock, delete this sentinel + the release-coupled table row in training-roadmap.md. -->
 # Course 8 · Module 1 — Reading the black box
 
 One induced failure on one database (`diag_blackbox`), read end to end. Module 0 showed you the trail a *healthy* deploy leaves. This is the first deploy that stops on purpose — a unique index that won't take on dirty data — and the walk from `exit 2` to a named phase to green.
@@ -33,7 +34,23 @@ Exits `0` and forges the `Shop` schema into `diag_blackbox`, then a run-once see
 schemaquench --ConfigFile:quench.settings.after.json --LogPath:"$PWD/logs"
 ```
 
-**Exit `2`.** Now read the black box. Open `logs/SchemaQuench - Progress.log` and find the `FAILED to quench:` block — the error is right there, and it names the phase:
+**Exit `2`.** Now read the black box.
+
+**Fast path (from-source CLI only).** Open `logs/SchemaQuench - Failures.log` first. One block per failure: the error, a `Debug SQL:` pointer to the artifact, and a `Context (last 25 lines)` phase trail — everything you need without scrolling the full run narrative. The SQL Server block from this lab:
+
+```text
+1 failure(s): 1 Template:Main
+
+─── FAILED  [Template:Main]  [localhost,11433].[diag_blackbox] ───
+Error: The CREATE UNIQUE INDEX statement terminated because a duplicate key was found for the object name 'dbo.Customer' and the index name 'IX_Customer_Email'. The duplicate key value is (ana.f@shop.test).
+Debug SQL: ./artifacts\SchemaQuench - Quench Indexes localhost,11433.diag_blackbox.sql
+Context (last 25 lines):   [trail abbreviated here — the full 25-line context is shown in the lesson]
+    … Quenching indexes and constraints → Add Missing Indexes → Creating index [dbo].[Customer].[IX_Customer_Email] …
+```
+
+> **From-source note.** `SchemaQuench - Failures.log` and the `*** FAILED` banner are Deployment Failure Triage ([#338](https://github.com/Schema-Smith/SchemaSmith/issues/338)), merged to `main` in PR #340 — not in stock 2.2.0. Build the CLI from `main` to see them. On stock 2.2.0, use the `Progress.log` path below.
+
+**Full path (stock 2.2.0 and from-source).** Open `logs/SchemaQuench - Progress.log` and find the `FAILED to quench:` block — the error is right there, and it names the phase:
 
 | Engine | `FAILED to quench:` block |
 | --- | --- |
