@@ -1,0 +1,34 @@
+{
+  "Name": "product_status",
+  "Columns": [
+    {
+      "Name": "code",
+      "DataType": "text",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "description",
+      "DataType": "text",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_product_status",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "code",
+      "ShouldApplyExpression": "",
+      "VariantName": ""
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": ""
+}

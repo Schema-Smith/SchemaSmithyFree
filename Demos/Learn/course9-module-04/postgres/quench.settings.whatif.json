@@ -1,0 +1,8 @@
+{
+  "Target": { "Databases": ["catalog"], "ConnectionProperties": {} },
+  "WhatIfONLY": true,
+  "SchemaPackagePath": "./package",
+  "KindleTheForge": true,
+  "ArtifactPath": "./artifacts",
+  "CheckpointDirectory": "./checkpoints"
+}

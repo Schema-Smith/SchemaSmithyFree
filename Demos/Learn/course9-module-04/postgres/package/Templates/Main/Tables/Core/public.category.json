@@ -1,0 +1,34 @@
+{
+  "Name": "category",
+  "Columns": [
+    {
+      "Name": "categoryid",
+      "DataType": "int4",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    },
+    {
+      "Name": "name",
+      "DataType": "text",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_category",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "categoryid",
+      "ShouldApplyExpression": "",
+      "VariantName": ""
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": ""
+}

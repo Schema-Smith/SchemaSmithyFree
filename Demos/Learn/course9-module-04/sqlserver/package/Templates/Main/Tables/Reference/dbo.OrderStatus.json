@@ -1,0 +1,50 @@
+{
+  "Name": "[OrderStatus]",
+  "Columns": [
+    {
+      "Name": "[Code]",
+      "DataType": "NVARCHAR(20)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    },
+    {
+      "Name": "[Description]",
+      "DataType": "NVARCHAR(100)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "VariantName": "",
+      "Collation": "",
+      "DataMaskFunction": "",
+      "EncryptionType": "NONE",
+      "EncryptionKey": "",
+      "EncryptionAlgorithm": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_OrderStatus]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "[Code]",
+      "ShouldApplyExpression": "",
+      "VariantName": "",
+      "CompressionType": "NONE",
+      "Clustered": true
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": "",
+  "Schema": "[dbo]",
+  "CompressionType": "NONE",
+  "XmlIndexes": [],
+  "Statistics": []
+}
