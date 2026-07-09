@@ -1,3 +1,5 @@
+<!-- TRAINING-RELEASE-PIN #338: Deployment Failure Triage (SchemaQuench - Failures.log roll-up + *** FAILED banner) merged to main in PR #340, not in stock 2.2.0. When a release includes #338: drop the from-source note, re-cert on stock, delete this sentinel + the release-coupled table row in training-roadmap.md. -->
+
 # Course 7, Module 5 — Diagnosing a fleet failure (lab)
 
 Goal: roll out a new unique index across the whole fleet, watch **two** tenants fail in **two different
@@ -90,11 +92,47 @@ pipeline. The failure count tells you how many; the error text names the phase.
 
 ## Step 4: Locate what failed and where
 
-This is the diagnostic work. Three surfaces to read together:
+This is the diagnostic work. Start with the fast fleet-triage read, then go deeper per-tenant.
 
-**a) The `FAILED to quench:` blocks**
+### 4a) Read Failures.log first (CLI from main / #338)
 
-The log lines above are all you need to name the phase:
+> **From-source note:** `logs/SchemaQuench - Failures.log` requires a CLI built from `main` (#338, PR #340).
+> On stock 2.2.0, skip to the interleaved-log method in 4b below — everything there still works.
+
+If you're running from `main`, open `logs/SchemaQuench - Failures.log`. It opens with the count, then one
+block per failed tenant — error, phase trail, and artifact pointer all in one place:
+
+```
+2 failure(s): 2 Template:Main
+
+─── FAILED  [Template:Main]  [localhost,11433].[fleet_tenant_004] ───
+Error: The ALTER TABLE statement conflicted with the FOREIGN KEY constraint "FK_OrderItem_Product"...
+Debug SQL: ./artifacts\SchemaQuench - Quench Foreign Keys localhost,11433.fleet_tenant_004.sql
+Context (last 25 lines):
+    ...
+    Quenching foreign keys
+        Add Missing Foreign Keys
+          Adding foreign key [dbo].[OrderItem].[FK_OrderItem_Product]
+  The ALTER TABLE statement conflicted...
+
+─── FAILED  [Template:Main]  [localhost,11433].[fleet_tenant_002] ───
+Error: The CREATE UNIQUE INDEX statement terminated because a duplicate key was found...
+Debug SQL: ./artifacts\SchemaQuench - Quench Indexes localhost,11433.fleet_tenant_002.sql
+Context (last 25 lines):
+    ...
+        Add Missing Indexes
+          Creating index [dbo].[Customer].[UQ_Customer_Email]
+  The CREATE UNIQUE INDEX statement terminated...
+```
+
+One read names both failed tenants, both errors, both phases (FK phase for 004, index phase for 002), and
+both artifact paths. That's everything you need before opening anything else.
+
+### 4b) The interleaved Progress.log (stock 2.2.0 and deeper drill-down)
+
+**The `FAILED to quench:` blocks**
+
+The log lines from Step 3 are all you need to name the phase:
 
 - `002`: `CREATE UNIQUE INDEX` terminated on a duplicate key — the index build failed. This is the
   **index phase** (`Quench Indexes`). Error 1505 (SQL Server dup-key on index create).
@@ -105,7 +143,7 @@ Notice: 004's FK was not in the `after/` change. The convergence engine re-check
 run; it found `FK_OrderItem_Product` missing, recreated it WITH CHECK, and the orphan failed it. The rollout
 didn't cause the drift — it exposed it.
 
-**b) The checkpoint files**
+**The checkpoint files**
 
 After a partial-failure run, **all five tenants** keep a checkpoint file — the checkpoint directory is not a
 "failed tenants" manifest. The diagnostic signal is `[Completed Steps]`:
@@ -120,7 +158,7 @@ Read the checkpoint alongside the error: 002's one completed step tells you exac
 *finished* before the failure. The unfinished phase is the next one — indexes. 004's three steps confirm it
 got all the way through index creation before the FK phase terminated it.
 
-**c) The resolved-SQL artifacts**
+**The resolved-SQL artifacts**
 
 The `./artifacts` folder holds thin, copy-runnable `EXEC` wrappers — one per phase per tenant — named
 `<server>.<database>.sql`. For example:
@@ -208,6 +246,10 @@ the artifact naming pattern are the same across all three engines — only the e
 PostgreSQL, detail lands in `ProgressLog`; on MySQL, it surfaces via the `SchemaSmith_StatusMessages` sidecar
 and `ProgressLog` FAILED block — `Errors.log` is empty on both non-SS engines).
 
+> **Note on Failures.log across engines:** `SchemaQuench - Failures.log` is produced on all three engines
+> (SQL Server, PostgreSQL, MySQL) when running a CLI built from `main` (#338). The block format and phase
+> context trail are identical; only the error text inside each block changes per engine.
+
 ## Cleanup
 
 The reset scripts return both tenants to a clean, deployable state. A successful resume deletes the
@@ -222,11 +264,12 @@ rm -rf mysql/checkpoints mysql/artifacts
 ## The principle
 
 One failure count can hide unrelated causes. `Template 'Main' had 2 failed work unit(s)` tells you *how
-many* — not *why each one*, not *where each one stopped*. The diagnostic sequence is always the same: read
-the `FAILED to quench:` block to name the phase, read the checkpoint to confirm how far the tenant got, and
-look at the artifact to see the exact SQL the engine tried to run. Fix with intent — not just "it worked"
-but "I know what broke, I removed the specific condition that caused it, and I confirmed the fix before
-resuming." Then resume, and the engine handles the rest.
+many* — not *why each one*, not *where each one stopped*. The diagnostic sequence is always the same: on a
+CLI from `main`, open `Failures.log` first — it names every failed tenant, its error, the phase context, and
+the artifact pointer in one read. Then drill into the per-tenant checkpoint to confirm depth, and the
+artifact to see the exact SQL the engine tried to run. Fix with intent — not just "it worked" but "I know
+what broke, I removed the specific condition that caused it, and I confirmed the fix before resuming." Then
+resume, and the engine handles the rest.
 
 That's Course 7 complete. You can stand up a fleet, steer it, grow it, operate it safely when a tenant
 drifts, and now diagnose it precisely when more than one tenant fails in different ways.
