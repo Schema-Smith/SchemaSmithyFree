@@ -50,6 +50,13 @@ public class ProductQuench
     // later slice to assemble into the report.
     private readonly RunTiming _runTiming = new();
 
+    // Thread-safe collection of every migration script that actually ran this run, across both
+    // template-scoped scripts (handed down to each DatabaseQuench, see the object-initializer at
+    // the DatabaseQuench construction site) and product-folder scripts run directly below (#243
+    // Deployment Summary Report, E4b). A later slice (E4d) maps this into the report's
+    // migrationScripts[].
+    private readonly MigrationScriptCapture _migrationScripts = new();
+
     // Thread-safe collection of every scope failure (tenant work units today; product/server
     // phases as their capture is added), rendered once into the end-of-run roll-up.
     private readonly ConcurrentBag<FailureRecord> _failureRecords = new();
@@ -63,6 +70,8 @@ public class ProductQuench
 
     /// <summary>Snapshot of every work unit's captured outcome so far. Used by a later slice (E4d).</summary>
     internal IReadOnlyCollection<TargetResult> TargetResults => _targetResults.ToArray();
+
+    internal MigrationScriptCapture MigrationScripts => _migrationScripts;
 
     /// <summary>
     /// True when any template or product-level step reported a fatal failure during
@@ -1643,7 +1652,8 @@ public class ProductQuench
             // behavior for discovery-sourced units.
             SchemaFromOverride = unit.SchemaFromOverride,
             ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing,
-            RunTiming = _runTiming
+            RunTiming = _runTiming,
+            MigrationScripts = _migrationScripts
         };
         var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();
@@ -1705,6 +1715,7 @@ public class ProductQuench
                 script.HasBeenQuenched = true;
                 script.Error = null;
                 _checkpointing.MarkScriptCompleted(ProductScopeForServer(server), slot, script.LogPath);
+                _migrationScripts.Record(server, "", "", "", slot, script.LogPath);
             }
             catch (Exception ex)
             {

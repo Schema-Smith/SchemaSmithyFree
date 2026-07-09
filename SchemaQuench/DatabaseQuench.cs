@@ -75,6 +75,15 @@ public class DatabaseQuench
     /// </summary>
     public RunTiming RunTiming { get; init; }
 
+    /// <summary>
+    /// Shared run-level migration-script capture, set via the object initializer at the
+    /// <c>ProductQuench</c> construction site (#243 Deployment Summary Report, E4b). Null on any
+    /// DatabaseQuench built without one (e.g. existing unit tests) — the hook call site
+    /// null-guards with <c>MigrationScripts?.Record</c> so capture is purely additive
+    /// instrumentation, never a behavior dependency for script execution or checkpoint tracking.
+    /// </summary>
+    public MigrationScriptCapture MigrationScripts { get; init; }
+
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly ILog _errorLog = LogFactory.GetLogger("ErrorLog");
 
@@ -1756,6 +1765,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
                 if (script.HasBeenQuenched)
                 {
                     _checkpointing.MarkScriptCompleted(DbScope, checkpointSlot.ToString(), script.LogPath);
+                    MigrationScripts?.Record(_server, _databaseName, _schemaName ?? "", _template.Name, checkpointSlot.ToString(), GetRelativeScriptPath(script.LogPath));
                     if (_trackRunOnceMigrations && !ShouldAlwaysRun(script.Name))
                         MarkScriptCompleted(destCmd, script.LogPath, slot);
                 }
