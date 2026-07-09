@@ -658,7 +658,7 @@ Controls whether SchemaQuench drops a **product-owned** index (one SchemaSmith c
 | Template | `DropIndexesRemovedFromProduct` in `Template.json` | (inherit) |
 | Table | `DropIndexesRemovedFromProduct` in a table's `.json` file | (inherit) |
 
-Same explicit-false-sticky semantics as the other drop-control flags; a primary key is never dropped by this path. On SQL Server and PostgreSQL it gates the removed-from-product index drop directly; on MySQL it adds per-table suppression to the managed-index cleanup.
+Same explicit-false-sticky semantics as the other drop-control flags; a primary key is never dropped by this path. All three engines gate the removed-from-product index drop directly through this flag — MySQL previously coupled it to `DropUnknownIndexes` and is now at parity with SQL Server and PostgreSQL (a product-owned index removed from the definition drops by default).
 
 > **Note:** All tiers absent preserves existing behavior (default `true`).
 
@@ -668,7 +668,7 @@ For full guidance, see [DropIndexesRemovedFromProduct](schemaquench.md#dropindex
 
 ## DropUnknownIndexes
 
-Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.
+Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package — *out-of-band* indexes SchemaSmith never created (distinct from [DropIndexesRemovedFromProduct](#dropindexesremovedfromproduct), which handles product-owned indexes removed from the definition). Three tiers compose to produce the effective value, resolved environment → product → template. Identical on all three engines — MySQL previously never dropped an out-of-band index and is now at parity with SQL Server and PostgreSQL.
 
 | Scope | Where to set | Default |
 |---|---|---|
