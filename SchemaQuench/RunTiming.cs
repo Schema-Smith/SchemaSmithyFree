@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using SchemaQuench.Reporting;
 
 namespace SchemaQuench;
 
@@ -58,6 +59,14 @@ public class RunTiming
         _entries
             .Where(e => e.Ms > thresholdMs)
             .Select(e => new BottleneckEntry(e.ScopeKey, e.Slot, e.Ms))
+            .ToList();
+
+    /// <summary>Per-target slot timings for one scope (the target's LogPrefix), for the report's targets[].slots[].</summary>
+    public IReadOnlyList<TargetSlotTiming> SlotsForScope(string scopeKey) =>
+        _entries
+            .Where(e => e.ScopeKey == scopeKey)
+            .GroupBy(e => e.Slot)
+            .Select(g => new TargetSlotTiming(g.Key, g.Sum(e => e.Ms), g.Sum(e => e.ScriptsRun)))
             .ToList();
 }
 

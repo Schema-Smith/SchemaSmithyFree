@@ -97,4 +97,38 @@ public class RunTimingTests
         Assert.That(byDatabase.Count, Is.EqualTo(10));
         Assert.That(byDatabase.Sum(d => d.TotalMs), Is.EqualTo(callCount));
     }
+
+    [Test]
+    public void SlotsForScope_ReturnsOnlyThatScopesSlots_SummedPerSlot()
+    {
+        var timing = new RunTiming();
+
+        timing.Record("[srv].[dbA]", "dbA", "ModifiedTables", 100, 2);
+        timing.Record("[srv].[dbA]", "dbA", "ModifiedTables", 50, 1);
+        timing.Record("[srv].[dbA]", "dbA", "ForeignKeys", 30, 0);
+        timing.Record("[srv].[dbB]", "dbB", "ModifiedTables", 999, 9);
+
+        var slots = timing.SlotsForScope("[srv].[dbA]").ToList();
+
+        Assert.That(slots.Count, Is.EqualTo(2));
+
+        var modifiedTables = slots.Single(s => s.Slot == "ModifiedTables");
+        Assert.That(modifiedTables.DurationMs, Is.EqualTo(150));
+        Assert.That(modifiedTables.ScriptsRun, Is.EqualTo(3));
+
+        var foreignKeys = slots.Single(s => s.Slot == "ForeignKeys");
+        Assert.That(foreignKeys.DurationMs, Is.EqualTo(30));
+        Assert.That(foreignKeys.ScriptsRun, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void SlotsForScope_UnknownScope_ReturnsEmptyList()
+    {
+        var timing = new RunTiming();
+        timing.Record("[srv].[dbA]", "dbA", "ModifiedTables", 100, 0);
+
+        var slots = timing.SlotsForScope("[srv].[unknown]");
+
+        Assert.That(slots, Is.Empty);
+    }
 }
