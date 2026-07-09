@@ -73,6 +73,9 @@
     "DropTablesRemovedFromProduct": {
       "type": "boolean"
     },
+    "IdentificationDatabase": {
+      "type": "string"
+    },
     "DropUnknownIndexes": {
       "type": "boolean"
     },
