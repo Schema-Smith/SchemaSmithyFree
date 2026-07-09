@@ -231,7 +231,50 @@ BEGIN
     -- =========================================================================
     -- STEP 3: Drop unknown indexes (owned by product but not in definition)
     -- =========================================================================
-    IF p_DropUnknownIndexes = 1 THEN
+    IF p_DropUnknownIndexes = 1 OR p_DropIndexesRemovedFromProduct = 1 THEN
+        -- Crash-safe snapshots (mirrors MissingIndexesAndConstraintsQuench STEP 8): decoupling
+        -- removed-from-product from DropUnknownIndexes means this block runs on every IndexOnly
+        -- quench (DropIndexesRemovedFromProduct defaults on), so detection + FK-drop read snapshots
+        -- rather than live INFORMATION_SCHEMA in set-based DML (the frequent-run segfault trigger, #337).
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxOnlyIdx;
+        CREATE TEMPORARY TABLE _SchemaSmith_IdxOnlyIdx (
+            TableName VARCHAR(128) NOT NULL,
+            IndexName VARCHAR(128) NOT NULL,
+            NonUnique TINYINT DEFAULT 0,
+            PRIMARY KEY (TableName, IndexName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_IdxOnlyIdx (TableName, IndexName, NonUnique)
+        SELECT CONVERT(s.TABLE_NAME USING utf8mb4), CONVERT(s.INDEX_NAME USING utf8mb4), s.NON_UNIQUE
+        FROM INFORMATION_SCHEMA.STATISTICS s
+        WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND s.SEQ_IN_INDEX = 1;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxOnlyKCU;
+        CREATE TEMPORARY TABLE _SchemaSmith_IdxOnlyKCU (
+            TableName VARCHAR(128) NOT NULL,
+            ConstraintName VARCHAR(128) NOT NULL,
+            ReferencedTableName VARCHAR(128) DEFAULT NULL,
+            KEY ix_iokcu (ReferencedTableName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_IdxOnlyKCU (TableName, ConstraintName, ReferencedTableName)
+        SELECT CONVERT(kcu.TABLE_NAME USING utf8mb4), CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4), CONVERT(kcu.REFERENCED_TABLE_NAME USING utf8mb4)
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+        WHERE BINARY kcu.REFERENCED_TABLE_SCHEMA = BINARY p_DatabaseName
+          AND BINARY kcu.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND kcu.REFERENCED_TABLE_NAME IS NOT NULL;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxOnlyTC;
+        CREATE TEMPORARY TABLE _SchemaSmith_IdxOnlyTC (
+            TableName VARCHAR(128) NOT NULL,
+            ConstraintName VARCHAR(128) NOT NULL,
+            KEY ix_iotc (TableName, ConstraintName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_IdxOnlyTC (TableName, ConstraintName)
+        SELECT CONVERT(tc.TABLE_NAME USING utf8mb4), CONVERT(tc.CONSTRAINT_NAME USING utf8mb4)
+        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+        WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY';
+
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexesToDrop;
         CREATE TEMPORARY TABLE _SchemaSmith_IndexesToDrop (
             TableName VARCHAR(128) NOT NULL,
@@ -255,53 +298,75 @@ BEGIN
                CONVERT(SchemaSmith_StripBacktickWrapping(i.IndexName) USING utf8mb4)
         FROM _SchemaSmith_Indexes i;
 
-        -- Find indexes owned by product but not in current definition
-        -- IMPORTANT: Only consider indexes on tables that ARE in the current definition
-        -- This prevents IndexOnlyQuench from dropping indexes on tables not included in the JSON
-        -- NOTE: _SchemaSmith_Tables is populated by ParseTableJson with ALL tables from JSON
-        INSERT INTO _SchemaSmith_IndexesToDrop (TableName, IndexName, IsUnique)
-        SELECT DISTINCT
-            SUBSTRING_INDEX(po.ObjectName, '.', 1) AS TableName,
-            SUBSTRING_INDEX(po.ObjectName, '.', -1) AS IndexName,
-            COALESCE(s.NON_UNIQUE = 0, 0) AS IsUnique
-        FROM SchemaSmith_ProductOwnership po
-        -- Join with _SchemaSmith_Tables to only consider indexes on tables in the current JSON
-        INNER JOIN _SchemaSmith_Tables t
-            ON CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
-        -- Left join with defined indexes to find which are NOT defined
-        LEFT JOIN _SchemaSmith_DefinedIndexes di
-            ON CONVERT(di.TableName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
-            AND CONVERT(di.IndexName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
-        LEFT JOIN INFORMATION_SCHEMA.STATISTICS s
-            ON CONVERT(s.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-            AND CONVERT(s.TABLE_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
-            AND CONVERT(s.INDEX_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
-            AND s.SEQ_IN_INDEX = 1
-        WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
-          AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
-          AND po.ObjectType COLLATE utf8mb4_unicode_ci = 'INDEX' COLLATE utf8mb4_unicode_ci
-          -- Removed-from-product per-table tightening (the outer IF still gates on DropUnknownIndexes;
-          -- that mis-gating is normalized in Index-B). p_DropIndexesRemovedFromProduct defaults on, so
-          -- this only adds suppression, no default behavior change.
-          AND p_DropIndexesRemovedFromProduct = 1
-          AND COALESCE(t.DropIndexesRemovedFromProduct, 1) = 1
-          -- Never drop PRIMARY KEY
-          AND UPPER(SUBSTRING_INDEX(po.ObjectName, '.', -1) COLLATE utf8mb4_unicode_ci) != 'PRIMARY' COLLATE utf8mb4_unicode_ci
-          -- Not in current definition (LEFT JOIN produces NULL when not found)
-          AND di.IndexName IS NULL
-          -- Not a renamed index
-          AND NOT EXISTS (
-              SELECT 1 FROM _SchemaSmith_IndexRenames r
-              WHERE r.TableName = SUBSTRING_INDEX(po.ObjectName, '.', 1)
-                AND r.OldIndexName = SUBSTRING_INDEX(po.ObjectName, '.', -1)
-          )
-          -- Verify index actually exists
-          AND EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s2
-              WHERE CONVERT(s2.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                AND CONVERT(s2.TABLE_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
-                AND CONVERT(s2.INDEX_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
-          );
+        -- AXIS 1 — removed-from-product: indexes OWNED by this product but no longer in the
+        -- definition. Gated by p_DropIndexesRemovedFromProduct (+ per-table tightening), NOT by
+        -- p_DropUnknownIndexes (Index-B decouple, matching SQL Server / PostgreSQL).
+        -- IMPORTANT: Only consider indexes on tables that ARE in the current definition (_SchemaSmith_Tables).
+        -- Reads the _SchemaSmith_IdxOnlyIdx snapshot (existence == ei.IndexName IS NOT NULL,
+        -- IsUnique == ei.NonUnique = 0) instead of live INFORMATION_SCHEMA.
+        IF p_DropIndexesRemovedFromProduct = 1 THEN
+            INSERT INTO _SchemaSmith_IndexesToDrop (TableName, IndexName, IsUnique)
+            SELECT DISTINCT
+                SUBSTRING_INDEX(po.ObjectName, '.', 1) AS TableName,
+                SUBSTRING_INDEX(po.ObjectName, '.', -1) AS IndexName,
+                COALESCE(ei.NonUnique = 0, 0) AS IsUnique
+            FROM SchemaSmith_ProductOwnership po
+            INNER JOIN _SchemaSmith_Tables t
+                ON CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+            LEFT JOIN _SchemaSmith_DefinedIndexes di
+                ON CONVERT(di.TableName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+                AND CONVERT(di.IndexName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
+            LEFT JOIN _SchemaSmith_IdxOnlyIdx ei
+                ON CONVERT(ei.TableName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+                AND CONVERT(ei.IndexName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
+            WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
+              AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+              AND po.ObjectType COLLATE utf8mb4_unicode_ci = 'INDEX' COLLATE utf8mb4_unicode_ci
+              -- Per-table tightening (the env/product gate is the enclosing IF)
+              AND COALESCE(t.DropIndexesRemovedFromProduct, 1) = 1
+              -- Never drop PRIMARY KEY
+              AND UPPER(SUBSTRING_INDEX(po.ObjectName, '.', -1) COLLATE utf8mb4_unicode_ci) != 'PRIMARY' COLLATE utf8mb4_unicode_ci
+              -- Not in current definition (LEFT JOIN produces NULL when not found)
+              AND di.IndexName IS NULL
+              -- Not a renamed index
+              AND NOT EXISTS (
+                  SELECT 1 FROM _SchemaSmith_IndexRenames r
+                  WHERE r.TableName = SUBSTRING_INDEX(po.ObjectName, '.', 1)
+                    AND r.OldIndexName = SUBSTRING_INDEX(po.ObjectName, '.', -1)
+              )
+              -- Verify index actually exists (snapshot bridge)
+              AND ei.IndexName IS NOT NULL;
+        END IF;
+
+        -- AXIS 2 — out-of-band: an index in the catalog on a current-quench table that is NOT in the
+        -- definition AND NOT owned by this product. Gated by p_DropUnknownIndexes. Crash-safe: reads
+        -- the snapshot + temp/real tables only. INSERT IGNORE dedupes against any removed-from-product
+        -- row already queued (shared PK on _SchemaSmith_IndexesToDrop).
+        IF p_DropUnknownIndexes = 1 THEN
+            INSERT IGNORE INTO _SchemaSmith_IndexesToDrop (TableName, IndexName, IsUnique)
+            SELECT CONVERT(ei.TableName USING utf8mb4), CONVERT(ei.IndexName USING utf8mb4), COALESCE(ei.NonUnique = 0, 0)
+            FROM _SchemaSmith_IdxOnlyIdx ei
+            INNER JOIN _SchemaSmith_Tables t
+                ON CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(ei.TableName USING utf8mb4)
+            WHERE UPPER(ei.IndexName COLLATE utf8mb4_unicode_ci) != 'PRIMARY' COLLATE utf8mb4_unicode_ci
+              AND NOT EXISTS (
+                  SELECT 1 FROM _SchemaSmith_DefinedIndexes di
+                  WHERE CONVERT(di.TableName USING utf8mb4) = CONVERT(ei.TableName USING utf8mb4)
+                    AND CONVERT(di.IndexName USING utf8mb4) = CONVERT(ei.IndexName USING utf8mb4)
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM SchemaSmith_ProductOwnership po
+                  WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
+                    AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+                    AND po.ObjectType COLLATE utf8mb4_unicode_ci = 'INDEX' COLLATE utf8mb4_unicode_ci
+                    AND po.ObjectName COLLATE utf8mb4_unicode_ci = CONCAT(ei.TableName, '.', ei.IndexName) COLLATE utf8mb4_unicode_ci
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM _SchemaSmith_IndexRenames r
+                  WHERE CONVERT(r.TableName USING utf8mb4) = CONVERT(ei.TableName USING utf8mb4)
+                    AND CONVERT(r.OldIndexName USING utf8mb4) = CONVERT(ei.IndexName USING utf8mb4)
+              );
+        END IF;
 
         -- Cleanup helper temp table
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DefinedIndexes;
@@ -325,24 +390,18 @@ BEGIN
             -- DISTINCT: a composite FK produces one KEY_COLUMN_USAGE row per column, which would
             -- otherwise duplicate the (table, constraint) pair and fold into an invalid
             -- "DROP FOREIGN KEY x, DROP FOREIGN KEY x" clause.
+            -- Reads the STEP 3 snapshots (IdxOnlyKCU / IdxOnlyTC), not live INFORMATION_SCHEMA.
+            -- itd.IsUnique already carries the unique-index flag, so no STATISTICS re-check is needed.
             INSERT INTO _SchemaSmith_FKsForIndexDrop (TableName, ConstraintName)
             SELECT DISTINCT
-                CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                CONVERT(kcu.TableName USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                CONVERT(tc.ConstraintName USING utf8mb4) COLLATE utf8mb4_unicode_ci
             FROM _SchemaSmith_IndexesToDrop itd
-            JOIN INFORMATION_SCHEMA.STATISTICS s
-                ON CONVERT(s.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                AND CONVERT(s.TABLE_NAME USING utf8mb4) = CONVERT(itd.TableName USING utf8mb4)
-                AND CONVERT(s.INDEX_NAME USING utf8mb4) = CONVERT(itd.IndexName USING utf8mb4)
-                AND s.SEQ_IN_INDEX = 1
-            JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-                ON CONVERT(kcu.REFERENCED_TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                AND CONVERT(kcu.REFERENCED_TABLE_NAME USING utf8mb4) = CONVERT(itd.TableName USING utf8mb4)
-            JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                ON CONVERT(tc.TABLE_SCHEMA USING utf8mb4) = CONVERT(kcu.TABLE_SCHEMA USING utf8mb4)
-                AND CONVERT(tc.TABLE_NAME USING utf8mb4) = CONVERT(kcu.TABLE_NAME USING utf8mb4)
-                AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4)
-                AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
+            JOIN _SchemaSmith_IdxOnlyKCU kcu
+                ON CONVERT(kcu.ReferencedTableName USING utf8mb4) = CONVERT(itd.TableName USING utf8mb4)
+            JOIN _SchemaSmith_IdxOnlyTC tc
+                ON CONVERT(tc.TableName USING utf8mb4) = CONVERT(kcu.TableName USING utf8mb4)
+                AND CONVERT(tc.ConstraintName USING utf8mb4) = CONVERT(kcu.ConstraintName USING utf8mb4)
             WHERE itd.IsUnique = 1;
 
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
@@ -405,6 +464,9 @@ BEGIN
         END IF;
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexesToDrop;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxOnlyIdx;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxOnlyKCU;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxOnlyTC;
     END IF;
 
     -- =========================================================================

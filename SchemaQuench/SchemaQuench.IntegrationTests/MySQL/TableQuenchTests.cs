@@ -789,15 +789,10 @@ public class TableQuenchTests
             ) ENGINE=InnoDB";
         command.ExecuteNonQuery();
 
-        // Register the idx_email as owned by our product
-        command.CommandText = @"INSERT INTO SchemaSmith_ProductOwnership
-            (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
-            VALUES (@productName, '', @objectSchema, 'INDEX', @objectName)";
-        command.Parameters.Clear();
-        command.AddParameterWithValue("@productName", "TestProduct");
-        command.AddParameterWithValue("@objectSchema", _testDb);
-        command.AddParameterWithValue("@objectName", $"{tableName}.idx_email");
-        command.ExecuteNonQuery();
+        // idx_email is deliberately NOT registered in ProductOwnership — it is an out-of-band
+        // (unmanaged) index. With DropUnknownIndexes=0 the out-of-band drop path is gated off, so it
+        // must survive. (A product-OWNED index removed from the definition is a different axis:
+        // it drops by default via DropIndexesRemovedFromProduct — see TableQuench_IndexParityTests.)
 
         // JSON without the idx_email index
         var tableJson = $@"[
