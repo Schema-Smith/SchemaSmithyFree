@@ -7,6 +7,7 @@ using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using log4net;
 using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
@@ -15,6 +16,7 @@ using Schema.Domain.SqlServer;
 using Schema.Checkpointing;
 using Schema.Isolators;
 using Schema.Utility;
+using SchemaQuench.Reporting;
 
 namespace SchemaQuench;
 
@@ -68,6 +70,13 @@ public class ProductQuench
     private readonly ConcurrentBag<FailureRecord> _failureRecords = new();
     private bool _rollupEmitted;
     private bool _anyFailure;
+
+    // Deployment summary report (#243, E4e). _startedUtc marks the run's wall-clock start
+    // (captured first thing in the QuenchProduct wrapper); _summaryWritten guards
+    // WriteDeploymentSummary so an abort-path write can never double-fire alongside the
+    // normal-completion write.
+    private DateTime _startedUtc;
+    private bool _summaryWritten;
 
     // Thread-safe collection of every work unit's outcome + duration (#243 Deployment Summary
     // Report, slice E4a). Passive capture only — a later slice (E4d) assembles this into the
@@ -597,17 +606,28 @@ public class ProductQuench
 
     public void QuenchProduct(bool suppressKindlingForTesting = false)
     {
-        // Time the full run; finally guarantees Stop() on every exit path (return, throw, normal end)
-        // without threading Stop() through the several exit sites inside the core body.
+        _startedUtc = DateTime.UtcNow;
+
         _runTiming.Start();
         try
         {
             QuenchProductCore(suppressKindlingForTesting);
         }
-        finally
+        catch
         {
+            // An exception escaping Core (e.g. a baseline/validate/after-product-script failure that
+            // throws rather than routing through a hard-abort site) heads for the unhandled-exception
+            // handler, which backs up logs and exits 3. Emit a best-effort Aborted summary first so
+            // even these failure exits produce a report, then rethrow to preserve existing behavior.
             _runTiming.Stop();
+            WriteDeploymentSummary(RunOutcome.Aborted, 3);
+            throw;
         }
+        _runTiming.Stop();
+
+        // Normal Success / continue-mode PartialFailure. (Hard-abort sites inside Core already wrote
+        // their Aborted summary and Exit()ed before control could return here.)
+        WriteDeploymentSummary(Failed ? RunOutcome.PartialFailure : RunOutcome.Success, Failed ? 2 : 0);
     }
 
     private void QuenchProductCore(bool suppressKindlingForTesting)
@@ -749,6 +769,62 @@ public class ProductQuench
         // appender) — NOT through _progressLog — so it reaches the console once at end of run without
         // duplicating error content into the progress stream that exact-count assertions depend on.
         LogFactory.GetLogger("FailureLog").Info(report);
+    }
+
+    /// <summary>
+    /// Assembles and writes the deployment summary report (#243, E4e) — the run's normal
+    /// Success/PartialFailure completion AND all three hard-abort sites funnel through here.
+    /// <see cref="_summaryWritten"/> makes this idempotent (an abort path writes once, then
+    /// <c>LogBackup.BackupLogsAndExit</c> terminates the process) and the try/catch makes it
+    /// strictly best-effort: a failure to assemble or write the report is logged as a warning
+    /// and swallowed — it must never disrupt the run's real logging, exit code, or control flow.
+    /// </summary>
+    private void WriteDeploymentSummary(RunOutcome outcome, int exitCode)
+    {
+        if (_summaryWritten) return;
+        _summaryWritten = true;
+        try
+        {
+            var mode = IsWhatIfOnly ? RunMode.WhatIf : RunMode.Quench;
+            var resumed = _checkpointing?.GetProductCheckpointSummary(_product.Name)?.HasAnyCompleted ?? false;
+            var summary = DeploymentSummaryAssembler.Assemble(
+                _product.Name, _product.Platform.ToString(), ToolVersion(),
+                _startedUtc, DateTime.UtcNow, mode, outcome, exitCode, resumed,
+                _targetResults.ToArray(), _runTiming, _migrationScripts.Snapshot(),
+                _whatIf.Snapshot(), _failureRecords.ToArray(), BottleneckThresholdMs());
+            var (jsonPath, mdPath) = ResolveReportPaths(CommandLineParser.ValueOfSwitch("report", null), ConfigHelper.ResolveLogPath(), "SchemaQuench");
+            var file = FileWrapper.GetFromFactory();
+            file.WriteAllText(jsonPath, DeploymentSummaryJson.Serialize(summary));
+            file.WriteAllText(mdPath, DeploymentSummaryText.Render(summary));
+            _progressLog.Info($"Deployment summary written: {jsonPath}");
+        }
+        catch (Exception ex)
+        {
+            // Best-effort: a summary-write failure must never disrupt the run's real logging or exit.
+            _progressLog.Warn($"Could not write deployment summary: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Unit-testable path resolution: <c>--report &lt;path&gt;</c> redirects both report files to
+    /// <c>&lt;path&gt;.json</c> / <c>&lt;path&gt;.md</c>; otherwise both default alongside the logs
+    /// in <paramref name="logDir"/> as <c>{appName} - Summary.json</c> / <c>.md</c>.
+    /// </summary>
+    internal static (string JsonPath, string MdPath) ResolveReportPaths(string reportSwitch, string logDir, string appName) =>
+        string.IsNullOrWhiteSpace(reportSwitch)
+            ? (Path.Join(logDir, $"{appName} - Summary.json"), Path.Join(logDir, $"{appName} - Summary.md"))
+            : (reportSwitch + ".json", reportSwitch + ".md");
+
+    private int BottleneckThresholdMs() =>
+        int.TryParse(_config["BottleneckThresholdMs"], out var ms) && ms >= 0 ? ms : 30000;
+
+    // Mirrors CommandLineParser.ShowVersionAndExit's reflection so the deployment summary
+    // reports the same tool version the CLI's --version switch shows.
+    private static string ToolVersion()
+    {
+        var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+        return assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version
+               ?? assembly.GetName().Version?.ToString() ?? "unknown";
     }
 
     internal static readonly string[] SpecialTokenTags = ["TableSchema_", "ObjectScripts_", "QueryTokens_", "MaterializedViewSchema_", "IndexedViewSchema_"];
@@ -1008,6 +1084,7 @@ public class ProductQuench
             _updateFailed = true;
             _anyFailure = true;
             EmitFailureRollup();
+            WriteDeploymentSummary(RunOutcome.Aborted, 2);
             LogBackup.BackupLogsAndExit("SchemaQuench", 2);
             return;
         }
@@ -1042,6 +1119,7 @@ public class ProductQuench
         if (!ShouldAbortOnFailure(template)) return;
 
         EmitFailureRollup();
+        WriteDeploymentSummary(RunOutcome.Aborted, 2);
         LogBackup.BackupLogsAndExit("SchemaQuench", 2);
     }
 
@@ -1095,6 +1173,7 @@ public class ProductQuench
             _errorLog.Error(message);
             _anyFailure = true;
             EmitFailureRollup();
+            WriteDeploymentSummary(RunOutcome.Aborted, 2);
             LogBackup.BackupLogsAndExit("SchemaQuench", 2);
             return false;
         }
