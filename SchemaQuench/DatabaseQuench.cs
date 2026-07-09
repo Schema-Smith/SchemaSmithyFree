@@ -84,6 +84,16 @@ public class DatabaseQuench
     /// </summary>
     public MigrationScriptCapture MigrationScripts { get; init; }
 
+    /// <summary>
+    /// Shared run-level WhatIf capture, set via the object initializer at the
+    /// <c>ProductQuench</c> construction site (#243 Deployment Summary Report, E4c). Null on any
+    /// DatabaseQuench built without one (e.g. existing unit tests) — the hook call sites in the
+    /// <c>WhatIfLog*</c> methods null-guard with <c>WhatIf?.Record</c> so capture is purely
+    /// additive instrumentation alongside the existing progress-log entries, never a behavior
+    /// dependency.
+    /// </summary>
+    public WhatIfCapture WhatIf { get; init; }
+
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly ILog _errorLog = LogFactory.GetLogger("ErrorLog");
 
@@ -2047,13 +2057,19 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     private void WhatIfLogScripts(List<SqlScript> scripts, DatabaseScriptSlot slot)
     {
         foreach (var script in scripts)
+        {
             SafeProgressLog($"    Would APPLY: {script.LogPath}");
+            WhatIf?.Record(WhatIfCategory.Apply, LogPrefix, script.LogPath);
+        }
     }
 
     private void WhatIfLogTableDataScripts(List<SqlScript> scripts)
     {
         foreach (var script in scripts)
+        {
             SafeProgressLog($"    Would DELIVER: {Path.GetFileNameWithoutExtension(script.LogPath)}");
+            WhatIf?.Record(WhatIfCategory.Deliver, LogPrefix, script.LogPath);
+        }
     }
 
     private void WhatIfLogTemplateScripts(IDbCommand destCmd, string slot, List<SqlScript> scripts, DatabaseScriptSlot checkpointSlot)
@@ -2062,9 +2078,15 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         foreach (var script in scripts)
         {
             if (!ShouldAlwaysRun(script.Name) && alreadyRan.Contains(GetRelativeScriptPath(script.LogPath)))
+            {
                 SafeProgressLog($"    Would SKIP (previously quenched): {script.LogPath}");
+                WhatIf?.Record(WhatIfCategory.Skip, LogPrefix, script.LogPath);
+            }
             else
+            {
                 SafeProgressLog($"    Would APPLY: {script.LogPath}");
+                WhatIf?.Record(WhatIfCategory.Apply, LogPrefix, script.LogPath);
+            }
         }
     }
 

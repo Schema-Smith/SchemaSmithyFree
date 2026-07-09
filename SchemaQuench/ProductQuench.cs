@@ -57,6 +57,12 @@ public class ProductQuench
     // migrationScripts[].
     private readonly MigrationScriptCapture _migrationScripts = new();
 
+    // Thread-safe collection of every WhatIf-mode would-apply/skip/deliver entry across the run
+    // (handed down to each DatabaseQuench, see the object-initializer at the DatabaseQuench
+    // construction site) (#243 Deployment Summary Report, E4c). A later slice (E4d) maps this into
+    // the report's whatIf section for WhatIf-mode runs.
+    private readonly WhatIfCapture _whatIf = new();
+
     // Thread-safe collection of every scope failure (tenant work units today; product/server
     // phases as their capture is added), rendered once into the end-of-run roll-up.
     private readonly ConcurrentBag<FailureRecord> _failureRecords = new();
@@ -72,6 +78,8 @@ public class ProductQuench
     internal IReadOnlyCollection<TargetResult> TargetResults => _targetResults.ToArray();
 
     internal MigrationScriptCapture MigrationScripts => _migrationScripts;
+
+    internal WhatIfCapture WhatIf => _whatIf;
 
     /// <summary>
     /// True when any template or product-level step reported a fatal failure during
@@ -1653,7 +1661,8 @@ public class ProductQuench
             SchemaFromOverride = unit.SchemaFromOverride,
             ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing,
             RunTiming = _runTiming,
-            MigrationScripts = _migrationScripts
+            MigrationScripts = _migrationScripts,
+            WhatIf = _whatIf
         };
         var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();
