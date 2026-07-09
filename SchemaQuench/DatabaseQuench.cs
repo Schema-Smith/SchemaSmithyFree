@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -31,6 +32,14 @@ public class DatabaseQuench
     public bool QuenchSuccessful { get; private set; }
 
     /// <summary>
+    /// True when <see cref="Execute"/> short-circuited via the benign
+    /// <see cref="SchemaPresence.MissingSkipped"/> path — distinguishes a skipped iteration from a
+    /// real success for the deployment summary report (#243), since both leave
+    /// <see cref="QuenchSuccessful"/> true. Default false.
+    /// </summary>
+    public bool WasSkipped { get; private set; }
+
+    /// <summary>
     /// Set to a non-null <see cref="FailureRecord"/> when <see cref="Execute"/> fails, so the
     /// dispatching <c>ProductQuench.RunOneWorkUnit</c> can collect this tenant's failure (with its
     /// captured context tail) into the end-of-run roll-up. Null on success.
@@ -57,6 +66,33 @@ public class DatabaseQuench
     /// <see cref="Template.CreateSchemaIfMissing"/> remains the authority.
     /// </summary>
     public bool ProvisionSchemaIfMissing { get; init; }
+
+    /// <summary>
+    /// Shared run-level timing collector, set via the object initializer at the
+    /// <c>ProductQuench</c> construction site. Null on any DatabaseQuench built without one
+    /// (e.g. existing unit tests) — every timing call site null-guards with <c>RunTiming?.Record</c>
+    /// so timing is purely additive instrumentation, never a behavior dependency.
+    /// </summary>
+    public RunTiming RunTiming { get; init; }
+
+    /// <summary>
+    /// Shared run-level migration-script capture, set via the object initializer at the
+    /// <c>ProductQuench</c> construction site (#243 Deployment Summary Report, E4b). Null on any
+    /// DatabaseQuench built without one (e.g. existing unit tests) — the hook call site
+    /// null-guards with <c>MigrationScripts?.Record</c> so capture is purely additive
+    /// instrumentation, never a behavior dependency for script execution or checkpoint tracking.
+    /// </summary>
+    public MigrationScriptCapture MigrationScripts { get; init; }
+
+    /// <summary>
+    /// Shared run-level WhatIf capture, set via the object initializer at the
+    /// <c>ProductQuench</c> construction site (#243 Deployment Summary Report, E4c). Null on any
+    /// DatabaseQuench built without one (e.g. existing unit tests) — the hook call sites in the
+    /// <c>WhatIfLog*</c> methods null-guard with <c>WhatIf?.Record</c> so capture is purely
+    /// additive instrumentation alongside the existing progress-log entries, never a behavior
+    /// dependency.
+    /// </summary>
+    public WhatIfCapture WhatIf { get; init; }
 
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly ILog _errorLog = LogFactory.GetLogger("ErrorLog");
@@ -383,6 +419,7 @@ public class DatabaseQuench
                 if (EnsureSchemaExists(command) == SchemaPresence.MissingSkipped)
                 {
                     QuenchSuccessful = true;
+                    WasSkipped = true;
                     return;
                 }
 
@@ -418,6 +455,7 @@ public class DatabaseQuench
                 // may reference {{SchemaName}} for schema templates).
                 if (!string.IsNullOrWhiteSpace(_iteration.BaselineValidationScript))
                 {
+                    var validateBaselineSw = Stopwatch.StartNew();
                     _checkpointing.Track(DbScope, "ValidateBaseline", () =>
                     {
                         SafeProgressLog("  Validate Baseline");
@@ -433,6 +471,8 @@ public class DatabaseQuench
                             throw;
                         }
                     });
+                    validateBaselineSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "ValidateBaseline", validateBaselineSw.ElapsedMilliseconds, 0);
                 }
 
                 // Step: Object scripts without unresolved tokens
@@ -495,7 +535,10 @@ public class DatabaseQuench
                 // Step: Modified tables
                 if (!_template.IndexOnlyTableQuenches && _updateTables)
                 {
+                    var modifiedTablesSw = Stopwatch.StartNew();
                     _checkpointing.Track(DbScope, "ModifiedTables", () => QuenchModifiedTables(effectiveTableCmd));
+                    modifiedTablesSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "ModifiedTables", modifiedTablesSw.ElapsedMilliseconds, 0);
                 }
 
                 if (!IsWhatIf)
@@ -518,7 +561,10 @@ public class DatabaseQuench
                 // Step: Indexes and constraints
                 if (_updateTables)
                 {
+                    var indexesAndConstraintsSw = Stopwatch.StartNew();
                     _checkpointing.Track(DbScope, "IndexesAndConstraints", () => QuenchIndexesAndConstraints(effectiveTableCmd));
+                    indexesAndConstraintsSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "IndexesAndConstraints", indexesAndConstraintsSw.ElapsedMilliseconds, 0);
                 }
 
                 // MySQL: cleanup temp tables after index quench
@@ -539,6 +585,7 @@ public class DatabaseQuench
                     if (_deliverData)
                     {
                         // Data delivery — Pro determines behavior based on license.
+                        var tableDataDeliverySw = Stopwatch.StartNew();
                         _checkpointing.Track(DbScope, "TableDataDelivery", () =>
                         {
                             // Register platform-specific script helper if not already registered
@@ -579,6 +626,8 @@ public class DatabaseQuench
                                 }
                             });
                         });
+                        tableDataDeliverySw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "TableDataDelivery", tableDataDeliverySw.ElapsedMilliseconds, 0);
 
                         if (_iteration.ObjectScripts.Union(_iteration.TableDataScripts).Any(s => !s.HasBeenQuenched))
                         {
@@ -590,24 +639,33 @@ public class DatabaseQuench
                     // Foreign keys after data delivery (all platforms)
                     if (!_template.IndexOnlyTableQuenches && _updateTables)
                     {
+                        var foreignKeysSw = Stopwatch.StartNew();
                         _checkpointing.Track(DbScope, "ForeignKeys", () =>
                         {
                             QuenchForeignKeys(effectiveTableCmd);
                             if (_product.Platform == Platform.MySQL)
                                 CleanupMySqlTempTables(command);
                         });
+                        foreignKeysSw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "ForeignKeys", foreignKeysSw.ElapsedMilliseconds, 0);
                     }
 
                     // Step: Materialized views (PostgreSQL only)
                     if (_product.Platform == Platform.PostgreSQL && _template.MaterializedViews.Count > 0)
                     {
+                        var materializedViewQuenchSw = Stopwatch.StartNew();
                         _checkpointing.Track(DbScope, "MaterializedViewQuench", () => QuenchMaterializedViews(effectiveTableCmd));
+                        materializedViewQuenchSw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "MaterializedViewQuench", materializedViewQuenchSw.ElapsedMilliseconds, 0);
                     }
 
                     // Step: Indexed views (SQL Server only)
                     if (_product.Platform == Platform.SqlServer && _template.IndexedViews.Count > 0)
                     {
+                        var indexedViewQuenchSw = Stopwatch.StartNew();
                         _checkpointing.Track(DbScope, "IndexedViewQuench", () => QuenchIndexedViews(effectiveTableCmd));
+                        indexedViewQuenchSw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "IndexedViewQuench", indexedViewQuenchSw.ElapsedMilliseconds, 0);
                     }
 
                     SafeProgressLog("  Quenching after database scripts");
@@ -615,6 +673,7 @@ public class DatabaseQuench
 
                     if (!string.IsNullOrWhiteSpace(_iteration.VersionStampScript))
                     {
+                        var versionStampSw = Stopwatch.StartNew();
                         _checkpointing.Track(DbScope, "VersionStamp", () =>
                         {
                             SafeProgressLog("  Stamp version");
@@ -629,6 +688,8 @@ public class DatabaseQuench
                                 throw;
                             }
                         });
+                        versionStampSw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "VersionStamp", versionStampSw.ElapsedMilliseconds, 0);
                     }
                 }
                 else
@@ -1714,6 +1775,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
                 if (script.HasBeenQuenched)
                 {
                     _checkpointing.MarkScriptCompleted(DbScope, checkpointSlot.ToString(), script.LogPath);
+                    MigrationScripts?.Record(_server, _databaseName, _schemaName ?? "", _template.Name, checkpointSlot.ToString(), GetRelativeScriptPath(script.LogPath));
                     if (_trackRunOnceMigrations && !ShouldAlwaysRun(script.Name))
                         MarkScriptCompleted(destCmd, script.LogPath, slot);
                 }
@@ -1995,13 +2057,19 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     private void WhatIfLogScripts(List<SqlScript> scripts, DatabaseScriptSlot slot)
     {
         foreach (var script in scripts)
+        {
             SafeProgressLog($"    Would APPLY: {script.LogPath}");
+            WhatIf?.Record(WhatIfCategory.Apply, LogPrefix, script.LogPath);
+        }
     }
 
     private void WhatIfLogTableDataScripts(List<SqlScript> scripts)
     {
         foreach (var script in scripts)
+        {
             SafeProgressLog($"    Would DELIVER: {Path.GetFileNameWithoutExtension(script.LogPath)}");
+            WhatIf?.Record(WhatIfCategory.Deliver, LogPrefix, script.LogPath);
+        }
     }
 
     private void WhatIfLogTemplateScripts(IDbCommand destCmd, string slot, List<SqlScript> scripts, DatabaseScriptSlot checkpointSlot)
@@ -2010,9 +2078,15 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         foreach (var script in scripts)
         {
             if (!ShouldAlwaysRun(script.Name) && alreadyRan.Contains(GetRelativeScriptPath(script.LogPath)))
+            {
                 SafeProgressLog($"    Would SKIP (previously quenched): {script.LogPath}");
+                WhatIf?.Record(WhatIfCategory.Skip, LogPrefix, script.LogPath);
+            }
             else
+            {
                 SafeProgressLog($"    Would APPLY: {script.LogPath}");
+                WhatIf?.Record(WhatIfCategory.Apply, LogPrefix, script.LogPath);
+            }
         }
     }
 

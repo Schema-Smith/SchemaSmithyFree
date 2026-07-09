@@ -78,6 +78,21 @@ public class LogBackupTests
     }
 
     [Test]
+    public void BackupLogsAndExit_CopiesSummaryFiles()
+    {
+        _mockDirectory.Exists(Arg.Any<string>()).Returns(false);
+        _mockDirectory.GetFiles(Arg.Any<string>(), "TestApp - *.log", SearchOption.TopDirectoryOnly)
+            .Returns(Array.Empty<string>());
+        _mockDirectory.GetFiles(Arg.Any<string>(), "TestApp - Summary.*", SearchOption.TopDirectoryOnly)
+            .Returns(new[] { "/logs/TestApp - Summary.json", "/logs/TestApp - Summary.md" });
+
+        LogBackup.BackupLogsAndExit("TestApp");
+
+        _mockFile.Received(1).Copy(Arg.Is<string>(s => s.EndsWith("Summary.json")), Arg.Any<string>(), Arg.Any<bool>());
+        _mockFile.Received(1).Copy(Arg.Is<string>(s => s.EndsWith("Summary.md")), Arg.Any<string>(), Arg.Any<bool>());
+    }
+
+    [Test]
     public void BackupLogsAndExit_ExitsWithSpecifiedCode()
     {
         _mockDirectory.Exists(Arg.Any<string>()).Returns(false);

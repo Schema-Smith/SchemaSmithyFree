@@ -28,6 +28,12 @@ public static class LogBackup
             foreach (var logFile in logFiles)
                 file.Copy(logFile, Path.Combine(backupDir, Path.GetFileName(logFile)));
 
+            // Deployment summary report (#243, E4e): archive the always-on Summary.json/.md
+            // alongside the run's logs. Harmless on tools that never write them (SchemaTongs,
+            // DataTongs) — GetFiles simply matches nothing.
+            foreach (var summaryFile in directory.GetFiles(cwd, $"{appName} - Summary.*", SearchOption.TopDirectoryOnly))
+                file.Copy(summaryFile, Path.Join(backupDir, Path.GetFileName(summaryFile)));
+
             EnvironmentWrapper.GetFromFactory().Exit(exitCode);
         }
         catch (Exception e)

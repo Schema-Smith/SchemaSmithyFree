@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 ﻿using log4net;
+using Newtonsoft.Json.Linq;
 using Schema.IntegrationTests;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -112,6 +113,63 @@ WHERE s.name = 'dbo' AND v.name = 'vTestSummary'
 AND OBJECTPROPERTY(v.object_id, 'IsIndexed') = 1";
             Assert.That((int)verifyIvCmd.ExecuteScalar()!, Is.EqualTo(1), "Indexed view should exist after quench");
             verifyIvConn.Close();
+
+            LogFactory.Clear();
+            FactoryContainer.Unregister<IEnvironment>();
+        }
+    }
+
+    [Test]
+    public void ShouldWriteDeploymentSummaryOnSuccessfulQuench()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+
+            FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", "ValidProduct");
+            var product = Product.Load();
+
+            using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+            conn.Open();
+            conn.ChangeDatabase(_mainDb);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @$"
+TRUNCATE TABLE SchemaSmith.CompletedMigrationScripts
+TRUNCATE TABLE SchemaSmith.TestLog
+INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [QuenchSlot], [template_name], [schema_name]) VALUES('MigrationScripts/Before/MigrationScript0.sql', '{product.Name}', 'Before', 'Main', '')
+";
+            cmd.ExecuteNonQuery();
+            conn.ChangeDatabase(_secondaryDb);
+            cmd.CommandText = @$"
+TRUNCATE TABLE SchemaSmith.CompletedMigrationScripts
+TRUNCATE TABLE SchemaSmith.TestLog";
+            cmd.ExecuteNonQuery();
+            conn.Close();
+
+            RunSchemaQuench();
+
+            _progressLog.DidNotReceive().Error(Arg.Any<string>());
+            _environment.DidNotReceive().Exit(2);
+            _environment.DidNotReceive().Exit(3);
+
+            var logDir = ConfigHelper.ResolveLogPath();
+            var jsonPath = Path.Join(logDir, "SchemaQuench - Summary.json");
+            var mdPath = Path.Join(logDir, "SchemaQuench - Summary.md");
+
+            Assert.That(File.Exists(jsonPath), Is.True, $"Expected deployment summary JSON at {jsonPath}");
+            Assert.That(File.Exists(mdPath), Is.True, $"Expected deployment summary Markdown at {mdPath}");
+
+            var json = JObject.Parse(File.ReadAllText(jsonPath));
+            Assert.That(json.SelectToken("run.outcome")?.Value<string>(), Is.EqualTo("Success"));
+            Assert.That(json.SelectToken("run.mode")?.Value<string>(), Is.EqualTo("Quench"));
+            // A fresh (non-resumed) run must report resumedFromCheckpoint=false — regression guard
+            // for reading the checkpoint at emit time, which would see this run's own completions.
+            Assert.That(json.SelectToken("run.resumedFromCheckpoint")?.Value<bool>(), Is.False);
+            var targets = (JArray)json.SelectToken("targets");
+            Assert.That(targets, Is.Not.Null.And.Not.Empty);
+
+            var markdown = File.ReadAllText(mdPath);
+            Assert.That(markdown, Is.Not.Empty);
 
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();

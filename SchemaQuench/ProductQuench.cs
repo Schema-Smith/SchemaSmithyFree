@@ -4,8 +4,10 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using log4net;
 using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
@@ -14,6 +16,7 @@ using Schema.Domain.SqlServer;
 using Schema.Checkpointing;
 using Schema.Isolators;
 using Schema.Utility;
+using SchemaQuench.Reporting;
 
 namespace SchemaQuench;
 
@@ -43,11 +46,53 @@ public class ProductQuench
     private readonly ICheckpointing _checkpointing;
     private bool _updateFailed;
 
+    // Run-level timing collector (#243 Deployment Summary Report, slice 1). Started/stopped around
+    // the whole run and handed to each DatabaseQuench work unit (see the object-initializer at the
+    // DatabaseQuench construction site) so per-slot Record calls land in one shared collector for a
+    // later slice to assemble into the report.
+    private readonly RunTiming _runTiming = new();
+
+    // Thread-safe collection of every migration script that actually ran this run, across both
+    // template-scoped scripts (handed down to each DatabaseQuench, see the object-initializer at
+    // the DatabaseQuench construction site) and product-folder scripts run directly below (#243
+    // Deployment Summary Report, E4b). A later slice (E4d) maps this into the report's
+    // migrationScripts[].
+    private readonly MigrationScriptCapture _migrationScripts = new();
+
+    // Thread-safe collection of every WhatIf-mode would-apply/skip/deliver entry across the run
+    // (handed down to each DatabaseQuench, see the object-initializer at the DatabaseQuench
+    // construction site) (#243 Deployment Summary Report, E4c). A later slice (E4d) maps this into
+    // the report's whatIf section for WhatIf-mode runs.
+    private readonly WhatIfCapture _whatIf = new();
+
     // Thread-safe collection of every scope failure (tenant work units today; product/server
     // phases as their capture is added), rendered once into the end-of-run roll-up.
     private readonly ConcurrentBag<FailureRecord> _failureRecords = new();
     private bool _rollupEmitted;
     private bool _anyFailure;
+
+    // Deployment summary report (#243, E4e). _startedUtc marks the run's wall-clock start
+    // (captured first thing in the QuenchProduct wrapper); _summaryWritten guards
+    // WriteDeploymentSummary so an abort-path write can never double-fire alongside the
+    // normal-completion write.
+    private DateTime _startedUtc;
+    private bool _summaryWritten;
+    // Captured pre-run (before this run marks any of its own steps complete) so the report
+    // reflects whether the run RESUMED — reading the checkpoint at emit time would see this
+    // run's own in-progress completions and report true for nearly every run.
+    private bool _resumedFromCheckpoint;
+
+    // Thread-safe collection of every work unit's outcome + duration (#243 Deployment Summary
+    // Report, slice E4a). Passive capture only — a later slice (E4d) assembles this into the
+    // report's targets[]; nothing reads it yet.
+    private readonly ConcurrentBag<TargetResult> _targetResults = new();
+
+    /// <summary>Snapshot of every work unit's captured outcome so far. Used by a later slice (E4d).</summary>
+    internal IReadOnlyCollection<TargetResult> TargetResults => _targetResults.ToArray();
+
+    internal MigrationScriptCapture MigrationScripts => _migrationScripts;
+
+    internal WhatIfCapture WhatIf => _whatIf;
 
     /// <summary>
     /// True when any template or product-level step reported a fatal failure during
@@ -565,6 +610,32 @@ public class ProductQuench
 
     public void QuenchProduct(bool suppressKindlingForTesting = false)
     {
+        _startedUtc = DateTime.UtcNow;
+
+        _runTiming.Start();
+        try
+        {
+            QuenchProductCore(suppressKindlingForTesting);
+        }
+        catch
+        {
+            // An exception escaping Core (e.g. a baseline/validate/after-product-script failure that
+            // throws rather than routing through a hard-abort site) heads for the unhandled-exception
+            // handler, which backs up logs and exits 3. Emit a best-effort Aborted summary first so
+            // even these failure exits produce a report, then rethrow to preserve existing behavior.
+            _runTiming.Stop();
+            WriteDeploymentSummary(RunOutcome.Aborted, 3);
+            throw;
+        }
+        _runTiming.Stop();
+
+        // Normal Success / continue-mode PartialFailure. (Hard-abort sites inside Core already wrote
+        // their Aborted summary and Exit()ed before control could return here.)
+        WriteDeploymentSummary(Failed ? RunOutcome.PartialFailure : RunOutcome.Success, Failed ? 2 : 0);
+    }
+
+    private void QuenchProductCore(bool suppressKindlingForTesting)
+    {
         _progressLog.Info($"Begin Quench of {_product.Name}");
 
         LogProductInfo();
@@ -576,6 +647,7 @@ public class ProductQuench
         RemoveOldTableQuenchScripts();
 
         var summary = _checkpointing.GetProductCheckpointSummary(_product.Name);
+        _resumedFromCheckpoint = summary.HasAnyCompleted;
         if (summary.HasAnyCompleted)
             _progressLog.Info($"Resuming from checkpoint (Before Scripts: {summary.TotalBeforeScripts} across {summary.ServersWithBeforeScripts} server(s), Templates: {summary.CompletedTemplates}, After Scripts: {summary.TotalAfterScripts} across {summary.ServersWithAfterScripts} server(s))");
 
@@ -702,6 +774,75 @@ public class ProductQuench
         // appender) — NOT through _progressLog — so it reaches the console once at end of run without
         // duplicating error content into the progress stream that exact-count assertions depend on.
         LogFactory.GetLogger("FailureLog").Info(report);
+    }
+
+    /// <summary>
+    /// Assembles and writes the deployment summary report (#243, E4e) — the run's normal
+    /// Success/PartialFailure completion AND all three hard-abort sites funnel through here.
+    /// <see cref="_summaryWritten"/> makes this idempotent (an abort path writes once, then
+    /// <c>LogBackup.BackupLogsAndExit</c> terminates the process) and the try/catch makes it
+    /// strictly best-effort: a failure to assemble or write the report is logged as a warning
+    /// and swallowed — it must never disrupt the run's real logging, exit code, or control flow.
+    /// </summary>
+    private void WriteDeploymentSummary(RunOutcome outcome, int exitCode)
+    {
+        if (_summaryWritten) return;
+        _summaryWritten = true;
+        try
+        {
+            var mode = IsWhatIfOnly ? RunMode.WhatIf : RunMode.Quench;
+            var resumed = _resumedFromCheckpoint;
+            var summary = DeploymentSummaryAssembler.Assemble(
+                _product.Name, _product.Platform.ToString(), ToolVersion(),
+                _startedUtc, DateTime.UtcNow, mode, outcome, exitCode, resumed,
+                _targetResults.ToArray(), _runTiming, _migrationScripts.Snapshot(),
+                _whatIf.Snapshot(), _failureRecords.ToArray(), BottleneckThresholdMs());
+            var (jsonPath, mdPath) = ResolveReportPaths(CommandLineParser.ValueOfSwitch("report", null), ConfigHelper.ResolveLogPath(), "SchemaQuench");
+            var file = FileWrapper.GetFromFactory();
+            file.WriteAllText(jsonPath, DeploymentSummaryJson.Serialize(summary));
+            file.WriteAllText(mdPath, DeploymentSummaryText.Render(summary));
+            _progressLog.Info($"Deployment summary written: {jsonPath}");
+        }
+        catch (Exception ex)
+        {
+            // Best-effort: a summary-write failure must never disrupt the run's real logging or exit.
+            _progressLog.Warn($"Could not write deployment summary: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Unit-testable path resolution: <c>--report &lt;path&gt;</c> redirects both report files to
+    /// <c>&lt;path&gt;.json</c> / <c>&lt;path&gt;.md</c>; otherwise both default alongside the logs
+    /// in <paramref name="logDir"/> as <c>{appName} - Summary.json</c> / <c>.md</c>.
+    /// </summary>
+    internal static (string JsonPath, string MdPath) ResolveReportPaths(string reportSwitch, string logDir, string appName) =>
+        string.IsNullOrWhiteSpace(reportSwitch)
+            ? (Path.Join(logDir, $"{appName} - Summary.json"), Path.Join(logDir, $"{appName} - Summary.md"))
+            : (reportSwitch + ".json", reportSwitch + ".md");
+
+    // Relativizes a product-folder script's on-disk path against the product root for the
+    // deployment summary, so product scripts read like "Jobs/Job 1.sql" rather than a full
+    // absolute path — matching the relative form DatabaseQuench.GetRelativeScriptPath produces
+    // for template scripts.
+    internal static string MakeScriptPathRelative(string filePath, string baseDir)
+    {
+        var stripped = LongPathSupport.StripLongPathPrefix(filePath);
+        if (!string.IsNullOrEmpty(baseDir)) stripped = stripped.Replace(baseDir, "");
+        return stripped
+            .Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .TrimStart(Path.AltDirectorySeparatorChar);
+    }
+
+    private int BottleneckThresholdMs() =>
+        int.TryParse(_config["BottleneckThresholdMs"], out var ms) && ms >= 0 ? ms : 30000;
+
+    // Mirrors CommandLineParser.ShowVersionAndExit's reflection so the deployment summary
+    // reports the same tool version the CLI's --version switch shows.
+    private static string ToolVersion()
+    {
+        var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+        return assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version
+               ?? assembly.GetName().Version?.ToString() ?? "unknown";
     }
 
     internal static readonly string[] SpecialTokenTags = ["TableSchema_", "ObjectScripts_", "QueryTokens_", "MaterializedViewSchema_", "IndexedViewSchema_"];
@@ -961,6 +1102,7 @@ public class ProductQuench
             _updateFailed = true;
             _anyFailure = true;
             EmitFailureRollup();
+            WriteDeploymentSummary(RunOutcome.Aborted, 2);
             LogBackup.BackupLogsAndExit("SchemaQuench", 2);
             return;
         }
@@ -995,6 +1137,7 @@ public class ProductQuench
         if (!ShouldAbortOnFailure(template)) return;
 
         EmitFailureRollup();
+        WriteDeploymentSummary(RunOutcome.Aborted, 2);
         LogBackup.BackupLogsAndExit("SchemaQuench", 2);
     }
 
@@ -1048,6 +1191,7 @@ public class ProductQuench
             _errorLog.Error(message);
             _anyFailure = true;
             EmitFailureRollup();
+            WriteDeploymentSummary(RunOutcome.Aborted, 2);
             LogBackup.BackupLogsAndExit("SchemaQuench", 2);
             return false;
         }
@@ -1612,9 +1756,17 @@ public class ProductQuench
             // TemplateTargets-driven provisioning + skip-missing. Defaults preserve existing
             // behavior for discovery-sourced units.
             SchemaFromOverride = unit.SchemaFromOverride,
-            ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing
+            ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing,
+            RunTiming = _runTiming,
+            MigrationScripts = _migrationScripts,
+            WhatIf = _whatIf
         };
+        var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();
+        workUnitStopwatch.Stop();
+        _targetResults.Add(new TargetResult(
+            quench.LogPrefix, unit.Server, unit.DatabaseName, unit.SchemaName ?? "", unit.TemplateName,
+            TargetResult.DeriveOutcome(quench.QuenchSuccessful, quench.WasSkipped), workUnitStopwatch.ElapsedMilliseconds));
         if (!quench.QuenchSuccessful)
         {
             if (quench.LastFailure != null) _failureRecords.Add(quench.LastFailure);
@@ -1669,6 +1821,7 @@ public class ProductQuench
                 script.HasBeenQuenched = true;
                 script.Error = null;
                 _checkpointing.MarkScriptCompleted(ProductScopeForServer(server), slot, script.LogPath);
+                _migrationScripts.Record(server, "", "", "", slot, MakeScriptPathRelative(script.LogPath, Path.GetDirectoryName(_product.FilePath) ?? ""));
             }
             catch (Exception ex)
             {
