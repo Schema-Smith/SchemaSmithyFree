@@ -32,6 +32,14 @@ public class DatabaseQuench
     public bool QuenchSuccessful { get; private set; }
 
     /// <summary>
+    /// True when <see cref="Execute"/> short-circuited via the benign
+    /// <see cref="SchemaPresence.MissingSkipped"/> path — distinguishes a skipped iteration from a
+    /// real success for the deployment summary report (#243), since both leave
+    /// <see cref="QuenchSuccessful"/> true. Default false.
+    /// </summary>
+    public bool WasSkipped { get; private set; }
+
+    /// <summary>
     /// Set to a non-null <see cref="FailureRecord"/> when <see cref="Execute"/> fails, so the
     /// dispatching <c>ProductQuench.RunOneWorkUnit</c> can collect this tenant's failure (with its
     /// captured context tail) into the end-of-run roll-up. Null on success.
@@ -392,6 +400,7 @@ public class DatabaseQuench
                 if (EnsureSchemaExists(command) == SchemaPresence.MissingSkipped)
                 {
                     QuenchSuccessful = true;
+                    WasSkipped = true;
                     return;
                 }
 

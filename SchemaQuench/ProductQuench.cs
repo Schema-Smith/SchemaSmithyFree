@@ -4,6 +4,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using log4net;
@@ -54,6 +55,14 @@ public class ProductQuench
     private readonly ConcurrentBag<FailureRecord> _failureRecords = new();
     private bool _rollupEmitted;
     private bool _anyFailure;
+
+    // Thread-safe collection of every work unit's outcome + duration (#243 Deployment Summary
+    // Report, slice E4a). Passive capture only — a later slice (E4d) assembles this into the
+    // report's targets[]; nothing reads it yet.
+    private readonly ConcurrentBag<TargetResult> _targetResults = new();
+
+    /// <summary>Snapshot of every work unit's captured outcome so far. Used by a later slice (E4d).</summary>
+    internal IReadOnlyCollection<TargetResult> TargetResults => _targetResults.ToArray();
 
     /// <summary>
     /// True when any template or product-level step reported a fatal failure during
@@ -1636,7 +1645,12 @@ public class ProductQuench
             ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing,
             RunTiming = _runTiming
         };
+        var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();
+        workUnitStopwatch.Stop();
+        _targetResults.Add(new TargetResult(
+            quench.LogPrefix, unit.Server, unit.DatabaseName, unit.SchemaName ?? "", unit.TemplateName,
+            TargetResult.DeriveOutcome(quench.QuenchSuccessful, quench.WasSkipped), workUnitStopwatch.ElapsedMilliseconds));
         if (!quench.QuenchSuccessful)
         {
             if (quench.LastFailure != null) _failureRecords.Add(quench.LastFailure);
