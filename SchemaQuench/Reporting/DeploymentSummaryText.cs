@@ -160,9 +160,12 @@ public static class DeploymentSummaryText
     }
 
     private static string FormatScope(string server, string database, string schema)
-        => string.IsNullOrEmpty(schema)
-            ? $"{server} / {database}"
-            : $"{server} / {database} [{schema}]";
+    {
+        // Product-folder scripts are server-scoped (no database) — collapse to just the server
+        // rather than emitting a dangling "server / ".
+        var scope = string.IsNullOrEmpty(database) ? server : $"{server} / {database}";
+        return string.IsNullOrEmpty(schema) ? scope : $"{scope} [{schema}]";
+    }
 
     private static string FormatUtc(DateTime value)
         => value.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);

@@ -58,4 +58,23 @@ public class DeploymentSummaryEmitTests
         Assert.That(jsonPath, Is.EqualTo(Path.Join("/logs", "SchemaTongs - Summary.json")));
         Assert.That(mdPath, Is.EqualTo(Path.Join("/logs", "SchemaTongs - Summary.md")));
     }
+
+    [Test]
+    public void MakeScriptPathRelative_StripsProductRoot_AndNormalizesSeparators()
+    {
+        var full = string.Join(Path.DirectorySeparatorChar, "C:", "root", "Jobs", "SubFolder", "Job 2.sql");
+        var baseDir = string.Join(Path.DirectorySeparatorChar, "C:", "root");
+
+        var relative = ProductQuench.MakeScriptPathRelative(full, baseDir);
+
+        Assert.That(relative, Is.EqualTo("Jobs/SubFolder/Job 2.sql"));
+    }
+
+    [Test]
+    public void MakeScriptPathRelative_EmptyBaseDir_ReturnsNormalizedTrimmedPath()
+    {
+        var relative = ProductQuench.MakeScriptPathRelative("/root/Jobs/Job 1.sql", "");
+
+        Assert.That(relative, Is.EqualTo("root/Jobs/Job 1.sql"));
+    }
 }

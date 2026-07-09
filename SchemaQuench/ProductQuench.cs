@@ -815,6 +815,19 @@ public class ProductQuench
             ? (Path.Join(logDir, $"{appName} - Summary.json"), Path.Join(logDir, $"{appName} - Summary.md"))
             : (reportSwitch + ".json", reportSwitch + ".md");
 
+    // Relativizes a product-folder script's on-disk path against the product root for the
+    // deployment summary, so product scripts read like "Jobs/Job 1.sql" rather than a full
+    // absolute path — matching the relative form DatabaseQuench.GetRelativeScriptPath produces
+    // for template scripts.
+    internal static string MakeScriptPathRelative(string filePath, string baseDir)
+    {
+        var stripped = LongPathSupport.StripLongPathPrefix(filePath);
+        if (!string.IsNullOrEmpty(baseDir)) stripped = stripped.Replace(baseDir, "");
+        return stripped
+            .Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .TrimStart(Path.AltDirectorySeparatorChar);
+    }
+
     private int BottleneckThresholdMs() =>
         int.TryParse(_config["BottleneckThresholdMs"], out var ms) && ms >= 0 ? ms : 30000;
 
@@ -1803,7 +1816,7 @@ public class ProductQuench
                 script.HasBeenQuenched = true;
                 script.Error = null;
                 _checkpointing.MarkScriptCompleted(ProductScopeForServer(server), slot, script.LogPath);
-                _migrationScripts.Record(server, "", "", "", slot, script.LogPath);
+                _migrationScripts.Record(server, "", "", "", slot, MakeScriptPathRelative(script.LogPath, Path.GetDirectoryName(_product.FilePath) ?? ""));
             }
             catch (Exception ex)
             {

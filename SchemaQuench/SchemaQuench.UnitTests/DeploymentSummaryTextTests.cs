@@ -267,4 +267,24 @@ public class DeploymentSummaryTextTests
         Assert.That(result, Does.Contain("tables=3"));
         Assert.That(result, Does.Not.Contain("(not instrumented)"));
     }
+
+    // ─── Scope formatting: product-folder scripts have no database ───────────────
+
+    [Test]
+    public void Render_ScriptWithEmptyDatabase_RendersServerOnly_NoDanglingSlash()
+    {
+        // Product-folder migration scripts are server-scoped — no template/schema/database. The
+        // scope must collapse to just the server, not "primary / " with a dangling separator.
+        var productScript = new List<MigrationScriptRecord>
+        {
+            new(Path: "Jobs/Job 1.sql", Slot: "Before Product", Template: "",
+                Schema: null, Server: "primary", Database: null, Outcome: "Ran")
+        };
+        var summary = BuildFullyPopulatedSummary() with { MigrationScripts = productScript };
+
+        var result = DeploymentSummaryText.Render(summary);
+
+        Assert.That(result, Does.Contain("Jobs/Job 1.sql — primary"));
+        Assert.That(result, Does.Not.Contain("Jobs/Job 1.sql — primary / "));
+    }
 }
