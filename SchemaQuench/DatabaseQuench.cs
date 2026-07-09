@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -57,6 +58,14 @@ public class DatabaseQuench
     /// <see cref="Template.CreateSchemaIfMissing"/> remains the authority.
     /// </summary>
     public bool ProvisionSchemaIfMissing { get; init; }
+
+    /// <summary>
+    /// Shared run-level timing collector, set via the object initializer at the
+    /// <c>ProductQuench</c> construction site. Null on any DatabaseQuench built without one
+    /// (e.g. existing unit tests) — every timing call site null-guards with <c>RunTiming?.Record</c>
+    /// so timing is purely additive instrumentation, never a behavior dependency.
+    /// </summary>
+    public RunTiming RunTiming { get; init; }
 
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly ILog _errorLog = LogFactory.GetLogger("ErrorLog");
@@ -418,6 +427,7 @@ public class DatabaseQuench
                 // may reference {{SchemaName}} for schema templates).
                 if (!string.IsNullOrWhiteSpace(_iteration.BaselineValidationScript))
                 {
+                    var validateBaselineSw = Stopwatch.StartNew();
                     _checkpointing.Track(DbScope, "ValidateBaseline", () =>
                     {
                         SafeProgressLog("  Validate Baseline");
@@ -433,6 +443,8 @@ public class DatabaseQuench
                             throw;
                         }
                     });
+                    validateBaselineSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "ValidateBaseline", validateBaselineSw.ElapsedMilliseconds, 0);
                 }
 
                 // Step: Object scripts without unresolved tokens
@@ -495,7 +507,10 @@ public class DatabaseQuench
                 // Step: Modified tables
                 if (!_template.IndexOnlyTableQuenches && _updateTables)
                 {
+                    var modifiedTablesSw = Stopwatch.StartNew();
                     _checkpointing.Track(DbScope, "ModifiedTables", () => QuenchModifiedTables(effectiveTableCmd));
+                    modifiedTablesSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "ModifiedTables", modifiedTablesSw.ElapsedMilliseconds, 0);
                 }
 
                 if (!IsWhatIf)
@@ -518,7 +533,10 @@ public class DatabaseQuench
                 // Step: Indexes and constraints
                 if (_updateTables)
                 {
+                    var indexesAndConstraintsSw = Stopwatch.StartNew();
                     _checkpointing.Track(DbScope, "IndexesAndConstraints", () => QuenchIndexesAndConstraints(effectiveTableCmd));
+                    indexesAndConstraintsSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "IndexesAndConstraints", indexesAndConstraintsSw.ElapsedMilliseconds, 0);
                 }
 
                 // MySQL: cleanup temp tables after index quench
@@ -539,6 +557,7 @@ public class DatabaseQuench
                     if (_deliverData)
                     {
                         // Data delivery — Pro determines behavior based on license.
+                        var tableDataDeliverySw = Stopwatch.StartNew();
                         _checkpointing.Track(DbScope, "TableDataDelivery", () =>
                         {
                             // Register platform-specific script helper if not already registered
@@ -579,6 +598,8 @@ public class DatabaseQuench
                                 }
                             });
                         });
+                        tableDataDeliverySw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "TableDataDelivery", tableDataDeliverySw.ElapsedMilliseconds, 0);
 
                         if (_iteration.ObjectScripts.Union(_iteration.TableDataScripts).Any(s => !s.HasBeenQuenched))
                         {
@@ -590,24 +611,33 @@ public class DatabaseQuench
                     // Foreign keys after data delivery (all platforms)
                     if (!_template.IndexOnlyTableQuenches && _updateTables)
                     {
+                        var foreignKeysSw = Stopwatch.StartNew();
                         _checkpointing.Track(DbScope, "ForeignKeys", () =>
                         {
                             QuenchForeignKeys(effectiveTableCmd);
                             if (_product.Platform == Platform.MySQL)
                                 CleanupMySqlTempTables(command);
                         });
+                        foreignKeysSw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "ForeignKeys", foreignKeysSw.ElapsedMilliseconds, 0);
                     }
 
                     // Step: Materialized views (PostgreSQL only)
                     if (_product.Platform == Platform.PostgreSQL && _template.MaterializedViews.Count > 0)
                     {
+                        var materializedViewQuenchSw = Stopwatch.StartNew();
                         _checkpointing.Track(DbScope, "MaterializedViewQuench", () => QuenchMaterializedViews(effectiveTableCmd));
+                        materializedViewQuenchSw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "MaterializedViewQuench", materializedViewQuenchSw.ElapsedMilliseconds, 0);
                     }
 
                     // Step: Indexed views (SQL Server only)
                     if (_product.Platform == Platform.SqlServer && _template.IndexedViews.Count > 0)
                     {
+                        var indexedViewQuenchSw = Stopwatch.StartNew();
                         _checkpointing.Track(DbScope, "IndexedViewQuench", () => QuenchIndexedViews(effectiveTableCmd));
+                        indexedViewQuenchSw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "IndexedViewQuench", indexedViewQuenchSw.ElapsedMilliseconds, 0);
                     }
 
                     SafeProgressLog("  Quenching after database scripts");
@@ -615,6 +645,7 @@ public class DatabaseQuench
 
                     if (!string.IsNullOrWhiteSpace(_iteration.VersionStampScript))
                     {
+                        var versionStampSw = Stopwatch.StartNew();
                         _checkpointing.Track(DbScope, "VersionStamp", () =>
                         {
                             SafeProgressLog("  Stamp version");
@@ -629,6 +660,8 @@ public class DatabaseQuench
                                 throw;
                             }
                         });
+                        versionStampSw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "VersionStamp", versionStampSw.ElapsedMilliseconds, 0);
                     }
                 }
                 else

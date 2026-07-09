@@ -43,6 +43,12 @@ public class ProductQuench
     private readonly ICheckpointing _checkpointing;
     private bool _updateFailed;
 
+    // Run-level timing collector (#243 Deployment Summary Report, slice 1). Started/stopped around
+    // the whole run and handed to each DatabaseQuench work unit (see the object-initializer at the
+    // DatabaseQuench construction site) so per-slot Record calls land in one shared collector for a
+    // later slice to assemble into the report.
+    private readonly RunTiming _runTiming = new();
+
     // Thread-safe collection of every scope failure (tenant work units today; product/server
     // phases as their capture is added), rendered once into the end-of-run roll-up.
     private readonly ConcurrentBag<FailureRecord> _failureRecords = new();
@@ -564,6 +570,21 @@ public class ProductQuench
     }
 
     public void QuenchProduct(bool suppressKindlingForTesting = false)
+    {
+        // Time the full run; finally guarantees Stop() on every exit path (return, throw, normal end)
+        // without threading Stop() through the several exit sites inside the core body.
+        _runTiming.Start();
+        try
+        {
+            QuenchProductCore(suppressKindlingForTesting);
+        }
+        finally
+        {
+            _runTiming.Stop();
+        }
+    }
+
+    private void QuenchProductCore(bool suppressKindlingForTesting)
     {
         _progressLog.Info($"Begin Quench of {_product.Name}");
 
@@ -1612,7 +1633,8 @@ public class ProductQuench
             // TemplateTargets-driven provisioning + skip-missing. Defaults preserve existing
             // behavior for discovery-sourced units.
             SchemaFromOverride = unit.SchemaFromOverride,
-            ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing
+            ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing,
+            RunTiming = _runTiming
         };
         quench.Execute();
         if (!quench.QuenchSuccessful)
