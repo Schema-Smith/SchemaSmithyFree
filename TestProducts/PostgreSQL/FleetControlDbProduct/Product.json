@@ -1,0 +1,11 @@
+{
+    "Name": "FleetControlDbProduct",
+    "TemplateOrder": [
+        "FleetControlDb",
+        "FleetInitDb"
+    ],
+    "ScriptTokens": {
+        "MainDB": "TestMain"
+    },
+    "Platform": "PostgreSQL"
+}
