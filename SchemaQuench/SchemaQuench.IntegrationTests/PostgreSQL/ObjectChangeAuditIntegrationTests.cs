@@ -47,8 +47,6 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
             "expected constraint/created for the check constraint");
         Assert.That(created.Any(r => r is { Type: "foreignKey", Action: "created" } && r.Name.Contains("FK_AuditChild")),
             "expected foreignKey/created for FK_AuditChild_Parent");
-        Assert.That(created.Any(r => r is { Type: "column", Action: "created" } && r.Name.Contains("Calc")),
-            "expected column/created for the computed column Calc");
 
         ClearAudit(cmd);
 
@@ -67,6 +65,8 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
             "expected constraint/dropped for the check constraint");
         Assert.That(changed.Any(r => r is { Type: "table", Action: "dropped" } && r.Name.Contains("AuditDrop")),
             "expected table/dropped for AuditDrop");
+        Assert.That(changed.Any(r => r is { Type: "column", Action: "created" } && r.Name.Contains("Calc")),
+            "expected column/created for the computed column Calc added to the existing table");
 
         DropIfExists(cmd, "public", "AuditChild");
         DropIfExists(cmd, "public", "AuditParent");
@@ -86,8 +86,7 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
             "Columns": [
                 { "Name": "Id", "DataType": "INT4", "Nullable": false },
                 { "Name": "ParentId", "DataType": "INT4", "Nullable": false },
-                { "Name": "Name", "DataType": "VARCHAR(50)", "Nullable": true },
-                { "Name": "Calc", "DataType": "INT4", "ComputedExpression": "\"Id\" + \"ParentId\"" }
+                { "Name": "Name", "DataType": "VARCHAR(50)", "Nullable": true }
             ],
             "Indexes": [
                 { "Name": "PK_AuditChild", "PrimaryKey": true, "IndexColumns": "Id" },
