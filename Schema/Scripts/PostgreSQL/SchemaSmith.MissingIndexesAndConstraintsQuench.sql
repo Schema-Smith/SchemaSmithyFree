@@ -36,7 +36,13 @@ BEGIN
                        FROM temp_columns tc
                        WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                          AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
-                         AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)) || ';', CHR(10))
+                         AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)) || ';' || CHR(10) ||
+                    -- Object-change audit (#243 E5): one row per computed column added (folded ALTER above).
+                    COALESCE((SELECT STRING_AGG('INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''column'', ''' || tt."Schema" || '.' || tt."Name" || '.' || tc."Name" || ''', ''created'');', CHR(10))
+                                FROM temp_columns tc
+                                WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
+                                  AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
+                                  AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)), ''), CHR(10))
     INTO sql_script
     FROM temp_tables tt
     WHERE EXISTS(SELECT * FROM information_schema.tables t WHERE t.table_schema = tt."Schema" AND t.table_name = tt."Name")
@@ -66,7 +72,8 @@ BEGIN
                                    THEN ' WITH (fillfactor = ' || ti."FillFactor" || ') '
                                    ELSE ' ' END ||
                               CASE WHEN NULLIF(ti."FilterExpression", '') IS NOT NULL THEN ' WHERE ' || ti."FilterExpression" ELSE '' END || ';'
-                         END, CHR(10))
+                         END || CHR(10) ||
+                    'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''' || CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey" THEN 'constraint' ELSE 'index' END || ''', ''' || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."Name" || ''', ''created'');', CHR(10))
     INTO sql_script
     FROM temp_indexes ti
     WHERE NOT EXISTS (SELECT * 
@@ -103,7 +110,8 @@ BEGIN
                     'CREATE STATISTICS "' || ts."TableSchema" || '"."' || ts."Name" || '"' ||
                     CASE WHEN NULLIF(TRIM(ts."Kind"), '') IS NOT NULL THEN ' (' || ts."Kind" ||')' ELSE '' END ||
                     ' ON ' || "SchemaSmith"."QuoteIndexColumnList"(ts."StatisticsColumns") ||
-                    ' FROM "' || ts."TableSchema" || '"."' || ts."TableName" || '";', CHR(10))
+                    ' FROM "' || ts."TableSchema" || '"."' || ts."TableName" || '";' || CHR(10) ||
+                    'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''statistic'', ''' || ts."TableSchema" || '.' || ts."TableName" || '.' || ts."Name" || ''', ''created'');', CHR(10))
     INTO sql_script
     FROM temp_statistics ts
     WHERE NOT EXISTS (SELECT 1
@@ -123,7 +131,8 @@ BEGIN
                                FROM JSON_ARRAY_ELEMENTS(tc."ExcludeColumns"::JSON) AS celem) || ')' ||
                     CASE WHEN NULLIF(TRIM(tc."FilterExpression"), '') IS NOT NULL THEN ' WHERE (' || tc."FilterExpression" || ')' ELSE '' END ||
                     CASE WHEN tc."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
-                    CASE WHEN tc."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END || ';', CHR(10))
+                    CASE WHEN tc."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END || ';' || CHR(10) ||
+                    'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''constraint'', ''' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || ''', ''created'');', CHR(10))
     INTO sql_script
     FROM temp_excludes tc
     WHERE NOT EXISTS (SELECT 1
@@ -138,7 +147,8 @@ BEGIN
 
   RAISE NOTICE 'Add Missing Defaults';
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing default for ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
-                    'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ALTER COLUMN "' || tc."Name" || '" SET DEFAULT ' || tc."Default" ||';', CHR(10))
+                    'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ALTER COLUMN "' || tc."Name" || '" SET DEFAULT ' || tc."Default" ||';' || CHR(10) ||
+                    'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''constraint'', ''' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || ' (default)'', ''created'');', CHR(10))
     INTO sql_script
     FROM temp_columns tc
     WHERE NULLIF(tc."Default", '') IS NOT NULL
@@ -149,7 +159,8 @@ BEGIN
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing check constraint ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ADD CONSTRAINT "' || tc."Name" || '" CHECK (' || tc."Expression" || ')' ||
                     CASE WHEN tc."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
-                    CASE WHEN tc."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END || ';', CHR(10))
+                    CASE WHEN tc."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END || ';' || CHR(10) ||
+                    'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''constraint'', ''' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || ''', ''created'');', CHR(10))
     INTO sql_script
     FROM temp_checks tc
     WHERE NOT EXISTS (SELECT 1 
@@ -166,7 +177,8 @@ BEGIN
   -- and modify-detection (in ModifiedTableQuench) can both key on it.
   RAISE NOTICE 'Add Missing Column Check Constraints';
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing column check constraint ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
-                    'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ADD CONSTRAINT "CK_' || tc."TableName" || '_' || tc."Name" || '" CHECK (' || tc."CheckExpression" || ');', CHR(10))
+                    'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ADD CONSTRAINT "CK_' || tc."TableName" || '_' || tc."Name" || '" CHECK (' || tc."CheckExpression" || ');' || CHR(10) ||
+                    'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''constraint'', ''' || tc."TableSchema" || '.' || tc."TableName" || '.CK_' || tc."TableName" || '_' || tc."Name" || ''', ''created'');', CHR(10))
     INTO sql_script
     FROM temp_columns tc
     WHERE NULLIF(tc."CheckExpression", '') IS NOT NULL

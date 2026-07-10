@@ -16,7 +16,8 @@ BEGIN
                     CASE WHEN fk."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
                     CASE WHEN fk."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END ||
                     CASE WHEN NULLIF(fk."DeleteAction", '') IS NOT NULL THEN ' ON DELETE ' || fk."DeleteAction" ELSE '' END ||
-                    CASE WHEN NULLIF(fk."UpdateAction", '') IS NOT NULL THEN ' ON UPDATE ' || fk."UpdateAction" ELSE '' END || ';', CHR(10))
+                    CASE WHEN NULLIF(fk."UpdateAction", '') IS NOT NULL THEN ' ON UPDATE ' || fk."UpdateAction" ELSE '' END || ';' || CHR(10) ||
+                    'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''foreignKey'', ''' || fk."TableSchema" || '.' || fk."TableName" || '.' || fk."Name" || ''', ''created'');', CHR(10))
     INTO sql_script
     FROM temp_fks fk
     WHERE NOT EXISTS (SELECT 1

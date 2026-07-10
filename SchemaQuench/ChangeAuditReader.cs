@@ -23,7 +23,9 @@ public static class ChangeAuditReader
             Platform.SqlServer => ReadRows(command,
                 "SELECT ObjectType, ObjectName, ActionType FROM SchemaSmith.ChangeAudit WHERE SessionId = @@SPID ORDER BY Id",
                 "DELETE FROM SchemaSmith.ChangeAudit WHERE SessionId = @@SPID"),
-            // Slice D: Platform.PostgreSQL => ...
+            Platform.PostgreSQL => ReadRows(command,
+                "SELECT \"ObjectType\", \"ObjectName\", \"ActionType\" FROM \"SchemaSmith\".\"ChangeAudit\" WHERE \"SessionId\" = pg_backend_pid() ORDER BY \"Id\"",
+                "DELETE FROM \"SchemaSmith\".\"ChangeAudit\" WHERE \"SessionId\" = pg_backend_pid()"),
             // Slice E: Platform.MySQL => ...
             _ => null
         };
