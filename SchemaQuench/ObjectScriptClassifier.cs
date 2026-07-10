@@ -1,5 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System.Linq;
+
 namespace SchemaQuench;
 
 /// <summary>
@@ -12,10 +14,8 @@ public static class ObjectScriptClassifier
 {
     public static string Classify(string logPath)
     {
-        var segments = (logPath ?? "").Split('/', '\\');
-        foreach (var seg in segments)
+        foreach (var s in (logPath ?? "").Split('/', '\\').Select(seg => seg.Trim().ToLowerInvariant()))
         {
-            var s = seg.Trim().ToLowerInvariant();
             if (s is "procedures" or "storedprocedures" or "procs") return "procedure";
             if (s is "views") return "view";
             if (s is "functions" or "funcs") return "function";
