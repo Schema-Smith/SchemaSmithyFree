@@ -90,6 +90,7 @@ public class DeploymentSummaryJsonTests
             Created: new CreatedCounts(0, 0, 0, 0, 0, 0, 0),
             Modified: new ModifiedCounts(0, 0),
             Dropped: new DroppedCounts(0, 0, 0, 0),
+            ScriptsRan: 0,
             Details: new List<ObjectChangeDetail>());
 
         return new DeploymentSummary(
@@ -227,6 +228,8 @@ public class DeploymentSummaryJsonTests
             Assert.That(json.SelectToken($"objectChanges.modified.{key}"), Is.Not.Null, $"modified.{key} missing");
         foreach (var key in new[] { "tables", "indexes", "constraints", "foreignKeys" })
             Assert.That(json.SelectToken($"objectChanges.dropped.{key}"), Is.Not.Null, $"dropped.{key} missing");
+
+        Assert.That(json.SelectToken("objectChanges.scriptsRan"), Is.Not.Null, "scriptsRan missing");
 
         // PascalCase ForeignKeys must NOT leak through the camelCase resolver.
         Assert.That(json.SelectToken("objectChanges.created.ForeignKeys"), Is.Null);

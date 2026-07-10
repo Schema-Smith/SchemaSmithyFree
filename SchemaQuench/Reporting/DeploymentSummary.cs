@@ -84,6 +84,7 @@ public sealed record ObjectChangeSummary(
     CreatedCounts Created,
     ModifiedCounts Modified,
     DroppedCounts Dropped,
+    int ScriptsRan,
     IReadOnlyList<ObjectChangeDetail> Details);
 
 public sealed record CreatedCounts(

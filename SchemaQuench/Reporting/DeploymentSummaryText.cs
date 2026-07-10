@@ -157,6 +157,7 @@ public static class DeploymentSummaryText
         lines.Add($"- Created: tables={created.Tables}, indexes={created.Indexes}, constraints={created.Constraints}, foreignKeys={created.ForeignKeys}, procedures={created.Procedures}, views={created.Views}, functions={created.Functions}");
         lines.Add($"- Modified: tables={modified.Tables}, columns={modified.Columns}");
         lines.Add($"- Dropped: tables={dropped.Tables}, indexes={dropped.Indexes}, constraints={dropped.Constraints}, foreignKeys={dropped.ForeignKeys}");
+        lines.Add($"- Ran (object scripts): {objectChanges.ScriptsRan}");
     }
 
     private static string FormatScope(string server, string database, string schema)
