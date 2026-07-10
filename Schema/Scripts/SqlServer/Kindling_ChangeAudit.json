@@ -1,0 +1,53 @@
+{
+  "Schema": "[SchemaSmith]",
+  "Name": "[ChangeAudit]",
+  "Columns": [
+    {
+      "Name": "[Id]",
+      "DataType": "BIGINT IDENTITY(1,1)",
+      "Nullable": false
+    },
+    {
+      "Name": "[SessionId]",
+      "DataType": "INT",
+      "Nullable": false
+    },
+    {
+      "Name": "[ObjectType]",
+      "DataType": "NVARCHAR(64)",
+      "Nullable": false
+    },
+    {
+      "Name": "[ObjectName]",
+      "DataType": "NVARCHAR(512)",
+      "Nullable": false
+    },
+    {
+      "Name": "[ActionType]",
+      "DataType": "VARCHAR(16)",
+      "Nullable": false
+    },
+    {
+      "Name": "[CreatedAt]",
+      "DataType": "DATETIME",
+      "Nullable": false,
+      "Default": "GETDATE()"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_ChangeAudit]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "Clustered": true,
+      "IndexColumns": "[Id]"
+    },
+    {
+      "Name": "[IX_ChangeAudit_SessionId]",
+      "PrimaryKey": false,
+      "Unique": false,
+      "Clustered": false,
+      "IndexColumns": "[SessionId]"
+    }
+  ]
+}

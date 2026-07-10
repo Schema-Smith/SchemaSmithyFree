@@ -1,0 +1,46 @@
+{
+  "Name": "SchemaSmith_ChangeAudit",
+  "Columns": [
+    {
+      "Name": "Id",
+      "DataType": "BIGINT",
+      "Nullable": false,
+      "AutoIncrement": true,
+      "PrimaryKey": true
+    },
+    {
+      "Name": "SessionId",
+      "DataType": "BIGINT",
+      "Nullable": false
+    },
+    {
+      "Name": "ObjectType",
+      "DataType": "VARCHAR(64)",
+      "Nullable": false
+    },
+    {
+      "Name": "ObjectName",
+      "DataType": "VARCHAR(512)",
+      "Nullable": false
+    },
+    {
+      "Name": "ActionType",
+      "DataType": "VARCHAR(16)",
+      "Nullable": false
+    },
+    {
+      "Name": "CreatedAt",
+      "DataType": "DATETIME(3)",
+      "Nullable": true,
+      "Default": "NOW(3)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "IX_SessionId",
+      "PrimaryKey": false,
+      "Unique": false,
+      "IndexColumns": "SessionId"
+    }
+  ]
+}
