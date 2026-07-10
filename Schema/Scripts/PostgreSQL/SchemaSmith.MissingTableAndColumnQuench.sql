@@ -47,7 +47,12 @@ BEGIN
                             CASE WHEN tc."Nullable" THEN '' ELSE ' NOT NULL' END ||
                             CASE WHEN COALESCE(tc."Generated", 'NEVER') NOT LIKE 'GENERATED%IDENTITY%' AND COALESCE(tc."Default", '') != '' THEN ' DEFAULT ' || tc."Default" ELSE '' END, ', ')
                        FROM temp_columns tc
-                       WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name") || ')' ||
+                       WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
+                         -- Defer computed (GENERATED ALWAYS AS expression) columns to the "Add New Computed
+                         -- Columns" step (parity with SQL Server / MySQL) — they may reference columns not yet
+                         -- present at CREATE time, and inlining them here created a plain column then churned
+                         -- it to generated via a drop-and-re-add. Identity columns are NOT deferred.
+                         AND NOT (COALESCE(tc."Generated", 'NEVER') = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> '')) || ')' ||
                     ' WITH (fillfactor = ' || tt."FillFactor" || ');' || CHR(10) ||
                     'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''table'', ''' || tt."Schema" || '.' || tt."Name" || ''', ''created'');', CHR(10))
     INTO sql_script
