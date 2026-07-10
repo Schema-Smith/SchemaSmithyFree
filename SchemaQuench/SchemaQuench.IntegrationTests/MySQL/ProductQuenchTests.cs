@@ -10,6 +10,7 @@ using log4net;
 using Microsoft.Extensions.Configuration;
 
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NSubstitute;
 using Schema.DataAccess;
 using Schema.Delivery;
@@ -514,6 +515,14 @@ public class ProductUpdateTests
 
             AssertScriptsQuenched(_mainDb);
             AssertScriptsQuenched(_secondaryDb);
+
+            // #243 E5: MySQL object-change audit is wired, so a real run is instrumented and the
+            // object scripts (procedures/views/functions) that re-apply are counted as "ran".
+            var summaryJson = JObject.Parse(File.ReadAllText(Path.Join(ConfigHelper.ResolveLogPath(), "SchemaQuench - Summary.json")));
+            Assert.That(summaryJson.SelectToken("objectChanges.instrumented")?.Value<bool>(), Is.True,
+                "objectChanges should be instrumented once the audit reader drains the session table");
+            Assert.That(summaryJson.SelectToken("objectChanges.scriptsRan")?.Value<int>(), Is.GreaterThan(0),
+                "object scripts that ran should be counted");
 
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();

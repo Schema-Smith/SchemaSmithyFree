@@ -170,6 +170,21 @@ BEGIN
         );
 
         -- Fold each table's missing-FK creates into one multi-clause ALTER, materialize, execute.
+        -- Object-change audit (#243 E5): one row per FK about to be created. The create statement
+        -- below folds a table's FKs into one ALTER, so per-FK audit uses the same pre-create NOT
+        -- EXISTS predicate (evaluated before the ALTER runs). Same INFORMATION_SCHEMA read pattern
+        -- the statement build below uses — not the #337 set-based-UPDATE shape.
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'foreignKey', CONCAT(SchemaSmith_StripBacktickWrapping(f.TableName), '.', SchemaSmith_StripBacktickWrapping(f.KeyName)), 'created'
+        FROM _SchemaSmith_ForeignKeys f
+        WHERE NOT EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.TableName)
+              AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
+              AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
+        );
+
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FKCreateStmts;
         CREATE TEMPORARY TABLE _SchemaSmith_FKCreateStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -302,6 +317,13 @@ BEGIN
                 AND BINARY s.INDEX_NAME = BINARY d.ConstraintName
                 AND s.SEQ_IN_INDEX = 1
             GROUP BY d.TableName;
+
+            -- Object-change audit (#243 E5): one row per FK about to be dropped. Set-based over the
+            -- computed _SchemaSmith_FKsToDrop temp (no INFORMATION_SCHEMA — not the #337 shape); the
+            -- drop below folds a table's FKs into one ALTER, so per-FK audit is captured here.
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'foreignKey', CONCAT(TableName, '.', ConstraintName), 'dropped'
+            FROM _SchemaSmith_FKsToDrop;
 
             SET @v_fkdrop_id := (SELECT MIN(RowId) FROM _SchemaSmith_FKDropStmts);
             WHILE @v_fkdrop_id IS NOT NULL DO
