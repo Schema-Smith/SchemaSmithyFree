@@ -6,7 +6,7 @@ When a deployment fails, the *same* logical problem — an orphaned foreign key,
 
 ## The three reporting channels
 
-SchemaSmith runs the same convergence engine on every database, but each engine hands progress and errors back through a different mechanism. Knowing which one you're reading saves time when a deploy stops.
+SchemaSmith runs the same convergence engine on every database, but each engine hands progress and errors back through a different mechanism. Knowing which one you're reading saves time when a deploy stops. For the structured, machine-readable receipt of the whole run — every target, timing, and failure in one file — see the [Deployment Summary Report](deployment-summary-report.md).
 
 | Engine | Channel | How it works |
 | --- | --- | --- |
@@ -29,6 +29,8 @@ SchemaSmith writes two logs per run — a progress log (everything that happened
 When a run has failures, SchemaQuench writes a third log — `SchemaQuench - Failures.log` — that answers "*which* targets failed?" at a glance. A deployment fans out to many `(server, database, schema)` targets in parallel and shares one interleaved progress log; the roll-up pulls every failure back into one consolidated, phase-grouped list.
 
 Each entry names the failed **scope** — a tenant (`[server].[db] [Schema: x]`), a per-server `Before`/`After` product script (`[server]`), or a product-level `Validate` phase — along with the engine error, the resolved-SQL artifact path, and a captured tail of the log lines leading up to the failure. A loud `*** FAILED` banner also marks each failure live in the progress stream, so you can grep `*** FAILED` to jump straight to the failed scopes; the roll-up block echoes to the console at the end of the run.
+
+A failed **user script** now reads with the same detail as a mechanical failure. The `Error:` line carries the specific per-script error — `Unable to quench '<path>': <error>` (with a `(+N more)` tail when several scripts in the scope failed) — and the `Debug SQL:` line points at that script's resolved-SQL artifact. Previously a user-script failure showed only a generic "unable to quench all scripts" message with `n/a` for the artifact; now the roll-up sends you straight to the offending script and the SQL it produced.
 
 It's always on and adds nothing to a clean run (no banner, no roll-up, an empty `Failures.log`). The captured-context depth is the `FailureContextLines` setting — default `25`, or `0` to disable context capture while still listing the failed scopes and their errors. See [configuration.md](configuration.md#failure-triage-roll-up).
 
