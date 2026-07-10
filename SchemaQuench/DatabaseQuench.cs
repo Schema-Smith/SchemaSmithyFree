@@ -1718,17 +1718,12 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     private void DrainChangeAudit(IDbCommand auditCmd)
     {
         if (ChangeAudit == null || auditCmd == null) return;
-        try
-        {
-            var rows = ChangeAuditReader.ReadAndDrain(_product.Platform, auditCmd);
-            if (rows == null) return;
-            foreach (var r in rows) ChangeAudit.Record(r.ObjectType, r.ObjectName, r.Action);
-            ChangeAudit.MarkInstrumented();
-        }
-        catch (Exception ex)
-        {
-            SafeProgressLog($"Change-audit read skipped: {ex.Message}");
-        }
+        // Best-effort: ChangeAuditReader swallows DB errors (absent audit table, unreadable) and
+        // returns null, leaving the run honestly not-instrumented; the record/mark steps can't throw.
+        var rows = ChangeAuditReader.ReadAndDrain(_product.Platform, auditCmd);
+        if (rows == null) return;
+        foreach (var r in rows) ChangeAudit.Record(r.ObjectType, r.ObjectName, r.Action);
+        ChangeAudit.MarkInstrumented();
     }
 
     internal void QuenchDatabaseObjects(IDbCommand destCmd, List<SqlScript> templateObjects, bool showErrors = true)
