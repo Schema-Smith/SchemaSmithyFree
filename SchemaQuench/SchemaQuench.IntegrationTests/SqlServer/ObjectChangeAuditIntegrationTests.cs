@@ -49,6 +49,10 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
             "expected constraint/created for the check constraint");
         Assert.That(created.Any(r => r is { Type: "foreignKey", Action: "created" } && r.Name.Contains("FK_AuditChild")),
             "expected foreignKey/created for FK_AuditChild_Parent");
+        Assert.That(created.Any(r => r is { Type: "column", Action: "created" } && r.Name.Contains("Calc")),
+            "expected column/created for the computed column Calc");
+        Assert.That(created.Any(r => r is { Type: "statistic", Action: "created" } && r.Name.Contains("ST_AuditChild")),
+            "expected statistic/created for ST_AuditChild_Id");
 
         ClearAudit(cmd);
 
@@ -86,7 +90,8 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
             "Columns": [
                 { "Name": "[Id]", "DataType": "INT", "Nullable": false },
                 { "Name": "[ParentId]", "DataType": "INT", "Nullable": false },
-                { "Name": "[Name]", "DataType": "NVARCHAR(50)", "Nullable": true }
+                { "Name": "[Name]", "DataType": "NVARCHAR(50)", "Nullable": true },
+                { "Name": "[Calc]", "DataType": "INT", "ComputedExpression": "[Id]+[ParentId]" }
             ],
             "Indexes": [
                 { "Name": "[PK_AuditChild]", "PrimaryKey": true, "IndexColumns": "[Id]" },
@@ -97,6 +102,9 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
             ],
             "CheckConstraints": [
                 { "Name": "CK_AuditChild_Ids", "Expression": "[Id]<>[ParentId]" }
+            ],
+            "Statistics": [
+                { "Name": "ST_AuditChild_Id", "Columns": "[Id]" }
             ]
         },
         {
@@ -119,9 +127,13 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
             "Columns": [
                 { "Name": "[Id]", "DataType": "INT", "Nullable": false },
                 { "Name": "[ParentId]", "DataType": "INT", "Nullable": false },
-                { "Name": "[Name]", "DataType": "NVARCHAR(100)", "Nullable": true }
+                { "Name": "[Name]", "DataType": "NVARCHAR(100)", "Nullable": true },
+                { "Name": "[Calc]", "DataType": "INT", "ComputedExpression": "[Id]+[ParentId]" }
             ],
-            "Indexes": [ { "Name": "[PK_AuditChild]", "PrimaryKey": true, "IndexColumns": "[Id]" } ]
+            "Indexes": [ { "Name": "[PK_AuditChild]", "PrimaryKey": true, "IndexColumns": "[Id]" } ],
+            "Statistics": [
+                { "Name": "ST_AuditChild_Id", "Columns": "[Id]" }
+            ]
         }
         ]
         """;
