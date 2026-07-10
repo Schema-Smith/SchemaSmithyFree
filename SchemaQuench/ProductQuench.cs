@@ -65,6 +65,11 @@ public class ProductQuench
     // the report's whatIf section for WhatIf-mode runs.
     private readonly WhatIfCapture _whatIf = new();
 
+    // Object-change audit collector (#243 E5). Handed to each DatabaseQuench work unit; the 4 table
+    // procs write session-scoped audit rows that DatabaseQuench drains at end of work unit, and
+    // object-script "ran" rows are recorded C#-side. Assembled into the report's objectChanges.
+    private readonly ChangeAuditCapture _changeAudit = new();
+
     // Thread-safe collection of every scope failure (tenant work units today; product/server
     // phases as their capture is added), rendered once into the end-of-run roll-up.
     private readonly ConcurrentBag<FailureRecord> _failureRecords = new();
@@ -93,6 +98,8 @@ public class ProductQuench
     internal MigrationScriptCapture MigrationScripts => _migrationScripts;
 
     internal WhatIfCapture WhatIf => _whatIf;
+
+    internal ChangeAuditCapture ChangeAudit => _changeAudit;
 
     /// <summary>
     /// True when any template or product-level step reported a fatal failure during
@@ -796,7 +803,7 @@ public class ProductQuench
                 _product.Name, _product.Platform.ToString(), ToolVersion(),
                 _startedUtc, DateTime.UtcNow, mode, outcome, exitCode, resumed,
                 _targetResults.ToArray(), _runTiming, _migrationScripts.Snapshot(),
-                _whatIf.Snapshot(), _failureRecords.ToArray(), BottleneckThresholdMs());
+                _whatIf.Snapshot(), _failureRecords.ToArray(), BottleneckThresholdMs(), _changeAudit);
             var (jsonPath, mdPath) = ResolveReportPaths(CommandLineParser.ValueOfSwitch("report", null), ConfigHelper.ResolveLogPath(), "SchemaQuench");
             var file = FileWrapper.GetFromFactory();
             file.WriteAllText(jsonPath, DeploymentSummaryJson.Serialize(summary));
@@ -1759,7 +1766,8 @@ public class ProductQuench
             ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing,
             RunTiming = _runTiming,
             MigrationScripts = _migrationScripts,
-            WhatIf = _whatIf
+            WhatIf = _whatIf,
+            ChangeAudit = _changeAudit
         };
         var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();

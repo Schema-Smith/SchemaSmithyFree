@@ -94,6 +94,16 @@ public class DatabaseQuench
     /// </summary>
     public WhatIfCapture WhatIf { get; init; }
 
+    /// <summary>
+    /// Shared run-level object-change audit capture, set via the object initializer at the
+    /// <c>ProductQuench</c> construction site (#243 E5). Null on any DatabaseQuench built without one
+    /// (e.g. existing unit tests) — all hook call sites null-guard so capture is purely additive
+    /// instrumentation, never a behavior dependency. The 4 table procs write session-scoped rows
+    /// that <see cref="ChangeAuditReader"/> drains in <c>Execute()</c>'s finally; object scripts are
+    /// recorded here as Action "ran".
+    /// </summary>
+    public ChangeAuditCapture ChangeAudit { get; init; }
+
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly ILog _errorLog = LogFactory.GetLogger("ErrorLog");
 
@@ -749,6 +759,7 @@ public class DatabaseQuench
             {
                 _statusMonitor?.Dispose();
                 _statusMonitor = null;
+                DrainChangeAudit(tableCommand ?? command);
                 connection.Close();
                 tableConnection?.Close();
                 objectsConnection?.Close();
@@ -1671,12 +1682,39 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
                 QuenchOneScript(destCmd, script, _runScriptsTwice, showErrors);
                 if (script.HasBeenQuenched)
+                {
                     _checkpointing.MarkScriptCompleted(DbScope, slot.ToString(), script.LogPath);
+                    if (slot is DatabaseScriptSlot.Object or DatabaseScriptSlot.AfterTablesObject)
+                        ChangeAudit?.RecordRan(ObjectScriptClassifier.Classify(script.LogPath), script.LogPath);
+                }
             }
         }
 
         _debugFileLocation = "";
         if (showErrors) LogScriptErrors(templateObjects);
+    }
+
+    /// <summary>
+    /// Drains this work unit's session-scoped ChangeAudit rows into the run-level capture and marks
+    /// the run instrumented (#243 E5). Runs on the connection the 4 table procs wrote on so the
+    /// session filter is exact. Best-effort: an audit-read failure must never disrupt the run — a
+    /// null return (engine not yet emitting, or the audit table absent) leaves the run honestly
+    /// not-instrumented.
+    /// </summary>
+    private void DrainChangeAudit(IDbCommand auditCmd)
+    {
+        if (ChangeAudit == null || auditCmd == null) return;
+        try
+        {
+            var rows = ChangeAuditReader.ReadAndDrain(_product.Platform, auditCmd);
+            if (rows == null) return;
+            foreach (var r in rows) ChangeAudit.Record(r.ObjectType, r.ObjectName, r.Action);
+            ChangeAudit.MarkInstrumented();
+        }
+        catch (Exception ex)
+        {
+            SafeProgressLog($"Change-audit read skipped: {ex.Message}");
+        }
     }
 
     internal void QuenchDatabaseObjects(IDbCommand destCmd, List<SqlScript> templateObjects, bool showErrors = true)

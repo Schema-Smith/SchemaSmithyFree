@@ -31,7 +31,8 @@ public static class DeploymentSummaryAssembler
         IReadOnlyList<MigrationScriptRun> migrationScripts,
         IReadOnlyList<WhatIfRun> whatIfEntries,
         IReadOnlyList<FailureRecord> failures,
-        long bottleneckThresholdMs)
+        long bottleneckThresholdMs,
+        ChangeAuditCapture changeAudit)
     {
         var run = new RunInfo(
             Product: product,
@@ -74,13 +75,7 @@ public static class DeploymentSummaryAssembler
 
         var whatIf = mode == RunMode.WhatIf ? BuildWhatIfSummary(whatIfEntries) : null;
 
-        var objectChanges = new ObjectChangeSummary(
-            Instrumented: false,
-            Created: new CreatedCounts(0, 0, 0, 0, 0, 0, 0),
-            Modified: new ModifiedCounts(0, 0),
-            Dropped: new DroppedCounts(0, 0, 0, 0),
-            ScriptsRan: 0,
-            Details: Array.Empty<ObjectChangeDetail>());
+        var objectChanges = BuildObjectChanges(changeAudit);
 
         return new DeploymentSummary(
             SchemaVersion: "1.0",
@@ -93,6 +88,56 @@ public static class DeploymentSummaryAssembler
             Failures: failures,
             WhatIf: whatIf,
             ObjectChanges: objectChanges);
+    }
+
+    /// <summary>
+    /// Aggregates the object-change audit (#243 E5) into the report's objectChanges block. The block
+    /// is <c>instrumented:false</c> (all zeros) unless the run's engine produced a real audit read —
+    /// see <see cref="ChangeAuditCapture.Instrumented"/>. created/modified/dropped counts are
+    /// verified change from the 4 table procs (object types table/column/index/constraint/foreignKey);
+    /// object scripts (procedures/views/functions) never "created" — they "ran" (scriptsRan).
+    /// </summary>
+    private static ObjectChangeSummary BuildObjectChanges(ChangeAuditCapture changeAudit)
+    {
+        if (changeAudit is not { Instrumented: true })
+            return new ObjectChangeSummary(
+                Instrumented: false,
+                Created: new CreatedCounts(0, 0, 0, 0, 0, 0, 0),
+                Modified: new ModifiedCounts(0, 0),
+                Dropped: new DroppedCounts(0, 0, 0, 0),
+                ScriptsRan: 0,
+                Details: Array.Empty<ObjectChangeDetail>());
+
+        var rows = changeAudit.Snapshot();
+
+        int Count(string type, string action) =>
+            rows.Count(r => r.ObjectType == type && r.Action == action);
+
+        var created = new CreatedCounts(
+            Tables: Count("table", "created"),
+            Indexes: Count("index", "created"),
+            Constraints: Count("constraint", "created"),
+            ForeignKeys: Count("foreignKey", "created"),
+            Procedures: 0,
+            Views: 0,
+            Functions: 0);
+
+        var modified = new ModifiedCounts(
+            Tables: Count("table", "modified") + Count("table", "renamed"),
+            Columns: Count("column", "modified"));
+
+        var dropped = new DroppedCounts(
+            Tables: Count("table", "dropped"),
+            Indexes: Count("index", "dropped"),
+            Constraints: Count("constraint", "dropped"),
+            ForeignKeys: Count("foreignKey", "dropped"));
+
+        var scriptsRan = rows.Count(r => r.Action == "ran");
+        var details = rows
+            .Select(r => new ObjectChangeDetail(r.ObjectType, r.ObjectName, r.Action))
+            .ToArray();
+
+        return new ObjectChangeSummary(true, created, modified, dropped, scriptsRan, details);
     }
 
     private static WhatIfSummary BuildWhatIfSummary(IReadOnlyList<WhatIfRun> whatIfEntries)
