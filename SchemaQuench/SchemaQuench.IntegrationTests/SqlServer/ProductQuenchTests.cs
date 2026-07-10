@@ -168,6 +168,13 @@ TRUNCATE TABLE SchemaSmith.TestLog";
             var targets = (JArray)json.SelectToken("targets");
             Assert.That(targets, Is.Not.Null.And.Not.Empty);
 
+            // #243 E5: SQL Server object-change audit is wired, so a real run is instrumented and the
+            // object scripts (procedures/views/functions) that re-apply are counted as "ran".
+            Assert.That(json.SelectToken("objectChanges.instrumented")?.Value<bool>(), Is.True,
+                "objectChanges should be instrumented once the audit reader drains the session table");
+            Assert.That(json.SelectToken("objectChanges.scriptsRan")?.Value<int>(), Is.GreaterThan(0),
+                "object scripts that ran should be counted");
+
             var markdown = File.ReadAllText(mdPath);
             Assert.That(markdown, Is.Not.Empty);
 

@@ -83,7 +83,8 @@ BEGIN TRY
                                                            ELSE '' END +
 							                          ')'
                                                  ELSE '' END
-                                       END + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.[Clustered] =  1 THEN 0 ELSE 1 END, i.[IndexName])
+                                       END + ';' + CHAR(13) + CHAR(10) +
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END + ''', ''' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', ''created'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.[Clustered] =  1 THEN 0 ELSE 1 END, i.[IndexName])
     FROM #Indexes i WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.indexes si WITH (NOLOCK)
@@ -151,7 +152,8 @@ BEGIN TRY
 
   RAISERROR('Add Missing Defaults', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering Column ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ADD DEFAULT ' + c.[Default] + ' FOR ' + c.[ColumnName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                  'ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ADD DEFAULT ' + c.[Default] + ' FOR ' + c.[ColumnName] + ';' + CHAR(13) + CHAR(10) +
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ' (default)'', ''created'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Columns c WITH (NOLOCK)
     WHERE RTRIM(ISNULL(c.[Default], '')) <> ''
       AND NOT EXISTS (SELECT * 
@@ -162,7 +164,8 @@ BEGIN TRY
   
   RAISERROR('Add Missing Check Constraints', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ConstraintName] + CASE WHEN RTRIM(ISNULL(cc.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(cc.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ADD CONSTRAINT [' + SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]) + '] CHECK (' + cc.[Expression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ADD CONSTRAINT [' + SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]) + '] CHECK (' + cc.[Expression] + ');' + CHAR(13) + CHAR(10) +
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ConstraintName] + ''', ''created'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #CheckConstraints cc WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.check_constraints sc WITH (NOLOCK)
