@@ -318,6 +318,18 @@ TRUNCATE TABLE SchemaSmith.TestLog";
             _environment.Received(1).Exit(2);
             _environment.DidNotReceive().Exit(3);
 
+            // #338 refinement: the Failures.log roll-up (mirrored in Summary.json failures[]) surfaces
+            // the SPECIFIC per-script error + artifact for a user-script failure — not the generic
+            // "Unable to quench all scripts" / n/a.
+            var json = JObject.Parse(File.ReadAllText(Path.Join(ConfigHelper.ResolveLogPath(), "SchemaQuench - Summary.json")));
+            var failure = json.SelectToken("failures[0]");
+            Assert.That(failure, Is.Not.Null, "a script failure should be recorded");
+            Assert.That(failure!.SelectToken("error")?.Value<string>(),
+                Does.StartWith("Unable to quench '").And.Not.EqualTo("Unable to quench all scripts"),
+                "Error line should name the specific failed script + its error");
+            Assert.That(failure.SelectToken("artifactPath")?.Value<string>(), Does.Contain("Failed"),
+                "Debug SQL should point at the Failed <script> artifact, not n/a");
+
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();
         }

@@ -774,8 +774,22 @@ public class DatabaseQuench
             SafeProgressLogError($"FAILED to quench:\r\n{e.Message}");
             if (!string.IsNullOrWhiteSpace(_debugFileLocation))
                 SafeProgressLogError($"Resolved SQL written to: {_debugFileLocation}");
-            LastFailure = FailureCtx.ToRecord(e.Message,
-                string.IsNullOrWhiteSpace(_debugFileLocation) ? null : _debugFileLocation);
+
+            // #338 refinement: for a user-script failure, surface the specific per-script error +
+            // artifact on the roll-up's Error:/Debug SQL: lines (parity with mechanical failures)
+            // instead of the generic "Unable to quench all scripts" wrapper + n/a.
+            if (e is ScriptQuenchException { Failures.Count: > 0 } scriptFailure)
+            {
+                var first = scriptFailure.Failures[0];
+                var extra = scriptFailure.Failures.Count > 1 ? $" (+{scriptFailure.Failures.Count - 1} more)" : "";
+                LastFailure = FailureCtx.ToRecord($"Unable to quench '{first.LogPath}': {first.Error}{extra}",
+                    string.IsNullOrWhiteSpace(first.ArtifactPath) ? null : first.ArtifactPath);
+            }
+            else
+            {
+                LastFailure = FailureCtx.ToRecord(e.Message,
+                    string.IsNullOrWhiteSpace(_debugFileLocation) ? null : _debugFileLocation);
+            }
             // Terse greppable scope marker; the error text is on the inline "FAILED to quench" line
             // above and in the end-of-run roll-up, so it is not restated here (avoids duplicating
             // error content into the progress stream, which exact-count log assertions rely on).
@@ -1935,20 +1949,22 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         if (scripts.All(x => x.HasBeenQuenched)) return;
 
         var directory = ResolveArtifactDirectory();
+        var failures = new List<ScriptFailure>();
         foreach (var sqlScript in scripts.Where(s => !s.HasBeenQuenched))
         {
             sqlScript.Outcome = ScriptOutcome.Failed;
 
+            string artifactPath = null;
             try
             {
                 var header = $"Failed: {_server}.{_databaseName}" +
                              $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")}" +
                              $" [{sqlScript.LogPath}] — {sqlScript.Error?.Message}";
                 var fileName = GetDebugFileName($"Failed {Path.GetFileNameWithoutExtension(sqlScript.Name)}");
-                var path = ResolvedSqlArtifactWriter.WriteFailureArtifact(directory, ScrubArtifactsEnabled,
+                artifactPath = ResolvedSqlArtifactWriter.WriteFailureArtifact(directory, ScrubArtifactsEnabled,
                     SensitiveTokenValues(), header, sqlScript.Batches, FailingBatchIndex(sqlScript), fileName);
-                SafeProgressLogError($"    Resolved SQL written to: {path}");
-                SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message} — resolved SQL: {path}");
+                SafeProgressLogError($"    Resolved SQL written to: {artifactPath}");
+                SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message} — resolved SQL: {artifactPath}");
             }
             catch (Exception artifactEx)
             {
@@ -1956,9 +1972,12 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             }
 
             SafeProgressLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message}");
+            failures.Add(new ScriptFailure(sqlScript.LogPath, sqlScript.Error?.Message, artifactPath));
         }
 
-        throw new Exception("Unable to quench all scripts");
+        // #338 refinement: carry the per-script specifics so the failure roll-up surfaces the
+        // specific error + artifact (parity with mechanical failures) instead of a generic message.
+        throw new ScriptQuenchException(failures);
     }
 
     private static int FailingBatchIndex(SqlScript script) => script.Batches.Count - 1;

@@ -2062,7 +2062,7 @@ public class DatabaseQuenchTests
             // throws so the script stays unquenched, then LogScriptErrors fires and throws.
             var mockCmd = CreateMockCommand();
             mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception("SQL error"));
-            var ex = Assert.Throws<Exception>(() => quench.QuenchDatabaseObjects(mockCmd, scripts, showErrors: true));
+            var ex = Assert.Throws<ScriptQuenchException>(() => quench.QuenchDatabaseObjects(mockCmd, scripts, showErrors: true));
             Assert.That(ex!.Message, Does.Contain("Unable to quench all scripts"));
 
             // Assert: artifact file received the raw SQL batch body.
@@ -2127,7 +2127,7 @@ public class DatabaseQuenchTests
 
             var mockCmd = CreateMockCommand();
             mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception("SQL error"));
-            Assert.Throws<Exception>(() =>
+            Assert.Throws<ScriptQuenchException>(() =>
                 quench.QuenchDatabaseObjects(mockCmd, new List<SqlScript> { script }, showErrors: true));
 
             // The sensitive value must be masked in the artifact content.
