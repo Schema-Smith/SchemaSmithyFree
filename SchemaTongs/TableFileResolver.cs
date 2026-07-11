@@ -46,7 +46,9 @@ public sealed class TableFileResolver
             catch { continue; } // unreadable/invalid JSON is the loader/validator's concern, not ours
             if (table == null || string.IsNullOrWhiteSpace(table.Name)) continue;
 
-            var key = ((table as IDeliverableTable)?.Schema ?? "", table.Name.Trim());
+            // Schema-template files are schema-scrubbed on extraction, so identity is name-only there.
+            var schema = _isSchemaTemplate ? "" : (table as IDeliverableTable)?.Schema ?? "";
+            var key = (schema, table.Name.Trim());
             if (!_byIdentity.TryGetValue(key, out var entries))
                 _byIdentity[key] = entries = new List<TableFileEntry>();
             entries.Add(new TableFileEntry(path, table.ShouldApplyExpression ?? "", table.VariantName ?? ""));
@@ -55,7 +57,7 @@ public sealed class TableFileResolver
 
     public TableResolution Resolve(string schema, string name)
     {
-        var key = (schema ?? "", (name ?? "").Trim());
+        var key = (_isSchemaTemplate ? "" : schema ?? "", (name ?? "").Trim());
         var matches = _byIdentity.TryGetValue(key, out var entries) ? entries : new List<TableFileEntry>();
 
         if (matches.Count == 0)

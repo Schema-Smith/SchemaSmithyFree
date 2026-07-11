@@ -637,6 +637,14 @@ public class SchemaTongs
         return defaultPath;
     }
 
+    // Marks a content-resolved table path as written so orphan detection spares it (the resolver
+    // picks the path by identity, bypassing the filename-keyed ResolveOutputPath).
+    private void MarkPathWritten(string baseFolderPath, string path)
+    {
+        var folderName = GetRelativeFolderName(baseFolderPath);
+        _folderIndexes.GetValueOrDefault(folderName)?.MarkWritten(path);
+    }
+
     private static string EncodeFileName(string schema, string name, string extension)
     {
         return $"{FileNameEncoder.Encode(schema)}.{FileNameEncoder.Encode(name)}{extension}";
@@ -1911,6 +1919,7 @@ SELECT t.schemaname, t.tablename
 
         var castPath = Path.Combine(_templatePath, "Tables");
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+        var resolver = new TableFileResolver(castPath, _platform, _isSchemaTemplate, IsVariantActive);
 
         foreach (var (schema, table) in tables)
         {
@@ -1930,7 +1939,11 @@ SELECT t.schemaname, t.tablename
             var tableObj = _isSchemaTemplate
                 ? PlatformDeserializer.DeserializeTable(tableJson, _platform)
                 : JsonConvert.DeserializeObject<Table>(tableJson);
-            var tableFile = ResolveOutputPath(castPath, EncodeObjectFileName(schema, table, ".json"));
+            var resolution = resolver.Resolve(schema, table);
+            var tableFile = resolution.WritePath;
+            MarkPathWritten(castPath, tableFile);
+            if (resolution.UngatedEmit)
+                _progressLog.Warn($"    Extracted {schema}.{table} did not match any active variant — writing ungated '{Path.GetFileName(tableFile)}'; resolve its gating (SS-DUP-001).");
             var oldTableFile = ResolveOutputPath(castPath, EncodeObjectFileName(schema, tableObj.OldName.Trim('"'), ".json"));
             _progressLog.Info($"    Casting {tableFile}");
             if (FileWrapper.GetFromFactory().Exists(tableFile) || FileWrapper.GetFromFactory().Exists(oldTableFile))
@@ -2444,6 +2457,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
 
             var tableDir = Path.Combine(_templatePath, "Tables");
             DirectoryWrapper.GetFromFactory().CreateDirectory(tableDir);
+            var resolver = new TableFileResolver(tableDir, _platform, _isSchemaTemplate, IsVariantActive);
 
             var tables = new List<(string Schema, string Table)>();
             using (var reader = command.ExecuteReader())
@@ -2499,7 +2513,11 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                         continue;
                     }
 
-                    var filename = ResolveOutputPath(tableDir, EncodeFileName(table, ".json"));
+                    var resolution = resolver.Resolve("", table);
+                    var filename = resolution.WritePath;
+                    MarkPathWritten(tableDir, filename);
+                    if (resolution.UngatedEmit)
+                        _progressLog.Warn($"    Extracted {table} did not match any active variant — writing ungated '{Path.GetFileName(filename)}'; resolve its gating (SS-DUP-001).");
                     var oldTableFile = !string.IsNullOrEmpty(tableObj.OldName)
                         ? ResolveOutputPath(tableDir, EncodeFileName(tableObj.OldName.Trim('`'), ".json"))
                         : null;
@@ -2594,6 +2612,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             _progressLog.Info("Casting Table Structures");
             var tableDir = Path.Combine(_templatePath, "Tables");
             DirectoryWrapper.GetFromFactory().CreateDirectory(tableDir);
+            var resolver = new TableFileResolver(tableDir, _platform, _isSchemaTemplate, IsVariantActive);
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
@@ -2616,7 +2635,11 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                     continue;
                 }
 
-                var filename = ResolveOutputPath(tableDir, EncodeObjectFileName(tableSchema, tableName, ".json"));
+                var resolution = resolver.Resolve(tableSchema, tableName);
+                var filename = resolution.WritePath;
+                MarkPathWritten(tableDir, filename);
+                if (resolution.UngatedEmit)
+                    _progressLog.Warn($"    Extracted {tableSchema}.{tableName} did not match any active variant — writing ungated '{Path.GetFileName(filename)}'; resolve its gating (SS-DUP-001).");
                 _progressLog.Info($"    Casting {filename}");
                 // Use the platform-aware deserializer so the platform subclass
                 // (e.g., SqlServerTable) materializes — otherwise the base Table

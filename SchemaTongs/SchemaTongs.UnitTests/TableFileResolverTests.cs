@@ -127,6 +127,19 @@ public class TableFileResolverTests
     }
 
     [Test]
+    public void Resolve_SchemaTemplate_MatchesScrubbedFileByNameIgnoringPassedSchema()
+    {
+        // Schema-template files are schema-scrubbed; resolver keys on name only in template mode.
+        var existing = Path.Combine("pkg", "Tables", "Orders.json");
+        StubTablesFolder((existing, TableJson("", "Orders")));
+
+        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: true, AnyGate);
+        var res = resolver.Resolve("dbo", "Orders"); // caller passes the source schema; template mode ignores it
+
+        Assert.That(res.WritePath, Is.EqualTo(existing));
+    }
+
+    [Test]
     public void Resolve_MySqlNoSchemaContent_MatchesByNameAlone()
     {
         var existing = Path.Combine("pkg", "Tables", "Documents.json");
