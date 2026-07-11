@@ -72,7 +72,7 @@ public class TableFileResolverTests
     [Test]
     public void Resolve_SingleExistingMatch_NonCanonicalName_ReturnsExistingPath()
     {
-        var existing = Path.Combine("pkg", "Tables", "legacy-name.json"); // deliberately non-canonical
+        var existing = Path.Join("pkg", "Tables", "legacy-name.json"); // deliberately non-canonical
         StubTablesFolder((existing, TableJson("dbo", "Orders")));
 
         var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, AnyGate);
@@ -85,10 +85,10 @@ public class TableFileResolverTests
     [Test]
     public void Resolve_VariantSet_OneActive_ResolvesToActiveVariantFile()
     {
-        var euPath = Path.Combine("pkg", "Tables", "dbo.Orders.EU.json");
+        var euPath = Path.Join("pkg", "Tables", "dbo.Orders.EU.json");
         StubTablesFolder(
             (euPath, TableJson("dbo", "Orders", "EU", "region='EU'")),
-            (Path.Combine("pkg", "Tables", "dbo.Orders.US.json"), TableJson("dbo", "Orders", "US", "region='US'")));
+            (Path.Join("pkg", "Tables", "dbo.Orders.US.json"), TableJson("dbo", "Orders", "US", "region='US'")));
 
         // EU is active on this source.
         var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, expr => expr == "region='EU'");
@@ -102,8 +102,8 @@ public class TableFileResolverTests
     public void Resolve_VariantSet_NoneActive_ResolvesToBareCanonical_UngatedEmit()
     {
         StubTablesFolder(
-            (Path.Combine("pkg", "Tables", "dbo.Orders.EU.json"), TableJson("dbo", "Orders", "EU", "region='EU'")),
-            (Path.Combine("pkg", "Tables", "dbo.Orders.US.json"), TableJson("dbo", "Orders", "US", "region='US'")));
+            (Path.Join("pkg", "Tables", "dbo.Orders.EU.json"), TableJson("dbo", "Orders", "EU", "region='EU'")),
+            (Path.Join("pkg", "Tables", "dbo.Orders.US.json"), TableJson("dbo", "Orders", "US", "region='US'")));
 
         var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, _ => false);
         var res = resolver.Resolve("dbo", "Orders");
@@ -116,21 +116,21 @@ public class TableFileResolverTests
     public void Resolve_DifferentSchemaSameName_AreDistinctIdentities()
     {
         StubTablesFolder(
-            (Path.Combine("pkg", "Tables", "sales.Orders.json"), TableJson("sales", "Orders")),
-            (Path.Combine("pkg", "Tables", "hr.Orders.json"), TableJson("hr", "Orders")));
+            (Path.Join("pkg", "Tables", "sales.Orders.json"), TableJson("sales", "Orders")),
+            (Path.Join("pkg", "Tables", "hr.Orders.json"), TableJson("hr", "Orders")));
 
         var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, AnyGate);
         var sales = resolver.Resolve("sales", "Orders");
 
         Assert.That(sales.UngatedEmit, Is.False); // not a variant set — different schemas
-        Assert.That(sales.WritePath, Is.EqualTo(Path.Combine("pkg", "Tables", "sales.Orders.json")));
+        Assert.That(sales.WritePath, Is.EqualTo(Path.Join("pkg", "Tables", "sales.Orders.json")));
     }
 
     [Test]
     public void Resolve_SchemaTemplate_MatchesScrubbedFileByNameIgnoringPassedSchema()
     {
         // Schema-template files are schema-scrubbed; resolver keys on name only in template mode.
-        var existing = Path.Combine("pkg", "Tables", "Orders.json");
+        var existing = Path.Join("pkg", "Tables", "Orders.json");
         StubTablesFolder((existing, TableJson("", "Orders")));
 
         var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: true, AnyGate);
@@ -143,7 +143,7 @@ public class TableFileResolverTests
     public void Resolve_QuotedContentIdentifiers_MatchUnquotedQuery()
     {
         // Loaded Name/Schema are quoted ([dbo], [Widget]); the INFORMATION_SCHEMA query is unquoted.
-        var existing = Path.Combine("pkg", "Tables", "dbo.Widget.json");
+        var existing = Path.Join("pkg", "Tables", "dbo.Widget.json");
         StubTablesFolder((existing, TableJson("[dbo]", "[Widget]")));
 
         var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, AnyGate);
@@ -155,7 +155,7 @@ public class TableFileResolverTests
     [Test]
     public void Resolve_MySqlNoSchemaContent_MatchesByNameAlone()
     {
-        var existing = Path.Combine("pkg", "Tables", "Documents.json");
+        var existing = Path.Join("pkg", "Tables", "Documents.json");
         StubTablesFolder((existing, TableJson("", "Documents")));
 
         var resolver = new TableFileResolver(TablesDir, Platform.MySQL, isSchemaTemplate: true, AnyGate);

@@ -62,7 +62,7 @@ public sealed class TableFileResolver
         var matches = _byIdentity.TryGetValue(key, out var entries) ? entries : new List<TableFileEntry>();
 
         if (matches.Count == 0)
-            return new TableResolution(Path.Combine(_tablesDir, TableFileName.Canonical(schema, name, "", _isSchemaTemplate)), UngatedEmit: false);
+            return new TableResolution(Path.Join(_tablesDir, TableFileName.Canonical(schema, name, "", _isSchemaTemplate)), UngatedEmit: false);
 
         if (matches.Count == 1)
             return new TableResolution(matches[0].Path, UngatedEmit: false);
@@ -71,7 +71,7 @@ public sealed class TableFileResolver
         var decision = VariantAttribution.Decide(matches, e => e.Gate, _isVariantActive);
         return decision.Action == VariantAction.RefreshActive
             ? new TableResolution(matches[decision.ActiveIndex].Path, UngatedEmit: false)
-            : new TableResolution(Path.Combine(_tablesDir, TableFileName.Canonical(schema, name, "", _isSchemaTemplate)), UngatedEmit: true);
+            : new TableResolution(Path.Join(_tablesDir, TableFileName.Canonical(schema, name, "", _isSchemaTemplate)), UngatedEmit: true);
     }
 
     private sealed class IdentityComparer : IEqualityComparer<(string Schema, string Name)>

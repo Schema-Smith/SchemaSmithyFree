@@ -15,7 +15,7 @@ namespace SchemaQuench.UnitTests.Validation.Checks;
 public class TableFileNameCheckTests
 {
     private const string PackagePath = @"C:\pkg";
-    private static readonly string TablesDir = Path.Combine(PackagePath, "Templates", "Main", "Tables");
+    private static readonly string TablesDir = Path.Join(PackagePath, "Templates", "Main", "Tables");
 
     private IFile _file;
     private IDirectory _directory;
@@ -59,7 +59,7 @@ public class TableFileNameCheckTests
     [Test]
     public void CanonicalName_NoFinding()
     {
-        StubTableFiles((Path.Combine(TablesDir, "dbo.Orders.json"), TableJson("dbo", "Orders")));
+        StubTableFiles((Path.Join(TablesDir, "dbo.Orders.json"), TableJson("dbo", "Orders")));
 
         var findings = new TableFileNameCheck().Run(Context()).ToList();
 
@@ -70,7 +70,7 @@ public class TableFileNameCheckTests
     public void QuotedContentIdentifiers_CanonicalFile_NoFinding()
     {
         // Content loads quoted ([dbo], [Widget]); the canonical filename is the bare identifier.
-        StubTableFiles((Path.Combine(TablesDir, "dbo.Widget.json"), TableJson("[dbo]", "[Widget]")));
+        StubTableFiles((Path.Join(TablesDir, "dbo.Widget.json"), TableJson("[dbo]", "[Widget]")));
 
         var findings = new TableFileNameCheck().Run(Context()).ToList();
 
@@ -80,7 +80,7 @@ public class TableFileNameCheckTests
     [Test]
     public void CanonicalVariantName_NoFinding()
     {
-        StubTableFiles((Path.Combine(TablesDir, "dbo.Orders.EU.json"), TableJson("dbo", "Orders", "EU", "region='EU'")));
+        StubTableFiles((Path.Join(TablesDir, "dbo.Orders.EU.json"), TableJson("dbo", "Orders", "EU", "region='EU'")));
 
         var findings = new TableFileNameCheck().Run(Context()).ToList();
 
@@ -90,7 +90,7 @@ public class TableFileNameCheckTests
     [Test]
     public void NonCanonicalVariantFile_WarnsWithCanonicalName_NeverErrors()
     {
-        StubTableFiles((Path.Combine(TablesDir, "Orders-EU.json"), TableJson("dbo", "Orders", "EU", "region='EU'")));
+        StubTableFiles((Path.Join(TablesDir, "Orders-EU.json"), TableJson("dbo", "Orders", "EU", "region='EU'")));
 
         var findings = new TableFileNameCheck().Run(Context()).ToList();
 
@@ -103,7 +103,7 @@ public class TableFileNameCheckTests
     [Test]
     public void NonTableJsonOutsideTablesFolder_Ignored()
     {
-        StubTableFiles((Path.Combine(PackagePath, "Templates", "Main", "TableData", "weird-name.json"), TableJson("dbo", "Orders")));
+        StubTableFiles((Path.Join(PackagePath, "Templates", "Main", "TableData", "weird-name.json"), TableJson("dbo", "Orders")));
 
         var findings = new TableFileNameCheck().Run(Context()).ToList();
 
