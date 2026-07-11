@@ -8,10 +8,13 @@
 [![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/releases/latest)
 [![Chocolatey](https://img.shields.io/chocolatey/v/schemasmith)](https://community.chocolatey.org/packages/schemasmith)
 [![License: SSCL v2.0](https://img.shields.io/badge/license-SSCL%20v2.0-blue)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/stargazers)
 
 SchemaSmith is a state-based database schema management toolset for SQL Server, PostgreSQL, and MySQL. Define your desired database state as metadata — tables, views, procedures, indexes, constraints, data — and SchemaSmith transforms any target server to match. Same toolset, same package format, three engines — no migration scripts to author or order.
 
 Self-contained, single-file executables for Windows, Linux, and macOS. No .NET runtime install needed.
+
+⭐ **Find SchemaSmith useful?** [Star the repo](https://github.com/Schema-Smith/SchemaSmith/stargazers) — it helps other database teams discover it.
 
 ## Tools
 

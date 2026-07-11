@@ -247,6 +247,8 @@ You just completed the full SchemaSmith workflow:
 
 No migration scripts. No ordered chains of ALTERs. No guessing what the target looks like. You declare the state you want, and SchemaSmith gets you there. Every time.
 
+> ⭐ **Did this click?** If SchemaSmith just saved you a migration script, [give it a star on GitHub](https://github.com/Schema-Smith/SchemaSmith/stargazers) — it helps other database teams find it.
+
 ## What's Next
 
 You just did state-based schema management. Now let's understand what is happening under the hood -- products, templates, tokens, and the deployment pipeline that makes it all work. Same concepts across all three platforms.
