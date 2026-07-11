@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
 using System.IO;
 using NSubstitute;
 using Schema.Domain;
@@ -52,46 +53,63 @@ public class TableFileResolverTests
         return "{" + string.Join(",", parts) + "}";
     }
 
+    // Non-variant tests never exercise the gate delegate; pass an arbitrary one.
+    private static readonly Func<string, bool> AnyGate = _ => true;
+
     [Test]
-    public void Resolve_NoExistingFileForTable_ReturnsCanonicalBarePath_RefreshTrue()
+    public void Resolve_NoExistingFileForTable_ReturnsCanonicalBarePath()
     {
         _directory.Exists(TablesDir).Returns(true);
         _directory.GetFiles(TablesDir, "*.json", SearchOption.AllDirectories).Returns([]);
 
-        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false);
+        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, AnyGate);
         var res = resolver.Resolve("dbo", "Orders");
 
-        Assert.That(res.RefreshStructure, Is.True);
-        Assert.That(res.IsVariantSet, Is.False);
+        Assert.That(res.UngatedEmit, Is.False);
         Assert.That(Path.GetFileName(res.WritePath), Is.EqualTo("dbo.Orders.json"));
     }
 
     [Test]
-    public void Resolve_SingleExistingMatch_NonCanonicalName_ReturnsExistingPath_RefreshTrue()
+    public void Resolve_SingleExistingMatch_NonCanonicalName_ReturnsExistingPath()
     {
         var existing = Path.Combine("pkg", "Tables", "legacy-name.json"); // deliberately non-canonical
         StubTablesFolder((existing, TableJson("dbo", "Orders")));
 
-        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false);
+        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, AnyGate);
         var res = resolver.Resolve("dbo", "Orders");
 
-        Assert.That(res.RefreshStructure, Is.True);
-        Assert.That(res.IsVariantSet, Is.False);
+        Assert.That(res.UngatedEmit, Is.False);
         Assert.That(res.WritePath, Is.EqualTo(existing)); // refresh in place, do not duplicate
     }
 
     [Test]
-    public void Resolve_VariantSet_RefreshFalse_IsVariantSetTrue()
+    public void Resolve_VariantSet_OneActive_ResolvesToActiveVariantFile()
     {
+        var euPath = Path.Combine("pkg", "Tables", "dbo.Orders.EU.json");
         StubTablesFolder(
-            (Path.Combine("pkg", "Tables", "dbo.Orders.EU.json"), TableJson("dbo", "Orders", "EU", "1=1")),
-            (Path.Combine("pkg", "Tables", "dbo.Orders.US.json"), TableJson("dbo", "Orders", "US", "1=0")));
+            (euPath, TableJson("dbo", "Orders", "EU", "region='EU'")),
+            (Path.Combine("pkg", "Tables", "dbo.Orders.US.json"), TableJson("dbo", "Orders", "US", "region='US'")));
 
-        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false);
+        // EU is active on this source.
+        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, expr => expr == "region='EU'");
         var res = resolver.Resolve("dbo", "Orders");
 
-        Assert.That(res.RefreshStructure, Is.False);
-        Assert.That(res.IsVariantSet, Is.True);
+        Assert.That(res.UngatedEmit, Is.False);
+        Assert.That(res.WritePath, Is.EqualTo(euPath)); // refresh the active variant's file
+    }
+
+    [Test]
+    public void Resolve_VariantSet_NoneActive_ResolvesToBareCanonical_UngatedEmit()
+    {
+        StubTablesFolder(
+            (Path.Combine("pkg", "Tables", "dbo.Orders.EU.json"), TableJson("dbo", "Orders", "EU", "region='EU'")),
+            (Path.Combine("pkg", "Tables", "dbo.Orders.US.json"), TableJson("dbo", "Orders", "US", "region='US'")));
+
+        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, _ => false);
+        var res = resolver.Resolve("dbo", "Orders");
+
+        Assert.That(res.UngatedEmit, Is.True);
+        Assert.That(Path.GetFileName(res.WritePath), Is.EqualTo("dbo.Orders.json")); // ungated shape → bare name
     }
 
     [Test]
@@ -101,10 +119,10 @@ public class TableFileResolverTests
             (Path.Combine("pkg", "Tables", "sales.Orders.json"), TableJson("sales", "Orders")),
             (Path.Combine("pkg", "Tables", "hr.Orders.json"), TableJson("hr", "Orders")));
 
-        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false);
+        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, AnyGate);
         var sales = resolver.Resolve("sales", "Orders");
 
-        Assert.That(sales.IsVariantSet, Is.False); // not a variant set — different schemas
+        Assert.That(sales.UngatedEmit, Is.False); // not a variant set — different schemas
         Assert.That(sales.WritePath, Is.EqualTo(Path.Combine("pkg", "Tables", "sales.Orders.json")));
     }
 
@@ -114,10 +132,10 @@ public class TableFileResolverTests
         var existing = Path.Combine("pkg", "Tables", "Documents.json");
         StubTablesFolder((existing, TableJson("", "Documents")));
 
-        var resolver = new TableFileResolver(TablesDir, Platform.MySQL, isSchemaTemplate: true);
+        var resolver = new TableFileResolver(TablesDir, Platform.MySQL, isSchemaTemplate: true, AnyGate);
         var res = resolver.Resolve("", "Documents");
 
-        Assert.That(res.RefreshStructure, Is.True);
+        Assert.That(res.UngatedEmit, Is.False);
         Assert.That(res.WritePath, Is.EqualTo(existing));
     }
 }
