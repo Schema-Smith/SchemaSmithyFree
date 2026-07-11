@@ -12,6 +12,7 @@ using log4net;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Schema.DataAccess;
+using Schema.Delivery;
 using Schema.Domain;
 using Schema.Isolators;
 using MySqlConnector;
@@ -1860,7 +1861,7 @@ SELECT s.name AS SchemaName, v.name AS ViewName
             _progressLog.Info("Kindling The Forge");
             ForgeKindler.KindleTheForge(command, _platform);
 
-            if (_includeTables) CastPostgreSqlTableDefinitions(command);
+            if (_includeTables) CastPostgreSqlTableDefinitions(command, targetDb);
             if (_includeSchemas) CastPostgreSqlSchemas(command);
             if (_includeDomainTypes) CastPostgreSqlDomainTypes(command);
             if (_includeEnumTypes) CastPostgreSqlEnumTypes(command);
@@ -1880,8 +1881,12 @@ SELECT s.name AS SchemaName, v.name AS ViewName
         }
     }
 
-    private void CastPostgreSqlTableDefinitions(IDbCommand command)
+    private void CastPostgreSqlTableDefinitions(IDbCommand command, string targetDb)
     {
+        using var gateConnection = GetConnection(targetDb);
+        using var gateCommand = gateConnection.CreateCommand();
+        bool IsVariantActive(string expr) => GateEvaluator.ShouldApply(gateCommand, expr);
+
         command.CommandText = @"
 SELECT t.schemaname, t.tablename
   FROM pg_tables t
@@ -1931,7 +1936,7 @@ SELECT t.schemaname, t.tablename
             if (FileWrapper.GetFromFactory().Exists(tableFile) || FileWrapper.GetFromFactory().Exists(oldTableFile))
             {
                 var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile, _platform);
-                ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
+                ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
             }
             ScrubSchemaForTemplate(tableObj, tableFile);
             JsonHelper.Write(tableFile, tableObj);
@@ -2423,6 +2428,10 @@ SELECT 'Events' AS Folder,
         {
             using var commandJson = connectionJson.CreateCommand();
 
+            using var gateConnection = GetConnection(targetSchema);
+            using var gateCommand = gateConnection.CreateCommand();
+            bool IsVariantActive(string expr) => GateEvaluator.ShouldApply(gateCommand, expr);
+
             command.CommandText = $@"
 SELECT TABLE_SCHEMA, TABLE_NAME
   FROM INFORMATION_SCHEMA.TABLES t
@@ -2499,7 +2508,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                     {
                         var originalPath = FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile;
                         var original = JsonHelper.TableLoad(originalPath, _platform);
-                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
+                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
                     }
 
                     JsonHelper.Write(filename, tableObj);
@@ -2562,6 +2571,12 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         try
         {
             using var commandJson = connectionJson.CreateCommand();
+
+            // Dedicated connection/command for gate evaluation — the enumeration reader on `command`
+            // and the JSON reader on `commandJson` are both live during the loop.
+            using var gateConnection = GetConnection(targetDb);
+            using var gateCommand = gateConnection.CreateCommand();
+            bool IsVariantActive(string expr) => GateEvaluator.ShouldApply(gateCommand, expr);
 
             command.CommandText = @"
 SELECT TABLE_SCHEMA, TABLE_NAME
@@ -2632,7 +2647,7 @@ SELECT cc.name AS [Name],
                 if (FileWrapper.GetFromFactory().Exists(filename) || FileWrapper.GetFromFactory().Exists(oldTableFile))
                 {
                     var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile, _platform);
-                    ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
+                    ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
                 }
                 // Schema-template mode: strip the platform Schema field and any same-source RelatedTableSchema
                 // values on the in-memory table object before serialization (design §7.2), and rewrite
