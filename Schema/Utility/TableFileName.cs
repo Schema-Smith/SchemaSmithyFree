@@ -14,11 +14,18 @@ public static class TableFileName
     public static string Canonical(string schema, string name, string variantName, bool isSchemaTemplate)
     {
         var body = isSchemaTemplate
-            ? FileNameEncoder.Encode(name)
-            : $"{FileNameEncoder.Encode(schema)}.{FileNameEncoder.Encode(name)}";
-        var variantSuffix = string.IsNullOrWhiteSpace(variantName)
-            ? ""
-            : $".{FileNameEncoder.Encode(variantName.Trim())}";
+            ? FileNameEncoder.Encode(NormalizeIdentifier(name))
+            : $"{FileNameEncoder.Encode(NormalizeIdentifier(schema))}.{FileNameEncoder.Encode(NormalizeIdentifier(name))}";
+        var variant = NormalizeIdentifier(variantName);
+        var variantSuffix = variant.Length == 0 ? "" : $".{FileNameEncoder.Encode(variant)}";
         return $"{body}{variantSuffix}.json";
     }
+
+    /// <summary>
+    /// Strips identifier quoting (brackets, double-quotes, backticks) so the canonical filename and
+    /// content-identity comparisons use the bare identifier — matching how extraction names files
+    /// from the unquoted <c>INFORMATION_SCHEMA</c> form.
+    /// </summary>
+    public static string NormalizeIdentifier(string identifier) =>
+        (identifier ?? "").Trim().Trim('[', ']', '"', '`').Trim();
 }

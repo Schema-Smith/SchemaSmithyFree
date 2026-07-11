@@ -44,6 +44,25 @@ public class TableFileNameTests
     }
 
     [Test]
+    public void Canonical_StripsIdentifierQuoting_SqlServerBrackets()
+    {
+        // Table Name/Schema load quoted from JSON; the filename is the bare identifier.
+        Assert.That(TableFileName.Canonical("[dbo]", "[Widget]", "", false), Is.EqualTo("dbo.Widget.json"));
+    }
+
+    [Test]
+    public void Canonical_StripsIdentifierQuoting_MySqlBackticksNameOnly()
+    {
+        Assert.That(TableFileName.Canonical("", "`Widget`", "", true), Is.EqualTo("Widget.json"));
+    }
+
+    [Test]
+    public void Canonical_StripsIdentifierQuoting_PostgresDoubleQuotes()
+    {
+        Assert.That(TableFileName.Canonical("\"public\"", "\"Orders\"", "\"EU\"", false), Is.EqualTo("public.Orders.EU.json"));
+    }
+
+    [Test]
     public void Canonical_EncodesEachSegmentWithFileNameEncoder()
     {
         var expected = $"{FileNameEncoder.Encode("dbo")}.{FileNameEncoder.Encode("Or/ders")}.{FileNameEncoder.Encode("E<U")}.json";

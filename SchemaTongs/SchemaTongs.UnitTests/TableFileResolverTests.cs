@@ -140,6 +140,19 @@ public class TableFileResolverTests
     }
 
     [Test]
+    public void Resolve_QuotedContentIdentifiers_MatchUnquotedQuery()
+    {
+        // Loaded Name/Schema are quoted ([dbo], [Widget]); the INFORMATION_SCHEMA query is unquoted.
+        var existing = Path.Combine("pkg", "Tables", "dbo.Widget.json");
+        StubTablesFolder((existing, TableJson("[dbo]", "[Widget]")));
+
+        var resolver = new TableFileResolver(TablesDir, Platform.SqlServer, isSchemaTemplate: false, AnyGate);
+        var res = resolver.Resolve("dbo", "Widget");
+
+        Assert.That(res.WritePath, Is.EqualTo(existing)); // matched despite the quoting mismatch
+    }
+
+    [Test]
     public void Resolve_MySqlNoSchemaContent_MatchesByNameAlone()
     {
         var existing = Path.Combine("pkg", "Tables", "Documents.json");

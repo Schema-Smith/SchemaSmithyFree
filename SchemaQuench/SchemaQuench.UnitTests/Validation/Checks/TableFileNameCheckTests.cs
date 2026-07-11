@@ -67,6 +67,17 @@ public class TableFileNameCheckTests
     }
 
     [Test]
+    public void QuotedContentIdentifiers_CanonicalFile_NoFinding()
+    {
+        // Content loads quoted ([dbo], [Widget]); the canonical filename is the bare identifier.
+        StubTableFiles((Path.Combine(TablesDir, "dbo.Widget.json"), TableJson("[dbo]", "[Widget]")));
+
+        var findings = new TableFileNameCheck().Run(Context()).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
     public void CanonicalVariantName_NoFinding()
     {
         StubTableFiles((Path.Combine(TablesDir, "dbo.Orders.EU.json"), TableJson("dbo", "Orders", "EU", "region='EU'")));

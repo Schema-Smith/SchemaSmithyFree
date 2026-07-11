@@ -47,8 +47,9 @@ public sealed class TableFileResolver
             if (table == null || string.IsNullOrWhiteSpace(table.Name)) continue;
 
             // Schema-template files are schema-scrubbed on extraction, so identity is name-only there.
-            var schema = _isSchemaTemplate ? "" : (table as IDeliverableTable)?.Schema ?? "";
-            var key = (schema, table.Name.Trim());
+            // Identifiers load quoted ([dbo], `Widget`); normalize so they match the unquoted query.
+            var schema = _isSchemaTemplate ? "" : TableFileName.NormalizeIdentifier((table as IDeliverableTable)?.Schema ?? "");
+            var key = (schema, TableFileName.NormalizeIdentifier(table.Name));
             if (!_byIdentity.TryGetValue(key, out var entries))
                 _byIdentity[key] = entries = new List<TableFileEntry>();
             entries.Add(new TableFileEntry(path, table.ShouldApplyExpression ?? "", table.VariantName ?? ""));
@@ -57,7 +58,7 @@ public sealed class TableFileResolver
 
     public TableResolution Resolve(string schema, string name)
     {
-        var key = (_isSchemaTemplate ? "" : schema ?? "", (name ?? "").Trim());
+        var key = (_isSchemaTemplate ? "" : TableFileName.NormalizeIdentifier(schema), TableFileName.NormalizeIdentifier(name));
         var matches = _byIdentity.TryGetValue(key, out var entries) ? entries : new List<TableFileEntry>();
 
         if (matches.Count == 0)
