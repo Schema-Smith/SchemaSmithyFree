@@ -27,6 +27,12 @@
       "DataType": "VARCHAR(256)",
       "Nullable": false,
       "Default": "''''"
+    },
+    {
+      "Name": "PreventDrop",
+      "DataType": "BOOLEAN",
+      "Nullable": false,
+      "Default": "false"
     }
   ],
   "Indexes": [

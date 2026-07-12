@@ -22,6 +22,7 @@
            COALESCE(elem ->> 'PersistenceType', '') AS "PersistenceType",
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((elem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
            COALESCE(NULLIF((elem ->> 'FillFactor')::INT2, 0), 100) AS "FillFactor",
+           COALESCE((elem ->> 'PreventDrop')::BOOLEAN, FALSE) AS "PreventDrop",
            (elem ->> 'DropColumnsRemovedFromProduct')::BOOLEAN AS "DropColumnsRemovedFromProduct",
            (elem ->> 'DropForeignKeysRemovedFromProduct')::BOOLEAN AS "DropForeignKeysRemovedFromProduct",
            (elem ->> 'DropCheckConstraintsRemovedFromProduct')::BOOLEAN AS "DropCheckConstraintsRemovedFromProduct",

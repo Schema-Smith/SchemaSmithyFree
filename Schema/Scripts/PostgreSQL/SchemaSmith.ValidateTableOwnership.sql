@@ -45,7 +45,7 @@ BEGIN
     RAISE NOTICE 'Collect Existing Column Definitions';
     DROP TABLE IF EXISTS temp_product_ownership;
     CREATE TEMPORARY TABLE temp_product_ownership AS
-      SELECT "Schema", "TableName", "IndexName"
+      SELECT "Schema", "TableName", "IndexName", "PreventDrop"
         FROM "SchemaSmith"."ProductOwnership"
         WHERE "ProductName" = p_ProductName
           AND template_name = p_TemplateName

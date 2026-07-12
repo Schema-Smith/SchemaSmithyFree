@@ -16,6 +16,7 @@ CREATE OR REPLACE PROCEDURE "SchemaSmith"."ModifiedTableQuench"
 AS $$
 DECLARE
   sql_script TEXT = '';
+  protect_notice TEXT;
 BEGIN
     IF p_DropTablesRemovedFromProduct THEN
       RAISE NOTICE 'Drop inbound foreign keys referencing tables removed from the product';
@@ -32,6 +33,7 @@ BEGIN
         JOIN pg_class pc       ON pc.oid = con.conrelid
         JOIN pg_namespace pn   ON pn.oid = pc.relnamespace
         WHERE tp."IndexName" IS NULL
+          AND NOT COALESCE(tp."PreventDrop", FALSE)  -- a protected table survives, so keep its inbound FKs (#270)
           AND NOT EXISTS (SELECT 1
                             FROM temp_tables t
                             WHERE tp."Schema" = t."Schema"
@@ -58,6 +60,7 @@ BEGIN
         INTO sql_script
         FROM temp_product_ownership tp
         WHERE tp."IndexName" IS NULL
+          AND NOT COALESCE(tp."PreventDrop", FALSE)
           AND NOT EXISTS (SELECT 1
                             FROM temp_tables t
                             WHERE tp."Schema" = t."Schema"
@@ -68,6 +71,18 @@ BEGIN
                               AND mv.matviewname = tp."TableName");
       CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
     END IF;
+
+    -- Report protected-but-absent tables as skipped regardless of the global drop toggle (#270).
+    RAISE NOTICE 'Report tables removed from product but protected by PreventDrop';
+    SELECT STRING_AGG('RAISE NOTICE ''  Table ' || tp."Schema" || '.' || tp."TableName" ||
+                      ' removed from product but PreventDrop is set — skipping drop (protected)'';', CHR(10))
+      INTO protect_notice
+      FROM temp_product_ownership tp
+      WHERE tp."IndexName" IS NULL
+        AND COALESCE(tp."PreventDrop", FALSE)
+        AND NOT EXISTS (SELECT 1 FROM temp_tables t
+                          WHERE tp."Schema" = t."Schema" AND tp."TableName" = t."Name");
+    CALL "SchemaSmith"."ExecuteOrDebug"(protect_notice, p_WhatIf);
 
     RAISE NOTICE 'Collect Existing Column Definitions';
     DROP TABLE IF EXISTS temp_existing_columns;
