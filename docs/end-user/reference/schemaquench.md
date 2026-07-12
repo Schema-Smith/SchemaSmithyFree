@@ -801,6 +801,43 @@ For an alternative that keeps auto-drops on while still protecting data, see [Re
 
 ---
 
+## PreventDrop
+
+Some tables you never want the deployment tool to drop -- not on a rollback, not when someone trims the package, not by accident. The `Drop…RemovedFromProduct` flags help while a table is still in the package, but they share a blind spot: they gate the by-absence drop pass, so they only "see" a table whose definition is still present. The moment you delete a table's `.json`, there's nothing left to carry a `false` -- and the table becomes a drop candidate. `PreventDrop` closes that gap. Set it on a table and SchemaSmith persists the intent *in the database itself*, so the protection outlives the table's own definition.
+
+`PreventDrop` is a per-table boolean set in the table's `.json`, default `false`. When `true`, the table is never dropped by absence -- even after you remove it from the package entirely.
+
+```json
+{
+  "Name": "[Orders]",
+  "PreventDrop": true,
+  "Columns": [ /* ... */ ]
+}
+```
+
+**Sticky by design.** The protection is persisted in SchemaSmith's ownership tracking, so it survives the table leaving the package. On SQL Server it's a `PreventDrop` extended property stamped on the table; on PostgreSQL and MySQL it's a `PreventDrop` column on the `ProductOwnership` tracking table. Each run, while the table is still in the package, SchemaSmith refreshes the marker to match the package value -- so the stored protection always tracks what your JSON declares.
+
+**Removed, not dropped.** When a protected table is later removed from the package, SchemaSmith reads the persisted marker, logs that it's retaining the table, and skips the drop. Its inbound foreign keys -- constraints on *other* tables that reference the protected table -- are preserved too, so the table stays fully wired into the schema rather than left as an orphan.
+
+**Not a cascade flag.** Unlike `DropTablesRemovedFromProduct` (an environment → product → template cascade that *suppresses* the drop pass), `PreventDrop` is a positive, per-table guard that lives with the table and persists in the database. The cascade flag answers "should this deployment run the drop pass at all?"; `PreventDrop` answers "should this specific table ever be a drop candidate?" -- and keeps answering it after the definition is gone.
+
+### Un-protecting a table
+
+Because the marker is sticky, clearing it is a deliberate, reviewed step -- you can't un-protect a table by simply deleting its JSON, since that's exactly the case the stickiness defends against. Two ways to remove protection:
+
+1. **Refresh, then remove.** Set `PreventDrop: false` and re-deploy while the table is *still* in the package. That run refreshes the sticky marker to `false`. Now remove the table from the package on a later deployment and it drops normally.
+2. **Drop via migration script.** Write a migration script that drops the table explicitly. Migration scripts run outside the drop-by-absence pass, so they aren't gated by `PreventDrop` at all.
+
+> **Tip:** Reach for the refresh-then-remove path when you want the removal to flow through the normal declarative pipeline; reach for the migration script when you want the drop recorded as an explicit, reviewable step in the package.
+
+**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, and MySQL -- the persistence mechanism differs per engine, but the contract is the same everywhere.
+
+> **Note:** Ownership is reconciled against the live catalog on every run. If a protected table is dropped out-of-band -- by a migration script, a DBA, or a manual change -- SchemaSmith prunes its ownership record (including the sticky marker) because the table no longer exists in the catalog. No stale protection lingers to confuse a future deployment; the marker only ever protects a table that's actually there.
+
+The environment-level protected mode (a runtime setting that hardens drop behavior across a whole deployment) is covered separately.
+
+---
+
 ## DropColumnsRemovedFromProduct
 
 When you remove a column from a table JSON file, SchemaQuench needs to know what to do with the column that's already in the database. `DropColumnsRemovedFromProduct` is `true` by default — columns absent from the schema package are dropped, keeping the deployed database in sync with the product definition. Set it to `false` when that drop is unsafe: a production column that other systems still read, a column you want to retire gradually with a migration script rather than a hard drop, or any environment where you want human review before structural column removal happens.
