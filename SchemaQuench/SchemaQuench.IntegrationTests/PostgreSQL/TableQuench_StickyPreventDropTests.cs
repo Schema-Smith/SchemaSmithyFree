@@ -210,6 +210,50 @@ public class TableQuench_StickyPreventDropTests
         }
     }
 
+    // A tracked object must never have two owners. On PostgreSQL this is now enforced structurally by
+    // the ProductOwnership unique key (Schema, TableName, IndexName) with NULLS NOT DISTINCT (applied by
+    // the transitional Kindling_ProductOwnership_IndexMigration) — parity with SQL Server (one ProductName
+    // extended property per object) and MySQL (uk_object on ObjectType/ObjectSchema/ObjectName).
+    [Test]
+    public void SecondOwnerForSameObject_IsStructurallyRejected()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"OwnUnique_{Guid.NewGuid():N}");
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            CopyFixtureTo(tempDir);
+            using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+            conn.Open();
+            conn.ChangeDatabase(_mainDb);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandTimeout = 300;
+            try
+            {
+                // Deploy establishes StickyPreventDrop ownership of KeeperTable (one ownership row).
+                FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = tempDir;
+                RunSchemaQuench();
+                Assert.That(TableExists(cmd, "KeeperTable"), Is.True, "Setup: KeeperTable should exist and be owned.");
+
+                // A different product claiming the same (Schema, TableName) physical object must be rejected
+                // by the unique key — NULLS NOT DISTINCT makes the NULL IndexName (a table) collide.
+                cmd.CommandText = @"INSERT INTO ""SchemaSmith"".""ProductOwnership""
+                    (""Schema"", ""TableName"", ""IndexName"", ""ProductName"", template_name, ""PreventDrop"")
+                    VALUES ('public', 'KeeperTable', NULL, 'OtherProduct', 'OtherTemplate', FALSE);";
+                Assert.That(() => cmd.ExecuteNonQuery(), Throws.Exception,
+                    "A second owner for the same (Schema, TableName) must violate the ProductOwnership unique key.");
+            }
+            finally
+            {
+                DropTablesAndCleanup(cmd);
+                conn.Close();
+                FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = string.Empty;
+                Directory.Delete(tempDir, true);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
     private void SetupSharedMocks()
     {
         _progressLog.ClearReceivedCalls();
