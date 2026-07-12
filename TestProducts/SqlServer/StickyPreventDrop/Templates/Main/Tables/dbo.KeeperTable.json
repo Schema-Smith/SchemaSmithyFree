@@ -1,0 +1,20 @@
+{
+    "Schema": "[dbo]",
+    "Name": "[KeeperTable]",
+    "Columns": [
+        {
+            "Name": "[Id]",
+            "DataType": "INT",
+            "Nullable": false
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "[PK_KeeperTable]",
+            "PrimaryKey": true,
+            "Unique": true,
+            "Clustered": true,
+            "IndexColumns": "[Id]"
+        }
+    ]
+}

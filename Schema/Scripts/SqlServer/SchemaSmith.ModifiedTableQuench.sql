@@ -46,21 +46,23 @@ BEGIN TRY
     INTO #TableProperties
     FROM #SchemaList WITH (NOLOCK)
     CROSS APPLY fn_listextendedproperty(default, 'Schema', SchemaSmith.fn_StripBracketWrapping([Schema]), 'Table', default, default, default) x
-    WHERE x.[Name] COLLATE DATABASE_DEFAULT = 'ProductName'
-  
+    WHERE x.[Name] COLLATE DATABASE_DEFAULT IN ('ProductName', 'PreventDrop')
+
   RAISERROR('Validate Table Ownership', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.[TableName] + ' owned by different product. [' + tp.[Value] + ']'', 10, 100) WITH NOWAIT;' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Tables t WITH (NOLOCK)
     JOIN #TableProperties tp WITH (NOLOCK) ON t.[Schema] = tp.[Schema]
                                           AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName
-    WHERE tp.[value] <> @ProductName
+    WHERE tp.PropertyName = 'ProductName'
+      AND tp.[value] <> @ProductName
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
   IF EXISTS (SELECT *
                FROM #Tables t WITH (NOLOCK)
                JOIN #TableProperties tp WITH (NOLOCK) ON t.[Schema] = tp.[Schema]
                                                      AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName
-               WHERE tp.[value] <> @ProductName)
+               WHERE tp.PropertyName = 'ProductName'
+                 AND tp.[value] <> @ProductName)
   BEGIN
     RAISERROR('One or more tables in this quench are already owned by another product', 16, 1) WITH NOWAIT
   END
@@ -72,10 +74,17 @@ BEGIN TRY
     SELECT tp.[Schema], tp.TableName
       INTO #TablesRemovedFromProduct
       FROM #TableProperties tp
-      WHERE tp.[value] = @ProductName
-        AND NOT EXISTS (SELECT * 
-                          FROM #Tables t WITH (NOLOCK) 
-                          WHERE t.[Schema] = tp.[Schema] 
+      WHERE tp.PropertyName = 'ProductName'
+        AND tp.[value] = @ProductName
+        AND NOT EXISTS (SELECT 1
+                          FROM #TableProperties px WITH (NOLOCK)
+                          WHERE px.[Schema] = tp.[Schema]
+                            AND px.TableName = tp.TableName
+                            AND px.PropertyName = 'PreventDrop'
+                            AND px.[value] = 'true')
+        AND NOT EXISTS (SELECT *
+                          FROM #Tables t WITH (NOLOCK)
+                          WHERE t.[Schema] = tp.[Schema]
                             AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
 
     IF EXISTS (SELECT * FROM #TablesRemovedFromProduct WITH (NOLOCK))
@@ -129,6 +138,23 @@ BEGIN TRY
       END
     END
   END
+
+  RAISERROR('Report tables removed from the product but retained by PreventDrop', 10, 100) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Retaining table ' + tp.[Schema] + '.' + tp.TableName + ' - removed from product but protected by PreventDrop'', 10, 100) WITH NOWAIT;' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #TableProperties tp WITH (NOLOCK)
+    WHERE tp.PropertyName = 'ProductName'
+      AND tp.[value] = @ProductName
+      AND EXISTS (SELECT 1
+                    FROM #TableProperties px WITH (NOLOCK)
+                    WHERE px.[Schema] = tp.[Schema]
+                      AND px.TableName = tp.TableName
+                      AND px.PropertyName = 'PreventDrop'
+                      AND px.[value] = 'true')
+      AND NOT EXISTS (SELECT *
+                        FROM #Tables t WITH (NOLOCK)
+                        WHERE t.[Schema] = tp.[Schema]
+                          AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Collect index level extended properties', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexProperties
@@ -808,6 +834,18 @@ BEGIN TRY
     FROM #Tables t WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * FROM #TableProperties tp WITH (NOLOCK) WHERE t.[Schema] = tp.[Schema] AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName AND tp.PropertyName = 'ProductName')
       AND OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL  -- and the table physically exists
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+  -- Stamp/refresh the sticky PreventDrop protection marker so it tracks the package value each run
+  -- (an existing table newly marked PreventDrop:true gets its property; one toggled back to false is
+  -- updated). Covers the same present-table set as the ProductName stamp above (physical tables in #Tables).
+  RAISERROR('Stamp/refresh PreventDrop protection marker', 10, 100) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST(
+    'IF EXISTS (SELECT 1 FROM fn_listextendedproperty(N''PreventDrop'', N''Schema'', ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', N''Table'', ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', default, default)) ' +
+    'EXEC sp_updateextendedproperty @name = N''PreventDrop'', @value = ''' + CASE WHEN t.[PreventDrop] = 1 THEN 'true' ELSE 'false' END + ''', @level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', @level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + '''; ' +
+    'ELSE EXEC sp_addextendedproperty @name = N''PreventDrop'', @value = ''' + CASE WHEN t.[PreventDrop] = 1 THEN 'true' ELSE 'false' END + ''', @level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', @level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #Tables t WITH (NOLOCK)
+    WHERE OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL  -- table physically exists
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Add Missing Physical Columns', 10, 100) WITH NOWAIT

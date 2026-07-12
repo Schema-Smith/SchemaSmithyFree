@@ -1,0 +1,20 @@
+{
+    "Schema": "[dbo]",
+    "Name": "[RemovableTable]",
+    "Columns": [
+        {
+            "Name": "[Id]",
+            "DataType": "INT",
+            "Nullable": false
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "[PK_RemovableTable]",
+            "PrimaryKey": true,
+            "Unique": true,
+            "Clustered": true,
+            "IndexColumns": "[Id]"
+        }
+    ]
+}
