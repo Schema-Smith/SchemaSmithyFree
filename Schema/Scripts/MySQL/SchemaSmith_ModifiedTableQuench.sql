@@ -1423,16 +1423,25 @@ BEGIN
     -- Parity prune for tables dropped OUT of band (a migration or DBA dropped the physical table
     -- without going through SchemaSmith), so their ownership rows don't go stale. The STEP 8 cleanup
     -- only removes ownership for tables THIS run dropped, so protected tables keep ownership (intended).
-    -- Live path only (WhatIf must not mutate ownership). Discrete INFORMATION_SCHEMA read, run after
-    -- STEP 8 completes and not fused into any set-based DML (Index-B crash-safety).
+    -- Live path only (WhatIf must not mutate ownership). Materialize the catalog read into a temp
+    -- table first (a SELECT, not DML), then DELETE against the temp — matching the STEP 8 ELSE
+    -- crash-safety convention so no INFORMATION_SCHEMA read runs inside DML (Index-B).
     IF p_WhatIf = 0 THEN
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_OrphanedOwnership;
+        CREATE TEMPORARY TABLE _SchemaSmith_OrphanedOwnership (Id INT PRIMARY KEY)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_OrphanedOwnership (Id)
+        SELECT po.Id
+          FROM SchemaSmith_ProductOwnership po
+          WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+            AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+            AND po.ObjectType = 'TABLE'
+            AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+                             WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                               AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4));
         DELETE po FROM SchemaSmith_ProductOwnership po
-        WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
-          AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-          AND po.ObjectType = 'TABLE'
-          AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                           WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                             AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4));
+          JOIN _SchemaSmith_OrphanedOwnership o ON o.Id = po.Id;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_OrphanedOwnership;
     END IF;
 
 END//
