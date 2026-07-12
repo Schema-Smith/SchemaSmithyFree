@@ -805,6 +805,7 @@ public class ProductQuench
                 _targetResults.ToArray(), _runTiming, _migrationScripts.Snapshot(),
                 _whatIf.Snapshot(), _failureRecords.ToArray(), BottleneckThresholdMs(), _changeAudit);
             var (jsonPath, mdPath) = ResolveReportPaths(CommandLineParser.ValueOfSwitch("report", null), ConfigHelper.ResolveLogPath(), "SchemaQuench");
+            EnsureReportDirectory(jsonPath);
             var file = FileWrapper.GetFromFactory();
             file.WriteAllText(jsonPath, DeploymentSummaryJson.Serialize(summary));
             file.WriteAllText(mdPath, DeploymentSummaryText.Render(summary));
@@ -822,6 +823,16 @@ public class ProductQuench
     /// <c>&lt;path&gt;.json</c> / <c>&lt;path&gt;.md</c>; otherwise both default alongside the logs
     /// in <paramref name="logDir"/> as <c>{appName} - Summary.json</c> / <c>.md</c>.
     /// </summary>
+    /// Creates the parent directory of a resolved report path if it doesn't exist, so a
+    /// <c>--report &lt;path&gt;</c> pointing at a not-yet-created directory writes the summary
+    /// instead of silently failing (the default log-dir path already exists). A no-op when the
+    /// path has no directory component (bare filename) or the directory is already present.
+    internal static void EnsureReportDirectory(string reportFilePath)
+    {
+        var dir = Path.GetDirectoryName(reportFilePath);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+    }
+
     internal static (string JsonPath, string MdPath) ResolveReportPaths(string reportSwitch, string logDir, string appName) =>
         string.IsNullOrWhiteSpace(reportSwitch)
             ? (Path.Join(logDir, $"{appName} - Summary.json"), Path.Join(logDir, $"{appName} - Summary.md"))
