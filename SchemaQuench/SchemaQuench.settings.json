@@ -22,6 +22,8 @@
     // "DropExcludeConstraintsRemovedFromProduct": false, // Drop exclude constraints removed from the product definition (PostgreSQL only) — absent = inherit the product/template/table value (default: drop)
     // "DropStatisticsRemovedFromProduct": false, // Drop statistics removed from the product definition (SQL Server + PostgreSQL) — absent = inherit the product/template/table value (default: drop)
     // "DropIndexesRemovedFromProduct": false, // Drop product-owned indexes removed from the product definition (distinct from DropUnknownIndexes, which targets out-of-band indexes) — absent = inherit the product/template/table value (default: drop)
+    // "PreventDrop": true, // Environment-level protected mode: detect every would-drop across all targets and refuse to drop. Default off.
+    // "PreventDropMode": "fail", // "fail" (default): fail-closed with a complete would-drop manifest before any object work. "log": log the manifest, suppress all drops, and complete the run.
     "UpdateTables": true, // Apply table structure changes (columns, indexes, constraints)
     "KindleTheForge": true, // Install SchemaSmith helper functions/procedures in target database
     "ForceReKindle": false, // Re-install helper objects regardless of kindle version — use after a failed/partial kindle or when debugging helper objects (CLI: --ForceReKindle)

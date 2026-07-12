@@ -188,6 +188,20 @@ public class ProductQuench
         return bool.TryParse(raw, out var parsed) ? parsed : (bool?)null;
     }
 
+    // Env-level protected mode (#270 Slice E). When PreventDrop is true the environment refuses
+    // drop-by-absence: a two-phase detect assembles a complete would-drop manifest, then the run
+    // either fails closed (default) with that manifest before any object work, or — in log mode —
+    // logs the manifest and suppresses all drops while completing the rest of the run.
+    internal static bool ProtectedModeEnabled(IConfiguration config) => ConfigBool(config, "PreventDrop") == true;
+
+    internal static string ProtectedModeMode(IConfiguration config) =>
+        string.Equals(config["PreventDropMode"]?.Trim(), "log", System.StringComparison.OrdinalIgnoreCase) ? "log" : "fail";
+
+    // The fail-closed gate: in fail mode, a non-empty would-drop manifest aborts before any object
+    // work. Log mode never aborts (it suppresses + logs); an empty manifest proceeds normally.
+    internal static bool ShouldFailClosed(string mode, int manifestCount) =>
+        string.Equals(mode, "fail", System.StringComparison.OrdinalIgnoreCase) && manifestCount > 0;
+
     /// <summary>
     /// Reads <c>Target.TemplateTargets</c> from configuration into the per-template override map.
     /// Each template name becomes a dictionary key (case-insensitive) carrying the parsed
