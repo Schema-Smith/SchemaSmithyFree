@@ -143,6 +143,73 @@ public class ProtectedMode_PreventDropTests
         }
     }
 
+    [Test]
+    public void ProtectedMode_RemovedColumn_NotDropped_ManifestLists_Exit0()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"ProtMode_Col_{Guid.NewGuid():N}");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            CopyFixtureTo(tempDir);
+
+            using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+            conn.Open();
+            conn.ChangeDatabase(_mainDb);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandTimeout = 300;
+
+            try
+            {
+                // First quench (protection off): KeeperTable is created with its Notes column.
+                FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = tempDir;
+                RunSchemaQuench();
+                Assert.That(ColumnExists(cmd, "KeeperTable", "Notes"), Is.True, "Setup: KeeperTable.Notes should exist.");
+
+                // Remove the Notes column from the package (KeeperTable stays) — normally a column drop-by-absence.
+                RemoveColumnFromTable(Path.Join(tempDir, "Templates", "Main", "Tables", "dbo.KeeperTable.json"), "[Notes]");
+
+                FactoryContainer.Resolve<IConfigurationRoot>()["PreventDrop"] = "true";
+                _environment.ClearReceivedCalls();
+                RunSchemaQuench();
+
+                _environment.DidNotReceive().Exit(2);
+                _environment.DidNotReceive().Exit(3);
+                Assert.That(ColumnExists(cmd, "KeeperTable", "Notes"), Is.True,
+                    "Protected environment must NOT drop the Notes column for being absent from the product.");
+
+                var manifest = ReadWouldDropNames();
+                Assert.That(manifest.Any(n => n.Contains("Notes")), Is.True,
+                    $"PreventDrop manifest must list the suppressed Notes column drop. Manifest: [{string.Join(", ", manifest)}]");
+            }
+            finally
+            {
+                FactoryContainer.Resolve<IConfigurationRoot>()["PreventDrop"] = string.Empty;
+                DropTablesAndCleanup(cmd);
+                conn.Close();
+                FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = string.Empty;
+                Directory.Delete(tempDir, true);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    private static void RemoveColumnFromTable(string tableJsonPath, string columnName)
+    {
+        var root = JObject.Parse(File.ReadAllText(tableJsonPath));
+        var columns = (JArray)root["Columns"]!;
+        var toRemove = columns.First(c => (string)c["Name"]! == columnName);
+        toRemove.Remove();
+        File.WriteAllText(tableJsonPath, root.ToString());
+    }
+
+    private static bool ColumnExists(System.Data.IDbCommand cmd, string tableName, string columnName)
+    {
+        cmd.CommandText = $"SELECT CASE WHEN COL_LENGTH('dbo.{tableName}', '{columnName}') IS NULL THEN 0 ELSE 1 END";
+        return Convert.ToInt32(cmd.ExecuteScalar()) == 1;
+    }
+
     private void SetupSharedMocks()
     {
         _progressLog.ClearReceivedCalls();

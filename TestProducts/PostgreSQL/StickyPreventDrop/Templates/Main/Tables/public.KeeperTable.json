@@ -1,6 +1,6 @@
 {
     "Schema": "public",
     "Name": "KeeperTable",
-    "Columns": [{"Name": "Id","DataType": "INTEGER","Nullable": false}],
+    "Columns": [{"Name": "Id","DataType": "INTEGER","Nullable": false},{"Name": "Notes","DataType": "VARCHAR(50)","Nullable": true}],
     "Indexes": [{"Name": "PK_KeeperTable","PrimaryKey": true,"Unique": true,"IndexColumns": "Id"}]
 }

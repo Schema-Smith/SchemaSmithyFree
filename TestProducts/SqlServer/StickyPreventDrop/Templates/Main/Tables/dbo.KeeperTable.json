@@ -6,6 +6,11 @@
             "Name": "[Id]",
             "DataType": "INT",
             "Nullable": false
+        },
+        {
+            "Name": "[Notes]",
+            "DataType": "NVARCHAR(50)",
+            "Nullable": true
         }
     ],
     "Indexes": [

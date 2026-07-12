@@ -241,6 +241,36 @@ BEGIN
       FROM temp_tables t
       JOIN  pg_statistic_ext se ON se.stxrelid = ('"' || t."Schema" || '"."' || t."Name" || '"')::regclass;
 
+    -- No-drop protection tier (#270): the FK drop pass below still runs in protected mode but its
+    -- by-absence branch is gated by p_DropForeignKeysRemovedFromProduct (forced FALSE), so only
+    -- modified (same-name) FKs are dropped. Record the FKs that WOULD be dropped by absence — name
+    -- gone from the product, per-table flag still honored — to the ChangeAudit seam as 'wouldDrop'.
+    -- Mirrors the drop pass's removed-from-package branch (NOT EXISTS same-name + per-table flag).
+    IF p_CaptureWouldDrop THEN
+      RAISE NOTICE 'Capture foreign keys suppressed by PreventDrop (would drop by absence)';
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(), 'foreignKey', ek."TableSchema" || '.' || ek."TableName" || '.' || ek."KeyName", 'wouldDrop'
+          FROM temp_existing_foreignkeys ek
+          JOIN temp_tables tt ON tt."Schema" = ek."TableSchema"
+                             AND tt."Name" = ek."TableName"
+          WHERE NOT EXISTS (SELECT 1
+                              FROM temp_fks fk
+                              WHERE ek."TableSchema" = fk."TableSchema"
+                                AND ek."TableName" = fk."TableName"
+                                AND ek."KeyName" = fk."Name"
+                                AND ek."Columns" = fk."Columns"
+                                AND ek."RelatedTableSchema" = fk."RelatedTableSchema"
+                                AND ek."RelatedTable" = fk."RelatedTable"
+                                AND ek."RelatedColumns" = fk."RelatedColumns"
+                                AND ek."DeleteAction" = fk."DeleteAction"
+                                AND ek."UpdateAction" = fk."UpdateAction")
+            AND NOT EXISTS (SELECT 1
+                              FROM temp_fks fk2
+                              WHERE ek."TableSchema" = fk2."TableSchema"
+                                AND ek."TableName" = fk2."TableName"
+                                AND ek."KeyName" = fk2."Name")
+            AND COALESCE(tt."DropForeignKeysRemovedFromProduct", TRUE);
+    END IF;
     RAISE NOTICE 'Drop Modified or Removed Foreign Keys';
     SELECT STRING_AGG('RAISE NOTICE ''  Foreign Key ' || ek."TableSchema" || '.' || ek."TableName" || '.' || ek."KeyName" || ' no longer in product'';' || CHR(10) ||
                       'ALTER TABLE "' || ek."TableSchema" || '"."' || ek."TableName" || '" DROP CONSTRAINT IF EXISTS "' || ek."KeyName" || '" CASCADE;' || CHR(10) ||
@@ -271,6 +301,36 @@ BEGIN
              OR (p_DropForeignKeysRemovedFromProduct AND COALESCE(tt."DropForeignKeysRemovedFromProduct", TRUE)));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+    -- No-drop protection tier (#270): record check constraints that WOULD be dropped by absence —
+    -- name gone from the product, per-table flag still honored — as 'wouldDrop'. Mirrors the drop
+    -- pass's removed-from-package branch, keeping the column-level-check (CK_<table>_<column>)
+    -- exclusion so a column-owned check is never mis-attributed to the table-level pass.
+    IF p_CaptureWouldDrop THEN
+      RAISE NOTICE 'Capture check constraints suppressed by PreventDrop (would drop by absence)';
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(), 'constraint', ec."TableSchema" || '.' || ec."TableName" || '.' || ec."CheckName", 'wouldDrop'
+          FROM temp_existing_checks ec
+          JOIN temp_tables tt ON tt."Schema" = ec."TableSchema"
+                             AND tt."Name" = ec."TableName"
+          WHERE NOT EXISTS (SELECT 1
+                              FROM temp_checks c
+                              WHERE ec."TableSchema" = c."TableSchema"
+                                AND ec."TableName" = c."TableName"
+                                AND ec."CheckName" = c."Name"
+                                AND ec."Expression" = c."Expression")
+            AND NOT EXISTS (SELECT 1
+                              FROM temp_columns col
+                              WHERE col."TableSchema" = ec."TableSchema"
+                                AND col."TableName" = ec."TableName"
+                                AND NULLIF(col."CheckExpression", '') IS NOT NULL
+                                AND ec."CheckName" = 'CK_' || col."TableName" || '_' || col."Name")
+            AND NOT EXISTS (SELECT 1
+                              FROM temp_checks c2
+                              WHERE ec."TableSchema" = c2."TableSchema"
+                                AND ec."TableName" = c2."TableName"
+                                AND ec."CheckName" = c2."Name")
+            AND COALESCE(tt."DropCheckConstraintsRemovedFromProduct", TRUE);
+    END IF;
     RAISE NOTICE 'Drop Modified or Removed Check Constraints';
     SELECT STRING_AGG('RAISE NOTICE ''  Check Constraint ' || ec."TableSchema" || '.' || ec."TableName" || '.' || ec."CheckName" || ' modified or no longer in product'';' || CHR(10) ||
                       'ALTER TABLE "' || ec."TableSchema" || '"."' || ec."TableName" || '" DROP CONSTRAINT IF EXISTS "' || ec."CheckName" || '" CASCADE;' || CHR(10) ||
@@ -320,6 +380,31 @@ BEGIN
       WHERE ec."Expression" != col."CheckExpression";
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+    -- No-drop protection tier (#270): record statistics objects that WOULD be dropped by absence —
+    -- name gone from the product, per-table flag still honored — as 'wouldDrop'. Mirrors the drop
+    -- pass's removed-from-package branch. Statistics are schema-scoped, so the object name follows the
+    -- pass's own notice form (schema.statisticsName); the drop pass emits no 'dropped' audit row.
+    IF p_CaptureWouldDrop THEN
+      RAISE NOTICE 'Capture statistics suppressed by PreventDrop (would drop by absence)';
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(), 'statistic', es."TableSchema" || '.' || es."StatisticsName", 'wouldDrop'
+          FROM temp_existing_statistics es
+          JOIN temp_tables tt ON tt."Schema" = es."TableSchema"
+                             AND tt."Name" = es."TableName"
+          WHERE NOT EXISTS (SELECT 1
+                              FROM temp_statistics ts
+                              WHERE es."TableSchema" = ts."TableSchema"
+                                AND es."TableName" = ts."TableName"
+                                AND es."StatisticsName" = ts."Name"
+                                AND es."Kind" = COALESCE(NULLIF(ts."Kind", ''), 'NDISTINCT,DEPENDENCIES,MCV')
+                                AND es."StatisticsColumns" = ts."StatisticsColumns")
+            AND NOT EXISTS (SELECT 1
+                              FROM temp_statistics ts2
+                              WHERE es."TableSchema" = ts2."TableSchema"
+                                AND es."TableName" = ts2."TableName"
+                                AND es."StatisticsName" = ts2."Name")
+            AND COALESCE(tt."DropStatisticsRemovedFromProduct", TRUE);
+    END IF;
     RAISE NOTICE 'Drop Modified or Removed Statistics';
     SELECT STRING_AGG('RAISE NOTICE ''  Statistics ' || es."TableSchema" || '.' || es."StatisticsName" || ' modified or no longer in product'';' || CHR(10) ||
                       'DROP STATISTICS IF EXISTS "' || es."TableSchema" || '"."' || es."StatisticsName" || '" CASCADE;', CHR(10))
@@ -345,6 +430,35 @@ BEGIN
              OR (p_DropStatisticsRemovedFromProduct AND COALESCE(tt."DropStatisticsRemovedFromProduct", TRUE)));
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+    -- No-drop protection tier (#270): record exclude constraints that WOULD be dropped by absence —
+    -- name gone from the product, per-table flag still honored — as 'wouldDrop'. Mirrors the drop
+    -- pass's removed-from-package branch. Object name follows the pass's own notice form
+    -- (schema.table.excludeName); the drop pass emits no 'dropped' audit row, ObjectType 'constraint'.
+    IF p_CaptureWouldDrop THEN
+      RAISE NOTICE 'Capture exclude constraints suppressed by PreventDrop (would drop by absence)';
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(), 'constraint', ec."TableSchema" || '.' || ec."TableName" || '.' || ec."ExcludeName", 'wouldDrop'
+          FROM temp_existing_excludes ec
+          JOIN temp_tables tt ON tt."Schema" = ec."TableSchema"
+                             AND tt."Name" = ec."TableName"
+          WHERE NOT EXISTS (SELECT 1
+                              FROM temp_excludes c
+                              WHERE ec."TableSchema" = c."TableSchema"
+                                AND ec."TableName" = c."TableName"
+                                AND ec."ExcludeName" = c."Name"
+                                AND (ec."AccessMethod" = c."AccessMethod" OR c."AccessMethod" = '')
+                                AND ec."ExcludeColumns" = (SELECT STRING_AGG("SchemaSmith"."QuoteIndexColumnList"((celem ->> 'Column')::TEXT) || ' WITH ' || (celem ->> 'Operator')::TEXT, ',')
+                                                             FROM JSON_ARRAY_ELEMENTS(c."ExcludeColumns"::JSON) AS celem)
+                                AND ec."FilterExpression" = c."FilterExpression"
+                                AND ec."Deferrable" = c."Deferrable"
+                                AND ec."InitiallyDeferred" = c."InitiallyDeferred")
+            AND NOT EXISTS (SELECT 1
+                              FROM temp_excludes c2
+                              WHERE ec."TableSchema" = c2."TableSchema"
+                                AND ec."TableName" = c2."TableName"
+                                AND ec."ExcludeName" = c2."Name")
+            AND COALESCE(tt."DropExcludeConstraintsRemovedFromProduct", TRUE);
+    END IF;
     RAISE NOTICE 'Drop Modified or Removed Exclude Constraints';
     SELECT STRING_AGG('RAISE NOTICE ''  Exclude Constraint ' || ec."TableSchema" || '.' || ec."TableName" || '.' || ec."ExcludeName" || ' modified or no longer in product'';' || CHR(10) ||
                       'ALTER TABLE "' || ec."TableSchema" || '"."' || ec."TableName" || '" DROP CONSTRAINT IF EXISTS "' || ec."ExcludeName" || '" CASCADE;', CHR(10))
@@ -447,6 +561,24 @@ BEGIN
       FROM temp_indexes_to_drop ti;
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+    -- No-drop protection tier (#270): the column drop pass below is gated inline by
+    -- p_DropColumnsRemovedFromProduct (forced FALSE in protected mode), so it drops nothing. Record
+    -- the columns that WOULD be dropped by absence — gone from the product, per-table flag still
+    -- honored — as 'wouldDrop'. This is a straight by-absence pass (no modified branch).
+    IF p_CaptureWouldDrop THEN
+      RAISE NOTICE 'Capture columns suppressed by PreventDrop (would drop by absence)';
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(), 'column', ec."TableSchema" || '.' || ec."TableName" || '.' || ec."ColumnName", 'wouldDrop'
+          FROM temp_existing_columns ec
+          JOIN temp_tables tt ON tt."Schema" = ec."TableSchema"
+                             AND tt."Name" = ec."TableName"
+          WHERE NOT EXISTS (SELECT 1
+                              FROM temp_columns c
+                              WHERE ec."TableSchema" = c."TableSchema"
+                                AND ec."TableName" = c."TableName"
+                                AND ec."ColumnName" = c."Name")
+            AND COALESCE(tt."DropColumnsRemovedFromProduct", TRUE);
+    END IF;
     RAISE NOTICE 'Drop Columns No Longer Part of The Product Definition';
     SELECT STRING_AGG('RAISE NOTICE ''  Column ' || ec."TableSchema" || '.' || ec."TableName" || '.' || ec."ColumnName" || ' no longer in product'';' || CHR(10) ||
                       'ALTER TABLE "' || ec."TableSchema" || '"."' || ec."TableName" || '" DROP COLUMN IF EXISTS "' || ec."ColumnName" || '" CASCADE;' || CHR(10) ||

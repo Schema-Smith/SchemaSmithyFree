@@ -653,6 +653,41 @@ BEGIN
       AND p_DropColumnsRemovedFromProduct = 1
       AND COALESCE(t.DropColumnsRemovedFromProduct, 1) = 1;
 
+    -- No-drop protection tier (#270): capture columns that WOULD have been dropped by absence but
+    -- are suppressed. Same by-absence predicate as the _SchemaSmith_ColumnsToDrop build above, minus
+    -- the env p_DropColumnsRemovedFromProduct gate (protection forces it false) but keeping the
+    -- per-table opt-out. Materialize the INFORMATION_SCHEMA read first (Index-B crash-safety), then
+    -- a discrete audit insert. Audit rows only, so it runs regardless of p_WhatIf.
+    IF p_CaptureWouldDrop = 1 THEN
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropColumns;
+        CREATE TEMPORARY TABLE _SchemaSmith_WouldDropColumns (
+            TableName VARCHAR(128) NOT NULL,
+            ColumnName VARCHAR(128) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        INSERT INTO _SchemaSmith_WouldDropColumns (TableName, ColumnName)
+        SELECT SchemaSmith_StripBacktickWrapping(t.TableName), isc.COLUMN_NAME
+        FROM _SchemaSmith_Tables t
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+        LEFT JOIN _SchemaSmith_DefinedColumns dc
+            ON dc.TableName = SchemaSmith_StripBacktickWrapping(t.TableName)
+            AND (
+                BINARY dc.ColumnName = BINARY isc.COLUMN_NAME
+                OR (dc.OldName IS NOT NULL AND BINARY dc.OldName = BINARY isc.COLUMN_NAME)
+            )
+        WHERE t.NewTable = 0
+          AND dc.ColumnName IS NULL
+          AND COALESCE(t.DropColumnsRemovedFromProduct, 1) = 1;
+
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'column', CONCAT(p_DatabaseName, '.', TableName, '.', ColumnName), 'wouldDrop'
+        FROM _SchemaSmith_WouldDropColumns;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropColumns;
+    END IF;
+
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unused columns');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
