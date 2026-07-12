@@ -1,0 +1,7 @@
+# Learner-generated run output. Resolved-SQL artifacts are ignored repo-wide
+# (root .gitignore: "SchemaQuench - *.sql"); logs, checkpoints, and the --report
+# output dir are per-run and transient, so keep them out of the lab too.
+*/logs/
+*/checkpoints/
+*/artifacts/
+*/out/

@@ -1,0 +1,13 @@
+{
+  "Name": "[ShipmentEvent]",
+  "Columns": [
+    { "Name": "[ShipmentEventId]", "DataType": "INT", "ShouldApplyExpression": "", "OldName": "", "VariantName": "", "Collation": "", "DataMaskFunction": "", "EncryptionType": "NONE", "EncryptionKey": "", "EncryptionAlgorithm": "" },
+    { "Name": "[OrderId]", "DataType": "INT", "Nullable": true, "ShouldApplyExpression": "", "OldName": "", "VariantName": "", "Collation": "", "DataMaskFunction": "", "EncryptionType": "NONE", "EncryptionKey": "", "EncryptionAlgorithm": "" },
+    { "Name": "[Status]", "DataType": "NVARCHAR(20)", "Nullable": true, "ShouldApplyExpression": "", "OldName": "", "VariantName": "", "Collation": "", "DataMaskFunction": "", "EncryptionType": "NONE", "EncryptionKey": "", "EncryptionAlgorithm": "" },
+    { "Name": "[EventUtc]", "DataType": "DATETIME2", "Nullable": true, "ShouldApplyExpression": "", "OldName": "", "VariantName": "", "Collation": "", "DataMaskFunction": "", "EncryptionType": "NONE", "EncryptionKey": "", "EncryptionAlgorithm": "" }
+  ],
+  "Indexes": [
+    { "Name": "[PK_ShipmentEvent]", "PrimaryKey": true, "Unique": true, "IndexColumns": "[ShipmentEventId]", "ShouldApplyExpression": "", "VariantName": "", "CompressionType": "NONE", "Clustered": true }
+  ],
+  "ForeignKeys": [], "CheckConstraints": [], "ShouldApplyExpression": "", "VariantName": "", "OldName": "", "Schema": "[dbo]", "CompressionType": "NONE", "XmlIndexes": [], "Statistics": []
+}
