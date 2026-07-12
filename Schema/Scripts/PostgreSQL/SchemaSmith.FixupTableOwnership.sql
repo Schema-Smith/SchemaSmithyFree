@@ -21,6 +21,11 @@ BEGIN
   -- WhatIf is read-only: ownership bookkeeping is a real mutation, so skip it entirely (#303).
   IF p_WhatIf THEN RETURN; END IF;
   RAISE NOTICE 'Add missing Product ownership to tables';
+  -- One-owner-per-object (#270): the unique key is (Schema, TableName, IndexName) NULLS NOT DISTINCT,
+  -- so ANY existing owner row for this physical table suppresses the insert regardless of template.
+  -- A second template declaring the same table in one database silently coalesces onto the existing
+  -- owner row (parity with MySQL INSERT IGNORE on uk_object and SQL Server's single ProductName EP)
+  -- rather than hitting a raw unique violation.
   INSERT INTO "SchemaSmith"."ProductOwnership"
     ("Schema", "TableName", "IndexName", "ProductName", template_name, "PreventDrop")
     SELECT t."Schema", t."Name", NULL, p_ProductName, p_TemplateName, COALESCE(t."PreventDrop", FALSE)
@@ -28,8 +33,7 @@ BEGIN
       WHERE NOT EXISTS (SELECT 1 FROM "SchemaSmith"."ProductOwnership" po
                           WHERE po."Schema" = t."Schema"
                             AND po."TableName" = t."Name"
-                            AND po."IndexName" IS NULL
-                            AND po.template_name IN ('', p_TemplateName));
+                            AND po."IndexName" IS NULL);
 
   RAISE NOTICE 'Refresh PreventDrop marker for tables present in the product';
   UPDATE "SchemaSmith"."ProductOwnership" po

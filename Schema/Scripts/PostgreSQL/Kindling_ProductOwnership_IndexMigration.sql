@@ -15,10 +15,11 @@
 -- Runs AFTER Kindling_ProductOwnership_Table.sql (the table exists by now). Idempotent: once the
 -- tightened NULLS NOT DISTINCT index is in place it neither drops nor recreates.
 --
--- FAILS LOUD if pre-existing dual-owner rows exist (CREATE UNIQUE INDEX errors) -- that state should
--- never occur (FixupTableOwnership's existence check and the deploy-side ownership validation prevent
--- it), so a failure here surfaces a real invariant violation to resolve rather than silently picking
--- a winner.
+-- FAILS LOUD if pre-existing dual-owner rows exist (CREATE UNIQUE INDEX errors). Going forward the
+-- tightened key plus FixupTableOwnership's now-template-agnostic insert guard prevent new dual rows,
+-- but a database migrated from the old 5-column key COULD carry cross-template dual rows created
+-- before this change -- failing loud surfaces that real invariant violation for manual reconciliation
+-- rather than silently picking a winner.
 --
 -- DELETION TRIGGER: once all deployed databases are presumed migrated (~2 releases past the release
 -- that ships this), delete this script and its ForgeKindler PostgreSQL entry (the tightened index is
