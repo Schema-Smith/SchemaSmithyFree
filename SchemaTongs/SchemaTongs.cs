@@ -32,6 +32,13 @@ public class SchemaTongs
     private string _templatePath = "";
     private string[] _objectsToCast = [];
 
+    // Package ScriptTokens (template + product, template-precedence) used to substitute variant-gate
+    // expressions before evaluating them against the source DB during re-extraction. Deploy resolves
+    // ScriptTokens across the package before any gate evaluates; extraction must match so a token
+    // gate (e.g. '{{Edition}}'='Modern') folds to the active variant instead of being written as a
+    // spurious ungated 3rd entry (SS-DUP-001). Populated by LoadPackageTokens.
+    private List<KeyValuePair<string, string>> _packageTokens = [];
+
     private FolderMappingConfig _folderMappingConfig;
     internal Dictionary<ScriptObjectType, string> ResolvedFolders { get; } = new();
 
@@ -258,6 +265,8 @@ public class SchemaTongs
         ResolveFolderMappings();
 
         BuildFileIndexes();
+
+        LoadPackageTokens();
 
         RepositoryHelper.WriteSchemaFiles(_productPath, _platform);
 
@@ -576,6 +585,37 @@ public class SchemaTongs
         {
             _checkConstraintStyle = productStyle;
         }
+    }
+
+    /// <summary>
+    /// Loads the package's configured ScriptTokens (template + product) so variant-gate expressions
+    /// can be token-substituted before evaluation during re-extraction — mirroring deploy, which
+    /// resolves ScriptTokens across the package before any gate evaluates. Precedence matches the
+    /// authoritative deploy gate-resolution path (<c>Template.Load</c>: template tokens override
+    /// product tokens on key conflict). <see cref="SqlScript.TokenReplace"/> builds a first-added-wins
+    /// lookup, so template entries are added first to win. Unresolved tokens are left as-is (same as
+    /// deploy — <see cref="SqlScript.TokenReplace"/> leaves a placeholder it can't resolve untouched).
+    /// </summary>
+    private void LoadPackageTokens()
+    {
+        var tokens = new List<KeyValuePair<string, string>>();
+
+        var templateFile = Path.Combine(_templatePath, "Template.json");
+        if (FileWrapper.GetFromFactory().Exists(templateFile))
+        {
+            var template = JsonHelper.Load<Template>(templateFile);
+            if (template?.ScriptTokens != null) tokens.AddRange(template.ScriptTokens);
+        }
+
+        var productFile = Path.Combine(_productPath, "Product.json");
+        if (FileWrapper.GetFromFactory().Exists(productFile))
+        {
+            var productJson = FileWrapper.GetFromFactory().ReadAllText(productFile);
+            var product = productJson != null ? JsonConvert.DeserializeObject<Product>(productJson) : null;
+            if (product?.ScriptTokens != null) tokens.AddRange(product.ScriptTokens);
+        }
+
+        _packageTokens = tokens;
     }
 
     private readonly ExtractionStats _stats = new();
@@ -1893,7 +1933,8 @@ SELECT s.name AS SchemaName, v.name AS ViewName
     {
         using var gateConnection = GetConnection(targetDb);
         using var gateCommand = gateConnection.CreateCommand();
-        bool IsVariantActive(string expr) => GateEvaluator.ShouldApply(gateCommand, expr);
+        bool IsVariantActive(string expr) =>
+            GateEvaluator.ShouldApply(gateCommand, SqlScript.TokenReplace(expr, _packageTokens, _platform));
 
         command.CommandText = @"
 SELECT t.schemaname, t.tablename
@@ -2461,7 +2502,8 @@ SELECT 'Events' AS Folder,
 
             using var gateConnection = GetConnection(targetSchema);
             using var gateCommand = gateConnection.CreateCommand();
-            bool IsVariantActive(string expr) => GateEvaluator.ShouldApply(gateCommand, expr);
+            bool IsVariantActive(string expr) =>
+                GateEvaluator.ShouldApply(gateCommand, SqlScript.TokenReplace(expr, _packageTokens, _platform));
 
             command.CommandText = $@"
 SELECT TABLE_SCHEMA, TABLE_NAME
@@ -2612,7 +2654,8 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             // and the JSON reader on `commandJson` are both live during the loop.
             using var gateConnection = GetConnection(targetDb);
             using var gateCommand = gateConnection.CreateCommand();
-            bool IsVariantActive(string expr) => GateEvaluator.ShouldApply(gateCommand, expr);
+            bool IsVariantActive(string expr) =>
+                GateEvaluator.ShouldApply(gateCommand, SqlScript.TokenReplace(expr, _packageTokens, _platform));
 
             command.CommandText = @"
 SELECT TABLE_SCHEMA, TABLE_NAME
