@@ -58,11 +58,17 @@ public sealed class TableFileResolver
 
     public TableResolution Resolve(string schema, string name)
     {
+        // A bare (schema-less) canonical name is produced whenever the content carries no schema —
+        // schema-template packages (scrubbed) OR a table whose schema is the platform default and is
+        // therefore omitted from content (PostgreSQL public, MySQL no-schema). This mirrors the
+        // SS-FILE-NAME-003 check, which derives its canonical name with the same empty-schema test,
+        // so extraction output and validation agree by construction.
+        var schemaLess = _isSchemaTemplate || string.IsNullOrEmpty(schema);
         var key = (_isSchemaTemplate ? "" : TableFileName.NormalizeIdentifier(schema), TableFileName.NormalizeIdentifier(name));
         var matches = _byIdentity.TryGetValue(key, out var entries) ? entries : new List<TableFileEntry>();
 
         if (matches.Count == 0)
-            return new TableResolution(Path.Join(_tablesDir, TableFileName.Canonical(schema, name, "", _isSchemaTemplate)), UngatedEmit: false);
+            return new TableResolution(Path.Join(_tablesDir, TableFileName.Canonical(schema, name, "", schemaLess)), UngatedEmit: false);
 
         if (matches.Count == 1)
             return new TableResolution(matches[0].Path, UngatedEmit: false);
@@ -71,7 +77,7 @@ public sealed class TableFileResolver
         var decision = VariantAttribution.Decide(matches, e => e.Gate, _isVariantActive);
         return decision.Action == VariantAction.RefreshActive
             ? new TableResolution(matches[decision.ActiveIndex].Path, UngatedEmit: false)
-            : new TableResolution(Path.Join(_tablesDir, TableFileName.Canonical(schema, name, "", _isSchemaTemplate)), UngatedEmit: true);
+            : new TableResolution(Path.Join(_tablesDir, TableFileName.Canonical(schema, name, "", schemaLess)), UngatedEmit: true);
     }
 
     private sealed class IdentityComparer : IEqualityComparer<(string Schema, string Name)>

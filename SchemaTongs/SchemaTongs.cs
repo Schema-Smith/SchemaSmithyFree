@@ -1934,19 +1934,37 @@ SELECT t.schemaname, t.tablename
                 _stats.TableErrors++;
                 continue;
             }
-            // Schema-template mode needs the typed PostgreSqlTable so the Schema/RelatedTableSchema
-            // properties exist on the in-memory object and can be scrubbed before serialization.
-            var tableObj = _isSchemaTemplate
-                ? PlatformDeserializer.DeserializeTable(tableJson, _platform)
-                : JsonConvert.DeserializeObject<Table>(tableJson);
-            var resolution = resolver.Resolve(schema, table);
+            // Deserialize to the typed PostgreSqlTable so the Schema property exists on the in-memory
+            // object — needed both to scrub it in schema-template mode and to omit the default schema
+            // in regular mode. Base Table would drop Schema (and PG-specific column properties),
+            // leaving content that disagrees with a catalog-derived filename (SS-FILE-NAME-003) and,
+            // worse, round-tripping a non-default-schema table as public.<name> on the next deploy.
+            var tableObj = PlatformDeserializer.DeserializeTable(tableJson, _platform);
+
+            // Regular mode: omit the PostgreSQL default schema (public) from content so the package
+            // follows the default-schema-omission convention (deploy re-resolves an unset Schema to
+            // public). A named non-default schema is kept. The write target then derives from this
+            // same content Schema — schema-less for public, qualified for a named schema — so the
+            // extraction output passes SS-FILE-NAME-003 by construction. Schema-template mode nulls
+            // Schema in ScrubSchemaForTemplate below, so it is excluded here.
+            if (!_isSchemaTemplate && tableObj is PostgreSqlTable pgTable
+                && string.Equals(Identifier.Unwrap(pgTable.Schema, _platform),
+                                 _platform.GetDefaultSchema(), _schemaNameComparison))
+                pgTable.Schema = null;
+
+            var contentSchema = (tableObj as IDeliverableTable)?.Schema ?? "";
+            var resolution = resolver.Resolve(contentSchema, table);
             var tableFile = resolution.WritePath;
             MarkPathWritten(castPath, tableFile);
             if (resolution.UngatedEmit)
                 _progressLog.Warn($"    Extracted {schema}.{table} did not match any active variant — writing ungated '{Path.GetFileName(tableFile)}'; resolve its gating (SS-DUP-001).");
-            var oldTableFile = ResolveOutputPath(castPath, EncodeObjectFileName(schema, tableObj.OldName.Trim('"'), ".json"));
+            var oldName = tableObj.OldName?.Trim('"') ?? "";
+            var oldTableFile = string.IsNullOrEmpty(oldName)
+                ? null
+                : ResolveOutputPath(castPath, TableFileName.Canonical(
+                    contentSchema, oldName, "", _isSchemaTemplate || string.IsNullOrEmpty(contentSchema)));
             _progressLog.Info($"    Casting {tableFile}");
-            if (FileWrapper.GetFromFactory().Exists(tableFile) || FileWrapper.GetFromFactory().Exists(oldTableFile))
+            if (FileWrapper.GetFromFactory().Exists(tableFile) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
             {
                 var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile, _platform);
                 ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
