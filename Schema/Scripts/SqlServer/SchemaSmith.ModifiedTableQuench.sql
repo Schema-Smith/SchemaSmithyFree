@@ -608,6 +608,46 @@ BEGIN TRY
     FROM #XmlIndexRenames ir WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
+  -- No-drop protection tier (#270): when protected mode is active the caller forces both
+  -- @DropIndexesRemovedFromProduct and @DropUnknownIndexes to 0, so the by-absence arms of the
+  -- #IndexesToDrop build below never populate. Record the indexes that WOULD have been dropped by
+  -- absence -- exactly the three by-absence arms of that build, each minus its @Drop... env gate:
+  -- (a) indexes removed from the product (ownership-stamped, per-table cascade tightening not opting
+  -- out), (b) unknown relational indexes, (c) unknown XML indexes. The modified / for-change arms
+  -- (#IndexesToDropForColumnChanges, #IndexChanges, #XmlIndexChanges, and the clustered-PK XML cascade)
+  -- are transient drop-then-recreate for a declared change and are deliberately EXCLUDED -- capturing
+  -- them would falsely report a transient drop as protection-withheld. Audit rows only -- no DDL -- so
+  -- this runs regardless of @WhatIf. ObjectType / ObjectName match the 'dropped' index audit byte-for-byte.
+  IF @CaptureWouldDrop = 1
+  BEGIN
+    RAISERROR('Capture indexes suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STRING_AGG(CAST(
+      'RAISERROR(''  ' + [ObjName] + ' removed from product but PreventDrop is active -- skipping ' + [ObjType] + ' drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + [ObjType] + ''', ''' + [ObjName] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      FROM (
+        -- Arm (a): indexes removed from the product (ownership-stamped) -- @DropIndexesRemovedFromProduct
+        -- env gate stripped; per-table cascade-tightening opt-out (ISNULL(...) = 1) kept.
+        SELECT [ObjType] = CASE WHEN ir.[IsConstraint] = 1 THEN 'constraint' ELSE 'index' END,
+               [ObjName] = ir.[Schema] + '.' + ir.[TableName] + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[IndexName])
+          FROM #IndexesRemovedFromProduct ir WITH (NOLOCK)
+          JOIN sys.indexes i WITH (NOLOCK) ON i.[object_id] = OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]) AND i.[Name] = SchemaSmith.fn_StripBracketWrapping(ir.[IndexName])
+          WHERE ISNULL((SELECT t.[DropIndexesRemovedFromProduct] FROM #Tables t WITH (NOLOCK) WHERE t.[Schema] = ir.[Schema] AND t.[Name] = ir.[TableName]), 1) = 1
+        UNION
+        -- Arm (b): unknown relational indexes (present in DB, absent from the product) -- @DropUnknownIndexes env gate stripped.
+        SELECT [ObjType] = CASE WHEN ei.[IsConstraint] = 1 THEN 'constraint' ELSE 'index' END,
+               [ObjName] = ei.[xSchema] + '.' + ei.[xTableName] + '.' + ei.[xIndexName]
+          FROM #ExistingIndexes ei WITH (NOLOCK)
+          WHERE NOT EXISTS (SELECT * FROM #Indexes i WITH (NOLOCK) WHERE i.[Schema] = ei.[xSchema] AND i.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i.[IndexName]) = ei.[xIndexName])
+        UNION
+        -- Arm (c): unknown XML indexes (present in DB, absent from the product) -- @DropUnknownIndexes env gate stripped; XML indexes are never constraints.
+        SELECT [ObjType] = 'index',
+               [ObjName] = ei.[xSchema] + '.' + ei.[xTableName] + '.' + ei.[xIndexName]
+          FROM #ExistingXmlIndexes ei WITH (NOLOCK)
+          WHERE NOT EXISTS (SELECT * FROM #XmlIndexes i WITH (NOLOCK) WHERE i.[Schema] = ei.[xSchema] AND i.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i.[IndexName]) = ei.[xIndexName])
+      ) x
+    IF @v_SQL IS NOT NULL EXEC(@v_SQL)
+  END
+
   RAISERROR('Identify unknown and modified indexes to drop', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexesToDrop
   SELECT [Schema] = CAST([Schema] AS NVARCHAR(500)), [TableName] = CAST([TableName] AS NVARCHAR(500)), 

@@ -232,6 +232,110 @@ public class ProtectedMode_PreventDropTests
         }
     }
 
+    [Test]
+    public void ProtectedMode_RemovedIndex_NotDropped_ManifestLists_Exit0()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"ProtMode_Idx_{Guid.NewGuid():N}");
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            CopyFixtureTo(tempDir);
+            using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand(); cmd.CommandTimeout = 300;
+            try
+            {
+                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["SchemaPackagePath"] = tempDir;
+                RunSchemaQuench();
+                Assert.That(IndexExists(cmd, "KeeperTable", "IX_KeeperTable_Notes"), Is.True, "Setup: index should exist.");
+
+                RemoveIndexFromTable(Path.Join(tempDir, "Templates", "Main", "Tables", "KeeperTable.json"), "IX_KeeperTable_Notes");
+
+                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["PreventDrop"] = "true";
+                _environment.ClearReceivedCalls();
+                RunSchemaQuench();
+
+                _environment.DidNotReceive().Exit(2);
+                _environment.DidNotReceive().Exit(3);
+                Assert.That(IndexExists(cmd, "KeeperTable", "IX_KeeperTable_Notes"), Is.True,
+                    "Protected environment must NOT drop the index for being absent from the product.");
+                var manifest = ReadWouldDropNames();
+                Assert.That(manifest.Any(n => n.Contains("IX_KeeperTable_Notes")), Is.True,
+                    $"PreventDrop manifest must list the suppressed index drop. Manifest: [{string.Join(", ", manifest)}]");
+            }
+            finally
+            {
+                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["PreventDrop"] = string.Empty;
+                DropTablesAndCleanup(cmd); conn.Close();
+                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["SchemaPackagePath"] = string.Empty;
+                Directory.Delete(tempDir, true); LogFactory.Clear(); FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void ProtectedMode_ModifiedIndex_IsRecreated_NotInManifest()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"ProtMode_IdxMod_{Guid.NewGuid():N}");
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            CopyFixtureTo(tempDir);
+            using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand(); cmd.CommandTimeout = 300;
+            try
+            {
+                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["SchemaPackagePath"] = tempDir;
+                RunSchemaQuench();
+                Assert.That(IndexExists(cmd, "KeeperTable", "IX_KeeperTable_Notes"), Is.True, "Setup: index should exist.");
+
+                ModifyIndexColumns(Path.Join(tempDir, "Templates", "Main", "Tables", "KeeperTable.json"), "IX_KeeperTable_Notes", "`Id`");
+
+                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["PreventDrop"] = "true";
+                _environment.ClearReceivedCalls();
+                RunSchemaQuench();
+
+                _environment.DidNotReceive().Exit(2);
+                _environment.DidNotReceive().Exit(3);
+                Assert.Multiple(() =>
+                {
+                    Assert.That(IndexExists(cmd, "KeeperTable", "IX_KeeperTable_Notes"), Is.True,
+                        "A modified index must still be recreated under protection (transient drop-recreate is allowed).");
+                    Assert.That(ReadWouldDropNames().Any(n => n.Contains("IX_KeeperTable_Notes")), Is.False,
+                        "A MODIFIED (for-change) index drop must NOT appear in the PreventDrop manifest — only by-absence drops do.");
+                });
+            }
+            finally
+            {
+                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["PreventDrop"] = string.Empty;
+                DropTablesAndCleanup(cmd); conn.Close();
+                FactoryContainer.Resolve<Microsoft.Extensions.Configuration.IConfigurationRoot>()["SchemaPackagePath"] = string.Empty;
+                Directory.Delete(tempDir, true); LogFactory.Clear(); FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    private static void RemoveIndexFromTable(string tableJsonPath, string indexName)
+    {
+        var root = JObject.Parse(File.ReadAllText(tableJsonPath));
+        ((JArray)root["Indexes"]!).First(i => (string)i["Name"]! == indexName).Remove();
+        File.WriteAllText(tableJsonPath, root.ToString());
+    }
+
+    private static void ModifyIndexColumns(string tableJsonPath, string indexName, string newColumns)
+    {
+        var root = JObject.Parse(File.ReadAllText(tableJsonPath));
+        ((JArray)root["Indexes"]!).First(i => (string)i["Name"]! == indexName)["IndexColumns"] = newColumns;
+        File.WriteAllText(tableJsonPath, root.ToString());
+    }
+
+    private bool IndexExists(System.Data.IDbCommand cmd, string tableName, string indexName)
+    {
+        cmd.CommandText = $"SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{tableName}' AND INDEX_NAME = '{indexName}'";
+        return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+    }
+
     private static void RemoveCheckConstraints(string tableJsonPath)
     {
         var root = JObject.Parse(File.ReadAllText(tableJsonPath));

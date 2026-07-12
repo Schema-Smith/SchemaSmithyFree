@@ -20,6 +20,10 @@
             "Unique": true,
             "Clustered": true,
             "IndexColumns": "[Id]"
+        },
+        {
+            "Name": "[IX_KeeperTable_Notes]",
+            "IndexColumns": "[Notes]"
         }
     ],
     "CheckConstraints": [
