@@ -23,7 +23,8 @@ public sealed record DeploymentSummary(
     TimingSummary Timing,
     IReadOnlyList<FailureRecord> Failures,
     WhatIfSummary WhatIf,
-    ObjectChangeSummary ObjectChanges);
+    ObjectChangeSummary ObjectChanges,
+    PreventDropSummary PreventDrop = null);
 
 public sealed record RunInfo(
     string Product,
@@ -101,6 +102,19 @@ public sealed record ModifiedCounts(int Tables, int Columns);
 public sealed record DroppedCounts(int Tables, int Indexes, int Constraints, int ForeignKeys);
 
 public sealed record ObjectChangeDetail(string ObjectType, string ObjectName, string Action);
+
+/// <summary>
+/// No-drop protection tier manifest (#270 Slice E). Present only when the environment-level
+/// <c>PreventDrop</c> is enabled; <c>null</c> (omitted) otherwise, so non-protected runs keep the
+/// v1 shape. <see cref="WouldDrop"/> itemizes the objects that would have been dropped by absence
+/// but were suppressed by protection — v1 itemizes tables (all by-absence drops are suppressed
+/// regardless).
+/// </summary>
+public sealed record PreventDropSummary(
+    bool Enabled,
+    IReadOnlyList<WouldDropEntry> WouldDrop);
+
+public sealed record WouldDropEntry(string ObjectType, string ObjectName);
 
 public enum RunMode
 {

@@ -44,6 +44,7 @@ public static class DeploymentSummaryText
         RenderFailures(summary, lines);
         RenderWhatIf(summary, lines);
         RenderObjectChanges(summary, lines);
+        RenderPreventDrop(summary, lines);
 
         return string.Join("\n", lines);
     }
@@ -158,6 +159,24 @@ public static class DeploymentSummaryText
         lines.Add($"- Modified: tables={modified.Tables}, columns={modified.Columns}");
         lines.Add($"- Dropped: tables={dropped.Tables}, indexes={dropped.Indexes}, constraints={dropped.Constraints}, foreignKeys={dropped.ForeignKeys}");
         lines.Add($"- Ran (object scripts): {objectChanges.ScriptsRan}");
+    }
+
+    private static void RenderPreventDrop(DeploymentSummary summary, List<string> lines)
+    {
+        var preventDrop = summary.PreventDrop;
+        if (preventDrop == null)
+            return;
+
+        lines.Add("");
+        lines.Add("## PreventDrop (no-drop protection)");
+        if (preventDrop.WouldDrop.Count == 0)
+        {
+            lines.Add("- Protection active — no drops were suppressed this run.");
+            return;
+        }
+        lines.Add($"- Protection active — {preventDrop.WouldDrop.Count} drop(s) suppressed (object removed from product but not dropped):");
+        foreach (var entry in preventDrop.WouldDrop)
+            lines.Add($"  - {entry.ObjectType}: {entry.ObjectName}");
     }
 
     private static string FormatScope(string server, string database, string schema)

@@ -12,7 +12,8 @@ CREATE OR ALTER PROCEDURE SchemaSmith.ModifiedTableQuench
   @DropCheckConstraintsRemovedFromProduct BIT = 1,
   @DropExcludeConstraintsRemovedFromProduct BIT = 1,
   @DropStatisticsRemovedFromProduct BIT = 1,
-  @DropIndexesRemovedFromProduct BIT = 1
+  @DropIndexesRemovedFromProduct BIT = 1,
+  @CaptureWouldDrop BIT = 0
 AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = '',
@@ -67,6 +68,33 @@ BEGIN TRY
     RAISERROR('One or more tables in this quench are already owned by another product', 16, 1) WITH NOWAIT
   END
   
+  -- No-drop protection tier (#270): when protected mode is active the caller forces
+  -- @DropTablesRemovedFromProduct to 0 so the drop block below never runs. Record the tables that
+  -- WOULD have been dropped by absence (owned by this product, absent from the package, not already
+  -- sticky-PreventDrop) to the ChangeAudit seam as 'wouldDrop' so the run can surface a manifest.
+  -- Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
+  IF @CaptureWouldDrop = 1
+  BEGIN
+    RAISERROR('Capture tables suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STRING_AGG(CAST(
+      'RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.TableName + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + tp.[Schema] + '.[' + tp.TableName + ']'', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      FROM #TableProperties tp
+      WHERE tp.PropertyName = 'ProductName'
+        AND tp.[value] = @ProductName
+        AND NOT EXISTS (SELECT 1
+                          FROM #TableProperties px WITH (NOLOCK)
+                          WHERE px.[Schema] = tp.[Schema]
+                            AND px.TableName = tp.TableName
+                            AND px.PropertyName = 'PreventDrop'
+                            AND px.[value] = 'true')
+        AND NOT EXISTS (SELECT *
+                          FROM #Tables t WITH (NOLOCK)
+                          WHERE t.[Schema] = tp.[Schema]
+                            AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
+    IF @v_SQL IS NOT NULL EXEC(@v_SQL)
+  END
+
   IF @DropTablesRemovedFromProduct = 1
   BEGIN
     RAISERROR('Identify tables removed from the product', 10, 100) WITH NOWAIT

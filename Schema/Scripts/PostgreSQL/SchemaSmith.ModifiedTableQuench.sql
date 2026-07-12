@@ -11,13 +11,35 @@ CREATE OR REPLACE PROCEDURE "SchemaSmith"."ModifiedTableQuench"
    p_DropCheckConstraintsRemovedFromProduct BOOLEAN = TRUE,
    p_DropExcludeConstraintsRemovedFromProduct BOOLEAN = TRUE,
    p_DropStatisticsRemovedFromProduct BOOLEAN = TRUE,
-   p_DropIndexesRemovedFromProduct BOOLEAN = TRUE)
+   p_DropIndexesRemovedFromProduct BOOLEAN = TRUE,
+   p_CaptureWouldDrop BOOLEAN = FALSE)
   LANGUAGE plpgsql
 AS $$
 DECLARE
   sql_script TEXT = '';
   protect_notice TEXT;
 BEGIN
+    -- No-drop protection tier (#270): when protected mode is active the caller forces
+    -- p_DropTablesRemovedFromProduct to FALSE so the table-drop pass below is skipped. Record the
+    -- tables that WOULD have been dropped by absence (owned, absent from the package, not sticky
+    -- PreventDrop) to the ChangeAudit seam as 'wouldDrop' so the run can surface a manifest. Same
+    -- by-absence predicate as the drop pass; audit rows only, so this runs regardless of p_WhatIf.
+    IF p_CaptureWouldDrop THEN
+      RAISE NOTICE 'Capture tables suppressed by PreventDrop (would drop by absence)';
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(), 'table', tp."Schema" || '.' || tp."TableName", 'wouldDrop'
+          FROM temp_product_ownership tp
+          WHERE tp."IndexName" IS NULL
+            AND NOT COALESCE(tp."PreventDrop", FALSE)
+            AND NOT EXISTS (SELECT 1
+                              FROM temp_tables t
+                              WHERE tp."Schema" = t."Schema"
+                                AND tp."TableName" = t."Name")
+            AND NOT EXISTS (SELECT 1
+                              FROM pg_matviews mv
+                              WHERE mv.schemaname = tp."Schema"
+                                AND mv.matviewname = tp."TableName");
+    END IF;
     IF p_DropTablesRemovedFromProduct THEN
       RAISE NOTICE 'Drop inbound foreign keys referencing tables removed from the product';
       -- Drop any foreign key that REFERENCES a table about to be removed (from any table), so the

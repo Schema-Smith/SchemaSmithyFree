@@ -251,7 +251,7 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`DropColumnControl` (`Column1` INT NOT
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0)";
         cmd.ExecuteNonQuery();
 
         // Second quench: exercises table-level DropColumnsRemovedFromProduct flag.
@@ -281,7 +281,7 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`DropColumnControl` (`Column1` INT NOT
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0)";
         cmd.ExecuteNonQuery();
 
         conn.Close();

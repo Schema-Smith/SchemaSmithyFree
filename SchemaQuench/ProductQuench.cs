@@ -818,7 +818,8 @@ public class ProductQuench
                 _product.Name, _product.Platform.ToString(), ToolVersion(),
                 _startedUtc, DateTime.UtcNow, mode, outcome, exitCode, resumed,
                 _targetResults.ToArray(), _runTiming, _migrationScripts.Snapshot(),
-                _whatIf.Snapshot(), _failureRecords.ToArray(), BottleneckThresholdMs(), _changeAudit);
+                _whatIf.Snapshot(), _failureRecords.ToArray(), BottleneckThresholdMs(), _changeAudit,
+                protectedModeEnabled: _protectedMode);
             var (jsonPath, mdPath) = ResolveReportPaths(CommandLineParser.ValueOfSwitch("report", null), ConfigHelper.ResolveLogPath(), "SchemaQuench");
             EnsureReportDirectory(jsonPath);
             var file = FileWrapper.GetFromFactory();
@@ -1809,7 +1810,8 @@ public class ProductQuench
             RunTiming = _runTiming,
             MigrationScripts = _migrationScripts,
             WhatIf = _whatIf,
-            ChangeAudit = _changeAudit
+            ChangeAudit = _changeAudit,
+            CaptureWouldDrop = _protectedMode
         };
         var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();

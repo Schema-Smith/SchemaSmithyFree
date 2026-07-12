@@ -119,7 +119,7 @@ public class AutoIncrementValueQuenchTests
         cmd.CommandText = $"CALL SchemaSmith_MissingTableAndColumnQuench('{_testDb}', {whatIfVal})";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('TestProduct', '{_testDb}', {whatIfVal}, 0, 1, 1, 1, 1)";
+        cmd.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('TestProduct', '{_testDb}', {whatIfVal}, 0, 1, 1, 1, 1, 0)";
         cmd.ExecuteNonQuery();
     }
 

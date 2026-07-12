@@ -14,7 +14,8 @@ CREATE PROCEDURE SchemaSmith_ModifiedTableQuench(
     IN p_DropColumnsRemovedFromProduct TINYINT,
     IN p_DropCheckConstraintsRemovedFromProduct TINYINT,
     IN p_DropExcludeConstraintsRemovedFromProduct TINYINT,
-    IN p_DropStatisticsRemovedFromProduct TINYINT
+    IN p_DropStatisticsRemovedFromProduct TINYINT,
+    IN p_CaptureWouldDrop TINYINT
 )
 SQL SECURITY DEFINER
 BEGIN
@@ -1166,6 +1167,45 @@ BEGIN
          WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
            AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
            AND po.ObjectType = 'TABLE';
+    END IF;
+
+    -- =======================
+    -- No-drop protection tier (#270): when protected mode is active the caller forces
+    -- p_DropTablesRemovedFromProduct to 0 so STEP 8 is skipped. Record the tables that WOULD have
+    -- been dropped by absence (owned, present in the catalog, absent from the package, not sticky
+    -- PreventDrop) to the ChangeAudit seam as 'wouldDrop' so the run can surface a manifest. Same
+    -- by-absence predicate as STEP 8; materialized first (INFORMATION_SCHEMA read out of the DML,
+    -- Index-B crash-safety), then a discrete audit insert. Audit rows only, so it runs regardless
+    -- of p_WhatIf.
+    IF p_CaptureWouldDrop = 1 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Capture tables suppressed by PreventDrop (would drop by absence)');
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropTables;
+        CREATE TEMPORARY TABLE _SchemaSmith_WouldDropTables (
+            TableName VARCHAR(128) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        INSERT INTO _SchemaSmith_WouldDropTables (TableName)
+        SELECT po.ObjectName
+        FROM SchemaSmith_ProductOwnership po
+        WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+          AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+          AND po.ObjectType = 'TABLE'
+          AND COALESCE(po.PreventDrop, 0) = 0
+          AND EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+              WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_Tables t
+              WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+          );
+
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'table', CONCAT(p_DatabaseName, '.', TableName), 'wouldDrop'
+        FROM _SchemaSmith_WouldDropTables;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropTables;
     END IF;
 
     -- =======================

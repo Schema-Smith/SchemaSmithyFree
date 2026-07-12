@@ -2447,7 +2447,7 @@ public class DatabaseQuenchTests
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
 
-        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 1, 1, 1, 1)
+        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 1, 1, 1, 1, 0)
         // (prod, db, whatIf=0, dropTables=0, dropCols=1, dropChecks=1) — dropCols is the 5th arg.
         Assert.That(mockCmd.CommandText, Does.Contain(", 0, 0, 1,"));
     }
@@ -2559,7 +2559,7 @@ public class DatabaseQuenchTests
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
 
-        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 0, 1, 1, 1)
+        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 0, 1, 1, 1, 0)
         Assert.That(mockCmd.CommandText, Does.EndWith(", 1)"));
     }
 

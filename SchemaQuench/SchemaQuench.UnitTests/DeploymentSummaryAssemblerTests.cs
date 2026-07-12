@@ -37,7 +37,8 @@ public class DeploymentSummaryAssemblerTests
         IReadOnlyList<WhatIfRun> whatIfEntries = null,
         IReadOnlyList<FailureRecord> failures = null,
         long bottleneckThresholdMs = 5000,
-        ChangeAuditCapture changeAudit = null)
+        ChangeAuditCapture changeAudit = null,
+        bool protectedModeEnabled = false)
     {
         targets ??= new List<TargetResult>
         {
@@ -66,7 +67,47 @@ public class DeploymentSummaryAssemblerTests
             whatIfEntries: whatIfEntries,
             failures: failures,
             bottleneckThresholdMs: bottleneckThresholdMs,
-            changeAudit: changeAudit);
+            changeAudit: changeAudit,
+            protectedModeEnabled: protectedModeEnabled);
+    }
+
+    [Test]
+    public void Assemble_PreventDrop_NullWhenProtectionOff()
+    {
+        Assert.That(AssembleWith(protectedModeEnabled: false).PreventDrop, Is.Null);
+    }
+
+    [Test]
+    public void Assemble_PreventDrop_ManifestFromWouldDropRows_WhenProtectionOn()
+    {
+        var cap = new ChangeAuditCapture();
+        cap.Record("table", "dbo.Orders", "wouldDrop");
+        cap.Record("table", "dbo.Audit", "wouldDrop");
+        cap.Record("table", "dbo.Kept", "created"); // not a wouldDrop — must not appear in the manifest
+        cap.MarkInstrumented();
+
+        var summary = AssembleWith(changeAudit: cap, protectedModeEnabled: true);
+
+        Assert.That(summary.PreventDrop, Is.Not.Null);
+        Assert.That(summary.PreventDrop.Enabled, Is.True);
+        Assert.That(summary.PreventDrop.WouldDrop.Select(w => w.ObjectName),
+            Is.EquivalentTo(new[] { "dbo.Orders", "dbo.Audit" }));
+        // wouldDrop rows are protection-suppressed, not changes that occurred — excluded from object-change detail.
+        Assert.That(summary.ObjectChanges.Details.Select(d => d.Action), Does.Not.Contain("wouldDrop"));
+    }
+
+    [Test]
+    public void Assemble_PreventDrop_EmptyManifest_WhenProtectionOnButNothingSuppressed()
+    {
+        var cap = new ChangeAuditCapture();
+        cap.Record("table", "dbo.Orders", "created");
+        cap.MarkInstrumented();
+
+        var summary = AssembleWith(changeAudit: cap, protectedModeEnabled: true);
+
+        Assert.That(summary.PreventDrop, Is.Not.Null);
+        Assert.That(summary.PreventDrop.Enabled, Is.True);
+        Assert.That(summary.PreventDrop.WouldDrop, Is.Empty);
     }
 
     [Test]

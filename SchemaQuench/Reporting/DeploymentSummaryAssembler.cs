@@ -32,7 +32,8 @@ public static class DeploymentSummaryAssembler
         IReadOnlyList<WhatIfRun> whatIfEntries,
         IReadOnlyList<FailureRecord> failures,
         long bottleneckThresholdMs,
-        ChangeAuditCapture changeAudit)
+        ChangeAuditCapture changeAudit,
+        bool protectedModeEnabled = false)
     {
         var run = new RunInfo(
             Product: product,
@@ -77,6 +78,8 @@ public static class DeploymentSummaryAssembler
 
         var objectChanges = BuildObjectChanges(changeAudit);
 
+        var preventDrop = protectedModeEnabled ? BuildPreventDrop(changeAudit) : null;
+
         return new DeploymentSummary(
             SchemaVersion: "1.0",
             Tool: "SchemaQuench",
@@ -87,7 +90,25 @@ public static class DeploymentSummaryAssembler
             Timing: timingSummary,
             Failures: failures,
             WhatIf: whatIf,
-            ObjectChanges: objectChanges);
+            ObjectChanges: objectChanges,
+            PreventDrop: preventDrop);
+    }
+
+    /// <summary>
+    /// No-drop protection tier manifest (#270 Slice E). Itemizes the objects the procs reported as
+    /// <c>wouldDrop</c> — dropped by absence but suppressed because the environment is protected.
+    /// Emitted only when protected mode is enabled; empty <see cref="PreventDropSummary.WouldDrop"/>
+    /// means protection was on but nothing was suppressed this run.
+    /// </summary>
+    private static PreventDropSummary BuildPreventDrop(ChangeAuditCapture changeAudit)
+    {
+        var wouldDrop = changeAudit is { Instrumented: true }
+            ? changeAudit.Snapshot()
+                .Where(r => r.Action == "wouldDrop")
+                .Select(r => new WouldDropEntry(r.ObjectType, r.ObjectName))
+                .ToArray()
+            : Array.Empty<WouldDropEntry>();
+        return new PreventDropSummary(Enabled: true, WouldDrop: wouldDrop);
     }
 
     /// <summary>
@@ -133,7 +154,10 @@ public static class DeploymentSummaryAssembler
             ForeignKeys: Count("foreignKey", "dropped"));
 
         var scriptsRan = rows.Count(r => r.Action == "ran");
+        // 'wouldDrop' rows are protection-suppressed drops, not changes that occurred — they belong
+        // to the PreventDropSummary manifest, not the object-change detail.
         var details = rows
+            .Where(r => r.Action != "wouldDrop")
             .Select(r => new ObjectChangeDetail(r.ObjectType, r.ObjectName, r.Action))
             .ToArray();
 
