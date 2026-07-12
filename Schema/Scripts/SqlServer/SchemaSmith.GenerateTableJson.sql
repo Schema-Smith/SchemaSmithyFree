@@ -19,6 +19,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
        st.is_tracked_by_cdc AS [EnableCDC],
+       -- Emit the sticky drop-protection marker first-class (only when set true, so unprotected tables stay minimal).
+       -- Read from the PreventDrop extended property (excluded from generic Extensions via @InternalEPNames). #270
+       CASE WHEN (SELECT CONVERT(NVARCHAR(50), [value])
+                    FROM fn_listextendedproperty(N'PreventDrop', N'Schema', @p_Schema, N'Table', @p_Table, default, default)) = 'true'
+            THEN CAST(1 AS BIT) END AS [PreventDrop],
        '' AS [OldName],
        '' AS [ContentFile],
        'NONE' AS [MergeType],
