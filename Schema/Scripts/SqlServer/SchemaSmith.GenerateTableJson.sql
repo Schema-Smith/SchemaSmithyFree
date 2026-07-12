@@ -10,7 +10,7 @@ SET NOCOUNT ON
 DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))
 -- SchemaSmith-internal extended properties to exclude from extraction (one-line change to add new names)
 DECLARE @InternalEPNames TABLE ([Name] NVARCHAR(128))
-INSERT @InternalEPNames VALUES (N'ProductName')
+INSERT @InternalEPNames VALUES (N'ProductName'), (N'PreventDrop')  -- PreventDrop is a SchemaSmith ownership marker, not a user extended property (#270)
 SELECT [Line] FROM SchemaSmith.fn_FormatJson(REPLACE(REPLACE(REPLACE((
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
