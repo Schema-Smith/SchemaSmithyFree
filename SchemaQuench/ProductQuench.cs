@@ -39,6 +39,7 @@ public class ProductQuench
     private readonly bool _deliverData;
     private readonly bool _trackRunOnceMigrations;
     private readonly bool _pruneObsoleteMigrationTracking;
+    private readonly bool _protectedMode;
     private readonly IReadOnlyList<string> _targetTemplates;
     private readonly IReadOnlyList<string> _targetDatabases;
     private readonly IReadOnlyList<string> _targetSchemas;
@@ -129,6 +130,7 @@ public class ProductQuench
         _deliverData = _config["DeliverData"]?.ToLower() != "false";
         _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
         _pruneObsoleteMigrationTracking = _config["PruneObsoleteMigrationTracking"]?.ToLower() != "false";
+        _protectedMode = ProtectedModeEnabled(_config);
         _targetTemplates = ReadFilterArray("Target:Templates");
         _targetDatabases = ReadFilterArray("Target:Databases");
         _targetSchemas = ReadFilterArray("Target:Schemas");
@@ -188,20 +190,13 @@ public class ProductQuench
         return bool.TryParse(raw, out var parsed) ? parsed : (bool?)null;
     }
 
-    // Env-level protected mode (#270 Slice E). When PreventDrop is true the environment refuses
-    // drop-by-absence: a two-phase detect assembles a complete would-drop manifest, then the run
-    // either fails closed (default) with that manifest before any object work, or — in log mode —
-    // logs the manifest and suppresses all drops while completing the rest of the run.
+    // Env-level no-drop protection tier (#270 Slice E). When PreventDrop is true the environment
+    // never drops an object BY ABSENCE: every Drop…RemovedFromProduct pass (plus DropUnknownIndexes)
+    // is suppressed, each skipped drop is recorded to the ChangeAudit seam and surfaced as a
+    // PreventDropSummary manifest, and the run completes normally (exit 0). Transient drop-then-
+    // recreate that is part of applying a declared change is unaffected — protected mode touches
+    // only the by-absence lever.
     internal static bool ProtectedModeEnabled(IConfiguration config) => ConfigBool(config, "PreventDrop") == true;
-
-    internal static string ProtectedModeMode(IConfiguration config) =>
-        string.Equals(config["PreventDropMode"]?.Trim(), "log", System.StringComparison.OrdinalIgnoreCase) ? "log" : "fail";
-
-    // The fail-closed gate: a non-empty would-drop manifest aborts before any object work in every
-    // mode except log (which suppresses + logs); an empty manifest proceeds normally. Keyed on
-    // "not log" rather than "is fail" so an unnormalized/unexpected mode fails closed by construction.
-    internal static bool ShouldFailClosed(string mode, int manifestCount) =>
-        !string.Equals(mode, "log", System.StringComparison.OrdinalIgnoreCase) && manifestCount > 0;
 
     /// <summary>
     /// Reads <c>Target.TemplateTargets</c> from configuration into the per-template override map.
@@ -659,6 +654,11 @@ public class ProductQuench
     private void QuenchProductCore(bool suppressKindlingForTesting)
     {
         _progressLog.Info($"Begin Quench of {_product.Name}");
+
+        if (_protectedMode)
+            _progressLog.Info("PreventDrop is ENABLED — this environment will skip every drop-by-absence and report the suppressed drops (no objects are dropped for being absent from the product).");
+        else if (!string.IsNullOrWhiteSpace(_config["PreventDrop"]) && ConfigBool(_config, "PreventDrop") == null)
+            _progressLog.Warn($"PreventDrop value '{_config["PreventDrop"]}' is not a recognized boolean (true/false) — the no-drop protection tier is NOT enabled.");
 
         LogProductInfo();
 
@@ -1779,6 +1779,22 @@ public class ProductQuench
         var dropUnknownIndexes = ResolveCascadedFlag(
             ConfigBool(_config, "DropUnknownIndexes"), _product.DropUnknownIndexes,
             template.DropUnknownIndexes, defaultValue: false);
+        // No-drop protection tier (#270 Slice E): a protected environment never drops an object BY
+        // ABSENCE. Force every Drop…RemovedFromProduct lever (and DropUnknownIndexes) false so the
+        // by-absence passes are suppressed; the procs still record what they skipped for the manifest.
+        // Transient/for-change drop-then-recreate is gated by change detection, not these flags, so it
+        // is unaffected (verified across all three engines).
+        if (_protectedMode)
+        {
+            dropRemovedTables = FormatBooleanFlag(false);
+            dropRemovedColumns = FormatBooleanFlag(false);
+            dropRemovedForeignKeys = FormatBooleanFlag(false);
+            dropRemovedCheckConstraints = FormatBooleanFlag(false);
+            dropRemovedExcludeConstraints = FormatBooleanFlag(false);
+            dropRemovedStatistics = FormatBooleanFlag(false);
+            dropRemovedIndexes = FormatBooleanFlag(false);
+            dropUnknownIndexes = false;
+        }
         var quench = new DatabaseQuench(unit.Server, _product, template, unit.DatabaseName, unit.SchemaName,
             suppressKindling, _whatIfOnly, _runScriptsTwice, dropRemovedTables,
             dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropRemovedExcludeConstraints, dropRemovedStatistics, dropRemovedIndexes, dropUnknownIndexes,

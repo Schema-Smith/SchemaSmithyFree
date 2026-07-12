@@ -2577,20 +2577,14 @@ public class ProductQuenchTests
     [Test] public void ConfigBool_False_False()   { var c = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string>{["X"]="false"}).Build(); Assert.That(ProductQuench.ConfigBool(c,"X"), Is.False); }
     [Test] public void ConfigBool_True_True()     { var c = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string>{["X"]="true"}).Build(); Assert.That(ProductQuench.ConfigBool(c,"X"), Is.True); }
 
-    // Protected mode (env-level PreventDrop) config resolution + fail-closed gate (#270 Slice E).
+    // Env-level no-drop protection tier (env PreventDrop) config resolution (#270 Slice E).
     private static IConfigurationRoot Cfg(params (string Key, string Value)[] kv) =>
         new ConfigurationBuilder().AddInMemoryCollection(kv.ToDictionary(p => p.Key, p => p.Value)).Build();
 
-    [Test] public void ProtectedMode_Off_WhenAbsent()       => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg()), Is.False);
-    [Test] public void ProtectedMode_On_WhenTrue()          => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg(("PreventDrop","true"))), Is.True);
-    [Test] public void ProtectedMode_Off_WhenFalse()        => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg(("PreventDrop","false"))), Is.False);
-    [Test] public void ProtectedMode_DefaultMode_IsFail()   => Assert.That(ProductQuench.ProtectedModeMode(Cfg(("PreventDrop","true"))), Is.EqualTo("fail"));
-    [Test] public void ProtectedMode_LogMode_IsLog()        => Assert.That(ProductQuench.ProtectedModeMode(Cfg(("PreventDropMode","log"))), Is.EqualTo("log"));
-    [Test] public void ProtectedMode_UnknownMode_IsFail()   => Assert.That(ProductQuench.ProtectedModeMode(Cfg(("PreventDropMode","banana"))), Is.EqualTo("fail"));
-    [Test] public void Gate_FailMode_NonEmpty_Aborts()      => Assert.That(ProductQuench.ShouldFailClosed("fail", 3), Is.True);
-    [Test] public void Gate_FailMode_Empty_Proceeds()       => Assert.That(ProductQuench.ShouldFailClosed("fail", 0), Is.False);
-    [Test] public void Gate_LogMode_NonEmpty_DoesNotAbort() => Assert.That(ProductQuench.ShouldFailClosed("log", 3), Is.False);
-    [Test] public void Gate_UnknownMode_NonEmpty_FailsClosed() => Assert.That(ProductQuench.ShouldFailClosed("banana", 3), Is.True);
+    [Test] public void ProtectedMode_Off_WhenAbsent()      => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg()), Is.False);
+    [Test] public void ProtectedMode_On_WhenTrue()         => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg(("PreventDrop","true"))), Is.True);
+    [Test] public void ProtectedMode_Off_WhenFalse()       => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg(("PreventDrop","false"))), Is.False);
+    [Test] public void ProtectedMode_Off_WhenUnparseable() => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg(("PreventDrop","banana"))), Is.False);
 
     #endregion
 }
