@@ -243,6 +243,58 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- No-drop protection tier (#270): capture foreign keys that WOULD have been dropped by absence
+    -- but are suppressed. Same by-absence predicate as STEP 4's _SchemaSmith_FKsToDrop build below,
+    -- minus the env p_DropForeignKeysRemovedFromProduct gate (protection forces it false, so STEP 4
+    -- is skipped) but keeping the per-table opt-out. Materialize the INFORMATION_SCHEMA read into a
+    -- temp first (crash-safety), then a discrete audit insert. Audit rows only, so it runs regardless
+    -- of p_WhatIf. The capture signal is the session user-variable @ss_capture_would_drop set by the
+    -- caller on the connection (this proc takes no new parameter). ObjectName mirrors STEP 4's
+    -- 'foreignKey'/'dropped' audit: CONCAT(TableName, '.', ConstraintName).
+    IF COALESCE(@ss_capture_would_drop, 0) = 1 THEN
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropFKs;
+        CREATE TEMPORARY TABLE _SchemaSmith_WouldDropFKs (
+            TableName VARCHAR(128) NOT NULL,
+            ConstraintName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, ConstraintName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        INSERT INTO _SchemaSmith_WouldDropFKs (TableName, ConstraintName)
+        SELECT
+            SUBSTRING_INDEX(po.ObjectName, '.', 1) AS TableName,
+            SUBSTRING_INDEX(po.ObjectName, '.', -1) AS ConstraintName
+        FROM SchemaSmith_ProductOwnership po
+        WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
+          AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+          AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'FOREIGN KEY' COLLATE utf8mb4_unicode_ci
+          -- Not in current definition
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_ForeignKeys f
+              WHERE CONVERT(SchemaSmith_StripBacktickWrapping(f.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+                AND CONVERT(SchemaSmith_StripBacktickWrapping(f.KeyName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
+          )
+          -- Verify FK actually exists
+          AND EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+              WHERE CONVERT(tc.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                AND CONVERT(tc.TABLE_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+                AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
+                AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
+          )
+          -- Per-table tightening: a table may set DropForeignKeysRemovedFromProduct:false to protect its own FKs.
+          AND COALESCE((SELECT t.DropForeignKeysRemovedFromProduct
+                          FROM _SchemaSmith_Tables t
+                          WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+                          LIMIT 1), 1) = 1;
+
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'foreignKey', CONCAT(TableName, '.', ConstraintName), 'wouldDrop'
+        FROM _SchemaSmith_WouldDropFKs;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropFKs;
+    END IF;
+
+    -- =========================================================================
     -- STEP 4: Drop FKs owned by product but not in definition
     -- Gated by DropForeignKeysRemovedFromProduct (decoupled from DropUnknownIndexes):
     -- MySQL FK cleanup no longer requires enabling index drops.

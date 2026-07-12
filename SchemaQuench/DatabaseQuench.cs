@@ -1367,14 +1367,14 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
-                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}"
+                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}"
                     : $"EXEC [{_databaseName}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
                 break;
             }
             case Platform.PostgreSQL:
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
                     ? $@"
-CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{EscapeSqlLiteral(IterationTableSchema)}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()});
+CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{EscapeSqlLiteral(IterationTableSchema)}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()}, p_CaptureWouldDrop := {FormatBooleanFlag(CaptureWouldDrop)});
 CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 "
                     : $@"
@@ -1387,6 +1387,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             {
                 if (!MySqlTempTablesExist(tableCommand))
                     ParseMySqlTableJson(tableCommand);
+                SetMySqlCaptureFlag(tableCommand);
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
                 var dropRemovedChecks = _dropRemovedCheckConstraints == "1" ? 1 : 0;
@@ -1401,6 +1402,16 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Indexes"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
+    }
+
+    // MySQL threads the no-drop-protection capture signal via a connection session variable rather
+    // than a proc parameter — its FK / index / check quench procs have too many direct call sites to
+    // add a parameter cleanly. Set it explicitly (0/1) before each such proc so a pooled connection
+    // never carries a stale value; the procs read `COALESCE(@ss_capture_would_drop, 0)`.
+    private void SetMySqlCaptureFlag(IDbCommand tableCommand)
+    {
+        tableCommand.CommandText = $"SET @ss_capture_would_drop = {(CaptureWouldDrop ? 1 : 0)}";
+        tableCommand.ExecuteNonQuery();
     }
 
     internal void QuenchForeignKeys(IDbCommand tableCommand)
@@ -1422,6 +1433,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             {
                 if (!MySqlTempTablesExist(tableCommand))
                     ParseMySqlTableJson(tableCommand);
+                SetMySqlCaptureFlag(tableCommand);
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
                 var dropRemovedFks = _dropRemovedForeignKeys == "1" ? 1 : 0;

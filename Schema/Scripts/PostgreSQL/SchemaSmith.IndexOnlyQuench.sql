@@ -8,7 +8,8 @@ CREATE OR REPLACE PROCEDURE "SchemaSmith"."IndexOnlyQuench"
  p_WhatIf BOOLEAN = FALSE,
  p_DropUnknownIndexes BOOLEAN = FALSE,
  p_DropIndexesRemovedFromProduct BOOLEAN = TRUE,
- p_UpdateFillFactor BOOLEAN = TRUE)
+ p_UpdateFillFactor BOOLEAN = TRUE,
+ p_CaptureWouldDrop BOOLEAN = FALSE)
     LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -166,6 +167,40 @@ BEGIN
                                             WHERE i."TableSchema" = ei."TableSchema"
                                               AND i."TableName" = ei."TableName"
                                               AND i."Name" = ei."IndexName")));
+
+    -- No-drop protection tier (#270): under protected mode the caller forces p_DropUnknownIndexes and
+    -- p_DropIndexesRemovedFromProduct to FALSE, so the by-absence branches of temp_indexes_to_drop above
+    -- stay empty and the drop pass below skips them. Record the indexes that WOULD be dropped by absence
+    -- -- unknown/out-of-band, and product-owned indexes removed from the definition with the per-table
+    -- cascade tightening still honored -- as 'wouldDrop'. Same by-absence predicates as those branches
+    -- minus the env gates; the modified branch is not by-absence and is never suppressed, so it is
+    -- excluded. ObjectName/ObjectType mirror the drop pass's 'dropped' index audit form.
+    IF p_CaptureWouldDrop THEN
+      RAISE NOTICE 'Capture indexes suppressed by PreventDrop (would drop by absence)';
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(),
+               CASE WHEN ei."PrimaryKey" OR ei."UniqueConstraint" THEN 'constraint' ELSE 'index' END,
+               ei."TableSchema" || '.' || ei."TableName" || '.' || ei."IndexName",
+               'wouldDrop'
+          FROM temp_existing_indexes ei
+          WHERE NOT EXISTS (SELECT 1 -- Unknown Index (minus the p_DropUnknownIndexes gate)
+                              FROM temp_indexes i
+                              WHERE i."TableSchema" = ei."TableSchema"
+                                AND i."TableName" = ei."TableName"
+                                AND i."Name" = ei."IndexName")
+             OR (COALESCE((SELECT tt."DropIndexesRemovedFromProduct" FROM temp_tables tt WHERE tt."Schema" = ei."TableSchema" AND tt."Name" = ei."TableName"), TRUE) -- Index Removed from Product (minus the p_DropIndexesRemovedFromProduct gate; per-table opt-out kept)
+                 AND EXISTS (SELECT 1
+                               FROM "SchemaSmith"."ProductOwnership" tp
+                               WHERE tp."ProductName" = p_ProductName
+                                 AND tp."IndexName" = ei."IndexName"
+                                 AND tp."Schema" = ei."TableSchema"
+                                 AND tp."TableName" = ei."TableName")
+                 AND NOT EXISTS (SELECT 1
+                                   FROM temp_indexes i
+                                   WHERE i."TableSchema" = ei."TableSchema"
+                                     AND i."TableName" = ei."TableName"
+                                     AND i."Name" = ei."IndexName"));
+    END IF;
 
     RAISE NOTICE 'Drop Unknown, Removed, and Modified Indexes';
     SELECT STRING_AGG('RAISE NOTICE ''  Dropping ' || CASE WHEN "IsConstraint" THEN 'Constraint' ELSE 'Index' END || ' ' || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."IndexName" || ''';' || CHR(10) ||

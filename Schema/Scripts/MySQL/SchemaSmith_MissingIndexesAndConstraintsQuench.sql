@@ -441,6 +441,50 @@ BEGIN
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ModifiedChecks;
 
     -- =========================================================================
+    -- No-drop protection tier (#270): capture check constraints that WOULD have been dropped by
+    -- absence but are suppressed. Same by-absence predicate as the _SchemaSmith_ChecksToDropByAbsence
+    -- build below, minus the env p_DropCheckConstraintsRemovedFromProduct gate (protection forces it
+    -- false, so the drop pass is skipped) but keeping the per-table opt-out. Materialize the
+    -- INFORMATION_SCHEMA read into a temp first (crash-safety), then a discrete audit insert. Audit
+    -- rows only, so it runs regardless of p_WhatIf. The capture signal is the session user-variable
+    -- @ss_capture_would_drop set by the caller on the connection (this proc takes no new parameter).
+    -- ObjectName mirrors the drop pass's 'constraint'/'dropped' audit: CONCAT(TableName, '.', ConstraintName).
+    IF COALESCE(@ss_capture_would_drop, 0) = 1 THEN
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropChecks;
+        CREATE TEMPORARY TABLE _SchemaSmith_WouldDropChecks (
+            TableName VARCHAR(128) NOT NULL,
+            ConstraintName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, ConstraintName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        INSERT INTO _SchemaSmith_WouldDropChecks (TableName, ConstraintName)
+        SELECT CONVERT(tc.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+               CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+        JOIN _SchemaSmith_Tables t
+            ON BINARY SchemaSmith_StripBacktickWrapping(t.TableName) = BINARY tc.TABLE_NAME
+            AND t.NewTable = 0
+            AND COALESCE(t.DropCheckConstraintsRemovedFromProduct, 1) = 1
+        WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND tc.CONSTRAINT_TYPE = 'CHECK'
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_CheckConstraints c
+              WHERE BINARY SchemaSmith_StripBacktickWrapping(c.TableName) = BINARY tc.TABLE_NAME
+                AND BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName) = BINARY tc.CONSTRAINT_NAME)
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_Columns col
+              WHERE BINARY SchemaSmith_StripBacktickWrapping(col.TableName) = BINARY tc.TABLE_NAME
+                AND col.CheckExpression IS NOT NULL AND TRIM(col.CheckExpression) != ''
+                AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName)));
+
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'constraint', CONCAT(TableName, '.', ConstraintName), 'wouldDrop'
+        FROM _SchemaSmith_WouldDropChecks;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropChecks;
+    END IF;
+
+    -- =========================================================================
     -- Drop check constraints removed from the product (by-absence), gated by the cascade flag
     -- and per-table tightening. Scoped to the current quench's product tables. Table-level checks
     -- absent from _SchemaSmith_CheckConstraints are dropped; a column-level CK_<table>_<column>

@@ -195,6 +195,69 @@ public class ProtectedMode_PreventDropTests
         }
     }
 
+    [Test]
+    public void ProtectedMode_RemovedCheckConstraint_NotDropped_ManifestLists_Exit0()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"ProtMode_Chk_{Guid.NewGuid():N}");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            CopyFixtureTo(tempDir);
+
+            using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+            conn.Open();
+            conn.ChangeDatabase(_mainDb);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandTimeout = 300;
+
+            try
+            {
+                FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = tempDir;
+                RunSchemaQuench();
+                Assert.That(CheckConstraintExists(cmd, "CK_KeeperTable_Id"), Is.True, "Setup: check constraint should exist.");
+
+                RemoveCheckConstraints(Path.Join(tempDir, "Templates", "Main", "Tables", "dbo.KeeperTable.json"));
+
+                FactoryContainer.Resolve<IConfigurationRoot>()["PreventDrop"] = "true";
+                _environment.ClearReceivedCalls();
+                RunSchemaQuench();
+
+                _environment.DidNotReceive().Exit(2);
+                _environment.DidNotReceive().Exit(3);
+                Assert.That(CheckConstraintExists(cmd, "CK_KeeperTable_Id"), Is.True,
+                    "Protected environment must NOT drop the check constraint for being absent from the product.");
+
+                var manifest = ReadWouldDropNames();
+                Assert.That(manifest.Any(n => n.Contains("CK_KeeperTable_Id")), Is.True,
+                    $"PreventDrop manifest must list the suppressed check-constraint drop. Manifest: [{string.Join(", ", manifest)}]");
+            }
+            finally
+            {
+                FactoryContainer.Resolve<IConfigurationRoot>()["PreventDrop"] = string.Empty;
+                DropTablesAndCleanup(cmd);
+                conn.Close();
+                FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = string.Empty;
+                Directory.Delete(tempDir, true);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    private static void RemoveCheckConstraints(string tableJsonPath)
+    {
+        var root = JObject.Parse(File.ReadAllText(tableJsonPath));
+        root.Remove("CheckConstraints");
+        File.WriteAllText(tableJsonPath, root.ToString());
+    }
+
+    private static bool CheckConstraintExists(System.Data.IDbCommand cmd, string checkName)
+    {
+        cmd.CommandText = $"SELECT CASE WHEN OBJECT_ID('dbo.{checkName}', 'C') IS NULL THEN 0 ELSE 1 END";
+        return Convert.ToInt32(cmd.ExecuteScalar()) == 1;
+    }
+
     private static void RemoveColumnFromTable(string tableJsonPath, string columnName)
     {
         var root = JObject.Parse(File.ReadAllText(tableJsonPath));
