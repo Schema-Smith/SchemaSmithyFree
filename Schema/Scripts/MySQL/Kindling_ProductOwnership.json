@@ -44,6 +44,12 @@
       "DataType": "DATETIME",
       "Nullable": false,
       "Default": "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+    },
+    {
+      "Name": "PreventDrop",
+      "DataType": "TINYINT",
+      "Nullable": false,
+      "Default": "0"
     }
   ],
   "Indexes": [

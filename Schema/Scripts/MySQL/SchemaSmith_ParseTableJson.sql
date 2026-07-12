@@ -49,6 +49,7 @@ BEGIN
         DropForeignKeysRemovedFromProduct TINYINT DEFAULT NULL,
         DropCheckConstraintsRemovedFromProduct TINYINT DEFAULT NULL,
         DropIndexesRemovedFromProduct TINYINT DEFAULT NULL,
+        PreventDrop TINYINT DEFAULT 0,
         KEY ix_tables_name (TableName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -56,7 +57,7 @@ BEGIN
     -- The NOT EXISTS check against INFORMATION_SCHEMA is done separately via UPDATE
     -- to avoid a MySQL optimizer issue where correlated subqueries with function calls
     -- inside JSON_TABLE context don't re-evaluate correctly for all rows.
-    INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropIndexesRemovedFromProduct)
+    INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropIndexesRemovedFromProduct, PreventDrop)
     SELECT
         SchemaSmith_SafeBacktickWrap(jt.Name) AS TableName,
         COALESCE(NULLIF(TRIM(jt.Engine), ''), 'InnoDB') AS Engine,
@@ -71,7 +72,8 @@ BEGIN
         jt.DropColumnsRemovedFromProduct,
         jt.DropForeignKeysRemovedFromProduct,
         jt.DropCheckConstraintsRemovedFromProduct,
-        jt.DropIndexesRemovedFromProduct
+        jt.DropIndexesRemovedFromProduct,
+        COALESCE(jt.PreventDrop, 0) AS PreventDrop
     FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
         Name VARCHAR(128) PATH '$.Name',
         Engine VARCHAR(50) PATH '$.Engine',
@@ -84,7 +86,8 @@ BEGIN
         DropColumnsRemovedFromProduct TINYINT PATH '$.DropColumnsRemovedFromProduct',
         DropForeignKeysRemovedFromProduct TINYINT PATH '$.DropForeignKeysRemovedFromProduct',
         DropCheckConstraintsRemovedFromProduct TINYINT PATH '$.DropCheckConstraintsRemovedFromProduct',
-        DropIndexesRemovedFromProduct TINYINT PATH '$.DropIndexesRemovedFromProduct'
+        DropIndexesRemovedFromProduct TINYINT PATH '$.DropIndexesRemovedFromProduct',
+        PreventDrop TINYINT PATH '$.PreventDrop'
     )) AS jt
     WHERE jt.Name IS NOT NULL;
 

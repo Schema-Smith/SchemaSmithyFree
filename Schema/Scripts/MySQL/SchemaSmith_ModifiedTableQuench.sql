@@ -1148,14 +1148,24 @@ BEGIN
 
     -- Update ProductOwnership for managed tables (non-WhatIf mode only)
     IF p_WhatIf = 0 THEN
-        INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
-        SELECT p_ProductName, '', p_DatabaseName, 'TABLE', SchemaSmith_StripBacktickWrapping(t.TableName)
+        INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName, PreventDrop)
+        SELECT p_ProductName, '', p_DatabaseName, 'TABLE', SchemaSmith_StripBacktickWrapping(t.TableName), COALESCE(t.PreventDrop, 0)
         FROM _SchemaSmith_Tables t
         WHERE EXISTS (
             SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
             WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
               AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
         );
+
+        -- INSERT IGNORE skips existing ownership rows, so a toggled PreventDrop would not take
+        -- effect without this refresh UPDATE carrying the current per-table flag onto the row.
+        UPDATE SchemaSmith_ProductOwnership po
+          JOIN _SchemaSmith_Tables t
+            ON CONVERT(po.ObjectName USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4)
+         SET po.PreventDrop = COALESCE(t.PreventDrop, 0)
+         WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+           AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+           AND po.ObjectType = 'TABLE';
     END IF;
 
     -- =======================
@@ -1183,6 +1193,7 @@ BEGIN
             WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
               AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
               AND po.ObjectType = 'TABLE'
+              AND COALESCE(po.PreventDrop, 0) = 0
               AND EXISTS (
                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
                   WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
@@ -1219,6 +1230,7 @@ BEGIN
             WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
               AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
               AND po.ObjectType = 'TABLE'
+              AND COALESCE(po.PreventDrop, 0) = 0
               AND EXISTS (
                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
                   WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
@@ -1278,6 +1290,7 @@ BEGIN
             WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
               AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
               AND po.ObjectType = 'TABLE'
+              AND COALESCE(po.PreventDrop, 0) = 0
               -- Table exists
               AND EXISTS (
                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
@@ -1310,6 +1323,7 @@ BEGIN
             WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
               AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
               AND po.ObjectType = 'TABLE'
+              AND COALESCE(po.PreventDrop, 0) = 0
               -- Table exists
               AND EXISTS (
                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
@@ -1384,6 +1398,41 @@ BEGIN
 
             DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TablesToDrop;
         END IF;
+
+        -- #270: report tables removed from the product but retained because PreventDrop is set.
+        -- The protected table still exists and is still absent from _SchemaSmith_Tables in both the
+        -- WhatIf and live paths (it was excluded from the drop candidate sets above), so this mirror
+        -- set is correct either way. Discrete INFORMATION_SCHEMA read (Index-B crash-safety).
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('Table ', po.ObjectName, ' removed from product but PreventDrop is set — skipping drop (protected)')
+        FROM SchemaSmith_ProductOwnership po
+        WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+          AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+          AND po.ObjectType = 'TABLE'
+          AND COALESCE(po.PreventDrop, 0) = 1
+          AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+                       WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                         AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4))
+          AND NOT EXISTS (SELECT 1 FROM _SchemaSmith_Tables t
+                            WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4));
+    END IF;
+
+    -- =======================
+    -- STEP 9 (D5): CATALOG-RECONCILE PRUNE
+    -- =======================
+    -- Parity prune for tables dropped OUT of band (a migration or DBA dropped the physical table
+    -- without going through SchemaSmith), so their ownership rows don't go stale. The STEP 8 cleanup
+    -- only removes ownership for tables THIS run dropped, so protected tables keep ownership (intended).
+    -- Live path only (WhatIf must not mutate ownership). Discrete INFORMATION_SCHEMA read, run after
+    -- STEP 8 completes and not fused into any set-based DML (Index-B crash-safety).
+    IF p_WhatIf = 0 THEN
+        DELETE po FROM SchemaSmith_ProductOwnership po
+        WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+          AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+          AND po.ObjectType = 'TABLE'
+          AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+                           WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                             AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4));
     END IF;
 
 END//

@@ -1,0 +1,6 @@
+{
+    "Name": "`KeeperTable`",
+    "Engine": "InnoDB",
+    "Columns": [{"Name": "`Id`","DataType": "INT","Nullable": false}],
+    "Indexes": [{"Name": "PRIMARY","PrimaryKey": true,"IndexColumns": "`Id`"}]
+}
