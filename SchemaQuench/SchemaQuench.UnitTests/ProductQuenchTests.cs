@@ -2590,6 +2590,7 @@ public class ProductQuenchTests
     [Test] public void Gate_FailMode_NonEmpty_Aborts()      => Assert.That(ProductQuench.ShouldFailClosed("fail", 3), Is.True);
     [Test] public void Gate_FailMode_Empty_Proceeds()       => Assert.That(ProductQuench.ShouldFailClosed("fail", 0), Is.False);
     [Test] public void Gate_LogMode_NonEmpty_DoesNotAbort() => Assert.That(ProductQuench.ShouldFailClosed("log", 3), Is.False);
+    [Test] public void Gate_UnknownMode_NonEmpty_FailsClosed() => Assert.That(ProductQuench.ShouldFailClosed("banana", 3), Is.True);
 
     #endregion
 }

@@ -197,10 +197,11 @@ public class ProductQuench
     internal static string ProtectedModeMode(IConfiguration config) =>
         string.Equals(config["PreventDropMode"]?.Trim(), "log", System.StringComparison.OrdinalIgnoreCase) ? "log" : "fail";
 
-    // The fail-closed gate: in fail mode, a non-empty would-drop manifest aborts before any object
-    // work. Log mode never aborts (it suppresses + logs); an empty manifest proceeds normally.
+    // The fail-closed gate: a non-empty would-drop manifest aborts before any object work in every
+    // mode except log (which suppresses + logs); an empty manifest proceeds normally. Keyed on
+    // "not log" rather than "is fail" so an unnormalized/unexpected mode fails closed by construction.
     internal static bool ShouldFailClosed(string mode, int manifestCount) =>
-        string.Equals(mode, "fail", System.StringComparison.OrdinalIgnoreCase) && manifestCount > 0;
+        !string.Equals(mode, "log", System.StringComparison.OrdinalIgnoreCase) && manifestCount > 0;
 
     /// <summary>
     /// Reads <c>Target.TemplateTargets</c> from configuration into the per-template override map.
