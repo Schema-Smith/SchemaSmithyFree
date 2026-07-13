@@ -2,7 +2,7 @@
 
 *Terraform for SQL Server, Postgres, and MySQL databases*
 
-> **SchemaSmith v2.2.0 released.** Per-object drop-control guardrails, SchemaShears for surgical object-level patches, and read-only pre-flight diagnostics — decide exactly what a deploy is allowed to change. [Read the v2.2.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/319) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.2.0) · [CHANGELOG](https://github.com/Schema-Smith/SchemaSmith/blob/main/CHANGELOG.md)
+> **SchemaSmith v2.3.0 released.** A per-object report of what every deploy changed, an environment-level no-drop switch that never removes an object by omission, and a `--Validate` pre-flight linter that stops a bad package before it reaches a target. [Read the v2.3.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/350) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.3.0) · [CHANGELOG](https://github.com/Schema-Smith/SchemaSmith/blob/main/CHANGELOG.md)
 
 ![Build](https://github.com/Schema-Smith/SchemaSmith/actions/workflows/continuous-integration.yml/badge.svg)
 [![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/releases/latest)
