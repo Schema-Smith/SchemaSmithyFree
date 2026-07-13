@@ -27,13 +27,24 @@
 DO $$
 BEGIN
   -- Drop any PK_ProductOwnership that is not already the tightened NULLS NOT DISTINCT form (the old
-  -- 5-column key, or a 3-column key BootstrapTableQuench created without NULLS NOT DISTINCT).
+  -- 5-column key, or a 3-column key BootstrapTableQuench created without NULLS NOT DISTINCT). The
+  -- old shape may be a plain unique index OR a constraint-backed index (a legacy PRIMARY KEY / UNIQUE
+  -- constraint) — a constraint's backing index cannot be DROP INDEXed, so drop the constraint in that
+  -- case (which drops its index), else drop the index directly.
   IF EXISTS (SELECT 1 FROM pg_indexes
               WHERE schemaname = 'SchemaSmith'
                 AND indexname = 'PK_ProductOwnership'
                 AND indexdef NOT ILIKE '%NULLS NOT DISTINCT%')
   THEN
-    DROP INDEX IF EXISTS "SchemaSmith"."PK_ProductOwnership";
+    IF EXISTS (SELECT 1 FROM pg_constraint c
+                 JOIN pg_namespace n ON n.oid = c.connamespace
+                WHERE c.conname = 'PK_ProductOwnership'
+                  AND n.nspname = 'SchemaSmith')
+    THEN
+      ALTER TABLE "SchemaSmith"."ProductOwnership" DROP CONSTRAINT "PK_ProductOwnership";
+    ELSE
+      DROP INDEX IF EXISTS "SchemaSmith"."PK_ProductOwnership";
+    END IF;
   END IF;
 
   -- Create the tightened one-owner index if absent. NULLS NOT DISTINCT makes a table's NULL IndexName
