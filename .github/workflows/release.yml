@@ -416,3 +416,20 @@ jobs:
             --notes-file release-notes.md \
             --draft \
             release-assets/*
+
+  cleanup-artifacts:
+    runs-on: ubuntu-latest
+    needs: create-release
+    permissions:
+      actions: write
+    steps:
+      # Build/package artifacts are inter-job plumbing; the shippables live on the Release. Free the storage now.
+      - name: Delete workflow artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --paginate --jq '.artifacts[].id' \
+          | while read -r id; do
+              gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" && echo "deleted artifact $id"
+            done
