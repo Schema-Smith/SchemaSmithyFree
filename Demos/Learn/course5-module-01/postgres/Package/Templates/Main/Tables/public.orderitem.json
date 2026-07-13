@@ -6,35 +6,50 @@
       "DataType": "int4",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
     },
     {
       "Name": "orderitemid",
       "DataType": "int4",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
     },
     {
       "Name": "productid",
       "DataType": "int4",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
     },
     {
       "Name": "quantity",
       "DataType": "int4",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
     },
     {
       "Name": "unitprice",
       "DataType": "numeric(10, 2)",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "MAIN",
+      "Compression": "DEFAULT"
     }
   ],
   "Indexes": [
@@ -44,7 +59,9 @@
       "Unique": true,
       "IndexColumns": "orderitemid",
       "ShouldApplyExpression": "",
-      "VariantName": ""
+      "VariantName": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
     }
   ],
   "ForeignKeys": [
@@ -56,7 +73,9 @@
       "DeleteAction": "",
       "UpdateAction": "",
       "ShouldApplyExpression": "",
-      "VariantName": ""
+      "VariantName": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
     },
     {
       "Name": "fk_orderitem_salesorder",
@@ -66,11 +85,18 @@
       "DeleteAction": "",
       "UpdateAction": "",
       "ShouldApplyExpression": "",
-      "VariantName": ""
+      "VariantName": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
     }
   ],
   "CheckConstraints": [],
   "ShouldApplyExpression": "",
   "VariantName": "",
-  "OldName": ""
+  "OldName": "",
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100
 }

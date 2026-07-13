@@ -6,14 +6,20 @@
       "DataType": "int4",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
     },
     {
       "Name": "email",
       "DataType": "text",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
     },
     {
       "Name": "fullname",
@@ -21,7 +27,10 @@
       "Nullable": true,
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
     }
   ],
   "Indexes": [
@@ -31,12 +40,19 @@
       "Unique": true,
       "IndexColumns": "customerid",
       "ShouldApplyExpression": "",
-      "VariantName": ""
+      "VariantName": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
     }
   ],
   "ForeignKeys": [],
   "CheckConstraints": [],
   "ShouldApplyExpression": "",
   "VariantName": "",
-  "OldName": ""
+  "OldName": "",
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100
 }

@@ -6,28 +6,40 @@
       "DataType": "int4",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
     },
     {
       "Name": "orderdate",
       "DataType": "timestamp",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
     },
     {
       "Name": "orderid",
       "DataType": "int4",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "PLAIN",
+      "Compression": "DEFAULT"
     },
     {
       "Name": "status",
       "DataType": "varchar(20)",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "VariantName": ""
+      "VariantName": "",
+      "Generated": "NEVER",
+      "Storage": "EXTENDED",
+      "Compression": "DEFAULT"
     }
   ],
   "Indexes": [
@@ -37,7 +49,9 @@
       "Unique": true,
       "IndexColumns": "orderid",
       "ShouldApplyExpression": "",
-      "VariantName": ""
+      "VariantName": "",
+      "AccessMethod": "btree",
+      "FillFactor": 90
     }
   ],
   "ForeignKeys": [
@@ -49,11 +63,18 @@
       "DeleteAction": "",
       "UpdateAction": "",
       "ShouldApplyExpression": "",
-      "VariantName": ""
+      "VariantName": "",
+      "RelatedTableSchema": "public",
+      "MatchType": "SIMPLE"
     }
   ],
   "CheckConstraints": [],
   "ShouldApplyExpression": "",
   "VariantName": "",
-  "OldName": ""
+  "OldName": "",
+  "Statistics": [],
+  "ExcludeConstraints": [],
+  "AccessMethod": "heap",
+  "PersistenceType": "Logged",
+  "FillFactor": 100
 }
