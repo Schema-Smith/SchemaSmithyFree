@@ -1115,9 +1115,10 @@ BEGIN TRY
                                  AND ec.[TableName] = c.[TableName]
                                  AND ec.[CheckColumn] = SchemaSmith.fn_StripBracketWrapping(c.[ColumnName])
     WHERE ec.[CheckColumn] IS NOT NULL
+      AND ISNULL(c.[CheckExpression], '') <> ''
       AND ec.[CheckDefinition] <> ISNULL(c.[CheckExpression], '')
-      AND NOT EXISTS (SELECT * 
-                        FROM #CheckConstraints cc WITH (NOLOCK) 
+      AND NOT EXISTS (SELECT *
+                        FROM #CheckConstraints cc WITH (NOLOCK)
                         WHERE ec.[Schema] = cc.[Schema]
                           AND ec.[TableName] = cc.[TableName]
                           AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
@@ -1151,7 +1152,12 @@ BEGIN TRY
       'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
       FROM #ExistingCheckConstraints ec WITH (NOLOCK)
       JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
-      WHERE ec.[CheckColumn] IS NULL
+      WHERE (ec.[CheckColumn] IS NULL
+             OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK)
+                          WHERE c.[Schema] = ec.[Schema]
+                            AND c.[TableName] = ec.[TableName]
+                            AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = ec.[CheckColumn]
+                            AND ISNULL(c.[CheckExpression], '') = ''))
         AND t.NewTable = 0
         AND ISNULL(t.[DropCheckConstraintsRemovedFromProduct], 1) = 1
         AND NOT EXISTS (SELECT * FROM #CheckConstraints cc WITH (NOLOCK)
@@ -1161,17 +1167,24 @@ BEGIN TRY
     IF @v_SQL IS NOT NULL EXEC(@v_SQL)
   END
 
-  -- Drop table-level check constraints removed from the product (by-absence). Column-level checks
-  -- (CheckColumn IS NOT NULL) are owned by the column modify pass above; only table-level checks
-  -- absent from the product's CheckConstraints are dropped here, gated by the cascade flag + the
-  -- per-table tightening (a table may set DropCheckConstraintsRemovedFromProduct:false to protect its own).
+  -- Drop named check constraints removed from the product (by-absence). Covers table-level checks
+  -- (CheckColumn IS NULL) AND single-column named checks SQL Server stored as column-associated
+  -- (CheckColumn set) whose column still exists but no longer carries a CheckExpression -- a genuine
+  -- removal, not a modification (a changed non-empty expression stays on the column modify pass above).
+  -- Gated by the cascade flag + the per-table tightening (a table may set
+  -- DropCheckConstraintsRemovedFromProduct:false to protect its own).
   RAISERROR('Drop Check Constraints No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping check constraint ' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + ec.[Schema] + '.' + ec.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + ec.[CheckName] + '];' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #ExistingCheckConstraints ec WITH (NOLOCK)
     JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
-    WHERE ec.[CheckColumn] IS NULL
+    WHERE (ec.[CheckColumn] IS NULL
+           OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK)
+                        WHERE c.[Schema] = ec.[Schema]
+                          AND c.[TableName] = ec.[TableName]
+                          AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = ec.[CheckColumn]
+                          AND ISNULL(c.[CheckExpression], '') = ''))
       AND t.NewTable = 0
       AND @DropCheckConstraintsRemovedFromProduct = 1
       AND ISNULL(t.[DropCheckConstraintsRemovedFromProduct], 1) = 1

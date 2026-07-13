@@ -225,12 +225,20 @@ public class ProtectedMode_PreventDropTests
 
                 _environment.DidNotReceive().Exit(2);
                 _environment.DidNotReceive().Exit(3);
-                Assert.That(CheckConstraintExists(cmd, "CK_KeeperTable_Id"), Is.True,
-                    "Protected environment must NOT drop the check constraint for being absent from the product.");
-
                 var manifest = ReadWouldDropNames();
-                Assert.That(manifest.Any(n => n.Contains("CK_KeeperTable_Id")), Is.True,
-                    $"PreventDrop manifest must list the suppressed check-constraint drop. Manifest: [{string.Join(", ", manifest)}]");
+                Assert.Multiple(() =>
+                {
+                    // Table-level (multi-column) named check.
+                    Assert.That(CheckConstraintExists(cmd, "CK_KeeperTable_Id"), Is.True,
+                        "Protected environment must NOT drop the table-level check for being absent from the product.");
+                    Assert.That(manifest.Any(n => n.Contains("CK_KeeperTable_Id")), Is.True,
+                        $"Manifest must list the suppressed table-level check. Manifest: [{string.Join(", ", manifest)}]");
+                    // Single-column NAMED check (engine-classified column-level) — must be protected too.
+                    Assert.That(CheckConstraintExists(cmd, "CK_KeeperTable_IdPos"), Is.True,
+                        "Protected environment must NOT drop a single-column NAMED check for being absent from the product.");
+                    Assert.That(manifest.Any(n => n.Contains("CK_KeeperTable_IdPos")), Is.True,
+                        $"Manifest must list the suppressed single-column named check. Manifest: [{string.Join(", ", manifest)}]");
+                });
             }
             finally
             {
@@ -351,10 +359,61 @@ public class ProtectedMode_PreventDropTests
         return Convert.ToInt32(cmd.ExecuteScalar()) == 1;
     }
 
+    [Test]
+    public void ProtectedMode_ModifiedCheckConstraint_IsRecreated_NotInManifest()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"ProtMode_ChkMod_{Guid.NewGuid():N}");
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            CopyFixtureTo(tempDir);
+            using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+            conn.Open(); conn.ChangeDatabase(_mainDb);
+            using var cmd = conn.CreateCommand(); cmd.CommandTimeout = 300;
+            try
+            {
+                FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = tempDir;
+                RunSchemaQuench();
+                Assert.That(CheckConstraintExists(cmd, "CK_KeeperTable_IdPos"), Is.True, "Setup: single-column check should exist.");
+
+                // MODIFY the single-column check's expression — a transient drop-recreate, NOT a by-absence removal.
+                ModifyCheckExpression(Path.Join(tempDir, "Templates", "Main", "Tables", "dbo.KeeperTable.json"), "[CK_KeeperTable_IdPos]", "[Id]>=(0)");
+
+                FactoryContainer.Resolve<IConfigurationRoot>()["PreventDrop"] = "true";
+                _environment.ClearReceivedCalls();
+                RunSchemaQuench();
+
+                _environment.DidNotReceive().Exit(2);
+                _environment.DidNotReceive().Exit(3);
+                Assert.Multiple(() =>
+                {
+                    Assert.That(CheckConstraintExists(cmd, "CK_KeeperTable_IdPos"), Is.True,
+                        "A modified check must still be recreated under protection (transient drop-recreate is allowed).");
+                    Assert.That(ReadWouldDropNames().Any(n => n.Contains("CK_KeeperTable_IdPos")), Is.False,
+                        "A MODIFIED check (expression changed) must NOT appear in the manifest — only by-absence removals do.");
+                });
+            }
+            finally
+            {
+                FactoryContainer.Resolve<IConfigurationRoot>()["PreventDrop"] = string.Empty;
+                DropTablesAndCleanup(cmd); conn.Close();
+                FactoryContainer.Resolve<IConfigurationRoot>()["SchemaPackagePath"] = string.Empty;
+                Directory.Delete(tempDir, true); LogFactory.Clear(); FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
     private static void RemoveCheckConstraints(string tableJsonPath)
     {
         var root = JObject.Parse(File.ReadAllText(tableJsonPath));
         root.Remove("CheckConstraints");
+        File.WriteAllText(tableJsonPath, root.ToString());
+    }
+
+    private static void ModifyCheckExpression(string tableJsonPath, string checkName, string newExpression)
+    {
+        var root = JObject.Parse(File.ReadAllText(tableJsonPath));
+        ((JArray)root["CheckConstraints"]!).First(c => (string)c["Name"]! == checkName)["Expression"] = newExpression;
         File.WriteAllText(tableJsonPath, root.ToString());
     }
 

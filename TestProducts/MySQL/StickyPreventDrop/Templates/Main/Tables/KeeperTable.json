@@ -3,5 +3,5 @@
     "Engine": "InnoDB",
     "Columns": [{"Name": "`Id`","DataType": "INT","Nullable": false},{"Name": "`Notes`","DataType": "VARCHAR(50)","Nullable": true}],
     "Indexes": [{"Name": "PRIMARY","PrimaryKey": true,"IndexColumns": "`Id`"},{"Name": "IX_KeeperTable_Notes","IndexColumns": "`Notes`"}],
-    "CheckConstraints": [{"Name": "CK_KeeperTable_Id","Expression": "`Id` > 0 OR `Notes` IS NOT NULL"}]
+    "CheckConstraints": [{"Name": "CK_KeeperTable_Id","Expression": "`Id` > 0 OR `Notes` IS NOT NULL"},{"Name": "CK_KeeperTable_IdPos","Expression": "`Id` > 0"}]
 }

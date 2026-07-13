@@ -30,6 +30,10 @@
         {
             "Name": "[CK_KeeperTable_Id]",
             "Expression": "[Id]>(0) OR [Notes] IS NOT NULL"
+        },
+        {
+            "Name": "[CK_KeeperTable_IdPos]",
+            "Expression": "[Id]>(0)"
         }
     ]
 }
