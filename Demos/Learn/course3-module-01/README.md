@@ -24,7 +24,7 @@ once under `solution/` — each with its own `Package/` and `dev.settings.json` 
 
   It creates the nine `ordersservice_{dev,staging,prod}` databases across the three engines and
   reports `PASS` for each.
-- The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.2.0.0`).
+- The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0`).
 
 ## Step 1: Establish the base (the v1 package)
 

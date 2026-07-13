@@ -14,7 +14,7 @@ Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package
 ## Before you start
 
 - The [sandbox](../docker) is up (`docker compose up -d`) and verified (all three engines `PASS`).
-- The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.1.0.0` or later
+- The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later
   — folder-level `ShouldApplyExpression` token resolution shipped in v2.1.0).
 
 ## Step 1: Look at the three gates

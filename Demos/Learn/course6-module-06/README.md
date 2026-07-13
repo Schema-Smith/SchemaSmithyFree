@@ -1,6 +1,3 @@
-<!-- TRAINING-RELEASE-PIN #324: --Validate semantic linter (SchemaSmith#324, merged in #326). When --Validate ships in a stock release: bump the pre-flight version string, drop the from-source caveat, simplify ci/validate.yml to the plain install step, re-cert, then delete this sentinel and its release-coupled tracking entry. -->
-<!-- TRAINING-RELEASE-PIN #343: SS-FILE-NAME-003 file-naming lean for --Validate (SchemaSmith#343). When SS-FILE-NAME-003 ships in a stock release: bump the pre-flight version string, drop the from-source caveat, re-cert, then delete this sentinel and its release-coupled tracking entry. -->
-
 # Course 6, Module 6 — Lint before you deploy: the `--Validate` semantic linter (lab)
 
 **Goal:** catch the cross-object errors JSON Schema can't express — a dangling foreign key, an ungated duplicate column, an undefined token, a stale editor schema, a drifted file name — with a single static command that needs no database, no credentials, and no running engine. Read a broken package's findings board, fix each error to green, prove the linter is *semantic* (not dumb), surface a misnamed-file warning that never gates the exit code, clear an induced staleness finding, then wire it in as a CI gate. SQL Server, PostgreSQL, and MySQL.
@@ -14,22 +11,17 @@ Structural validation (Module 3) catches the typo — a missing `DataType`, a mi
 ## Before you start
 
 - **No sandbox, no database, no credentials.** `--Validate` (and `schematongs --WriteSchemasOnly`, used later) never connect to an engine. This lab is entirely database-free.
-- **From-source override.** `--Validate` merged to `main` (SchemaSmith [#324](https://github.com/Schema-Smith/SchemaSmith/issues/324), PR [#326](https://github.com/Schema-Smith/SchemaSmith/pull/326)) but isn't in the 2.2.0 release yet. Build the CLI from source, then set `SCHEMAQUENCH` / `SCHEMATONGS` to the built executables and use them in the commands below:
-  ```
-  export SCHEMAQUENCH="/path/to/SchemaSmith/SchemaQuench/bin/Release/net10.0/SchemaQuench.exe"
-  export SCHEMATONGS="/path/to/SchemaSmith/SchemaTongs/bin/Release/net10.0/SchemaTongs.exe"
-  ```
-  Once `--Validate` ships in a stock release, drop this step and use the installed `schemaquench` / `schematongs` on your PATH.
+- **The CLI is on your PATH** — `schemaquench --version` answers **2.3.0** or later.
 - Each engine package under `sqlserver/`, `postgres/`, and `mysql/` ships **deliberately broken** — that's the starting point. You'll fix it.
 
-> **Path binding note:** if `--SchemaPackagePath:./sqlserver/Package` doesn't bind in your shell, pass the absolute path via the environment instead: `SmithySettings_SchemaPackagePath="$(pwd)/sqlserver/Package" "$SCHEMAQUENCH" --Validate`. Run `schematongs --WriteSchemasOnly` from *inside* a `Package` directory (it defaults to `.`).
+> **Path binding note:** if `--SchemaPackagePath:./sqlserver/Package` doesn't bind in your shell, pass the absolute path via the environment instead: `SmithySettings_SchemaPackagePath="$(pwd)/sqlserver/Package" schemaquench --Validate`. Run `schematongs --WriteSchemasOnly` from *inside* a `Package` directory (it defaults to `.`).
 
 ## Scenario 1 — read the board
 
 Run the linter against the broken SQL Server package (swap `sqlserver` for `postgres` / `mysql` — the same three errors reproduce on every engine):
 
 ```
-"$SCHEMAQUENCH" --Validate --SchemaPackagePath:./sqlserver/Package
+schemaquench --Validate --SchemaPackagePath:./sqlserver/Package
 ```
 
 It exits `2` and prints exactly three errors, one from each check engine:
@@ -58,7 +50,7 @@ Fix each error and re-run. Three edits:
 Re-run:
 
 ```
-"$SCHEMAQUENCH" --Validate --SchemaPackagePath:./sqlserver/Package
+schemaquench --Validate --SchemaPackagePath:./sqlserver/Package
 ```
 
 ```
@@ -85,7 +77,7 @@ Every finding so far has been an error. `--Validate` also has a warning tier, an
 1. Rename `sqlserver/Package/Templates/Main/Tables/dbo.OrderItem.json` to `sqlserver/Package/Templates/Main/Tables/orderitem-legacy.json`.
 2. Re-run:
    ```
-   "$SCHEMAQUENCH" --Validate --SchemaPackagePath:./sqlserver/Package
+   schemaquench --Validate --SchemaPackagePath:./sqlserver/Package
    ```
    ```
    WARN [SS-FILE-NAME-003] .../orderitem-legacy.json: Table file 'orderitem-legacy.json' does not match its canonical name 'dbo.OrderItem.json' (from Schema/Name/VariantName). Identity is content, so this is a naming lean, not an error - rename to keep the file a reliable pointer to its table.
@@ -107,7 +99,7 @@ The editor `.json-schemas` that give you red-squiggle validation in your IDE are
    Exit `2`.
 3. Regenerate (database-free), from inside the `Package` directory:
    ```
-   cd sqlserver/Package && "$SCHEMATONGS" --WriteSchemasOnly && cd ../..
+   cd sqlserver/Package && schematongs --WriteSchemasOnly && cd ../..
    ```
 4. Re-run `--Validate` → `PASS - no issues found`, exit `0`. The staleness finding is gone.
 

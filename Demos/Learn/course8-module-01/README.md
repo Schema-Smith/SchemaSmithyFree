@@ -1,5 +1,3 @@
-<!-- TRAINING-RELEASE-PIN #332: PostgreSQL stale-checkpoint re-run (SchemaSmith#332, merged in PR #335). The dedupe re-green needs this — a stock pre-#335 CLI crashes `42P01: temp_existing_indexes` on the PostgreSQL re-run. When #332 ships in a stock release: drop the from-source note below, re-cert against stock, delete this sentinel and its release-coupled tracking entry. -->
-<!-- TRAINING-RELEASE-PIN #338: Deployment Failure Triage (SchemaQuench - Failures.log roll-up + *** FAILED banner) merged to main in PR #340, not in stock 2.2.0. When a release includes #338: drop the from-source note, re-cert on stock, delete this sentinel and its release-coupled tracking entry. -->
 # Course 8 · Module 1 — Reading the black box
 
 One induced failure on one database (`diag_blackbox`), read end to end. Module 0 showed you the trail a *healthy* deploy leaves. This is the first deploy that stops on purpose — a unique index that won't take on dirty data — and the walk from `exit 2` to a named phase to green.
@@ -7,8 +5,7 @@ One induced failure on one database (`diag_blackbox`), read end to end. Module 0
 ## Prerequisites
 
 - The three-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
-- `schemaquench --version` answers on your PATH. New to the CLI? [Course 1, Module 1](https://learn.schemasmith.com/01-install-connect/).
-- **From-source override (PostgreSQL re-green only).** The PostgreSQL stale-checkpoint fix (SchemaSmith [#332](https://github.com/Schema-Smith/SchemaSmith/issues/332)) merged to `main` but isn't in a stock release yet. The dedupe re-green's *PostgreSQL* plain re-run needs it — on a stock pre-#332 CLI it crashes with `42P01: relation "temp_existing_indexes" does not exist`. Build the CLI from source for that step (the failure itself, and the SQL Server / MySQL re-green, run on any recent CLI). Once #332 ships in a stock release, use the installed CLI on your PATH.
+- `schemaquench --version` answers **2.3.0** or later on your PATH. New to the CLI? [Course 1, Module 1](https://learn.schemasmith.com/01-install-connect/).
 
 ## Step 1 — create the sandbox database
 
@@ -36,7 +33,7 @@ schemaquench --ConfigFile:quench.settings.after.json --LogPath:"$PWD/logs"
 
 **Exit `2`.** Now read the black box.
 
-**Fast path (from-source CLI only).** Open `logs/SchemaQuench - Failures.log` first. One block per failure: the error, a `Debug SQL:` pointer to the artifact, and a `Context (last 25 lines)` phase trail — everything you need without scrolling the full run narrative. The SQL Server block from this lab:
+**Fast path.** Open `logs/SchemaQuench - Failures.log` first. One block per failure: the error, a `Debug SQL:` pointer to the artifact, and a `Context (last 25 lines)` phase trail — everything you need without scrolling the full run narrative. The SQL Server block from this lab:
 
 ```text
 1 failure(s): 1 Template:Main
@@ -48,9 +45,7 @@ Context (last 25 lines):   [trail abbreviated here — the full 25-line context 
     … Quenching indexes and constraints → Add Missing Indexes → Creating index [dbo].[Customer].[IX_Customer_Email] …
 ```
 
-> **From-source note.** `SchemaQuench - Failures.log` and the `*** FAILED` banner are Deployment Failure Triage ([#338](https://github.com/Schema-Smith/SchemaSmith/issues/338)), merged to `main` in PR #340 — not in stock 2.2.0. Build the CLI from `main` to see them. On stock 2.2.0, use the `Progress.log` path below.
-
-**Full path (stock 2.2.0 and from-source).** Open `logs/SchemaQuench - Progress.log` and find the `FAILED to quench:` block — the error is right there, and it names the phase:
+**Full path.** Open `logs/SchemaQuench - Progress.log` and find the `FAILED to quench:` block — the error is right there, and it names the phase:
 
 | Engine | `FAILED to quench:` block |
 | --- | --- |

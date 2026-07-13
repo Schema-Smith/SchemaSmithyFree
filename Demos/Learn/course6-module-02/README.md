@@ -9,7 +9,7 @@ Your team is about to push a schema update to three tenant databases across a fl
 ## Before you start
 
 - The three-engine sandbox is up (`Demos/Learn/docker`) and `course6-setup` has been run — it seeds `shop_tenant_a`, `shop_tenant_b`, and `shop_tenant_c` on each engine.
-- The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.2.0.0` or later). The `--TestConnection` and `--PreviewTargets` switches shipped in v2.2.0; if `schemaquench --help` does not list them, upgrade to v2.2.0 or later.
+- The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later). The `--TestConnection` and `--PreviewTargets` switches shipped in v2.2.0; if `schemaquench --help` does not list them, upgrade to v2.3.0 or later.
 
 ## Scenario 1 — `--TestConnection` pass
 

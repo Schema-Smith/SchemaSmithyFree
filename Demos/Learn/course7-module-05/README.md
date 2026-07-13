@@ -1,5 +1,3 @@
-<!-- TRAINING-RELEASE-PIN #338: Deployment Failure Triage (SchemaQuench - Failures.log roll-up + *** FAILED banner) merged to main in PR #340, not in stock 2.2.0. When a release includes #338: drop the from-source note, re-cert on stock, delete this sentinel and its release-coupled tracking entry. -->
-
 # Course 7, Module 5 — Diagnosing a fleet failure (lab)
 
 Goal: roll out a new unique index across the whole fleet, watch **two** tenants fail in **two different
@@ -15,7 +13,7 @@ fleet, tune it, handle drift, and resume a partial failure. M5 is the middle ste
 
 - The [sandbox](../docker) is up and verified (all three engines healthy).
 - The fleet exists — run [`../course7-setup`](../course7-setup) once if you haven't already.
-- The CLI is on your PATH — `schemaquench --version` answers **2.2.0** or later.
+- The CLI is on your PATH — `schemaquench --version` answers **2.3.0** or later.
 
 Each engine folder ships a `baseline/` package (the established fleet state), an `after/` package (adds the
 `UQ_Customer_Email` unique index to `Customer`), two settings files, and drift + reset helpers for the two
@@ -94,12 +92,9 @@ pipeline. The failure count tells you how many; the error text names the phase.
 
 This is the diagnostic work. Start with the fast fleet-triage read, then go deeper per-tenant.
 
-### 4a) Read Failures.log first (CLI from main / #338)
+### 4a) Read Failures.log first
 
-> **From-source note:** `logs/SchemaQuench - Failures.log` requires a CLI built from `main` (#338, PR #340).
-> On stock 2.2.0, skip to the interleaved-log method in 4b below — everything there still works.
-
-If you're running from `main`, open `logs/SchemaQuench - Failures.log`. It opens with the count, then one
+Open `logs/SchemaQuench - Failures.log`. It opens with the count, then one
 block per failed tenant — error, phase trail, and artifact pointer all in one place:
 
 ```
@@ -128,7 +123,7 @@ Context (last 25 lines):
 One read names both failed tenants, both errors, both phases (FK phase for 004, index phase for 002), and
 both artifact paths. That's everything you need before opening anything else.
 
-### 4b) The interleaved Progress.log (stock 2.2.0 and deeper drill-down)
+### 4b) The interleaved Progress.log (deeper drill-down)
 
 **The `FAILED to quench:` blocks**
 
@@ -247,8 +242,8 @@ PostgreSQL, detail lands in `ProgressLog`; on MySQL, it surfaces via the `Schema
 and `ProgressLog` FAILED block — `Errors.log` is empty on both non-SS engines).
 
 > **Note on Failures.log across engines:** `SchemaQuench - Failures.log` is produced on all three engines
-> (SQL Server, PostgreSQL, MySQL) when running a CLI built from `main` (#338). The block format and phase
-> context trail are identical; only the error text inside each block changes per engine.
+> (SQL Server, PostgreSQL, MySQL). The block format and phase context trail are identical; only the error
+> text inside each block changes per engine.
 
 ## Cleanup
 
@@ -264,8 +259,8 @@ rm -rf mysql/checkpoints mysql/artifacts
 ## The principle
 
 One failure count can hide unrelated causes. `Template 'Main' had 2 failed work unit(s)` tells you *how
-many* — not *why each one*, not *where each one stopped*. The diagnostic sequence is always the same: on a
-CLI from `main`, open `Failures.log` first — it names every failed tenant, its error, the phase context, and
+many* — not *why each one*, not *where each one stopped*. The diagnostic sequence is always the same:
+open `Failures.log` first — it names every failed tenant, its error, the phase context, and
 the artifact pointer in one read. Then drill into the per-tenant checkpoint to confirm depth, and the
 artifact to see the exact SQL the engine tried to run. Fix with intent — not just "it worked" but "I know
 what broke, I removed the specific condition that caused it, and I confirmed the fix before resuming." Then

@@ -14,7 +14,7 @@ covered the *schema* axis — many schemas inside one database. Different axis; 
 - The [sandbox](../docker) is up and verified (all three engines healthy).
 - The fleet exists — run [`../course7-setup`](../course7-setup) once (creates `fleet_tenant_001`…`005`,
   **empty**, on each engine).
-- The CLI is on your PATH — `schemaquench --version` answers **2.2.0** or later. New to the CLI?
+- The CLI is on your PATH — `schemaquench --version` answers **2.3.0** or later. New to the CLI?
   Course 1, Module 1 walks the install.
 
 Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships a `quench.settings.json` (the deploy

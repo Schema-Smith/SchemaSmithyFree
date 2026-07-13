@@ -1,5 +1,3 @@
-<!-- TRAINING-RELEASE-PIN #343: Deployment Summary Report — real objectChanges audit (SchemaSmith#343). The Summary.json/.md report and its objectChanges block are post-2.2.0 (on main via #342/#343), not in the stock 2.2.0 release. When a release includes #343: bump the pre-flight version string, drop the from-source note below, re-cert against stock, then delete this sentinel and its release-coupled tracking entry. -->
-
 # Course 7, Module 6 — Reading the deployment summary report (lab)
 
 Goal: roll a real, mixed change across the whole fleet — a new table, a new unique index, a widened column, a new column, a dropped index, and a re-applied view — with one tenant pre-seeded to fail, then read the run's structured receipt end to end. You'll pull apart `SchemaQuench - Summary.json`: the run verdict, every target's outcome, where the milliseconds went, the failure as data, and — the centerpiece — the verified `objectChanges` audit. SQL Server, then PostgreSQL and MySQL.
@@ -10,7 +8,7 @@ This is the reporting capstone of Course 7. Module 5 taught you to *hunt* a fail
 
 - The [sandbox](../docker) is up and verified (all three engines healthy).
 - The fleet exists — run [`../course7-setup`](../course7-setup) once if you haven't already (`fleet_tenant_001`–`005` on every engine).
-- **From-source note:** the Deployment Summary Report — `SchemaQuench - Summary.json` / `.md`, its `--report` switch, and the real `objectChanges` audit — landed on `main` *after* the 2.2.0 release (SchemaSmith [#342](https://github.com/Schema-Smith/SchemaSmith/pull/342) / [#343](https://github.com/Schema-Smith/SchemaSmith/pull/343)). Build the CLI from `main`, then set `SCHEMAQUENCH` to the built executable and use it in the commands below. Once the report ships in a stock release, drop this step and use the installed `schemaquench` on your PATH.
+- **The CLI is on your PATH** — `schemaquench --version` answers **2.3.0** or later.
 
 Each engine folder ships a `baseline/` package (the established fleet state, including an `IX_Customer_FullName` index the rollout will drop), an `after/` package (the mixed rollout), two settings files, and a drift + reset helper for the one tenant staged to fail.
 
@@ -29,7 +27,7 @@ Land the `baseline/` package fleet-wide so every tenant starts at the same known
 
 ```bash
 cd sqlserver
-"$SCHEMAQUENCH" --ConfigFile:quench.settings.baseline.json
+schemaquench --ConfigFile:quench.settings.baseline.json
 ```
 
 All five tenants deploy cleanly, exit `0`.
@@ -48,7 +46,7 @@ docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa 
 Deploy `after/` fleet-wide, and pin the report where the sandbox can read it. `--report` takes a base path with no extension — SchemaSmith writes both `.json` and `.md`. The lab lowers `BottleneckThresholdMs` far below its 30-second default so a fast five-tenant run still surfaces a long pole:
 
 ```bash
-"$SCHEMAQUENCH" --ConfigFile:quench.settings.after.json --report ./out/deploy-summary --BottleneckThresholdMs=800
+schemaquench --ConfigFile:quench.settings.after.json --report ./out/deploy-summary --BottleneckThresholdMs=800
 ```
 
 The run finishes with exit code `2` — four tenants converge, `fleet_tenant_003` fails on its duplicate emails. Now open `out/deploy-summary.json` (and its human-readable twin `out/deploy-summary.md`).
@@ -70,7 +68,7 @@ Reset the one tenant and re-run to watch the summary go all-green:
 ```bash
 docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
   -i /dev/stdin < reset-tenant-003.sql
-"$SCHEMAQUENCH" --ConfigFile:quench.settings.after.json --report ./out/deploy-summary --BottleneckThresholdMs=800
+schemaquench --ConfigFile:quench.settings.after.json --report ./out/deploy-summary --BottleneckThresholdMs=800
 ```
 
 Exit `0`, `outcome: "Success"`, empty `failures[]`, and `objectChanges` now shows only what this second run changed — the structure already converged, so the counts are near-empty except the view, which re-runs every time (`scriptsRan`). That contrast — a busy first run, a quiet idempotent second — is the audit telling the truth about what each run actually did.

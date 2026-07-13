@@ -1,5 +1,3 @@
-<!-- TRAINING-RELEASE-PIN #320: column-level Extensions preservation (SchemaSmith#320). Remove this pin + promote the column-level survives-regeneration step when that fix ships in a released CLI. -->
-
 # Course 6, Module 3 — CI schema validation & Extensions governance (lab)
 
 **Goal:** validate a schema package structurally on every pull request with no database, then turn the generated `.json-schemas` into a governance contract — requiring and constraining custom `Extensions` metadata at the table and column level — and wire it all into a CI gate. SQL Server, PostgreSQL, and MySQL.
@@ -70,7 +68,7 @@ SmithySettings_Product__Path="$(pwd)/sqlserver/Package" schematongs --WriteSchem
 
 (Run the equivalent for the `postgres/Package` and `mysql/Package` directories to regenerate those engines.)
 
-The **table-level** `Extensions` fragment survives the round-trip — your `OwningTeam` rule is still enforced. The **column-level** fragment is not yet preserved across regeneration (SchemaSmith [#320](https://github.com/Schema-Smith/SchemaSmith/issues/320)); re-apply it after regenerating until that fix ships in a released CLI. Table-level governance is regeneration-safe today; column-level governance is enforced at pull-request time today and becomes regeneration-safe once #320 releases.
+Both the **table-level** and **column-level** `Extensions` fragments survive the round-trip — your `OwningTeam` and `DataClassification` rules are still enforced after regeneration. Governance is regeneration-safe at both levels.
 
 ## Scenario 5 — wire it into CI
 

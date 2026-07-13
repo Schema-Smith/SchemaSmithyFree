@@ -55,7 +55,7 @@ that varies per environment is injected as an env var at run time, identical to 
 
   It creates the nine `ordersservice_{dev,staging,prod}` databases and reports `PASS` for each.
 - The CLI is reachable. The commands below assume `schemaquench` is on your PATH
-  (`schemaquench --version` reports `SchemaQuench - Version: 2.2.0.0`). If you'd rather not put it on
+  (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0`). If you'd rather not put it on
   the PATH, set `SCHEMAQUENCH` to the full path to the executable and substitute `$SCHEMAQUENCH` for
   `schemaquench` in every command below.
 
