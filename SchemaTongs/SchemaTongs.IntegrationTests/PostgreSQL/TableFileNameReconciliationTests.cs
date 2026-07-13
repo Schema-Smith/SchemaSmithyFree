@@ -60,7 +60,7 @@ public class TableFileNameReconciliationTests
         if (!string.IsNullOrEmpty(_tempProductPath) && Directory.Exists(_tempProductPath))
         {
             try { Directory.Delete(_tempProductPath, recursive: true); }
-            catch { /* best effort — temp cleanup */ }
+            catch (IOException) { /* best effort — temp cleanup */ }
         }
         Npgsql.NpgsqlConnection.ClearAllPools();
         FactoryContainer.Clear();
@@ -73,7 +73,7 @@ public class TableFileNameReconciliationTests
     [Test]
     public void Extraction_NamesTableFilesFromContentSchema_PassesTableFileNameCheck()
     {
-        _tempProductPath = Path.Combine(Path.GetTempPath(), $"SchemaTongsFileNamePg_{Guid.NewGuid():N}");
+        _tempProductPath = Path.Join(Path.GetTempPath(), $"SchemaTongsFileNamePg_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempProductPath);
 
         var errorLog = Substitute.For<ILog>();
@@ -96,14 +96,14 @@ public class TableFileNameReconciliationTests
                 var tongs = new SchemaTongs(Platform.PostgreSQL);
                 tongs.CastTemplate();
 
-                var tablesDir = Path.Combine(_tempProductPath, "Templates", TemplateName, "Tables");
-                var publicTableFile = Path.Combine(tablesDir, "widget.json");
-                var salesTableFile = Path.Combine(tablesDir, "sales.invoice.json");
+                var tablesDir = Path.Join(_tempProductPath, "Templates", TemplateName, "Tables");
+                var publicTableFile = Path.Join(tablesDir, "widget.json");
+                var salesTableFile = Path.Join(tablesDir, "sales.invoice.json");
 
                 // Default schema (public) is omitted → schema-less filename; NOT the old public.<t>.json.
                 Assert.That(File.Exists(publicTableFile), Is.True,
                     "public-schema table must be emitted schema-less as widget.json.");
-                Assert.That(File.Exists(Path.Combine(tablesDir, "public.widget.json")), Is.False,
+                Assert.That(File.Exists(Path.Join(tablesDir, "public.widget.json")), Is.False,
                     "public-schema table must NOT keep the public. prefix in its filename.");
 
                 // Named non-default schema is kept → schema-qualified filename.

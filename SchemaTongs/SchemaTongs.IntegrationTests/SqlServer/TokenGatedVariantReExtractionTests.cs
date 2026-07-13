@@ -56,23 +56,23 @@ public class TokenGatedVariantReExtractionTests
         if (!string.IsNullOrEmpty(_tempProductPath) && Directory.Exists(_tempProductPath))
         {
             try { Directory.Delete(_tempProductPath, recursive: true); }
-            catch { /* best effort — temp cleanup */ }
+            catch (IOException) { /* best effort — temp cleanup */ }
         }
     }
 
     [Test]
     public void ReExtract_TokenGatedVariant_FoldsActiveVariant_NoUngatedDuplicate()
     {
-        _tempProductPath = Path.Combine(Path.GetTempPath(), $"SchemaTongsTokenGate_{Guid.NewGuid():N}");
-        var tablesDir = Path.Combine(_tempProductPath, "Templates", TemplateName, "Tables");
+        _tempProductPath = Path.Join(Path.GetTempPath(), $"SchemaTongsTokenGate_{Guid.NewGuid():N}");
+        var tablesDir = Path.Join(_tempProductPath, "Templates", TemplateName, "Tables");
         Directory.CreateDirectory(tablesDir);
 
         // ----- pre-seed the package: Edition=Modern token, two token-gated variants -----
         SeedPackage(tablesDir);
 
-        var modernFile = Path.Combine(tablesDir, "Test.Widget.Modern.json");
-        var legacyFile = Path.Combine(tablesDir, "Test.Widget.Legacy.json");
-        var bareFile = Path.Combine(tablesDir, "Test.Widget.json");
+        var modernFile = Path.Join(tablesDir, "Test.Widget.Modern.json");
+        var legacyFile = Path.Join(tablesDir, "Test.Widget.Legacy.json");
+        var bareFile = Path.Join(tablesDir, "Test.Widget.json");
         var legacyBefore = File.ReadAllText(legacyFile);
 
         var errorLog = Substitute.For<ILog>();
@@ -146,7 +146,7 @@ public class TokenGatedVariantReExtractionTests
 
     private void SeedPackage(string tablesDir)
     {
-        File.WriteAllText(Path.Combine(_tempProductPath, "Product.json"),
+        File.WriteAllText(Path.Join(_tempProductPath, "Product.json"),
             "{\n" +
             $"  \"Name\": \"{ProductName}\",\n" +
             "  \"ValidationScript\": \"SELECT 1\",\n" +
@@ -156,7 +156,7 @@ public class TokenGatedVariantReExtractionTests
             "  \"Platform\": \"SqlServer\"\n" +
             "}\n");
 
-        File.WriteAllText(Path.Combine(_tempProductPath, "Templates", TemplateName, "Template.json"),
+        File.WriteAllText(Path.Join(_tempProductPath, "Templates", TemplateName, "Template.json"),
             "{\n" +
             "  \"Name\": \"" + TemplateName + "\",\n" +
             "  \"DatabaseIdentificationScript\": \"SELECT 1\",\n" +
@@ -164,12 +164,12 @@ public class TokenGatedVariantReExtractionTests
             "}\n");
 
         // Two same-named (Test.Widget) variants, each gated by the Edition token.
-        File.WriteAllText(Path.Combine(tablesDir, "Test.Widget.Modern.json"),
+        File.WriteAllText(Path.Join(tablesDir, "Test.Widget.Modern.json"),
             VariantTableJson("Modern", "'{{Edition}}'='Modern'",
                 "{ \"Name\": \"[Id]\", \"DataType\": \"INT\" },\n" +
                 "    { \"Name\": \"[Label]\", \"DataType\": \"NVARCHAR(50)\", \"Nullable\": true }"));
 
-        File.WriteAllText(Path.Combine(tablesDir, "Test.Widget.Legacy.json"),
+        File.WriteAllText(Path.Join(tablesDir, "Test.Widget.Legacy.json"),
             VariantTableJson("Legacy", "'{{Edition}}'='Legacy'",
                 "{ \"Name\": \"[Id]\", \"DataType\": \"INT\" }"));
     }

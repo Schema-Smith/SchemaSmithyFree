@@ -600,14 +600,14 @@ public class SchemaTongs
     {
         var tokens = new List<KeyValuePair<string, string>>();
 
-        var templateFile = Path.Combine(_templatePath, "Template.json");
+        var templateFile = Path.Join(_templatePath, "Template.json");
         if (FileWrapper.GetFromFactory().Exists(templateFile))
         {
             var template = JsonHelper.Load<Template>(templateFile);
             if (template?.ScriptTokens != null) tokens.AddRange(template.ScriptTokens);
         }
 
-        var productFile = Path.Combine(_productPath, "Product.json");
+        var productFile = Path.Join(_productPath, "Product.json");
         if (FileWrapper.GetFromFactory().Exists(productFile))
         {
             var productJson = FileWrapper.GetFromFactory().ReadAllText(productFile);

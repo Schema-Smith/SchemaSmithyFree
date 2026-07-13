@@ -54,7 +54,7 @@ public class TableFileNameReconciliationTests
         if (!string.IsNullOrEmpty(_tempProductPath) && Directory.Exists(_tempProductPath))
         {
             try { Directory.Delete(_tempProductPath, recursive: true); }
-            catch { /* best effort — temp cleanup */ }
+            catch (IOException) { /* best effort — temp cleanup */ }
         }
         FactoryContainer.Clear();
         LogFactory.Clear();
@@ -63,7 +63,7 @@ public class TableFileNameReconciliationTests
     [Test]
     public void Extraction_NamesTableFileSchemaLess_PassesTableFileNameCheck()
     {
-        _tempProductPath = Path.Combine(Path.GetTempPath(), $"SchemaTongsFileNameMy_{Guid.NewGuid():N}");
+        _tempProductPath = Path.Join(Path.GetTempPath(), $"SchemaTongsFileNameMy_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempProductPath);
 
         var errorLog = Substitute.For<ILog>();
@@ -85,10 +85,10 @@ public class TableFileNameReconciliationTests
                 var tongs = new SchemaTongs(Platform.MySQL);
                 tongs.CastTemplate();
 
-                var tablesDir = Path.Combine(_tempProductPath, "Templates", TemplateName, "Tables");
-                Assert.That(File.Exists(Path.Combine(tablesDir, "TestTable.json")), Is.True,
+                var tablesDir = Path.Join(_tempProductPath, "Templates", TemplateName, "Tables");
+                Assert.That(File.Exists(Path.Join(tablesDir, "TestTable.json")), Is.True,
                     "MySQL table must be emitted schema-less as TestTable.json.");
-                Assert.That(File.Exists(Path.Combine(tablesDir, ".TestTable.json")), Is.False,
+                Assert.That(File.Exists(Path.Join(tablesDir, ".TestTable.json")), Is.False,
                     "MySQL table file must not carry a leading-dot (empty-schema) prefix.");
 
                 var ctx = new ValidationContext(
