@@ -2552,7 +2552,8 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Prod", Platform = Platform.MySQL };
         var template = new Template { Name = "T" };
         template.Tables.Add(new Schema.Domain.Table { Name = "[T1]" });
-        // dropRemovedCheckConstraints="1" -> last (6th) positional arg of the MySQL CALL
+        // dropRemovedCheckConstraints="1" -> 6th positional arg of the MySQL CALL (followed by
+        // excludes, statistics, and the #270 captureWouldDrop flag).
         var quench = new DatabaseQuench("srv", product, template, "db",
             false, "0", false, "0", "0", "0", "1", "1", "1", "1", "0", false, false, null);
 
@@ -2560,7 +2561,8 @@ public class DatabaseQuenchTests
         quench.QuenchModifiedTables(mockCmd);
 
         // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 0, 1, 1, 1, 0)
-        Assert.That(mockCmd.CommandText, Does.EndWith(", 1)"));
+        // — dropChecks (1) followed by excludes (1), stats (1), captureWouldDrop (0).
+        Assert.That(mockCmd.CommandText, Does.EndWith(", 1, 1, 1, 0)"));
     }
 
     #endregion

@@ -178,8 +178,8 @@ public class ForgeKindlerTests
 
         // SqlServer: 23 = 22 prior + 1 for Kindling_ChangeAudit_Table (object-change audit, #243 E5).
         Assert.That(sqlServer.Length, Is.EqualTo(23));
-        // PostgreSQL: 29 = 28 prior + 1 for Kindling_ChangeAudit_Table (object-change audit, #243 E5).
-        Assert.That(postgres.Length, Is.EqualTo(29));
+        // PostgreSQL: 30 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration (one-owner enforcement, #270 TRANSITIONAL).
+        Assert.That(postgres.Length, Is.EqualTo(30));
         // MySQL: 22 = 21 prior + 1 for Kindling_ChangeAudit_Table (object-change audit, #243 E5).
         Assert.That(mysql.Length, Is.EqualTo(22));
     }
