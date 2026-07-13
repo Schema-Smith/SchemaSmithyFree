@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
+using System.IO;
 using Microsoft.Extensions.Configuration;
 using Schema.Isolators;
 using Schema.Utility;
@@ -24,10 +25,10 @@ public static class Program
 
         var request = new PatchBuildRequest
         {
-            SourcePath = CommandLineParser.ValueOfSwitch("Source", config["SourcePath"]),
-            ManifestPath = CommandLineParser.ValueOfSwitch("Manifest", config["ManifestPath"]),
-            AlwaysIncludePath = CommandLineParser.ValueOfSwitch("AlwaysInclude", config["AlwaysIncludePath"]),
-            OutputPath = CommandLineParser.ValueOfSwitch("Output", config["OutputPath"]),
+            SourcePath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("Source", config["SourcePath"])),
+            ManifestPath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("Manifest", config["ManifestPath"])),
+            AlwaysIncludePath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("AlwaysInclude", config["AlwaysIncludePath"])),
+            OutputPath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("Output", config["OutputPath"])),
             Zip = CommandLineParser.ContainsSwitch("Zip") || string.Equals(config["Zip"], "true", StringComparison.OrdinalIgnoreCase),
             AllowDrops = allowDrops
         };
@@ -35,6 +36,12 @@ public static class Program
         new PatchBuilder().Build(request);
         LogBackup.BackupLogsAndExit("SchemaShears");
     }
+
+    // Resolve a user-supplied path switch to an absolute path against the invocation directory, so a relative
+    // --Source/--Manifest/--Output (the form the training labs document) works and logs/errors show canonical paths.
+    // Path.GetFullPath resolves a relative path against the process CWD and leaves an absolute path unchanged.
+    internal static string ResolveToFullPath(string path) =>
+        string.IsNullOrWhiteSpace(path) ? path : Path.GetFullPath(path);
 
     public static void UnhandledException(object sender, UnhandledExceptionEventArgs e)
     {

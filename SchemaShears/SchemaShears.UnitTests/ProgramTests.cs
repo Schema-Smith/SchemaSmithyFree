@@ -84,6 +84,36 @@ public class ProgramTests
     }
 
     [Test]
+    [NonParallelizable] // mutates the process current directory to exercise relative-path resolution
+    public void Main_RelativeSourcePath_ResolvesAgainstCurrentDirectoryAndBuilds()
+    {
+        File.WriteAllText(Path.Join(_root, "m.txt"), "Templates/Main/Tables/dbo.Orders.json\n");
+
+        var priorCwd = Directory.GetCurrentDirectory();
+        try
+        {
+            Directory.SetCurrentDirectory(_root); // as if the user invoked schemashears from the product's parent dir
+
+            var environment = RunMain("SchemaShears.exe", new Dictionary<string, string>
+            {
+                ["SourcePath"] = "product", // relative — the form documented in the course6-module-05 lab
+                ["ManifestPath"] = "m.txt",
+                ["OutputPath"] = "patch"
+            });
+
+            Assert.Multiple(() =>
+            {
+                environment.Received(1).Exit(0);
+                Assert.That(File.Exists(Path.Join(_output, "Templates", "Main", "Tables", "dbo.Orders.json")), Is.True);
+            });
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(priorCwd);
+        }
+    }
+
+    [Test]
     public void Main_WithHelpSwitch_ShowsUsageThenFailsForMissingSource()
     {
         var (environment, exception) = RunMainExpectingThrow("SchemaShears.exe --help", new Dictionary<string, string>());
@@ -158,6 +188,29 @@ public class ProgramTests
             Assert.That(product["DropUnknownIndexes"], Is.Null,
                 "Indexes is allowed, so the drop flag should not be stamped false");
             Assert.That(product["DropTablesRemovedFromProduct"].Value<bool>(), Is.False);
+        });
+    }
+
+    [Test]
+    public void ResolveToFullPath_RelativePath_BecomesRooted()
+    {
+        var result = Program.ResolveToFullPath("product");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Path.IsPathRooted(result), Is.True);
+            Assert.That(result, Does.EndWith("product"));
+        });
+    }
+
+    [Test]
+    public void ResolveToFullPath_NullOrBlank_IsReturnedUnchanged()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(Program.ResolveToFullPath(null), Is.Null);
+            Assert.That(Program.ResolveToFullPath(""), Is.EqualTo(""));
+            Assert.That(Program.ResolveToFullPath("   "), Is.EqualTo("   "));
         });
     }
 
