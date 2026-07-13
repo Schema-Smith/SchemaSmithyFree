@@ -10,7 +10,7 @@ SET NOCOUNT ON
 DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))
 -- SchemaSmith-internal extended properties to exclude from extraction (one-line change to add new names)
 DECLARE @InternalEPNames TABLE ([Name] NVARCHAR(128))
-INSERT @InternalEPNames VALUES (N'ProductName')
+INSERT @InternalEPNames VALUES (N'ProductName'), (N'PreventDrop')  -- PreventDrop is a SchemaSmith ownership marker, not a user extended property (#270)
 SELECT [Line] FROM SchemaSmith.fn_FormatJson(REPLACE(REPLACE(REPLACE((
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
@@ -19,6 +19,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
        st.is_tracked_by_cdc AS [EnableCDC],
+       -- Emit the sticky drop-protection marker first-class (only when set true, so unprotected tables stay minimal).
+       -- Read from the PreventDrop extended property (excluded from generic Extensions via @InternalEPNames). #270
+       CASE WHEN (SELECT CONVERT(NVARCHAR(50), [value])
+                    FROM fn_listextendedproperty(N'PreventDrop', N'Schema', @p_Schema, N'Table', @p_Table, default, default)) = 'true'
+            THEN CAST(1 AS BIT) END AS [PreventDrop],
        '' AS [OldName],
        '' AS [ContentFile],
        'NONE' AS [MergeType],

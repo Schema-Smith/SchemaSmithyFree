@@ -36,7 +36,9 @@ public class DeploymentSummaryAssemblerTests
         IReadOnlyList<MigrationScriptRun> migrationScripts = null,
         IReadOnlyList<WhatIfRun> whatIfEntries = null,
         IReadOnlyList<FailureRecord> failures = null,
-        long bottleneckThresholdMs = 5000)
+        long bottleneckThresholdMs = 5000,
+        ChangeAuditCapture changeAudit = null,
+        bool protectedModeEnabled = false)
     {
         targets ??= new List<TargetResult>
         {
@@ -47,6 +49,7 @@ public class DeploymentSummaryAssemblerTests
         migrationScripts ??= new List<MigrationScriptRun>();
         whatIfEntries ??= new List<WhatIfRun>();
         failures ??= new List<FailureRecord>();
+        changeAudit ??= new ChangeAuditCapture();
 
         return DeploymentSummaryAssembler.Assemble(
             product: "MyProduct",
@@ -63,7 +66,80 @@ public class DeploymentSummaryAssemblerTests
             migrationScripts: migrationScripts,
             whatIfEntries: whatIfEntries,
             failures: failures,
-            bottleneckThresholdMs: bottleneckThresholdMs);
+            bottleneckThresholdMs: bottleneckThresholdMs,
+            changeAudit: changeAudit,
+            protectedModeEnabled: protectedModeEnabled);
+    }
+
+    [Test]
+    public void Assemble_PreventDrop_NullWhenProtectionOff()
+    {
+        Assert.That(AssembleWith(protectedModeEnabled: false).PreventDrop, Is.Null);
+    }
+
+    [Test]
+    public void Assemble_PreventDrop_ManifestFromWouldDropRows_WhenProtectionOn()
+    {
+        var cap = new ChangeAuditCapture();
+        cap.Record("table", "dbo.Orders", "wouldDrop");
+        cap.Record("table", "dbo.Audit", "wouldDrop");
+        cap.Record("table", "dbo.Kept", "created"); // not a wouldDrop — must not appear in the manifest
+        cap.MarkInstrumented();
+
+        var summary = AssembleWith(changeAudit: cap, protectedModeEnabled: true);
+
+        Assert.That(summary.PreventDrop, Is.Not.Null);
+        Assert.That(summary.PreventDrop.Enabled, Is.True);
+        Assert.That(summary.PreventDrop.WouldDrop.Select(w => w.ObjectName),
+            Is.EquivalentTo(new[] { "dbo.Orders", "dbo.Audit" }));
+        // wouldDrop rows are protection-suppressed, not changes that occurred — excluded from object-change detail.
+        Assert.That(summary.ObjectChanges.Details.Select(d => d.Action), Does.Not.Contain("wouldDrop"));
+    }
+
+    [Test]
+    public void Assemble_PreventDrop_EmptyManifest_WhenProtectionOnButNothingSuppressed()
+    {
+        var cap = new ChangeAuditCapture();
+        cap.Record("table", "dbo.Orders", "created");
+        cap.MarkInstrumented();
+
+        var summary = AssembleWith(changeAudit: cap, protectedModeEnabled: true);
+
+        Assert.That(summary.PreventDrop, Is.Not.Null);
+        Assert.That(summary.PreventDrop.Enabled, Is.True);
+        Assert.That(summary.PreventDrop.WouldDrop, Is.Empty);
+    }
+
+    [Test]
+    public void Assemble_AggregatesChangeAudit_WhenInstrumented()
+    {
+        var cap = new ChangeAuditCapture();
+        cap.Record("table", "dbo.Orders", "created");
+        cap.Record("index", "dbo.Orders.IX_1", "created");
+        cap.Record("column", "dbo.Orders.Status", "modified");
+        cap.Record("foreignKey", "dbo.Orders.FK_Cust", "dropped");
+        cap.RecordRan("procedure", "Procedures/usp_Get.sql");
+        cap.MarkInstrumented();
+
+        var oc = AssembleWith(changeAudit: cap).ObjectChanges;
+
+        Assert.That(oc.Instrumented, Is.True);
+        Assert.That(oc.Created.Tables, Is.EqualTo(1));
+        Assert.That(oc.Created.Indexes, Is.EqualTo(1));
+        Assert.That(oc.Modified.Columns, Is.EqualTo(1));
+        Assert.That(oc.Dropped.ForeignKeys, Is.EqualTo(1));
+        Assert.That(oc.ScriptsRan, Is.EqualTo(1));
+        Assert.That(oc.Details, Has.Count.EqualTo(5));
+    }
+
+    [Test]
+    public void Assemble_NotInstrumented_WhenCaptureNotMarked()
+    {
+        var oc = AssembleWith(changeAudit: new ChangeAuditCapture()).ObjectChanges;
+
+        Assert.That(oc.Instrumented, Is.False);
+        Assert.That(oc.ScriptsRan, Is.EqualTo(0));
+        Assert.That(oc.Created.Tables, Is.EqualTo(0));
     }
 
     [Test]

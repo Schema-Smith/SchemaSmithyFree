@@ -26,7 +26,7 @@ public class ImportTableHelperTests
 
         var newTable = new SqlServerTable { Name = "Orders" };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         Assert.That(newTable.DataDelivery[0].ContentFile, Is.EqualTo("orders.csv"));
         Assert.That(newTable.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
@@ -42,7 +42,7 @@ public class ImportTableHelperTests
         var original = new SqlServerTable { Name = "Orders", DataDelivery = [new DataDelivery { MergeType = null }] };
         var newTable = new SqlServerTable { Name = "Orders" };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         Assert.That(newTable.DataDelivery[0].MergeType, Is.EqualTo("None"));
     }
@@ -55,7 +55,7 @@ public class ImportTableHelperTests
 
         var newTable = new SqlServerTable { Name = "Orders" };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         Assert.That(newTable.Extensions?["CustomProp"]?.ToString(), Is.EqualTo("CustomValue"));
     }
@@ -70,7 +70,7 @@ public class ImportTableHelperTests
         var newCol = new Column { Name = "OrderId" };
         var newTable = new SqlServerTable { Name = "Orders", Columns = { newCol } };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         Assert.That(newCol.Extensions?["IsAudited"]?.Value<bool>(), Is.True);
     }
@@ -87,7 +87,7 @@ public class ImportTableHelperTests
         var newCol = new Column { Name = "OldColName" };
         var newTable = new SqlServerTable { Name = "Orders", Columns = { newCol } };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         Assert.That(newCol.Extensions?["Custom"]?.ToString(), Is.EqualTo("value"));
     }
@@ -103,7 +103,7 @@ public class ImportTableHelperTests
 
         var newTable = new PostgreSqlTable { Name = "orders" };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         Assert.That(newTable.DataDelivery[0].MergeDisableRules, Is.True);
         Assert.That(newTable.DataDelivery[0].MergeUpdateDescendents, Is.True);
@@ -120,7 +120,7 @@ public class ImportTableHelperTests
         var newFti = new Schema.Domain.MySQL.FullTextIndex { Name = "fti_content" };
         var newTable = new MySqlTable { Name = "articles", FullTextIndexes = { newFti } };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         Assert.That(newFti.Extensions?["CustomParser"]?.ToString(), Is.EqualTo("ngram"));
     }
@@ -136,7 +136,7 @@ public class ImportTableHelperTests
         var newXml = new XmlIndex { Name = "XI_Data" };
         var newTable = new SqlServerTable { Name = "Docs", XmlIndexes = { newXml } };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         Assert.That(newXml.Extensions?["CustomFlag"]?.ToString(), Is.EqualTo("yes"));
     }
@@ -147,7 +147,7 @@ public class ImportTableHelperTests
         var original = new SqlServerTable { Name = "Orders", DataDelivery = null };
         var newTable = new SqlServerTable { Name = "Orders" };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         // Table.DataDelivery defaults to an empty list (not null); with no original deliveries to
         // preserve, the freshly-imported table simply keeps its own (empty) list.
@@ -166,13 +166,13 @@ public class ImportTableHelperTests
         var newCol = new Column { Name = "[OrderId]" };
         var newTable = new SqlServerTable { Name = "Orders", Columns = { newCol } };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         Assert.That(newCol.Extensions?["IsKey"]?.Value<bool>(), Is.True);
     }
 
     [Test]
-    public void PreserveCustomProperties_MultiVariantFullTextIndex_SurvivesReimportWholesale()
+    public void PreserveCustomProperties_MultiVariantFullTextIndex_AttributesExtractedToActiveVariant()
     {
         var original = new SqlServerTable
         {
@@ -186,12 +186,15 @@ public class ImportTableHelperTests
         var reimported = new SqlServerTable
         {
             Name = "[Docs]",
-            FullTextIndex = [new Schema.Domain.SqlServer.FullTextIndex { FullTextCatalog = "[A]", KeyIndex = "[PK]", Columns = "[T]" }]
+            FullTextIndex = [new Schema.Domain.SqlServer.FullTextIndex { FullTextCatalog = "[Extracted]", KeyIndex = "[PK]", Columns = "[T]" }]
         };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        // East is active on this source — the extracted FT refreshes the East variant; West is preserved.
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, expr => expr == "DB_NAME() = 'East'");
 
         Assert.That(reimported.FullTextIndex, Has.Count.EqualTo(2));
+        Assert.That(reimported.FullTextIndex[0].ShouldApplyExpression, Is.EqualTo("DB_NAME() = 'East'"));
+        Assert.That(reimported.FullTextIndex[0].FullTextCatalog, Is.EqualTo("[Extracted]"));
         Assert.That(reimported.FullTextIndex[1].ShouldApplyExpression, Is.EqualTo("DB_NAME() = 'West'"));
     }
 
@@ -209,7 +212,7 @@ public class ImportTableHelperTests
             FullTextIndex = [new Schema.Domain.SqlServer.FullTextIndex { FullTextCatalog = "[NewCatalog]", KeyIndex = "[PK]", Columns = "[T]" }]
         };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.FullTextIndex[0].ShouldApplyExpression, Is.EqualTo("1 = 1"));
         Assert.That(reimported.FullTextIndex[0].FullTextCatalog, Is.EqualTo("[NewCatalog]"));
@@ -229,7 +232,7 @@ public class ImportTableHelperTests
             FullTextIndex = []
         };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.FullTextIndex, Has.Count.EqualTo(1));
         Assert.That(reimported.FullTextIndex[0].ShouldApplyExpression, Is.EqualTo("DB_NAME() = 'Prod'"));
@@ -249,7 +252,7 @@ public class ImportTableHelperTests
             FullTextIndex = []
         };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.FullTextIndex, Is.Empty);
     }
@@ -262,13 +265,13 @@ public class ImportTableHelperTests
         var newCol = new Column { Name = "payload" };
         var newTable = new SqlServerTable { Name = "Orders", Columns = { newCol } };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(newTable, original, _ => true);
 
         Assert.That(newCol.VariantName, Is.EqualTo("Modern engines"));
     }
 
     [Test]
-    public void PreserveCustomProperties_MultiVariantNamedComponent_SurvivesReimportWholesale()
+    public void PreserveCustomProperties_MultiVariantNamedComponent_RefreshesActiveVariantWithExtractedShape()
     {
         var original = new SqlServerTable
         {
@@ -282,15 +285,17 @@ public class ImportTableHelperTests
         var reimported = new SqlServerTable
         {
             Name = "Orders",
-            Indexes = [new Index { Name = "IX_Region", IndexColumns = "RegionId" }]
+            Indexes = [new Index { Name = "IX_Region", IndexColumns = "RegionId, Refreshed" }]
         };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        // East is active — the extracted index refreshes the East variant (keeping its gate/label); West is preserved.
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, expr => expr == "DB_NAME() = 'East'");
 
         Assert.That(reimported.Indexes, Has.Count.EqualTo(2));
         Assert.That(reimported.Indexes[0].VariantName, Is.EqualTo("East"));
+        Assert.That(reimported.Indexes[0].IndexColumns, Is.EqualTo("RegionId, Refreshed")); // extracted shape, not authored
         Assert.That(reimported.Indexes[1].VariantName, Is.EqualTo("West"));
-        Assert.That(reimported.Indexes[1].IndexColumns, Is.EqualTo("RegionId, Zone"));
+        Assert.That(reimported.Indexes[1].IndexColumns, Is.EqualTo("RegionId, Zone")); // inactive variant preserved
     }
 
     [Test]
@@ -313,7 +318,7 @@ public class ImportTableHelperTests
             Indexes = [new Index { Name = "IX_Region", IndexColumns = "RegionId" }, extractedPlain]
         };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, expr => expr == "DB_NAME() = 'East'");
 
         Assert.That(reimported.Indexes, Has.Count.EqualTo(3));
         Assert.That(reimported.Indexes.Single(i => i.Name == "IX_Plain").IndexColumns, Is.EqualTo("OrderDate, Status"));
@@ -333,7 +338,7 @@ public class ImportTableHelperTests
         };
         var reimported = new SqlServerTable { Name = "Orders", Indexes = [] };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.Indexes, Has.Count.EqualTo(2));
         Assert.That(reimported.Indexes.Select(i => i.VariantName), Is.EquivalentTo(new[] { "East", "West" }));
@@ -362,12 +367,62 @@ public class ImportTableHelperTests
             ]
         };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, expr => expr == "1=1");
 
         Assert.That(reimported.Columns, Has.Count.EqualTo(3));
         Assert.That(reimported.Columns[0].Name.Trim('[', ']', '"', '`'), Is.EqualTo("Id"));
         Assert.That(reimported.Columns.Where(c => c.Name.Trim('[', ']', '"', '`') == "payload").Select(c => c.VariantName),
                     Is.EquivalentTo(new[] { "Modern", "Legacy" }));
+    }
+
+    [Test]
+    public void PreserveCustomProperties_NoVariantActive_AppendsExtractedUngated()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "Orders",
+            Indexes =
+            [
+                new Index { Name = "IX_Region", IndexColumns = "RegionId", ShouldApplyExpression = "DB_NAME() = 'East'", VariantName = "East" },
+                new Index { Name = "IX_Region", IndexColumns = "RegionId, Zone", ShouldApplyExpression = "DB_NAME() = 'West'", VariantName = "West" }
+            ]
+        };
+        var reimported = new SqlServerTable
+        {
+            Name = "Orders",
+            Indexes = [new Index { Name = "IX_Region", IndexColumns = "RegionId, Drifted" }]
+        };
+
+        // No variant active on this source — the extracted shape is kept ungated so SS-DUP-001 surfaces it.
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => false);
+
+        Assert.That(reimported.Indexes, Has.Count.EqualTo(3)); // both authored variants + the ungated extracted
+        var ungated = reimported.Indexes.Single(i => string.IsNullOrEmpty(i.ShouldApplyExpression));
+        Assert.That(ungated.IndexColumns, Is.EqualTo("RegionId, Drifted"));
+        Assert.That(reimported.Indexes.Count(i => !string.IsNullOrEmpty(i.ShouldApplyExpression)), Is.EqualTo(2));
+    }
+
+    [Test]
+    public void PreserveCustomProperties_GateEvaluationThrows_PropagatesFailClosed()
+    {
+        var original = new SqlServerTable
+        {
+            Name = "Orders",
+            Indexes =
+            [
+                new Index { Name = "IX_Region", IndexColumns = "RegionId", ShouldApplyExpression = "bad", VariantName = "A" },
+                new Index { Name = "IX_Region", IndexColumns = "RegionId, Zone", ShouldApplyExpression = "worse", VariantName = "B" }
+            ]
+        };
+        var reimported = new SqlServerTable
+        {
+            Name = "Orders",
+            Indexes = [new Index { Name = "IX_Region", IndexColumns = "RegionId" }]
+        };
+
+        Assert.That(() => ImportTableHelper.PreserveDataDeliveryAndCustomProperties(
+                reimported, original, _ => throw new System.InvalidOperationException("gate blew up")),
+            Throws.InvalidOperationException);
     }
 
     [Test]
@@ -380,7 +435,7 @@ public class ImportTableHelperTests
         };
         var reimported = new SqlServerTable { Name = "Orders", Indexes = [] };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.Indexes, Has.Count.EqualTo(1));
         Assert.That(reimported.Indexes[0].VariantName, Is.EqualTo("Modern engines"));
@@ -396,7 +451,7 @@ public class ImportTableHelperTests
         };
         var reimported = new SqlServerTable { Name = "Orders", Indexes = [] };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.Indexes, Is.Empty);
     }
@@ -412,7 +467,7 @@ public class ImportTableHelperTests
         var newCol = new Column { Name = "OldName" };
         var reimported = new SqlServerTable { Name = "Orders", Columns = { newCol } };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.Columns, Has.Count.EqualTo(1));
         Assert.That(newCol.ShouldApplyExpression, Is.EqualTo("1=1"));
@@ -436,7 +491,7 @@ public class ImportTableHelperTests
             DataDelivery = [new Schema.Delivery.DataDelivery { ContentFile = "stale.json", MergeType = "Insert" }]
         };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.DataDelivery, Has.Count.EqualTo(2));
         Assert.That(reimported.DataDelivery[0].VariantName, Is.EqualTo("dev"));
@@ -454,7 +509,7 @@ public class ImportTableHelperTests
         };
         var reimported = new Table { Name = "[dbo].[Ref]", DataDelivery = [] };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.DataDelivery, Has.Count.EqualTo(1));
         Assert.That(reimported.DataDelivery[0].ShouldApplyExpression, Is.EqualTo("DB_NAME() = 'Dev'"));
@@ -471,7 +526,7 @@ public class ImportTableHelperTests
         };
         var reimported = new Table { Name = "[dbo].[Ref]", DataDelivery = [] };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.DataDelivery, Has.Count.EqualTo(1));
         Assert.That(reimported.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
@@ -492,7 +547,7 @@ public class ImportTableHelperTests
             DataDelivery = [new Schema.Delivery.DataDelivery { ContentFile = "extracted.json" }]
         };
 
-        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original);
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(reimported, original, _ => true);
 
         Assert.That(reimported.DataDelivery, Has.Count.EqualTo(1));
         Assert.That(reimported.DataDelivery[0].ContentFile, Is.EqualTo("authored.json"));

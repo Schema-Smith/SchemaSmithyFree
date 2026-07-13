@@ -12,7 +12,8 @@ CREATE OR ALTER PROCEDURE SchemaSmith.ModifiedTableQuench
   @DropCheckConstraintsRemovedFromProduct BIT = 1,
   @DropExcludeConstraintsRemovedFromProduct BIT = 1,
   @DropStatisticsRemovedFromProduct BIT = 1,
-  @DropIndexesRemovedFromProduct BIT = 1
+  @DropIndexesRemovedFromProduct BIT = 1,
+  @CaptureWouldDrop BIT = 0
 AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = '',
@@ -46,25 +47,54 @@ BEGIN TRY
     INTO #TableProperties
     FROM #SchemaList WITH (NOLOCK)
     CROSS APPLY fn_listextendedproperty(default, 'Schema', SchemaSmith.fn_StripBracketWrapping([Schema]), 'Table', default, default, default) x
-    WHERE x.[Name] COLLATE DATABASE_DEFAULT = 'ProductName'
-  
+    WHERE x.[Name] COLLATE DATABASE_DEFAULT IN ('ProductName', 'PreventDrop')
+
   RAISERROR('Validate Table Ownership', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.[TableName] + ' owned by different product. [' + tp.[Value] + ']'', 10, 100) WITH NOWAIT;' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Tables t WITH (NOLOCK)
     JOIN #TableProperties tp WITH (NOLOCK) ON t.[Schema] = tp.[Schema]
                                           AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName
-    WHERE tp.[value] <> @ProductName
+    WHERE tp.PropertyName = 'ProductName'
+      AND tp.[value] <> @ProductName
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
   IF EXISTS (SELECT *
                FROM #Tables t WITH (NOLOCK)
                JOIN #TableProperties tp WITH (NOLOCK) ON t.[Schema] = tp.[Schema]
                                                      AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName
-               WHERE tp.[value] <> @ProductName)
+               WHERE tp.PropertyName = 'ProductName'
+                 AND tp.[value] <> @ProductName)
   BEGIN
     RAISERROR('One or more tables in this quench are already owned by another product', 16, 1) WITH NOWAIT
   END
   
+  -- No-drop protection tier (#270): when protected mode is active the caller forces
+  -- @DropTablesRemovedFromProduct to 0 so the drop block below never runs. Record the tables that
+  -- WOULD have been dropped by absence (owned by this product, absent from the package, not already
+  -- sticky-PreventDrop) to the ChangeAudit seam as 'wouldDrop' so the run can surface a manifest.
+  -- Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
+  IF @CaptureWouldDrop = 1
+  BEGIN
+    RAISERROR('Capture tables suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STRING_AGG(CAST(
+      'RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.TableName + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + tp.[Schema] + '.[' + tp.TableName + ']'', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      FROM #TableProperties tp
+      WHERE tp.PropertyName = 'ProductName'
+        AND tp.[value] = @ProductName
+        AND NOT EXISTS (SELECT 1
+                          FROM #TableProperties px WITH (NOLOCK)
+                          WHERE px.[Schema] = tp.[Schema]
+                            AND px.TableName = tp.TableName
+                            AND px.PropertyName = 'PreventDrop'
+                            AND px.[value] = 'true')
+        AND NOT EXISTS (SELECT *
+                          FROM #Tables t WITH (NOLOCK)
+                          WHERE t.[Schema] = tp.[Schema]
+                            AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
+    IF @v_SQL IS NOT NULL EXEC(@v_SQL)
+  END
+
   IF @DropTablesRemovedFromProduct = 1
   BEGIN
     RAISERROR('Identify tables removed from the product', 10, 100) WITH NOWAIT
@@ -72,10 +102,17 @@ BEGIN TRY
     SELECT tp.[Schema], tp.TableName
       INTO #TablesRemovedFromProduct
       FROM #TableProperties tp
-      WHERE tp.[value] = @ProductName
-        AND NOT EXISTS (SELECT * 
-                          FROM #Tables t WITH (NOLOCK) 
-                          WHERE t.[Schema] = tp.[Schema] 
+      WHERE tp.PropertyName = 'ProductName'
+        AND tp.[value] = @ProductName
+        AND NOT EXISTS (SELECT 1
+                          FROM #TableProperties px WITH (NOLOCK)
+                          WHERE px.[Schema] = tp.[Schema]
+                            AND px.TableName = tp.TableName
+                            AND px.PropertyName = 'PreventDrop'
+                            AND px.[value] = 'true')
+        AND NOT EXISTS (SELECT *
+                          FROM #Tables t WITH (NOLOCK)
+                          WHERE t.[Schema] = tp.[Schema]
                             AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
 
     IF EXISTS (SELECT * FROM #TablesRemovedFromProduct WITH (NOLOCK))
@@ -100,7 +137,8 @@ BEGIN TRY
 
       RAISERROR('Drop inbound foreign keys referencing tables removed from the product', 10, 100) WITH NOWAIT
       SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping inbound foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                      'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                      'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];' + CHAR(13) + CHAR(10) +
+                                      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''[' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '].[' + fk.[name] + ']'', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #TablesRemovedFromProduct t WITH (NOLOCK)
         JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']')
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
@@ -110,7 +148,8 @@ BEGIN TRY
                                       CASE WHEN OBJECT_ID('SchemaSmith.CustomTableDrop') IS NOT NULL
                                            THEN 'EXEC SchemaSmith.CustomTableDrop ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ''' + t.[TableName] + ''';'
                                            ELSE 'DROP TABLE IF EXISTS ' + t.[Schema] + '.[' + t.[TableName] + '];'
-                                           END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                           END + CHAR(13) + CHAR(10) +
+                                      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + t.[Schema] + '.[' + t.[TableName] + ']'', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #TablesRemovedFromProduct t WITH (NOLOCK)
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
@@ -127,6 +166,23 @@ BEGIN TRY
       END
     END
   END
+
+  RAISERROR('Report tables removed from the product but retained by PreventDrop', 10, 100) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Retaining table ' + tp.[Schema] + '.' + tp.TableName + ' - removed from product but protected by PreventDrop'', 10, 100) WITH NOWAIT;' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #TableProperties tp WITH (NOLOCK)
+    WHERE tp.PropertyName = 'ProductName'
+      AND tp.[value] = @ProductName
+      AND EXISTS (SELECT 1
+                    FROM #TableProperties px WITH (NOLOCK)
+                    WHERE px.[Schema] = tp.[Schema]
+                      AND px.TableName = tp.TableName
+                      AND px.PropertyName = 'PreventDrop'
+                      AND px.[value] = 'true')
+      AND NOT EXISTS (SELECT *
+                        FROM #Tables t WITH (NOLOCK)
+                        WHERE t.[Schema] = tp.[Schema]
+                          AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Collect index level extended properties', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexProperties
@@ -260,6 +316,24 @@ BEGIN TRY
                             AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = COLUMN_NAME)
         AND NOT (t.IsTemporal = 1 AND COLUMN_NAME IN ('ValidFrom', 'ValidTo'))
   
+  -- No-drop protection tier (#270): when protected mode is active the caller forces
+  -- @DropForeignKeysRemovedFromProduct to 0 so the drop block below never runs. Record the foreign
+  -- keys that WOULD have been dropped by absence (present on the table, absent from the package,
+  -- and the per-table cascade tightening not opting out) to the ChangeAudit seam as 'wouldDrop' so
+  -- the run can surface a manifest. Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
+  IF @CaptureWouldDrop = 1
+  BEGIN
+    RAISERROR('Capture foreign keys suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STRING_AGG(CAST(
+      'RAISERROR(''  Foreign key ' + t.[Schema] + '.' + t.[Name] + '.' + fk.[name] + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + t.[Schema] + '.' + t.[Name] + '.' + fk.[name] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      FROM #Tables t WITH (NOLOCK)
+      JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.parent_object_id = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+      WHERE NOT EXISTS (SELECT * FROM #ForeignKeys fk2 WITH (NOLOCK) WHERE t.[Schema] = fk2.[Schema] AND t.[Name] = fk2.[TableName] AND fk.[name] = SchemaSmith.fn_StripBracketWrapping(fk2.[KeyName]))
+        AND ISNULL(t.[DropForeignKeysRemovedFromProduct], 1) = 1
+    IF @v_SQL IS NOT NULL EXEC(@v_SQL)
+  END
+
   RAISERROR('Collect Foreign Keys To Drop', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #FKsToDrop
   SELECT t.[Schema], [TableName] = t.[Name], [FKName] = fk.[Name]
@@ -272,7 +346,8 @@ BEGIN TRY
 
   RAISERROR('Drop Foreign Keys No Longer Defined In The Product', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + df.[FKName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                  'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + df.[FKName] + '];' + CHAR(13) + CHAR(10) +
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #FKsToDrop df WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
@@ -327,7 +402,8 @@ BEGIN TRY
   -- Handle table compression changes
   RAISERROR('Fixup Table Compression', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering table compression for ' + t.[Schema] + '.' + t.[Name] + ' TO ' + t.[CompressionType] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + t.[Schema] + '.' + t.[Name] + ' REBUILD PARTITION=ALL WITH (DATA_COMPRESSION=' + t.[CompressionType] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                  'ALTER TABLE ' + t.[Schema] + '.' + t.[Name] + ' REBUILD PARTITION=ALL WITH (DATA_COMPRESSION=' + t.[CompressionType] + ');' + CHAR(13) + CHAR(10) +
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + t.[Schema] + '.' + t.[Name] + ''', ''modified'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Tables t WITH (NOLOCK)
     LEFT JOIN sys.partitions AS p WITH (NOLOCK) ON p.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
                                                AND p.index_id < 2
@@ -532,6 +608,46 @@ BEGIN TRY
     FROM #XmlIndexRenames ir WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
+  -- No-drop protection tier (#270): when protected mode is active the caller forces both
+  -- @DropIndexesRemovedFromProduct and @DropUnknownIndexes to 0, so the by-absence arms of the
+  -- #IndexesToDrop build below never populate. Record the indexes that WOULD have been dropped by
+  -- absence -- exactly the three by-absence arms of that build, each minus its @Drop... env gate:
+  -- (a) indexes removed from the product (ownership-stamped, per-table cascade tightening not opting
+  -- out), (b) unknown relational indexes, (c) unknown XML indexes. The modified / for-change arms
+  -- (#IndexesToDropForColumnChanges, #IndexChanges, #XmlIndexChanges, and the clustered-PK XML cascade)
+  -- are transient drop-then-recreate for a declared change and are deliberately EXCLUDED -- capturing
+  -- them would falsely report a transient drop as protection-withheld. Audit rows only -- no DDL -- so
+  -- this runs regardless of @WhatIf. ObjectType / ObjectName match the 'dropped' index audit byte-for-byte.
+  IF @CaptureWouldDrop = 1
+  BEGIN
+    RAISERROR('Capture indexes suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STRING_AGG(CAST(
+      'RAISERROR(''  ' + [ObjName] + ' removed from product but PreventDrop is active -- skipping ' + [ObjType] + ' drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + [ObjType] + ''', ''' + [ObjName] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      FROM (
+        -- Arm (a): indexes removed from the product (ownership-stamped) -- @DropIndexesRemovedFromProduct
+        -- env gate stripped; per-table cascade-tightening opt-out (ISNULL(...) = 1) kept.
+        SELECT [ObjType] = CASE WHEN ir.[IsConstraint] = 1 THEN 'constraint' ELSE 'index' END,
+               [ObjName] = ir.[Schema] + '.' + ir.[TableName] + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[IndexName])
+          FROM #IndexesRemovedFromProduct ir WITH (NOLOCK)
+          JOIN sys.indexes i WITH (NOLOCK) ON i.[object_id] = OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]) AND i.[Name] = SchemaSmith.fn_StripBracketWrapping(ir.[IndexName])
+          WHERE ISNULL((SELECT t.[DropIndexesRemovedFromProduct] FROM #Tables t WITH (NOLOCK) WHERE t.[Schema] = ir.[Schema] AND t.[Name] = ir.[TableName]), 1) = 1
+        UNION
+        -- Arm (b): unknown relational indexes (present in DB, absent from the product) -- @DropUnknownIndexes env gate stripped.
+        SELECT [ObjType] = CASE WHEN ei.[IsConstraint] = 1 THEN 'constraint' ELSE 'index' END,
+               [ObjName] = ei.[xSchema] + '.' + ei.[xTableName] + '.' + ei.[xIndexName]
+          FROM #ExistingIndexes ei WITH (NOLOCK)
+          WHERE NOT EXISTS (SELECT * FROM #Indexes i WITH (NOLOCK) WHERE i.[Schema] = ei.[xSchema] AND i.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i.[IndexName]) = ei.[xIndexName])
+        UNION
+        -- Arm (c): unknown XML indexes (present in DB, absent from the product) -- @DropUnknownIndexes env gate stripped; XML indexes are never constraints.
+        SELECT [ObjType] = 'index',
+               [ObjName] = ei.[xSchema] + '.' + ei.[xTableName] + '.' + ei.[xIndexName]
+          FROM #ExistingXmlIndexes ei WITH (NOLOCK)
+          WHERE NOT EXISTS (SELECT * FROM #XmlIndexes i WITH (NOLOCK) WHERE i.[Schema] = ei.[xSchema] AND i.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i.[IndexName]) = ei.[xIndexName])
+      ) x
+    IF @v_SQL IS NOT NULL EXEC(@v_SQL)
+  END
+
   RAISERROR('Identify unknown and modified indexes to drop', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #IndexesToDrop
   SELECT [Schema] = CAST([Schema] AS NVARCHAR(500)), [TableName] = CAST([TableName] AS NVARCHAR(500)), 
@@ -594,7 +710,8 @@ BEGIN TRY
                                   CASE WHEN IsConstraint = 1
                                        THEN 'ALTER TABLE ' + di.[Schema] + '.' + di.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + di.[IndexName] + '];'
                                        ELSE 'DROP INDEX IF EXISTS [' + di.[IndexName] + '] ON ' + di.[Schema] + '.' + di.[TableName] + ';'
-                                       END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY CASE WHEN [IsClustered] = 0 THEN 0 ELSE 1 END)
+                                       END + CHAR(13) + CHAR(10) +
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ''', ''' + di.[Schema] + '.' + di.[TableName] + '.' + di.[IndexName] + ''', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY CASE WHEN [IsClustered] = 0 THEN 0 ELSE 1 END)
     FROM #IndexesToDrop di WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
@@ -755,6 +872,25 @@ BEGIN TRY
               AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0)) T
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
+  -- No-drop protection tier (#270): when protected mode is active the caller forces
+  -- @DropColumnsRemovedFromProduct to 0 so the drop block below never runs. Record the columns that
+  -- WOULD have been dropped by absence (present on the table, absent from the package -- #ColumnChanges
+  -- DropOnly rows -- and the per-table cascade tightening not opting out) to the ChangeAudit seam as
+  -- 'wouldDrop' so the run can surface a manifest. Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
+  IF @CaptureWouldDrop = 1
+  BEGIN
+    RAISERROR('Capture columns suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STRING_AGG(CAST(
+      'RAISERROR(''  Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''column'', ''' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      FROM #ColumnChanges cc WITH (NOLOCK)
+      JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = cc.[Schema] AND t.[Name] = cc.[TableName]
+      WHERE cc.DropOnly = 1
+        AND t.NewTable = 0
+        AND ISNULL(t.[DropColumnsRemovedFromProduct], 1) = 1
+    IF @v_SQL IS NOT NULL EXEC(@v_SQL)
+  END
+
   RAISERROR('Drop Columns No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
@@ -803,6 +939,18 @@ BEGIN TRY
     FROM #Tables t WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * FROM #TableProperties tp WITH (NOLOCK) WHERE t.[Schema] = tp.[Schema] AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName AND tp.PropertyName = 'ProductName')
       AND OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL  -- and the table physically exists
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+  -- Stamp/refresh the sticky PreventDrop protection marker so it tracks the package value each run
+  -- (an existing table newly marked PreventDrop:true gets its property; one toggled back to false is
+  -- updated). Covers the same present-table set as the ProductName stamp above (physical tables in #Tables).
+  RAISERROR('Stamp/refresh PreventDrop protection marker', 10, 100) WITH NOWAIT
+  SELECT @v_SQL = STRING_AGG(CAST(
+    'IF EXISTS (SELECT 1 FROM fn_listextendedproperty(N''PreventDrop'', N''Schema'', ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', N''Table'', ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', default, default)) ' +
+    'EXEC sp_updateextendedproperty @name = N''PreventDrop'', @value = ''' + CASE WHEN t.[PreventDrop] = 1 THEN 'true' ELSE 'false' END + ''', @level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', @level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + '''; ' +
+    'ELSE EXEC sp_addextendedproperty @name = N''PreventDrop'', @value = ''' + CASE WHEN t.[PreventDrop] = 1 THEN 'true' ELSE 'false' END + ''', @level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', @level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    FROM #Tables t WITH (NOLOCK)
+    WHERE OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL  -- table physically exists
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Add Missing Physical Columns', 10, 100) WITH NOWAIT
@@ -900,6 +1048,33 @@ BEGIN TRY
     FROM #StatsChanges sc WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
+  -- No-drop protection tier (#270): when protected mode is active the caller forces
+  -- @DropStatisticsRemovedFromProduct to 0 so the drop block below never runs. Record the user-created
+  -- statistics that WOULD have been dropped by absence (same by-absence set as the drop pass -- absent
+  -- from the product, not already handled by the modified or column-change stats passes, per-table
+  -- cascade tightening not opting out) to the ChangeAudit seam as 'wouldDrop' so the run can surface a
+  -- manifest. Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
+  IF @CaptureWouldDrop = 1
+  BEGIN
+    RAISERROR('Capture statistics suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STRING_AGG(CAST(
+      'RAISERROR(''  Statistic ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + '] removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''statistic'', ''' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + ']'', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      FROM #ExistingStats es WITH (NOLOCK)
+      JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = es.[Schema] AND t.[Name] = es.[TableName]
+      WHERE t.NewTable = 0
+        AND ISNULL(t.[DropStatisticsRemovedFromProduct], 1) = 1
+        AND NOT EXISTS (SELECT * FROM #Statistics s WITH (NOLOCK)
+                          WHERE es.[Schema] = s.[Schema]
+                            AND es.[TableName] = s.[TableName]
+                            AND es.[StatsName] = SchemaSmith.fn_StripBracketWrapping(s.[StatisticName]))
+        AND NOT EXISTS (SELECT * FROM #StatisticsToDropForChanges sd WITH (NOLOCK)
+                          WHERE es.[Schema] = sd.[Schema]
+                            AND es.[TableName] = sd.[TableName]
+                            AND es.[StatsName] = sd.[StatName])
+    IF @v_SQL IS NOT NULL EXEC(@v_SQL)
+  END
+
   -- Drop user-created statistics removed from the product (by-absence), gated by the cascade flag
   -- and per-table tightening. Excludes stats already dropped by the modified pass (#StatsChanges,
   -- still in the product by name) and the column-change pass (#StatisticsToDropForChanges) to avoid
@@ -940,9 +1115,10 @@ BEGIN TRY
                                  AND ec.[TableName] = c.[TableName]
                                  AND ec.[CheckColumn] = SchemaSmith.fn_StripBracketWrapping(c.[ColumnName])
     WHERE ec.[CheckColumn] IS NOT NULL
+      AND ISNULL(c.[CheckExpression], '') <> ''
       AND ec.[CheckDefinition] <> ISNULL(c.[CheckExpression], '')
-      AND NOT EXISTS (SELECT * 
-                        FROM #CheckConstraints cc WITH (NOLOCK) 
+      AND NOT EXISTS (SELECT *
+                        FROM #CheckConstraints cc WITH (NOLOCK)
                         WHERE ec.[Schema] = cc.[Schema]
                           AND ec.[TableName] = cc.[TableName]
                           AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
@@ -962,16 +1138,53 @@ BEGIN TRY
     FROM #CheckChanges cc WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
-  -- Drop table-level check constraints removed from the product (by-absence). Column-level checks
-  -- (CheckColumn IS NOT NULL) are owned by the column modify pass above; only table-level checks
-  -- absent from the product's CheckConstraints are dropped here, gated by the cascade flag + the
-  -- per-table tightening (a table may set DropCheckConstraintsRemovedFromProduct:false to protect its own).
+  -- No-drop protection tier (#270): when protected mode is active the caller forces
+  -- @DropCheckConstraintsRemovedFromProduct to 0 so the drop block below never runs. Record the
+  -- table-level check constraints that WOULD have been dropped by absence (same by-absence set as the
+  -- drop pass -- table-level only, absent from the product, per-table cascade tightening not opting out)
+  -- to the ChangeAudit seam as 'wouldDrop' so the run can surface a manifest. Audit rows only -- no DDL
+  -- so this runs regardless of @WhatIf.
+  IF @CaptureWouldDrop = 1
+  BEGIN
+    RAISERROR('Capture check constraints suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STRING_AGG(CAST(
+      'RAISERROR(''  Check constraint ' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      FROM #ExistingCheckConstraints ec WITH (NOLOCK)
+      JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
+      WHERE (ec.[CheckColumn] IS NULL
+             OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK)
+                          WHERE c.[Schema] = ec.[Schema]
+                            AND c.[TableName] = ec.[TableName]
+                            AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = ec.[CheckColumn]
+                            AND ISNULL(c.[CheckExpression], '') = ''))
+        AND t.NewTable = 0
+        AND ISNULL(t.[DropCheckConstraintsRemovedFromProduct], 1) = 1
+        AND NOT EXISTS (SELECT * FROM #CheckConstraints cc WITH (NOLOCK)
+                          WHERE ec.[Schema] = cc.[Schema]
+                            AND ec.[TableName] = cc.[TableName]
+                            AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
+    IF @v_SQL IS NOT NULL EXEC(@v_SQL)
+  END
+
+  -- Drop named check constraints removed from the product (by-absence). Covers table-level checks
+  -- (CheckColumn IS NULL) AND single-column named checks SQL Server stored as column-associated
+  -- (CheckColumn set) whose column still exists but no longer carries a CheckExpression -- a genuine
+  -- removal, not a modification (a changed non-empty expression stays on the column modify pass above).
+  -- Gated by the cascade flag + the per-table tightening (a table may set
+  -- DropCheckConstraintsRemovedFromProduct:false to protect its own).
   RAISERROR('Drop Check Constraints No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping check constraint ' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + ec.[Schema] + '.' + ec.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + ec.[CheckName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                  'ALTER TABLE ' + ec.[Schema] + '.' + ec.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + ec.[CheckName] + '];' + CHAR(13) + CHAR(10) +
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #ExistingCheckConstraints ec WITH (NOLOCK)
     JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
-    WHERE ec.[CheckColumn] IS NULL
+    WHERE (ec.[CheckColumn] IS NULL
+           OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK)
+                        WHERE c.[Schema] = ec.[Schema]
+                          AND c.[TableName] = ec.[TableName]
+                          AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = ec.[CheckColumn]
+                          AND ISNULL(c.[CheckExpression], '') = ''))
       AND t.NewTable = 0
       AND @DropCheckConstraintsRemovedFromProduct = 1
       AND ISNULL(t.[DropCheckConstraintsRemovedFromProduct], 1) = 1
@@ -983,8 +1196,9 @@ BEGIN TRY
 
   RAISERROR('Alter Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ALTER COLUMN ' + cc.[ColumnName] + ' ' + 
-                                  CASE WHEN RTRIM([SpecialColumnScript]) <> '' THEN [SpecialColumnScript] ELSE [ColumnScript] END + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ALTER COLUMN ' + cc.[ColumnName] + ' ' +
+                                  CASE WHEN RTRIM([SpecialColumnScript]) <> '' THEN [SpecialColumnScript] ELSE [ColumnScript] END + ';' + CHAR(13) + CHAR(10) +
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''column'', ''' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', ''modified'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #ColumnChanges cc WITH (NOLOCK)
         WHERE [MustDropAndRecreate] = 0
           AND [MustSwapColumn] = 0

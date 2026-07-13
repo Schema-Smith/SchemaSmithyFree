@@ -8,7 +8,8 @@ CREATE OR ALTER PROCEDURE SchemaSmith.IndexOnlyQuench
   @WhatIf BIT = 0,
   @DropUnknownIndexes BIT = 0,
   @DropIndexesRemovedFromProduct BIT = 1,
-  @UpdateFillFactor BIT = 1
+  @UpdateFillFactor BIT = 1,
+  @CaptureWouldDrop BIT = 0
 AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = ''
@@ -475,6 +476,42 @@ BEGIN TRY
     JOIN sys.fulltext_indexes fi WITH (NOLOCK) ON fi.[object_id] = OBJECT_ID(ef.[Schema] + '.' + ef.[TableName])
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
+  -- No-drop protection tier (#270): when protected mode is active the caller forces @DropUnknownIndexes
+  -- and @DropIndexesRemovedFromProduct to 0, so the unknown and removed-from-product branches of
+  -- #IndexesToDrop above contribute nothing and the drop pass below skips them. Record the indexes that
+  -- WOULD have been dropped by absence -- unknown/out-of-band, and product-owned indexes removed from the
+  -- definition with the per-table cascade tightening not opting out -- to the ChangeAudit seam as
+  -- 'wouldDrop' so the run can surface a manifest. Same by-absence predicates as those branches minus the
+  -- env gates; the modified branches are not by-absence and are never suppressed, so they are excluded.
+  -- Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
+  IF @CaptureWouldDrop = 1
+  BEGIN
+    RAISERROR('Capture indexes suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STRING_AGG(CAST(
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + w.[ObjectType] + ''', ''' + w.[Schema] + '.' + w.[TableName] + '.' + w.[IndexName] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      FROM (
+        -- Indexes removed from the product (minus the @DropIndexesRemovedFromProduct gate; per-table opt-out kept)
+        SELECT [Schema] = CAST(ir.[Schema] AS NVARCHAR(500)), [TableName] = CAST(ir.[TableName] AS NVARCHAR(500)),
+               [IndexName] = CAST(SchemaSmith.fn_StripBracketWrapping(ir.[IndexName]) AS NVARCHAR(500)),
+               [ObjectType] = CASE WHEN ir.[IsConstraint] = 1 THEN 'constraint' ELSE 'index' END
+          FROM #IndexesRemovedFromProduct ir WITH (NOLOCK)
+          JOIN sys.indexes i WITH (NOLOCK) ON i.[object_id] = OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]) AND i.[Name] = SchemaSmith.fn_StripBracketWrapping(ir.[IndexName])
+          WHERE ISNULL((SELECT t.[DropIndexesRemovedFromProduct] FROM #Tables t WITH (NOLOCK) WHERE t.[Schema] = ir.[Schema] AND t.[Name] = ir.[TableName]), 1) = 1
+        UNION
+        -- Unknown indexes (minus the @DropUnknownIndexes gate)
+        SELECT CAST(di.[xSchema] AS NVARCHAR(500)), CAST(di.[xTableName] AS NVARCHAR(500)), CAST(di.[xIndexName] AS NVARCHAR(500)),
+               CASE WHEN di.[IsConstraint] = 1 THEN 'constraint' ELSE 'index' END
+          FROM #ExistingIndexes di WITH (NOLOCK)
+          WHERE NOT EXISTS (SELECT * FROM #Indexes i WITH (NOLOCK) WHERE i.[Schema] = di.[xSchema] AND i.[TableName] = di.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i.[IndexName]) = di.[xIndexName])
+        UNION
+        -- Unknown xml indexes (minus the @DropUnknownIndexes gate)
+        SELECT CAST(ei.[xSchema] AS NVARCHAR(500)), CAST(ei.[xTableName] AS NVARCHAR(500)), CAST(ei.[xIndexName] AS NVARCHAR(500)), 'index'
+          FROM #ExistingXmlIndexes ei WITH (NOLOCK)
+          WHERE NOT EXISTS (SELECT * FROM #XmlIndexes i WITH (NOLOCK) WHERE i.[Schema] = ei.[xSchema] AND i.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i.[IndexName]) = ei.[xIndexName])
+      ) w
+    IF @v_SQL IS NOT NULL EXEC(@v_SQL)
+  END
+
   RAISERROR('Drop Unknown and Modified Indexes', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + di.[Schema] + '.' + di.[TableName] + '.' + di.[IndexName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN IsConstraint = 1

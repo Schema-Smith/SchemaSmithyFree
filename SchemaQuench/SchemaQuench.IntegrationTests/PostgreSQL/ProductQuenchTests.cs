@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 ﻿using log4net;
+using Newtonsoft.Json.Linq;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.IntegrationTests;
@@ -111,6 +112,14 @@ DROP TABLE IF EXISTS ""SchemaSmith"".""TestLog"";
             verifyMvCmd.CommandText = "SELECT COUNT(*) FROM pg_matviews WHERE schemaname = 'public' AND matviewname = 'testsummaryview'";
             Assert.That((long)verifyMvCmd.ExecuteScalar()!, Is.EqualTo(1), "Materialized view should exist after quench");
             verifyMvConn.Close();
+
+            // #243 E5: PostgreSQL object-change audit is wired, so a real run is instrumented and the
+            // object scripts (functions/views) that re-apply are counted as "ran".
+            var summaryJson = JObject.Parse(File.ReadAllText(Path.Join(ConfigHelper.ResolveLogPath(), "SchemaQuench - Summary.json")));
+            Assert.That(summaryJson.SelectToken("objectChanges.instrumented")?.Value<bool>(), Is.True,
+                "objectChanges should be instrumented once the audit reader drains the session table");
+            Assert.That(summaryJson.SelectToken("objectChanges.scriptsRan")?.Value<int>(), Is.GreaterThan(0),
+                "object scripts that ran should be counted");
 
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();

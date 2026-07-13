@@ -32,7 +32,15 @@ BEGIN
         'CharacterSet', SUBSTRING_INDEX(t.TABLE_COLLATION, '_', 1),
         'Collation', t.TABLE_COLLATION,
         'Comment', NULLIF(t.TABLE_COMMENT, ''),
-        'AutoIncrementValue', t.AUTO_INCREMENT
+        'AutoIncrementValue', t.AUTO_INCREMENT,
+        -- Emit the sticky drop-protection marker first-class. Emitted as NULL when unset and stripped by the
+        -- JSON_REMOVE pass below, so only protected tables carry "PreventDrop": true. Read from ProductOwnership. #270
+        'PreventDrop', CASE WHEN EXISTS (SELECT 1 FROM SchemaSmith_ProductOwnership po
+                                          WHERE po.ObjectType = 'TABLE'
+                                            AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_Schema USING utf8mb4)
+                                            AND CONVERT(po.ObjectName USING utf8mb4) = CONVERT(p_Table USING utf8mb4)
+                                            AND COALESCE(po.PreventDrop, 0) = 1)
+                            THEN TRUE ELSE NULL END
     ) INTO v_json
     FROM INFORMATION_SCHEMA.TABLES t
     WHERE t.TABLE_SCHEMA = p_Schema
@@ -192,7 +200,8 @@ BEGIN
     SET v_json = JSON_REMOVE(v_json,
         CASE WHEN JSON_EXTRACT(v_json, '$.Comment') IS NULL THEN '$.Comment' ELSE '$.___dummy___' END,
         CASE WHEN JSON_EXTRACT(v_json, '$.AutoIncrementValue') IS NULL THEN '$.AutoIncrementValue' ELSE '$.___dummy___' END,
-        CASE WHEN JSON_EXTRACT(v_json, '$.RowFormat') IS NULL THEN '$.RowFormat' ELSE '$.___dummy___' END
+        CASE WHEN JSON_EXTRACT(v_json, '$.RowFormat') IS NULL THEN '$.RowFormat' ELSE '$.___dummy___' END,
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.PreventDrop')), 'NULL') = 'NULL' THEN '$.PreventDrop' ELSE '$.___dummy___' END
     );
 
     SELECT v_json AS TableJson;

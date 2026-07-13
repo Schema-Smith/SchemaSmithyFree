@@ -12,6 +12,7 @@ using log4net;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Schema.DataAccess;
+using Schema.Delivery;
 using Schema.Domain;
 using Schema.Isolators;
 using MySqlConnector;
@@ -30,6 +31,13 @@ public class SchemaTongs
     private string _productPath = "";
     private string _templatePath = "";
     private string[] _objectsToCast = [];
+
+    // Package ScriptTokens (template + product, template-precedence) used to substitute variant-gate
+    // expressions before evaluating them against the source DB during re-extraction. Deploy resolves
+    // ScriptTokens across the package before any gate evaluates; extraction must match so a token
+    // gate (e.g. '{{Edition}}'='Modern') folds to the active variant instead of being written as a
+    // spurious ungated 3rd entry (SS-DUP-001). Populated by LoadPackageTokens.
+    private List<KeyValuePair<string, string>> _packageTokens = [];
 
     private FolderMappingConfig _folderMappingConfig;
     internal Dictionary<ScriptObjectType, string> ResolvedFolders { get; } = new();
@@ -257,6 +265,8 @@ public class SchemaTongs
         ResolveFolderMappings();
 
         BuildFileIndexes();
+
+        LoadPackageTokens();
 
         RepositoryHelper.WriteSchemaFiles(_productPath, _platform);
 
@@ -577,6 +587,37 @@ public class SchemaTongs
         }
     }
 
+    /// <summary>
+    /// Loads the package's configured ScriptTokens (template + product) so variant-gate expressions
+    /// can be token-substituted before evaluation during re-extraction — mirroring deploy, which
+    /// resolves ScriptTokens across the package before any gate evaluates. Precedence matches the
+    /// authoritative deploy gate-resolution path (<c>Template.Load</c>: template tokens override
+    /// product tokens on key conflict). <see cref="SqlScript.TokenReplace"/> builds a first-added-wins
+    /// lookup, so template entries are added first to win. Unresolved tokens are left as-is (same as
+    /// deploy — <see cref="SqlScript.TokenReplace"/> leaves a placeholder it can't resolve untouched).
+    /// </summary>
+    private void LoadPackageTokens()
+    {
+        var tokens = new List<KeyValuePair<string, string>>();
+
+        var templateFile = Path.Join(_templatePath, "Template.json");
+        if (FileWrapper.GetFromFactory().Exists(templateFile))
+        {
+            var template = JsonHelper.Load<Template>(templateFile);
+            if (template?.ScriptTokens != null) tokens.AddRange(template.ScriptTokens);
+        }
+
+        var productFile = Path.Join(_productPath, "Product.json");
+        if (FileWrapper.GetFromFactory().Exists(productFile))
+        {
+            var productJson = FileWrapper.GetFromFactory().ReadAllText(productFile);
+            var product = productJson != null ? JsonConvert.DeserializeObject<Product>(productJson) : null;
+            if (product?.ScriptTokens != null) tokens.AddRange(product.ScriptTokens);
+        }
+
+        _packageTokens = tokens;
+    }
+
     private readonly ExtractionStats _stats = new();
     private readonly Dictionary<string, ExtractionFileIndex> _folderIndexes = new();
     private readonly List<string> _pendingSqulerrorCleanup = new();
@@ -634,6 +675,14 @@ public class SchemaTongs
         var defaultPath = Path.Combine(baseFolderPath, fileName);
         _folderIndexes.GetValueOrDefault(folderName)?.MarkWritten(defaultPath);
         return defaultPath;
+    }
+
+    // Marks a content-resolved table path as written so orphan detection spares it (the resolver
+    // picks the path by identity, bypassing the filename-keyed ResolveOutputPath).
+    private void MarkPathWritten(string baseFolderPath, string path)
+    {
+        var folderName = GetRelativeFolderName(baseFolderPath);
+        _folderIndexes.GetValueOrDefault(folderName)?.MarkWritten(path);
     }
 
     private static string EncodeFileName(string schema, string name, string extension)
@@ -1860,7 +1909,7 @@ SELECT s.name AS SchemaName, v.name AS ViewName
             _progressLog.Info("Kindling The Forge");
             ForgeKindler.KindleTheForge(command, _platform);
 
-            if (_includeTables) CastPostgreSqlTableDefinitions(command);
+            if (_includeTables) CastPostgreSqlTableDefinitions(command, targetDb);
             if (_includeSchemas) CastPostgreSqlSchemas(command);
             if (_includeDomainTypes) CastPostgreSqlDomainTypes(command);
             if (_includeEnumTypes) CastPostgreSqlEnumTypes(command);
@@ -1880,8 +1929,13 @@ SELECT s.name AS SchemaName, v.name AS ViewName
         }
     }
 
-    private void CastPostgreSqlTableDefinitions(IDbCommand command)
+    private void CastPostgreSqlTableDefinitions(IDbCommand command, string targetDb)
     {
+        using var gateConnection = GetConnection(targetDb);
+        using var gateCommand = gateConnection.CreateCommand();
+        bool IsVariantActive(string expr) =>
+            GateEvaluator.ShouldApply(gateCommand, SqlScript.TokenReplace(expr, _packageTokens, _platform));
+
         command.CommandText = @"
 SELECT t.schemaname, t.tablename
   FROM pg_tables t
@@ -1906,6 +1960,7 @@ SELECT t.schemaname, t.tablename
 
         var castPath = Path.Combine(_templatePath, "Tables");
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+        var resolver = new TableFileResolver(castPath, _platform, _isSchemaTemplate, IsVariantActive);
 
         foreach (var (schema, table) in tables)
         {
@@ -1920,18 +1975,40 @@ SELECT t.schemaname, t.tablename
                 _stats.TableErrors++;
                 continue;
             }
-            // Schema-template mode needs the typed PostgreSqlTable so the Schema/RelatedTableSchema
-            // properties exist on the in-memory object and can be scrubbed before serialization.
-            var tableObj = _isSchemaTemplate
-                ? PlatformDeserializer.DeserializeTable(tableJson, _platform)
-                : JsonConvert.DeserializeObject<Table>(tableJson);
-            var tableFile = ResolveOutputPath(castPath, EncodeObjectFileName(schema, table, ".json"));
-            var oldTableFile = ResolveOutputPath(castPath, EncodeObjectFileName(schema, tableObj.OldName.Trim('"'), ".json"));
+            // Deserialize to the typed PostgreSqlTable so the Schema property exists on the in-memory
+            // object — needed both to scrub it in schema-template mode and to omit the default schema
+            // in regular mode. Base Table would drop Schema (and PG-specific column properties),
+            // leaving content that disagrees with a catalog-derived filename (SS-FILE-NAME-003) and,
+            // worse, round-tripping a non-default-schema table as public.<name> on the next deploy.
+            var tableObj = PlatformDeserializer.DeserializeTable(tableJson, _platform);
+
+            // Regular mode: omit the PostgreSQL default schema (public) from content so the package
+            // follows the default-schema-omission convention (deploy re-resolves an unset Schema to
+            // public). A named non-default schema is kept. The write target then derives from this
+            // same content Schema — schema-less for public, qualified for a named schema — so the
+            // extraction output passes SS-FILE-NAME-003 by construction. Schema-template mode nulls
+            // Schema in ScrubSchemaForTemplate below, so it is excluded here.
+            if (!_isSchemaTemplate && tableObj is PostgreSqlTable pgTable
+                && string.Equals(Identifier.Unwrap(pgTable.Schema, _platform),
+                                 _platform.GetDefaultSchema(), _schemaNameComparison))
+                pgTable.Schema = null;
+
+            var contentSchema = (tableObj as IDeliverableTable)?.Schema ?? "";
+            var resolution = resolver.Resolve(contentSchema, table);
+            var tableFile = resolution.WritePath;
+            MarkPathWritten(castPath, tableFile);
+            if (resolution.UngatedEmit)
+                _progressLog.Warn($"    Extracted {schema}.{table} did not match any active variant — writing ungated '{Path.GetFileName(tableFile)}'; resolve its gating (SS-DUP-001).");
+            var oldName = tableObj.OldName?.Trim('"') ?? "";
+            var oldTableFile = string.IsNullOrEmpty(oldName)
+                ? null
+                : ResolveOutputPath(castPath, TableFileName.Canonical(
+                    contentSchema, oldName, "", _isSchemaTemplate || string.IsNullOrEmpty(contentSchema)));
             _progressLog.Info($"    Casting {tableFile}");
-            if (FileWrapper.GetFromFactory().Exists(tableFile) || FileWrapper.GetFromFactory().Exists(oldTableFile))
+            if (FileWrapper.GetFromFactory().Exists(tableFile) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
             {
                 var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile, _platform);
-                ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
+                ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
             }
             ScrubSchemaForTemplate(tableObj, tableFile);
             JsonHelper.Write(tableFile, tableObj);
@@ -2423,6 +2500,11 @@ SELECT 'Events' AS Folder,
         {
             using var commandJson = connectionJson.CreateCommand();
 
+            using var gateConnection = GetConnection(targetSchema);
+            using var gateCommand = gateConnection.CreateCommand();
+            bool IsVariantActive(string expr) =>
+                GateEvaluator.ShouldApply(gateCommand, SqlScript.TokenReplace(expr, _packageTokens, _platform));
+
             command.CommandText = $@"
 SELECT TABLE_SCHEMA, TABLE_NAME
   FROM INFORMATION_SCHEMA.TABLES t
@@ -2435,6 +2517,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
 
             var tableDir = Path.Combine(_templatePath, "Tables");
             DirectoryWrapper.GetFromFactory().CreateDirectory(tableDir);
+            var resolver = new TableFileResolver(tableDir, _platform, _isSchemaTemplate, IsVariantActive);
 
             var tables = new List<(string Schema, string Table)>();
             using (var reader = command.ExecuteReader())
@@ -2490,7 +2573,11 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                         continue;
                     }
 
-                    var filename = ResolveOutputPath(tableDir, EncodeFileName(table, ".json"));
+                    var resolution = resolver.Resolve("", table);
+                    var filename = resolution.WritePath;
+                    MarkPathWritten(tableDir, filename);
+                    if (resolution.UngatedEmit)
+                        _progressLog.Warn($"    Extracted {table} did not match any active variant — writing ungated '{Path.GetFileName(filename)}'; resolve its gating (SS-DUP-001).");
                     var oldTableFile = !string.IsNullOrEmpty(tableObj.OldName)
                         ? ResolveOutputPath(tableDir, EncodeFileName(tableObj.OldName.Trim('`'), ".json"))
                         : null;
@@ -2499,7 +2586,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                     {
                         var originalPath = FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile;
                         var original = JsonHelper.TableLoad(originalPath, _platform);
-                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
+                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
                     }
 
                     JsonHelper.Write(filename, tableObj);
@@ -2563,6 +2650,13 @@ SELECT TABLE_SCHEMA, TABLE_NAME
         {
             using var commandJson = connectionJson.CreateCommand();
 
+            // Dedicated connection/command for gate evaluation — the enumeration reader on `command`
+            // and the JSON reader on `commandJson` are both live during the loop.
+            using var gateConnection = GetConnection(targetDb);
+            using var gateCommand = gateConnection.CreateCommand();
+            bool IsVariantActive(string expr) =>
+                GateEvaluator.ShouldApply(gateCommand, SqlScript.TokenReplace(expr, _packageTokens, _platform));
+
             command.CommandText = @"
 SELECT TABLE_SCHEMA, TABLE_NAME
   FROM INFORMATION_SCHEMA.TABLES t
@@ -2579,6 +2673,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             _progressLog.Info("Casting Table Structures");
             var tableDir = Path.Combine(_templatePath, "Tables");
             DirectoryWrapper.GetFromFactory().CreateDirectory(tableDir);
+            var resolver = new TableFileResolver(tableDir, _platform, _isSchemaTemplate, IsVariantActive);
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
@@ -2601,7 +2696,11 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                     continue;
                 }
 
-                var filename = ResolveOutputPath(tableDir, EncodeObjectFileName(tableSchema, tableName, ".json"));
+                var resolution = resolver.Resolve(tableSchema, tableName);
+                var filename = resolution.WritePath;
+                MarkPathWritten(tableDir, filename);
+                if (resolution.UngatedEmit)
+                    _progressLog.Warn($"    Extracted {tableSchema}.{tableName} did not match any active variant — writing ungated '{Path.GetFileName(filename)}'; resolve its gating (SS-DUP-001).");
                 _progressLog.Info($"    Casting {filename}");
                 // Use the platform-aware deserializer so the platform subclass
                 // (e.g., SqlServerTable) materializes — otherwise the base Table
@@ -2632,7 +2731,7 @@ SELECT cc.name AS [Name],
                 if (FileWrapper.GetFromFactory().Exists(filename) || FileWrapper.GetFromFactory().Exists(oldTableFile))
                 {
                     var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile, _platform);
-                    ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original);
+                    ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
                 }
                 // Schema-template mode: strip the platform Schema field and any same-source RelatedTableSchema
                 // values on the in-memory table object before serialization (design §7.2), and rewrite

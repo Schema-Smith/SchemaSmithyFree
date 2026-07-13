@@ -1,0 +1,7 @@
+{
+    "Schema": "public",
+    "Name": "ProtectedTable",
+    "PreventDrop": true,
+    "Columns": [{"Name": "Id","DataType": "INTEGER","Nullable": false}],
+    "Indexes": [{"Name": "PK_ProtectedTable","PrimaryKey": true,"Unique": true,"IndexColumns": "Id"}]
+}

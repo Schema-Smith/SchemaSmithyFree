@@ -15,7 +15,8 @@ BEGIN TRY
                                   'ALTER TABLE ' + f.[Schema] + '.' + f.[TableName] + ' ADD CONSTRAINT ' + f.[KeyName] + ' FOREIGN KEY ' +
                                   '(' + f.[Columns] + ') REFERENCES ' + [RelatedTableSchema] + '.' + f.[RelatedTable] + ' (' + [RelatedColumns] + ')' +
                                   ' ON DELETE ' + [DeleteAction] +
-                                  ' ON UPDATE ' + [UpdateAction] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+                                  ' ON UPDATE ' + [UpdateAction] + ';' + CHAR(13) + CHAR(10) +
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + f.[Schema] + '.' + f.[TableName] + '.' + f.[KeyName] + ''', ''created'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #ForeignKeys f WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT *
                         FROM sys.foreign_keys sf WITH (NOLOCK)

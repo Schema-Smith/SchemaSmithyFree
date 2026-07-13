@@ -89,6 +89,7 @@ public class DeploymentSummaryTextTests
             Created: new CreatedCounts(0, 0, 0, 0, 0, 0, 0),
             Modified: new ModifiedCounts(0, 0),
             Dropped: new DroppedCounts(0, 0, 0, 0),
+            ScriptsRan: 0,
             Details: new List<ObjectChangeDetail>());
 
         return new DeploymentSummary(
@@ -256,7 +257,8 @@ public class DeploymentSummaryTextTests
             ObjectChanges = summary.ObjectChanges with
             {
                 Instrumented = true,
-                Created = new CreatedCounts(Tables: 3, Indexes: 1, Constraints: 0, ForeignKeys: 0, Procedures: 0, Views: 0, Functions: 0)
+                Created = new CreatedCounts(Tables: 3, Indexes: 1, Constraints: 0, ForeignKeys: 0, Procedures: 0, Views: 0, Functions: 0),
+                ScriptsRan = 2
             }
         };
 
@@ -265,6 +267,7 @@ public class DeploymentSummaryTextTests
         // "tables=3" (not a bare "3") so this doesn't accidentally match the fixture's unrelated
         // "3000ms" target duration — pins the actual created-tables count being rendered.
         Assert.That(result, Does.Contain("tables=3"));
+        Assert.That(result, Does.Contain("Ran (object scripts): 2"));
         Assert.That(result, Does.Not.Contain("(not instrumented)"));
     }
 

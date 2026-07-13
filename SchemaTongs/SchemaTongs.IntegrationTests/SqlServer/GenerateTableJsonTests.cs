@@ -506,6 +506,41 @@ CREATE TABLE [Test].[NonDefaultSchemaTable] (
         conn.Close();
     }
 
+    [Test]
+    public void ShouldEmitPreventDropOnlyForProtectedTables()
+    {
+        // #270 round-trip: a table protected in the source DB (sticky PreventDrop marker set) must extract with
+        // "PreventDrop": true so an extract -> re-deploy preserves protection; an unprotected sibling omits the key.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.ProtectedExtractTable (Id INT NOT NULL PRIMARY KEY)
+CREATE TABLE dbo.UnprotectedExtractTable (Id INT NOT NULL PRIMARY KEY)
+
+-- Stamp the sticky PreventDrop marker exactly as ModifiedTableQuench does for a protected table.
+EXEC sys.sp_addextendedproperty 'PreventDrop', 'true', 'SCHEMA', [dbo], 'TABLE', [ProtectedExtractTable], NULL, NULL;
+";
+        cmd.ExecuteNonQuery();
+
+        var protectedJson = GenerateTableJson(cmd, "dbo", "ProtectedExtractTable");
+        var protectedTable = (SqlServerTable)PlatformDeserializer.DeserializeTable(protectedJson, Platform.SqlServer);
+        var unprotectedJson = GenerateTableJson(cmd, "dbo", "UnprotectedExtractTable");
+        var unprotectedTable = (SqlServerTable)PlatformDeserializer.DeserializeTable(unprotectedJson, Platform.SqlServer);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(protectedTable.PreventDrop, Is.True, "Protected table must round-trip PreventDrop:true.");
+            Assert.That(protectedJson, Does.Contain("PreventDrop"), "Extracted JSON for a protected table must carry the PreventDrop marker.");
+            Assert.That(unprotectedTable.PreventDrop, Is.False, "Unprotected table must deserialize to PreventDrop:false.");
+            Assert.That(unprotectedJson, Does.Not.Contain("PreventDrop"), "Extracted JSON for an unprotected table must omit the PreventDrop key.");
+            // The internal marker must not leak into the generic ExtendedProperties extraction.
+            Assert.That(protectedTable.Extensions?["ExtendedProperties"]?["PreventDrop"], Is.Null, "PreventDrop must stay out of generic Extensions.");
+        });
+
+        conn.Close();
+    }
+
     private string GenerateTableJson(IDbCommand cmd, string schema, string table)
     {
         cmd.CommandText = $"EXEC [SchemaSmith].GenerateTableJson @p_Schema = '{schema}', @p_Table = '{table}'";

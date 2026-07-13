@@ -312,6 +312,26 @@ This is what makes [Custom Properties](custom-properties.md) trustworthy across 
 
 ---
 
+## Table File Naming
+
+SchemaTongs writes each table file under a canonical name derived from the table's content:
+
+```
+<schema>.<table>[.<VariantName>].json
+```
+
+The optional `VariantName` segment comes after the schema and table, so a table's [conditional variants](schema-packages.md#conditional-application) sort together in source control and in a file listing. The schema segment is omitted for MySQL and schema-template packages, which carry no per-table schema (`<table>[.<VariantName>].json`).
+
+A table's identity lives in its file *content* -- `Schema`, `Name`, and `VariantName` -- not in its filename. SchemaTongs matches an existing file to an extracted table by that content identity, so a file you renamed by hand is still found and refreshed in place rather than duplicated. The canonical name is a convention, not a contract: if a file's name drifts from canonical, the deploy still works and [`--Validate`](validate.md#file-naming) emits an `SS-FILE-NAME-003` warning pointing at the canonical name.
+
+## Variant Reconciliation on Re-Extraction
+
+When a table -- or one of its components (column, index, foreign key, constraint, statistic, full-text index) -- carries an authored [variant set](schema-packages.md#conditional-application) (two or more same-named entries each gated by `ShouldApplyExpression`), SchemaTongs can only ever see one physical shape on the source database. Rather than discard what it extracted, it **evaluates each variant's gate against the source and folds the extracted shape into the variant that is active there**, keeping that variant's gate and `VariantName` and leaving the inactive variants untouched. Real drift on the deployed variant is captured, not lost.
+
+If no single variant's gate is active on the source, the extracted shape is written as an **ungated** entry alongside the authored variants; `--Validate` then flags the ungated-plus-gated mix (`SS-DUP-001`) so you can fold it into the right variant or gate it. A malformed or erroring gate fails the extraction rather than guessing (fail-closed).
+
+---
+
 ## Script Validation
 
 Catch problems at extraction time instead of discovering them during deployment. When `ShouldCast:ValidateScripts` is `true`, SchemaTongs tests each extracted SQL script for validity immediately after writing it. The validation strategy depends on the platform and the object type, but the principle is the same: try to compile the object server-side, roll back, and flag failures.

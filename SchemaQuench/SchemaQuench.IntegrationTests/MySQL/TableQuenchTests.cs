@@ -877,7 +877,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -938,7 +938,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -999,7 +999,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -1405,7 +1405,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -1472,7 +1472,7 @@ public class TableQuenchTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);

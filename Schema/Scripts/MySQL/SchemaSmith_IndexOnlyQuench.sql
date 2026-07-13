@@ -229,6 +229,117 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- No-drop protection tier (#270): capture indexes that WOULD have been dropped by absence but
+    -- are suppressed. STEP 3 below is skipped entirely under protection (the caller forces both
+    -- p_DropUnknownIndexes and p_DropIndexesRemovedFromProduct false), so this block is
+    -- self-contained: it snapshots the catalog (INFORMATION_SCHEMA out of the set-based DML, #337
+    -- crash-safety), then computes BOTH STEP 3 axes' by-absence candidates MINUS their env gates
+    -- into one temp — AXIS 1 removed-from-product (keeps the per-table
+    -- COALESCE(t.DropIndexesRemovedFromProduct,1) opt-out) UNION AXIS 2 unknown/out-of-band — then a
+    -- discrete audit insert. Audit rows only, so it runs regardless of p_WhatIf. The capture signal
+    -- is the session user-variable @ss_capture_would_drop set by the caller on the connection (these
+    -- procs take no new parameter). ObjectName mirrors the sibling 'index'/'dropped' audit in
+    -- MissingIndexesAndConstraintsQuench STEP 8: CONCAT(TableName, '.', IndexName).
+    IF COALESCE(@ss_capture_would_drop, 0) = 1 THEN
+        -- Catalog snapshot (one row per index; SEQ_IN_INDEX = 1). Mirrors STEP 3's _SchemaSmith_IdxOnlyIdx.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropIdxCat;
+        CREATE TEMPORARY TABLE _SchemaSmith_WouldDropIdxCat (
+            TableName VARCHAR(128) NOT NULL,
+            IndexName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, IndexName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_WouldDropIdxCat (TableName, IndexName)
+        SELECT CONVERT(s.TABLE_NAME USING utf8mb4), CONVERT(s.INDEX_NAME USING utf8mb4)
+        FROM INFORMATION_SCHEMA.STATISTICS s
+        WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND s.SEQ_IN_INDEX = 1;
+
+        -- Defined-index snapshot (table.index pairs from the current definition). Mirrors STEP 3's _SchemaSmith_DefinedIndexes.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropDefIdx;
+        CREATE TEMPORARY TABLE _SchemaSmith_WouldDropDefIdx (
+            TableName VARCHAR(128) NOT NULL,
+            IndexName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, IndexName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_WouldDropDefIdx (TableName, IndexName)
+        SELECT CONVERT(SchemaSmith_StripBacktickWrapping(i.TableName) USING utf8mb4),
+               CONVERT(SchemaSmith_StripBacktickWrapping(i.IndexName) USING utf8mb4)
+        FROM _SchemaSmith_Indexes i;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropIndexes;
+        CREATE TEMPORARY TABLE _SchemaSmith_WouldDropIndexes (
+            TableName VARCHAR(128) NOT NULL,
+            IndexName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, IndexName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        -- AXIS 1 — removed-from-product (env gate p_DropIndexesRemovedFromProduct dropped; per-table opt-out kept).
+        INSERT IGNORE INTO _SchemaSmith_WouldDropIndexes (TableName, IndexName)
+        SELECT DISTINCT
+            SUBSTRING_INDEX(po.ObjectName, '.', 1),
+            SUBSTRING_INDEX(po.ObjectName, '.', -1)
+        FROM SchemaSmith_ProductOwnership po
+        INNER JOIN _SchemaSmith_Tables t
+            ON CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+        LEFT JOIN _SchemaSmith_WouldDropDefIdx di
+            ON CONVERT(di.TableName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+            AND CONVERT(di.IndexName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
+        LEFT JOIN _SchemaSmith_WouldDropIdxCat ei
+            ON CONVERT(ei.TableName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', 1) USING utf8mb4)
+            AND CONVERT(ei.IndexName USING utf8mb4) = CONVERT(SUBSTRING_INDEX(po.ObjectName, '.', -1) USING utf8mb4)
+        WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
+          AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+          AND po.ObjectType COLLATE utf8mb4_unicode_ci = 'INDEX' COLLATE utf8mb4_unicode_ci
+          -- Per-table tightening (the env/product gate is removed for capture)
+          AND COALESCE(t.DropIndexesRemovedFromProduct, 1) = 1
+          -- Never drop PRIMARY KEY
+          AND UPPER(SUBSTRING_INDEX(po.ObjectName, '.', -1) COLLATE utf8mb4_unicode_ci) != 'PRIMARY' COLLATE utf8mb4_unicode_ci
+          -- Not in current definition (LEFT JOIN produces NULL when not found)
+          AND di.IndexName IS NULL
+          -- Not a renamed index
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_IndexRenames r
+              WHERE r.TableName = SUBSTRING_INDEX(po.ObjectName, '.', 1)
+                AND r.OldIndexName = SUBSTRING_INDEX(po.ObjectName, '.', -1)
+          )
+          -- Verify index actually exists (snapshot bridge)
+          AND ei.IndexName IS NOT NULL;
+
+        -- AXIS 2 — out-of-band (env gate p_DropUnknownIndexes dropped).
+        INSERT IGNORE INTO _SchemaSmith_WouldDropIndexes (TableName, IndexName)
+        SELECT CONVERT(ei.TableName USING utf8mb4), CONVERT(ei.IndexName USING utf8mb4)
+        FROM _SchemaSmith_WouldDropIdxCat ei
+        INNER JOIN _SchemaSmith_Tables t
+            ON CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(ei.TableName USING utf8mb4)
+        WHERE UPPER(ei.IndexName COLLATE utf8mb4_unicode_ci) != 'PRIMARY' COLLATE utf8mb4_unicode_ci
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_WouldDropDefIdx di
+              WHERE CONVERT(di.TableName USING utf8mb4) = CONVERT(ei.TableName USING utf8mb4)
+                AND CONVERT(di.IndexName USING utf8mb4) = CONVERT(ei.IndexName USING utf8mb4)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM SchemaSmith_ProductOwnership po
+              WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
+                AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+                AND po.ObjectType COLLATE utf8mb4_unicode_ci = 'INDEX' COLLATE utf8mb4_unicode_ci
+                AND po.ObjectName COLLATE utf8mb4_unicode_ci = CONCAT(ei.TableName, '.', ei.IndexName) COLLATE utf8mb4_unicode_ci
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_IndexRenames r
+              WHERE CONVERT(r.TableName USING utf8mb4) = CONVERT(ei.TableName USING utf8mb4)
+                AND CONVERT(r.OldIndexName USING utf8mb4) = CONVERT(ei.IndexName USING utf8mb4)
+          );
+
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'index', CONCAT(TableName, '.', IndexName), 'wouldDrop'
+        FROM _SchemaSmith_WouldDropIndexes;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropIndexes;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropDefIdx;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropIdxCat;
+    END IF;
+
+    -- =========================================================================
     -- STEP 3: Drop unknown indexes (owned by product but not in definition)
     -- =========================================================================
     IF p_DropUnknownIndexes = 1 OR p_DropIndexesRemovedFromProduct = 1 THEN

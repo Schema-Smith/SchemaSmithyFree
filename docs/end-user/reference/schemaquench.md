@@ -62,6 +62,7 @@ SchemaQuench reads configuration from `SchemaQuench.settings.json` (or the file 
 | `KindleTheForge` | bool | `true` | Deploy SchemaSmith helper procedures and the migration tracking table to each target database before quenching. |
 | `UpdateTables` | bool | `true` | Apply table structure changes (columns, indexes, constraints, foreign keys) from the schema package. |
 | `DropTablesRemovedFromProduct` | bool | `true` | Drop tables that exist in the database but aren't defined in the schema package. Also settable as a `Product.json` property — see [DropTablesRemovedFromProduct](#droptablesremovedfromproduct). |
+| `PreventDrop` | bool | `false` | Environment-wide no-drop protection: when `true`, this environment never drops an object for being absent from the product (every `Drop…RemovedFromProduct` pass is suppressed) and the run completes normally, itemizing the withheld drops in the deployment summary's `preventDrop` manifest. Transient drop-then-recreate for a declared change is unaffected. See [PreventDrop](#preventdrop). |
 | `DropColumnsRemovedFromProduct` | bool | `true` | Drop columns that exist in the database but aren't defined in the schema package. Resolves across a four-tier cascade (env → product → template → table) with explicit-false-sticky semantics. See [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct). |
 | `DeliverData` | bool | `true` | Run the per-table `DataDelivery` step and the `TableData`-slot scripts. Set to `false` to ship a structure-only deployment that leaves reference data untouched -- pairs naturally with `UpdateTables: true` for "deploy schema, skip data" pipelines. |
 | `RunScriptsTwice` | bool | `false` | Run object scripts twice to verify idempotency. A CI/testing tool. |
@@ -798,6 +799,67 @@ A `false` at either the environment or product level suppresses the drop pass fo
 4. After the retention period, either enable the setting for one deployment or add an explicit DROP in a migration script.
 
 For an alternative that keeps auto-drops on while still protecting data, see [Recyclebin -- Soft-Drop and Restore Hooks](recyclebin.md) (posture 2: drop-but-recoverable via the `SchemaSmith.CustomTableDrop` / `SchemaSmith.CustomTableRestore` hooks).
+
+---
+
+## PreventDrop
+
+Some tables you never want the deployment tool to drop -- not on a rollback, not when someone trims the package, not by accident. The `Drop…RemovedFromProduct` flags help while a table is still in the package, but they share a blind spot: they gate the by-absence drop pass, so they only "see" a table whose definition is still present. The moment you delete a table's `.json`, there's nothing left to carry a `false` -- and the table becomes a drop candidate. `PreventDrop` closes that gap. Set it on a table and SchemaSmith persists the intent *in the database itself*, so the protection outlives the table's own definition.
+
+`PreventDrop` is a per-table boolean set in the table's `.json`, default `false`. When `true`, the table is never dropped by absence -- even after you remove it from the package entirely.
+
+```json
+{
+  "Name": "[Orders]",
+  "PreventDrop": true,
+  "Columns": [ /* ... */ ]
+}
+```
+
+**Sticky by design.** The protection is persisted in SchemaSmith's ownership tracking, so it survives the table leaving the package. On SQL Server it's a `PreventDrop` extended property stamped on the table; on PostgreSQL and MySQL it's a `PreventDrop` column on the `ProductOwnership` tracking table. Each run, while the table is still in the package, SchemaSmith refreshes the marker to match the package value -- so the stored protection always tracks what your JSON declares.
+
+**Removed, not dropped.** When a protected table is later removed from the package, SchemaSmith reads the persisted marker, logs that it's retaining the table, and skips the drop. Its inbound foreign keys -- constraints on *other* tables that reference the protected table -- are preserved too, so the table stays fully wired into the schema rather than left as an orphan.
+
+**Not a cascade flag.** Unlike `DropTablesRemovedFromProduct` (an environment → product → template cascade that *suppresses* the drop pass), `PreventDrop` is a positive, per-table guard that lives with the table and persists in the database. The cascade flag answers "should this deployment run the drop pass at all?"; `PreventDrop` answers "should this specific table ever be a drop candidate?" -- and keeps answering it after the definition is gone.
+
+### Un-protecting a table
+
+Because the marker is sticky, clearing it is a deliberate, reviewed step -- you can't un-protect a table by simply deleting its JSON, since that's exactly the case the stickiness defends against. Two ways to remove protection:
+
+1. **Refresh, then remove.** Set `PreventDrop: false` and re-deploy while the table is *still* in the package. That run refreshes the sticky marker to `false`. Now remove the table from the package on a later deployment and it drops normally.
+2. **Drop via migration script.** Write a migration script that drops the table explicitly. Migration scripts run outside the drop-by-absence pass, so they aren't gated by `PreventDrop` at all.
+
+> **Tip:** Reach for the refresh-then-remove path when you want the removal to flow through the normal declarative pipeline; reach for the migration script when you want the drop recorded as an explicit, reviewable step in the package.
+
+**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, and MySQL -- the persistence mechanism differs per engine, but the contract is the same everywhere.
+
+> **Note:** Ownership is reconciled against the live catalog on every run. If a protected table is dropped out-of-band -- by a migration script, a DBA, or a manual change -- SchemaSmith prunes its ownership record (including the sticky marker) because the table no longer exists in the catalog. No stale protection lingers to confuse a future deployment; the marker only ever protects a table that's actually there.
+
+### Environment-level protection — the `PreventDrop` setting
+
+Per-table `PreventDrop` protects tables you name one at a time. Sometimes you want the opposite default: an entire environment where the deployment tool is simply not allowed to remove anything by omission -- production, a shared staging fleet, any target where an accidental drop is unacceptable. The **environment-level `PreventDrop`** setting is that blanket guardrail.
+
+Set `PreventDrop: true` in `SchemaQuench.settings.json` (or the `SmithySettings_PreventDrop` environment variable) and, for the whole run, SchemaQuench suppresses *every* drop-by-absence pass -- tables, columns, foreign keys, check and exclude constraints, statistics, product-owned indexes, and unknown out-of-band indexes. Nothing is dropped for being absent from the product, regardless of what any package, template, or table declares. It is off by default.
+
+```json
+{
+  "PreventDrop": true
+}
+```
+
+**It doesn't drop -- it doesn't explode.** A protected run still completes normally (exit code `0`). SchemaQuench applies every additive and modifying change as usual, skips the drops, logs each one it withheld, and records them in the deployment summary under a `preventDrop` manifest -- so you get a precise list of what was *not* removed (`objectType` + `objectName`) without the run failing. Read the manifest to see whether a package genuinely intends those removals; if it does, deploy that package to an unprotected environment, or clear protection deliberately.
+
+**Transient drops are untouched.** Protection suppresses only removal *by absence*. An object that is still declared but has to be dropped and recreated to apply a change -- dropping an index to alter the column it covers and putting it back, modifying a constraint, recreating a computed column whose expression changed -- reconciles exactly as it always does. Those drops are part of applying your declared schema, not removing something you left out, so protected mode never blocks them.
+
+**How it relates to the other controls.** Three layers, narrowest-winning intent:
+
+- **`Drop…RemovedFromProduct` cascade** — per-object-type, four-tier (environment → product → template → table). Fine-grained: "should *this kind* of by-absence drop run *here*?"
+- **Per-table `PreventDrop`** — a sticky, persisted guard on *one named table*, surviving its removal from the package.
+- **Environment `PreventDrop`** — a whole-run blanket: "for this deployment, don't remove *anything* by absence." The simplest possible answer when the rule is "this environment never drops."
+
+They compose. The environment switch is the outermost guarantee; the cascade and per-table guards still apply beneath it for environments that aren't fully locked down.
+
+**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, and MySQL.
 
 ---
 

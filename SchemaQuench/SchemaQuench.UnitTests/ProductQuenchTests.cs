@@ -2577,5 +2577,14 @@ public class ProductQuenchTests
     [Test] public void ConfigBool_False_False()   { var c = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string>{["X"]="false"}).Build(); Assert.That(ProductQuench.ConfigBool(c,"X"), Is.False); }
     [Test] public void ConfigBool_True_True()     { var c = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string>{["X"]="true"}).Build(); Assert.That(ProductQuench.ConfigBool(c,"X"), Is.True); }
 
+    // Env-level no-drop protection tier (env PreventDrop) config resolution (#270 Slice E).
+    private static IConfigurationRoot Cfg(params (string Key, string Value)[] kv) =>
+        new ConfigurationBuilder().AddInMemoryCollection(kv.ToDictionary(p => p.Key, p => p.Value)).Build();
+
+    [Test] public void ProtectedMode_Off_WhenAbsent()      => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg()), Is.False);
+    [Test] public void ProtectedMode_On_WhenTrue()         => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg(("PreventDrop","true"))), Is.True);
+    [Test] public void ProtectedMode_Off_WhenFalse()       => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg(("PreventDrop","false"))), Is.False);
+    [Test] public void ProtectedMode_Off_WhenUnparseable() => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg(("PreventDrop","banana"))), Is.False);
+
     #endregion
 }

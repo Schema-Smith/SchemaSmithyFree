@@ -345,6 +345,39 @@ CREATE TABLE `{_integrationDb}`.`TestGenerated` (
         return table.FullTextIndexes.Find(ft => ft.Name == name || ft.Name == $"`{name}`");
     }
 
+    [Test]
+    public void ShouldEmitPreventDropOnlyForProtectedTables()
+    {
+        // #270 round-trip: a table protected in the source DB (sticky PreventDrop marker set) must extract with
+        // "PreventDrop": true so an extract -> re-deploy preserves protection; an unprotected sibling omits the key.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+CREATE TABLE `{_integrationDb}`.`ProtectedExtractTable` (`Id` INT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+CREATE TABLE `{_integrationDb}`.`UnprotectedExtractTable` (`Id` INT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+
+INSERT INTO SchemaSmith_ProductOwnership (ObjectType, ObjectSchema, ObjectName, ProductName, TemplateName, PreventDrop)
+VALUES ('TABLE', '{_integrationDb}', 'ProtectedExtractTable', 'TestProduct', '', 1);
+";
+        cmd.ExecuteNonQuery();
+
+        var protectedJson = GenerateTableJson(cmd, _integrationDb, "ProtectedExtractTable");
+        var protectedTable = (MySqlTable)PlatformDeserializer.DeserializeTable(protectedJson, Platform.MySQL);
+        var unprotectedJson = GenerateTableJson(cmd, _integrationDb, "UnprotectedExtractTable");
+        var unprotectedTable = (MySqlTable)PlatformDeserializer.DeserializeTable(unprotectedJson, Platform.MySQL);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(protectedTable.PreventDrop, Is.True, "Protected table must round-trip PreventDrop:true.");
+            Assert.That(protectedJson, Does.Contain("PreventDrop"), "Extracted JSON for a protected table must carry the PreventDrop marker.");
+            Assert.That(unprotectedTable.PreventDrop, Is.False, "Unprotected table must deserialize to PreventDrop:false.");
+            Assert.That(unprotectedJson, Does.Not.Contain("PreventDrop"), "Extracted JSON for an unprotected table must omit the PreventDrop key.");
+        });
+
+        conn.Close();
+    }
+
     private string GenerateTableJson(IDbCommand cmd, string schema, string table)
     {
         cmd.CommandText = $"CALL SchemaSmith_GenerateTableJSON('{schema}', '{table}')";

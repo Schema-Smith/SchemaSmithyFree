@@ -77,6 +77,10 @@ namespace Schema.Domain
         [JsonProperty(Order = 90)]
         public bool? DropIndexesRemovedFromProduct { get; set; }
 
+        [SchemaProperty(Description = "When true, this table is protected from drop-by-absence and the protection is sticky: it is persisted in SchemaSmith's ownership tracking so a protected table that is later removed from the product package is skipped (never silently dropped) rather than reconciled away. Set false and re-deploy while the table is still in the package to clear the protection before an intended removal. Default false.")]
+        [JsonProperty(Order = 91)]
+        public bool PreventDrop { get; set; }
+
         [JsonProperty(Order = 90)]
         public string OldName { get; set; }
 

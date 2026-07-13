@@ -236,5 +236,20 @@ namespace Schema.UnitTests.Domain
             Assert.That(table.DropIndexesRemovedFromProduct, Is.True);
         }
 
+        [Test]
+        public void PreventDrop_DefaultsToFalse()
+        {
+            var table = new Table();
+            Assert.That(table.PreventDrop, Is.False);
+        }
+
+        [Test]
+        public void PreventDrop_RoundTripsThroughJson()
+        {
+            var table = Newtonsoft.Json.JsonConvert.DeserializeObject<Table>(
+                """{ "Name": "[Orders]", "PreventDrop": true }""");
+            Assert.That(table!.PreventDrop, Is.True);
+        }
+
     }
 }

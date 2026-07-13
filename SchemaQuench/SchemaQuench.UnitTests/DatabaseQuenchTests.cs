@@ -2062,7 +2062,7 @@ public class DatabaseQuenchTests
             // throws so the script stays unquenched, then LogScriptErrors fires and throws.
             var mockCmd = CreateMockCommand();
             mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception("SQL error"));
-            var ex = Assert.Throws<Exception>(() => quench.QuenchDatabaseObjects(mockCmd, scripts, showErrors: true));
+            var ex = Assert.Throws<ScriptQuenchException>(() => quench.QuenchDatabaseObjects(mockCmd, scripts, showErrors: true));
             Assert.That(ex!.Message, Does.Contain("Unable to quench all scripts"));
 
             // Assert: artifact file received the raw SQL batch body.
@@ -2127,7 +2127,7 @@ public class DatabaseQuenchTests
 
             var mockCmd = CreateMockCommand();
             mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception("SQL error"));
-            Assert.Throws<Exception>(() =>
+            Assert.Throws<ScriptQuenchException>(() =>
                 quench.QuenchDatabaseObjects(mockCmd, new List<SqlScript> { script }, showErrors: true));
 
             // The sensitive value must be masked in the artifact content.
@@ -2447,7 +2447,7 @@ public class DatabaseQuenchTests
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
 
-        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 1, 1, 1, 1)
+        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 1, 1, 1, 1, 0)
         // (prod, db, whatIf=0, dropTables=0, dropCols=1, dropChecks=1) — dropCols is the 5th arg.
         Assert.That(mockCmd.CommandText, Does.Contain(", 0, 0, 1,"));
     }
@@ -2552,15 +2552,17 @@ public class DatabaseQuenchTests
         var product = new Product { Name = "Prod", Platform = Platform.MySQL };
         var template = new Template { Name = "T" };
         template.Tables.Add(new Schema.Domain.Table { Name = "[T1]" });
-        // dropRemovedCheckConstraints="1" -> last (6th) positional arg of the MySQL CALL
+        // dropRemovedCheckConstraints="1" -> 6th positional arg of the MySQL CALL (followed by
+        // excludes, statistics, and the #270 captureWouldDrop flag).
         var quench = new DatabaseQuench("srv", product, template, "db",
             false, "0", false, "0", "0", "0", "1", "1", "1", "1", "0", false, false, null);
 
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
 
-        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 0, 1, 1, 1)
-        Assert.That(mockCmd.CommandText, Does.EndWith(", 1)"));
+        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 0, 1, 1, 1, 0)
+        // — dropChecks (1) followed by excludes (1), stats (1), captureWouldDrop (0).
+        Assert.That(mockCmd.CommandText, Does.EndWith(", 1, 1, 1, 0)"));
     }
 
     #endregion

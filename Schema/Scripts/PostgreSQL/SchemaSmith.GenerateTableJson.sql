@@ -184,6 +184,14 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                '' AS "OldName",
                rls.relrowsecurity AS "RowLevelSecurity",
                rls.relforcerowsecurity AS "ForceRowLevelSecurity",
+               -- Emit the sticky drop-protection marker first-class (only when set true; FormatJson strips the null key
+               -- for unprotected tables). Read from the ProductOwnership table-level row by schema+table. #270
+               CASE WHEN COALESCE((SELECT po."PreventDrop"
+                                     FROM "SchemaSmith"."ProductOwnership" po
+                                     WHERE po."Schema" = t.table_schema
+                                       AND po."TableName" = t.table_name
+                                       AND po."IndexName" IS NULL), FALSE)
+                    THEN TRUE END AS "PreventDrop",
                am.amname AS "AccessMethod",
                CASE rls.relpersistence WHEN 'p' THEN 'Logged' WHEN 'u' THEN 'Unlogged' WHEN 't' THEN 'Temporary' END AS "PersistenceType",
                COALESCE((SELECT SPLIT_PART(opt, '=', 2)

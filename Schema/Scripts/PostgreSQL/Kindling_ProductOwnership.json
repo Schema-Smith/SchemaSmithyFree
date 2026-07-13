@@ -27,6 +27,12 @@
       "DataType": "VARCHAR(256)",
       "Nullable": false,
       "Default": "''''"
+    },
+    {
+      "Name": "PreventDrop",
+      "DataType": "BOOLEAN",
+      "Nullable": false,
+      "Default": "false"
     }
   ],
   "Indexes": [
@@ -34,7 +40,8 @@
       "Name": "PK_ProductOwnership",
       "PrimaryKey": false,
       "Unique": true,
-      "IndexColumns": "\"Schema\",\"TableName\",\"IndexName\",\"ProductName\",template_name"
+      "NullsNotDistinct": true,
+      "IndexColumns": "\"Schema\",\"TableName\",\"IndexName\""
     }
   ]
 }

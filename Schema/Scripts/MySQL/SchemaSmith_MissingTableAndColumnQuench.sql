@@ -189,6 +189,8 @@ BEGIN
             SET @exec_sql = v_Sql;
             PREPARE stmt FROM @exec_sql;
             EXECUTE stmt;
+            -- Object-change audit (#243 E5): after EXECUTE, before DEALLOCATE (crash-safe #337 point).
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (CONNECTION_ID(), 'table', v_StatusTableName, 'created');
             DEALLOCATE PREPARE stmt;
         END LOOP;
 
@@ -231,6 +233,16 @@ BEGIN
             SET @v_addcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_AddColumnStmts WHERE RowId > @v_addcol_id);
         END WHILE;
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_AddColumnStmts;
+
+        -- Object-change audit (#243 E5): one row per physical column added to an existing table.
+        -- Set-based over temp tables only (no INFORMATION_SCHEMA — not the #337 segfault shape).
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'column', CONCAT(c.TableName, '.', c.ColumnName), 'created'
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        WHERE t.NewTable = 0
+          AND c.NewColumn = 1
+          AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '');
 
     END IF;
 

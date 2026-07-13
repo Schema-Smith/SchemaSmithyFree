@@ -1,0 +1,39 @@
+{
+    "Schema": "[dbo]",
+    "Name": "[KeeperTable]",
+    "Columns": [
+        {
+            "Name": "[Id]",
+            "DataType": "INT",
+            "Nullable": false
+        },
+        {
+            "Name": "[Notes]",
+            "DataType": "NVARCHAR(50)",
+            "Nullable": true
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "[PK_KeeperTable]",
+            "PrimaryKey": true,
+            "Unique": true,
+            "Clustered": true,
+            "IndexColumns": "[Id]"
+        },
+        {
+            "Name": "[IX_KeeperTable_Notes]",
+            "IndexColumns": "[Notes]"
+        }
+    ],
+    "CheckConstraints": [
+        {
+            "Name": "[CK_KeeperTable_Id]",
+            "Expression": "[Id]>(0) OR [Notes] IS NOT NULL"
+        },
+        {
+            "Name": "[CK_KeeperTable_IdPos]",
+            "Expression": "[Id]>(0)"
+        }
+    ]
+}

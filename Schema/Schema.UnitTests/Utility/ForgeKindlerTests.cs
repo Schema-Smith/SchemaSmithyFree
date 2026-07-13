@@ -33,6 +33,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.TableQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.IndexOnlyQuench.sql"));
         Assert.That(scripts, Does.Contain("Kindling_CompletedMigrationScripts_Table.sql"));
+        Assert.That(scripts, Does.Contain("Kindling_ChangeAudit_Table.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_FormatJson.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.GenerateTableJson.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ValidateIndexedViewOwnership.sql"));
@@ -84,6 +85,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.TableQuench.sql"));
         Assert.That(scripts, Does.Contain("Kindling_ProductOwnership_Table.sql"));
         Assert.That(scripts, Does.Contain("Kindling_CompletedMigrationScripts_Table.sql"));
+        Assert.That(scripts, Does.Contain("Kindling_ChangeAudit_Table.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.IndexOnlyQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.FormatJson.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.GenerateTableJson.sql"));
@@ -117,6 +119,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("Kindling_CompletedMigrationScripts_Table.sql"));
         Assert.That(scripts, Does.Contain("Kindling_ProductOwnership_Table.sql"));
         Assert.That(scripts, Does.Contain("Kindling_StatusMessages_Table.sql"));
+        Assert.That(scripts, Does.Contain("Kindling_ChangeAudit_Table.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_QuoteIdentifier.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_StripBacktickWrapping.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_SafeBacktickWrap.sql"));
@@ -154,6 +157,7 @@ public class ForgeKindlerTests
         var completedIdx = Array.IndexOf(scripts, "Kindling_CompletedMigrationScripts_Table.sql");
         var ownershipIdx = Array.IndexOf(scripts, "Kindling_ProductOwnership_Table.sql");
         var statusIdx = Array.IndexOf(scripts, "Kindling_StatusMessages_Table.sql");
+        var changeAuditIdx = Array.IndexOf(scripts, "Kindling_ChangeAudit_Table.sql");
 
         Assert.That(bootstrapIdx, Is.LessThan(completedIdx),
             "BootstrapTableQuench must precede CompletedMigrationScripts kindling.");
@@ -161,6 +165,8 @@ public class ForgeKindlerTests
             "BootstrapTableQuench must precede ProductOwnership kindling.");
         Assert.That(bootstrapIdx, Is.LessThan(statusIdx),
             "BootstrapTableQuench must precede StatusMessages kindling.");
+        Assert.That(bootstrapIdx, Is.LessThan(changeAuditIdx),
+            "BootstrapTableQuench must precede ChangeAudit kindling.");
     }
 
     [Test]
@@ -170,13 +176,12 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        // SqlServer: 22 = 21 prior + 1 for fn_ServerMajorVersion (version-aware codegen helper).
-        Assert.That(sqlServer.Length, Is.EqualTo(22));
-        // PostgreSQL: 28 = 27 prior + 1 for BuildExistingIndexesSnapshot (shared temp_existing_indexes
-        // builder extracted so a checkpoint-resumed run can rebuild the snapshot, #332).
-        Assert.That(postgres.Length, Is.EqualTo(28));
-        // MySQL: 21 = 20 prior + 1 for UpperDataType (enum/set literal-case-preserving type upcaser).
-        Assert.That(mysql.Length, Is.EqualTo(21));
+        // SqlServer: 23 = 22 prior + 1 for Kindling_ChangeAudit_Table (object-change audit, #243 E5).
+        Assert.That(sqlServer.Length, Is.EqualTo(23));
+        // PostgreSQL: 30 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration (one-owner enforcement, #270 TRANSITIONAL).
+        Assert.That(postgres.Length, Is.EqualTo(30));
+        // MySQL: 22 = 21 prior + 1 for Kindling_ChangeAudit_Table (object-change audit, #243 E5).
+        Assert.That(mysql.Length, Is.EqualTo(22));
     }
 
     [Test]
@@ -262,7 +267,7 @@ public class ForgeKindlerTests
     }
 
     [Test]
-    public void GetSiblingTableDefJson_MySQL_LoadsAllThreeKindlingJsons()
+    public void GetSiblingTableDefJson_MySQL_LoadsAllKindlingJsons()
     {
         var completed = ForgeKindler.GetSiblingTableDefJson(
             "Kindling_CompletedMigrationScripts_Table.sql", Platform.MySQL);
@@ -277,6 +282,10 @@ public class ForgeKindlerTests
         var status = ForgeKindler.GetSiblingTableDefJson(
             "Kindling_StatusMessages_Table.sql", Platform.MySQL);
         Assert.That(status, Does.Contain("SchemaSmith_StatusMessages"));
+
+        var changeAudit = ForgeKindler.GetSiblingTableDefJson(
+            "Kindling_ChangeAudit_Table.sql", Platform.MySQL);
+        Assert.That(changeAudit, Does.Contain("SchemaSmith_ChangeAudit"));
     }
 
     [Test]

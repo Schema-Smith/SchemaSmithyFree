@@ -168,6 +168,13 @@ TRUNCATE TABLE SchemaSmith.TestLog";
             var targets = (JArray)json.SelectToken("targets");
             Assert.That(targets, Is.Not.Null.And.Not.Empty);
 
+            // #243 E5: SQL Server object-change audit is wired, so a real run is instrumented and the
+            // object scripts (procedures/views/functions) that re-apply are counted as "ran".
+            Assert.That(json.SelectToken("objectChanges.instrumented")?.Value<bool>(), Is.True,
+                "objectChanges should be instrumented once the audit reader drains the session table");
+            Assert.That(json.SelectToken("objectChanges.scriptsRan")?.Value<int>(), Is.GreaterThan(0),
+                "object scripts that ran should be counted");
+
             var markdown = File.ReadAllText(mdPath);
             Assert.That(markdown, Is.Not.Empty);
 
@@ -310,6 +317,18 @@ TRUNCATE TABLE SchemaSmith.TestLog";
             _progressLog.Received(1).Error(Arg.Is<string>(s => s.EndsWith("One or more database quenches FAILED")));
             _environment.Received(1).Exit(2);
             _environment.DidNotReceive().Exit(3);
+
+            // #338 refinement: the Failures.log roll-up (mirrored in Summary.json failures[]) surfaces
+            // the SPECIFIC per-script error + artifact for a user-script failure — not the generic
+            // "Unable to quench all scripts" / n/a.
+            var json = JObject.Parse(File.ReadAllText(Path.Join(ConfigHelper.ResolveLogPath(), "SchemaQuench - Summary.json")));
+            var failure = json.SelectToken("failures[0]");
+            Assert.That(failure, Is.Not.Null, "a script failure should be recorded");
+            Assert.That(failure!.SelectToken("error")?.Value<string>(),
+                Does.StartWith("Unable to quench '").And.Not.EqualTo("Unable to quench all scripts"),
+                "Error line should name the specific failed script + its error");
+            Assert.That(failure.SelectToken("artifactPath")?.Value<string>(), Does.Contain("Failed"),
+                "Debug SQL should point at the Failed <script> artifact, not n/a");
 
             LogFactory.Clear();
             FactoryContainer.Unregister<IEnvironment>();

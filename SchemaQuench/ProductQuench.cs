@@ -39,6 +39,7 @@ public class ProductQuench
     private readonly bool _deliverData;
     private readonly bool _trackRunOnceMigrations;
     private readonly bool _pruneObsoleteMigrationTracking;
+    private readonly bool _protectedMode;
     private readonly IReadOnlyList<string> _targetTemplates;
     private readonly IReadOnlyList<string> _targetDatabases;
     private readonly IReadOnlyList<string> _targetSchemas;
@@ -64,6 +65,11 @@ public class ProductQuench
     // construction site) (#243 Deployment Summary Report, E4c). A later slice (E4d) maps this into
     // the report's whatIf section for WhatIf-mode runs.
     private readonly WhatIfCapture _whatIf = new();
+
+    // Object-change audit collector (#243 E5). Handed to each DatabaseQuench work unit; the 4 table
+    // procs write session-scoped audit rows that DatabaseQuench drains at end of work unit, and
+    // object-script "ran" rows are recorded C#-side. Assembled into the report's objectChanges.
+    private readonly ChangeAuditCapture _changeAudit = new();
 
     // Thread-safe collection of every scope failure (tenant work units today; product/server
     // phases as their capture is added), rendered once into the end-of-run roll-up.
@@ -94,6 +100,8 @@ public class ProductQuench
 
     internal WhatIfCapture WhatIf => _whatIf;
 
+    internal ChangeAuditCapture ChangeAudit => _changeAudit;
+
     /// <summary>
     /// True when any template or product-level step reported a fatal failure during
     /// QuenchProduct. Callers can inspect this after QuenchProduct returns to decide
@@ -122,6 +130,7 @@ public class ProductQuench
         _deliverData = _config["DeliverData"]?.ToLower() != "false";
         _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
         _pruneObsoleteMigrationTracking = _config["PruneObsoleteMigrationTracking"]?.ToLower() != "false";
+        _protectedMode = ProtectedModeEnabled(_config);
         _targetTemplates = ReadFilterArray("Target:Templates");
         _targetDatabases = ReadFilterArray("Target:Databases");
         _targetSchemas = ReadFilterArray("Target:Schemas");
@@ -180,6 +189,14 @@ public class ProductQuench
         if (string.IsNullOrWhiteSpace(raw)) return null;
         return bool.TryParse(raw, out var parsed) ? parsed : (bool?)null;
     }
+
+    // Env-level no-drop protection tier (#270 Slice E). When PreventDrop is true the environment
+    // never drops an object BY ABSENCE: every Drop…RemovedFromProduct pass (plus DropUnknownIndexes)
+    // is suppressed, each skipped drop is recorded to the ChangeAudit seam and surfaced as a
+    // PreventDropSummary manifest, and the run completes normally (exit 0). Transient drop-then-
+    // recreate that is part of applying a declared change is unaffected — protected mode touches
+    // only the by-absence lever.
+    internal static bool ProtectedModeEnabled(IConfiguration config) => ConfigBool(config, "PreventDrop") == true;
 
     /// <summary>
     /// Reads <c>Target.TemplateTargets</c> from configuration into the per-template override map.
@@ -638,6 +655,11 @@ public class ProductQuench
     {
         _progressLog.Info($"Begin Quench of {_product.Name}");
 
+        if (_protectedMode)
+            _progressLog.Info("PreventDrop is ENABLED — this environment will skip every drop-by-absence and report the suppressed drops (no objects are dropped for being absent from the product).");
+        else if (!string.IsNullOrWhiteSpace(_config["PreventDrop"]) && ConfigBool(_config, "PreventDrop") == null)
+            _progressLog.Warn($"PreventDrop value '{_config["PreventDrop"]}' is not a recognized boolean (true/false) — the no-drop protection tier is NOT enabled.");
+
         LogProductInfo();
 
         TestServerConnections();
@@ -796,8 +818,10 @@ public class ProductQuench
                 _product.Name, _product.Platform.ToString(), ToolVersion(),
                 _startedUtc, DateTime.UtcNow, mode, outcome, exitCode, resumed,
                 _targetResults.ToArray(), _runTiming, _migrationScripts.Snapshot(),
-                _whatIf.Snapshot(), _failureRecords.ToArray(), BottleneckThresholdMs());
+                _whatIf.Snapshot(), _failureRecords.ToArray(), BottleneckThresholdMs(), _changeAudit,
+                protectedModeEnabled: _protectedMode);
             var (jsonPath, mdPath) = ResolveReportPaths(CommandLineParser.ValueOfSwitch("report", null), ConfigHelper.ResolveLogPath(), "SchemaQuench");
+            EnsureReportDirectory(jsonPath);
             var file = FileWrapper.GetFromFactory();
             file.WriteAllText(jsonPath, DeploymentSummaryJson.Serialize(summary));
             file.WriteAllText(mdPath, DeploymentSummaryText.Render(summary));
@@ -815,6 +839,16 @@ public class ProductQuench
     /// <c>&lt;path&gt;.json</c> / <c>&lt;path&gt;.md</c>; otherwise both default alongside the logs
     /// in <paramref name="logDir"/> as <c>{appName} - Summary.json</c> / <c>.md</c>.
     /// </summary>
+    /// Creates the parent directory of a resolved report path if it doesn't exist, so a
+    /// <c>--report &lt;path&gt;</c> pointing at a not-yet-created directory writes the summary
+    /// instead of silently failing (the default log-dir path already exists). A no-op when the
+    /// path has no directory component (bare filename) or the directory is already present.
+    internal static void EnsureReportDirectory(string reportFilePath)
+    {
+        var dir = Path.GetDirectoryName(reportFilePath);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+    }
+
     internal static (string JsonPath, string MdPath) ResolveReportPaths(string reportSwitch, string logDir, string appName) =>
         string.IsNullOrWhiteSpace(reportSwitch)
             ? (Path.Join(logDir, $"{appName} - Summary.json"), Path.Join(logDir, $"{appName} - Summary.md"))
@@ -1746,6 +1780,22 @@ public class ProductQuench
         var dropUnknownIndexes = ResolveCascadedFlag(
             ConfigBool(_config, "DropUnknownIndexes"), _product.DropUnknownIndexes,
             template.DropUnknownIndexes, defaultValue: false);
+        // No-drop protection tier (#270 Slice E): a protected environment never drops an object BY
+        // ABSENCE. Force every Drop…RemovedFromProduct lever (and DropUnknownIndexes) false so the
+        // by-absence passes are suppressed; the procs still record what they skipped for the manifest.
+        // Transient/for-change drop-then-recreate is gated by change detection, not these flags, so it
+        // is unaffected (verified across all three engines).
+        if (_protectedMode)
+        {
+            dropRemovedTables = FormatBooleanFlag(false);
+            dropRemovedColumns = FormatBooleanFlag(false);
+            dropRemovedForeignKeys = FormatBooleanFlag(false);
+            dropRemovedCheckConstraints = FormatBooleanFlag(false);
+            dropRemovedExcludeConstraints = FormatBooleanFlag(false);
+            dropRemovedStatistics = FormatBooleanFlag(false);
+            dropRemovedIndexes = FormatBooleanFlag(false);
+            dropUnknownIndexes = false;
+        }
         var quench = new DatabaseQuench(unit.Server, _product, template, unit.DatabaseName, unit.SchemaName,
             suppressKindling, _whatIfOnly, _runScriptsTwice, dropRemovedTables,
             dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropRemovedExcludeConstraints, dropRemovedStatistics, dropRemovedIndexes, dropUnknownIndexes,
@@ -1759,7 +1809,9 @@ public class ProductQuench
             ProvisionSchemaIfMissing = unit.ProvisionSchemaIfMissing,
             RunTiming = _runTiming,
             MigrationScripts = _migrationScripts,
-            WhatIf = _whatIf
+            WhatIf = _whatIf,
+            ChangeAudit = _changeAudit,
+            CaptureWouldDrop = _protectedMode
         };
         var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();

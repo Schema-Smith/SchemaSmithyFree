@@ -77,4 +77,27 @@ public class DeploymentSummaryEmitTests
 
         Assert.That(relative, Is.EqualTo("root/Jobs/Job 1.sql"));
     }
+
+    [Test]
+    public void EnsureReportDirectory_CreatesMissingParentDirectory()
+    {
+        var tempRoot = Path.Join(Path.GetTempPath(), $"SummaryDir_{System.Guid.NewGuid():N}");
+        var reportFile = Path.Join(tempRoot, "nested", "sub", "deploy-summary.json");
+        try
+        {
+            Assert.That(Directory.Exists(Path.GetDirectoryName(reportFile)), Is.False, "precondition: parent dir absent");
+            ProductQuench.EnsureReportDirectory(reportFile);
+            Assert.That(Directory.Exists(Path.GetDirectoryName(reportFile)), Is.True, "the --report parent directory must be created");
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true);
+        }
+    }
+
+    [Test]
+    public void EnsureReportDirectory_NoDirectoryComponent_DoesNotThrow()
+    {
+        Assert.DoesNotThrow(() => ProductQuench.EnsureReportDirectory("summary.json"));
+    }
 }

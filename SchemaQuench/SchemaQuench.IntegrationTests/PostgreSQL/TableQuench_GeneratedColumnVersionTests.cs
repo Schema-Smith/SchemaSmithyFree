@@ -23,6 +23,54 @@ public class TableQuench_GeneratedColumnVersionTests : BaseTableQuenchTests
         conn.Close();
     }
 
+    // Parity (#243 follow-up): a generated column on a BRAND-NEW table (created by SchemaSmith, not
+    // seeded via raw CREATE) must be created AS a generated column — not a plain column. SQL Server
+    // and MySQL exclude computed/generated columns from CREATE TABLE and add them via a later step
+    // (they may reference other columns); PostgreSQL must do the same. Regression guard for the bug
+    // where PG's CREATE TABLE emitted the column with no GENERATED clause, then skipped it as
+    // "already exists".
+    [Test]
+    public void TableQuench_CreatesGeneratedColumn_OnNewTable()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var schema = "GeneratedColumnVersionTests";
+        var tableName = $"GenNew_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var json = $$"""
+[{
+    "Schema": "{{schema}}",
+    "Name": "{{tableName}}",
+    "Columns": [
+        { "Name": "Qty", "DataType": "INT", "Nullable": false },
+        { "Name": "DoubleQty", "DataType": "INT", "Nullable": true,
+          "Generated": "ALWAYS", "GenerationExpression": "(\"Qty\" * 2)" }
+    ]
+}]
+""";
+        RunTableQuenchProc(cmd, json, productName: productName);
+
+        cmd.CommandText = $@"SELECT is_generated FROM information_schema.columns
+                             WHERE table_schema = '{schema}' AND table_name = '{tableName}' AND column_name = 'DoubleQty';";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("ALWAYS"),
+            "DoubleQty must be created as a GENERATED column on a brand-new table, not a plain column.");
+
+        // Data proof: the generation must actually compute.
+        cmd.CommandText = $@"INSERT INTO ""{schema}"".""{tableName}"" (""Qty"") VALUES (7);
+                             SELECT ""DoubleQty"" FROM ""{schema}"".""{tableName}"" WHERE ""Qty"" = 7;";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(14));
+
+        cmd.CommandText = $@"DROP TABLE ""{schema}"".""{tableName}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
     // Forces the in-DB version helper to report PG 16 (the override GUC), so the
     // pre-17 drop-and-re-add path runs even on a PG17 CI container. Asserts the
     // generated-column expression change is applied AND data is correct, with no

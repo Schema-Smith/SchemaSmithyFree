@@ -14,7 +14,8 @@ CREATE PROCEDURE SchemaSmith_ModifiedTableQuench(
     IN p_DropColumnsRemovedFromProduct TINYINT,
     IN p_DropCheckConstraintsRemovedFromProduct TINYINT,
     IN p_DropExcludeConstraintsRemovedFromProduct TINYINT,
-    IN p_DropStatisticsRemovedFromProduct TINYINT
+    IN p_DropStatisticsRemovedFromProduct TINYINT,
+    IN p_CaptureWouldDrop TINYINT
 )
 SQL SECURITY DEFINER
 BEGIN
@@ -375,6 +376,47 @@ BEGIN
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
           );
 
+        -- Object-change audit (#243 E5): one row per column about to be modified. Same join +
+        -- predicate as the fold below, evaluated before the ALTER (INFORMATION_SCHEMA still reflects
+        -- the OLD definition); per-column (no GROUP BY). Same INFORMATION_SCHEMA read pattern the
+        -- statement-build below uses — not the #337 set-based-UPDATE shape.
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'column', CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'modified'
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+            AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+        WHERE t.NewTable = 0
+          AND c.NewColumn = 0
+          AND NOT (
+              ((isc.GENERATION_EXPRESSION IS NOT NULL AND isc.GENERATION_EXPRESSION != '')
+               AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = ''))
+              OR
+              ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
+               AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
+          )
+          AND (
+              CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
+                     OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
+                   THEN BINARY SchemaSmith_UpperDataType(isc.COLUMN_TYPE) != BINARY SchemaSmith_UpperDataType(c.DataType)
+                   ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
+                     != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') END
+              OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)
+              OR (isc.IS_NULLABLE = 'NO' AND c.IsNullable = 1)
+              OR (c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) != '' AND c.IsAutoIncrement = 0
+                  AND (isc.COLUMN_DEFAULT IS NULL OR BINARY isc.COLUMN_DEFAULT != BINARY
+                      CASE WHEN c.DefaultValue LIKE '''%'''
+                           THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
+                           ELSE c.DefaultValue END))
+              OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND isc.COLUMN_DEFAULT IS NOT NULL)
+              OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
+              OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
+                  AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
+              OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+          );
+
         -- Materialize: fold each table's column modifications into one multi-clause ALTER, then drain.
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ModifyColStmts;
         CREATE TEMPORARY TABLE _SchemaSmith_ModifyColStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
@@ -610,6 +652,41 @@ BEGIN
       AND dc.ColumnName IS NULL
       AND p_DropColumnsRemovedFromProduct = 1
       AND COALESCE(t.DropColumnsRemovedFromProduct, 1) = 1;
+
+    -- No-drop protection tier (#270): capture columns that WOULD have been dropped by absence but
+    -- are suppressed. Same by-absence predicate as the _SchemaSmith_ColumnsToDrop build above, minus
+    -- the env p_DropColumnsRemovedFromProduct gate (protection forces it false) but keeping the
+    -- per-table opt-out. Materialize the INFORMATION_SCHEMA read first (Index-B crash-safety), then
+    -- a discrete audit insert. Audit rows only, so it runs regardless of p_WhatIf.
+    IF p_CaptureWouldDrop = 1 THEN
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropColumns;
+        CREATE TEMPORARY TABLE _SchemaSmith_WouldDropColumns (
+            TableName VARCHAR(128) NOT NULL,
+            ColumnName VARCHAR(128) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        INSERT INTO _SchemaSmith_WouldDropColumns (TableName, ColumnName)
+        SELECT SchemaSmith_StripBacktickWrapping(t.TableName), isc.COLUMN_NAME
+        FROM _SchemaSmith_Tables t
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+        LEFT JOIN _SchemaSmith_DefinedColumns dc
+            ON dc.TableName = SchemaSmith_StripBacktickWrapping(t.TableName)
+            AND (
+                BINARY dc.ColumnName = BINARY isc.COLUMN_NAME
+                OR (dc.OldName IS NOT NULL AND BINARY dc.OldName = BINARY isc.COLUMN_NAME)
+            )
+        WHERE t.NewTable = 0
+          AND dc.ColumnName IS NULL
+          AND COALESCE(t.DropColumnsRemovedFromProduct, 1) = 1;
+
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'column', CONCAT(p_DatabaseName, '.', TableName, '.', ColumnName), 'wouldDrop'
+        FROM _SchemaSmith_WouldDropColumns;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropColumns;
+    END IF;
 
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unused columns');
@@ -1107,14 +1184,63 @@ BEGIN
 
     -- Update ProductOwnership for managed tables (non-WhatIf mode only)
     IF p_WhatIf = 0 THEN
-        INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
-        SELECT p_ProductName, '', p_DatabaseName, 'TABLE', SchemaSmith_StripBacktickWrapping(t.TableName)
+        INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName, PreventDrop)
+        SELECT p_ProductName, '', p_DatabaseName, 'TABLE', SchemaSmith_StripBacktickWrapping(t.TableName), COALESCE(t.PreventDrop, 0)
         FROM _SchemaSmith_Tables t
         WHERE EXISTS (
             SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
             WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
               AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
         );
+
+        -- INSERT IGNORE skips existing ownership rows, so a toggled PreventDrop would not take
+        -- effect without this refresh UPDATE carrying the current per-table flag onto the row.
+        UPDATE SchemaSmith_ProductOwnership po
+          JOIN _SchemaSmith_Tables t
+            ON CONVERT(po.ObjectName USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4)
+         SET po.PreventDrop = COALESCE(t.PreventDrop, 0)
+         WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+           AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+           AND po.ObjectType = 'TABLE';
+    END IF;
+
+    -- =======================
+    -- No-drop protection tier (#270): when protected mode is active the caller forces
+    -- p_DropTablesRemovedFromProduct to 0 so STEP 8 is skipped. Record the tables that WOULD have
+    -- been dropped by absence (owned, present in the catalog, absent from the package, not sticky
+    -- PreventDrop) to the ChangeAudit seam as 'wouldDrop' so the run can surface a manifest. Same
+    -- by-absence predicate as STEP 8; materialized first (INFORMATION_SCHEMA read out of the DML,
+    -- Index-B crash-safety), then a discrete audit insert. Audit rows only, so it runs regardless
+    -- of p_WhatIf.
+    IF p_CaptureWouldDrop = 1 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Capture tables suppressed by PreventDrop (would drop by absence)');
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropTables;
+        CREATE TEMPORARY TABLE _SchemaSmith_WouldDropTables (
+            TableName VARCHAR(128) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        INSERT INTO _SchemaSmith_WouldDropTables (TableName)
+        SELECT po.ObjectName
+        FROM SchemaSmith_ProductOwnership po
+        WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+          AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+          AND po.ObjectType = 'TABLE'
+          AND COALESCE(po.PreventDrop, 0) = 0
+          AND EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+              WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_Tables t
+              WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+          );
+
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'table', CONCAT(p_DatabaseName, '.', TableName), 'wouldDrop'
+        FROM _SchemaSmith_WouldDropTables;
+
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropTables;
     END IF;
 
     -- =======================
@@ -1142,6 +1268,7 @@ BEGIN
             WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
               AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
               AND po.ObjectType = 'TABLE'
+              AND COALESCE(po.PreventDrop, 0) = 0
               AND EXISTS (
                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
                   WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
@@ -1178,6 +1305,7 @@ BEGIN
             WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
               AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
               AND po.ObjectType = 'TABLE'
+              AND COALESCE(po.PreventDrop, 0) = 0
               AND EXISTS (
                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
                   WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
@@ -1237,6 +1365,7 @@ BEGIN
             WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
               AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
               AND po.ObjectType = 'TABLE'
+              AND COALESCE(po.PreventDrop, 0) = 0
               -- Table exists
               AND EXISTS (
                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
@@ -1269,6 +1398,7 @@ BEGIN
             WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
               AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
               AND po.ObjectType = 'TABLE'
+              AND COALESCE(po.PreventDrop, 0) = 0
               -- Table exists
               AND EXISTS (
                   SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
@@ -1284,6 +1414,12 @@ BEGIN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop tables removed from product');
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
             SELECT CONNECTION_ID(), CONCAT('  Drop table: ', TableName)
+            FROM _SchemaSmith_TablesToDrop;
+
+            -- Object-change audit (#243 E5): one row per table about to be dropped (set-based over the
+            -- computed _SchemaSmith_TablesToDrop temp; the drop below folds them into one statement).
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'table', TableName, 'dropped'
             FROM _SchemaSmith_TablesToDrop;
 
             IF @has_custom_drop = 1 THEN
@@ -1337,6 +1473,50 @@ BEGIN
 
             DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TablesToDrop;
         END IF;
+
+        -- #270: report tables removed from the product but retained because PreventDrop is set.
+        -- The protected table still exists and is still absent from _SchemaSmith_Tables in both the
+        -- WhatIf and live paths (it was excluded from the drop candidate sets above), so this mirror
+        -- set is correct either way. Discrete INFORMATION_SCHEMA read (Index-B crash-safety).
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('Table ', po.ObjectName, ' removed from product but PreventDrop is set — skipping drop (protected)')
+        FROM SchemaSmith_ProductOwnership po
+        WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+          AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+          AND po.ObjectType = 'TABLE'
+          AND COALESCE(po.PreventDrop, 0) = 1
+          AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+                       WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                         AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4))
+          AND NOT EXISTS (SELECT 1 FROM _SchemaSmith_Tables t
+                            WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4));
+    END IF;
+
+    -- =======================
+    -- STEP 9 (D5): CATALOG-RECONCILE PRUNE
+    -- =======================
+    -- Parity prune for tables dropped OUT of band (a migration or DBA dropped the physical table
+    -- without going through SchemaSmith), so their ownership rows don't go stale. The STEP 8 cleanup
+    -- only removes ownership for tables THIS run dropped, so protected tables keep ownership (intended).
+    -- Live path only (WhatIf must not mutate ownership). Materialize the catalog read into a temp
+    -- table first (a SELECT, not DML), then DELETE against the temp — matching the STEP 8 ELSE
+    -- crash-safety convention so no INFORMATION_SCHEMA read runs inside DML (Index-B).
+    IF p_WhatIf = 0 THEN
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_OrphanedOwnership;
+        CREATE TEMPORARY TABLE _SchemaSmith_OrphanedOwnership (Id INT PRIMARY KEY)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_OrphanedOwnership (Id)
+        SELECT po.Id
+          FROM SchemaSmith_ProductOwnership po
+          WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+            AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+            AND po.ObjectType = 'TABLE'
+            AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+                             WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                               AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4));
+        DELETE po FROM SchemaSmith_ProductOwnership po
+          JOIN _SchemaSmith_OrphanedOwnership o ON o.Id = po.Id;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_OrphanedOwnership;
     END IF;
 
 END//

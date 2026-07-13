@@ -94,6 +94,24 @@ public class DatabaseQuench
     /// </summary>
     public WhatIfCapture WhatIf { get; init; }
 
+    /// <summary>
+    /// Shared run-level object-change audit capture, set via the object initializer at the
+    /// <c>ProductQuench</c> construction site (#243 E5). Null on any DatabaseQuench built without one
+    /// (e.g. existing unit tests) — all hook call sites null-guard so capture is purely additive
+    /// instrumentation, never a behavior dependency. The 4 table procs write session-scoped rows
+    /// that <see cref="ChangeAuditReader"/> drains in <c>Execute()</c>'s finally; object scripts are
+    /// recorded here as Action "ran".
+    /// </summary>
+    public ChangeAuditCapture ChangeAudit { get; init; }
+
+    /// <summary>
+    /// No-drop protection tier (#270 Slice E): when true, the ModifiedTableQuench proc records the
+    /// tables it would have dropped by absence (but is suppressing) to the ChangeAudit seam as
+    /// <c>wouldDrop</c> rows, so the run can surface a PreventDropSummary manifest. Set alongside the
+    /// forced-false drop flags in protected mode.
+    /// </summary>
+    public bool CaptureWouldDrop { get; init; }
+
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly ILog _errorLog = LogFactory.GetLogger("ErrorLog");
 
@@ -749,6 +767,7 @@ public class DatabaseQuench
             {
                 _statusMonitor?.Dispose();
                 _statusMonitor = null;
+                DrainChangeAudit(tableCommand ?? command);
                 connection.Close();
                 tableConnection?.Close();
                 objectsConnection?.Close();
@@ -763,8 +782,22 @@ public class DatabaseQuench
             SafeProgressLogError($"FAILED to quench:\r\n{e.Message}");
             if (!string.IsNullOrWhiteSpace(_debugFileLocation))
                 SafeProgressLogError($"Resolved SQL written to: {_debugFileLocation}");
-            LastFailure = FailureCtx.ToRecord(e.Message,
-                string.IsNullOrWhiteSpace(_debugFileLocation) ? null : _debugFileLocation);
+
+            // #338 refinement: for a user-script failure, surface the specific per-script error +
+            // artifact on the roll-up's Error:/Debug SQL: lines (parity with mechanical failures)
+            // instead of the generic "Unable to quench all scripts" wrapper + n/a.
+            if (e is ScriptQuenchException { Failures.Count: > 0 } scriptFailure)
+            {
+                var first = scriptFailure.Failures[0];
+                var extra = scriptFailure.Failures.Count > 1 ? $" (+{scriptFailure.Failures.Count - 1} more)" : "";
+                LastFailure = FailureCtx.ToRecord($"Unable to quench '{first.LogPath}': {first.Error}{extra}",
+                    string.IsNullOrWhiteSpace(first.ArtifactPath) ? null : first.ArtifactPath);
+            }
+            else
+            {
+                LastFailure = FailureCtx.ToRecord(e.Message,
+                    string.IsNullOrWhiteSpace(_debugFileLocation) ? null : _debugFileLocation);
+            }
             // Terse greppable scope marker; the error text is on the inline "FAILED to quench" line
             // above and in the end-of-run roll-up, so it is not restated here (avoids duplicating
             // error content into the progress stream, which exact-count log assertions rely on).
@@ -1293,12 +1326,12 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
         switch (_product.Platform)
         {
             case Platform.SqlServer:
-                tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}";
+                tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}";
                 break;
             case Platform.PostgreSQL:
                 tableCommand.CommandText = $@"
 CALL ""SchemaSmith"".""ValidateTableOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
-CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_DropTablesRemovedFromProduct := {_dropRemovedTables}, p_DropColumnsRemovedFromProduct := {_dropRemovedColumns}, p_DropForeignKeysRemovedFromProduct := {_dropRemovedForeignKeys}, p_DropCheckConstraintsRemovedFromProduct := {_dropRemovedCheckConstraints}, p_DropExcludeConstraintsRemovedFromProduct := {_dropRemovedExcludeConstraints}, p_DropStatisticsRemovedFromProduct := {_dropRemovedStatistics}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes});";
+CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_DropTablesRemovedFromProduct := {_dropRemovedTables}, p_DropColumnsRemovedFromProduct := {_dropRemovedColumns}, p_DropForeignKeysRemovedFromProduct := {_dropRemovedForeignKeys}, p_DropCheckConstraintsRemovedFromProduct := {_dropRemovedCheckConstraints}, p_DropExcludeConstraintsRemovedFromProduct := {_dropRemovedExcludeConstraints}, p_DropStatisticsRemovedFromProduct := {_dropRemovedStatistics}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes}, p_CaptureWouldDrop := {FormatBooleanFlag(CaptureWouldDrop)});";
                 break;
             case Platform.MySQL:
             {
@@ -1310,7 +1343,8 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
                 var dropRemovedChecks = _dropRemovedCheckConstraints == "1" ? 1 : 0;
                 var dropRemovedExcludes = _dropRemovedExcludeConstraints == "1" ? 1 : 0;
                 var dropRemovedStats = _dropRemovedStatistics == "1" ? 1 : 0;
-                tableCommand.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropRemoved}, {dropRemovedCols}, {dropRemovedChecks}, {dropRemovedExcludes}, {dropRemovedStats})";
+                var captureWouldDrop = CaptureWouldDrop ? 1 : 0;
+                tableCommand.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropRemoved}, {dropRemovedCols}, {dropRemovedChecks}, {dropRemovedExcludes}, {dropRemovedStats}, {captureWouldDrop})";
                 break;
             }
         }
@@ -1333,14 +1367,14 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
-                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}"
+                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}"
                     : $"EXEC [{_databaseName}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
                 break;
             }
             case Platform.PostgreSQL:
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
                     ? $@"
-CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{EscapeSqlLiteral(IterationTableSchema)}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()});
+CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{EscapeSqlLiteral(IterationTableSchema)}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()}, p_CaptureWouldDrop := {FormatBooleanFlag(CaptureWouldDrop)});
 CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 "
                     : $@"
@@ -1353,6 +1387,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             {
                 if (!MySqlTempTablesExist(tableCommand))
                     ParseMySqlTableJson(tableCommand);
+                SetMySqlCaptureFlag(tableCommand);
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
                 var dropRemovedChecks = _dropRemovedCheckConstraints == "1" ? 1 : 0;
@@ -1367,6 +1402,16 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Indexes"), tableCommand.CommandText);
         ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
+    }
+
+    // MySQL threads the no-drop-protection capture signal via a connection session variable rather
+    // than a proc parameter — its FK / index / check quench procs have too many direct call sites to
+    // add a parameter cleanly. Set it explicitly (0/1) before each such proc so a pooled connection
+    // never carries a stale value; the procs read `COALESCE(@ss_capture_would_drop, 0)`.
+    private void SetMySqlCaptureFlag(IDbCommand tableCommand)
+    {
+        tableCommand.CommandText = $"SET @ss_capture_would_drop = {(CaptureWouldDrop ? 1 : 0)}";
+        tableCommand.ExecuteNonQuery();
     }
 
     internal void QuenchForeignKeys(IDbCommand tableCommand)
@@ -1388,6 +1433,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             {
                 if (!MySqlTempTablesExist(tableCommand))
                     ParseMySqlTableJson(tableCommand);
+                SetMySqlCaptureFlag(tableCommand);
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
                 var dropRemovedFks = _dropRemovedForeignKeys == "1" ? 1 : 0;
@@ -1671,12 +1717,34 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
                 QuenchOneScript(destCmd, script, _runScriptsTwice, showErrors);
                 if (script.HasBeenQuenched)
+                {
                     _checkpointing.MarkScriptCompleted(DbScope, slot.ToString(), script.LogPath);
+                    if (slot is DatabaseScriptSlot.Object or DatabaseScriptSlot.AfterTablesObject)
+                        ChangeAudit?.RecordRan(ObjectScriptClassifier.Classify(script.LogPath), script.LogPath);
+                }
             }
         }
 
         _debugFileLocation = "";
         if (showErrors) LogScriptErrors(templateObjects);
+    }
+
+    /// <summary>
+    /// Drains this work unit's session-scoped ChangeAudit rows into the run-level capture and marks
+    /// the run instrumented (#243 E5). Runs on the connection the 4 table procs wrote on so the
+    /// session filter is exact. Best-effort: an audit-read failure must never disrupt the run — a
+    /// null return (engine not yet emitting, or the audit table absent) leaves the run honestly
+    /// not-instrumented.
+    /// </summary>
+    private void DrainChangeAudit(IDbCommand auditCmd)
+    {
+        if (ChangeAudit == null || auditCmd == null) return;
+        // Best-effort: ChangeAuditReader swallows DB errors (absent audit table, unreadable) and
+        // returns null, leaving the run honestly not-instrumented; the record/mark steps can't throw.
+        var rows = ChangeAuditReader.ReadAndDrain(_product.Platform, auditCmd);
+        if (rows == null) return;
+        foreach (var r in rows) ChangeAudit.Record(r.ObjectType, r.ObjectName, r.Action);
+        ChangeAudit.MarkInstrumented();
     }
 
     internal void QuenchDatabaseObjects(IDbCommand destCmd, List<SqlScript> templateObjects, bool showErrors = true)
@@ -1897,20 +1965,22 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         if (scripts.All(x => x.HasBeenQuenched)) return;
 
         var directory = ResolveArtifactDirectory();
+        var failures = new List<ScriptFailure>();
         foreach (var sqlScript in scripts.Where(s => !s.HasBeenQuenched))
         {
             sqlScript.Outcome = ScriptOutcome.Failed;
 
+            string artifactPath = null;
             try
             {
                 var header = $"Failed: {_server}.{_databaseName}" +
                              $"{(string.IsNullOrEmpty(_schemaName) ? "" : $" [Schema: {_schemaName}]")}" +
                              $" [{sqlScript.LogPath}] — {sqlScript.Error?.Message}";
                 var fileName = GetDebugFileName($"Failed {Path.GetFileNameWithoutExtension(sqlScript.Name)}");
-                var path = ResolvedSqlArtifactWriter.WriteFailureArtifact(directory, ScrubArtifactsEnabled,
+                artifactPath = ResolvedSqlArtifactWriter.WriteFailureArtifact(directory, ScrubArtifactsEnabled,
                     SensitiveTokenValues(), header, sqlScript.Batches, FailingBatchIndex(sqlScript), fileName);
-                SafeProgressLogError($"    Resolved SQL written to: {path}");
-                SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message} — resolved SQL: {path}");
+                SafeProgressLogError($"    Resolved SQL written to: {artifactPath}");
+                SafeErrorLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message} — resolved SQL: {artifactPath}");
             }
             catch (Exception artifactEx)
             {
@@ -1918,9 +1988,12 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             }
 
             SafeProgressLogError($"Unable to quench '{sqlScript.LogPath}': {sqlScript.Error?.Message}");
+            failures.Add(new ScriptFailure(sqlScript.LogPath, sqlScript.Error?.Message, artifactPath));
         }
 
-        throw new Exception("Unable to quench all scripts");
+        // #338 refinement: carry the per-script specifics so the failure roll-up surfaces the
+        // specific error + artifact (parity with mechanical failures) instead of a generic message.
+        throw new ScriptQuenchException(failures);
     }
 
     private static int FailingBatchIndex(SqlScript script) => script.Batches.Count - 1;

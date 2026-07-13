@@ -47,8 +47,14 @@ BEGIN
                             CASE WHEN tc."Nullable" THEN '' ELSE ' NOT NULL' END ||
                             CASE WHEN COALESCE(tc."Generated", 'NEVER') NOT LIKE 'GENERATED%IDENTITY%' AND COALESCE(tc."Default", '') != '' THEN ' DEFAULT ' || tc."Default" ELSE '' END, ', ')
                        FROM temp_columns tc
-                       WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name") || ')' ||
-                    ' WITH (fillfactor = ' || tt."FillFactor" || ');', CHR(10))
+                       WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
+                         -- Defer computed (GENERATED ALWAYS AS expression) columns to the "Add New Computed
+                         -- Columns" step (parity with SQL Server / MySQL) — they may reference columns not yet
+                         -- present at CREATE time, and inlining them here created a plain column then churned
+                         -- it to generated via a drop-and-re-add. Identity columns are NOT deferred.
+                         AND NOT (COALESCE(tc."Generated", 'NEVER') = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> '')) || ')' ||
+                    ' WITH (fillfactor = ' || tt."FillFactor" || ');' || CHR(10) ||
+                    'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''table'', ''' || tt."Schema" || '.' || tt."Name" || ''', ''created'');', CHR(10))
     INTO sql_script
     FROM temp_tables tt
     WHERE NOT EXISTS(SELECT * FROM information_schema.tables t WHERE t.table_schema = tt."Schema" AND t.table_name = tt."Name");
@@ -71,7 +77,13 @@ BEGIN
                        FROM temp_columns tc
                        WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                          AND (COALESCE(tc."Generated", 'NEVER') = 'NEVER' OR COALESCE(tc."Generated", '') LIKE 'GENERATED%IDENTITY%')
-                         AND NOT EXISTS (SELECT 1 FROM information_schema.columns ic WHERE ic.table_name = tc."TableName" AND ic.table_schema = tc."TableSchema" AND ic.column_name = tc."Name")) || ';', CHR(10))
+                         AND NOT EXISTS (SELECT 1 FROM information_schema.columns ic WHERE ic.table_name = tc."TableName" AND ic.table_schema = tc."TableSchema" AND ic.column_name = tc."Name")) || ';' || CHR(10) ||
+                    -- Object-change audit (#243 E5): one row per physical column added (folded ALTER above).
+                    COALESCE((SELECT STRING_AGG('INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''column'', ''' || tt."Schema" || '.' || tt."Name" || '.' || tc."Name" || ''', ''created'');', CHR(10))
+                                FROM temp_columns tc
+                                WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
+                                  AND (COALESCE(tc."Generated", 'NEVER') = 'NEVER' OR COALESCE(tc."Generated", '') LIKE 'GENERATED%IDENTITY%')
+                                  AND NOT EXISTS (SELECT 1 FROM information_schema.columns ic WHERE ic.table_name = tc."TableName" AND ic.table_schema = tc."TableSchema" AND ic.column_name = tc."Name")), ''), CHR(10))
     INTO sql_script
     FROM temp_tables tt
     WHERE EXISTS(SELECT * FROM information_schema.tables t WHERE t.table_schema = tt."Schema" AND t.table_name = tt."Name")

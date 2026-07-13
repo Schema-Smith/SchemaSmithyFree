@@ -532,6 +532,27 @@ For full guidance — environment advice, the rollback-friendly removal pattern,
 
 ---
 
+## PreventDrop
+
+Protects a single table from drop-by-absence, and makes that protection *sticky* — it survives the table leaving the package. Unlike the `Drop…RemovedFromProduct` cascade flags (which only take effect while a table's definition is still present), `PreventDrop` is a per-table boolean set in the table's `.json` and persisted in SchemaSmith's ownership tracking, so a protected table that is later removed from the package is skipped rather than dropped.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Table | `PreventDrop` in a table's `.json` file | `false` |
+
+```json
+// Tables/dbo.Orders.json — never drop this table by absence, even after it leaves the package
+{ "Name": "[Orders]", "PreventDrop": true }
+```
+
+The marker is refreshed to match the package value on every run while the table is still declared. To un-protect: set `PreventDrop: false` and re-deploy while the table is still in the package (this clears the sticky marker), then remove it — or drop the table explicitly with a migration script. Ownership is reconciled against the live catalog each run, so a table dropped out-of-band has its marker pruned automatically.
+
+> **Note:** `PreventDrop` is persisted per engine — a `PreventDrop` extended property on SQL Server, a `PreventDrop` column on the `ProductOwnership` table for PostgreSQL and MySQL — but behaves identically on all three.
+
+For full guidance — the persistence model, inbound-foreign-key preservation, and the deliberate two-step un-protect — see [PreventDrop](schemaquench.md#preventdrop) in the SchemaQuench reference.
+
+---
+
 ## DropColumnsRemovedFromProduct
 
 Controls whether SchemaQuench drops columns that exist in the database but no longer appear in the table JSON. Four tiers compose to produce the effective value, resolved environment → product → template → table.

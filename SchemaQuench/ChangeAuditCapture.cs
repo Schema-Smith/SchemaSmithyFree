@@ -1,0 +1,35 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace SchemaQuench;
+
+public sealed record ChangeAuditRow(string ObjectType, string ObjectName, string Action);
+
+/// <summary>
+/// Run-level collector for object-change audit rows (#243 E5). The 4 table quench procs write rows
+/// to a session-scoped ChangeAudit table; <see cref="ChangeAuditReader"/> drains them per work unit
+/// into this capture. Object scripts (procs/views/functions) are recorded C#-side as Action "ran"
+/// (idempotent re-apply — we cannot know they changed anything). <see cref="Instrumented"/> is set
+/// true only once a real audit read has succeeded for the run's engine, so a run on an engine whose
+/// procs do not yet emit stays honestly not-instrumented.
+/// </summary>
+public sealed class ChangeAuditCapture
+{
+    private readonly ConcurrentBag<ChangeAuditRow> _rows = new();
+    private volatile bool _instrumented;
+
+    public bool Instrumented => _instrumented;
+
+    public void MarkInstrumented() => _instrumented = true;
+
+    public void Record(string objectType, string objectName, string action) =>
+        _rows.Add(new ChangeAuditRow(objectType, objectName, action));
+
+    public void RecordRan(string objectType, string objectName) =>
+        _rows.Add(new ChangeAuditRow(objectType, objectName, "ran"));
+
+    public IReadOnlyList<ChangeAuditRow> Snapshot() => _rows.ToArray();
+}
