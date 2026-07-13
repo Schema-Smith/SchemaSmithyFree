@@ -106,9 +106,10 @@ public sealed record ObjectChangeDetail(string ObjectType, string ObjectName, st
 /// <summary>
 /// No-drop protection tier manifest (#270 Slice E). Present only when the environment-level
 /// <c>PreventDrop</c> is enabled; <c>null</c> (omitted) otherwise, so non-protected runs keep the
-/// v1 shape. <see cref="WouldDrop"/> itemizes the objects that would have been dropped by absence
-/// but were suppressed by protection — v1 itemizes tables (all by-absence drops are suppressed
-/// regardless).
+/// v1 shape. <see cref="WouldDrop"/> itemizes every object that would have been dropped by absence
+/// but was suppressed by protection — tables, columns, foreign keys, check and exclude constraints,
+/// statistics, and indexes. <see cref="WouldDropEntry.ObjectType"/> names the kind. Transient
+/// drop-then-recreate for a declared change is never listed (only by-absence removals are).
 /// </summary>
 public sealed record PreventDropSummary(
     bool Enabled,
