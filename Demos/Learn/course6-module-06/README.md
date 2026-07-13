@@ -1,8 +1,9 @@
 <!-- TRAINING-RELEASE-PIN #324: --Validate semantic linter (SchemaSmith#324, merged in #326). When --Validate ships in a stock release: bump the pre-flight version string, drop the from-source caveat, simplify ci/validate.yml to the plain install step, re-cert, then delete this sentinel + the release-coupled table row in training-roadmap.md. -->
+<!-- TRAINING-RELEASE-PIN #343: SS-FILE-NAME-003 file-naming lean for --Validate (SchemaSmith#343). When SS-FILE-NAME-003 ships in a stock release: bump the pre-flight version string, drop the from-source caveat, re-cert, then delete this sentinel and its release-coupled tracking entry. -->
 
 # Course 6, Module 6 — Lint before you deploy: the `--Validate` semantic linter (lab)
 
-**Goal:** catch the cross-object errors JSON Schema can't express — a dangling foreign key, an ungated duplicate column, an undefined token, a stale editor schema — with a single static command that needs no database, no credentials, and no running engine. Read a broken package's findings board, fix each error to green, prove the linter is *semantic* (not dumb), clear an induced staleness finding, then wire it in as a CI gate. SQL Server, PostgreSQL, and MySQL.
+**Goal:** catch the cross-object errors JSON Schema can't express — a dangling foreign key, an ungated duplicate column, an undefined token, a stale editor schema, a drifted file name — with a single static command that needs no database, no credentials, and no running engine. Read a broken package's findings board, fix each error to green, prove the linter is *semantic* (not dumb), surface a misnamed-file warning that never gates the exit code, clear an induced staleness finding, then wire it in as a CI gate. SQL Server, PostgreSQL, and MySQL.
 
 ## The scenario
 
@@ -64,7 +65,7 @@ Re-run:
 PASS - no issues found
 ```
 
-Exit `0`. Green board.
+Exit `0`. Green board — zero errors, zero warnings. (A warning-only board would still say `PASS` and exit `0` — you'll see that in Scenario 4.)
 
 ## Scenario 3 — smart, not dumb
 
@@ -77,7 +78,24 @@ Before you fixed anything, `Product` already had *two* columns named `[Discontin
 
 Both are gated on the **defined** `{{Edition}}` token, and each carries a distinct `VariantName`. That's a legitimate variant pair — the same logical column, materialized differently per edition, only ever one at a time. `--Validate` understands the difference between a variant pair and a collision. The two ungated `[Quantity]` columns were a bug; the two gated `[Discontinued]` columns are a feature. A dumb name-uniqueness check would flag both. A semantic linter flags only the first.
 
-## Scenario 4 — when your schemas drift
+## Scenario 4 — a lean, not a gate
+
+Every finding so far has been an error. `--Validate` also has a warning tier, and a warning never gates the exit code. Induce it:
+
+1. Rename `sqlserver/Package/Templates/Main/Tables/dbo.OrderItem.json` to `sqlserver/Package/Templates/Main/Tables/orderitem-legacy.json`.
+2. Re-run:
+   ```
+   "$SCHEMAQUENCH" --Validate --SchemaPackagePath:./sqlserver/Package
+   ```
+   ```
+   WARN [SS-FILE-NAME-003] .../orderitem-legacy.json: Table file 'orderitem-legacy.json' does not match its canonical name 'dbo.OrderItem.json' (from Schema/Name/VariantName). Identity is content, so this is a naming lean, not an error - rename to keep the file a reliable pointer to its table.
+   ```
+   Exit `0`. The count line reads `0 error(s), 1 warning(s)` — a warning-only board still passes.
+3. Rename the file back to `dbo.OrderItem.json`. This is an induced scenario — the committed package files stay canonical.
+
+Identity lives in the table's *content* (`Schema` / `Name` / `VariantName`), never its filename — a misnamed file still deploys correctly. The canonical name is there for you: it keeps a table's variants sorted together in source control and keeps the filename a reliable pointer to the table inside it. Canonical shape is `<schema>.<table>[.<VariantName>].json`. This scenario is database-free like every other one in this lab, and it works the same on all three engines — on PostgreSQL and MySQL the canonical name is schema-less (`<table>.json`); on SQL Server it keeps the schema segment (`dbo.<table>.json`).
+
+## Scenario 5 — when your schemas drift
 
 The editor `.json-schemas` that give you red-squiggle validation in your IDE are generated from the domain model. If the model changes and nobody regenerates them, they lie. `--Validate` catches that too. Induce it:
 
@@ -93,10 +111,14 @@ The editor `.json-schemas` that give you red-squiggle validation in your IDE are
    ```
 4. Re-run `--Validate` → `PASS - no issues found`, exit `0`. The staleness finding is gone.
 
-## Scenario 5 — make it a gate
+## Scenario 6 — make it a gate
 
 `ci/validate.yml` is a copy-ready GitHub Actions workflow. Copy it into your repository's `.github/workflows/` and adjust the package path. It runs `--Validate` on every pull request; the exit-2-on-error behavior fails the PR automatically — no database, no credentials, no matrix of engine containers. Because it needs no live engine, it's the cheapest gate you have: run it first, ahead of anything that connects.
 
 ## Cross-platform
 
-The same three-error board reproduces on all three engines. Only the identifier quoting and native type spellings differ (`[dbo]` schema and bracket quoting on SQL Server; lowercase `public` and unquoted lowercase identifiers on PostgreSQL; backtick-quoted, schema-less names on MySQL). On MySQL, foreign-key resolution is **name-only** — there are no schemas within a database — so `SS-FK-002` resolves `Supplier` by bare name. The finding codes, the switch names, the exit behavior, and the pass/fail semantics are identical everywhere.
+The same three-error board reproduces on all three engines. Only the identifier quoting and native type spellings differ (`[dbo]` schema and bracket quoting on SQL Server; lowercase `public` and unquoted lowercase identifiers on PostgreSQL; backtick-quoted, schema-less names on MySQL). On MySQL, foreign-key resolution is **name-only** — there are no schemas within a database — so `SS-FK-002` resolves `Supplier` by bare name.
+
+`SS-FILE-NAME-003`'s canonical name carries the same schema rule: SQL Server keeps it (`dbo.<table>.json`, from the table's `"Schema": "[dbo]"`), while PostgreSQL and MySQL are schema-less (`<table>.json`) — PostgreSQL because these packages leave `Schema` empty and rely on the default `public`, MySQL because it has no schemas within a database at all.
+
+The finding codes, the switch names, the exit behavior, and the pass/fail semantics are identical everywhere — a naming warning never flips a pass to a fail, on any engine.
