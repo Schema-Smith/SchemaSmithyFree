@@ -1,4 +1,4 @@
-<!-- TRAINING-RELEASE-PIN #338: Deployment Failure Triage (SchemaQuench - Failures.log roll-up + *** FAILED banner) merged to main in PR #340, not in stock 2.2.0. When a release includes #338: drop the from-source note, re-cert on stock, delete this sentinel + the release-coupled table row in training-roadmap.md. -->
+<!-- TRAINING-RELEASE-PIN #338: Deployment Failure Triage (SchemaQuench - Failures.log roll-up + *** FAILED banner) merged to main in PR #340, not in stock 2.2.0. When a release includes #338: drop the from-source note, re-cert on stock, delete this sentinel and its release-coupled tracking entry. -->
 
 # Course 7, Module 5 — Diagnosing a fleet failure (lab)
 

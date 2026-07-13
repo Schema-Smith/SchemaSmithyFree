@@ -1,4 +1,4 @@
-<!-- TRAINING-RELEASE-PIN #332: PostgreSQL stale-checkpoint re-run (SchemaSmith#332, merged in PR #335). Beat-1's PostgreSQL dedupe re-green needs this — a stock pre-#335 CLI crashes `42P01: temp_existing_indexes` on the plain re-run. When #332 ships in a stock release: drop the from-source note below, re-cert against stock, delete this sentinel + the release-coupled table row in training-roadmap.md. -->
+<!-- TRAINING-RELEASE-PIN #332: PostgreSQL stale-checkpoint re-run (SchemaSmith#332, merged in PR #335). Beat-1's PostgreSQL dedupe re-green needs this — a stock pre-#335 CLI crashes `42P01: temp_existing_indexes` on the plain re-run. When #332 ships in a stock release: drop the from-source note below, re-cert against stock, delete this sentinel and its release-coupled tracking entry. -->
 # Course 8 · Module 3 — Index, constraint & FK failures
 
 Two induced incidents on one database (`diag_keys`), read end to end. This is the two phases *after*

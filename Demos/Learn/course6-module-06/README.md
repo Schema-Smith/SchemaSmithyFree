@@ -1,4 +1,4 @@
-<!-- TRAINING-RELEASE-PIN #324: --Validate semantic linter (SchemaSmith#324, merged in #326). When --Validate ships in a stock release: bump the pre-flight version string, drop the from-source caveat, simplify ci/validate.yml to the plain install step, re-cert, then delete this sentinel + the release-coupled table row in training-roadmap.md. -->
+<!-- TRAINING-RELEASE-PIN #324: --Validate semantic linter (SchemaSmith#324, merged in #326). When --Validate ships in a stock release: bump the pre-flight version string, drop the from-source caveat, simplify ci/validate.yml to the plain install step, re-cert, then delete this sentinel and its release-coupled tracking entry. -->
 <!-- TRAINING-RELEASE-PIN #343: SS-FILE-NAME-003 file-naming lean for --Validate (SchemaSmith#343). When SS-FILE-NAME-003 ships in a stock release: bump the pre-flight version string, drop the from-source caveat, re-cert, then delete this sentinel and its release-coupled tracking entry. -->
 
 # Course 6, Module 6 — Lint before you deploy: the `--Validate` semantic linter (lab)

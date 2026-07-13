@@ -1,4 +1,4 @@
-<!-- TRAINING-RELEASE-PIN #343: Deployment Summary Report — real objectChanges audit (SchemaSmith#343). The Summary.json/.md report and its objectChanges block are post-2.2.0 (on main via #342/#343), not in the stock 2.2.0 release. When a release includes #343: bump the pre-flight version string, drop the from-source note below, re-cert against stock, then delete this sentinel + the #343 row in training-roadmap.md. -->
+<!-- TRAINING-RELEASE-PIN #343: Deployment Summary Report — real objectChanges audit (SchemaSmith#343). The Summary.json/.md report and its objectChanges block are post-2.2.0 (on main via #342/#343), not in the stock 2.2.0 release. When a release includes #343: bump the pre-flight version string, drop the from-source note below, re-cert against stock, then delete this sentinel and its release-coupled tracking entry. -->
 
 # Course 7, Module 6 — Reading the deployment summary report (lab)
 
