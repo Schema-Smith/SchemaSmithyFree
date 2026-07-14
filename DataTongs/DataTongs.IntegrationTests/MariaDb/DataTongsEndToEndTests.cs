@@ -2,20 +2,20 @@
 
 using NUnit.Framework;
 using Schema.Domain;
-using Schema.IntegrationTests.MySQL;
+using Schema.IntegrationTests.MariaDb;
 using DataTongs.IntegrationTests.Shared;
 
-namespace DataTongs.IntegrationTests.MySQL;
+namespace DataTongs.IntegrationTests.MariaDb;
 
 /// <summary>
-/// MySQL binding of the shared DataTongs output integration tests.
+/// MariaDb binding of the shared DataTongs end-to-end integration tests.
 /// </summary>
-[Category("MySQL")]
+[Category("MariaDb")]
 [TestFixture]
 [Category("Integration")]
-public class DataTongsOutputTests : DataTongsOutputSharedTests
+public class DataTongsEndToEndTests : DataTongsEndToEndSharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
+    protected override Platform Platform => Platform.MariaDb;
     protected override string MainDb => FixtureSetup.MainDb;
     protected override string MainConnectionString => FixtureSetup.GetMainDbConnectionString();
 }

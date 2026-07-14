@@ -3,20 +3,20 @@
 using DataTongs.IntegrationTests.Shared;
 using NUnit.Framework;
 using Schema.Domain;
-using Schema.IntegrationTests.MySQL;
+using Schema.IntegrationTests.MariaDb;
 
-namespace DataTongs.IntegrationTests.MySQL;
+namespace DataTongs.IntegrationTests.MariaDb;
 
 /// <summary>
-/// MySQL binding of the shared --ConfigureDataDelivery integration tests.
+/// MariaDb binding of the shared --ConfigureDataDelivery integration tests.
 /// </summary>
-[Category("MySQL")]
+[Category("MariaDb")]
 [TestFixture]
 [Category("Integration")]
 public class ConfigureDataDeliveryTests : ConfigureDataDeliverySharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
+    protected override Platform Platform => Platform.MariaDb;
     protected override string MainDb => FixtureSetup.MainDb;
     protected override string MainConnectionString => FixtureSetup.GetMainDbConnectionString();
-    protected override string ConfigPrefix => "MySQL";
+    protected override string ConfigPrefix => "MariaDB";
 }
