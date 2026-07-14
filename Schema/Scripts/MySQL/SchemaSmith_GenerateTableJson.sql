@@ -110,14 +110,14 @@ BEGIN
                 ORDER BY s.SEQ_IN_INDEX
                 SEPARATOR ','
             ),
-            'Visible', CASE WHEN s.IS_VISIBLE = 'YES' THEN TRUE ELSE FALSE END,
+            'Visible', CASE WHEN SchemaSmith_IndexIsVisible(p_Schema, p_Table, s.INDEX_NAME) = 1 THEN TRUE ELSE FALSE END,
             'Comment', NULLIF(s.INDEX_COMMENT, '')
         ) AS idx_json
         FROM INFORMATION_SCHEMA.STATISTICS s
         WHERE s.TABLE_SCHEMA = p_Schema
           AND s.TABLE_NAME = p_Table
           AND s.INDEX_TYPE != 'FULLTEXT'
-        GROUP BY s.INDEX_NAME, s.NON_UNIQUE, s.INDEX_TYPE, s.IS_VISIBLE, s.INDEX_COMMENT
+        GROUP BY s.INDEX_NAME, s.NON_UNIQUE, s.INDEX_TYPE, s.INDEX_COMMENT
     ) idx_subquery;
 
     -- Get foreign keys

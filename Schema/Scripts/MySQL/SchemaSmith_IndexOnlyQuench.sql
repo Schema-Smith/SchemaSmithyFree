@@ -192,7 +192,7 @@ BEGIN
               AND NOT (BINARY UPPER(COALESCE(i.IndexType, 'BTREE')) = BINARY 'BTREE' AND BINARY UPPER(s.INDEX_TYPE) = BINARY 'BTREE'))
           -- Or visibility differs (FULLTEXT indexes don't support INVISIBLE, skip them)
           OR (BINARY UPPER(s.INDEX_TYPE) != BINARY 'FULLTEXT'
-              AND i.IsVisible != (CASE WHEN s.IS_VISIBLE = 'YES' THEN 1 ELSE 0 END))
+              AND i.IsVisible != SchemaSmith_IndexIsVisible(s.TABLE_SCHEMA, s.TABLE_NAME, s.INDEX_NAME))
       );
 
     -- Drop modified indexes (they'll be recreated later)
