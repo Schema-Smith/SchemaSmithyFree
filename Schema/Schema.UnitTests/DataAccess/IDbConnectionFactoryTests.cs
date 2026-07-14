@@ -42,6 +42,14 @@ public class DbConnectionFactoryDispatcherTests
     }
 
     [Test]
+    public void ForPlatform_MariaDb_ReturnsMySqlConnectionFactory()
+    {
+        var factory = DbConnectionFactory.ForPlatform(Platform.MariaDb);
+
+        Assert.That(factory, Is.InstanceOf<MySqlConnectionFactory>());
+    }
+
+    [Test]
     public void ForPlatform_InvalidPlatform_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>

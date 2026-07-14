@@ -62,6 +62,7 @@ namespace Schema.UnitTests.Utility
             Assert.That(TargetVersionDetector.GetVersionQuery(Platform.SqlServer), Does.Contain("ProductMajorVersion"));
             Assert.That(TargetVersionDetector.GetVersionQuery(Platform.PostgreSQL), Does.Contain("server_version_num"));
             Assert.That(TargetVersionDetector.GetVersionQuery(Platform.MySQL), Does.Contain("VERSION()"));
+            Assert.That(TargetVersionDetector.GetVersionQuery(Platform.MariaDb), Does.Contain("VERSION()"));
         }
     }
 }

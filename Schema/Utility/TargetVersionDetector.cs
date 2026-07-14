@@ -17,6 +17,7 @@ namespace Schema.Utility
             Platform.SqlServer => "SELECT CONVERT(int, SERVERPROPERTY('ProductMajorVersion'))",
             Platform.PostgreSQL => "SELECT current_setting('server_version_num')",
             Platform.MySQL => "SELECT VERSION()",
+            Platform.MariaDb => "SELECT VERSION()",
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "Unsupported platform for version detection")
         };
 
