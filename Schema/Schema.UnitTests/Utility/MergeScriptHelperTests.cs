@@ -616,9 +616,12 @@ public class MergeScriptHelperTests
             mergeUpdate: true, mergeDelete: true, disableTriggers: false,
             tokenizeScripts: false, mergeFilter: null);
 
-        // Delete pass should join on both key columns
+        // Delete pass should join on both key columns. The numeric key compares plainly; the string
+        // key forces utf8mb4_unicode_ci on both sides so a MariaDB 11.4 target column
+        // (utf8mb4_uca1400_ai_ci) and a JSON_TABLE-extracted value (utf8mb4_general_ci) don't raise
+        // "Illegal mix of collations" (1267).
         Assert.That(result, Does.Contain("Target.`id` = jt.`id`"));
-        Assert.That(result, Does.Contain("Target.`code` = jt.`code`"));
+        Assert.That(result, Does.Contain("Target.`code` COLLATE utf8mb4_unicode_ci = jt.`code` COLLATE utf8mb4_unicode_ci"));
     }
 
     [Test]

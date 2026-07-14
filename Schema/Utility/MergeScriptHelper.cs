@@ -1212,7 +1212,8 @@ SELECT c.column_name, c.udt_name
             var upsert = mergeUpdate
                 ? BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, updateColumns, tableData, keyColumns, tokenizeScripts)
                 : BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, tableData, tokenizeScripts);
-            var delete = BuildDeleteStatementMySql(databaseName, tableName, jsonTableColumns, keyColumns, mergeFilter);
+            var stringKeys = GetStringKeyColumnsMySql(cmd, databaseName, tableName, keyColumns);
+            var delete = BuildDeleteStatementMySql(databaseName, tableName, jsonTableColumns, keyColumns, mergeFilter, stringKeys);
             return upsert + "\n" + delete;
         }
         if (mergeUpdate)
@@ -1319,8 +1320,35 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
     private static readonly Regex JsonValidColumnRegex =
         new(@"json_valid\(`([^`]+)`\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Character data types whose key comparisons carry a collation and can raise
+    // "Illegal mix of collations" (1267) when the two sides differ.
+    private static readonly HashSet<string> MySqlCharacterTypes = new(StringComparer.OrdinalIgnoreCase)
+        { "char", "varchar", "tinytext", "text", "mediumtext", "longtext", "enum", "set" };
+
+    // The key columns whose type is character-based (so their comparisons need an explicit collation).
+    private static HashSet<string> GetStringKeyColumnsMySql(IDbCommand cmd, string databaseName, string tableName, string keyColumns)
+    {
+        var keyNames = new HashSet<string>(ParseKeyColumnsMySql(keyColumns), StringComparer.OrdinalIgnoreCase);
+        if (keyNames.Count == 0)
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var infos = GetColumnInfoMySql(cmd, databaseName, tableName, excludeAutoIncrement: false, jsonKeys: keyNames);
+        return new HashSet<string>(
+            infos.Where(c => MySqlCharacterTypes.Contains(c.DataType)).Select(c => c.Name),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    // Builds one key-match predicate. String keys force a common collation on both sides:
+    // MariaDB 11.4 defaults new tables to utf8mb4_uca1400_ai_ci while a JSON_TABLE-extracted string
+    // column is utf8mb4_general_ci, so `Target.k = jt.k` raises "Illegal mix of collations" (1267).
+    // Forcing utf8mb4_unicode_ci on both sides (the same canonical the quench comparison path uses)
+    // resolves the mix without changing which rows match. Numeric/date keys carry no collation.
+    private static string BuildKeyMatchMySql(string k, HashSet<string> stringKeys) =>
+        stringKeys.Contains(k)
+            ? $"Target.`{k}` COLLATE utf8mb4_unicode_ci = jt.`{k}` COLLATE utf8mb4_unicode_ci"
+            : $"Target.`{k}` = jt.`{k}`";
+
     private static string BuildDeleteStatementMySql(string databaseName, string tableName,
-        string jsonTableColumns, string keyColumns, string mergeFilter)
+        string jsonTableColumns, string keyColumns, string mergeFilter, HashSet<string> stringKeys)
     {
         var keyColNames = ParseKeyColumnsMySql(keyColumns);
         var sb = new StringBuilder();
@@ -1332,7 +1360,7 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
         sb.AppendLine($"      {jsonTableColumns}");
         sb.AppendLine("    )");
         sb.AppendLine("  ) AS jt");
-        sb.AppendLine($"  WHERE {string.Join(" AND ", keyColNames.Select(k => $"Target.`{k}` = jt.`{k}`"))}");
+        sb.AppendLine($"  WHERE {string.Join(" AND ", keyColNames.Select(k => BuildKeyMatchMySql(k, stringKeys)))}");
         sb.Append(")");
         if (!string.IsNullOrWhiteSpace(mergeFilter))
             sb.Append($"\nAND ({mergeFilter})");
