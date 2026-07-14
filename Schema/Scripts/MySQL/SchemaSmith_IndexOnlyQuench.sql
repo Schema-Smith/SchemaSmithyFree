@@ -597,7 +597,7 @@ BEGIN
                       CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                            WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
                            ELSE '' END,
-                      CASE WHEN i.IsVisible = 0 THEN ' INVISIBLE' ELSE '' END)
+                      CASE WHEN i.IsVisible = 0 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
         FROM _SchemaSmith_Indexes i
         WHERE i.IsPrimaryKey = 0
           AND NOT EXISTS (
@@ -647,7 +647,7 @@ BEGIN
                               CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                                    WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
                                    ELSE '' END,
-                              CASE WHEN i.IsVisible = 0 THEN ' INVISIBLE' ELSE '' END)
+                              CASE WHEN i.IsVisible = 0 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
                           ORDER BY i.IndexName SEPARATOR ', '))
         FROM _SchemaSmith_Indexes i
         WHERE i.IsPrimaryKey = 0

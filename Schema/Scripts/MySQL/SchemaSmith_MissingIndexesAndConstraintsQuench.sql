@@ -321,7 +321,7 @@ BEGIN
                 CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                      WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
                      ELSE '' END,
-                CASE WHEN i.IsVisible = 0 THEN ' INVISIBLE' ELSE '' END
+                CASE WHEN i.IsVisible = 0 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END
             ),
             CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
         FROM _SchemaSmith_Indexes i

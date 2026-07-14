@@ -180,11 +180,12 @@ public class ForgeKindlerTests
         Assert.That(sqlServer.Length, Is.EqualTo(23));
         // PostgreSQL: 30 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration (one-owner enforcement, #270 TRANSITIONAL).
         Assert.That(postgres.Length, Is.EqualTo(30));
-        // MySQL: 26 = 22 prior + four MariaDB-compat helpers (all #351): SchemaSmith_IndexIsVisible
+        // MySQL: 27 = 22 prior + five MariaDB-compat helpers (all #351): SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth (integer display width),
         // SchemaSmith_NormalizeColumnDefault (COLUMN_DEFAULT reporting: 'NULL' marker / quoting / parens),
-        // and SchemaSmith_DropCheckClause (DROP CHECK vs DROP CONSTRAINT for check-constraint drops).
-        Assert.That(mysql.Length, Is.EqualTo(26));
+        // SchemaSmith_DropCheckClause (DROP CHECK vs DROP CONSTRAINT for check-constraint drops), and
+        // SchemaSmith_IndexInvisibleClause (INVISIBLE vs IGNORED for hidden-index DDL).
+        Assert.That(mysql.Length, Is.EqualTo(27));
     }
 
     [Test]
