@@ -414,7 +414,7 @@ BEGIN
       JOIN _SchemaSmith_Columns c ON c.TableName = t.TableName AND c.IsAutoIncrement = 1
       JOIN _SchemaSmith_Indexes i ON i.TableName = t.TableName AND i.IsPrimaryKey = 1
        SET t.AutoIncrementKeyClause = CONCAT(', KEY (`', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`)')
-     WHERE LOCATE(CONCAT('`', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`'), i.IndexColumns) > 1;
+     WHERE LOCATE(CONCAT('`', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`') COLLATE utf8mb4_unicode_ci, i.IndexColumns COLLATE utf8mb4_unicode_ci) > 1;
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Parse foreign keys');
 
