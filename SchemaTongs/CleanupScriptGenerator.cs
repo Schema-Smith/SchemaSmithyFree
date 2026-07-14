@@ -98,7 +98,7 @@ public static class CleanupScriptGenerator
         var baseName = Path.GetFileNameWithoutExtension(fileName);
         if (string.IsNullOrEmpty(baseName)) return null;
 
-        if (platform == Platform.MySQL)
+        if (platform.GetBasePlatform() == Platform.MySQL)
             return (null, baseName);
 
         var dotIndex = baseName.IndexOf('.');
@@ -114,7 +114,7 @@ public static class CleanupScriptGenerator
         if (parsed == null) return null;
         var (schema, name) = parsed.Value;
 
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => schema != null ? $"[{schema}].[{name}]" : $"[{name}]",
             Platform.PostgreSQL => schema != null ? $"\"{schema}\".\"{name}\"" : $"\"{name}\"",
