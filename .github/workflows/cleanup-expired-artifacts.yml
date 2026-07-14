@@ -1,0 +1,36 @@
+name: Cleanup expired artifacts
+
+# GitHub marks artifacts expired at retention but keeps billing the storage until an
+# explicit DELETE. This weekly sweep reclaims it; shippables live on the Release.
+on:
+  schedule:
+    - cron: '0 4 * * 1'  # Mondays 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+concurrency:
+  group: cleanup-expired-artifacts
+  cancel-in-progress: false
+
+jobs:
+  purge-expired:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete expired artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          ids=$(gh api "repos/$REPO/actions/artifacts?per_page=100" --paginate \
+                --jq '.artifacts[] | select(.expired==true) | .id')
+          if [ -z "$ids" ]; then
+            echo "No expired artifacts to purge."
+            exit 0
+          fi
+          echo "Purging $(echo "$ids" | wc -l) expired artifacts..."
+          echo "$ids" | while read -r id; do
+            gh api -X DELETE "repos/$REPO/actions/artifacts/$id" && echo "deleted $id" || echo "skip $id (already gone)"
+          done
+          echo "Cleanup complete."
