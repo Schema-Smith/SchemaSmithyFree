@@ -2,17 +2,16 @@
 
 using NUnit.Framework;
 using Schema.Domain;
-using Schema.IntegrationTests.MySQL;
+using Schema.IntegrationTests.MariaDb;
 using SchemaQuench.IntegrationTests.Shared;
 
-namespace SchemaQuench.IntegrationTests.MySQL;
+namespace SchemaQuench.IntegrationTests.MariaDb;
 
-[Category("MySQL")]
-[TestFixture]
+[Category("MariaDb")]
 [Parallelizable(scope: ParallelScope.All)]
-public class TableQuench_NumericTypeIdempotencyTests : TableQuench_NumericTypeIdempotencySharedTests
+public class TableQuench_DropCompositeFkIndexTests : TableQuench_DropCompositeFkIndexSharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
+    protected override Platform Platform => Platform.MariaDb;
     protected override string MainConnectionString => FixtureSetup.GetMainDbConnectionString();
     protected override string MainDbName => FixtureSetup.MainDb;
 }

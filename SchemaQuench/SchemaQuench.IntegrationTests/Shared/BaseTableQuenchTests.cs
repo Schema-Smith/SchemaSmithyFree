@@ -3,6 +3,7 @@
 #nullable enable
 using System;
 using System.Data;
+using System.Linq;
 using Schema.DataAccess;
 using Schema.Domain;
 using System.Threading;
@@ -133,7 +134,7 @@ SELECT UPPER(COLUMN_TYPE)
  WHERE TABLE_SCHEMA = DATABASE()
    AND TABLE_NAME = '{tableName}'
    AND COLUMN_NAME = '{columnName}'";
-        return cmd.ExecuteScalar()?.ToString()?.ToUpper() ?? "UNKNOWN";
+        return StripIntDisplayWidth(cmd.ExecuteScalar()?.ToString()?.ToUpper()) ?? "UNKNOWN";
     }
 
     /// <summary>
@@ -147,7 +148,44 @@ SELECT UPPER(COLUMN_TYPE)
  WHERE TABLE_SCHEMA = '{schemaName}'
    AND TABLE_NAME = '{tableName}'
    AND COLUMN_NAME = '{columnName}'";
-        return cmd.ExecuteScalar()?.ToString()?.ToUpper() ?? "UNKNOWN";
+        return StripIntDisplayWidth(cmd.ExecuteScalar()?.ToString()?.ToUpper()) ?? "UNKNOWN";
+    }
+
+    /// <summary>
+    /// Whether the connected target honors DESC index key parts (reflected as COLLATION='D' in
+    /// INFORMATION_SCHEMA.STATISTICS). MySQL 8.0+ (our floor) always does; MariaDB ignored the DESC
+    /// keyword and stored ascending until 10.8, so a MariaDB 10.6/10.7 target reports COLLATION='A'.
+    /// </summary>
+    protected bool TargetSupportsDescendingIndexes(IDbCommand cmd)
+    {
+        if (Platform != Platform.MariaDb) return true;
+        cmd.CommandText = "SELECT VERSION()";
+        var parts = (cmd.ExecuteScalar()?.ToString() ?? "").Split('.');
+        if (parts.Length < 2 || !int.TryParse(parts[0], out var major) || !int.TryParse(parts[1], out var minor))
+            return true;
+        return major > 10 || (major == 10 && minor >= 8);
+    }
+
+    /// <summary>
+    /// Strips the deprecated integer/YEAR display width so a column's reported type is engine-neutral:
+    /// MariaDB reports `BIGINT(20)` / `INT(10) UNSIGNED` / `YEAR(4)` where MySQL 8.0.19+ reports
+    /// `BIGINT` / `INT UNSIGNED` / `YEAR`. Mirrors the engine's SchemaSmith_StripIntDisplayWidth so
+    /// test reads compare the same canonical form on both engines. Only a pure display width on an
+    /// integer/YEAR keyword is stripped; DECIMAL(p,s), VARCHAR(n), BIT(n), ENUM(...) keep their parens.
+    /// </summary>
+    private static string? StripIntDisplayWidth(string? dataType)
+    {
+        if (dataType == null) return null;
+        var paren = dataType.IndexOf('(');
+        if (paren < 0) return dataType;
+        var keyword = dataType[..paren].Trim().ToUpperInvariant();
+        if (keyword is not ("TINYINT" or "SMALLINT" or "MEDIUMINT" or "INT" or "INTEGER" or "BIGINT" or "YEAR"))
+            return dataType;
+        var close = dataType.IndexOf(')', paren);
+        if (close < 0) return dataType;
+        var inside = dataType.Substring(paren + 1, close - paren - 1);
+        if (inside.Length == 0 || !inside.All(char.IsDigit)) return dataType;
+        return dataType[..paren] + dataType[(close + 1)..];
     }
 
     /// <summary>
