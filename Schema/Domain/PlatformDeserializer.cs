@@ -93,66 +93,72 @@ namespace Schema.Domain
 
         public static Type GetTableType(Platform platform)
         {
-            return platform.GetBasePlatform() switch
+            return platform switch
             {
                 Platform.SqlServer => typeof(SqlServerTable),
                 Platform.PostgreSQL => typeof(PostgreSqlTable),
                 Platform.MySQL => typeof(MySqlTable),
+                Platform.MariaDb => typeof(MySqlTable),
                 _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
             };
         }
 
         public static Type GetColumnType(Platform platform)
         {
-            return platform.GetBasePlatform() switch
+            return platform switch
             {
                 Platform.SqlServer => typeof(SqlServerColumn),
                 Platform.PostgreSQL => typeof(PostgreSqlColumn),
                 Platform.MySQL => typeof(MySqlColumn),
+                Platform.MariaDb => typeof(MySqlColumn),
                 _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
             };
         }
 
         public static Type GetIndexType(Platform platform)
         {
-            return platform.GetBasePlatform() switch
+            return platform switch
             {
                 Platform.SqlServer => typeof(SqlServerIndex),
                 Platform.PostgreSQL => typeof(PostgreSqlIndex),
                 Platform.MySQL => typeof(MySqlIndex),
+                Platform.MariaDb => typeof(MySqlIndex),
                 _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
             };
         }
 
         public static Type GetForeignKeyType(Platform platform)
         {
-            return platform.GetBasePlatform() switch
+            return platform switch
             {
                 Platform.SqlServer => typeof(SqlServerForeignKey),
                 Platform.PostgreSQL => typeof(PostgreSqlForeignKey),
                 Platform.MySQL => typeof(MySqlForeignKey),
+                Platform.MariaDb => typeof(MySqlForeignKey),
                 _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
             };
         }
 
         public static Type GetCheckConstraintType(Platform platform)
         {
-            return platform.GetBasePlatform() switch
+            return platform switch
             {
                 Platform.SqlServer => typeof(CheckConstraint),
                 Platform.PostgreSQL => typeof(PostgreSqlCheckConstraint),
                 Platform.MySQL => typeof(CheckConstraint),
+                Platform.MariaDb => typeof(CheckConstraint),
                 _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
             };
         }
 
         public static Type GetTemplateType(Platform platform)
         {
-            return platform.GetBasePlatform() switch
+            return platform switch
             {
                 Platform.SqlServer => typeof(SqlServerTemplate),
                 Platform.PostgreSQL => typeof(PostgreSqlTemplate),
                 Platform.MySQL => typeof(MySqlTemplate),
+                Platform.MariaDb => typeof(MySqlTemplate),
                 _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
             };
         }
