@@ -187,13 +187,15 @@ BEGIN
         GROUP BY s.INDEX_NAME
     ) ft_subquery;
 
-    -- Combine all into final JSON
+    -- Combine all into final JSON. Nest the JSON-text vars as JSON values via JSON_EXTRACT(x,'$')
+    -- rather than CAST(x AS JSON): MariaDB has no native JSON type and rejects the CAST syntax,
+    -- while JSON_EXTRACT(x,'$') nests identically on both engines (and yields JSON null for NULL).
     SET v_json = JSON_SET(v_json,
-        '$.Columns', CAST(v_columns AS JSON),
-        '$.Indexes', CAST(v_indexes AS JSON),
-        '$.ForeignKeys', CAST(v_foreign_keys AS JSON),
-        '$.CheckConstraints', CAST(v_check_constraints AS JSON),
-        '$.FullTextIndexes', CAST(v_fulltext_indexes AS JSON)
+        '$.Columns', JSON_EXTRACT(v_columns, '$'),
+        '$.Indexes', JSON_EXTRACT(v_indexes, '$'),
+        '$.ForeignKeys', JSON_EXTRACT(v_foreign_keys, '$'),
+        '$.CheckConstraints', JSON_EXTRACT(v_check_constraints, '$'),
+        '$.FullTextIndexes', JSON_EXTRACT(v_fulltext_indexes, '$')
     );
 
     -- Remove null values for cleaner output
