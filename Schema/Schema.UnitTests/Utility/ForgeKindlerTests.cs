@@ -185,6 +185,15 @@ public class ForgeKindlerTests
     }
 
     [Test]
+    public void GetKindlingScriptNames_MariaDb_MatchesMySql()
+    {
+        // MariaDb is a MySQL variant: it inherits the MySQL kindling list via base-platform
+        // routing; per-file MariaDb overrides (if any) still resolve through ResourceLoader.
+        Assert.That(ForgeKindler.GetKindlingScriptNames(Platform.MariaDb),
+                    Is.EqualTo(ForgeKindler.GetKindlingScriptNames(Platform.MySQL)));
+    }
+
+    [Test]
     public void GetKindlingScripts_KindleStamp_FollowsBootstrapAndCarriesTableDef()
     {
         foreach (var platform in new[] { Platform.SqlServer, Platform.PostgreSQL, Platform.MySQL })

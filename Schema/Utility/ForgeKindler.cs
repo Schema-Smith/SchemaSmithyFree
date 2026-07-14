@@ -172,7 +172,9 @@ public static class ForgeKindler
 
     internal static KindleScript[] GetKindlingScripts(Platform platform)
     {
-        return platform switch
+        // Route on base platform so variants (e.g. MariaDb -> MySQL) inherit the base kindling
+        // list; each script still resolves through ResourceLoader's per-file variant fallback.
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer =>
             [
