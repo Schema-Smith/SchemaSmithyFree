@@ -4,13 +4,13 @@ using NUnit.Framework;
 using Schema.Domain;
 using SchemaQuench.IntegrationTests.Shared;
 
-namespace SchemaQuench.IntegrationTests.MySQL;
+namespace SchemaQuench.IntegrationTests.MariaDb;
 
-[Category("MySQL")]
+[Category("MariaDb")]
 [TestFixture]
 [NonParallelizable]
 public class FleetIdentificationDatabaseTests : FleetIdentificationDatabaseTestsSharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
-    protected override string ProductPlatformFolder => "MySQL";
+    protected override Platform Platform => Platform.MariaDb;
+    protected override string ProductPlatformFolder => "MariaDb";
 }

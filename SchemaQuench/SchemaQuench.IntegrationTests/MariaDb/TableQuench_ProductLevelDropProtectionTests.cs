@@ -3,17 +3,17 @@
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
 using Schema.Domain;
-using Schema.IntegrationTests.MySQL;
+using Schema.IntegrationTests.MariaDb;
 using SchemaQuench.IntegrationTests.Shared;
 
-namespace SchemaQuench.IntegrationTests.MySQL;
+namespace SchemaQuench.IntegrationTests.MariaDb;
 
-[Category("MySQL")]
-public class ProtectedMode_PreventDropTests : ProtectedMode_PreventDropTestsSharedTests
+[Category("MariaDb")]
+public class TableQuench_ProductLevelDropProtectionTests : TableQuench_ProductLevelDropProtectionTestsSharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
+    protected override Platform Platform => Platform.MariaDb;
     protected override string MainDb => FixtureSetup.MainDb;
     protected override string BaseConnectionString => FixtureSetup.ConnectionString;
     protected override IConfigurationRoot FixtureConfig => FixtureSetup.Config;
-    protected override string ProductPlatformFolder => "MySQL";
+    protected override string ProductPlatformFolder => "MariaDb";
 }

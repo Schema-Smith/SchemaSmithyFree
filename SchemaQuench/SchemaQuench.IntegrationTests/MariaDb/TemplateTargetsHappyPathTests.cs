@@ -4,11 +4,11 @@ using NUnit.Framework;
 using Schema.Domain;
 using SchemaQuench.IntegrationTests.Shared;
 
-namespace SchemaQuench.IntegrationTests.MySQL;
+namespace SchemaQuench.IntegrationTests.MariaDb;
 
-[Category("MySQL")]
+[Category("MariaDb")]
 public class TemplateTargetsHappyPathTests : TemplateTargetsHappyPathTestsSharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
-    protected override string ProductPlatformFolder => "MySQL";
+    protected override Platform Platform => Platform.MariaDb;
+    protected override string ProductPlatformFolder => "MariaDb";
 }
