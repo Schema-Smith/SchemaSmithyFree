@@ -102,7 +102,7 @@ namespace Schema.Domain
                     if (idx > 0 && script[idx - 1] == '\'')
                     {
                         // MySQL interprets backslashes as escape sequences in string literals
-                        if (platform == Platform.MySQL)
+                        if (platform.GetBasePlatform() == Platform.MySQL)
                             v = v.Replace("\\", "\\\\");
                         v = v.Replace("'", "''");
                     }
@@ -118,7 +118,7 @@ namespace Schema.Domain
 
         internal static List<string> SplitBatches(string content, Platform platform)
         {
-            return platform switch
+            return platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => SqlHelpers.SplitIntoBatches(content),
                 Platform.MySQL => BatchSplitter.Split(content),

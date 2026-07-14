@@ -217,7 +217,7 @@ public static class RepositoryHelper
     /// schema template (design §7.5). The stub returns the source schema as a single row
     /// so the package quench-tests immediately without user editing.
     /// </summary>
-    internal static string GetSchemaIdentificationStub(string sourceSchema, Platform platform) => platform switch
+    internal static string GetSchemaIdentificationStub(string sourceSchema, Platform platform) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer =>
             "-- TODO: replace with a query returning the active iteration schemas.\n" +
@@ -267,7 +267,7 @@ public static class RepositoryHelper
     {
         var objectPart = fileName.Split('.')[0]; // "products", "templates", "tables", "indexedviews", "materializedviews"
 
-        return (objectPart, platform) switch
+        return (objectPart, platform.GetBasePlatform()) switch
         {
             ("products", _) => typeof(Product),
             ("templates", Platform.SqlServer) => typeof(SqlServerTemplate),
@@ -298,7 +298,7 @@ public static class RepositoryHelper
         return files.ToArray();
     }
 
-    internal static string GetValidationScript(string templateName, Platform platform) => platform switch
+    internal static string GetValidationScript(string templateName, Platform platform) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => $"SELECT CAST(CASE WHEN EXISTS(SELECT * FROM master.sys.databases WHERE [Name] = '{{{{{templateName}Db}}}}') THEN 1 ELSE 0 END AS BIT)",
         Platform.PostgreSQL => $"SELECT EXISTS(SELECT * FROM pg_database WHERE datname = '{{{{{templateName}Db}}}}')",
@@ -306,7 +306,7 @@ public static class RepositoryHelper
         _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
     };
 
-    internal static string GetDatabaseIdentificationScript(string templateName, Platform platform) => platform switch
+    internal static string GetDatabaseIdentificationScript(string templateName, Platform platform) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => $"SELECT [Name] FROM master.sys.databases WHERE [Name] = '{{{{{templateName}Db}}}}'",
         Platform.PostgreSQL => $"SELECT datname FROM pg_database WHERE datname = '{{{{{templateName}Db}}}}'",
@@ -339,7 +339,7 @@ public static class RepositoryHelper
     {
         template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Before Scripts", QuenchSlot = TemplateQuenchSlot.Before });
 
-        switch (platform)
+        switch (platform.GetBasePlatform())
         {
             case Platform.SqlServer:
                 if (!isSchemaTemplate)

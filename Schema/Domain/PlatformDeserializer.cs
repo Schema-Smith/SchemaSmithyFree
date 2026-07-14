@@ -93,7 +93,7 @@ namespace Schema.Domain
 
         public static Type GetTableType(Platform platform)
         {
-            return platform switch
+            return platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => typeof(SqlServerTable),
                 Platform.PostgreSQL => typeof(PostgreSqlTable),
@@ -104,7 +104,7 @@ namespace Schema.Domain
 
         public static Type GetColumnType(Platform platform)
         {
-            return platform switch
+            return platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => typeof(SqlServerColumn),
                 Platform.PostgreSQL => typeof(PostgreSqlColumn),
@@ -115,7 +115,7 @@ namespace Schema.Domain
 
         public static Type GetIndexType(Platform platform)
         {
-            return platform switch
+            return platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => typeof(SqlServerIndex),
                 Platform.PostgreSQL => typeof(PostgreSqlIndex),
@@ -126,7 +126,7 @@ namespace Schema.Domain
 
         public static Type GetForeignKeyType(Platform platform)
         {
-            return platform switch
+            return platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => typeof(SqlServerForeignKey),
                 Platform.PostgreSQL => typeof(PostgreSqlForeignKey),
@@ -137,7 +137,7 @@ namespace Schema.Domain
 
         public static Type GetCheckConstraintType(Platform platform)
         {
-            return platform switch
+            return platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => typeof(CheckConstraint),
                 Platform.PostgreSQL => typeof(PostgreSqlCheckConstraint),
@@ -148,7 +148,7 @@ namespace Schema.Domain
 
         public static Type GetTemplateType(Platform platform)
         {
-            return platform switch
+            return platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => typeof(SqlServerTemplate),
                 Platform.PostgreSQL => typeof(PostgreSqlTemplate),

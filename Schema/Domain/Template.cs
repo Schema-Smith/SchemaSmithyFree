@@ -387,7 +387,7 @@ namespace Schema.Domain
         /// </summary>
         private void MigrateMySqlSchemaIdentificationScriptAlias()
         {
-            if (Product?.Platform != Platform.MySQL) return;
+            if (Product?.Platform.GetBasePlatform() != Platform.MySQL) return;
             if (string.IsNullOrWhiteSpace(SchemaIdentificationScript)) return;
 
             DatabaseIdentificationScript ??= SchemaIdentificationScript;
@@ -499,7 +499,7 @@ namespace Schema.Domain
         /// </summary>
         public static List<TemplateFolder> GetDefaultTemplateFolders(Platform platform, bool isSchemaTemplate)
         {
-            var folders = platform switch
+            var folders = platform.GetBasePlatform() switch
             {
                 Platform.SqlServer =>
                 [
@@ -671,7 +671,7 @@ namespace Schema.Domain
             // Rule 1 (defensive): MySQL never reaches here as a schema template because the alias
             // migration clears the field. If somehow we get here, fail loud with the design's
             // database-per-tenant hint rather than silently producing broken DDL.
-            if (Product?.Platform == Platform.MySQL)
+            if (Product?.Platform.GetBasePlatform() == Platform.MySQL)
                 throw new InvalidOperationException(
                     $"Template '{Name}' (file: {FilePath}) is a schema template on MySQL. " +
                     $"MySQL has no schema-inside-database concept — use database-per-tenant " +

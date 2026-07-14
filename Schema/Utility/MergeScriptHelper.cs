@@ -81,7 +81,7 @@ public static class MergeScriptHelper
 
     #region IMergeScriptHelper dispatch methods
 
-    public static string GetMatchColumns(Platform platform, string keyColumns) => platform switch
+    public static string GetMatchColumns(Platform platform, string keyColumns) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => BuildSqlServerMatchColumns(keyColumns),
         Platform.PostgreSQL => BuildPostgreSqlMatchColumns(keyColumns),
@@ -89,7 +89,7 @@ public static class MergeScriptHelper
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
-    public static string GetJsonColumnDefinitions(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    public static string GetJsonColumnDefinitions(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => GetJsonColumnDefinitionsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => GetJsonColumnDefinitionsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
@@ -97,7 +97,7 @@ public static class MergeScriptHelper
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
-    public static string GetJsonSelectColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    public static string GetJsonSelectColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => GetJsonSelectColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => "", // PostgreSQL uses json_populate_recordset — no separate select columns
@@ -105,7 +105,7 @@ public static class MergeScriptHelper
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
-    public static string GetInsertColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    public static string GetInsertColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => GetInsertColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => GetInsertColumnsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
@@ -113,7 +113,7 @@ public static class MergeScriptHelper
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
-    public static string GetUpdateColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    public static string GetUpdateColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => GetUpdateColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => GetUpdateColumnsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
@@ -121,19 +121,19 @@ public static class MergeScriptHelper
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
-    public static bool NeedsIdentityInsert(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName) => platform switch
+    public static bool NeedsIdentityInsert(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => NeedsIdentityInsertSqlServer(cmd, schemaOrDb, tableName),
         _ => false
     };
 
-    public static string GetIdentitySequence(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName) => platform switch
+    public static string GetIdentitySequence(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName) => platform.GetBasePlatform() switch
     {
         Platform.PostgreSQL => GetIdentityColumnAndSequencePostgreSql(cmd, schemaOrDb, tableName),
         _ => null
     };
 
-    public static (string Disable, string Enable) GetRuleStatements(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, bool updateDescendents = false) => platform switch
+    public static (string Disable, string Enable) GetRuleStatements(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, bool updateDescendents = false) => platform.GetBasePlatform() switch
     {
         Platform.PostgreSQL => GetRuleDisableEnableStatements(cmd, schemaOrDb, tableName, updateDescendents),
         _ => (null, null)
@@ -146,7 +146,7 @@ public static class MergeScriptHelper
     /// </summary>
     public static List<MergeColumnInfo> GetColumnMetadata(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => GetColumnMetadataSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
             Platform.PostgreSQL => GetColumnMetadataPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
@@ -369,7 +369,7 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
     /// </summary>
     public static string GetKeyColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => GetKeyColumnsSqlServer(cmd, schemaOrDb, tableName),
             Platform.PostgreSQL => GetKeyColumnsPostgreSql(cmd, schemaOrDb, tableName),
@@ -497,7 +497,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
         // For tokenized scripts, data is replaced at runtime so we include all columns.
         var jsonKeys = tokenizeScripts ? null : GetJsonDataKeys(tableData);
 
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => BuildMergeScriptSqlServer(cmd, schemaOrDb, tableName, tableData, keyColumns,
                 mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride),
@@ -518,7 +518,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
     /// </summary>
     internal static string GetUnsupportedColumnComments(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => GetUnsupportedColumnCommentsSqlServer(cmd, schemaOrDb, tableName),
             Platform.PostgreSQL => GetUnsupportedColumnCommentsPostgreSql(cmd, schemaOrDb, tableName),

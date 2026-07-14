@@ -18,7 +18,7 @@ namespace SchemaQuench;
 public static class ChangeAuditReader
 {
     public static IReadOnlyList<ChangeAuditRow> ReadAndDrain(Platform platform, IDbCommand command) =>
-        platform switch
+        platform.GetBasePlatform() switch
         {
             Platform.SqlServer => ReadRows(command,
                 "SELECT ObjectType, ObjectName, ActionType FROM SchemaSmith.ChangeAudit WHERE SessionId = @@SPID ORDER BY Id",

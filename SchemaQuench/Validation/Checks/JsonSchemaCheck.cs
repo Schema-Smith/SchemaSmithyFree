@@ -205,7 +205,7 @@ public sealed class JsonSchemaCheck : ISchemaCheck
     private static Type GetTypeForSchemaFile(string fileName, Platform platform)
     {
         var objectPart = fileName.Split('.')[0];
-        return (objectPart, platform) switch
+        return (objectPart, platform.GetBasePlatform()) switch
         {
             ("products", _) => typeof(Product),
             ("templates", Platform.SqlServer) => typeof(SqlServerTemplate),
