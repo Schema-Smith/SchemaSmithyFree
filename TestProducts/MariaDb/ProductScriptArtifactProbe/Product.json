@@ -1,0 +1,17 @@
+{
+    "Name": "ProductScriptArtifactProbe",
+    "ValidationScript": "SELECT EXISTS(SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{{MainDB}}')",
+    "TemplateOrder": [
+        "Bogus"
+    ],
+    "ScriptFolders": [
+        { "FolderPath" : "Before", "QuenchSlot" : "Before" }
+    ],
+    "ScriptTokens": {
+        "MainDB": "TestMain",
+        "ReleaseVersion": "",
+        "AdminPassword": "sup3rs3cr3t_product_probe",
+        "Region": "us-east"
+    },
+    "Platform": "MariaDb"
+}

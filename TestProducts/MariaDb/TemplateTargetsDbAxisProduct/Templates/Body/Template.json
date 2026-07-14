@@ -1,0 +1,8 @@
+{
+    "Name": "Body",
+    "DatabaseIdentificationScript": "SELECT 'CONFIG-DRIVEN' AS DatabaseName WHERE 1=0",
+    "VersionStampScript": "SELECT '{{ReleaseVersion}}' AS Version",
+    "ScriptFolders": [
+        { "FolderPath": "MigrationScripts/Before", "QuenchSlot": "Before" }
+    ]
+}

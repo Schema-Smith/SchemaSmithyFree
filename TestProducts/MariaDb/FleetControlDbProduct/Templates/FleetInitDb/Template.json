@@ -1,0 +1,5 @@
+{
+    "Name": "FleetInitDb",
+    "DatabaseIdentificationScript": "SELECT SCHEMA_NAME AS db_name FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '{{MainDB}}'",
+    "ScriptFolders": []
+}

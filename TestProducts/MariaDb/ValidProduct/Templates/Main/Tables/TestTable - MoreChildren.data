@@ -1,0 +1,4 @@
+[
+    {"TestID": "uuid1", "Status": 1, "SomeText": "Additional child 1"},
+    {"TestID": "uuid2", "Status": 2, "SomeText": "Additional child 2"}
+]

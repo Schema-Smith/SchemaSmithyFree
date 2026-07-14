@@ -1,0 +1,10 @@
+{
+    "Name": "InvalidServer",
+    "ValidationScript": "SELECT 0",
+    "TemplateOrder": [],
+    "ScriptTokens": {
+        "MainDB": "",
+        "ReleaseVersion": ""
+    },
+    "Platform": "MariaDb"
+}

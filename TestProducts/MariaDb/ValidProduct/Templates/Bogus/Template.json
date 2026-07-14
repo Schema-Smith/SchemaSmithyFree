@@ -1,0 +1,5 @@
+{
+    "Name": "Bogus",
+    "SchemaIdentificationScript": "",
+    "VersionStampScript": "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'BAD TEMPLATE'"
+}
