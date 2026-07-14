@@ -119,6 +119,20 @@ public class ResourceLoaderTests
     }
 
     [Test]
+    public void GetPlatformResourceStream_MariaDb_PrefersVariantOverride_WhenPresent()
+    {
+        // Exercises the override-wins branch of GetPlatformResourceStream (variantMatch != null),
+        // which no production script hits (shared-fix ships no Scripts/MariaDb overrides for v1).
+        // Uses test-assembly fixtures embedded under Scripts/MariaDb + Scripts/MySQL.
+        var assembly = typeof(ResourceLoaderTests).Assembly;
+        using var stream = ResourceLoader.GetPlatformResourceStream("SchemaSmith_SeamProbe.sql", Platform.MariaDb, assembly);
+
+        Assert.That(stream, Is.Not.Null);
+        using var reader = new StreamReader(stream);
+        Assert.That(reader.ReadToEnd(), Does.Contain("MARIADB OVERRIDE"));
+    }
+
+    [Test]
     public void Load_WithPlatform_DifferentPlatforms_ReturnDifferentContent()
     {
         // The same-named script should have different content per platform
