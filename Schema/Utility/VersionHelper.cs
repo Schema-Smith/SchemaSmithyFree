@@ -24,7 +24,7 @@ namespace Schema.Utility
             if (string.IsNullOrWhiteSpace(version)) return null;
             version = version.Trim();
 
-            if (platform == Platform.MySQL) return ParseMajorMinor(version);
+            if (platform.GetBasePlatform() == Platform.MySQL) return ParseMajorMinor(version);
 
             if (!int.TryParse(SplitFirst(version), out var value)) return null;
 
@@ -46,7 +46,9 @@ namespace Schema.Utility
                 // PostgreSQL current_setting('server_version_num') -> e.g. 160004 -> major 16.
                 Platform.PostgreSQL => int.TryParse(rawVersion, out var num) ? num / 10000 : (int?)null,
                 // MySQL VERSION() -> e.g. "8.0.36" -> 800.
-                Platform.MySQL => ParseMajorMinor(rawVersion),
+                // MariaDb VERSION() -> e.g. "10.6.27-MariaDB" -> 1006 (the -MariaDB suffix sits
+                // on the patch part, which ParseMajorMinor ignores).
+                Platform.MySQL or Platform.MariaDb => ParseMajorMinor(rawVersion),
                 // SQL Server SERVERPROPERTY('ProductMajorVersion') -> already the major.
                 _ => int.TryParse(SplitFirst(rawVersion), out var v) ? v : (int?)null
             };
