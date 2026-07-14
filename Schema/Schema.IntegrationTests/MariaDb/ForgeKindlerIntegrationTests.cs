@@ -4,17 +4,20 @@ using NUnit.Framework;
 using Schema.Domain;
 using Schema.IntegrationTests.Shared;
 
-namespace Schema.IntegrationTests.MySQL;
+namespace Schema.IntegrationTests.MariaDb;
 
 /// <summary>
-/// MySQL binding of the shared ForgeKindler integration tests.
+/// MariaDb binding of the shared ForgeKindler integration tests.
 /// </summary>
-[Category("MySQL")]
+[Category("MariaDb")]
 [TestFixture]
 [Category("Integration")]
 public class ForgeKindlerIntegrationTests : ForgeKindlerSharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
+    protected override Platform Platform => Platform.MariaDb;
     protected override string MainDb => FixtureSetup.MainDb;
     protected override string MainConnectionString => FixtureSetup.GetMainDbConnectionString();
+
+    // MariaDB's INFORMATION_SCHEMA reports an empty-string column default as the literal token `''`.
+    protected override string ExpectedEmptyStringColumnDefault => "''";
 }
