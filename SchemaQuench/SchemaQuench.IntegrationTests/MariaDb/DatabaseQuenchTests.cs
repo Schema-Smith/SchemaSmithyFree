@@ -2,16 +2,17 @@
 
 using NUnit.Framework;
 using Schema.Domain;
-using Schema.IntegrationTests.MySQL;
+using Schema.IntegrationTests.MariaDb;
 using SchemaQuench.IntegrationTests.Shared;
 
-namespace SchemaQuench.IntegrationTests.MySQL;
+namespace SchemaQuench.IntegrationTests.MariaDb;
 
-[Category("MySQL")]
+[Category("MariaDb")]
 [TestFixture]
-public class TableQuenchTests : TableQuenchTestsSharedTests
+public class DatabaseQuenchTests : DatabaseQuenchTestsSharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
+    protected override Platform Platform => Platform.MariaDb;
     protected override string MainDb => FixtureSetup.MainDb;
+    protected override string SecondaryDb => FixtureSetup.SecondaryDb;
     protected override string MainConnectionString => FixtureSetup.GetMainDbConnectionString();
 }
