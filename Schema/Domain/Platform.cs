@@ -12,8 +12,9 @@ namespace Schema.Domain
         Unknown,
         PostgreSQL,
         SqlServer,
-        MySQL
-        // Future: Oracle, AzureSql, AzurePostgreSql, MariaDb
+        MySQL,
+        MariaDb
+        // Future: Oracle, AzureSql, AzurePostgreSql
     }
 
     public static class PlatformExtensions
@@ -21,10 +22,10 @@ namespace Schema.Domain
         public static Platform GetBasePlatform(this Platform platform) => platform switch
         {
             Platform.Unknown => throw new ArgumentException("Platform has not been assigned.", nameof(platform)),
+            Platform.MariaDb => Platform.MySQL,
             // Future variants map to base:
             // Platform.AzureSql => Platform.SqlServer,
             // Platform.AzurePostgreSql => Platform.PostgreSQL,
-            // Platform.MariaDb => Platform.MySQL,
             _ => platform
         };
 
@@ -41,7 +42,7 @@ namespace Schema.Domain
                 return platform;
 
             throw new ArgumentException(
-                $"Unknown platform '{value}'. Supported platforms: SqlServer (or MSSQL), PostgreSQL, MySQL.",
+                $"Unknown platform '{value}'. Supported platforms: SqlServer (or MSSQL), PostgreSQL, MySQL, MariaDb.",
                 nameof(value));
         }
 
@@ -52,6 +53,7 @@ namespace Schema.Domain
             Platform.SqlServer => "dbo",
             Platform.PostgreSQL => "public",
             Platform.MySQL => "",
+            Platform.MariaDb => "",
             _ => throw new ArgumentException($"Platform '{platform}' does not have a default schema.", nameof(platform))
         };
     }

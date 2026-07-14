@@ -80,9 +80,30 @@ namespace Schema.UnitTests.Domain
         [TestCase(Platform.SqlServer, "dbo")]
         [TestCase(Platform.PostgreSQL, "public")]
         [TestCase(Platform.MySQL, "")]
+        [TestCase(Platform.MariaDb, "")]
         public void GetDefaultSchema_ReturnsCorrectDefault_PerPlatform(Platform platform, string expected)
         {
             Assert.That(platform.GetDefaultSchema(), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void GetBasePlatform_MariaDb_ReturnsMySql()
+        {
+            Assert.That(Platform.MariaDb.GetBasePlatform(), Is.EqualTo(Platform.MySQL));
+        }
+
+        [TestCase("MariaDb", Platform.MariaDb)]
+        [TestCase("MariaDB", Platform.MariaDb)]
+        [TestCase("mariadb", Platform.MariaDb)]
+        public void ParsePlatform_AcceptsMariaDbAliases_CaseInsensitive(string value, Platform expected)
+        {
+            Assert.That(PlatformExtensions.ParsePlatform(value), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void ToCanonicalString_MariaDb_ReturnsMariaDb()
+        {
+            Assert.That(Platform.MariaDb.ToCanonicalString(), Is.EqualTo("MariaDb"));
         }
     }
 }
