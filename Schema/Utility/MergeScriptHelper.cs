@@ -1436,7 +1436,14 @@ ORDER BY c.ORDINAL_POSITION;
             "binary" or "varbinary" or "tinyblob" or "blob" or "mediumblob" or "longblob"
                 => "TEXT",
             "tinytext" or "text" or "mediumtext" or "longtext" => "TEXT",
-            "enum" or "set" => col.ColumnType,
+            // Read ENUM/SET as text in JSON_TABLE: MySQL accepts the raw `enum(...)`/`set(...)`
+            // column type here, but MariaDB rejects it. The extracted string value coerces back
+            // into the real ENUM/SET column on INSERT, so VARCHAR is behavior-identical on MySQL
+            // and portable to MariaDB. CHARACTER_MAXIMUM_LENGTH holds the longest member (ENUM)
+            // or the full members-with-separators length (SET).
+            "enum" or "set" => col.CharMaxLength.HasValue
+                ? $"VARCHAR({col.CharMaxLength})"
+                : "VARCHAR(65535)",
             "json" => "JSON",
             "geometry" or "point" or "linestring" or "polygon" or "multipoint"
                 or "multilinestring" or "multipolygon" or "geometrycollection" => "TEXT",
