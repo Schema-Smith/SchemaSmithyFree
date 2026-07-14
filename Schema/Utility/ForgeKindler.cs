@@ -256,6 +256,7 @@ public static class ForgeKindler
                 new("SchemaSmith_StripIntDisplayWidth.sql"),
                 new("SchemaSmith_NormalizeColumnDefault.sql"),
                 new("SchemaSmith_IndexIsVisible.sql"),
+                new("SchemaSmith_DropCheckClause.sql"),
                 new("SchemaSmith_GenerateTableJson.sql"),
                 new("SchemaSmith_ParseTableJson.sql"),
                 new("SchemaSmith_MissingTableAndColumnQuench.sql"),

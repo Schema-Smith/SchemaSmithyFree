@@ -89,6 +89,19 @@ public class FixtureSetup
         _integrationSecondaryDb = GenerateUniqueDBName(config["ScriptTokens:SecondaryDB"] ?? "TestSecondary");
         _integrationMainDb = GenerateUniqueDBName(config["ScriptTokens:MainDB"] ?? "TestMain");
 
+        // Map MariaDB config to Target:* keys used by tools (mutate existing config, don't replace —
+        // replacing would lose SqlServer:* and PostgreSQL:* keys needed by other test assemblies)
+        config["Target:Server"] = server;
+        config["Target:Port"] = port;
+        config["Target:User"] = user;
+        config["Target:Password"] = password;
+        foreach (var prop in mariaProps)
+            config[$"Target:ConnectionProperties:{prop.Key}"] = prop.Value;
+        // Product-side connections the quench opens per target DB are non-pooled too (same ceiling reason).
+        config["Target:ConnectionProperties:Pooling"] = "false";
+        config["ScriptTokens:MainDB"] = _integrationMainDb;
+        config["ScriptTokens:SecondaryDB"] = _integrationSecondaryDb;
+
         CreateTestDatabases();
 
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Cleanup();
