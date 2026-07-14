@@ -2,20 +2,20 @@
 
 using NUnit.Framework;
 using Schema.Domain;
-using Schema.IntegrationTests.MySQL;
+using Schema.IntegrationTests.MariaDb;
 using SchemaTongs.IntegrationTests.Shared;
 
-namespace SchemaTongs.IntegrationTests.MySQL;
+namespace SchemaTongs.IntegrationTests.MariaDb;
 
 /// <summary>
-/// MySQL binding of the shared extraction / <c>SS-FILE-NAME-003</c> reconciliation tests.
+/// MariaDb binding of the shared extraction / <c>SS-FILE-NAME-003</c> reconciliation tests.
 /// </summary>
-[Category("MySQL")]
+[Category("MariaDb")]
 [TestFixture]
 [Category("Integration")]
 public class TableFileNameReconciliationTests : TableFileNameReconciliationSharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
-    protected override string ConfigPrefix => "MySQL";
+    protected override Platform Platform => Platform.MariaDb;
+    protected override string ConfigPrefix => "MariaDB";
     protected override string FixtureConnectionString => FixtureSetup.ConnectionString;
 }

@@ -2,17 +2,17 @@
 
 using NUnit.Framework;
 using Schema.Domain;
-using Schema.IntegrationTests.MySQL;
+using Schema.IntegrationTests.MariaDb;
 using SchemaTongs.IntegrationTests.Shared;
 
-namespace SchemaTongs.IntegrationTests.MySQL;
+namespace SchemaTongs.IntegrationTests.MariaDb;
 
-[Category("MySQL")]
+[Category("MariaDb")]
 [TestFixture]
 [Category("Integration")]
 public class SchemaTongsTests : SchemaTongsSharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
-    protected override string ConfigPrefix => "MySQL";
+    protected override Platform Platform => Platform.MariaDb;
+    protected override string ConfigPrefix => "MariaDB";
     protected override string FixtureConnectionString => FixtureSetup.ConnectionString;
 }
