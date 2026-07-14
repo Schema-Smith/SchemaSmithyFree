@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using Schema.Domain;
 using Schema.Delivery;
@@ -1180,7 +1181,7 @@ SELECT c.column_name, c.udt_name
         tableName = tableName.Trim().Trim('`');
         var columns = GetColumnInfoMySql(cmd, databaseName, tableName, excludeAutoIncrement: false, jsonKeys: jsonKeys);
         return string.Join(",", columns.Select(c =>
-            IsJsonTypeMySql(c.DataType) ? $"J[`{c.Name}`]" : $"`{c.Name}`"));
+            c.IsJson ? $"J[`{c.Name}`]" : $"`{c.Name}`"));
     }
 
     private static string BuildMergeScriptMySql(IDbCommand cmd, string databaseName, string tableName,
@@ -1226,6 +1227,8 @@ SELECT c.column_name, c.udt_name
     {
         databaseName = databaseName.Trim().Trim('`');
         tableName = tableName.Trim().Trim('`');
+
+        var jsonCheckColumns = GetJsonCheckConstraintColumnsMySql(cmd, databaseName, tableName);
 
         BindIdentifierParameters(cmd, ("@db", databaseName), ("@table", tableName));
         cmd.CommandText = $@"
@@ -1276,11 +1279,45 @@ ORDER BY c.ORDINAL_POSITION;
                     ? null
                     : reader.GetInt32(reader.GetOrdinal("DATETIME_PRECISION")),
                 ColumnType = reader.GetString(reader.GetOrdinal("COLUMN_TYPE")),
-                IsAutoIncrement = extra.Contains("auto_increment", StringComparison.OrdinalIgnoreCase)
+                IsAutoIncrement = extra.Contains("auto_increment", StringComparison.OrdinalIgnoreCase),
+                IsJson = reader.GetString(reader.GetOrdinal("DATA_TYPE")).Equals("json", StringComparison.OrdinalIgnoreCase)
+                         || jsonCheckColumns.Contains(colName)
             });
         }
         return columns;
     }
+
+    // MariaDB reports JSON columns as `longtext` in INFORMATION_SCHEMA (JSON is a LONGTEXT alias there),
+    // but auto-creates a `json_valid(<col>)` CHECK constraint per JSON column. Detect those so MariaDB
+    // JSON columns get the same JSON-aware merge treatment as MySQL's native `json` type. Returns empty
+    // on MySQL — its native JSON columns carry no such constraint and are detected by DATA_TYPE = 'json'.
+    private static HashSet<string> GetJsonCheckConstraintColumnsMySql(IDbCommand cmd, string databaseName, string tableName)
+    {
+        BindIdentifierParameters(cmd, ("@db", databaseName), ("@table", tableName));
+        cmd.CommandText = @"
+SELECT cc.CHECK_CLAUSE
+FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+  ON tc.CONSTRAINT_SCHEMA = cc.CONSTRAINT_SCHEMA
+ AND tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME
+ AND tc.CONSTRAINT_TYPE = 'CHECK'
+WHERE tc.CONSTRAINT_SCHEMA = @db
+  AND tc.TABLE_NAME = @table;
+";
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            if (reader.IsDBNull(0)) continue;
+            foreach (Match match in JsonValidColumnRegex.Matches(reader.GetString(0)))
+                result.Add(match.Groups[1].Value);
+        }
+        return result;
+    }
+
+    // Matches MariaDB's auto-generated JSON check clause `json_valid(`<col>`)`, capturing the column name.
+    private static readonly Regex JsonValidColumnRegex =
+        new(@"json_valid\(`([^`]+)`\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static string BuildDeleteStatementMySql(string databaseName, string tableName,
         string jsonTableColumns, string keyColumns, string mergeFilter)
@@ -1336,7 +1373,10 @@ ORDER BY c.ORDINAL_POSITION;
                 if (trimmed.StartsWith("J["))
                 {
                     var colName = trimmed.Substring(2).TrimEnd(']');
-                    return $"  {colName} = IF(CAST(VALUES({colName}) AS JSON) = CAST(`{databaseName}`.`{tableName}`.{colName} AS JSON), `{databaseName}`.`{tableName}`.{colName}, VALUES({colName}))";
+                    // JSON_EXTRACT(x,'$') normalizes the document for comparison and is portable across
+                    // MySQL and MariaDB. MariaDB rejects CAST(x AS JSON) (JSON is a LONGTEXT alias with
+                    // no native cast); MySQL keeps order-insensitive object equality on the extracted value.
+                    return $"  {colName} = IF(JSON_EXTRACT(VALUES({colName}), '$') = JSON_EXTRACT(`{databaseName}`.`{tableName}`.{colName}, '$'), `{databaseName}`.`{tableName}`.{colName}, VALUES({colName}))";
                 }
                 return $"  {trimmed} = VALUES({trimmed})";
             });
@@ -1405,6 +1445,11 @@ ORDER BY c.ORDINAL_POSITION;
 
     private static string GetMySqlTypeForJsonTable(MySqlColumnInfo col)
     {
+        // JSON columns must be read as JSON in JSON_TABLE so nested objects/arrays survive extraction;
+        // reading them as TEXT yields NULL for non-scalar values. MariaDB reports the column as longtext
+        // (JSON alias) but accepts JSON as a JSON_TABLE column type, so key on IsJson, not the raw type.
+        if (col.IsJson) return "JSON";
+
         var dataType = col.DataType.ToLowerInvariant();
 
         return dataType switch
@@ -1464,9 +1509,6 @@ ORDER BY c.ORDINAL_POSITION;
         _ => false
     };
 
-    private static bool IsJsonTypeMySql(string dataType) =>
-        dataType.Equals("json", StringComparison.OrdinalIgnoreCase);
-
     private static string BuildSelectExpressionsMySql(List<MySqlColumnInfo> columns)
     {
         return string.Join(", ", columns.Select(BuildSingleSelectExpressionMySql));
@@ -1502,6 +1544,11 @@ ORDER BY c.ORDINAL_POSITION;
         public int? DatetimePrecision { get; init; }
         public string ColumnType { get; init; } = "";
         public bool IsAutoIncrement { get; init; }
+
+        // JSON on MySQL is a native DATA_TYPE ('json'); on MariaDB it is a LONGTEXT alias detected via
+        // its auto-created json_valid(<col>) CHECK constraint. Either way the column gets JSON-aware
+        // merge treatment (JSON_TABLE read + order-tolerant upsert comparison).
+        public bool IsJson { get; init; }
     }
 
     #endregion

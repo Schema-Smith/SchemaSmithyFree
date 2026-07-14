@@ -874,12 +874,13 @@ public class MergeScriptHelperTests
             mergeUpdate: true, mergeDelete: false, disableTriggers: false,
             tokenizeScripts: false, mergeFilter: null);
 
-        // JSON column should use conditional comparison to prevent false updates from key reordering
-        Assert.That(result, Does.Contain("IF(CAST(VALUES(`metadata`) AS JSON) = CAST(`testdb`.`testtable`.`metadata` AS JSON), `testdb`.`testtable`.`metadata`, VALUES(`metadata`))"));
+        // JSON column should use conditional comparison to prevent false updates from key reordering.
+        // JSON_EXTRACT(x,'$') is the MySQL/MariaDB-portable form (MariaDB rejects CAST(x AS JSON)).
+        Assert.That(result, Does.Contain("IF(JSON_EXTRACT(VALUES(`metadata`), '$') = JSON_EXTRACT(`testdb`.`testtable`.`metadata`, '$'), `testdb`.`testtable`.`metadata`, VALUES(`metadata`))"));
 
         // Non-JSON column should use simple assignment
         Assert.That(result, Does.Contain("`name` = VALUES(`name`)"));
-        Assert.That(result, Does.Not.Contain("IF(CAST(VALUES(`name`)"));
+        Assert.That(result, Does.Not.Contain("IF(JSON_EXTRACT(VALUES(`name`)"));
     }
 
     #endregion
@@ -1523,9 +1524,21 @@ public class MergeScriptHelperTests
         var cmd = Substitute.For<IDbCommand>();
 
         // Return a fresh reader on each ExecuteReader() call so fragment methods
-        // that each query independently all get the full column set.
-        cmd.ExecuteReader().Returns(ci => CreateMySqlMockReader(columns));
+        // that each query independently all get the full column set. The MariaDB JSON-column
+        // detection issues a CHECK_CONSTRAINTS lookup before the column read; feed it an empty
+        // reader so the mock's column defs (which set DATA_TYPE='json' directly) drive JSON-ness.
+        cmd.ExecuteReader().Returns(ci =>
+            cmd.CommandText != null && cmd.CommandText.Contains("CHECK_CONSTRAINTS")
+                ? CreateEmptyMockReader()
+                : CreateMySqlMockReader(columns));
         return cmd;
+    }
+
+    private static IDataReader CreateEmptyMockReader()
+    {
+        var reader = Substitute.For<IDataReader>();
+        reader.Read().Returns(false);
+        return reader;
     }
 
     private static IDataReader CreateMySqlMockReader(MySqlColumnDef[] columns)
