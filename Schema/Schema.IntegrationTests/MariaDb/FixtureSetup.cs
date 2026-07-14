@@ -1,18 +1,23 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
-using System.Collections.Generic;
-using System.Data;
 using System.Linq;
+using System.Data;
 using NUnit.Framework;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.IntegrationTests.Shared;
 using Schema.Utility;
 
-namespace Schema.IntegrationTests.MySQL;
+namespace Schema.IntegrationTests.MariaDb;
 
-[Category("MySQL")]
+/// <summary>
+/// MariaDb integration fixture — the MariaDb-engine twin of the MySQL FixtureSetup. Same setup
+/// (unique per-run databases, kindled forge, shared Sakila-mirroring schema); differs only in the
+/// config prefix (MariaDB:*), category, and Platform.MariaDb. Its own static state so it can run in
+/// the same process as the MySQL fixture without collision.
+/// </summary>
+[Category("MariaDb")]
 [SetUpFixture]
 public class FixtureSetup
 {
@@ -49,10 +54,6 @@ public class FixtureSetup
         }
     }
 
-    /// <summary>
-    /// Ensures the test databases are initialized. Called automatically when accessing properties.
-    /// Can also be called explicitly from other test projects' SetUpFixture.
-    /// </summary>
     public static void EnsureInitialized()
     {
         if (_initialized) return;
@@ -74,36 +75,22 @@ public class FixtureSetup
     {
         var config = ConfigHelper.GetAppSettingsAndUserSecrets("test", null);
 
-        var server = config["MySQL:Server"] ?? "127.0.0.1";
-        var port = config["MySQL:Port"] ?? "3306";
-        var user = config["MySQL:User"] ?? "TestUser";
-        var password = config["MySQL:Password"] ?? "aCa2d805-41E5@40c4!98e7#92F93zzxo176";
+        var server = config["MariaDB:Server"] ?? "127.0.0.1";
+        var port = config["MariaDB:Port"] ?? "3306";
+        var user = config["MariaDB:User"] ?? "TestUser";
+        var password = config["MariaDB:Password"] ?? "aCa2d805-41E5@40c4!98e7#92F93zzxo176";
 
-        var mysqlProps = Schema.DataAccess.ConnectionString.ReadProperties(config, "MySQL:ConnectionProperties");
-        var extraProps = string.Join("", mysqlProps.Select(p => $"{p.Key}={p.Value};"));
+        var mariaProps = Schema.DataAccess.ConnectionString.ReadProperties(config, "MariaDB:ConnectionProperties");
+        var extraProps = string.Join("", mariaProps.Select(p => $"{p.Key}={p.Value};"));
         // Non-pooled: the suite creates a unique database per test, and retained idle pool connections
-        // across those per-DB pools otherwise pile up past the MySQL server's max_connections ceiling.
+        // across those per-DB pools otherwise pile up past the server's max_connections ceiling.
         _connectionString = $"Server={server};Port={port};User={user};Password={password};AllowUserVariables=true;Pooling=false;{extraProps}";
 
         _integrationSecondaryDb = GenerateUniqueDBName(config["ScriptTokens:SecondaryDB"] ?? "TestSecondary");
         _integrationMainDb = GenerateUniqueDBName(config["ScriptTokens:MainDB"] ?? "TestMain");
 
-        // Map MySQL config to Target:* keys used by tools (mutate existing config, don't replace —
-        // replacing would lose SqlServer:* and PostgreSQL:* keys needed by other test assemblies)
-        config["Target:Server"] = server;
-        config["Target:Port"] = port;
-        config["Target:User"] = user;
-        config["Target:Password"] = password;
-        foreach (var prop in mysqlProps)
-            config[$"Target:ConnectionProperties:{prop.Key}"] = prop.Value;
-        // Product-side connections the quench opens per target DB are non-pooled too (same ceiling reason).
-        config["Target:ConnectionProperties:Pooling"] = "false";
-        config["ScriptTokens:MainDB"] = _integrationMainDb;
-        config["ScriptTokens:SecondaryDB"] = _integrationSecondaryDb;
-
         CreateTestDatabases();
 
-        // Register cleanup on process exit for when tests are run from other assemblies
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Cleanup();
     }
 
@@ -124,28 +111,23 @@ public class FixtureSetup
 
     private void CreateTestDatabases()
     {
-        // TestUser has been granted CREATE/DROP and SYSTEM_USER privileges via docker init script
-        using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MariaDb).GetDbConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
 
-        // Create test databases
         cmd.CommandText = $"CREATE DATABASE IF NOT EXISTS `{_integrationSecondaryDb}`;";
         cmd.ExecuteNonQuery();
 
         cmd.CommandText = $"CREATE DATABASE IF NOT EXISTS `{_integrationMainDb}`;";
         cmd.ExecuteNonQuery();
 
-        // Deploy ForgeKindler to main database
         conn.ChangeDatabase(_integrationMainDb);
-        ForgeKindler.KindleTheForge(cmd, Platform.MySQL);
+        ForgeKindler.KindleTheForge(cmd, Platform.MariaDb);
 
-        // Create test tables that mirror Sakila structure for integration tests
         MySqlFamilyTestSchema.Create(cmd, _integrationMainDb);
 
-        // Deploy ForgeKindler to secondary database
         conn.ChangeDatabase(_integrationSecondaryDb);
-        ForgeKindler.KindleTheForge(cmd, Platform.MySQL);
+        ForgeKindler.KindleTheForge(cmd, Platform.MariaDb);
 
         conn.Close();
     }
@@ -154,14 +136,14 @@ public class FixtureSetup
     {
         dbName = dbName ?? throw new ArgumentNullException(nameof(dbName));
         var uniqueSegment = Guid.NewGuid().ToString().Replace("-", "_").Substring(0, 8);
-        return $"{dbName}_Test_{DateTime.Now:yyyyMMdd_HHmmss}_{uniqueSegment}";
+        return $"{dbName}_MariaTest_{DateTime.Now:yyyyMMdd_HHmmss}_{uniqueSegment}";
     }
 
     private void DropTestDatabases()
     {
         try
         {
-            using var conn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString);
+            using var conn = DbConnectionFactory.ForPlatform(Platform.MariaDb).GetDbConnection(_connectionString);
             conn.Open();
             using var cmd = conn.CreateCommand();
 
@@ -183,18 +165,12 @@ public class FixtureSetup
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>
-    /// Gets a connection string for the main test database.
-    /// </summary>
     public static string GetMainDbConnectionString()
     {
         EnsureInitialized();
         return _connectionString + $"Database={_integrationMainDb};";
     }
 
-    /// <summary>
-    /// Gets a connection string for the secondary test database.
-    /// </summary>
     public static string GetSecondaryDbConnectionString()
     {
         EnsureInitialized();

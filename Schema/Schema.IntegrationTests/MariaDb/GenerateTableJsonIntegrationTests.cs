@@ -4,17 +4,17 @@ using NUnit.Framework;
 using Schema.Domain;
 using Schema.IntegrationTests.Shared;
 
-namespace Schema.IntegrationTests.MySQL;
+namespace Schema.IntegrationTests.MariaDb;
 
 /// <summary>
-/// MySQL binding of the shared GenerateTableJSON integration tests.
+/// MariaDb binding of the shared GenerateTableJSON integration tests.
 /// </summary>
-[Category("MySQL")]
+[Category("MariaDb")]
 [TestFixture]
 [Category("Integration")]
 public class GenerateTableJsonIntegrationTests : GenerateTableJsonSharedTests
 {
-    protected override Platform Platform => Platform.MySQL;
+    protected override Platform Platform => Platform.MariaDb;
     protected override string MainDb => FixtureSetup.MainDb;
     protected override string MainConnectionString => FixtureSetup.GetMainDbConnectionString();
 }
