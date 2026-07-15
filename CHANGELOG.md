@@ -4,6 +4,12 @@ All notable changes to SchemaSmith Community Edition are documented here.
 
 For full release details and download links, see [GitHub Releases](https://github.com/Schema-Smith/SchemaSmith/releases).
 
+## [Unreleased]
+
+### Added
+
+- **MariaDB — a first-class supported platform.** SchemaSmith now manages MariaDB (10.6–11.x) alongside SQL Server, PostgreSQL, and MySQL, with full MySQL-equivalent coverage across SchemaQuench, SchemaTongs, and DataTongs. MariaDB is implemented as a MySQL variant — it reuses the MySQL comparison/DDL engine and adds targeted overrides only where MariaDB's metadata or DDL actually diverges: `ALTER TABLE … DROP CONSTRAINT` (MariaDB) vs `DROP CHECK` (MySQL 8.0) for check constraints, `IGNORED` vs `INVISIBLE` for hidden indexes, the `IGNORED`/`IS_VISIBLE` index-visibility metadata column, integer display-width reporting, `COLUMN_DEFAULT` quoting, and MariaDB 11.4's new `utf8mb4_uca1400_ai_ci` default collation in FK-aware data delivery. Declare `"Platform": "MariaDb"` in `Product.json`; everything else — packages, tokens, templates, fan-out, checkpoint/resume, WhatIf — works exactly as it does for MySQL. MariaDB-only features (SEQUENCE objects, system-versioned/temporal tables, native `UUID`) are deferred follow-ups. — #351
+
 ## [v2.3.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.3.0) — 2026-07-13
 
 ### Added
