@@ -1,0 +1,172 @@
+{
+  "Name": "`film`",
+  "Columns": [
+    {
+      "Name": "`film_id`",
+      "DataType": "int unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`title`",
+      "DataType": "varchar(255)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`description`",
+      "DataType": "text",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`release_year`",
+      "DataType": "year",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`language_id`",
+      "DataType": "int unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`original_language_id`",
+      "DataType": "int unsigned",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rental_duration`",
+      "DataType": "tinyint unsigned",
+      "Default": "3",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rental_rate`",
+      "DataType": "decimal(4,2)",
+      "Default": "4.99",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`length`",
+      "DataType": "smallint unsigned",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`replacement_cost`",
+      "DataType": "decimal(5,2)",
+      "Default": "19.99",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rating`",
+      "DataType": "enum('G','PG','PG-13','R','NC-17')",
+      "Nullable": true,
+      "Default": "'G'",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`special_features`",
+      "DataType": "set('TRAILERS','COMMENTARIES','DELETED SCENES','BEHIND THE SCENES')",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`last_update`",
+      "DataType": "timestamp",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "idx_fk_language_id",
+      "IndexColumns": "`language_id`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "idx_fk_original_language_id",
+      "IndexColumns": "`original_language_id`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "idx_title",
+      "IndexColumns": "`title`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`film_id`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_film_language",
+      "Columns": "`language_id`",
+      "RelatedTable": "`language`",
+      "RelatedColumns": "`language_id`",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "fk_film_language_original",
+      "Columns": "`original_language_id`",
+      "RelatedTable": "`language`",
+      "RelatedColumns": "`language_id`",
+      "DeleteAction": "RESTRICT",
+      "UpdateAction": "CASCADE",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb3_general_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb3",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 1001,
+  "DataDelivery": {
+    "ContentFile": "data/film.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`film_id`"
+  }
+}

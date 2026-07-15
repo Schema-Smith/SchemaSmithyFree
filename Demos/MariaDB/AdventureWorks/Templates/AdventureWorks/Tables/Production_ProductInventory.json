@@ -1,0 +1,119 @@
+{
+  "Name": "`Production_ProductInventory`",
+  "Columns": [
+    {
+      "Name": "`Bin`",
+      "DataType": "tinyint unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`LocationID`",
+      "DataType": "smallint",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Quantity`",
+      "DataType": "smallint",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Shelf`",
+      "DataType": "varchar(10)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_Production_ProductInventory_LocationID",
+      "IndexColumns": "`LocationID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductID`,`LocationID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Production_ProductInventory_LocationID",
+      "Columns": "`LocationID`",
+      "RelatedTable": "`Production_Location`",
+      "RelatedColumns": "`LocationID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_ProductInventory_ProductID",
+      "Columns": "`ProductID`",
+      "RelatedTable": "`Production_Product`",
+      "RelatedColumns": "`ProductID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Production_ProductInventory_Bin",
+      "Expression": "((`Bin` >= 0) and (`Bin` <= 100))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Production_ProductInventory_Shelf",
+      "Expression": "(`Shelf` REGEXP '^[A-Za-z]$' or (`Shelf` = 'N/A'))",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Production_ProductInventory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ProductID`,`LocationID`"
+  }
+}

@@ -1,0 +1,100 @@
+name: schemasmith-mariadb-demo
+
+services:
+  quench-adventureworks:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MARIADB_USER}
+      - SmithySettings_Target__Password=${MARIADB_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./AdventureWorks:/metadata
+    depends_on:
+      demoserver:
+        condition: service_healthy
+
+  quench-chinook:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MARIADB_USER}
+      - SmithySettings_Target__Password=${MARIADB_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Chinook:/metadata
+    depends_on:
+      quench-adventureworks: # Serialize to avoid kindling race on shared TestMain database
+        condition: service_completed_successfully
+
+  quench-northwind:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MARIADB_USER}
+      - SmithySettings_Target__Password=${MARIADB_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Northwind:/metadata
+    depends_on:
+      quench-chinook: # Serialize to avoid kindling race on shared TestMain database
+        condition: service_completed_successfully
+
+  quench-sakila:
+    build:
+      context: ../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=${MARIADB_USER}
+      - SmithySettings_Target__Password=${MARIADB_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Sakila:/metadata
+    depends_on:
+      quench-northwind: # Serialize to avoid kindling race on shared TestMain database
+        condition: service_completed_successfully
+
+  demoserver:
+    image: mariadb:11.4
+    # MariaDB's default max_allowed_packet is smaller than MySQL 8's 64M; raise it to parity so
+    # large single-table data deliveries (delivered as one JSON payload) aren't rejected. See the
+    # MariaDB delivery note in the end-user docs.
+    command: --log-bin-trust-function-creators=1 --max-connections=2000 --max-allowed-packet=64M
+    ports:
+      - "${MARIADB_PORT:-3306}:3306"
+    environment:
+      MARIADB_DATABASE: TestMain
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -u ${MARIADB_USER} -p${MARIADB_PASSWORD} -e \"SELECT 1 FROM TestMain._init_complete LIMIT 1\" 2>/dev/null | grep -q 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    volumes:
+      - ./docker/init:/docker-entrypoint-initdb.d
+
+  completed:
+    image: alpine
+    entrypoint: ["echo"]
+    command: ["completed"]
+    depends_on:
+      demoserver:
+        condition: service_healthy
+      quench-adventureworks:
+        condition: service_completed_successfully
+      quench-chinook:
+        condition: service_completed_successfully
+      quench-northwind:
+        condition: service_completed_successfully
+      quench-sakila:
+        condition: service_completed_successfully

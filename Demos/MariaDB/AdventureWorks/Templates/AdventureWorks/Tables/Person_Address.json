@@ -1,0 +1,139 @@
+{
+  "Name": "`Person_Address`",
+  "Columns": [
+    {
+      "Name": "`AddressID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`AddressLine1`",
+      "DataType": "varchar(60)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`AddressLine2`",
+      "DataType": "varchar(60)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`City`",
+      "DataType": "varchar(30)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`PostalCode`",
+      "DataType": "varchar(15)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`SpatialLocation`",
+      "DataType": "text",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`StateProvinceID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_Address_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_Address_AddressLine1_AddressLine2_City_StateProvinceID_Postal",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`AddressLine1`,`AddressLine2`,`City`,`StateProvinceID`,`PostalCode`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_Address_StateProvinceID",
+      "IndexColumns": "`StateProvinceID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`AddressID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Person_Address_StateProvinceID",
+      "Columns": "`StateProvinceID`",
+      "RelatedTable": "`Person_StateProvince`",
+      "RelatedColumns": "`StateProvinceID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 32522,
+  "DataDelivery": {
+    "ContentFile": "data/Person_Address.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`AddressID`"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "Name": "`Production_ProductModelIllustration`",
+  "Columns": [
+    {
+      "Name": "`IllustrationID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductModelID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_Production_ProductModelIllustration_IllustrationID",
+      "IndexColumns": "`IllustrationID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductModelID`,`IllustrationID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Production_ProductModelIllustration_IllustrationID",
+      "Columns": "`IllustrationID`",
+      "RelatedTable": "`Production_Illustration`",
+      "RelatedColumns": "`IllustrationID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_ProductModelIllustration_ProductModelID",
+      "Columns": "`ProductModelID`",
+      "RelatedTable": "`Production_ProductModel`",
+      "RelatedColumns": "`ProductModelID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Production_ProductModelIllustration.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ProductModelID`,`IllustrationID`"
+  }
+}

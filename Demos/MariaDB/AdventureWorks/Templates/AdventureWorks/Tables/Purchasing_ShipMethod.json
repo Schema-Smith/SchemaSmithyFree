@@ -1,0 +1,106 @@
+{
+  "Name": "`Purchasing_ShipMethod`",
+  "Columns": [
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Name`",
+      "DataType": "varchar(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ShipBase`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ShipMethodID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`ShipRate`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_ShipMethod_Name",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`Name`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "AK_ShipMethod_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ShipMethodID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Purchasing_ShipMethod_ShipBase",
+      "Expression": "(`ShipBase` > 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_ShipMethod_ShipRate",
+      "Expression": "(`ShipRate` > 0.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 6,
+  "DataDelivery": {
+    "ContentFile": "data/Purchasing_ShipMethod.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ShipMethodID`"
+  }
+}

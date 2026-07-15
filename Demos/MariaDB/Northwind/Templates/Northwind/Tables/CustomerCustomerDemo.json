@@ -1,0 +1,67 @@
+{
+  "Name": "`CustomerCustomerDemo`",
+  "Columns": [
+    {
+      "Name": "`CustomerID`",
+      "DataType": "char(5)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`CustomerTypeID`",
+      "DataType": "char(10)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "CharacterSet": "utf8mb4"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_CustomerCustomerDemo",
+      "IndexColumns": "`CustomerTypeID`",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`CustomerID`,`CustomerTypeID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_CustomerCustomerDemo",
+      "Columns": "`CustomerTypeID`",
+      "RelatedTable": "`CustomerDemographics`",
+      "RelatedColumns": "`CustomerTypeID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_CustomerCustomerDemo_Customers",
+      "Columns": "`CustomerID`",
+      "RelatedTable": "`Customers`",
+      "RelatedColumns": "`CustomerID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": []
+}

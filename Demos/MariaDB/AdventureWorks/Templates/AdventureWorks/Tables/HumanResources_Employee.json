@@ -1,0 +1,208 @@
+{
+  "Name": "`HumanResources_Employee`",
+  "Columns": [
+    {
+      "Name": "`BirthDate`",
+      "DataType": "date",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`BusinessEntityID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`CurrentFlag`",
+      "DataType": "tinyint(1)",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Gender`",
+      "DataType": "char(1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`HireDate`",
+      "DataType": "date",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`JobTitle`",
+      "DataType": "varchar(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`LoginID`",
+      "DataType": "varchar(256)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`MaritalStatus`",
+      "DataType": "char(1)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`NationalIDNumber`",
+      "DataType": "varchar(15)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`OrganizationNode`",
+      "DataType": "varchar(255)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`SalariedFlag`",
+      "DataType": "tinyint(1)",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SickLeaveHours`",
+      "DataType": "smallint",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`VacationHours`",
+      "DataType": "smallint",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_Employee_LoginID",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`LoginID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "AK_Employee_NationalIDNumber",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`NationalIDNumber`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "AK_Employee_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_Employee_OrganizationNode",
+      "IndexColumns": "`OrganizationNode`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`BusinessEntityID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_HumanResources_Employee_BusinessEntityID",
+      "Columns": "`BusinessEntityID`",
+      "RelatedTable": "`Person_Person`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_HumanResources_Employee_Gender",
+      "Expression": "((upper(`Gender`) = 'F') or (upper(`Gender`) = 'M'))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_HumanResources_Employee_MaritalStatus",
+      "Expression": "((upper(`MaritalStatus`) = 'S') or (upper(`MaritalStatus`) = 'M'))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_HumanResources_Employee_SickLeaveHours",
+      "Expression": "((`SickLeaveHours` >= 0) and (`SickLeaveHours` <= 120))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_HumanResources_Employee_VacationHours",
+      "Expression": "((`VacationHours` >= -(40)) and (`VacationHours` <= 240))",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources_Employee.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`BusinessEntityID`"
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "Name": "`Sales_SalesTerritory`",
+  "Columns": [
+    {
+      "Name": "`CostLastYear`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`CostYTD`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`CountryRegionCode`",
+      "DataType": "varchar(3)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Group`",
+      "DataType": "varchar(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Name`",
+      "DataType": "varchar(50)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`SalesLastYear`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SalesYTD`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`TerritoryID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_SalesTerritory_Name",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`Name`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "AK_SalesTerritory_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Sales_SalesTerritory_CountryRegionCode",
+      "IndexColumns": "`CountryRegionCode`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`TerritoryID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Sales_SalesTerritory_CountryRegionCode",
+      "Columns": "`CountryRegionCode`",
+      "RelatedTable": "`Person_CountryRegion`",
+      "RelatedColumns": "`CountryRegionCode`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Sales_SalesTerritory_CostLastYear",
+      "Expression": "(`CostLastYear` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesTerritory_CostYTD",
+      "Expression": "(`CostYTD` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesTerritory_SalesLastYear",
+      "Expression": "(`SalesLastYear` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesTerritory_SalesYTD",
+      "Expression": "(`SalesYTD` >= 0.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 11,
+  "DataDelivery": {
+    "ContentFile": "data/Sales_SalesTerritory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`TerritoryID`"
+  }
+}

@@ -1,0 +1,200 @@
+{
+  "Name": "`Purchasing_PurchaseOrderHeader`",
+  "Columns": [
+    {
+      "Name": "`EmployeeID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Freight`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`OrderDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`PurchaseOrderID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`RevisionNumber`",
+      "DataType": "tinyint unsigned",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ShipDate`",
+      "DataType": "datetime",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ShipMethodID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Status`",
+      "DataType": "tinyint unsigned",
+      "Default": "1",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SubTotal`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`TaxAmt`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`VendorID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`TotalDue`",
+      "DataType": "decimal(19,4)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "STORED",
+      "GenerationExpression": "coalesce(((`SubTotal` + `TaxAmt`) + `Freight`),0)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_Purchasing_PurchaseOrderHeader_ShipMethodID",
+      "IndexColumns": "`ShipMethodID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_PurchaseOrderHeader_EmployeeID",
+      "IndexColumns": "`EmployeeID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_PurchaseOrderHeader_VendorID",
+      "IndexColumns": "`VendorID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`PurchaseOrderID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Purchasing_PurchaseOrderHeader_EmployeeID",
+      "Columns": "`EmployeeID`",
+      "RelatedTable": "`HumanResources_Employee`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Purchasing_PurchaseOrderHeader_ShipMethodID",
+      "Columns": "`ShipMethodID`",
+      "RelatedTable": "`Purchasing_ShipMethod`",
+      "RelatedColumns": "`ShipMethodID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Purchasing_PurchaseOrderHeader_VendorID",
+      "Columns": "`VendorID`",
+      "RelatedTable": "`Purchasing_Vendor`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_PurchaseOrderHeader_ShipDate",
+      "Expression": "((`ShipDate` >= `OrderDate`) or (`ShipDate` is null))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_PurchaseOrderHeader_Freight",
+      "Expression": "(`Freight` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_PurchaseOrderHeader_Status",
+      "Expression": "((`Status` >= 1) and (`Status` <= 4))",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_PurchaseOrderHeader_SubTotal",
+      "Expression": "(`SubTotal` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_PurchaseOrderHeader_TaxAmt",
+      "Expression": "(`TaxAmt` >= 0.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 4013,
+  "DataDelivery": {
+    "ContentFile": "data/Purchasing_PurchaseOrderHeader.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`PurchaseOrderID`"
+  }
+}

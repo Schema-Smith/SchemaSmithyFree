@@ -1,0 +1,103 @@
+{
+  "Name": "`Production_ProductModelProductDescriptionCulture`",
+  "Columns": [
+    {
+      "Name": "`CultureID`",
+      "DataType": "char(6)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductDescriptionID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductModelID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_Production_ProductModelProductDescriptionCulture_CultureID",
+      "IndexColumns": "`CultureID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Production_ProductModelProductDescriptionCulture_ProductDescr",
+      "IndexColumns": "`ProductDescriptionID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductModelID`,`ProductDescriptionID`,`CultureID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Production_ProductModelProductDescriptionCulture_CultureID",
+      "Columns": "`CultureID`",
+      "RelatedTable": "`Production_Culture`",
+      "RelatedColumns": "`CultureID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_ProductModelProductDescriptionCulture_ProductDescr",
+      "Columns": "`ProductDescriptionID`",
+      "RelatedTable": "`Production_ProductDescription`",
+      "RelatedColumns": "`ProductDescriptionID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_ProductModelProductDescriptionCulture_ProductModel",
+      "Columns": "`ProductModelID`",
+      "RelatedTable": "`Production_ProductModel`",
+      "RelatedColumns": "`ProductModelID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Production_ProductModelProductDescriptionCulture.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ProductModelID`,`ProductDescriptionID`,`CultureID`"
+  }
+}

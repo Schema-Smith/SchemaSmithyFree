@@ -1,0 +1,147 @@
+{
+  "Name": "`Track`",
+  "Columns": [
+    {
+      "Name": "`TrackId`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`Name`",
+      "DataType": "varchar(200)",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`AlbumId`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`MediaTypeId`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`GenreId`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Composer`",
+      "DataType": "varchar(220)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb3_general_ci",
+      "CharacterSet": "utf8mb3"
+    },
+    {
+      "Name": "`Milliseconds`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Bytes`",
+      "DataType": "int",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`UnitPrice`",
+      "DataType": "decimal(10,2)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "IFK_TrackAlbumId",
+      "IndexColumns": "`AlbumId`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IFK_TrackGenreId",
+      "IndexColumns": "`GenreId`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IFK_TrackMediaTypeId",
+      "IndexColumns": "`MediaTypeId`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`TrackId`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_TrackAlbumId",
+      "Columns": "`AlbumId`",
+      "RelatedTable": "`Album`",
+      "RelatedColumns": "`AlbumId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_TrackGenreId",
+      "Columns": "`GenreId`",
+      "RelatedTable": "`Genre`",
+      "RelatedColumns": "`GenreId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_TrackMediaTypeId",
+      "Columns": "`MediaTypeId`",
+      "RelatedTable": "`MediaType`",
+      "RelatedColumns": "`MediaTypeId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 3504,
+  "DataDelivery": {
+    "ContentFile": "data/Track.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`TrackId`"
+  }
+}

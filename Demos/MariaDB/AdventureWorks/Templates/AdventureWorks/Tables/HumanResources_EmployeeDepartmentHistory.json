@@ -1,0 +1,120 @@
+{
+  "Name": "`HumanResources_EmployeeDepartmentHistory`",
+  "Columns": [
+    {
+      "Name": "`BusinessEntityID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`DepartmentID`",
+      "DataType": "smallint",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`EndDate`",
+      "DataType": "date",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ShiftID`",
+      "DataType": "tinyint unsigned",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`StartDate`",
+      "DataType": "date",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "IX_EmployeeDepartmentHistory_DepartmentID",
+      "IndexColumns": "`DepartmentID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_EmployeeDepartmentHistory_ShiftID",
+      "IndexColumns": "`ShiftID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`BusinessEntityID`,`StartDate`,`DepartmentID`,`ShiftID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_HumanResources_EmployeeDepartmentHistory_BusinessEntityID",
+      "Columns": "`BusinessEntityID`",
+      "RelatedTable": "`HumanResources_Employee`",
+      "RelatedColumns": "`BusinessEntityID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_HumanResources_EmployeeDepartmentHistory_DepartmentID",
+      "Columns": "`DepartmentID`",
+      "RelatedTable": "`HumanResources_Department`",
+      "RelatedColumns": "`DepartmentID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_HumanResources_EmployeeDepartmentHistory_ShiftID",
+      "Columns": "`ShiftID`",
+      "RelatedTable": "`HumanResources_Shift`",
+      "RelatedColumns": "`ShiftID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_EmployeeDepartmentHistory_EndDate",
+      "Expression": "((`EndDate` >= `StartDate`) or (`EndDate` is null))",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/HumanResources_EmployeeDepartmentHistory.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`BusinessEntityID`,`StartDate`,`DepartmentID`,`ShiftID`"
+  }
+}

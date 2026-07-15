@@ -1,0 +1,1 @@
+[{"Name": "Day", "EndTime": "15:00:00", "ShiftID": 1, "StartTime": "07:00:00", "ModifiedDate": "2008-04-30T00:00:00"}, {"Name": "Evening", "EndTime": "23:00:00", "ShiftID": 2, "StartTime": "15:00:00", "ModifiedDate": "2008-04-30T00:00:00"}, {"Name": "Night", "EndTime": "07:00:00", "ShiftID": 3, "StartTime": "23:00:00", "ModifiedDate": "2008-04-30T00:00:00"}]

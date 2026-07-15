@@ -1,0 +1,85 @@
+{
+  "Name": "`Production_ProductProductPhoto`",
+  "Columns": [
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`Primary`",
+      "DataType": "tinyint(1)",
+      "Default": "0",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductPhotoID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_Production_ProductProductPhoto_ProductPhotoID",
+      "IndexColumns": "`ProductPhotoID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`ProductID`,`ProductPhotoID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Production_ProductProductPhoto_ProductID",
+      "Columns": "`ProductID`",
+      "RelatedTable": "`Production_Product`",
+      "RelatedColumns": "`ProductID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Production_ProductProductPhoto_ProductPhotoID",
+      "Columns": "`ProductPhotoID`",
+      "RelatedTable": "`Production_ProductPhoto`",
+      "RelatedColumns": "`ProductPhotoID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/Production_ProductProductPhoto.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`ProductID`,`ProductPhotoID`"
+  }
+}

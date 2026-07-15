@@ -1,0 +1,3 @@
+DROP VIEW IF EXISTS `Production_vProductAndDescription`;
+CREATE VIEW `Production_vProductAndDescription` AS
+select `p`.`ProductID` AS `ProductID`,`p`.`Name` AS `Name`,`pm`.`Name` AS `ProductModel`,`pmx`.`CultureID` AS `CultureID`,`pd`.`Description` AS `Description` from (((`adventureworks`.`Production_Product` `p` join `adventureworks`.`Production_ProductModel` `pm` on((`p`.`ProductModelID` = `pm`.`ProductModelID`))) join `adventureworks`.`Production_ProductModelProductDescriptionCulture` `pmx` on((`pm`.`ProductModelID` = `pmx`.`ProductModelID`))) join `adventureworks`.`Production_ProductDescription` `pd` on((`pmx`.`ProductDescriptionID` = `pd`.`ProductDescriptionID`)))
