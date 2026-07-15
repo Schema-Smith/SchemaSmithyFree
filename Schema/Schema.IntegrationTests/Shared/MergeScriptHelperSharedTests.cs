@@ -2,10 +2,12 @@
 
 using System.Data;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using NUnit.Framework;
 using Schema.DataAccess;
+using Schema.Delivery;
 using Schema.Domain;
 using Schema.Utility;
 
@@ -80,6 +82,52 @@ CREATE TABLE `{_testDb}`.`{tableName.Replace("`", "``")}` (
         finally
         {
             command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName.Replace("`", "``")}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void BuildDeferredMergeScript_TextColumn_UsesTextInJsonTableAndCanBeExecuted()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"zz_deferred_text_{Guid.NewGuid():N}";
+
+        try
+        {
+            // A nullable self-referencing FK makes ParentId a *deferred* column, which routes delivery
+            // through the deferred merge builder. `Notes` is a TEXT column whose JSON_TABLE column type
+            // used to be emitted as CHAR(65535) — accepted by MySQL but rejected by MariaDB with
+            // "Column length too big for column 'Notes' (max = 255); use BLOB or TEXT instead".
+            command.CommandText = $@"
+CREATE TABLE `{_testDb}`.`{tableName}` (
+    id INT PRIMARY KEY,
+    ParentId INT NULL,
+    Notes TEXT NULL,
+    CONSTRAINT `fk_{tableName}_self` FOREIGN KEY (ParentId) REFERENCES `{_testDb}`.`{tableName}`(id)
+)";
+            command.ExecuteNonQuery();
+
+            var helper = new MergeScriptHelperAdapter(Platform);
+            var tableData = @"[{""id"":1,""ParentId"":null,""Notes"":""hello""}]";
+            var script = DeferredMergeBuilder.Build(helper, command, "MySQL", _testDb, tableName,
+                tableData, "`id`", false, new List<string> { "ParentId" });
+
+            // TEXT must be read as TEXT in JSON_TABLE, not an oversized CHAR that MariaDB rejects.
+            Assert.That(script, Does.Contain("`Notes` TEXT PATH '$.Notes'"));
+
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrWhiteSpace(batch)) continue;
+                command.CommandText = batch;
+                command.ExecuteNonQuery();
+            }
+
+            command.CommandText = $"SELECT Notes FROM `{_testDb}`.`{tableName}` WHERE id = 1";
+            Assert.That(command.ExecuteScalar()?.ToString(), Is.EqualTo("hello"));
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName}`";
             command.ExecuteNonQuery();
         }
     }

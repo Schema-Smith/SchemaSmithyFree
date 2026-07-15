@@ -325,6 +325,10 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
 
             // MySQL JSON_TABLE COLUMNS clause requires real column types — not CAST aliases
             // like SIGNED/UNSIGNED. Integer types must be spelled out (INT, BIGINT, etc.).
+            // Character/text types mirror the non-deferred path (GetMySqlTypeForJsonTable): CHAR maxes
+            // at 255 and utf8mb4 VARCHAR at 16383. The old `CHAR(maxLen)` default emitted e.g. CHAR(65535)
+            // for a TEXT column, which MySQL tolerated in JSON_TABLE but MariaDB rejects with
+            // "Column length too big ... (max = 255); use BLOB or TEXT instead". Read oversized/text as TEXT.
             var jsonType = dataType switch
             {
                 "tinyint" or "smallint" or "mediumint" or "int" or "integer" or "bigint" => dataType.ToUpperInvariant(),
@@ -335,7 +339,11 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
                 "time" => "TIME",
                 "year" => "YEAR",
                 "json" => "JSON",
-                _ => maxLen > 0 ? $"CHAR({maxLen})" : "CHAR(65535)"
+                "tinytext" or "text" or "mediumtext" or "longtext"
+                    or "binary" or "varbinary" or "tinyblob" or "blob" or "mediumblob" or "longblob" => "TEXT",
+                "char" => maxLen is > 0 and <= 255 ? $"CHAR({maxLen})" : "TEXT",
+                "varchar" => maxLen is > 0 and <= 16383 ? $"VARCHAR({maxLen})" : "TEXT",
+                _ => maxLen is > 0 and <= 255 ? $"CHAR({maxLen})" : "TEXT"
             };
 
             var isGeometry = dataType is "point" or "linestring" or "polygon" or "geometry"
