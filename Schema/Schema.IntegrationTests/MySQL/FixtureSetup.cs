@@ -85,8 +85,14 @@ public class FixtureSetup
         // across those per-DB pools otherwise pile up past the MySQL server's max_connections ceiling.
         _connectionString = $"Server={server};Port={port};User={user};Password={password};AllowUserVariables=true;Pooling=false;{extraProps}";
 
-        _integrationSecondaryDb = GenerateUniqueDBName(config["ScriptTokens:SecondaryDB"] ?? "TestSecondary");
-        _integrationMainDb = GenerateUniqueDBName(config["ScriptTokens:MainDB"] ?? "TestMain");
+        // Use the literal base token, NOT config["ScriptTokens:*"]: this method overwrites that key
+        // below with the full generated name, and ConfigHelper returns a shared config instance reused
+        // by the sibling MariaDb fixture. Reading the key back would compound base-on-base
+        // (`TestMain_MariaTest_..._Test_...`) past MySQL's 64-char identifier limit when both the MySQL
+        // and MariaDb categories run in one process (error 1059). The `_Test_`/`_MariaTest_` prefix in
+        // GenerateUniqueDBName already keeps the two engines' database names distinct.
+        _integrationSecondaryDb = GenerateUniqueDBName("TestSecondary");
+        _integrationMainDb = GenerateUniqueDBName("TestMain");
 
         // Map MySQL config to Target:* keys used by tools (mutate existing config, don't replace —
         // replacing would lose SqlServer:* and PostgreSQL:* keys needed by other test assemblies)
