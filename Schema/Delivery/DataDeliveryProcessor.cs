@@ -179,6 +179,12 @@ public class DataDeliveryProcessor : IDataDelivery
         // (dependency retry loop + circular-fallback loop). A delivery that already succeeded on a
         // prior attempt must not re-run when a *sibling* delivery's failure re-queues the table.
         var deliverySucceeded = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+        // Record (don't log) the FIRST failure reason per table. First-pass failures are usually
+        // transient dependency-ordering ones that succeed on retry, so logging them would be noise on a
+        // green deploy. But a single genuine failure can leave the shared connection unusable, making
+        // *later* tables report that downstream symptom instead of their own root cause. Capturing the
+        // first reason here lets the permanent-failure pass below report the real root, not the cascade.
+        var firstFailureReason = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
         var lastCount = -1;
 
         while (tablesToDeliver.Count > 0 && tablesToDeliver.Count != lastCount)
@@ -201,8 +207,11 @@ public class DataDeliveryProcessor : IDataDelivery
                 {
                     DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Units, false, artifactWritten, deliverySucceeded, appliedByTable[table]);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    var failedKey = DataDeliveryHelper.GetTableKey(table, context.Platform);
+                    if (!firstFailureReason.ContainsKey(failedKey))
+                        firstFailureReason[failedKey] = ex.Message;
                     remaining.Add(table);
                 }
             }
@@ -226,8 +235,12 @@ public class DataDeliveryProcessor : IDataDelivery
             }
             catch (Exception ex)
             {
-                logError($"    Error delivering {DataDeliveryHelper.GetTableKey(table, context.Platform)}: {ex.Message}");
-                permanentFailures.Add(DataDeliveryHelper.GetTableKey(table, context.Platform));
+                var failedKey = DataDeliveryHelper.GetTableKey(table, context.Platform);
+                // Prefer the first recorded failure reason: it is the real root, captured before any
+                // connection-poisoning cascade rewrote later attempts into a downstream symptom.
+                var rootReason = firstFailureReason.TryGetValue(failedKey, out var r) ? r : ex.Message;
+                logError($"    Error delivering {failedKey}: {rootReason}");
+                permanentFailures.Add(failedKey);
             }
         }
 
