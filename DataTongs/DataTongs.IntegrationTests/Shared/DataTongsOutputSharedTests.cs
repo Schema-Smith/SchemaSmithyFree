@@ -253,7 +253,6 @@ public abstract class DataTongsOutputSharedTests
             command.ExecuteNonQuery();
 
             // Generate merge script (Upsert: mergeUpdate=true, mergeDelete=false)
-            var selectColumns = _dataTongs.GetSelectColumns(command, _testDb, tableName);
             var tableData = @"[{""code"":""A01"",""name"":""Updated"",""value"":20.00},{""code"":""A02"",""name"":""New"",""value"":30.00}]";
             var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName, tableData, "`code`",
                 mergeUpdate: true, mergeDelete: false, disableTriggers: false,
@@ -304,7 +303,6 @@ public abstract class DataTongsOutputSharedTests
             command.ExecuteNonQuery();
 
             // Generate REPLACE script (mergeUpdate=true, mergeDelete=true for full sync)
-            var selectColumns = _dataTongs.GetSelectColumns(command, _testDb, tableName);
             var tableData = @"[{""id"":1,""name"":""Replaced""}]";
             var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName, tableData, "`id`",
                 mergeUpdate: true, mergeDelete: true, disableTriggers: false,
@@ -351,7 +349,6 @@ public abstract class DataTongsOutputSharedTests
             command.ExecuteNonQuery();
 
             // Generate INSERT IGNORE script (Insert: mergeUpdate=false, mergeDelete=false)
-            var selectColumns = _dataTongs.GetSelectColumns(command, _testDb, tableName);
             var tableData = @"[{""id"":1,""name"":""Ignored""},{""id"":2,""name"":""New""}]";
             var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName, tableData, "`id`",
                 mergeUpdate: false, mergeDelete: false, disableTriggers: false,
