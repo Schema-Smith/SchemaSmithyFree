@@ -17,11 +17,16 @@ services:
     ports:
       - "11433:1433"
     healthcheck:
-      test: ["CMD-SHELL", "grep -q 'SQL Server is now ready for client connections' /var/opt/mssql/log/errorlog 2>/dev/null"]
+      # "ready for client connections" is logged when master finishes recovery,
+      # but on first boot sa auth can still fail for minutes while msdb/model
+      # upgrade (the stock image ships binaries newer than its templatedata).
+      # Gate on an actual authenticated query so sqlserver-init and the learner
+      # only start once the engine is genuinely usable.
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
-      retries: 30
-      start_period: 40s
+      retries: 60
+      start_period: 90s
 
   # One-shot: create the `learn` database on SQL Server so all three engines
   # have it ready (PostgreSQL and MySQL auto-create theirs via env vars; SQL
@@ -37,7 +42,7 @@ services:
       - bash
       - -c
       - |
-        for i in $$(seq 1 40); do
+        for i in $$(seq 1 60); do
           /opt/mssql-tools/bin/sqlcmd -S sqlserver -U sa -P 'Learn!Passw0rd' -Q "IF DB_ID('learn') IS NULL CREATE DATABASE learn" && exit 0
           echo "waiting for SQL Server to accept the sa login... ($$i)"
           sleep 3

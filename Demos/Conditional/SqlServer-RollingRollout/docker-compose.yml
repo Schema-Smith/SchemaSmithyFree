@@ -28,9 +28,12 @@ services:
         - "-C"
         - "-Q"
         - "SELECT 1"
+      # A first-boot system-database upgrade on modest hardware can delay a
+      # ready-to-serve engine (and working sa auth) by several minutes.
       interval: 5s
       timeout: 10s
-      retries: 30
+      retries: 60
+      start_period: 90s
     ports:
       - "1444:1433"
 
@@ -40,7 +43,14 @@ services:
       - /bin/bash
       - -c
       - |
-        /opt/mssql-tools18/bin/sqlcmd -S demoserver -U sa -P "${MSSQL_SA_PASSWORD}" -C -i /bootstrap/init-tenants.sql
+        # Retry: even after the healthcheck passes, sa auth can briefly wobble
+        # while a first-boot system-database upgrade finishes settling.
+        for attempt in $$(seq 1 30); do
+          /opt/mssql-tools18/bin/sqlcmd -S demoserver -U sa -P "${MSSQL_SA_PASSWORD}" -C -i /bootstrap/init-tenants.sql && exit 0
+          echo "bootstrap: SQL Server not ready yet, retrying ($$attempt/30)..."
+          sleep 5
+        done
+        echo "bootstrap: gave up waiting for SQL Server" >&2; exit 1
     volumes:
       - ./bootstrap:/bootstrap
     depends_on:

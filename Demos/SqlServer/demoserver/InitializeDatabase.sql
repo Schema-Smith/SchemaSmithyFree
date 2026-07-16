@@ -4,7 +4,10 @@ GO
 PRINT 'Alter the sa login'
 GO
 
-ALTER LOGIN [sa] WITH NAME = [$(MSSQL_SA_USERNAME)]
+-- Guarded so a retried/restarted init is a no-op instead of a hard failure:
+-- once sa has been renamed, the 'sa' principal no longer exists.
+IF EXISTS (SELECT 1 FROM sys.server_principals WHERE name = 'sa')
+    EXEC ('ALTER LOGIN [sa] WITH NAME = [$(MSSQL_SA_USERNAME)]')
 GO
 
 PRINT 'Alter the sa login (done)'

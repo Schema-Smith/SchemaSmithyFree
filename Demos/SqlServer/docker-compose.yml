@@ -93,11 +93,14 @@ services:
       - MSSQL_SA_USERNAME=${MSSQL_SA_USERNAME}
       - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
     healthcheck:
+      # A first-boot system-database upgrade on modest hardware can delay a
+      # ready-to-serve engine by several minutes, so the budget is generous:
+      # ~90s grace + 60 x 5s of retries before the container is called unhealthy.
       test: /tmp/devdatabase/is-ready.sh
       interval: 5s
-      timeout: 3s
-      retries: 30
-      start_period: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 90s
 
   completed:
     image: alpine
