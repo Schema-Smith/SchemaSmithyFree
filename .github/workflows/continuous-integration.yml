@@ -62,6 +62,12 @@ jobs:
       - name: SchemaShears Unit Tests
         run: dotnet test SchemaShears/SchemaShears.UnitTests/SchemaShears.UnitTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --logger trx --results-directory TestResults
 
+      - name: SchemaQuench --Validate Package Linter Tests
+        # The Category=Validate integration tests exercise the offline --Validate package linter and
+        # need no database — they run here rather than in an engine job, which each filter Category=<Engine>
+        # and would otherwise never run them (that gap let SS-STALE-001 schema staleness go undetected).
+        run: dotnet test SchemaQuench/SchemaQuench.IntegrationTests/SchemaQuench.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=Validate" --logger trx --results-directory TestResults
+
       - name: Upload Test Results
         uses: actions/upload-artifact@v7
         if: ${{ always() }}
