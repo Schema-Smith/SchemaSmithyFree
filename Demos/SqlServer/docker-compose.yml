@@ -93,14 +93,16 @@ services:
       - MSSQL_SA_USERNAME=${MSSQL_SA_USERNAME}
       - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
     healthcheck:
-      # A first-boot system-database upgrade on modest hardware can delay a
-      # ready-to-serve engine by several minutes, so the budget is generous:
-      # ~90s grace + 60 x 5s of retries before the container is called unhealthy.
+      # The one-time first-boot system-database upgrade is I/O-bound and can take
+      # 15-20+ minutes on a slow/constrained Docker backend, during which the demo
+      # databases can't be created yet. Budget generously (~20m grace + 60 x 10s)
+      # so the container isn't called unhealthy before init finishes; a fast disk
+      # still flips healthy in seconds and proceeds immediately.
       test: /tmp/devdatabase/is-ready.sh
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 60
-      start_period: 90s
+      start_period: 20m
 
   completed:
     image: alpine

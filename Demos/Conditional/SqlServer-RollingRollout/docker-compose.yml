@@ -28,12 +28,13 @@ services:
         - "-C"
         - "-Q"
         - "SELECT 1"
-      # A first-boot system-database upgrade on modest hardware can delay a
-      # ready-to-serve engine (and working sa auth) by several minutes.
-      interval: 5s
+      # The one-time first-boot system-database upgrade is I/O-bound and can take
+      # 15-20+ minutes on a slow/constrained backend, delaying working sa auth.
+      # Budget generously (~20m grace + 60 x 10s); a fast disk passes in seconds.
+      interval: 10s
       timeout: 10s
       retries: 60
-      start_period: 90s
+      start_period: 20m
     ports:
       - "1444:1433"
 
@@ -45,10 +46,10 @@ services:
       - |
         # Retry: even after the healthcheck passes, sa auth can briefly wobble
         # while a first-boot system-database upgrade finishes settling.
-        for attempt in $$(seq 1 30); do
+        for attempt in $$(seq 1 180); do
           /opt/mssql-tools18/bin/sqlcmd -S demoserver -U sa -P "${MSSQL_SA_PASSWORD}" -C -i /bootstrap/init-tenants.sql && exit 0
-          echo "bootstrap: SQL Server not ready yet, retrying ($$attempt/30)..."
-          sleep 5
+          echo "bootstrap: SQL Server not ready yet, retrying ($$attempt/180)..."
+          sleep 10
         done
         echo "bootstrap: gave up waiting for SQL Server" >&2; exit 1
     volumes:
