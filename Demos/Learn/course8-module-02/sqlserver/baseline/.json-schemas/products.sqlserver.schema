@@ -66,7 +66,7 @@
     },
     "Platform": {
       "type": "string",
-      "pattern": "Unknown|PostgreSQL|SqlServer|MySQL"
+      "pattern": "Unknown|PostgreSQL|SqlServer|MySQL|MariaDb"
     },
     "MinimumVersion": {
       "type": "string"

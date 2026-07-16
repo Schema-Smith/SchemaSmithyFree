@@ -1,0 +1,9 @@
+{
+  "Name": "`Keeper`",
+  "Columns": [
+    { "Name": "`Id`", "DataType": "INT", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`Id`" }
+  ]
+}

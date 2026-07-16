@@ -1,0 +1,10 @@
+{
+  "Name": "`SalesOrder`",
+  "Extensions": { "BusinessDomain": "Sales", "DataOwner": "revenue-team", "Description": "Customer orders", "RetentionPolicy": "10y" },
+  "Columns": [
+    { "Name": "`OrderId`", "DataType": "INT", "Nullable": false, "Extensions": { "BusinessName": "Order Identifier", "SensitivityLevel": "Internal" } },
+    { "Name": "`CustomerId`", "DataType": "INT", "Nullable": false, "Extensions": { "BusinessName": "Customer Identifier", "SensitivityLevel": "Internal" } },
+    { "Name": "`TotalAmount`", "DataType": "DECIMAL(12,2)", "Nullable": false, "Extensions": { "BusinessName": "Order Total", "SensitivityLevel": "Confidential", "DataSteward": "finance" } }
+  ],
+  "Indexes": [ { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`OrderId`" } ]
+}

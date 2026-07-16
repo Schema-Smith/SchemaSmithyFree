@@ -1,0 +1,16 @@
+{
+  "Target": {
+    "Server": "localhost",
+    "Port": "13307",
+    "User": "datafix_user",
+    "Password": "DataFix!Demo123",
+    "ConnectionProperties": {},
+    "Databases": ["shop_tenant_a"]
+  },
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./Package",
+  "KindleTheForge": false,
+  "UpdateTables": false,
+  "DropTablesRemovedFromProduct": false,
+  "TrackRunOnceMigrations": false
+}

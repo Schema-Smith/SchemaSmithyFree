@@ -1,0 +1,9 @@
+{
+  "Name": "IdentityService",
+  "ValidationScript": "",
+  "MinimumVersion": "8.0",
+  "TemplateOrder": ["Main"],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "MariaDb"
+}

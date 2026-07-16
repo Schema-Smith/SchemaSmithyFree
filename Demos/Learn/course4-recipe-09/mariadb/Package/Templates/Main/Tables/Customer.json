@@ -1,0 +1,10 @@
+{
+  "Name": "`Customer`",
+  "Extensions": { "BusinessDomain": "Identity", "DataOwner": "identity-team", "Description": "Registered customers", "RetentionPolicy": "7y" },
+  "Columns": [
+    { "Name": "`CustomerId`", "DataType": "INT", "Nullable": false, "Extensions": { "BusinessName": "Customer Identifier", "SensitivityLevel": "Internal" } },
+    { "Name": "`Email`", "DataType": "VARCHAR(256)", "Nullable": false, "Extensions": { "BusinessName": "Email Address", "SensitivityLevel": "PII", "DataSteward": "privacy-office" } },
+    { "Name": "`DisplayName`", "DataType": "VARCHAR(100)", "Nullable": true, "Extensions": { "BusinessName": "Display Name", "SensitivityLevel": "Public" } }
+  ],
+  "Indexes": [ { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`CustomerId`" } ]
+}

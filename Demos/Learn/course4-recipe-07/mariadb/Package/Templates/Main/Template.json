@@ -1,0 +1,5 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT schema_name FROM information_schema.schemata WHERE schema_name IN ('cookbook_r7_dev', 'cookbook_r7_main')",
+  "ScriptFolders": []
+}

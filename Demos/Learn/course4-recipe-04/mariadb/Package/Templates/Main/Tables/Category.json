@@ -1,0 +1,9 @@
+{
+  "Name": "`Category`",
+  "Columns": [
+    { "Name": "`CategoryName`", "DataType": "VARCHAR(50)", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`CategoryName`" }
+  ]
+}

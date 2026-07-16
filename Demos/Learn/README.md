@@ -1,8 +1,8 @@
 # SchemaSmith Learn — lab sandbox
 
 The hands-on labs for the [Learn SchemaSmith](https://learn.schemasmith.com) course run against a
-throwaway three-engine database sandbox — SQL Server, PostgreSQL, and MySQL, all at once. Spin it
-up, work through the labs, tear it down.
+throwaway four-engine database sandbox — SQL Server, PostgreSQL, MySQL, and MariaDB, all at once. Spin
+it up, work through the labs, tear it down.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ cd docker
 docker compose up -d
 ```
 
-The first run pulls three database images — give it a few minutes.
+The first run pulls four database images — give it a few minutes.
 
 ## Verify it's ready
 
@@ -34,9 +34,10 @@ minute and run it again — SQL Server in particular takes a little while on fir
 | SQL Server | `localhost` | `11433` | `sa`       | `Learn!Passw0rd` | `learn`  |
 | PostgreSQL | `localhost` | `15432` | `postgres` | `Learn!Passw0rd` | `learn`  |
 | MySQL      | `localhost` | `13306` | `root`     | `Learn!Passw0rd` | `learn`  |
+| MariaDB    | `localhost` | `13307` | `root`     | `Learn!Passw0rd` | `learn`  |
 
-All three engines come up with a `learn` database ready to go. PostgreSQL and MySQL create it from
-environment variables; SQL Server's image can't, so a one-shot `sqlserver-init` service creates it
+All four engines come up with a `learn` database ready to go. PostgreSQL, MySQL, and MariaDB create it
+from environment variables; SQL Server's image can't, so a one-shot `sqlserver-init` service creates it
 once the engine is healthy, then exits.
 
 These credentials are intentionally simple and public. The sandbox is disposable — **never reuse

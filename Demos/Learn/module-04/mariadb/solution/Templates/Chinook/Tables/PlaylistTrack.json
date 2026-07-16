@@ -1,0 +1,54 @@
+{
+  "Name": "`PlaylistTrack`",
+  "Columns": [
+    {
+      "Name": "`PlaylistId`",
+      "DataType": "int"
+    },
+    {
+      "Name": "`TrackId`",
+      "DataType": "int"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_PlaylistTrack_Track",
+      "IndexColumns": "`TrackId`",
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`PlaylistId`,`TrackId`",
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_PlaylistTrack_Playlist",
+      "Columns": "`PlaylistId`",
+      "RelatedTable": "`Playlist`",
+      "RelatedColumns": "`PlaylistId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_PlaylistTrack_Track",
+      "Columns": "`TrackId`",
+      "RelatedTable": "`Track`",
+      "RelatedColumns": "`TrackId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "Engine": "InnoDB",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "FullTextIndexes": []
+}

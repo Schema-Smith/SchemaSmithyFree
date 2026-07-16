@@ -1,0 +1,15 @@
+{
+  "Target": {
+    "Server": "localhost",
+    "Port": "13306",
+    "User": "root",
+    "Password": "Learn!Passw0rd",
+    "ConnectionProperties": {},
+    "Databases": [
+      "shop_patch_scratch"
+    ]
+  },
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./patch-allowdrops",
+  "KindleTheForge": true
+}

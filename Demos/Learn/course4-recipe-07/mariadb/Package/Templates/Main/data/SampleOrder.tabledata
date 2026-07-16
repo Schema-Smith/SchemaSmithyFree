@@ -1,0 +1,5 @@
+[
+{"OrderId":1001,"CustomerName":"Acme Test Co","Amount":125.00},
+{"OrderId":1002,"CustomerName":"Demo Industries","Amount":89.50},
+{"OrderId":1003,"CustomerName":"Sandbox LLC","Amount":240.75}
+]

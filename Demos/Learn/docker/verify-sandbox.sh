@@ -37,10 +37,11 @@ echo "Verifying the SchemaSmith Learn sandbox (this can take a minute on first s
 check "SQL Server" learn-sqlserver docker exec learn-sqlserver bash -c 'exec 3<>/dev/tcp/localhost/1433'
 check "PostgreSQL" learn-postgres  docker exec learn-postgres  psql -U postgres -d learn -tAc 'SELECT 1'
 check "MySQL"      learn-mysql     docker exec learn-mysql      mysql -uroot -pLearn!Passw0rd -N -e 'SELECT 1'
+check "MariaDB"    learn-mariadb   docker exec learn-mariadb    mariadb -uroot -pLearn!Passw0rd -N -e 'SELECT 1'
 
 echo
 if [ "$fail" -eq 0 ]; then
-  echo "All three engines are ready."
+  echo "All four engines are ready."
   exit 0
 else
   echo "One or more engines failed. Try again in a minute, or check 'docker compose logs'."

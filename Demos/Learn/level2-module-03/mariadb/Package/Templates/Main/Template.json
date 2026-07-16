@@ -1,0 +1,8 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'learn'",
+  "ScriptFolders": [
+    { "FolderPath": "After Scripts", "QuenchSlot": "After" },
+    { "FolderPath": "TestData", "QuenchSlot": "After", "ShouldApplyExpression": "SELECT CASE WHEN '{{Environment}}' = 'Development' THEN 1 ELSE 0 END" }
+  ]
+}
