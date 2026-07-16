@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
@@ -51,7 +52,17 @@ public static class ChangeAuditReader
         }
         catch (DbException)
         {
-            // Audit table absent (kindling suppressed) or unreadable — treat as not instrumented.
+            // Best-effort drain (see DatabaseQuench.DrainChangeAudit): an audit-read failure must
+            // NEVER disrupt the run. Audit table absent / unreadable (kindling suppressed) — treat
+            // as not instrumented.
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            // The shared table connection was reset or closed under concurrency ("Connection is not
+            // open"; also covers ObjectDisposedException, its subclass) — a deadlock victim or dropped
+            // connection surfaces here because the drain is the last op on that connection. Leave the
+            // run honestly not-instrumented instead of masking the real quench result in the finally.
             return null;
         }
     }
