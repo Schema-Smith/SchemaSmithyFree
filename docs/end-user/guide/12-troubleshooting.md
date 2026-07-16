@@ -424,6 +424,23 @@ Avoid backslashes in JSON configuration -- they require escaping (`\\`) and redu
 5. On PostgreSQL, check the `pg_hba.conf` in the container allows connections from your host (the official image is permissive by default).
 6. On MySQL, the official image may require `AllowPublicKeyRetrieval=True` in `ConnectionProperties` for first-run SSL key retrieval.
 
+### Demo databases don't appear / `demoserver` is unhealthy
+
+**Symptom:** `run-demo` finishes and the `demoserver` container appears in Docker Desktop (you can even connect to it), but none of the demo databases (Northwind, AdventureWorks, ...) exist. The console shows `dependency failed to start: container schemasmith-<platform>-demo-demoserver-1 is unhealthy`, and the `quench-*` containers are listed as `Created` but never `Started`.
+
+**Cause:** Each deploy step (`quench-*`) waits for the database-server container (`demoserver`) to pass its healthcheck before it runs. If the server never becomes healthy within the startup window, every deploy step is skipped -- so the engine is running but no schema was ever applied. Being able to reach the server from a client tool does **not** mean it passed the healthcheck.
+
+**Fix:**
+
+1. Read the server container's own log to see why it didn't come up:
+   ```
+   docker logs schemasmith-sqlserver-demo-demoserver-1
+   ```
+   (Swap `sqlserver` for `postgresql` or `mysql` for the other demos.)
+2. **Give Docker more memory.** On SQL Server this is the usual culprit -- SQL Server 2022 needs at least 2 GB and aborts startup below that, logging that it "requires a machine with at least 2000 megabytes of memory." Raise **Docker Desktop -> Settings -> Resources -> Memory** to 4 GB or more, then Apply & Restart.
+3. **Re-run the launcher.** The first run is the slowest because it builds images; a warm second run often clears a borderline healthcheck timeout on a slower machine.
+4. If the log shows a different error (bad password, port already in use), see [Docker database server not responding](#docker-database-server-not-responding) above.
+
 ### Environment variables not taking effect
 
 **Symptom:** You set an environment variable but the tool doesn't use the value.
