@@ -4,8 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
 using Schema.Domain;
+using Schema.Isolators;
 using Schema.Utility;
 
 namespace SchemaQuench.IntegrationTests.SqlServer;
@@ -19,26 +21,40 @@ public class FixtureSetup
     private string _integrationSecondaryDb = "";
     private string _connectionString;
 
+    // All four engine SetUpFixtures publish to the SAME global Target:* / ScriptTokens:* keys on the
+    // shared IConfigurationRoot (last-writer-wins). In the full unfiltered run a sibling engine
+    // fixture's OneTimeSetUp (parallel worker lane) can overwrite them while a SqlServer schema-template
+    // test is mid-quench. This captured snapshot lets those tests re-assert SqlServer's target under
+    // SharedLockObject before the quench reads Target:* live. See ApplyTargetConfig.
+    private static Dictionary<string, string> _targetConfig;
+
     [OneTimeSetUp]
     public void RunBeforeAnyTests()
     {
         var config = ConfigHelper.GetAppSettingsAndUserSecrets("test", null);
-
-        // Map SqlServer-specific config to Target:* keys used by ProductQuench
-        config["Target:Server"] = config["SqlServer:Server"] ?? "127.0.0.1";
-        config["Target:Port"] = config["SqlServer:Port"];
-        config["Target:User"] = config["SqlServer:User"];
-        config["Target:Password"] = config["SqlServer:Password"];
         var sqlServerConnProps = ConnectionString.ReadProperties(config, "SqlServer:ConnectionProperties");
-        foreach (var prop in sqlServerConnProps)
-            config[$"Target:ConnectionProperties:{prop.Key}"] = prop.Value;
-
-        _connectionString = ConnectionString.Build(Platform.SqlServer, config["Target:Server"], "master", config["Target:User"], config["Target:Password"], config["Target:Port"], sqlServerConnProps);
 
         _integrationSecondaryDb = GenerateUniqueDBName("TestSecondary");
-        config["ScriptTokens:SecondaryDB"] = _integrationSecondaryDb;
         _integrationMainDb = GenerateUniqueDBName("TestMain");
-        config["ScriptTokens:MainDB"] = _integrationMainDb;
+
+        _targetConfig = new Dictionary<string, string>
+        {
+            ["Target:Server"] = config["SqlServer:Server"] ?? "127.0.0.1",
+            ["Target:Port"] = config["SqlServer:Port"],
+            ["Target:User"] = config["SqlServer:User"],
+            ["Target:Password"] = config["SqlServer:Password"],
+            ["ScriptTokens:MainDB"] = _integrationMainDb,
+            ["ScriptTokens:SecondaryDB"] = _integrationSecondaryDb,
+        };
+        foreach (var prop in sqlServerConnProps)
+            _targetConfig[$"Target:ConnectionProperties:{prop.Key}"] = prop.Value;
+
+        // Publish under the shared lock so a concurrently-initialising sibling engine fixture can't
+        // interleave a half-written Target block (each fixture's write is now lock-guarded).
+        lock (FactoryContainer.SharedLockObject)
+            ApplyTargetConfig(config);
+
+        _connectionString = ConnectionString.Build(Platform.SqlServer, _targetConfig["Target:Server"], "master", _targetConfig["Target:User"], _targetConfig["Target:Password"], _targetConfig["Target:Port"], sqlServerConnProps);
 
         // Register in-memory key store provider for Always Encrypted tests
         _aeProvider = new InMemoryKeyStoreProvider();
@@ -55,6 +71,20 @@ public class FixtureSetup
     public void RunAfterAnyTests()
     {
         DropTestDatabases();
+    }
+
+    /// <summary>
+    /// Re-applies SqlServer's Target:* / ScriptTokens:* onto the shared config. All four engine
+    /// SetUpFixtures write these same global keys, so a sibling fixture's OneTimeSetUp can overwrite
+    /// them mid-run; SqlServer schema-template tests call this while holding SharedLockObject so the
+    /// quench connects to SqlServer rather than a sibling engine's target. Caller MUST hold
+    /// FactoryContainer.SharedLockObject.
+    /// </summary>
+    internal static void ApplyTargetConfig(IConfigurationRoot config)
+    {
+        if (_targetConfig == null) return;
+        foreach (var kv in _targetConfig)
+            config[kv.Key] = kv.Value;
     }
 
     private void CreateTestDatabases()
