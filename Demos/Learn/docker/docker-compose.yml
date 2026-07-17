@@ -8,7 +8,9 @@ name: schemasmith-learn-sandbox
 
 services:
   sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    # Overridable via MSSQL_IMAGE (2019 / 2022 / 2025) -- pick a lighter/older
+    # image for a faster first boot on slow hardware. See Demos/Learn/README.
+    image: ${MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest}
     container_name: learn-sqlserver
     environment:
       ACCEPT_EULA: "Y"
@@ -25,8 +27,8 @@ services:
       # I/O-bound and can take 15-20+ minutes on a slow/constrained backend, so
       # budget generously (~20m grace + 60 x 10s); a fast disk passes in seconds.
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b >/dev/null 2>&1"]
-      interval: 10s
-      timeout: 5s
+      interval: 15s
+      timeout: 15s
       retries: 60
       start_period: 20m
 

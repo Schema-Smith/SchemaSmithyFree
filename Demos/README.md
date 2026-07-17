@@ -62,6 +62,18 @@ Each platform folder contains:
 - A `run-demo.sh` / `run-demo.cmd` launcher
 - A `.env` file with default credentials
 
+### SQL Server version (optional)
+
+The SQL Server demo builds on `mcr.microsoft.com/mssql/server:2022-latest` by default. A fresh SQL Server container runs a one-time system-database upgrade on first boot — a few seconds on a fast disk, but many minutes on a slow or resource-constrained Docker backend, and the amount of work varies a lot by version. Point the demo at a different image with `MSSQL_IMAGE` in [`SqlServer/.env`](SqlServer/.env) (the [Learn sandbox](Learn/docker) honors the same variable):
+
+| `MSSQL_IMAGE` | First boot | Pick it when |
+| --- | --- | --- |
+| `mcr.microsoft.com/mssql/server:2019-latest` | fastest (~⅓ the upgrade work of 2022) | your Docker backend is slow, or you run SQL Server 2019 |
+| `mcr.microsoft.com/mssql/server:2022-latest` *(default)* | slowest | you run SQL Server 2022 |
+| `mcr.microsoft.com/mssql/server:2025-latest` | ~½ of 2022 | you want the current release, or you run SQL Server 2025 |
+
+All three are tested end-to-end — every demo package, including the AdventureWorks full-text catalog and indexes, deploys cleanly.
+
 ## Sources & Licensing
 
 Each extracted product folder contains a `PROVENANCE.md` documenting the canonical source, license, and extraction notes. AdventureWorks, Chinook, Northwind, and Sakila are extracted from open-source sample databases using the SchemaSmith toolset. TenantCRM is hand-authored as a schema-template feature demo and has a tutorial `README.md` in place of a `PROVENANCE.md`.

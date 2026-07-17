@@ -85,6 +85,9 @@ services:
     build:
       context: ./demoserver
       dockerfile: demoserver.Dockerfile
+      args:
+        # Overridable via MSSQL_IMAGE in .env (2019 / 2022 / 2025).
+        BASE_IMAGE: ${MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest}
     restart: always
     ports:
       - "${MSSQL_PORT:-1440}:1433"
@@ -99,8 +102,8 @@ services:
       # so the container isn't called unhealthy before init finishes; a fast disk
       # still flips healthy in seconds and proceeds immediately.
       test: /tmp/devdatabase/is-ready.sh
-      interval: 10s
-      timeout: 5s
+      interval: 15s
+      timeout: 15s
       retries: 60
       start_period: 20m
 

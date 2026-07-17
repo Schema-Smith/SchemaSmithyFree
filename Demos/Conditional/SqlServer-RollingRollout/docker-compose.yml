@@ -31,8 +31,8 @@ services:
       # The one-time first-boot system-database upgrade is I/O-bound and can take
       # 15-20+ minutes on a slow/constrained backend, delaying working sa auth.
       # Budget generously (~20m grace + 60 x 10s); a fast disk passes in seconds.
-      interval: 10s
-      timeout: 10s
+      interval: 15s
+      timeout: 15s
       retries: 60
       start_period: 20m
     ports:
