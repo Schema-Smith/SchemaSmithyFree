@@ -40,4 +40,28 @@ internal static class DeadlockClassifier
 
         return false;
     }
+
+    /// <summary>
+    /// True for the transient PostgreSQL relation-cache race — "could not open relation with OID N"
+    /// — raised when a parallel iteration reads catalog for a relation a sibling concurrently dropped
+    /// or recreated (the materialized-view schema-template fan-out). Like a deadlock it is safe to
+    /// re-run: a fresh catalog snapshot on retry resolves it. Matched on the specific message (mirroring
+    /// the MySQL deadlock message fallback) so unrelated internal errors sharing SQLSTATE XX000 are not
+    /// retried. Walks the inner-exception chain.
+    /// </summary>
+    public static bool IsTransientRelationRace(Exception ex)
+    {
+        for (var e = ex; e != null; e = e.InnerException)
+            if (e is PostgresException && e.Message != null &&
+                e.Message.Contains("could not open relation", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// True for any transient contention an idempotent convergence proc can recover from by re-running:
+    /// a deadlock (all engines) or the PostgreSQL relation-cache race under parallel fan-out.
+    /// </summary>
+    public static bool IsRetryableContention(Exception ex) => IsDeadlock(ex) || IsTransientRelationRace(ex);
 }

@@ -13,6 +13,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 ### Fixed
 
 - **A connection dropped mid-run no longer turns a successful deployment into a spurious failure.** The end-of-run object-change audit drain (the `objectChanges` section of the deployment summary) is best-effort and is meant never to disrupt a deployment, but it only tolerated database errors — a connection reset or closed during the run (for example a deadlock victim, or a transient network/server blip under heavy concurrency) surfaced as a "Connection is not open" error from the drain, which runs in the deployment's cleanup path and replaced the true outcome. A broken connection during the audit drain is now tolerated and leaves the run honestly not-instrumented instead of masking the real result.
+- **Concurrent multi-tenant PostgreSQL materialized-view deployments no longer intermittently fail with `XX000: could not open relation with OID`.** v2.3.0 scoped the materialized-view drop-detection queries to each iteration's own schema, but a residual PostgreSQL relation-cache race remained under parallel schema-template fan-out — and under heavy contention it could break the connection outright. The materialized-view convergence phase now runs one deployment at a time per target database (deployments to different databases stay fully parallel), and the transient relation-cache error is retried, so parallel tenant fan-out no longer trips the race.
 
 ## [v2.3.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.3.0) — 2026-07-13
 

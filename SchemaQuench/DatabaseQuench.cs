@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
@@ -1450,6 +1451,20 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         _debugFileLocation = "";
     }
 
+    // Materialized-view DDL against sibling tenant schemas in the SAME database races on the
+    // PostgreSQL relation cache under parallel schema-template fan-out ("could not open relation with
+    // OID"), and under enough contention the race can break the connection — which the
+    // transient-contention retry can't recover, because the materialized-view procs depend on
+    // session-scoped temp tables and the connection can't be reopened without losing them. Serialize
+    // the materialized-view phase per target database (keyed on server + database) so no two
+    // iterations run materialized-view DDL against the same database at once; iterations against
+    // different databases, and every other quench phase, stay fully parallel. The retry stays as a
+    // backstop for any residual transient contention.
+    private static readonly ConcurrentDictionary<string, object> MaterializedViewPhaseLocks = new();
+
+    private object MaterializedViewPhaseLock() =>
+        MaterializedViewPhaseLocks.GetOrAdd($"{_server} {_databaseName}", _ => new object());
+
     internal void QuenchMaterializedViews(IDbCommand tableCommand)
     {
         SafeProgressLog("  Quenching materialized views");
@@ -1457,9 +1472,12 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(IterationMaterializedViewSchema)}', {_whatIfOnly}, {updateFillFactor}, '{EscapeSqlLiteral(_template.Name)}', '{EscapeSqlLiteral(_schemaName)}');";
 
-        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Materialized Views"), tableCommand.CommandText);
-        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
-        _debugFileLocation = "";
+        lock (MaterializedViewPhaseLock())
+        {
+            _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Materialized Views"), tableCommand.CommandText);
+            ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
+            _debugFileLocation = "";
+        }
     }
 
     internal void QuenchIndexedViews(IDbCommand tableCommand)
@@ -1636,11 +1654,11 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             }
             catch (Exception ex) when (retryOnDeadlock
                                        && attempt < MaxDeadlockAttempts
-                                       && DeadlockClassifier.IsDeadlock(ex))
+                                       && DeadlockClassifier.IsRetryableContention(ex))
             {
                 var delayMs = DeadlockBackoffMs(attempt);
                 SafeProgressLog(
-                    $"    Deadlock contention from a parallel iteration; retrying " +
+                    $"    Transient contention from a parallel iteration; retrying " +
                     $"(attempt {attempt + 1} of {MaxDeadlockAttempts}){(delayMs > 0 ? $" after {delayMs} ms" : "")}");
                 if (delayMs > 0) Thread.Sleep(delayMs);
             }

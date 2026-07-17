@@ -2,6 +2,7 @@
 
 using System;
 using System.Data;
+using Npgsql;
 using NSubstitute;
 using NUnit.Framework;
 using Schema.Domain;
@@ -76,6 +77,34 @@ public class DatabaseQuenchDeadlockRetryTests
         Assert.Throws<Exception>(
             () => quench.ExecuteNonQueryHandlingMessages(cmd, retryOnDeadlock: true));
         Assert.That(calls(), Is.EqualTo(1), "non-deadlock errors must not be retried");
+    }
+
+    [Test]
+    public void RetryEnabled_TransientRelationRace_RetriesUntilSuccess()
+    {
+        // "could not open relation with OID N": a PostgreSQL relcache-invalidation race where a
+        // parallel materialized-view iteration reads catalog for a relation a sibling concurrently
+        // dropped/recreated. Transient — a fresh snapshot on retry resolves it, exactly like a deadlock.
+        var quench = NewQuench();
+        var cmd = CommandFailing(2, () => new PostgresException(
+            "could not open relation with OID 189676", "ERROR", "ERROR", "XX000"), out var calls);
+
+        Assert.DoesNotThrow(() => quench.ExecuteNonQueryHandlingMessages(cmd, retryOnDeadlock: true));
+        Assert.That(calls(), Is.EqualTo(3), "the transient relation-open race is retried like a deadlock");
+    }
+
+    [Test]
+    public void RetryEnabled_UnrelatedInternalError_ThrowsImmediately()
+    {
+        // A generic XX000 that is NOT the relation-open race must not be retried — the classifier
+        // matches the specific race message, not every internal error.
+        var quench = NewQuench();
+        var cmd = CommandFailing(int.MaxValue, () => new PostgresException(
+            "cache lookup failed for type 0", "ERROR", "ERROR", "XX000"), out var calls);
+
+        Assert.Throws<PostgresException>(
+            () => quench.ExecuteNonQueryHandlingMessages(cmd, retryOnDeadlock: true));
+        Assert.That(calls(), Is.EqualTo(1), "only the specific relcache race retries, not all XX000");
     }
 
     [Test]
