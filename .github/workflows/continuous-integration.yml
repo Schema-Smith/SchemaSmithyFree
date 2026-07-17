@@ -62,6 +62,12 @@ jobs:
       - name: SchemaShears Unit Tests
         run: dotnet test SchemaShears/SchemaShears.UnitTests/SchemaShears.UnitTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --logger trx --results-directory TestResults
 
+      - name: SchemaQuench --Validate Package Linter Tests
+        # The Category=Validate integration tests exercise the offline --Validate package linter and
+        # need no database — they run here rather than in an engine job, which each filter Category=<Engine>
+        # and would otherwise never run them (that gap let SS-STALE-001 schema staleness go undetected).
+        run: dotnet test SchemaQuench/SchemaQuench.IntegrationTests/SchemaQuench.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=Validate" --logger trx --results-directory TestResults
+
       - name: Upload Test Results
         uses: actions/upload-artifact@v7
         if: ${{ always() }}
@@ -326,10 +332,81 @@ jobs:
           only-summary: 'true'
           use-actions-summary: 'true'
 
+  integration-tests-mariadb:
+    name: Integration Tests (MariaDB)
+    runs-on: ubuntu-latest
+    needs: build-and-unit-tests
+    permissions:
+      contents: read
+      checks: write
+    services:
+      mariadb:
+        # MariaDB is a MySQL variant (GetBasePlatform() routes it to the MySQL engine + Scripts/MariaDb
+        # overrides). Pinned to the current LTS (11.4), whose new utf8mb4_uca1400_ai_ci default collation
+        # exercises the data-delivery collation fix (#15); the 10.6 floor is covered by local sandbox runs.
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: ${{ env.TEST_PASSWORD }}
+          MARIADB_USER: ${{ env.TEST_USER }}
+          MARIADB_PASSWORD: ${{ env.TEST_PASSWORD }}
+          MARIADB_DATABASE: TestMain
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Grant TestUser full privileges and increase max connections
+        run: |
+          mysql -h 127.0.0.1 -u root -p"$TEST_PASSWORD" -e "
+            GRANT ALL PRIVILEGES ON *.* TO '$TEST_USER'@'%' WITH GRANT OPTION;
+            FLUSH PRIVILEGES;
+            SET GLOBAL max_connections = 2000;
+          "
+
+      - name: Restore & Build
+        run: dotnet build SchemaSmith.sln -c Debug
+
+      - name: Run MariaDB Integration Tests
+        run: |
+          dotnet test Schema/Schema.IntegrationTests/Schema.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=MariaDb" --logger trx --results-directory TestResults
+          dotnet test SchemaQuench/SchemaQuench.IntegrationTests/SchemaQuench.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=MariaDb" --logger trx --results-directory TestResults
+          dotnet test SchemaTongs/SchemaTongs.IntegrationTests/SchemaTongs.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=MariaDb" --logger trx --results-directory TestResults
+          dotnet test DataTongs/DataTongs.IntegrationTests/DataTongs.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=MariaDb" --logger trx --results-directory TestResults
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: mariadb-test-results
+          path: TestResults
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Test Summary
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
+        with:
+          name: MariaDB Integration Tests
+          path: TestResults/*.trx
+          reporter: dotnet-trx
+          only-summary: 'true'
+          use-actions-summary: 'true'
+
   coverage-gate:
     name: Coverage Gate
     runs-on: ubuntu-latest
-    needs: [build-and-unit-tests, integration-tests-sqlserver, integration-tests-postgresql, integration-tests-mysql]
+    needs: [build-and-unit-tests, integration-tests-sqlserver, integration-tests-postgresql, integration-tests-mysql, integration-tests-mariadb]
     steps:
       - uses: actions/checkout@v6
 

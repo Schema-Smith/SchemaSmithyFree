@@ -1,0 +1,104 @@
+{
+  "Name": "`Track`",
+  "Columns": [
+    {
+      "Name": "`TrackId`",
+      "DataType": "int",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`Name`",
+      "DataType": "varchar(200)",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`AlbumId`",
+      "DataType": "int",
+      "Nullable": true
+    },
+    {
+      "Name": "`MediaTypeId`",
+      "DataType": "int"
+    },
+    {
+      "Name": "`GenreId`",
+      "DataType": "int",
+      "Nullable": true
+    },
+    {
+      "Name": "`Composer`",
+      "DataType": "varchar(220)",
+      "Nullable": true,
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`Milliseconds`",
+      "DataType": "int"
+    },
+    {
+      "Name": "`UnitPrice`",
+      "DataType": "decimal(10,2)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_Track_Album",
+      "IndexColumns": "`AlbumId`",
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Track_Genre",
+      "IndexColumns": "`GenreId`",
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Track_MediaType",
+      "IndexColumns": "`MediaTypeId`",
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`TrackId`",
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Track_Album",
+      "Columns": "`AlbumId`",
+      "RelatedTable": "`Album`",
+      "RelatedColumns": "`AlbumId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Track_MediaType",
+      "Columns": "`MediaTypeId`",
+      "RelatedTable": "`MediaType`",
+      "RelatedColumns": "`MediaTypeId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Track_Genre",
+      "Columns": "`GenreId`",
+      "RelatedTable": "`Genre`",
+      "RelatedColumns": "`GenreId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "Engine": "InnoDB",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "AutoIncrementValue": 5,
+  "FullTextIndexes": []
+}

@@ -30,10 +30,11 @@ Write-Host "Verifying the SchemaSmith Learn sandbox (this can take a minute on f
 Test-Engine "SQL Server" "learn-sqlserver" @('bash', '-c', 'exec 3<>/dev/tcp/localhost/1433')
 Test-Engine "PostgreSQL" "learn-postgres"  @('psql', '-U', 'postgres', '-d', 'learn', '-tAc', 'SELECT 1')
 Test-Engine "MySQL"      "learn-mysql"     @('mysql', '-uroot', '-pLearn!Passw0rd', '-N', '-e', 'SELECT 1')
+Test-Engine "MariaDB"    "learn-mariadb"   @('mariadb', '-uroot', '-pLearn!Passw0rd', '-N', '-e', 'SELECT 1')
 
 Write-Host ""
 if (-not $failed) {
-    Write-Host "All three engines are ready."
+    Write-Host "All four engines are ready."
     exit 0
 } else {
     Write-Host "One or more engines failed. Try again in a minute, or check 'docker compose logs'."

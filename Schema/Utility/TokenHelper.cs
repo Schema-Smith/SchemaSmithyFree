@@ -168,7 +168,7 @@ public static class TokenHelper
 
     internal static Table FindTable(IList<Table> tables, string tableRef, Platform platform)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => FindTableSqlServer(tables, tableRef),
             Platform.PostgreSQL => FindTablePostgreSQL(tables, tableRef),
@@ -247,7 +247,7 @@ public static class TokenHelper
 
     internal static string GetDropTempTablesScript(Platform platform)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => DropTempTablesSqlServer,
             Platform.PostgreSQL => DropTempTablesPostgreSQL,

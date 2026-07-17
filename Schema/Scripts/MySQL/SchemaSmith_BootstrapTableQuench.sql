@@ -50,12 +50,15 @@ BEGIN
     SET v_ColumnCount = JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, '$.Columns'));
     SET v_IdxCount = COALESCE(JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, '$.Indexes')), 0);
 
+    -- Boolean JSON props are read as `JSON_UNQUOTE(...) IN ('true','1')` rather than
+    -- `CAST(... AS UNSIGNED)`: MariaDB's text-based JSON returns the literal 'false', which fails
+    -- an integer cast under strict mode. This form yields identical 1/0 on MySQL and MariaDB.
     -- Determine if any column declares AutoIncrement + PrimaryKey (legacy MySQL idiom: Id INT AUTO_INCREMENT PRIMARY KEY).
     SET v_HasPkColumn = 0;
     SET v_Idx = 0;
     WHILE v_Idx < v_ColumnCount DO
-        SET v_AutoIncrement = COALESCE(CAST(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].AutoIncrement')) AS UNSIGNED), 0);
-        SET v_ColumnPrimaryKey = COALESCE(CAST(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].PrimaryKey')) AS UNSIGNED), 0);
+        SET v_AutoIncrement = COALESCE((JSON_UNQUOTE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].AutoIncrement'))) IN ('true','1')), 0);
+        SET v_ColumnPrimaryKey = COALESCE((JSON_UNQUOTE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].PrimaryKey'))) IN ('true','1')), 0);
         IF v_AutoIncrement = 1 AND v_ColumnPrimaryKey = 1 THEN
             SET v_HasPkColumn = 1;
         END IF;
@@ -68,10 +71,10 @@ BEGIN
     WHILE v_Idx < v_ColumnCount DO
         SET v_ColumnName = JSON_UNQUOTE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].Name')));
         SET v_DataType = JSON_UNQUOTE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].DataType')));
-        SET v_Nullable = COALESCE(CAST(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].Nullable')) AS UNSIGNED), 0);
+        SET v_Nullable = COALESCE((JSON_UNQUOTE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].Nullable'))) IN ('true','1')), 0);
         SET v_Default = JSON_UNQUOTE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].Default')));
-        SET v_AutoIncrement = COALESCE(CAST(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].AutoIncrement')) AS UNSIGNED), 0);
-        SET v_ColumnPrimaryKey = COALESCE(CAST(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].PrimaryKey')) AS UNSIGNED), 0);
+        SET v_AutoIncrement = COALESCE((JSON_UNQUOTE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].AutoIncrement'))) IN ('true','1')), 0);
+        SET v_ColumnPrimaryKey = COALESCE((JSON_UNQUOTE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_Idx, '].PrimaryKey'))) IN ('true','1')), 0);
 
         IF v_ColumnList <> '' THEN
             SET v_ColumnList = CONCAT(v_ColumnList, ', ');
@@ -89,7 +92,7 @@ BEGIN
     IF v_HasPkColumn = 0 THEN
         SET v_Idx = 0;
         WHILE v_Idx < v_IdxCount DO
-            SET v_IndexPrimaryKey = COALESCE(CAST(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Indexes[', v_Idx, '].PrimaryKey')) AS UNSIGNED), 0);
+            SET v_IndexPrimaryKey = COALESCE((JSON_UNQUOTE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Indexes[', v_Idx, '].PrimaryKey'))) IN ('true','1')), 0);
             IF v_IndexPrimaryKey = 1 AND v_PkClause = '' THEN
                 SET v_IndexColumns = JSON_UNQUOTE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Indexes[', v_Idx, '].IndexColumns')));
                 SET v_PkClause = CONCAT(', PRIMARY KEY (', v_IndexColumns, ')');

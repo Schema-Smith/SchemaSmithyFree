@@ -1,0 +1,18 @@
+{
+  "Name": "`SampleOrder`",
+  "Columns": [
+    { "Name": "`OrderId`", "DataType": "INT" },
+    { "Name": "`CustomerName`", "DataType": "VARCHAR(64)" },
+    { "Name": "`Amount`", "DataType": "DECIMAL(10,2)" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`OrderId`" }
+  ],
+  "DataDelivery": {
+    "ContentFile": "data/SampleOrder.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`OrderId`",
+    "ShouldApplyExpression": "DATABASE() LIKE '%_dev' OR DATABASE() LIKE '%_test'",
+    "VariantName": "Dev/test sample orders"
+  }
+}

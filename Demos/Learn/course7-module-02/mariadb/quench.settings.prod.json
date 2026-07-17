@@ -1,0 +1,18 @@
+{
+  "Target": {
+    "Server": "localhost",
+    "Port": "13306",
+    "User": "root",
+    "Password": "Learn!Passw0rd",
+    "ConnectionProperties": {},
+    "TemplateTargets": {
+      "Main": { "Databases": [
+        "fleet_tenant_001", "fleet_tenant_002", "fleet_tenant_003",
+        "fleet_tenant_004", "fleet_tenant_005"
+      ] }
+    }
+  },
+  "WhatIfONLY": false,
+  "SchemaPackagePath": "./Package",
+  "KindleTheForge": true
+}

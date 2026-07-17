@@ -12,6 +12,7 @@ public static class DbConnectionFactory
         Platform.SqlServer => SqlServerConnectionFactory.GetFromFactory(),
         Platform.PostgreSQL => PostgreSqlConnectionFactory.GetFromFactory(),
         Platform.MySQL => MySqlConnectionFactory.GetFromFactory(),
+        Platform.MariaDb => MySqlConnectionFactory.GetFromFactory(),
         _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
     };
 }

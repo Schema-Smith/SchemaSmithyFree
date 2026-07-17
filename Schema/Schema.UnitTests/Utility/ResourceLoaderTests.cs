@@ -106,6 +106,33 @@ public class ResourceLoaderTests
     }
 
     [Test]
+    public void Load_WithPlatform_MariaDb_FallsBackToMySqlScripts()
+    {
+        // MariaDb is a MySQL variant: with no Scripts/MariaDb override present, the variant
+        // lookup misses and ResourceLoader falls back to the MySQL base script. This exercises
+        // the previously-unused variant branch in GetPlatformResourceStream.
+        var maria = ResourceLoader.Load("SchemaSmith_TableQuench.sql", Platform.MariaDb);
+        var mysql = ResourceLoader.Load("SchemaSmith_TableQuench.sql", Platform.MySQL);
+
+        Assert.That(maria, Is.Not.Null.And.Not.Empty);
+        Assert.That(maria, Is.EqualTo(mysql));
+    }
+
+    [Test]
+    public void GetPlatformResourceStream_MariaDb_PrefersVariantOverride_WhenPresent()
+    {
+        // Exercises the override-wins branch of GetPlatformResourceStream (variantMatch != null),
+        // which no production script hits (shared-fix ships no Scripts/MariaDb overrides for v1).
+        // Uses test-assembly fixtures embedded under Scripts/MariaDb + Scripts/MySQL.
+        var assembly = typeof(ResourceLoaderTests).Assembly;
+        using var stream = ResourceLoader.GetPlatformResourceStream("SchemaSmith_SeamProbe.sql", Platform.MariaDb, assembly);
+
+        Assert.That(stream, Is.Not.Null);
+        using var reader = new StreamReader(stream);
+        Assert.That(reader.ReadToEnd(), Does.Contain("MARIADB OVERRIDE"));
+    }
+
+    [Test]
     public void Load_WithPlatform_DifferentPlatforms_ReturnDifferentContent()
     {
         // The same-named script should have different content per platform

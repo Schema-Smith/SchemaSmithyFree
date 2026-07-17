@@ -1,0 +1,13 @@
+{
+  "Name": "`Account`",
+  "Extensions": { "OwningTeam": "Billing" },
+  "Columns": [
+    { "Name": "`AccountId`", "DataType": "INT", "Extensions": { "DataClassification": "Internal" } },
+    { "Name": "`CustomerId`", "DataType": "INT", "Extensions": { "DataClassification": "Internal" } },
+    { "Name": "`Balance`", "DataType": "DECIMAL(19,4)", "Extensions": { "DataClassification": "Financial" } },
+    { "Name": "`OpenedUtc`", "DataType": "DATETIME", "Extensions": { "DataClassification": "Internal" } }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`AccountId`" }
+  ]
+}

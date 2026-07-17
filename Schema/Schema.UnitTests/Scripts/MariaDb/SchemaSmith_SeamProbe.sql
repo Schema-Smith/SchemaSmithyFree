@@ -1,0 +1,1 @@
+-- MARIADB OVERRIDE (test fixture — proves ResourceLoader picks the variant folder over the base)

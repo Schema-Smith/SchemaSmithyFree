@@ -193,7 +193,7 @@ public class SchemaTongs
         var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
         if (!string.IsNullOrEmpty(connectionStringOverride))
         {
-            if (_platform == Platform.MySQL &&
+            if (_platform.GetBasePlatform() == Platform.MySQL &&
                 !connectionStringOverride.Contains("AllowUserVariables", StringComparison.OrdinalIgnoreCase))
             {
                 _progressLog.Warn("Connection string override for MySQL does not contain AllowUserVariables=true. " +
@@ -223,7 +223,7 @@ public class SchemaTongs
 
     private IDbConnectionFactory GetConnectionFactory()
     {
-        return _platform switch
+        return _platform.GetBasePlatform() switch
         {
             Platform.SqlServer => SqlServerConnectionFactory.GetFromFactory(),
             Platform.PostgreSQL => PostgreSqlConnectionFactory.GetFromFactory(),
@@ -459,14 +459,14 @@ public class SchemaTongs
         _includeViews = config["ShouldCast:Views"]?.ToLower() != "false";
 
         // Schema-template extraction mode (design §7.1). MySQL excluded — no schema-inside-database concept (design §2).
-        _sourceSchema = _platform != Platform.MySQL ? (config["Source:Schema"] ?? "") : "";
+        _sourceSchema = _platform.GetBasePlatform() != Platform.MySQL ? (config["Source:Schema"] ?? "") : "";
         var rawSourceSchema = config["Source:Schema"];
-        if (_platform == Platform.MySQL && !string.IsNullOrWhiteSpace(rawSourceSchema))
+        if (_platform.GetBasePlatform() == Platform.MySQL && !string.IsNullOrWhiteSpace(rawSourceSchema))
             _progressLog.Warn($"MySQL: Source.Schema='{rawSourceSchema}' is set but ignored as schema-template activator — running in regular mode.");
         _schemaIdentificationScript = config["Template:SchemaIdentificationScript"] ?? "";
         _isSchemaTemplate = !string.IsNullOrWhiteSpace(_sourceSchema);
 
-        switch (_platform)
+        switch (_platform.GetBasePlatform())
         {
             case Platform.SqlServer:
                 _includeSchemas = config["ShouldCast:Schemas"]?.ToLower() != "false";
@@ -852,7 +852,7 @@ public class SchemaTongs
         if (_includeTables) folders.Add("Tables");
         if (_includeViews) folders.Add(ResolveFolderName("Views", ScriptObjectType.Views));
 
-        switch (_platform)
+        switch (_platform.GetBasePlatform())
         {
             case Platform.SqlServer:
                 if (_includeSchemas) folders.Add(ResolveFolderName("Schemas", ScriptObjectType.Schemas));
@@ -916,7 +916,7 @@ public class SchemaTongs
 
     private void CastDatabaseObjects(string targetDb)
     {
-        switch (_platform)
+        switch (_platform.GetBasePlatform())
         {
             case Platform.SqlServer:
                 CastSqlServerObjects(targetDb);
@@ -2813,7 +2813,7 @@ SELECT cc.name AS [Name],
         _progressLog.Info("=== Casting Summary ===");
         _progressLog.Info($"  Tables:     {_stats.Tables} extracted, {_stats.TableErrors} errors");
 
-        switch (_platform)
+        switch (_platform.GetBasePlatform())
         {
             case Platform.SqlServer:
                 LogIfPositive("  Schemas:    ", _stats.Schemas);

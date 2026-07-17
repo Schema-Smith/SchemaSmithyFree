@@ -1,0 +1,10 @@
+{
+  "Name": "`LabWidget`",
+  "Columns": [
+    { "Name": "`WidgetId`", "DataType": "INT" },
+    { "Name": "`Name`", "DataType": "VARCHAR(100)" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`WidgetId`" }
+  ]
+}

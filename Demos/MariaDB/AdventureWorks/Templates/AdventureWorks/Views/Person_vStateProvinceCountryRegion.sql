@@ -1,0 +1,3 @@
+DROP VIEW IF EXISTS `Person_vStateProvinceCountryRegion`;
+CREATE VIEW `Person_vStateProvinceCountryRegion` AS
+select `sp`.`StateProvinceID` AS `StateProvinceID`,`sp`.`StateProvinceCode` AS `StateProvinceCode`,`sp`.`IsOnlyStateProvinceFlag` AS `IsOnlyStateProvinceFlag`,`sp`.`Name` AS `StateProvinceName`,`sp`.`TerritoryID` AS `TerritoryID`,`cr`.`CountryRegionCode` AS `CountryRegionCode`,`cr`.`Name` AS `CountryRegionName` from (`adventureworks`.`Person_StateProvince` `sp` join `adventureworks`.`Person_CountryRegion` `cr` on((`sp`.`CountryRegionCode` = `cr`.`CountryRegionCode`)))

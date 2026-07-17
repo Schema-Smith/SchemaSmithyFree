@@ -1,0 +1,7 @@
+{
+  "Name": "RecycleShop",
+  "ValidationScript": "SELECT CASE WHEN EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'cookbook_r6') THEN 1 ELSE 0 END",
+  "TemplateOrder": ["Main"],
+  "ScriptFolders": [],
+  "Platform": "MariaDb"
+}

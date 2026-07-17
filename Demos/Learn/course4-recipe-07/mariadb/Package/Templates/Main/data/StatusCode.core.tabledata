@@ -1,0 +1,5 @@
+[
+{"Code":"OPEN","Label":"Open","Region":"GLOBAL"},
+{"Code":"HELD","Label":"On Hold","Region":"GLOBAL"},
+{"Code":"CLSD","Label":"Closed","Region":"GLOBAL"}
+]

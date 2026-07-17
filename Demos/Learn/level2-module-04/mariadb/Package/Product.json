@@ -1,0 +1,12 @@
+{
+  "Name": "BillingService",
+  "ValidationScript": "SELECT CASE WHEN EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'learn') THEN 1 ELSE 0 END",
+  "TemplateOrder": ["Main"],
+  "ScriptTokens": {
+    "Environment": "Development",
+    "ReleaseVersion": "2.4.0-dev",
+    "EngineVersion": "<*Query*>SELECT VERSION()"
+  },
+  "ScriptFolders": [],
+  "Platform": "MariaDb"
+}

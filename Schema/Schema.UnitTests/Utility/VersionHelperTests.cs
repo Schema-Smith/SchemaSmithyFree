@@ -19,6 +19,8 @@ namespace Schema.UnitTests.Utility
         [TestCase("8.0", Platform.MySQL, 800)]
         [TestCase("8.4", Platform.MySQL, 804)]
         [TestCase("8", Platform.MySQL, 800)]
+        [TestCase("10.6", Platform.MariaDb, 1006)]
+        [TestCase("11.4", Platform.MariaDb, 1104)]
         public void ParseDeclaredVersion_NormalizesToComparable(string version, Platform platform, int expected)
         {
             Assert.That(VersionHelper.ParseDeclaredVersion(version, platform), Is.EqualTo(expected));
@@ -43,6 +45,8 @@ namespace Schema.UnitTests.Utility
         [TestCase("8.0.36", Platform.MySQL, 800)]
         [TestCase("8.4.1", Platform.MySQL, 804)]
         [TestCase("16", Platform.SqlServer, 16)]
+        [TestCase("10.6.27-MariaDB", Platform.MariaDb, 1006)]
+        [TestCase("11.4.2-MariaDB-1:11.4.2+maria~ubu2404", Platform.MariaDb, 1104)]
         public void ParseDetectedVersion_NormalizesToComparable(string raw, Platform platform, int expected)
         {
             Assert.That(VersionHelper.ParseDetectedVersion(raw, platform), Is.EqualTo(expected));

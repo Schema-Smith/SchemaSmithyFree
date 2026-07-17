@@ -31,7 +31,7 @@ public class DataTongs
         var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
         if (!string.IsNullOrEmpty(connectionStringOverride))
         {
-            if (_platform == Platform.MySQL &&
+            if (_platform.GetBasePlatform() == Platform.MySQL &&
                 !connectionStringOverride.Contains("AllowUserVariables", StringComparison.OrdinalIgnoreCase))
             {
                 _progressLog.Warn("Connection string override for MySQL does not contain AllowUserVariables=true. " +
@@ -61,7 +61,7 @@ public class DataTongs
 
     private IDbConnectionFactory GetConnectionFactory()
     {
-        return _platform switch
+        return _platform.GetBasePlatform() switch
         {
             Platform.SqlServer => SqlServerConnectionFactory.GetFromFactory(),
             Platform.PostgreSQL => PostgreSqlConnectionFactory.GetFromFactory(),
@@ -201,7 +201,7 @@ public class DataTongs
                 var tableName = parts.Name;
 
                 // MySQL uses the database name for INFORMATION_SCHEMA queries, not a schema prefix
-                var querySchema = _platform == Platform.MySQL ? sourceDb : tableSchema;
+                var querySchema = _platform.GetBasePlatform() == Platform.MySQL ? sourceDb : tableSchema;
                 var displayName = FormatTableName(tableSchema, tableName);
                 // Schema-template mode emits unqualified filenames: Customers.tabledata,
                 // Populate Customers.sql. The merge script's content-file token must match.
@@ -237,7 +237,7 @@ public class DataTongs
 
                 string tableData;
                 string selectColumns = null;
-                if (_platform == Platform.MySQL)
+                if (_platform.GetBasePlatform() == Platform.MySQL)
                 {
                     tableData = GetTableDataJsonMySql(cmd, querySchema, tableName, orderColumns, table.Filter, table.SelectColumns);
                 }
@@ -392,13 +392,13 @@ public class DataTongs
 
         // MySQL has no schema concept — database.table is the only dotted form.
         // Strip the database prefix if present; we use the connection's database context instead.
-        if (_platform == Platform.MySQL)
+        if (_platform.GetBasePlatform() == Platform.MySQL)
             return ("", parts.Length == 2 ? parts[1] : parts[0]);
 
         if (parts.Length == 2)
             return (parts[0], parts[1]);
 
-        var defaultSchema = _platform switch
+        var defaultSchema = _platform.GetBasePlatform() switch
         {
             Platform.SqlServer => "dbo",
             Platform.PostgreSQL => "public",
@@ -420,7 +420,7 @@ public class DataTongs
 
     internal string FormatOrderColumns(string keyColumns)
     {
-        return _platform switch
+        return _platform.GetBasePlatform() switch
         {
             Platform.SqlServer => string.Join(",", keyColumns.Split(',')
                 .Select(c => $"[{c.Trim().Trim(']', '[', '*')}]")),
@@ -451,7 +451,7 @@ public class DataTongs
 
     internal bool TableExists(IDbCommand cmd, string schemaOrDb, string tableName)
     {
-        return _platform switch
+        return _platform.GetBasePlatform() switch
         {
             Platform.SqlServer => TableExistsSqlServer(cmd, schemaOrDb, tableName),
             Platform.PostgreSQL => TableExistsPostgreSql(cmd, schemaOrDb, tableName),
@@ -493,7 +493,7 @@ SELECT EXISTS (
 
     internal string GetSelectColumns(IDbCommand cmd, string schemaOrDb, string tableName)
     {
-        return _platform switch
+        return _platform.GetBasePlatform() switch
         {
             Platform.SqlServer => GetSelectColumnsSqlServer(cmd, schemaOrDb, tableName),
             Platform.PostgreSQL => GetSelectColumnsPostgreSql(cmd, schemaOrDb, tableName),
@@ -584,7 +584,7 @@ SELECT GROUP_CONCAT(
     internal string GetTableDataJson(IDbCommand cmd, string selectColumns, string schemaOrDb,
         string tableName, string orderColumns, string filter)
     {
-        return _platform switch
+        return _platform.GetBasePlatform() switch
         {
             Platform.SqlServer => GetTableDataJsonSqlServer(cmd, selectColumns, schemaOrDb, tableName, orderColumns, filter),
             Platform.PostgreSQL => GetTableDataJsonPostgreSql(cmd, selectColumns, schemaOrDb, tableName, orderColumns, filter),
@@ -717,7 +717,7 @@ ORDER BY c.ORDINAL_POSITION;";
 
     internal void LogUnsupportedColumns(IDbCommand cmd, Platform platform, string schema, string table)
     {
-        switch (platform)
+        switch (platform.GetBasePlatform())
         {
             case Platform.SqlServer:
                 LogUnsupportedColumnsSqlServer(cmd, schema, table);

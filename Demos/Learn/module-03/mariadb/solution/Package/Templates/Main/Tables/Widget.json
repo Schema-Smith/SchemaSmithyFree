@@ -1,0 +1,12 @@
+{
+  "Name": "Widget",
+  "Columns": [
+    { "Name": "WidgetId", "DataType": "BIGINT" },
+    { "Name": "Name", "DataType": "VARCHAR(200)" },
+    { "Name": "Quantity", "DataType": "INT", "Nullable": true },
+    { "Name": "Price", "DataType": "DECIMAL(10,2)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "WidgetId" }
+  ]
+}

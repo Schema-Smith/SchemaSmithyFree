@@ -17,7 +17,7 @@ public static class ConnectionString
     public static string Build(Platform platform, string serverName, string dbName, string user, string password,
         string port = null, Dictionary<string, string> connectionProperties = null)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => BuildSqlServer(serverName, dbName, user, password, port, connectionProperties),
             Platform.PostgreSQL => BuildPostgreSql(serverName, dbName, user, password, port, connectionProperties),
@@ -36,7 +36,7 @@ public static class ConnectionString
         if (string.IsNullOrEmpty(connectionString)) return connectionString;
         if (string.IsNullOrEmpty(databaseName)) return connectionString;
 
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => new SqlConnectionStringBuilder(connectionString) { InitialCatalog = databaseName }.ToString(),
             Platform.PostgreSQL => new NpgsqlConnectionStringBuilder(connectionString) { Database = databaseName }.ToString(),

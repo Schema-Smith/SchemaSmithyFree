@@ -1,0 +1,26 @@
+{
+  "Name": "Customer",
+  "Columns": [
+    { "Name": "CustomerId", "DataType": "INT", "AutoIncrement": true },
+    { "Name": "Name", "DataType": "VARCHAR(100)" },
+    { "Name": "Email", "DataType": "VARCHAR(200)" },
+    { "Name": "LoyaltyTier", "DataType": "VARCHAR(20)", "Nullable": true, "Default": "'Standard'" },
+    { "Name": "PromotionId", "DataType": "INT", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "CustomerId" },
+    { "Name": "IX_Customer_Email", "Unique": false, "IndexColumns": "Email" },
+    { "Name": "FK_Customer_Promotion", "IndexColumns": "PromotionId" }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Customer_Promotion",
+      "Columns": "PromotionId",
+      "RelatedTable": "Promotion",
+      "RelatedColumns": "PromotionId",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": ""
+    }
+  ]
+}

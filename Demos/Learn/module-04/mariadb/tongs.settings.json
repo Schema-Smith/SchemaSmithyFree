@@ -1,0 +1,14 @@
+{
+  "Source": {
+    "Server": "localhost",
+    "Port": "13307",
+    "User": "root",
+    "Password": "Learn!Passw0rd",
+    "Database": "chinook",
+    "Platform": "MariaDb",
+    "ConnectionProperties": {}
+  },
+  "Product": { "Path": "./Extracted", "Name": "Chinook" },
+  "Template": { "Name": "Chinook" },
+  "ShouldCast": { "Tables": true }
+}

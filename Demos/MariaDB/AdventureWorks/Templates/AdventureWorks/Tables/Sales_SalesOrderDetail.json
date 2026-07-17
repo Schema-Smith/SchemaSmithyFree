@@ -1,0 +1,177 @@
+{
+  "Name": "`Sales_SalesOrderDetail`",
+  "Columns": [
+    {
+      "Name": "`CarrierTrackingNumber`",
+      "DataType": "varchar(25)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`OrderQty`",
+      "DataType": "smallint",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`rowguid`",
+      "DataType": "char(36)",
+      "Default": "uuid()",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Collation": "utf8mb4_0900_ai_ci",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`SalesOrderDetailID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`SalesOrderID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`SpecialOfferID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`UnitPrice`",
+      "DataType": "decimal(19,4)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`UnitPriceDiscount`",
+      "DataType": "decimal(19,4)",
+      "Default": "0.0000",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`LineTotal`",
+      "DataType": "decimal(38,6)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "STORED",
+      "GenerationExpression": "coalesce(((`UnitPrice` * (1.0 - `UnitPriceDiscount`)) * `OrderQty`),0.0)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "AK_SalesOrderDetail_rowguid",
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`rowguid`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "FK_Sales_SalesOrderDetail_SpecialOfferID",
+      "IndexColumns": "`SpecialOfferID`,`ProductID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "IX_SalesOrderDetail_ProductID",
+      "IndexColumns": "`ProductID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`SalesOrderID`,`SalesOrderDetailID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "SalesOrderDetailID",
+      "IndexColumns": "`SalesOrderDetailID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Sales_SalesOrderDetail_SalesOrderID",
+      "Columns": "`SalesOrderID`",
+      "RelatedTable": "`Sales_SalesOrderHeader`",
+      "RelatedColumns": "`SalesOrderID`",
+      "DeleteAction": "CASCADE",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Sales_SalesOrderDetail_SpecialOfferID",
+      "Columns": "`SpecialOfferID`,`ProductID`",
+      "RelatedTable": "`Sales_SpecialOfferProduct`",
+      "RelatedColumns": "`SpecialOfferID`,`ProductID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Sales_SalesOrderDetail_OrderQty",
+      "Expression": "(`OrderQty` > 0)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesOrderDetail_UnitPrice",
+      "Expression": "(`UnitPrice` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Sales_SalesOrderDetail_UnitPriceDiscount",
+      "Expression": "(`UnitPriceDiscount` >= 0.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 121318,
+  "DataDelivery": {
+    "ContentFile": "data/Sales_SalesOrderDetail.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`SalesOrderID`,`SalesOrderDetailID`"
+  }
+}

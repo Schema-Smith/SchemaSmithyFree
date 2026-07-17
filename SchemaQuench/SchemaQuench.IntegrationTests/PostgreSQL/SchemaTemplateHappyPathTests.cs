@@ -963,6 +963,12 @@ SELECT
 
     private void SetupSharedMocks()
     {
+        // Re-assert PostgreSQL's Target:* on the shared config before the quench reads it live: a sibling
+        // engine fixture (MySQL/MariaDb) running its OneTimeSetUp on the parallel worker lane can overwrite
+        // the shared Target keys. Every test body holds SharedLockObject and the fixtures now write Target
+        // under that same lock, so once re-asserted here no fixture write can stomp it before RunSchemaQuench.
+        FixtureSetup.ApplyTargetConfig(FactoryContainer.Resolve<IConfigurationRoot>());
+
         _progressLog.ClearReceivedCalls();
         _errorLog.ClearReceivedCalls();
         _environment.ClearReceivedCalls();

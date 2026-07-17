@@ -1,0 +1,13 @@
+{
+  "Name": "`Customer`",
+  "Extensions": { "OwningTeam": "Identity" },
+  "Columns": [
+    { "Name": "`CustomerId`", "DataType": "INT", "Extensions": { "DataClassification": "Internal" } },
+    { "Name": "`Email`", "DataType": "VARCHAR(256)", "Extensions": { "DataClassification": "PII" } },
+    { "Name": "`Ssn`", "DataType": "CHAR(11)", "Extensions": { "DataClassification": "PII" } },
+    { "Name": "`DisplayName`", "DataType": "VARCHAR(128)", "Extensions": { "DataClassification": "Internal" } }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`CustomerId`" }
+  ]
+}

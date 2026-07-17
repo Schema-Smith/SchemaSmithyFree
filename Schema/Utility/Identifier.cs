@@ -23,7 +23,7 @@ public static class Identifier
     public static string Unwrap(string value, Platform platform)
     {
         if (string.IsNullOrEmpty(value)) return value;
-        switch (platform)
+        switch (platform.GetBasePlatform())
         {
             case Platform.SqlServer:
                 if (value.Length >= 2 && value[0] == '[' && value[^1] == ']')
@@ -53,7 +53,7 @@ public static class Identifier
     {
         if (string.IsNullOrEmpty(value)) return (null, value);
 
-        var (open, close) = platform switch
+        var (open, close) = platform.GetBasePlatform() switch
         {
             Platform.SqlServer => ('[', ']'),
             Platform.PostgreSQL => ('"', '"'),

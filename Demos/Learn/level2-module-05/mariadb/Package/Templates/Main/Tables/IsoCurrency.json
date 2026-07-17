@@ -1,0 +1,16 @@
+{
+  "Name": "`IsoCurrency`",
+  "Columns": [
+    { "Name": "`Code`", "DataType": "CHAR(3)" },
+    { "Name": "`CurrencyName`", "DataType": "VARCHAR(64)" },
+    { "Name": "`IsoNumber`", "DataType": "INT" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`Code`" }
+  ],
+  "DataDelivery": {
+    "ContentFile": "data/IsoCurrency.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`Code`"
+  }
+}

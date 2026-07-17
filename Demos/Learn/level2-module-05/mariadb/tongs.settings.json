@@ -1,0 +1,16 @@
+{
+  "Source": {
+    "Server": "localhost",
+    "Port": "13307",
+    "User": "root",
+    "Password": "Learn!Passw0rd",
+    "Database": "learn",
+    "Platform": "MariaDb",
+    "ConnectionProperties": {}
+  },
+  "ContentPath": "./cast",
+  "ScriptPath": "./cast",
+  "Tables": [
+    { "Name": "IsoCurrency", "KeyColumns": "Code" }
+  ]
+}

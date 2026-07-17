@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
@@ -410,7 +411,7 @@ public class DatabaseQuench
             IDbConnection silentConnection = null;
             IDbCommand silentCommand = null;
 
-            if (_product.Platform != Platform.MySQL)
+            if (_product.Platform.GetBasePlatform() != Platform.MySQL)
             {
                 tableConnection = GetConnection();
                 tableCommand = tableConnection.CreateCommand();
@@ -586,7 +587,7 @@ public class DatabaseQuench
                 }
 
                 // MySQL: cleanup temp tables after index quench
-                if (_product.Platform == Platform.MySQL)
+                if (_product.Platform.GetBasePlatform() == Platform.MySQL)
                     CleanupMySqlTempTables(command);
 
                 if (!IsWhatIf)
@@ -614,7 +615,10 @@ public class DatabaseQuench
                             {
                                 Tables = _template.Tables.Cast<IDeliverableTable>().ToList(),
                                 Command = effectiveSilentCmd,
-                                Platform = _product.Platform.ToString(),
+                                // MariaDb is delivered as its MySQL base — the delivery subsystem dispatches on
+                                // this platform string and has no MariaDb-specific behavior (the enum-typed
+                                // ScriptHelper still carries the true platform for SQL generation).
+                                Platform = _product.Platform.GetBasePlatform().ToString(),
                                 DatabaseName = _databaseName,
                                 SchemaName = _schemaName,
                                 TemplateRootPath = Path.GetDirectoryName(_template.FilePath) ?? "",
@@ -661,7 +665,7 @@ public class DatabaseQuench
                         _checkpointing.Track(DbScope, "ForeignKeys", () =>
                         {
                             QuenchForeignKeys(effectiveTableCmd);
-                            if (_product.Platform == Platform.MySQL)
+                            if (_product.Platform.GetBasePlatform() == Platform.MySQL)
                                 CleanupMySqlTempTables(command);
                         });
                         foreignKeysSw.Stop();
@@ -1158,7 +1162,7 @@ public class DatabaseQuench
     /// <summary>
     /// Quotes a database name for USE statement per platform.
     /// </summary>
-    internal static string QuoteUseDatabase(string dbName, Platform platform) => platform switch
+    internal static string QuoteUseDatabase(string dbName, Platform platform) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => $"USE [{dbName}]",
         Platform.PostgreSQL => dbName, // PostgreSQL uses ChangeDatabase API
@@ -1171,7 +1175,7 @@ public class DatabaseQuench
     /// <summary>
     /// Quotes an identifier per platform.
     /// </summary>
-    internal static string QuoteIdentifier(string name, Platform platform) => platform switch
+    internal static string QuoteIdentifier(string name, Platform platform) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => $"[{name}]",
         Platform.PostgreSQL => $"\"{name}\"",
@@ -1188,7 +1192,7 @@ public class DatabaseQuench
     /// rows that may be shared across multiple templates in the same product. (Reads are
     /// permissive on template_name to pick up those legacy rows; writes/deletes are strict.)
     /// </summary>
-    internal string GetDeleteCompletedScriptSql(string productName, string slot, string obsoleteScript, string templateName, string schemaName) => _product.Platform switch
+    internal string GetDeleteCompletedScriptSql(string productName, string slot, string obsoleteScript, string templateName, string schemaName) => _product.Platform.GetBasePlatform() switch
     {
         Platform.SqlServer => $"DELETE SchemaSmith.CompletedMigrationScripts WHERE [ProductName] = '{EscapeSqlLiteral(productName)}' AND [QuenchSlot] = '{EscapeSqlLiteral(slot)}' AND [ScriptPath] = '{EscapeSqlLiteral(obsoleteScript)}' AND [template_name] = '{EscapeSqlLiteral(templateName)}' AND [schema_name] = '{EscapeSqlLiteral(schemaName)}'",
         Platform.PostgreSQL => $"DELETE FROM \"SchemaSmith\".\"CompletedMigrationScripts\" WHERE \"ProductName\" = '{EscapeSqlLiteral(productName)}' AND \"QuenchSlot\" = '{EscapeSqlLiteral(slot)}' AND \"ScriptPath\" = '{EscapeSqlLiteral(obsoleteScript)}' AND template_name = '{EscapeSqlLiteral(templateName)}' AND schema_name = '{EscapeSqlLiteral(schemaName)}'",
@@ -1200,7 +1204,7 @@ public class DatabaseQuench
     /// Gets the SELECT SQL for completed migration scripts per platform. Same scope-aware
     /// predicate shape as the DELETE builder — permissive template_name, strict schema_name.
     /// </summary>
-    internal string GetSelectCompletedScriptsSql(string productName, string slot, string templateName, string schemaName) => _product.Platform switch
+    internal string GetSelectCompletedScriptsSql(string productName, string slot, string templateName, string schemaName) => _product.Platform.GetBasePlatform() switch
     {
         Platform.SqlServer => $"SELECT [ScriptPath] FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE [ProductName] = '{EscapeSqlLiteral(productName)}' AND [QuenchSlot] = '{EscapeSqlLiteral(slot)}' AND [template_name] IN ('', '{EscapeSqlLiteral(templateName)}') AND [schema_name] = '{EscapeSqlLiteral(schemaName)}'",
         Platform.PostgreSQL => $"SELECT \"ScriptPath\" FROM \"SchemaSmith\".\"CompletedMigrationScripts\" WHERE \"ProductName\" = '{EscapeSqlLiteral(productName)}' AND \"QuenchSlot\" = '{EscapeSqlLiteral(slot)}' AND template_name IN ('', '{EscapeSqlLiteral(templateName)}') AND schema_name = '{EscapeSqlLiteral(schemaName)}'",
@@ -1213,7 +1217,7 @@ public class DatabaseQuench
     /// actual template_name + schema_name values from the active scope (legacy blank rows
     /// only arrive from pre-extension databases; new writes always have real values).
     /// </summary>
-    internal string GetInsertCompletedScriptSql(string scriptPath, string productName, string slot, string templateName, string schemaName) => _product.Platform switch
+    internal string GetInsertCompletedScriptSql(string scriptPath, string productName, string slot, string templateName, string schemaName) => _product.Platform.GetBasePlatform() switch
     {
         Platform.SqlServer => $"INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [QuenchSlot], [template_name], [schema_name]) VALUES('{EscapeSqlLiteral(scriptPath)}', '{EscapeSqlLiteral(productName)}', '{EscapeSqlLiteral(slot)}', '{EscapeSqlLiteral(templateName)}', '{EscapeSqlLiteral(schemaName)}')",
         Platform.PostgreSQL => $"INSERT INTO \"SchemaSmith\".\"CompletedMigrationScripts\" (\"ScriptPath\", \"ProductName\", \"QuenchSlot\", template_name, schema_name) VALUES('{EscapeSqlLiteral(scriptPath)}', '{EscapeSqlLiteral(productName)}', '{EscapeSqlLiteral(slot)}', '{EscapeSqlLiteral(templateName)}', '{EscapeSqlLiteral(schemaName)}')",
@@ -1237,7 +1241,7 @@ public class DatabaseQuench
     internal string GetClaimLegacyTrackingRowsSql(string productName, string slot, string templateName, string schemaName, IReadOnlyList<string> scriptPaths)
     {
         var inList = string.Join(",", scriptPaths.Select(p => $"'{EscapeSqlLiteral(p)}'"));
-        return _product.Platform switch
+        return _product.Platform.GetBasePlatform() switch
         {
             Platform.SqlServer => $"UPDATE SchemaSmith.CompletedMigrationScripts SET [template_name] = '{EscapeSqlLiteral(templateName)}' WHERE [ProductName] = '{EscapeSqlLiteral(productName)}' AND [QuenchSlot] = '{EscapeSqlLiteral(slot)}' AND [template_name] = '' AND [schema_name] = '{EscapeSqlLiteral(schemaName)}' AND [ScriptPath] IN ({inList})",
             Platform.PostgreSQL => $"UPDATE \"SchemaSmith\".\"CompletedMigrationScripts\" SET template_name = '{EscapeSqlLiteral(templateName)}' WHERE \"ProductName\" = '{EscapeSqlLiteral(productName)}' AND \"QuenchSlot\" = '{EscapeSqlLiteral(slot)}' AND template_name = '' AND schema_name = '{EscapeSqlLiteral(schemaName)}' AND \"ScriptPath\" IN ({inList})",
@@ -1270,12 +1274,12 @@ public class DatabaseQuench
 
     private void QuenchMissingTablesAndColumns(IDbCommand tableCommand)
     {
-        if (_product.Platform == Platform.MySQL && _template.Tables.Count == 0)
+        if (_product.Platform.GetBasePlatform() == Platform.MySQL && _template.Tables.Count == 0)
             return;
 
         SafeProgressLog("  Quenching missing tables and columns");
 
-        switch (_product.Platform)
+        switch (_product.Platform.GetBasePlatform())
         {
             case Platform.SqlServer:
             {
@@ -1318,12 +1322,12 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
 
     internal void QuenchModifiedTables(IDbCommand tableCommand)
     {
-        if (_product.Platform == Platform.MySQL && _template.Tables.Count == 0)
+        if (_product.Platform.GetBasePlatform() == Platform.MySQL && _template.Tables.Count == 0)
             return;
 
         SafeProgressLog("  Quenching modified tables");
 
-        switch (_product.Platform)
+        switch (_product.Platform.GetBasePlatform())
         {
             case Platform.SqlServer:
                 tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}";
@@ -1356,12 +1360,12 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
 
     internal void QuenchIndexesAndConstraints(IDbCommand tableCommand)
     {
-        if (_product.Platform == Platform.MySQL && _template.Tables.Count == 0)
+        if (_product.Platform.GetBasePlatform() == Platform.MySQL && _template.Tables.Count == 0)
             return;
 
         SafeProgressLog($"  Quenching indexes{(_template.IndexOnlyTableQuenches ? "" : " and constraints")}");
 
-        switch (_product.Platform)
+        switch (_product.Platform.GetBasePlatform())
         {
             case Platform.SqlServer:
             {
@@ -1421,7 +1425,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
         SafeProgressLog("  Quenching foreign keys");
 
-        switch (_product.Platform)
+        switch (_product.Platform.GetBasePlatform())
         {
             case Platform.SqlServer:
                 tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ForeignKeyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
@@ -1447,6 +1451,20 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         _debugFileLocation = "";
     }
 
+    // Materialized-view DDL against sibling tenant schemas in the SAME database races on the
+    // PostgreSQL relation cache under parallel schema-template fan-out ("could not open relation with
+    // OID"), and under enough contention the race can break the connection — which the
+    // transient-contention retry can't recover, because the materialized-view procs depend on
+    // session-scoped temp tables and the connection can't be reopened without losing them. Serialize
+    // the materialized-view phase per target database (keyed on server + database) so no two
+    // iterations run materialized-view DDL against the same database at once; iterations against
+    // different databases, and every other quench phase, stay fully parallel. The retry stays as a
+    // backstop for any residual transient contention.
+    private static readonly ConcurrentDictionary<string, object> MaterializedViewPhaseLocks = new();
+
+    private object MaterializedViewPhaseLock() =>
+        MaterializedViewPhaseLocks.GetOrAdd($"{_server} {_databaseName}", _ => new object());
+
     internal void QuenchMaterializedViews(IDbCommand tableCommand)
     {
         SafeProgressLog("  Quenching materialized views");
@@ -1454,9 +1472,12 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         tableCommand.CommandText = $@"CALL ""SchemaSmith"".""MaterializedViewQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(IterationMaterializedViewSchema)}', {_whatIfOnly}, {updateFillFactor}, '{EscapeSqlLiteral(_template.Name)}', '{EscapeSqlLiteral(_schemaName)}');";
 
-        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Materialized Views"), tableCommand.CommandText);
-        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
-        _debugFileLocation = "";
+        lock (MaterializedViewPhaseLock())
+        {
+            _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Materialized Views"), tableCommand.CommandText);
+            ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
+            _debugFileLocation = "";
+        }
     }
 
     internal void QuenchIndexedViews(IDbCommand tableCommand)
@@ -1573,7 +1594,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         // Platform-specific message handling
         if (!ignoreInfoMessages)
         {
-            switch (_product.Platform)
+            switch (_product.Platform.GetBasePlatform())
             {
                 case Platform.SqlServer when connection is SqlConnection sqlConnection:
                     sqlConnection.InfoMessage += OnSqlServerInfoMessage;
@@ -1588,7 +1609,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         connection.Open();
 
         // MySQL: start status message monitor
-        if (_product.Platform == Platform.MySQL && _statusMonitor == null)
+        if (_product.Platform.GetBasePlatform() == Platform.MySQL && _statusMonitor == null)
         {
             try
             {
@@ -1633,11 +1654,11 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             }
             catch (Exception ex) when (retryOnDeadlock
                                        && attempt < MaxDeadlockAttempts
-                                       && DeadlockClassifier.IsDeadlock(ex))
+                                       && DeadlockClassifier.IsRetryableContention(ex))
             {
                 var delayMs = DeadlockBackoffMs(attempt);
                 SafeProgressLog(
-                    $"    Deadlock contention from a parallel iteration; retrying " +
+                    $"    Transient contention from a parallel iteration; retrying " +
                     $"(attempt {attempt + 1} of {MaxDeadlockAttempts}){(delayMs > 0 ? $" after {delayMs} ms" : "")}");
                 if (delayMs > 0) Thread.Sleep(delayMs);
             }
@@ -1658,7 +1679,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     {
         _infoMessageException = null;
 
-        if (_product.Platform == Platform.MySQL)
+        if (_product.Platform.GetBasePlatform() == Platform.MySQL)
         {
             try
             {

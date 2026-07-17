@@ -33,6 +33,35 @@ namespace Schema.UnitTests.Utility
             Assert.That(info.ServerComparable, Is.EqualTo(expected));
         }
 
+        [TestCase("10.6.27-MariaDB", 1006)]
+        [TestCase("11.4.2-MariaDB-1:11.4.2+maria~ubu2404", 1104)]
+        public void Detect_MariaDb_ParsesVersion(string raw, int expected)
+        {
+            var cmd = CommandReturning(raw);
+
+            var info = TargetVersionDetector.Detect(cmd, Platform.MariaDb);
+
+            Assert.That(info.ServerComparable, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void Detect_MariaDbPlatform_NonMariaDbServer_Throws()
+        {
+            var cmd = CommandReturning("8.0.36");
+
+            var ex = Assert.Throws<Exception>(() => TargetVersionDetector.Detect(cmd, Platform.MariaDb));
+            Assert.That(ex!.Message, Does.Contain("does not appear to be MariaDB"));
+        }
+
+        [Test]
+        public void Detect_MySqlPlatform_MariaDbServer_Throws()
+        {
+            var cmd = CommandReturning("11.4.2-MariaDB");
+
+            var ex = Assert.Throws<Exception>(() => TargetVersionDetector.Detect(cmd, Platform.MySQL));
+            Assert.That(ex!.Message, Does.Contain("appears to be MariaDB"));
+        }
+
         [Test]
         public void Detect_Throws_WhenScalarNull()
         {
@@ -62,6 +91,7 @@ namespace Schema.UnitTests.Utility
             Assert.That(TargetVersionDetector.GetVersionQuery(Platform.SqlServer), Does.Contain("ProductMajorVersion"));
             Assert.That(TargetVersionDetector.GetVersionQuery(Platform.PostgreSQL), Does.Contain("server_version_num"));
             Assert.That(TargetVersionDetector.GetVersionQuery(Platform.MySQL), Does.Contain("VERSION()"));
+            Assert.That(TargetVersionDetector.GetVersionQuery(Platform.MariaDb), Does.Contain("VERSION()"));
         }
     }
 }

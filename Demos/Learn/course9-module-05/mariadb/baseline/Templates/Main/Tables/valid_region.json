@@ -1,0 +1,25 @@
+{
+  "Name": "`valid_region`",
+  "Columns": [
+    { "Name": "`RegionCode`", "DataType": "varchar(6)", "ShouldApplyExpression": "", "OldName": "", "VariantName": "", "CharacterSet": "utf8mb4" },
+    { "Name": "`RegionName`", "DataType": "varchar(100)", "Nullable": true, "ShouldApplyExpression": "", "OldName": "", "VariantName": "", "CharacterSet": "utf8mb4" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "UniqueConstraint": true, "IndexColumns": "`RegionCode`", "ShouldApplyExpression": "", "VariantName": "", "IndexType": "BTREE" }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "ShouldApplyExpression": "",
+  "VariantName": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "FullTextIndexes": [],
+  "DataDelivery": {
+    "ContentFile": "data/valid_region.tabledata",
+    "MergeType": "Insert/Update/Delete",
+    "MatchColumns": "`RegionCode`"
+  }
+}

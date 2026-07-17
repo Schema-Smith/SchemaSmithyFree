@@ -1,0 +1,427 @@
+// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+
+using System.Data;
+using Schema.DataAccess;
+using Schema.Domain;
+using System;
+using System.IO;
+using System.Linq;
+
+using NUnit.Framework;
+using Schema.Utility;
+
+namespace DataTongs.IntegrationTests.Shared;
+
+/// <summary>
+/// Shared end-to-end integration tests for DataTongs across the MySQL/MariaDb family.
+/// Tests the complete workflow: extract -> generate script -> apply -> verify.
+/// The MySQL and MariaDb subclasses supply the platform + fixture accessors; every
+/// [Test] body here runs on both engines. Uses dynamically created test databases via FixtureSetup.
+/// </summary>
+public abstract class DataTongsEndToEndSharedTests
+{
+    protected abstract Platform Platform { get; }
+    protected abstract string MainDb { get; }
+    protected abstract string MainConnectionString { get; }
+
+    private IDbConnection _connection = null!;
+    private global::DataTongs.DataTongs _dataTongs = null!;
+    private string _testOutputDir = null!;
+    private string _testDb = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _testDb = MainDb;
+        _connection = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(MainConnectionString);
+        _connection.Open();
+        _dataTongs = new global::DataTongs.DataTongs(Platform);
+        _testOutputDir = Path.Combine(Path.GetTempPath(), $"DataTongsE2E_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_testOutputDir);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _connection?.Close();
+        _connection?.Dispose();
+
+        if (Directory.Exists(_testOutputDir))
+        {
+            try { Directory.Delete(_testOutputDir, true); } catch { /* ignore */ }
+        }
+    }
+
+    [Test]
+    public void EndToEnd_ExtractAndReapply_DataMatches()
+    {
+        using var command = _connection.CreateCommand();
+        var sourceTable = $"_e2e_source_{Guid.NewGuid():N}".Substring(0, 30);
+        var targetTable = $"_e2e_target_{Guid.NewGuid():N}".Substring(0, 30);
+
+        try
+        {
+            // Create source table with test data
+            command.CommandText = $@"
+                CREATE TABLE `{_testDb}`.`{sourceTable}` (
+                    id INT PRIMARY KEY,
+                    code VARCHAR(20) NOT NULL,
+                    name VARCHAR(100),
+                    amount DECIMAL(10,2),
+                    created_date DATE,
+                    last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )";
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"
+                INSERT INTO `{_testDb}`.`{sourceTable}` (id, code, name, amount, created_date) VALUES
+                (1, 'A001', 'Item One', 100.50, '2024-01-15'),
+                (2, 'A002', 'Item Two', 200.75, '2024-02-20'),
+                (3, 'A003', 'Item Three', 300.00, '2024-03-25')";
+            command.ExecuteNonQuery();
+
+            // Create empty target table with same structure
+            command.CommandText = $@"
+                CREATE TABLE `{_testDb}`.`{targetTable}` (
+                    id INT PRIMARY KEY,
+                    code VARCHAR(20) NOT NULL,
+                    name VARCHAR(100),
+                    amount DECIMAL(10,2),
+                    created_date DATE,
+                    last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )";
+            command.ExecuteNonQuery();
+
+            // Extract data from source
+            var selectColumns = _dataTongs.GetSelectColumns(command, _testDb, sourceTable);
+            var keyColumns = MergeScriptHelper.GetKeyColumns(Platform, command, _testDb, sourceTable);
+            var json = _dataTongs.GetTableDataJson(command, selectColumns, _testDb, sourceTable, keyColumns, null);
+
+            // Write content file
+            var contentFile = Path.Combine(_testOutputDir, $"{sourceTable}.tabledata");
+            File.WriteAllText(contentFile, json);
+
+            // Generate merge script for target table (Upsert: mergeUpdate=true, mergeDelete=false)
+            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, targetTable, json, keyColumns,
+                mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null);
+
+            // Write script file
+            var scriptFile = Path.Combine(_testOutputDir, $"Populate {targetTable}.sql");
+            File.WriteAllText(scriptFile, script);
+
+            // Execute script against target table
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrWhiteSpace(batch)) continue;
+                command.CommandText = batch;
+                command.ExecuteNonQuery();
+            }
+
+            // Verify data matches
+            command.CommandText = $"SELECT COUNT(*) FROM `{_testDb}`.`{targetTable}`";
+            var targetCount = Convert.ToInt32(command.ExecuteScalar());
+            Assert.That(targetCount, Is.EqualTo(3));
+
+            // Verify specific values
+            command.CommandText = $"SELECT code, name, amount FROM `{_testDb}`.`{targetTable}` WHERE id = 1";
+            using var reader = command.ExecuteReader();
+            Assert.That(reader.Read(), Is.True);
+            Assert.That(reader.GetString(0), Is.EqualTo("A001"));
+            Assert.That(reader.GetString(1), Is.EqualTo("Item One"));
+            Assert.That(reader.GetDecimal(2), Is.EqualTo(100.50m));
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{sourceTable}`";
+            command.ExecuteNonQuery();
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{targetTable}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void EndToEnd_ContentFileCanBeConsumedBySchemaQuench()
+    {
+        // This test verifies that content files generated by DataTongs
+        // are in the correct format for SchemaQuench table data delivery
+        using var command = _connection.CreateCommand();
+
+        // Extract country data (small table)
+        var selectColumns = _dataTongs.GetSelectColumns(command, _testDb, "country");
+        var keyColumns = MergeScriptHelper.GetKeyColumns(Platform, command, _testDb, "country");
+        var json = _dataTongs.GetTableDataJson(command, selectColumns, _testDb, "country", keyColumns, "country_id <= 5");
+
+        // Write content file
+        var contentFile = Path.Combine(_testOutputDir, "country.tabledata");
+        File.WriteAllText(contentFile, FormatJson(json));
+
+        // Verify file format is compatible with SchemaQuench
+        var content = File.ReadAllText(contentFile);
+
+        // Must be valid JSON array
+        Assert.That(content.Trim(), Does.StartWith("["));
+        Assert.That(content.Trim(), Does.EndWith("]"));
+
+        // Must contain expected columns
+        Assert.That(content, Does.Contain("\"country_id\""));
+        Assert.That(content, Does.Contain("\"country\""));
+        Assert.That(content, Does.Contain("\"last_update\""));
+
+        // Verify it can be parsed and used in MergeScriptHelper (Upsert: mergeUpdate=true, mergeDelete=false)
+        var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, "country", json, keyColumns,
+            mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null);
+        Assert.That(script, Is.Not.Empty);
+        Assert.That(script, Does.Contain("INSERT INTO"));
+    }
+
+    [Test]
+    public void EndToEnd_RoundTrip_PreservesDecimalPrecision()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_e2e_decimal_{Guid.NewGuid():N}".Substring(0, 30);
+
+        try
+        {
+            // Create table with precise decimals
+            command.CommandText = $@"
+                CREATE TABLE `{_testDb}`.`{tableName}` (
+                    id INT PRIMARY KEY,
+                    price DECIMAL(10,4) NOT NULL,
+                    quantity DECIMAL(15,6)
+                )";
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"
+                INSERT INTO `{_testDb}`.`{tableName}` VALUES
+                (1, 123.4567, 9999.123456),
+                (2, 0.0001, 0.000001)";
+            command.ExecuteNonQuery();
+
+            // Extract
+            var selectColumns = _dataTongs.GetSelectColumns(command, _testDb, tableName);
+            var json = _dataTongs.GetTableDataJson(command, selectColumns, _testDb, tableName, "`id`", null);
+
+            // Clear and re-insert via script (Insert: mergeUpdate=false, mergeDelete=false)
+            command.CommandText = $"DELETE FROM `{_testDb}`.`{tableName}`";
+            command.ExecuteNonQuery();
+
+            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName, json, "`id`",
+                mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null);
+
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrWhiteSpace(batch)) continue;
+                command.CommandText = batch;
+                command.ExecuteNonQuery();
+            }
+
+            // Verify precision preserved
+            command.CommandText = $"SELECT price, quantity FROM `{_testDb}`.`{tableName}` WHERE id = 1";
+            using var reader = command.ExecuteReader();
+            Assert.That(reader.Read(), Is.True);
+            Assert.That(reader.GetDecimal(0), Is.EqualTo(123.4567m));
+            Assert.That(reader.GetDecimal(1), Is.EqualTo(9999.123456m));
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void EndToEnd_RoundTrip_PreservesDateFormats()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_e2e_date_{Guid.NewGuid():N}".Substring(0, 30);
+
+        try
+        {
+            // Create table with various date types
+            command.CommandText = $@"
+                CREATE TABLE `{_testDb}`.`{tableName}` (
+                    id INT PRIMARY KEY,
+                    date_only DATE,
+                    datetime_val DATETIME,
+                    time_only TIME
+                )";
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"
+                INSERT INTO `{_testDb}`.`{tableName}` VALUES
+                (1, '2024-06-15', '2024-06-15 14:30:45', '14:30:45')";
+            command.ExecuteNonQuery();
+
+            // Extract
+            var selectColumns = _dataTongs.GetSelectColumns(command, _testDb, tableName);
+            var json = _dataTongs.GetTableDataJson(command, selectColumns, _testDb, tableName, "`id`", null);
+
+            // Verify JSON contains properly formatted dates
+            Assert.That(json, Does.Contain("2024-06-15"));
+            Assert.That(json, Does.Contain("14:30:45"));
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void EndToEnd_RoundTrip_HandlesNullValues()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_e2e_null_{Guid.NewGuid():N}".Substring(0, 30);
+
+        try
+        {
+            // Create table with nullable columns
+            command.CommandText = $@"
+                CREATE TABLE `{_testDb}`.`{tableName}` (
+                    id INT PRIMARY KEY,
+                    optional_text VARCHAR(100),
+                    optional_number INT,
+                    optional_date DATE
+                )";
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"
+                INSERT INTO `{_testDb}`.`{tableName}` VALUES
+                (1, 'has value', 42, '2024-01-01'),
+                (2, NULL, NULL, NULL)";
+            command.ExecuteNonQuery();
+
+            // Extract
+            var selectColumns = _dataTongs.GetSelectColumns(command, _testDb, tableName);
+            var json = _dataTongs.GetTableDataJson(command, selectColumns, _testDb, tableName, "`id`", null);
+
+            // Clear and re-insert (Insert: mergeUpdate=false, mergeDelete=false)
+            command.CommandText = $"DELETE FROM `{_testDb}`.`{tableName}`";
+            command.ExecuteNonQuery();
+
+            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName, json, "`id`",
+                mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null);
+
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrWhiteSpace(batch)) continue;
+                command.CommandText = batch;
+                command.ExecuteNonQuery();
+            }
+
+            // Verify nulls preserved
+            command.CommandText = $"SELECT optional_text, optional_number FROM `{_testDb}`.`{tableName}` WHERE id = 2";
+            using var reader = command.ExecuteReader();
+            Assert.That(reader.Read(), Is.True);
+            Assert.That(reader.IsDBNull(0), Is.True);
+            Assert.That(reader.IsDBNull(1), Is.True);
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void EndToEnd_RoundTrip_HandlesBinaryData()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_e2e_binary_{Guid.NewGuid():N}".Substring(0, 30);
+
+        try
+        {
+            // Create table with binary column
+            command.CommandText = $@"
+                CREATE TABLE `{_testDb}`.`{tableName}` (
+                    id INT PRIMARY KEY,
+                    data VARBINARY(100)
+                )";
+            command.ExecuteNonQuery();
+
+            // Insert binary data
+            var binaryData = new byte[] { 0x48, 0x65, 0x6C, 0x6C, 0x6F }; // "Hello" in ASCII
+            command.CommandText = $"INSERT INTO `{_testDb}`.`{tableName}` VALUES (1, @data)";
+            command.Parameters.Clear();
+            var param = command.CreateParameter();
+            param.ParameterName = "@data";
+            param.Value = binaryData;
+            command.Parameters.Add(param);
+            command.ExecuteNonQuery();
+            command.Parameters.Clear();
+
+            // Extract - binary should be Base64 encoded
+            var selectColumns = _dataTongs.GetSelectColumns(command, _testDb, tableName);
+            var json = _dataTongs.GetTableDataJson(command, selectColumns, _testDb, tableName, "`id`", null);
+
+            // Verify Base64 encoding
+            var expectedBase64 = Convert.ToBase64String(binaryData);
+            Assert.That(json, Does.Contain(expectedBase64));
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void EndToEnd_MultipleTablesWorkflow()
+    {
+        // Simulate extracting multiple related tables
+        using var command = _connection.CreateCommand();
+
+        // Extract country (parent)
+        var countrySelectColumns = _dataTongs.GetSelectColumns(command, _testDb, "country");
+        var countryKeys = MergeScriptHelper.GetKeyColumns(Platform, command, _testDb, "country");
+        var countryJson = _dataTongs.GetTableDataJson(command, countrySelectColumns, _testDb, "country", countryKeys, "country_id <= 5");
+
+        // Extract city (child with FK to country)
+        var citySelectColumns = _dataTongs.GetSelectColumns(command, _testDb, "city");
+        var cityKeys = MergeScriptHelper.GetKeyColumns(Platform, command, _testDb, "city");
+        var cityJson = _dataTongs.GetTableDataJson(command, citySelectColumns, _testDb, "city", cityKeys, "country_id <= 5");
+
+        // Write content files
+        File.WriteAllText(Path.Combine(_testOutputDir, "country.tabledata"), FormatJson(countryJson));
+        File.WriteAllText(Path.Combine(_testOutputDir, "city.tabledata"), FormatJson(cityJson));
+
+        // Generate scripts (Upsert: mergeUpdate=true, mergeDelete=false)
+        var countryScript = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, "country", countryJson, countryKeys,
+            mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null);
+        var cityScript = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, "city", cityJson, cityKeys,
+            mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null);
+
+        File.WriteAllText(Path.Combine(_testOutputDir, "Populate country.sql"), countryScript);
+        File.WriteAllText(Path.Combine(_testOutputDir, "Populate city.sql"), cityScript);
+
+        // Verify files exist
+        Assert.That(File.Exists(Path.Combine(_testOutputDir, "country.tabledata")), Is.True);
+        Assert.That(File.Exists(Path.Combine(_testOutputDir, "city.tabledata")), Is.True);
+        Assert.That(File.Exists(Path.Combine(_testOutputDir, "Populate country.sql")), Is.True);
+        Assert.That(File.Exists(Path.Combine(_testOutputDir, "Populate city.sql")), Is.True);
+
+        // City script should have FK checks disabled
+        Assert.That(cityScript, Does.Not.Contain("FOREIGN_KEY_CHECKS"));
+    }
+
+    #region Helper Methods
+
+    private static string FormatJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "[]" || json == "null")
+            return "[]";
+
+        return json
+            .Replace("},{", "},\n{")
+            .Replace("[{", "[\n{")
+            .Replace("}]", "}\n]");
+    }
+
+    #endregion
+}

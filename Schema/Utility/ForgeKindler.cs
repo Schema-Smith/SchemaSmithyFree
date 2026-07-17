@@ -45,7 +45,7 @@ public static class ForgeKindler
                 DropSupersededPostgreSqlOverloads(command);
 
             KindleScripts(command, platform);
-            if (platform == Platform.MySQL)
+            if (platform.GetBasePlatform() == Platform.MySQL)
                 CleanupMySqlStatusMessages(command);
 
             WriteStamp(command, platform, expected);
@@ -108,7 +108,7 @@ public static class ForgeKindler
         {
             var script = ResolveKindleScript(fileName, platform, replaceParseJsonToken, replaceTableDefToken);
 
-            if (platform == Platform.MySQL)
+            if (platform.GetBasePlatform() == Platform.MySQL)
             {
                 foreach (var batch in BatchSplitter.Split(script))
                 {
@@ -172,7 +172,9 @@ public static class ForgeKindler
 
     internal static KindleScript[] GetKindlingScripts(Platform platform)
     {
-        return platform switch
+        // Route on base platform so variants (e.g. MariaDb -> MySQL) inherit the base kindling
+        // list; each script still resolves through ResourceLoader's per-file variant fallback.
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer =>
             [
@@ -251,6 +253,11 @@ public static class ForgeKindler
                 new("SchemaSmith_NormalizeIndexColumns.sql"),
                 new("SchemaSmith_NormalizeCheckExpression.sql"),
                 new("SchemaSmith_UpperDataType.sql"),
+                new("SchemaSmith_StripIntDisplayWidth.sql"),
+                new("SchemaSmith_NormalizeColumnDefault.sql"),
+                new("SchemaSmith_IndexIsVisible.sql"),
+                new("SchemaSmith_DropCheckClause.sql"),
+                new("SchemaSmith_IndexInvisibleClause.sql"),
                 new("SchemaSmith_GenerateTableJson.sql"),
                 new("SchemaSmith_ParseTableJson.sql"),
                 new("SchemaSmith_MissingTableAndColumnQuench.sql"),
@@ -301,7 +308,7 @@ public static class ForgeKindler
             return pgValue == null || pgValue == DBNull.Value ? null : pgValue.ToString();
         }
 
-        if (platform == Platform.MySQL)
+        if (platform.GetBasePlatform() == Platform.MySQL)
         {
             // MySQL validates all table references at parse time — even inside a subquery behind a
             // WHERE EXISTS guard — so a single-statement existence-gated read raises 1146 on a fresh
@@ -320,7 +327,7 @@ public static class ForgeKindler
             return mysqlValue == null || mysqlValue == DBNull.Value ? null : mysqlValue.ToString();
         }
 
-        command.CommandText = platform switch
+        command.CommandText = platform.GetBasePlatform() switch
         {
             Platform.SqlServer =>
                 "IF OBJECT_ID('[SchemaSmith].[KindleStamp]', 'U') IS NULL SELECT CAST(NULL AS VARCHAR(64)) " +
@@ -340,7 +347,7 @@ public static class ForgeKindler
         if (string.IsNullOrEmpty(stamp))
             throw new ArgumentException("Stamp must be a non-empty SHA-256 hex string.", nameof(stamp));
 
-        var (deleteSql, insertSql) = platform switch
+        var (deleteSql, insertSql) = platform.GetBasePlatform() switch
         {
             Platform.SqlServer => (
                 "DELETE FROM [SchemaSmith].[KindleStamp]",
@@ -387,7 +394,7 @@ public static class ForgeKindler
     /// </summary>
     internal static void AcquireKindleLock(IDbCommand command, Platform platform)
     {
-        switch (platform)
+        switch (platform.GetBasePlatform())
         {
             case Platform.SqlServer:
                 command.CommandText =
@@ -447,7 +454,7 @@ public static class ForgeKindler
     {
         try
         {
-            command.CommandText = platform switch
+            command.CommandText = platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => $"IF APPLOCK_MODE('public', '{KindleLockResource}', 'Session') <> 'NoLock' " +
                                       $"EXEC sp_releaseapplock @Resource = '{KindleLockResource}', @LockOwner = 'Session';",

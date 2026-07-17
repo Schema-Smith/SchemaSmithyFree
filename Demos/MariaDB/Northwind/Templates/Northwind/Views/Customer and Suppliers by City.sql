@@ -1,0 +1,3 @@
+DROP VIEW IF EXISTS `Customer and Suppliers by City`;
+CREATE VIEW `Customer and Suppliers by City` AS
+select `northwind`.`Customers`.`City` AS `City`,`northwind`.`Customers`.`CompanyName` AS `CompanyName`,`northwind`.`Customers`.`ContactName` AS `ContactName`,'Customers' AS `Relationship` from `northwind`.`Customers` union select `northwind`.`Suppliers`.`City` AS `City`,`northwind`.`Suppliers`.`CompanyName` AS `CompanyName`,`northwind`.`Suppliers`.`ContactName` AS `ContactName`,'Suppliers' AS `Suppliers` from `northwind`.`Suppliers`

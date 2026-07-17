@@ -1,0 +1,24 @@
+{
+  "Name": "`Customer`",
+  "Extensions": { "OwningTeam": "Identity" },
+  "Columns": [
+    { "Name": "`CustomerId`", "DataType": "INT", "Nullable": false },
+    { "Name": "`Email`", "DataType": "VARCHAR(256)", "Nullable": false },
+    {
+      "Name": "`DebugPayload`",
+      "DataType": "TEXT",
+      "Nullable": true,
+      "Extensions": { "Audience": "NonProdOnly" },
+      "ShouldApplyExpression": "'{{Audience}}' = 'NonProdOnly' AND '{{DeployEnv}}' <> 'Production'"
+    }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`CustomerId`" },
+    {
+      "Name": "ix_customer_email",
+      "IndexColumns": "`Email`",
+      "Extensions": { "Purpose": "PerfOnly" },
+      "ShouldApplyExpression": "'{{Purpose}}' = 'PerfOnly' AND '{{DeployEnv}}' = 'Production'"
+    }
+  ]
+}

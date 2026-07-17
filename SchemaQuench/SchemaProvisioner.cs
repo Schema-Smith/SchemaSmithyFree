@@ -41,7 +41,7 @@ public class SchemaProvisioner
     public virtual void EnsureSchemaExists(IDbCommand command, string schemaName, Platform platform,
         bool isWhatIf, Action<string> log)
     {
-        switch (platform)
+        switch (platform.GetBasePlatform())
         {
             case Platform.SqlServer:
             {
@@ -126,7 +126,7 @@ public class SchemaProvisioner
         {
             // Symmetric to EnsureSchemaExists — log the rendering using per-engine quoting style so
             // the WhatIf output mirrors what a real run would emit.
-            var rendered = platform switch
+            var rendered = platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => $"[{databaseName}]",
                 Platform.PostgreSQL => $"\"{databaseName}\"",
@@ -139,7 +139,7 @@ public class SchemaProvisioner
 
         try
         {
-            switch (platform)
+            switch (platform.GetBasePlatform())
             {
                 case Platform.SqlServer:
                 {
@@ -206,7 +206,7 @@ public class SchemaProvisioner
             // The original exception is preserved as InnerException so the underlying engine
             // error (SqlException error 262, PostgresException SqlState 42501, MySqlException
             // code 1044 / 1142) stays attached for the caller to inspect or log.
-            var adminDb = platform switch
+            var adminDb = platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => "master",
                 Platform.PostgreSQL => "postgres",

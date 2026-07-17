@@ -25,6 +25,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- Fixtures proving the ResourceLoader variant-override seam (MariaDb wins over MySQL base). -->
+		<EmbeddedResource Include="Scripts\MariaDb\*.sql" />
+		<EmbeddedResource Include="Scripts\MySQL\*.sql" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<Using Include="NUnit.Framework" />
 	</ItemGroup>
 

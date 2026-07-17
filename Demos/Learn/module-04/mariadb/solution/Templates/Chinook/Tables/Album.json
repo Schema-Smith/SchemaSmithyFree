@@ -1,0 +1,52 @@
+{
+  "Name": "`Album`",
+  "Columns": [
+    {
+      "Name": "`AlbumId`",
+      "DataType": "int",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`Title`",
+      "DataType": "varchar(160)",
+      "CharacterSet": "utf8mb4"
+    },
+    {
+      "Name": "`ArtistId`",
+      "DataType": "int"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "FK_Album_Artist",
+      "IndexColumns": "`ArtistId`",
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`AlbumId`",
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Album_Artist",
+      "Columns": "`ArtistId`",
+      "RelatedTable": "`Artist`",
+      "RelatedColumns": "`ArtistId`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [],
+  "Engine": "InnoDB",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "Collation": "utf8mb4_0900_ai_ci",
+  "AutoIncrementValue": 6,
+  "FullTextIndexes": []
+}

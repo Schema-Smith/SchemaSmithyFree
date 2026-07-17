@@ -1,0 +1,13 @@
+{
+  "Name": "Customer",
+  "Columns": [
+    { "Name": "CustomerId", "DataType": "INT", "AutoIncrement": true },
+    { "Name": "Name", "DataType": "VARCHAR(100)" },
+    { "Name": "ContactEmail", "DataType": "VARCHAR(200)", "Nullable": true },
+    { "Name": "LoyaltyTier", "DataType": "VARCHAR(20)", "Nullable": true, "Default": "'Standard'" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "CustomerId" },
+    { "Name": "IX_Customer_ContactEmail", "Unique": false, "IndexColumns": "ContactEmail" }
+  ]
+}

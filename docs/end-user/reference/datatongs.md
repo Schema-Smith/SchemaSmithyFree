@@ -335,6 +335,10 @@ DataTongs detects column types and applies the correct extraction and restoratio
 
 When a column is excluded from extraction, DataTongs logs a warning naming the table, the column, and the underlying type so you know exactly what was skipped.
 
+### MariaDB
+
+MariaDB uses the MySQL delivery path with the same behaviors as above. One operational difference: MariaDB's default `max_allowed_packet` is smaller than MySQL 8's 64&nbsp;MB. Because each table's data is delivered as a single JSON payload, delivering a large table can exceed that limit and fail with `Error submitting <N>MB packet; ensure 'max_allowed_packet' is greater than <N>MB`. Raise the server's `max_allowed_packet` (for example `--max-allowed-packet=64M`, or the equivalent in `my.cnf`) to accommodate your largest table's row set.
+
 ---
 
 ## Source Query

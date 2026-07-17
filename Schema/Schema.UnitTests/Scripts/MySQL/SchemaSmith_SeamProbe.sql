@@ -1,0 +1,1 @@
+-- MYSQL BASE (test fixture — the fallback the MariaDb variant override must win against)

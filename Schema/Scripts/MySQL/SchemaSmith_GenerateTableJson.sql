@@ -53,22 +53,32 @@ BEGIN
             'Name', CONCAT('`', c.COLUMN_NAME, '`'),
             'DataType', c.COLUMN_TYPE,
             'Nullable', CASE WHEN c.IS_NULLABLE = 'YES' THEN TRUE ELSE FALSE END,
+            -- SchemaSmith_NormalizeColumnDefault folds MariaDB's divergent COLUMN_DEFAULT reporting
+            -- (literal 'NULL' marker, quoted string values, current_timestamp() with parens) to the
+            -- MySQL form so extraction output — and thus a round-tripped product — matches MySQL and
+            -- does not phantom-churn on re-quench. It is an identity on MySQL. Shape detection
+            -- (parens, function-call, binary/hex) runs on the RAW value so it isn't disturbed.
+            -- Every branch is CONVERT(... USING utf8mb4) so the CASE has a single collation: the
+            -- SchemaSmith_NormalizeColumnDefault result carries utf8mb4_unicode_ci while raw
+            -- COLUMN_DEFAULT / string literals carry the information_schema/connection collation, and
+            -- MariaDB refuses to aggregate the mix without an explicit coercion.
             'Default', CASE
-                WHEN c.COLUMN_DEFAULT IS NULL THEN NULL
+                WHEN SchemaSmith_NormalizeColumnDefault(c.COLUMN_DEFAULT) IS NULL THEN NULL
                 -- Numeric types: value is always a valid literal
                 WHEN c.DATA_TYPE IN ('tinyint', 'smallint', 'mediumint', 'int', 'integer', 'bigint',
-                                     'float', 'double', 'decimal', 'numeric', 'bit', 'year') THEN c.COLUMN_DEFAULT
+                                     'float', 'double', 'decimal', 'numeric', 'bit', 'year') THEN CONVERT(c.COLUMN_DEFAULT USING utf8mb4)
                 -- Expression defaults (MySQL 8.0.13+): wrapped in parentheses
-                WHEN c.COLUMN_DEFAULT LIKE '(%' THEN c.COLUMN_DEFAULT
-                -- Function/keyword defaults (CURRENT_TIMESTAMP, CURRENT_DATE, etc.)
-                WHEN UPPER(TRIM(c.COLUMN_DEFAULT)) LIKE 'CURRENT\_%' ESCAPE '\\' THEN c.COLUMN_DEFAULT
+                WHEN c.COLUMN_DEFAULT LIKE '(%' THEN CONVERT(c.COLUMN_DEFAULT USING utf8mb4)
+                -- Function/keyword defaults (CURRENT_TIMESTAMP, CURRENT_DATE, etc.): normalize so
+                -- MariaDB's current_timestamp() folds to the MySQL CURRENT_TIMESTAMP form.
+                WHEN UPPER(TRIM(c.COLUMN_DEFAULT)) LIKE 'CURRENT\_%' ESCAPE '\\' THEN CONVERT(SchemaSmith_NormalizeColumnDefault(c.COLUMN_DEFAULT) USING utf8mb4)
                 -- Function calls like NOW(), UUID()
-                WHEN UPPER(TRIM(c.COLUMN_DEFAULT)) LIKE '%()' THEN c.COLUMN_DEFAULT
+                WHEN UPPER(TRIM(c.COLUMN_DEFAULT)) LIKE '%()' THEN CONVERT(c.COLUMN_DEFAULT USING utf8mb4)
                 -- Binary/hex literals
-                WHEN c.COLUMN_DEFAULT LIKE 'b''%' THEN c.COLUMN_DEFAULT
-                WHEN c.COLUMN_DEFAULT LIKE '0x%' THEN c.COLUMN_DEFAULT
-                -- String literals: wrap in single quotes
-                ELSE CONCAT('''', REPLACE(c.COLUMN_DEFAULT, '''', ''''''), '''')
+                WHEN c.COLUMN_DEFAULT LIKE 'b''%' THEN CONVERT(c.COLUMN_DEFAULT USING utf8mb4)
+                WHEN c.COLUMN_DEFAULT LIKE '0x%' THEN CONVERT(c.COLUMN_DEFAULT USING utf8mb4)
+                -- String literals: normalize (strips MariaDB's outer quotes) then wrap consistently
+                ELSE CONVERT(CONCAT('''', REPLACE(CONVERT(SchemaSmith_NormalizeColumnDefault(c.COLUMN_DEFAULT) USING utf8mb4), '''', ''''''), '''') USING utf8mb4)
             END,
             'AutoIncrement', CASE WHEN c.EXTRA LIKE '%auto_increment%' THEN TRUE ELSE FALSE END,
             'Generated', CASE
@@ -110,14 +120,14 @@ BEGIN
                 ORDER BY s.SEQ_IN_INDEX
                 SEPARATOR ','
             ),
-            'Visible', CASE WHEN s.IS_VISIBLE = 'YES' THEN TRUE ELSE FALSE END,
+            'Visible', CASE WHEN SchemaSmith_IndexIsVisible(p_Schema, p_Table, s.INDEX_NAME) = 1 THEN TRUE ELSE FALSE END,
             'Comment', NULLIF(s.INDEX_COMMENT, '')
         ) AS idx_json
         FROM INFORMATION_SCHEMA.STATISTICS s
         WHERE s.TABLE_SCHEMA = p_Schema
           AND s.TABLE_NAME = p_Table
           AND s.INDEX_TYPE != 'FULLTEXT'
-        GROUP BY s.INDEX_NAME, s.NON_UNIQUE, s.INDEX_TYPE, s.IS_VISIBLE, s.INDEX_COMMENT
+        GROUP BY s.INDEX_NAME, s.NON_UNIQUE, s.INDEX_TYPE, s.INDEX_COMMENT
     ) idx_subquery;
 
     -- Get foreign keys
@@ -187,13 +197,15 @@ BEGIN
         GROUP BY s.INDEX_NAME
     ) ft_subquery;
 
-    -- Combine all into final JSON
+    -- Combine all into final JSON. Nest the JSON-text vars as JSON values via JSON_EXTRACT(x,'$')
+    -- rather than CAST(x AS JSON): MariaDB has no native JSON type and rejects the CAST syntax,
+    -- while JSON_EXTRACT(x,'$') nests identically on both engines (and yields JSON null for NULL).
     SET v_json = JSON_SET(v_json,
-        '$.Columns', CAST(v_columns AS JSON),
-        '$.Indexes', CAST(v_indexes AS JSON),
-        '$.ForeignKeys', CAST(v_foreign_keys AS JSON),
-        '$.CheckConstraints', CAST(v_check_constraints AS JSON),
-        '$.FullTextIndexes', CAST(v_fulltext_indexes AS JSON)
+        '$.Columns', JSON_EXTRACT(v_columns, '$'),
+        '$.Indexes', JSON_EXTRACT(v_indexes, '$'),
+        '$.ForeignKeys', JSON_EXTRACT(v_foreign_keys, '$'),
+        '$.CheckConstraints', JSON_EXTRACT(v_check_constraints, '$'),
+        '$.FullTextIndexes', JSON_EXTRACT(v_fulltext_indexes, '$')
     );
 
     -- Remove null values for cleaner output

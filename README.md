@@ -10,7 +10,7 @@
 [![License: SSCL v2.0](https://img.shields.io/badge/license-SSCL%20v2.0-blue)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/stargazers)
 
-SchemaSmith is a state-based database schema management toolset for SQL Server, PostgreSQL, and MySQL. Define your desired database state as metadata — tables, views, procedures, indexes, constraints, data — and SchemaSmith transforms any target server to match. Same toolset, same package format, three engines — no migration scripts to author or order.
+SchemaSmith is a state-based database schema management toolset for SQL Server, PostgreSQL, MySQL, and MariaDB. Define your desired database state as metadata — tables, views, procedures, indexes, constraints, data — and SchemaSmith transforms any target server to match. Same toolset, same package format, four engines — no migration scripts to author or order.
 
 Self-contained, single-file executables for Windows, Linux, and macOS. No .NET runtime install needed.
 
@@ -19,8 +19,8 @@ Self-contained, single-file executables for Windows, Linux, and macOS. No .NET r
 ## Tools
 
 - **SchemaTongs** — Extracts databases into schema packages across all three platforms. Pure SQL extraction with no external SDKs, orphan detection with cleanup-script generation, post-extraction script validation, and subfolder preservation so your repository organization survives re-extraction.
-- **SchemaQuench** — Deploys schema packages to SQL Server, PostgreSQL, and MySQL. 9 execution slots, conditional deployment via `ShouldApplyExpression`, secondary-server fan-out, FK-aware data delivery, checkpoint/resume, WhatIf analysis, indexed views (SQL Server), materialized views (PostgreSQL), and a token system that reaches every script.
-- **DataTongs** — Extracts table data and generates platform-aware MERGE scripts for SQL Server, PostgreSQL, and MySQL. Auto primary-key detection, complex type support (geometry, hierarchyid, binary), and full token resolution including MySQL.
+- **SchemaQuench** — Deploys schema packages to SQL Server, PostgreSQL, MySQL, and MariaDB. 9 execution slots, conditional deployment via `ShouldApplyExpression`, secondary-server fan-out, FK-aware data delivery, checkpoint/resume, WhatIf analysis, indexed views (SQL Server), materialized views (PostgreSQL), and a token system that reaches every script.
+- **DataTongs** — Extracts table data and generates platform-aware MERGE scripts for SQL Server, PostgreSQL, MySQL, and MariaDB. Auto primary-key detection, complex type support (geometry, hierarchyid, binary), and full token resolution including MySQL.
 - **SchemaShears** — Carves an object-level patch (subset) package from a full product via a manifest. Emitted patches suppress drop-by-absence so omitted objects are preserved.
 
 For the complete feature reference, see [docs/FEATURE_LIST.md](docs/FEATURE_LIST.md).
@@ -118,7 +118,7 @@ See [Demos/README.md](Demos/README.md) for the per-platform layout, credentials,
 
 ## License
 
-SchemaSmith Community Edition is licensed under [SSCL v2.0](LICENSE). Use it freely to manage databases for your own products and services — SQL Server, PostgreSQL, or MySQL — with no restrictions on organization size, revenue, database size, or environment count. Not permitted: redistributing SchemaSmith as a standalone product, bundling it as a component of another product marketed to third parties, or offering it as a hosted or managed service. See the [LICENSE](LICENSE) for the full terms.
+SchemaSmith Community Edition is licensed under [SSCL v2.0](LICENSE). Use it freely to manage databases for your own products and services — SQL Server, PostgreSQL, MySQL, or MariaDB — with no restrictions on organization size, revenue, database size, or environment count. Not permitted: redistributing SchemaSmith as a standalone product, bundling it as a component of another product marketed to third parties, or offering it as a hosted or managed service. See the [LICENSE](LICENSE) for the full terms.
 
 ## Contributors
 

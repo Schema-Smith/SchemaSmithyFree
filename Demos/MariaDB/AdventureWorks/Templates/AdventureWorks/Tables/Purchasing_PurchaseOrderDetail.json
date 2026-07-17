@@ -1,0 +1,162 @@
+{
+  "Name": "`Purchasing_PurchaseOrderDetail`",
+  "Columns": [
+    {
+      "Name": "`DueDate`",
+      "DataType": "datetime",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ModifiedDate`",
+      "DataType": "datetime",
+      "Default": "CURRENT_TIMESTAMP",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`OrderQty`",
+      "DataType": "smallint",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ProductID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`PurchaseOrderDetailID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`PurchaseOrderID`",
+      "DataType": "int",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`ReceivedQty`",
+      "DataType": "decimal(8,2)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`RejectedQty`",
+      "DataType": "decimal(8,2)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`UnitPrice`",
+      "DataType": "decimal(19,4)",
+      "ShouldApplyExpression": "",
+      "OldName": ""
+    },
+    {
+      "Name": "`LineTotal`",
+      "DataType": "decimal(19,4)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "STORED",
+      "GenerationExpression": "coalesce((`OrderQty` * `UnitPrice`),0.00)"
+    },
+    {
+      "Name": "`StockedQty`",
+      "DataType": "decimal(9,2)",
+      "Nullable": true,
+      "ShouldApplyExpression": "",
+      "OldName": "",
+      "Generated": "STORED",
+      "GenerationExpression": "coalesce((`ReceivedQty` - `RejectedQty`),0.00)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "IX_PurchaseOrderDetail_ProductID",
+      "IndexColumns": "`ProductID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "Unique": true,
+      "UniqueConstraint": true,
+      "IndexColumns": "`PurchaseOrderID`,`PurchaseOrderDetailID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    },
+    {
+      "Name": "PurchaseOrderDetailID",
+      "IndexColumns": "`PurchaseOrderDetailID`",
+      "ShouldApplyExpression": "",
+      "Visible": true,
+      "IndexType": "BTREE"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_Purchasing_PurchaseOrderDetail_ProductID",
+      "Columns": "`ProductID`",
+      "RelatedTable": "`Production_Product`",
+      "RelatedColumns": "`ProductID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    },
+    {
+      "Name": "FK_Purchasing_PurchaseOrderDetail_PurchaseOrderID",
+      "Columns": "`PurchaseOrderID`",
+      "RelatedTable": "`Purchasing_PurchaseOrderHeader`",
+      "RelatedColumns": "`PurchaseOrderID`",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "ShouldApplyExpression": "",
+      "RelatedTableSchema": ""
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Purchasing_PurchaseOrderDetail_OrderQty",
+      "Expression": "(`OrderQty` > 0)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_PurchaseOrderDetail_ReceivedQty",
+      "Expression": "(`ReceivedQty` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_PurchaseOrderDetail_RejectedQty",
+      "Expression": "(`RejectedQty` >= 0.00)",
+      "ShouldApplyExpression": ""
+    },
+    {
+      "Name": "CK_Purchasing_PurchaseOrderDetail_UnitPrice",
+      "Expression": "(`UnitPrice` >= 0.00)",
+      "ShouldApplyExpression": ""
+    }
+  ],
+  "ShouldApplyExpression": "",
+  "OldName": "",
+  "Engine": "InnoDB",
+  "Collation": "utf8mb4_unicode_ci",
+  "RowFormat": "Dynamic",
+  "CharacterSet": "utf8mb4",
+  "FullTextIndexes": [],
+  "AutoIncrementValue": 8846,
+  "DataDelivery": {
+    "ContentFile": "data/Purchasing_PurchaseOrderDetail.tabledata",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "`PurchaseOrderID`,`PurchaseOrderDetailID`"
+  }
+}

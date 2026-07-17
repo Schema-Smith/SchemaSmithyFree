@@ -40,7 +40,7 @@ internal class ScriptValidator
 
     public string GenerateParseOnlyWrapper(string script, Platform platform)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => $"SET PARSEONLY ON;\n{script}\nSET PARSEONLY OFF;",
             Platform.MySQL => $"PREPARE _validate_stmt FROM '{script.Replace("'", "''")}'; DEALLOCATE PREPARE _validate_stmt;",
@@ -111,7 +111,7 @@ internal class ScriptValidator
     private static Regex GetCreatePattern(Platform platform)
     {
         // The "name" group captures the full quoted object name (including quotes) for replacement
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => new Regex(
                 @"CREATE\s+(OR\s+ALTER\s+)?(FUNCTION|VIEW|PROCEDURE)\s+(\[\w+\]\.)?(?<name>\[\w+\]|\w+)",
@@ -128,7 +128,7 @@ internal class ScriptValidator
 
     private static string QuoteTempName(string tempName, Platform platform)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => $"[{tempName}]",
             Platform.PostgreSQL => $"\"{tempName}\"",

@@ -276,6 +276,68 @@ jobs:
             schema: Demos/PostgreSQL/TenantCRM/.json-schemas/materializedviews.postgresql.schema
             files: "Demos/PostgreSQL/TenantCRM/Templates/**/Materialized Views/**/*.json"
 
+          # ── MariaDB – 4 sample databases ──────────────────────────────────
+          - name: MariaDB-AdventureWorks-Tables
+            schema: Demos/MariaDB/AdventureWorks/.json-schemas/tables.mariadb.schema
+            files: Demos/MariaDB/AdventureWorks/Templates/**/Tables/**/*.json
+
+          - name: MariaDB-AdventureWorks-Products
+            schema: Demos/MariaDB/AdventureWorks/.json-schemas/products.mariadb.schema
+            files: Demos/MariaDB/AdventureWorks/Product.json
+
+          - name: MariaDB-AdventureWorks-Templates
+            schema: Demos/MariaDB/AdventureWorks/.json-schemas/templates.mariadb.schema
+            files: Demos/MariaDB/AdventureWorks/Templates/*/Template.json
+
+          - name: MariaDB-Chinook-Tables
+            schema: Demos/MariaDB/Chinook/.json-schemas/tables.mariadb.schema
+            files: Demos/MariaDB/Chinook/Templates/**/Tables/**/*.json
+
+          - name: MariaDB-Chinook-Products
+            schema: Demos/MariaDB/Chinook/.json-schemas/products.mariadb.schema
+            files: Demos/MariaDB/Chinook/Product.json
+
+          - name: MariaDB-Chinook-Templates
+            schema: Demos/MariaDB/Chinook/.json-schemas/templates.mariadb.schema
+            files: Demos/MariaDB/Chinook/Templates/*/Template.json
+
+          - name: MariaDB-Northwind-Tables
+            schema: Demos/MariaDB/Northwind/.json-schemas/tables.mariadb.schema
+            files: Demos/MariaDB/Northwind/Templates/**/Tables/**/*.json
+
+          - name: MariaDB-Northwind-Products
+            schema: Demos/MariaDB/Northwind/.json-schemas/products.mariadb.schema
+            files: Demos/MariaDB/Northwind/Product.json
+
+          - name: MariaDB-Northwind-Templates
+            schema: Demos/MariaDB/Northwind/.json-schemas/templates.mariadb.schema
+            files: Demos/MariaDB/Northwind/Templates/*/Template.json
+
+          - name: MariaDB-Sakila-Tables
+            schema: Demos/MariaDB/Sakila/.json-schemas/tables.mariadb.schema
+            files: Demos/MariaDB/Sakila/Templates/**/Tables/**/*.json
+
+          - name: MariaDB-Sakila-Products
+            schema: Demos/MariaDB/Sakila/.json-schemas/products.mariadb.schema
+            files: Demos/MariaDB/Sakila/Product.json
+
+          - name: MariaDB-Sakila-Templates
+            schema: Demos/MariaDB/Sakila/.json-schemas/templates.mariadb.schema
+            files: Demos/MariaDB/Sakila/Templates/*/Template.json
+
+          # ── Learn / module-04 – mariadb ───────────────────────────────────
+          - name: Learn-module-04-mariadb-Tables
+            schema: Demos/Learn/module-04/mariadb/solution/.json-schemas/tables.mariadb.schema
+            files: Demos/Learn/module-04/mariadb/solution/Templates/**/Tables/**/*.json
+
+          - name: Learn-module-04-mariadb-Products
+            schema: Demos/Learn/module-04/mariadb/solution/.json-schemas/products.mariadb.schema
+            files: Demos/Learn/module-04/mariadb/solution/Product.json
+
+          - name: Learn-module-04-mariadb-Templates
+            schema: Demos/Learn/module-04/mariadb/solution/.json-schemas/templates.mariadb.schema
+            files: Demos/Learn/module-04/mariadb/solution/Templates/*/Template.json
+
     steps:
       - uses: actions/checkout@v4
 

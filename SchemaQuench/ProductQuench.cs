@@ -249,7 +249,7 @@ public class ProductQuench
     /// <summary>
     /// Returns the init database name used for server-level connections per platform.
     /// </summary>
-    internal static string GetInitDatabase(Platform platform) => platform switch
+    internal static string GetInitDatabase(Platform platform) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => "master",
         Platform.PostgreSQL => "postgres",
@@ -260,7 +260,7 @@ public class ProductQuench
     /// <summary>
     /// Returns the server identification query per platform.
     /// </summary>
-    internal static string GetServerIdQuery(Platform platform) => platform switch
+    internal static string GetServerIdQuery(Platform platform) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => "SELECT @@SERVERNAME",
         Platform.PostgreSQL => "SELECT inet_server_addr();",
@@ -394,7 +394,7 @@ public class ProductQuench
         string connectionString;
         if (!string.IsNullOrEmpty(connectionStringOverride) && server == _primaryServer)
         {
-            if (_product.Platform == Platform.MySQL &&
+            if (_product.Platform.GetBasePlatform() == Platform.MySQL &&
                 !connectionStringOverride.Contains("AllowUserVariables", StringComparison.OrdinalIgnoreCase))
             {
                 LogFactory.GetLogger("ProgressLog").Warn("Connection string override for MySQL does not contain AllowUserVariables=true. " +
@@ -529,7 +529,7 @@ public class ProductQuench
         var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
         if (!string.IsNullOrEmpty(connectionStringOverride) && server == _primaryServer)
         {
-            if (_product.Platform == Platform.MySQL &&
+            if (_product.Platform.GetBasePlatform() == Platform.MySQL &&
                 !connectionStringOverride.Contains("AllowUserVariables", StringComparison.OrdinalIgnoreCase))
             {
                 LogFactory.GetLogger("ProgressLog").Warn("Connection string override for MySQL does not contain AllowUserVariables=true. " +
@@ -1602,7 +1602,7 @@ public class ProductQuench
         try
         {
             command.Parameters.Clear();
-            command.CommandText = _product.Platform switch
+            command.CommandText = _product.Platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => "SELECT COUNT(*) FROM sys.databases WHERE name = @name",
                 Platform.PostgreSQL => "SELECT COUNT(*) FROM pg_database WHERE datname = @name",
@@ -1961,7 +1961,7 @@ public class ProductQuench
         try
         {
             var initDb = GetInitDatabase(_product.Platform);
-            destCmd.CommandText = _product.Platform switch
+            destCmd.CommandText = _product.Platform.GetBasePlatform() switch
             {
                 Platform.SqlServer => $"USE [{initDb}]",
                 Platform.PostgreSQL => initDb, // PostgreSQL uses ChangeDatabase

@@ -80,7 +80,7 @@ public static class SchemaDiscovery
         if (command == null) throw new ArgumentNullException(nameof(command));
 
         var platform = template.Product?.Platform ?? Platform.Unknown;
-        if (platform == Platform.MySQL)
+        if (platform.GetBasePlatform() == Platform.MySQL)
         {
             throw new InvalidOperationException(
                 $"Schema-template discovery is not supported on MySQL (template '{template.Name}'). " +

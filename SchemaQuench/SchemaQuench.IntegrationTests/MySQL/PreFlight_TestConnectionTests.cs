@@ -1,57 +1,19 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
-using Microsoft.Extensions.Configuration;
-using Schema.IntegrationTests;
-using Schema.Isolators;
-using Schema.Utility;
+using NUnit.Framework;
+using Schema.Domain;
+using Schema.IntegrationTests.MySQL;
+using SchemaQuench.IntegrationTests.Shared;
 
 namespace SchemaQuench.IntegrationTests.MySQL;
 
 [TestFixture]
 [Category("MySQL")]
 [NonParallelizable]
-public class PreFlight_TestConnectionTests : BaseTableQuenchTests
+public class PreFlight_TestConnectionTests : PreFlight_TestConnectionSharedTests
 {
-    [Test]
-    public void TestConnection_ValidServer_Succeeds()
-    {
-        lock (FactoryContainer.SharedLockObject)
-        {
-            var config = FactoryContainer.Resolve<IConfigurationRoot>();
-            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("MySQL", "ValidProduct");
-            try
-            {
-                var pq = new ProductQuench();
-                Assert.That(pq.RunPreFlight(previewTargets: false), Is.True);
-                Assert.That(pq.Failed, Is.False);
-            }
-            finally
-            {
-                config["SchemaPackagePath"] = null;
-            }
-        }
-    }
-
-    [Test]
-    public void TestConnection_BadCredentials_FailsWithoutThrowing()
-    {
-        lock (FactoryContainer.SharedLockObject)
-        {
-            var config = FactoryContainer.Resolve<IConfigurationRoot>();
-            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("MySQL", "ValidProduct");
-            var originalPassword = config["Target:Password"];
-            config["Target:Password"] = "WrongPassword_xK9z!";
-            try
-            {
-                var pq = new ProductQuench();
-                Assert.That(pq.RunPreFlight(previewTargets: false), Is.False);
-                Assert.That(pq.Failed, Is.True);
-            }
-            finally
-            {
-                config["Target:Password"] = originalPassword;
-                config["SchemaPackagePath"] = null;
-            }
-        }
-    }
+    protected override Platform Platform => Platform.MySQL;
+    protected override string MainConnectionString => FixtureSetup.GetMainDbConnectionString();
+    protected override string MainDbName => FixtureSetup.MainDb;
+    protected override string ProductPlatformFolder => "MySQL";
 }

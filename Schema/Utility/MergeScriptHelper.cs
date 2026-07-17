@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using Schema.Domain;
 using Schema.Delivery;
@@ -81,7 +82,7 @@ public static class MergeScriptHelper
 
     #region IMergeScriptHelper dispatch methods
 
-    public static string GetMatchColumns(Platform platform, string keyColumns) => platform switch
+    public static string GetMatchColumns(Platform platform, string keyColumns) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => BuildSqlServerMatchColumns(keyColumns),
         Platform.PostgreSQL => BuildPostgreSqlMatchColumns(keyColumns),
@@ -89,7 +90,7 @@ public static class MergeScriptHelper
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
-    public static string GetJsonColumnDefinitions(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    public static string GetJsonColumnDefinitions(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => GetJsonColumnDefinitionsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => GetJsonColumnDefinitionsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
@@ -97,7 +98,7 @@ public static class MergeScriptHelper
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
-    public static string GetJsonSelectColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    public static string GetJsonSelectColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => GetJsonSelectColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => "", // PostgreSQL uses json_populate_recordset — no separate select columns
@@ -105,7 +106,7 @@ public static class MergeScriptHelper
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
-    public static string GetInsertColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    public static string GetInsertColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => GetInsertColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => GetInsertColumnsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
@@ -113,7 +114,7 @@ public static class MergeScriptHelper
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
-    public static string GetUpdateColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform switch
+    public static string GetUpdateColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => GetUpdateColumnsSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
         Platform.PostgreSQL => GetUpdateColumnsPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
@@ -121,19 +122,19 @@ public static class MergeScriptHelper
         _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
     };
 
-    public static bool NeedsIdentityInsert(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName) => platform switch
+    public static bool NeedsIdentityInsert(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName) => platform.GetBasePlatform() switch
     {
         Platform.SqlServer => NeedsIdentityInsertSqlServer(cmd, schemaOrDb, tableName),
         _ => false
     };
 
-    public static string GetIdentitySequence(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName) => platform switch
+    public static string GetIdentitySequence(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName) => platform.GetBasePlatform() switch
     {
         Platform.PostgreSQL => GetIdentityColumnAndSequencePostgreSql(cmd, schemaOrDb, tableName),
         _ => null
     };
 
-    public static (string Disable, string Enable) GetRuleStatements(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, bool updateDescendents = false) => platform switch
+    public static (string Disable, string Enable) GetRuleStatements(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, bool updateDescendents = false) => platform.GetBasePlatform() switch
     {
         Platform.PostgreSQL => GetRuleDisableEnableStatements(cmd, schemaOrDb, tableName, updateDescendents),
         _ => (null, null)
@@ -146,7 +147,7 @@ public static class MergeScriptHelper
     /// </summary>
     public static List<MergeColumnInfo> GetColumnMetadata(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName, HashSet<string> jsonKeys = null)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => GetColumnMetadataSqlServer(cmd, schemaOrDb, tableName, jsonKeys),
             Platform.PostgreSQL => GetColumnMetadataPostgreSql(cmd, schemaOrDb, tableName, jsonKeys),
@@ -324,6 +325,10 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
 
             // MySQL JSON_TABLE COLUMNS clause requires real column types — not CAST aliases
             // like SIGNED/UNSIGNED. Integer types must be spelled out (INT, BIGINT, etc.).
+            // Character/text types mirror the non-deferred path (GetMySqlTypeForJsonTable): CHAR maxes
+            // at 255 and utf8mb4 VARCHAR at 16383. The old `CHAR(maxLen)` default emitted e.g. CHAR(65535)
+            // for a TEXT column, which MySQL tolerated in JSON_TABLE but MariaDB rejects with
+            // "Column length too big ... (max = 255); use BLOB or TEXT instead". Read oversized/text as TEXT.
             var jsonType = dataType switch
             {
                 "tinyint" or "smallint" or "mediumint" or "int" or "integer" or "bigint" => dataType.ToUpperInvariant(),
@@ -334,7 +339,11 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
                 "time" => "TIME",
                 "year" => "YEAR",
                 "json" => "JSON",
-                _ => maxLen > 0 ? $"CHAR({maxLen})" : "CHAR(65535)"
+                "tinytext" or "text" or "mediumtext" or "longtext"
+                    or "binary" or "varbinary" or "tinyblob" or "blob" or "mediumblob" or "longblob" => "TEXT",
+                "char" => maxLen is > 0 and <= 255 ? $"CHAR({maxLen})" : "TEXT",
+                "varchar" => maxLen is > 0 and <= 16383 ? $"VARCHAR({maxLen})" : "TEXT",
+                _ => maxLen is > 0 and <= 255 ? $"CHAR({maxLen})" : "TEXT"
             };
 
             var isGeometry = dataType is "point" or "linestring" or "polygon" or "geometry"
@@ -369,7 +378,7 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
     /// </summary>
     public static string GetKeyColumns(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => GetKeyColumnsSqlServer(cmd, schemaOrDb, tableName),
             Platform.PostgreSQL => GetKeyColumnsPostgreSql(cmd, schemaOrDb, tableName),
@@ -497,7 +506,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
         // For tokenized scripts, data is replaced at runtime so we include all columns.
         var jsonKeys = tokenizeScripts ? null : GetJsonDataKeys(tableData);
 
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => BuildMergeScriptSqlServer(cmd, schemaOrDb, tableName, tableData, keyColumns,
                 mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride),
@@ -518,7 +527,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
     /// </summary>
     internal static string GetUnsupportedColumnComments(Platform platform, IDbCommand cmd, string schemaOrDb, string tableName)
     {
-        return platform switch
+        return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => GetUnsupportedColumnCommentsSqlServer(cmd, schemaOrDb, tableName),
             Platform.PostgreSQL => GetUnsupportedColumnCommentsPostgreSql(cmd, schemaOrDb, tableName),
@@ -1180,7 +1189,7 @@ SELECT c.column_name, c.udt_name
         tableName = tableName.Trim().Trim('`');
         var columns = GetColumnInfoMySql(cmd, databaseName, tableName, excludeAutoIncrement: false, jsonKeys: jsonKeys);
         return string.Join(",", columns.Select(c =>
-            IsJsonTypeMySql(c.DataType) ? $"J[`{c.Name}`]" : $"`{c.Name}`"));
+            c.IsJson ? $"J[`{c.Name}`]" : $"`{c.Name}`"));
     }
 
     private static string BuildMergeScriptMySql(IDbCommand cmd, string databaseName, string tableName,
@@ -1211,7 +1220,8 @@ SELECT c.column_name, c.udt_name
             var upsert = mergeUpdate
                 ? BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, updateColumns, tableData, keyColumns, tokenizeScripts)
                 : BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, tableData, tokenizeScripts);
-            var delete = BuildDeleteStatementMySql(databaseName, tableName, jsonTableColumns, keyColumns, mergeFilter);
+            var stringKeys = GetStringKeyColumnsMySql(cmd, databaseName, tableName, keyColumns);
+            var delete = BuildDeleteStatementMySql(databaseName, tableName, jsonTableColumns, keyColumns, mergeFilter, stringKeys);
             return upsert + "\n" + delete;
         }
         if (mergeUpdate)
@@ -1226,6 +1236,8 @@ SELECT c.column_name, c.udt_name
     {
         databaseName = databaseName.Trim().Trim('`');
         tableName = tableName.Trim().Trim('`');
+
+        var jsonCheckColumns = GetJsonCheckConstraintColumnsMySql(cmd, databaseName, tableName);
 
         BindIdentifierParameters(cmd, ("@db", databaseName), ("@table", tableName));
         cmd.CommandText = $@"
@@ -1276,14 +1288,75 @@ ORDER BY c.ORDINAL_POSITION;
                     ? null
                     : reader.GetInt32(reader.GetOrdinal("DATETIME_PRECISION")),
                 ColumnType = reader.GetString(reader.GetOrdinal("COLUMN_TYPE")),
-                IsAutoIncrement = extra.Contains("auto_increment", StringComparison.OrdinalIgnoreCase)
+                IsAutoIncrement = extra.Contains("auto_increment", StringComparison.OrdinalIgnoreCase),
+                IsJson = reader.GetString(reader.GetOrdinal("DATA_TYPE")).Equals("json", StringComparison.OrdinalIgnoreCase)
+                         || jsonCheckColumns.Contains(colName)
             });
         }
         return columns;
     }
 
+    // MariaDB reports JSON columns as `longtext` in INFORMATION_SCHEMA (JSON is a LONGTEXT alias there),
+    // but auto-creates a `json_valid(<col>)` CHECK constraint per JSON column. Detect those so MariaDB
+    // JSON columns get the same JSON-aware merge treatment as MySQL's native `json` type. Returns empty
+    // on MySQL — its native JSON columns carry no such constraint and are detected by DATA_TYPE = 'json'.
+    private static HashSet<string> GetJsonCheckConstraintColumnsMySql(IDbCommand cmd, string databaseName, string tableName)
+    {
+        BindIdentifierParameters(cmd, ("@db", databaseName), ("@table", tableName));
+        cmd.CommandText = @"
+SELECT cc.CHECK_CLAUSE
+FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+  ON tc.CONSTRAINT_SCHEMA = cc.CONSTRAINT_SCHEMA
+ AND tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME
+ AND tc.CONSTRAINT_TYPE = 'CHECK'
+WHERE tc.CONSTRAINT_SCHEMA = @db
+  AND tc.TABLE_NAME = @table;
+";
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            if (reader.IsDBNull(0)) continue;
+            foreach (Match match in JsonValidColumnRegex.Matches(reader.GetString(0)))
+                result.Add(match.Groups[1].Value);
+        }
+        return result;
+    }
+
+    // Matches MariaDB's auto-generated JSON check clause `json_valid(`<col>`)`, capturing the column name.
+    private static readonly Regex JsonValidColumnRegex =
+        new(@"json_valid\(`([^`]+)`\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Character data types whose key comparisons carry a collation and can raise
+    // "Illegal mix of collations" (1267) when the two sides differ.
+    private static readonly HashSet<string> MySqlCharacterTypes = new(StringComparer.OrdinalIgnoreCase)
+        { "char", "varchar", "tinytext", "text", "mediumtext", "longtext", "enum", "set" };
+
+    // The key columns whose type is character-based (so their comparisons need an explicit collation).
+    private static HashSet<string> GetStringKeyColumnsMySql(IDbCommand cmd, string databaseName, string tableName, string keyColumns)
+    {
+        var keyNames = new HashSet<string>(ParseKeyColumnsMySql(keyColumns), StringComparer.OrdinalIgnoreCase);
+        if (keyNames.Count == 0)
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var infos = GetColumnInfoMySql(cmd, databaseName, tableName, excludeAutoIncrement: false, jsonKeys: keyNames);
+        return new HashSet<string>(
+            infos.Where(c => MySqlCharacterTypes.Contains(c.DataType)).Select(c => c.Name),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    // Builds one key-match predicate. String keys force a common collation on both sides:
+    // MariaDB 11.4 defaults new tables to utf8mb4_uca1400_ai_ci while a JSON_TABLE-extracted string
+    // column is utf8mb4_general_ci, so `Target.k = jt.k` raises "Illegal mix of collations" (1267).
+    // Forcing utf8mb4_unicode_ci on both sides (the same canonical the quench comparison path uses)
+    // resolves the mix without changing which rows match. Numeric/date keys carry no collation.
+    private static string BuildKeyMatchMySql(string k, HashSet<string> stringKeys) =>
+        stringKeys.Contains(k)
+            ? $"Target.`{k}` COLLATE utf8mb4_unicode_ci = jt.`{k}` COLLATE utf8mb4_unicode_ci"
+            : $"Target.`{k}` = jt.`{k}`";
+
     private static string BuildDeleteStatementMySql(string databaseName, string tableName,
-        string jsonTableColumns, string keyColumns, string mergeFilter)
+        string jsonTableColumns, string keyColumns, string mergeFilter, HashSet<string> stringKeys)
     {
         var keyColNames = ParseKeyColumnsMySql(keyColumns);
         var sb = new StringBuilder();
@@ -1295,7 +1368,7 @@ ORDER BY c.ORDINAL_POSITION;
         sb.AppendLine($"      {jsonTableColumns}");
         sb.AppendLine("    )");
         sb.AppendLine("  ) AS jt");
-        sb.AppendLine($"  WHERE {string.Join(" AND ", keyColNames.Select(k => $"Target.`{k}` = jt.`{k}`"))}");
+        sb.AppendLine($"  WHERE {string.Join(" AND ", keyColNames.Select(k => BuildKeyMatchMySql(k, stringKeys)))}");
         sb.Append(")");
         if (!string.IsNullOrWhiteSpace(mergeFilter))
             sb.Append($"\nAND ({mergeFilter})");
@@ -1336,7 +1409,10 @@ ORDER BY c.ORDINAL_POSITION;
                 if (trimmed.StartsWith("J["))
                 {
                     var colName = trimmed.Substring(2).TrimEnd(']');
-                    return $"  {colName} = IF(CAST(VALUES({colName}) AS JSON) = CAST(`{databaseName}`.`{tableName}`.{colName} AS JSON), `{databaseName}`.`{tableName}`.{colName}, VALUES({colName}))";
+                    // JSON_EXTRACT(x,'$') normalizes the document for comparison and is portable across
+                    // MySQL and MariaDB. MariaDB rejects CAST(x AS JSON) (JSON is a LONGTEXT alias with
+                    // no native cast); MySQL keeps order-insensitive object equality on the extracted value.
+                    return $"  {colName} = IF(JSON_EXTRACT(VALUES({colName}), '$') = JSON_EXTRACT(`{databaseName}`.`{tableName}`.{colName}, '$'), `{databaseName}`.`{tableName}`.{colName}, VALUES({colName}))";
                 }
                 return $"  {trimmed} = VALUES({trimmed})";
             });
@@ -1405,6 +1481,11 @@ ORDER BY c.ORDINAL_POSITION;
 
     private static string GetMySqlTypeForJsonTable(MySqlColumnInfo col)
     {
+        // JSON columns must be read as JSON in JSON_TABLE so nested objects/arrays survive extraction;
+        // reading them as TEXT yields NULL for non-scalar values. MariaDB reports the column as longtext
+        // (JSON alias) but accepts JSON as a JSON_TABLE column type, so key on IsJson, not the raw type.
+        if (col.IsJson) return "JSON";
+
         var dataType = col.DataType.ToLowerInvariant();
 
         return dataType switch
@@ -1436,7 +1517,14 @@ ORDER BY c.ORDINAL_POSITION;
             "binary" or "varbinary" or "tinyblob" or "blob" or "mediumblob" or "longblob"
                 => "TEXT",
             "tinytext" or "text" or "mediumtext" or "longtext" => "TEXT",
-            "enum" or "set" => col.ColumnType,
+            // Read ENUM/SET as text in JSON_TABLE: MySQL accepts the raw `enum(...)`/`set(...)`
+            // column type here, but MariaDB rejects it. The extracted string value coerces back
+            // into the real ENUM/SET column on INSERT, so VARCHAR is behavior-identical on MySQL
+            // and portable to MariaDB. CHARACTER_MAXIMUM_LENGTH holds the longest member (ENUM)
+            // or the full members-with-separators length (SET).
+            "enum" or "set" => col.CharMaxLength.HasValue
+                ? $"VARCHAR({col.CharMaxLength})"
+                : "VARCHAR(65535)",
             "json" => "JSON",
             "geometry" or "point" or "linestring" or "polygon" or "multipoint"
                 or "multilinestring" or "multipolygon" or "geometrycollection" => "TEXT",
@@ -1456,9 +1544,6 @@ ORDER BY c.ORDINAL_POSITION;
         "binary" or "varbinary" or "tinyblob" or "blob" or "mediumblob" or "longblob" => true,
         _ => false
     };
-
-    private static bool IsJsonTypeMySql(string dataType) =>
-        dataType.Equals("json", StringComparison.OrdinalIgnoreCase);
 
     private static string BuildSelectExpressionsMySql(List<MySqlColumnInfo> columns)
     {
@@ -1495,6 +1580,11 @@ ORDER BY c.ORDINAL_POSITION;
         public int? DatetimePrecision { get; init; }
         public string ColumnType { get; init; } = "";
         public bool IsAutoIncrement { get; init; }
+
+        // JSON on MySQL is a native DATA_TYPE ('json'); on MariaDB it is a LONGTEXT alias detected via
+        // its auto-created json_valid(<col>) CHECK constraint. Either way the column gets JSON-aware
+        // merge treatment (JSON_TABLE read + order-tolerant upsert comparison).
+        public bool IsJson { get; init; }
     }
 
     #endregion
