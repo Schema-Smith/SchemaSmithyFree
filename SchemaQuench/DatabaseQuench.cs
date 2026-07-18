@@ -783,6 +783,21 @@ public class DatabaseQuench
         }
         catch (Exception e)
         {
+            // A target-server drop mid-deploy (restart / crash / OOM) surfaces here as a raw
+            // provider disconnect (e.g. SocketException) that is indistinguishable from a schema
+            // error without classification. Lead with a purpose-built message; the full stack is
+            // preserved in the error log. Initial-connect failures are handled earlier by the
+            // pre-flight connection test, so at this point a lost connection is a mid-run drop.
+            if (ConnectionLostClassifier.IsConnectionLost(e))
+            {
+                var lost = ConnectionLostMessage.Build(_server, $"Template:{_template?.Name}");
+                _errorLog.Error($"Lost connection during Template:{_template?.Name}", e);
+                SafeProgressLogError(lost);
+                LastFailure = FailureCtx.ToRecord(lost, null);
+                SafeProgressLogError($"*** FAILED [Template:{_template?.Name}] ***");
+                return;
+            }
+
             SafeProgressLogError($"FAILED to quench:\r\n{e.Message}");
             if (!string.IsNullOrWhiteSpace(_debugFileLocation))
                 SafeProgressLogError($"Resolved SQL written to: {_debugFileLocation}");
