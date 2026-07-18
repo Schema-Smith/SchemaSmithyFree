@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 # Calibrated to ~1-2pt under the observed CI baseline.
 THRESHOLDS = {
     "DataTongs": 92.0,
-    "Schema": 92.0,
+    "Schema": 93.0,
     "SchemaQuench": 91.0,
     "SchemaShears": 98.0,
     "SchemaTongs": 90.0,
