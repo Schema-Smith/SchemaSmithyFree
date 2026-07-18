@@ -1,0 +1,15 @@
+# Databases the own-server helper (deploy-to-endpoint) manages on YOUR SQL Server.
+# Format:  TYPE|NAME|TOKEN|PACKAGE
+#   TYPE    = bootstrap (created directly) | product (deployed by SchemaQuench)
+#   NAME    = database name. Rename here to avoid colliding with a real database
+#             of the same name on your server; the helper drops/creates this name.
+#   TOKEN   = (product rows) the DB-name script token overridden into SchemaQuench.
+#   PACKAGE = (product rows) the package folder under Demos/SqlServer/.
+# Lines starting with # and blank lines are ignored.
+bootstrap|TestMain||
+bootstrap|TestSecondary||
+product|AdventureWorks|AdventureWorksDb|AdventureWorks
+product|Northwind|NorthwindDb|Northwind
+product|Sakila|SakilaDb|Sakila
+product|Chinook|ChinookDb|Chinook
+product|TenantCRM|TenantCRMDb|TenantCRM
