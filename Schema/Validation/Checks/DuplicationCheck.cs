@@ -9,7 +9,7 @@ using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 
-namespace SchemaQuench.Validation.Checks;
+namespace Schema.Validation.Checks;
 
 /// <summary>
 /// Flags accidental same-name duplicates at every level (column, index, foreign key, check

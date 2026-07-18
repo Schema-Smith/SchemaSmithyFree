@@ -1,9 +1,9 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System.Collections.Generic;
-using SchemaQuench.Validation.Checks;
+using Schema.Validation.Checks;
 
-namespace SchemaQuench.Validation;
+namespace Schema.Validation;
 
 /// <summary>
 /// Source of the checks run by `--Validate`. Slice 1 shipped this empty (the gate only exercised

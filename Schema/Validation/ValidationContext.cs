@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Schema.Domain;
 
-namespace SchemaQuench.Validation;
+namespace Schema.Validation;
 
 /// <summary>
 /// The read-only view of a loaded package handed to every <see cref="ISchemaCheck"/>. Flattens

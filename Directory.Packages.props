@@ -14,10 +14,12 @@
     <PackageVersion Include="MySqlConnector" Version="2.6.1" />
     <!-- Newtonsoft.Json 13.0.4 — latest stable; 13.0.5 is beta only -->
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
-    <!-- NJsonSchema (MIT) — SchemaQuench ONLY (Validate JSON-schema lint). Core package validates
-         a JSON string against a JsonSchema instance using the Newtonsoft-based API on net8.0+
-         (its net8.0 dependency group has no System.Text.Json dependency). MUST NOT be added to
-         Schema.csproj — keeps it out of the SchemaSmith.Schema NuGet consumed by SchemaForge. -->
+    <!-- NJsonSchema (MIT) — used by the Validate JSON-schema lint check, which lives in
+         SchemaSmith.Schema (Schema.csproj). Validates a JSON string against a JsonSchema instance
+         via the Newtonsoft-based API on net8.0+ (its net8.0 dependency group has no
+         System.Text.Json dependency). Referenced from Schema.csproj, so it is an accepted
+         transitive dependency of every SchemaSmith.Schema consumer (Community CLIs + add-ons):
+         small + MIT, cheaper than conditional compilation or duplicating the checks. -->
     <PackageVersion Include="NJsonSchema" Version="11.6.1" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
 

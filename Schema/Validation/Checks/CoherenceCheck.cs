@@ -7,7 +7,7 @@ using Schema.Delivery;
 using Schema.Domain;
 using Index = Schema.Domain.Index;
 
-namespace SchemaQuench.Validation.Checks;
+namespace Schema.Validation.Checks;
 
 /// <summary>
 /// Structural cross-object reference checks the JSON schema can't express: FK local/related

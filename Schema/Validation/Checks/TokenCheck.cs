@@ -9,7 +9,7 @@ using Newtonsoft.Json.Linq;
 using Schema.Isolators;
 using Schema.Utility;
 
-namespace SchemaQuench.Validation.Checks;
+namespace Schema.Validation.Checks;
 
 /// <summary>
 /// Text-level <c>{{Token}}</c> lint across the RAW package files, not the loaded domain model.

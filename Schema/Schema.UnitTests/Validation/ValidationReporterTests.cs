@@ -3,9 +3,9 @@
 using System;
 using System.Linq;
 using NUnit.Framework;
-using SchemaQuench.Validation;
+using Schema.Validation;
 
-namespace SchemaQuench.UnitTests.Validation;
+namespace Schema.UnitTests.Validation;
 
 [TestFixture]
 public class ValidationReporterTests

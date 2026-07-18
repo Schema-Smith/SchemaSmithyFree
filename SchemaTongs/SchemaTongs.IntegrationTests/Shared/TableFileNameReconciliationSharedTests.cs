@@ -12,8 +12,8 @@ using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Isolators;
 using Schema.Utility;
-using SchemaQuench.Validation;
-using SchemaQuench.Validation.Checks;
+using Schema.Validation;
+using Schema.Validation.Checks;
 
 namespace SchemaTongs.IntegrationTests.Shared;
 

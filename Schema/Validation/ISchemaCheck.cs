@@ -2,7 +2,7 @@
 
 using System.Collections.Generic;
 
-namespace SchemaQuench.Validation;
+namespace Schema.Validation;
 
 /// <summary>
 /// One `--Validate` linter rule. Implementations inspect the loaded package via

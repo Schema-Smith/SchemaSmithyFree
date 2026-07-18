@@ -4,10 +4,10 @@ using System.Linq;
 using NUnit.Framework;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
-using SchemaQuench.Validation;
-using SchemaQuench.Validation.Checks;
+using Schema.Validation;
+using Schema.Validation.Checks;
 
-namespace SchemaQuench.UnitTests.Validation.Checks;
+namespace Schema.UnitTests.Validation.Checks;
 
 /// <summary>
 /// Slice 2.1: ShouldApply-aware duplication check. A same-name group at any level is a legitimate

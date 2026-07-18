@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace SchemaQuench.Validation;
+namespace Schema.Validation;
 
 /// <summary>
 /// Immutable outcome of a <c>--Validate</c> run: the full set of findings plus a convenience
