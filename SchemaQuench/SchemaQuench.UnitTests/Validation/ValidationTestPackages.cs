@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
-using SchemaQuench.Validation;
+using Schema.Validation;
 
 namespace SchemaQuench.UnitTests.Validation;
 

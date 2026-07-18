@@ -4,7 +4,7 @@ using System;
 using NSubstitute;
 using NUnit.Framework;
 using Schema.Domain;
-using SchemaQuench.Validation;
+using Schema.Validation;
 
 namespace SchemaQuench.UnitTests.Validation;
 

@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using Schema.Domain;
 
-namespace SchemaQuench.Validation;
+namespace Schema.Validation;
 
 /// <summary>
 /// A fully loaded schema package: the <see cref="Product"/> plus every <see cref="Template"/>

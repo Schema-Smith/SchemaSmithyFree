@@ -14,7 +14,7 @@ using Schema.Domain.SqlServer;
 using Schema.Isolators;
 using Schema.Utility;
 
-namespace SchemaQuench.Validation.Checks;
+namespace Schema.Validation.Checks;
 
 /// <summary>
 /// The final `--Validate` check: two passes over the committed <c>.json-schemas/{type}.{platform}.

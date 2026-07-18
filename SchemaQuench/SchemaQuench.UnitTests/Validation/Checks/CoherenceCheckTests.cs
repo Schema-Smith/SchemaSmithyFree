@@ -4,8 +4,8 @@ using System.Linq;
 using NUnit.Framework;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
-using SchemaQuench.Validation;
-using SchemaQuench.Validation.Checks;
+using Schema.Validation;
+using Schema.Validation.Checks;
 
 namespace SchemaQuench.UnitTests.Validation.Checks;
 

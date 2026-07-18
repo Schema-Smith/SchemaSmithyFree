@@ -5,7 +5,7 @@ using System.IO;
 using System.Threading;
 using Microsoft.Extensions.Configuration;
 using Schema.Isolators;
-using SchemaQuench.Validation;
+using Schema.Validation;
 
 namespace SchemaQuench.IntegrationTests.Validate;
 

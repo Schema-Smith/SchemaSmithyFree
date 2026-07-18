@@ -6,8 +6,8 @@ using System.Linq;
 using NSubstitute;
 using Schema.Domain;
 using Schema.Isolators;
-using SchemaQuench.Validation;
-using SchemaQuench.Validation.Checks;
+using Schema.Validation;
+using Schema.Validation.Checks;
 
 namespace SchemaQuench.UnitTests.Validation.Checks;
 

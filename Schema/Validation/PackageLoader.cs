@@ -3,7 +3,7 @@
 using System.Linq;
 using Schema.Domain;
 
-namespace SchemaQuench.Validation;
+namespace Schema.Validation;
 
 /// <summary>
 /// Thin production loader for `--Validate`: reads the configured package from disk. Mirrors

@@ -3,12 +3,12 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace SchemaQuench.Validation;
+namespace Schema.Validation;
 
 /// <summary>
 /// Pure formatter for the <c>--Validate</c> report. Converts findings into log-ready lines;
 /// the caller logs them via the progress logger. No I/O, no side effects — fully unit-testable
-/// in isolation (mirrors <see cref="PreFlightReporter"/>).
+/// in isolation (mirrors the pre-flight reporter).
 /// </summary>
 public static class ValidationReporter
 {

@@ -9,7 +9,7 @@ using Schema.Domain;
 using Schema.Isolators;
 using Schema.Utility;
 
-namespace SchemaQuench.Validation.Checks;
+namespace Schema.Validation.Checks;
 
 /// <summary>
 /// Leans authors toward the canonical table-file naming convention

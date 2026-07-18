@@ -6,7 +6,7 @@ using Schema.Checkpointing;
 using Schema.Domain;
 using Schema.Isolators;
 using Schema.Utility;
-using SchemaQuench.Validation;
+using Schema.Validation;
 
 namespace SchemaQuench;
 

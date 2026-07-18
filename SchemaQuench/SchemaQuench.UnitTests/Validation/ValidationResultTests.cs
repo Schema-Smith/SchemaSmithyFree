@@ -1,7 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using NUnit.Framework;
-using SchemaQuench.Validation;
+using Schema.Validation;
 
 namespace SchemaQuench.UnitTests.Validation;
 

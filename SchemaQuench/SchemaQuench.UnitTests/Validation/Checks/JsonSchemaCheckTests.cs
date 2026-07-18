@@ -10,8 +10,8 @@ using Schema.Domain;
 using Schema.Domain.SqlServer;
 using Schema.Isolators;
 using Schema.Utility;
-using SchemaQuench.Validation;
-using SchemaQuench.Validation.Checks;
+using Schema.Validation;
+using Schema.Validation.Checks;
 
 namespace SchemaQuench.UnitTests.Validation.Checks;
 
