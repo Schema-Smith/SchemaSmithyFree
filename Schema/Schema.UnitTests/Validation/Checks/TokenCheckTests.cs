@@ -9,7 +9,7 @@ using Schema.Isolators;
 using Schema.Validation;
 using Schema.Validation.Checks;
 
-namespace SchemaQuench.UnitTests.Validation.Checks;
+namespace Schema.UnitTests.Validation.Checks;
 
 /// <summary>
 /// Slice 2.3: text-level {{Token}} lint over the RAW package files, not the loaded domain model —

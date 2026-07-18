@@ -7,7 +7,7 @@ using Schema.Domain.SqlServer;
 using Schema.Validation;
 using Schema.Validation.Checks;
 
-namespace SchemaQuench.UnitTests.Validation.Checks;
+namespace Schema.UnitTests.Validation.Checks;
 
 /// <summary>
 /// Slice 2.2: cross-object coherence (FK/index). Structural reference checks only — no type

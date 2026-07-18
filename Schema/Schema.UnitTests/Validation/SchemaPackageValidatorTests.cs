@@ -6,7 +6,7 @@ using NUnit.Framework;
 using Schema.Domain;
 using Schema.Validation;
 
-namespace SchemaQuench.UnitTests.Validation;
+namespace Schema.UnitTests.Validation;
 
 [TestFixture]
 public class SchemaPackageValidatorTests

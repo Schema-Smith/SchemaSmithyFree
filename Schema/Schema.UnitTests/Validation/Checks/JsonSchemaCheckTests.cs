@@ -13,7 +13,7 @@ using Schema.Utility;
 using Schema.Validation;
 using Schema.Validation.Checks;
 
-namespace SchemaQuench.UnitTests.Validation.Checks;
+namespace Schema.UnitTests.Validation.Checks;
 
 /// <summary>
 /// Slice 2.4: the final `--Validate` check. Presents a fake package tree via IFile/IDirectory

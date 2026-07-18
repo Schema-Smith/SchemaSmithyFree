@@ -9,7 +9,7 @@ using Schema.Isolators;
 using Schema.Validation;
 using Schema.Validation.Checks;
 
-namespace SchemaQuench.UnitTests.Validation.Checks;
+namespace Schema.UnitTests.Validation.Checks;
 
 [TestFixture]
 public class TableFileNameCheckTests

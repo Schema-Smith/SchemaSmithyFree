@@ -6,7 +6,7 @@ using Schema.Domain;
 using Schema.Domain.SqlServer;
 using Schema.Validation;
 
-namespace SchemaQuench.UnitTests.Validation;
+namespace Schema.UnitTests.Validation;
 
 /// <summary>
 /// Shared in-memory package fixtures for check tests (Slice 1B + later Slice 2 checks).
