@@ -189,7 +189,9 @@
     "KeyIndex": "[PK_ProductReview_ProductReviewID]",
     "ChangeTracking": "AUTO",
     "StopList": "SYSTEM",
-    "Columns": "[Comments]"
+    "Columns": "[Comments]",
+    "ShouldApplyExpression": "SERVERPROPERTY('IsFullTextInstalled') = 1",
+    "VariantName": "FullTextInstalled"
   },
   "XmlIndexes": [],
   "Statistics": [],

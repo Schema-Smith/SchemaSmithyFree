@@ -2,6 +2,13 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 GO
 
+-- Full-text search is required by this procedure. On a server without Full-Text
+-- Search installed, skip it (do not deploy) instead of failing the deploy: the
+-- sentinel is caught by SchemaQuench and the CREATE below never runs.
+IF SERVERPROPERTY('IsFullTextInstalled') <> 1
+    RAISERROR('SCHEMASMITH: SHOULD NOT APPLY', 16, 1);
+GO
+
 --A stored procedure which demonstrates integrated full text search
 
 CREATE OR ALTER   PROCEDURE [dbo].[uspSearchCandidateResumes]

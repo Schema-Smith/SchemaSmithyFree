@@ -15,7 +15,8 @@
     {
       "FolderPath": "FullTextCatalogs",
       "QuenchSlot": "Objects",
-      "ObjectType": "FullTextCatalogs"
+      "ObjectType": "FullTextCatalogs",
+      "ShouldApplyExpression": "SERVERPROPERTY('IsFullTextInstalled') = 1"
     },
     {
       "FolderPath": "XMLSchemaCollections",

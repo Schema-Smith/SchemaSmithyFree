@@ -123,7 +123,9 @@
     "KeyIndex": "[PK_JobCandidate_JobCandidateID]",
     "ChangeTracking": "AUTO",
     "StopList": "SYSTEM",
-    "Columns": "[Resume]"
+    "Columns": "[Resume]",
+    "ShouldApplyExpression": "SERVERPROPERTY('IsFullTextInstalled') = 1",
+    "VariantName": "FullTextInstalled"
   },
   "XmlIndexes": [],
   "Statistics": [],
