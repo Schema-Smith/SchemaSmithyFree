@@ -37,6 +37,8 @@ cd Demos/SqlServer
 ./deploy-to-endpoint.sh --server your-server --user sa --password 'YourPassword'
 ```
 
+> **Windows Authentication?** Omit the user and password — `-Server 'localhost,1433'` on its own (PowerShell) or `--server your-server` on its own (bash) — and the helper connects as your current Windows identity: SchemaQuench builds an `Integrated Security` connection and `sqlcmd` uses `-E`. SQL Server only; PostgreSQL and MySQL always need credentials.
+
 On every run the helper does three things:
 
 1. **Resets** — drops the demo databases it previously created (and *only* those — see below), so you always start from a known-clean state.

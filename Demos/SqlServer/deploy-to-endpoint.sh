@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-MANIFEST="$HERE/demo-databases.manifest"; FORCE=0
+MANIFEST="$HERE/demo-databases.manifest"; FORCE=0; USER_=""; PASSWORD=""
 while [ $# -gt 0 ]; do case "$1" in
   --server) SERVER="$2"; shift 2;; --user) USER_="$2"; shift 2;;
   --password) PASSWORD="$2"; shift 2;; --manifest) MANIFEST="$2"; shift 2;;
   --force) FORCE=1; shift;; *) echo "unknown arg: $1" >&2; exit 64;; esac; done
+
+# Omit --user/--password to connect with Windows Authentication (trusted connection);
+# SQL Server only. Supplying a user requires a password.
+if [ -n "$USER_" ] && [ -z "$PASSWORD" ]; then
+  echo "--user was supplied without --password. Provide both for SQL auth, or omit both for Windows Authentication." >&2
+  exit 1
+fi
 
 command -v sqlcmd >/dev/null 2>&1 || { cat >&2 <<'EOF'
 sqlcmd is required but was not found on PATH.
@@ -23,7 +30,9 @@ sql() { # sql <infile> [-v NAME=VAL ...]
   # Under Git Bash / Cygwin on Windows, sqlcmd is a native .exe that needs a
   # Windows path; cygpath is absent on macOS/Linux, where the POSIX path is used.
   command -v cygpath >/dev/null 2>&1 && infile="$(cygpath -w "$infile")"
-  sqlcmd -S "$SERVER" -U "$USER_" -P "$PASSWORD" -C -b -h -1 -W -i "$infile" "$@"
+  local auth
+  if [ -n "$USER_" ]; then auth=(-U "$USER_" -P "$PASSWORD"); else auth=(-E); fi
+  sqlcmd -S "$SERVER" "${auth[@]}" -C -b -h -1 -W -i "$infile" "$@"
 }
 
 # read manifest -> arrays

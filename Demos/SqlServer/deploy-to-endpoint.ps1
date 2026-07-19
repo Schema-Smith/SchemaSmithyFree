@@ -1,13 +1,21 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)] [string] $Server,
-  [Parameter(Mandatory)] [string] $User,
-  [Parameter(Mandatory)] [string] $Password,
+  [string] $User,
+  [string] $Password,
   [string] $ManifestPath = "$PSScriptRoot/demo-databases.manifest",
   [switch] $Force
 )
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
+
+# Omit -User/-Password to connect with Windows Authentication (trusted connection).
+# Supplying a user requires a password. SQL Server only — PostgreSQL/MySQL always need credentials.
+$WindowsAuth = [string]::IsNullOrEmpty($User)
+if (-not $WindowsAuth -and [string]::IsNullOrEmpty($Password)) {
+  Write-Error "-User was supplied without -Password. Provide both for SQL auth, or omit both for Windows Authentication."
+  exit 1
+}
 
 # --- Preflight: sqlcmd must be present ---
 if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
@@ -23,7 +31,8 @@ Verify with:  sqlcmd -?
 }
 
 function Invoke-Sql([string]$Query, [string[]]$Vars = @(), [string]$InFile) {
-  $args = @('-S', $Server, '-U', $User, '-P', $Password, '-C', '-b', '-h', '-1', '-W')
+  $args = @('-S', $Server, '-C', '-b', '-h', '-1', '-W')
+  if ($WindowsAuth) { $args += '-E' } else { $args += @('-U', $User, '-P', $Password) }
   foreach ($v in $Vars) { $args += @('-v', $v) }
   if ($InFile) { $args += @('-i', $InFile) } else { $args += @('-Q', $Query) }
   $out = & sqlcmd @args
@@ -70,8 +79,9 @@ Invoke-Sql -InFile "$here/endpoint/bootstrap.sql" | Out-Null
 foreach ($r in $rows | Where-Object Type -eq 'product') {
   Push-Location "$here/$($r.Package)"
   $env:SmithySettings_Target__Server = $Server
-  $env:SmithySettings_Target__User = $User
-  $env:SmithySettings_Target__Password = $Password
+  # Empty user/password → SchemaQuench builds an Integrated Security connection (Windows Auth).
+  $env:SmithySettings_Target__User = if ($WindowsAuth) { '' } else { $User }
+  $env:SmithySettings_Target__Password = if ($WindowsAuth) { '' } else { $Password }
   $env:SmithySettings_Target__ConnectionProperties__TrustServerCertificate = 'True'
   # --SchemaPackagePath=. points SchemaQuench at this package (cwd); the
   # --ScriptTokens override renames the deployed DB when the manifest NAME
