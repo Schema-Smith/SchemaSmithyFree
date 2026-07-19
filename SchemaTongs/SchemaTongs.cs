@@ -1869,7 +1869,7 @@ SELECT s.name AS SchemaName, v.name AS ViewName
             if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{name}".ToLower()) && !_objectsToCast.Contains(name.ToLower())) continue;
 
             _progressLog.Info($"  Cast Json for {schema}.{name}");
-            command.CommandText = $"SELECT [SchemaSmith].[GenerateIndexedViewJson]('{schema}', '{name}')";
+            command.CommandText = $"SELECT [SchemaSmith].[GenerateIndexedViewJson]('{EscapeSql(schema)}', '{EscapeSql(name)}')";
             var viewJson = command.ExecuteScalar()?.ToString() ?? "";
             if (string.IsNullOrWhiteSpace(viewJson) || viewJson.Trim().Equals("{}"))
             {
@@ -1967,7 +1967,7 @@ SELECT t.schemaname, t.tablename
             if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{table}".ToLower()) && !_objectsToCast.Contains(table.ToLower())) continue;
 
             _progressLog.Info($"  Cast Json for {schema}.{table}");
-            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateTableJSON\"('{schema}', '{table}')";
+            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateTableJSON\"('{EscapeSql(schema)}', '{EscapeSql(table)}')";
             var tableJson = command.ExecuteScalar()?.ToString() ?? "";
             if (string.IsNullOrWhiteSpace(tableJson) || tableJson.Trim().Equals("{}"))
             {
@@ -2284,7 +2284,7 @@ SELECT mv.schemaname, mv.matviewname
             if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{name}".ToLower()) && !_objectsToCast.Contains(name.ToLower())) continue;
 
             _progressLog.Info($"  Cast Json for {schema}.{name}");
-            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateMaterializedViewJson\"('{schema}', '{name}')";
+            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateMaterializedViewJson\"('{EscapeSql(schema)}', '{EscapeSql(name)}')";
             var viewJson = command.ExecuteScalar()?.ToString() ?? "";
             if (string.IsNullOrWhiteSpace(viewJson) || viewJson.Trim().Equals("{}"))
             {
@@ -2407,7 +2407,7 @@ SELECT 'Functions' AS Folder,
        '\n' || '  SQL SECURITY ' || SECURITY_TYPE ||
        '\n' || ROUTINE_DEFINITION || ' //\nDELIMITER ;' AS Code
   FROM INFORMATION_SCHEMA.ROUTINES r
-  WHERE ROUTINE_SCHEMA = '{targetSchema}'
+  WHERE ROUTINE_SCHEMA = '{EscapeSql(targetSchema)}'
     AND ROUTINE_TYPE = 'FUNCTION'
     AND ROUTINE_NAME NOT LIKE 'SchemaSmith\_%'
 ";
@@ -2422,7 +2422,7 @@ SELECT 'Views' AS Folder,
        TABLE_NAME AS FullName,
        'DROP VIEW IF EXISTS `' || TABLE_NAME || '`;\nCREATE VIEW `' || TABLE_NAME || '` AS\n' || VIEW_DEFINITION AS Code
   FROM INFORMATION_SCHEMA.VIEWS
-  WHERE TABLE_SCHEMA = '{targetSchema}'
+  WHERE TABLE_SCHEMA = '{EscapeSql(targetSchema)}'
     AND TABLE_NAME NOT LIKE 'SchemaSmith\_%'
 ";
         _stats.Views = PerformMySqlCasting(command, "Views");
@@ -2447,7 +2447,7 @@ SELECT 'Procedures' AS Folder,
        '\n' || '  SQL SECURITY ' || SECURITY_TYPE ||
        '\n' || ROUTINE_DEFINITION || ' //\nDELIMITER ;' AS Code
   FROM INFORMATION_SCHEMA.ROUTINES r
-  WHERE ROUTINE_SCHEMA = '{targetSchema}'
+  WHERE ROUTINE_SCHEMA = '{EscapeSql(targetSchema)}'
     AND ROUTINE_TYPE = 'PROCEDURE'
     AND ROUTINE_NAME NOT LIKE 'SchemaSmith\_%'
 ";
@@ -2463,7 +2463,7 @@ SELECT 'Triggers' AS Folder,
        'DROP TRIGGER IF EXISTS `' || TRIGGER_NAME || '`;\nDELIMITER //\nCREATE TRIGGER `' || TRIGGER_NAME || '`\n  ' || ACTION_TIMING || ' ' || EVENT_MANIPULATION || '\n  ON `' || EVENT_OBJECT_TABLE || '` ' ||
        '\n  FOR EACH ' || ACTION_ORIENTATION || ' \nBEGIN\n' || ACTION_STATEMENT || ';\nEND //\nDELIMITER ;' AS Code
   FROM INFORMATION_SCHEMA.TRIGGERS
-  WHERE TRIGGER_SCHEMA = '{targetSchema}'
+  WHERE TRIGGER_SCHEMA = '{EscapeSql(targetSchema)}'
     AND TRIGGER_NAME NOT LIKE 'SchemaSmith\_%'
 ";
         _stats.Triggers = PerformMySqlCasting(command, "Triggers");
@@ -2487,7 +2487,7 @@ SELECT 'Events' AS Folder,
        CASE WHEN NULLIF(EVENT_COMMENT, '') IS NOT NULL THEN '\n  COMMENT ''' || REPLACE(EVENT_COMMENT, '''', '''''') || '''' ELSE '' END ||
        '\n  DO ' || EVENT_DEFINITION || ' //\nDELIMITER ;' AS Code
   FROM INFORMATION_SCHEMA.EVENTS
-  WHERE EVENT_SCHEMA = '{targetSchema}'
+  WHERE EVENT_SCHEMA = '{EscapeSql(targetSchema)}'
     AND EVENT_NAME NOT LIKE 'SchemaSmith\_%'
 ";
         _stats.Events = PerformMySqlCasting(command, "Events");
@@ -2509,7 +2509,7 @@ SELECT 'Events' AS Folder,
 SELECT TABLE_SCHEMA, TABLE_NAME
   FROM INFORMATION_SCHEMA.TABLES t
   WHERE TABLE_TYPE = 'BASE TABLE'
-    AND TABLE_SCHEMA = '{targetSchema}'
+    AND TABLE_SCHEMA = '{EscapeSql(targetSchema)}'
     AND TABLE_SCHEMA <> 'SchemaSmith'
     AND TABLE_NAME NOT LIKE 'SchemaSmith\_%'
   ORDER BY TABLE_NAME
@@ -2545,7 +2545,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
 
                 try
                 {
-                    commandJson.CommandText = $"CALL SchemaSmith_GenerateTableJSON('{MySqlReservedWords.Unquote(schema)}', '{MySqlReservedWords.Unquote(table)}')";
+                    commandJson.CommandText = $"CALL SchemaSmith_GenerateTableJSON('{EscapeSql(MySqlReservedWords.Unquote(schema))}', '{EscapeSql(MySqlReservedWords.Unquote(table))}')";
 
                     string json = "";
                     using (var jsonReader = commandJson.ExecuteReader())
@@ -2683,7 +2683,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(tableName.ToLower()) && !_objectsToCast.Contains($"{tableSchema}.{tableName}".ToLower())) continue;
 
                 _progressLog.Info($"  Cast Json for {tableSchema}.{tableName}");
-                commandJson.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{tableSchema}', @p_Table = '{tableName}'";
+                commandJson.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{EscapeSql(tableSchema)}', @p_Table = '{EscapeSql(tableName)}'";
 
                 using var jsonReader = commandJson.ExecuteReader();
                 var json = "";

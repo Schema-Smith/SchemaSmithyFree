@@ -462,13 +462,13 @@ public class DataTongs
 
     private static bool TableExistsSqlServer(IDbCommand cmd, string tableSchema, string tableName)
     {
-        cmd.CommandText = $"SELECT CAST(CASE WHEN OBJECT_ID('{tableSchema}.{tableName}') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
+        cmd.CommandText = $"SELECT CAST(CASE WHEN OBJECT_ID('{tableSchema.Replace("'", "''")}.{tableName.Replace("'", "''")}') IS NOT NULL THEN 1 ELSE 0 END AS BIT)";
         return cmd.ExecuteScalar() as bool? ?? false;
     }
 
     private static bool TableExistsPostgreSql(IDbCommand cmd, string tableSchema, string tableName)
     {
-        cmd.CommandText = $"SELECT EXISTS (SELECT * FROM pg_class tbl JOIN pg_namespace ns ON ns.oid = tbl.relnamespace WHERE ns.nspname = '{tableSchema}' AND tbl.relname = '{tableName}');";
+        cmd.CommandText = $"SELECT EXISTS (SELECT * FROM pg_class tbl JOIN pg_namespace ns ON ns.oid = tbl.relnamespace WHERE ns.nspname = '{tableSchema.Replace("'", "''")}' AND tbl.relname = '{tableName.Replace("'", "''")}');";
         return cmd.ExecuteScalar() as bool? ?? false;
     }
 
@@ -514,7 +514,7 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
   LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
                                                  AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+  WHERE c.TABLE_SCHEMA = '{tableSchema.Replace("'", "''")}' AND c.TABLE_NAME = '{tableName.Replace("'", "''")}'
     AND cc.[name] IS NULL
     AND sc.is_rowguidcol = 0
     AND c.DATA_TYPE NOT IN ('sql_variant', 'rowversion', 'timestamp')
@@ -538,8 +538,8 @@ SELECT STRING_AGG(
   JOIN pg_class cls ON cls.relname = c.table_name
   JOIN pg_namespace ns ON ns.oid = cls.relnamespace AND ns.nspname = c.table_schema
   JOIN pg_attribute a ON a.attrelid = cls.oid AND a.attname = c.column_name AND NOT a.attisdropped AND a.attgenerated = ''
-  WHERE c.table_schema = '{tableSchema}'
-    AND c.table_name = '{tableName}'
+  WHERE c.table_schema = '{tableSchema.Replace("'", "''")}'
+    AND c.table_name = '{tableName.Replace("'", "''")}'
     AND c.udt_name NOT IN ('tsvector', 'tsquery', 'money', 'box', 'circle', 'line', 'lseg', 'path')
     AND NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
                     WHERE t.typname = c.udt_name AND n.nspname = c.udt_schema AND t.typtype = 'c');
@@ -599,7 +599,7 @@ SELECT GROUP_CONCAT(
         cmd.CommandText = $@"
 SELECT CAST((
 SELECT {selectColumns}
-  FROM [{tableSchema}].[{tableName}] WITH (NOLOCK)
+  FROM [{Identifier.EscapeDelimited(tableSchema, Platform.SqlServer)}].[{Identifier.EscapeDelimited(tableName, Platform.SqlServer)}] WITH (NOLOCK)
   {(string.IsNullOrWhiteSpace(filter) ? "" : $"WHERE {filter}")}
   ORDER BY {orderColumns}
   FOR JSON AUTO) AS NVARCHAR(MAX))
@@ -613,7 +613,7 @@ SELECT {selectColumns}
         cmd.CommandText = $@"
 SELECT JSON_AGG(ROW_TO_JSON(tbl))
   FROM(SELECT {selectColumns}
-         FROM ""{tableSchema}"".""{tableName}""
+         FROM ""{Identifier.EscapeDelimited(tableSchema, Platform.PostgreSQL)}"".""{Identifier.EscapeDelimited(tableName, Platform.PostgreSQL)}""
 {(string.IsNullOrWhiteSpace(filter) ? "" : $"         WHERE {filter}")}
          ORDER BY {orderColumns}) tbl
 ";
@@ -651,7 +651,7 @@ SELECT JSON_ARRAYAGG(
             {jsonObjectClause}
         )
     ) AS json_data
-FROM `{databaseName}`.`{tableName}`
+FROM `{Identifier.EscapeDelimited(databaseName, Platform.MySQL)}`.`{Identifier.EscapeDelimited(tableName, Platform.MySQL)}`
 {whereClause}
 ORDER BY {orderColumns};";
 
@@ -685,7 +685,7 @@ ORDER BY c.ORDINAL_POSITION;";
     internal static string FormatColumnForJsonObject(ColumnInfo column)
     {
         var quotedName = $"'{column.Name.Replace("'", "''")}'";
-        var columnRef = $"`{column.Name}`";
+        var columnRef = $"`{Identifier.EscapeDelimited(column.Name, Platform.MySQL)}`";
         var dataType = column.DataType.ToLowerInvariant();
 
         return dataType switch
@@ -733,7 +733,7 @@ ORDER BY c.ORDINAL_POSITION;";
         cmd.CommandText = $@"
 SELECT c.COLUMN_NAME, c.DATA_TYPE
   FROM INFORMATION_SCHEMA.COLUMNS c
-  WHERE c.TABLE_SCHEMA = '{tableSchema}' AND c.TABLE_NAME = '{tableName}'
+  WHERE c.TABLE_SCHEMA = '{tableSchema.Replace("'", "''")}' AND c.TABLE_NAME = '{tableName.Replace("'", "''")}'
     AND c.DATA_TYPE IN ('sql_variant', 'rowversion', 'timestamp')
 ";
         using var reader = cmd.ExecuteReader();
@@ -753,7 +753,7 @@ SELECT c.column_name, c.udt_name
   JOIN pg_class cls ON cls.relname = c.table_name
   JOIN pg_namespace ns ON ns.oid = cls.relnamespace AND ns.nspname = c.table_schema
   JOIN pg_attribute a ON a.attrelid = cls.oid AND a.attname = c.column_name AND NOT a.attisdropped AND a.attgenerated = ''
-  WHERE c.table_schema = '{tableSchema}' AND c.table_name = '{tableName}'
+  WHERE c.table_schema = '{tableSchema.Replace("'", "''")}' AND c.table_name = '{tableName.Replace("'", "''")}'
     AND (c.udt_name IN ('tsvector', 'tsquery', 'money', 'box', 'circle', 'line', 'lseg', 'path')
          OR EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
                     WHERE t.typname = c.udt_name AND n.nspname = c.udt_schema AND t.typtype = 'c'))

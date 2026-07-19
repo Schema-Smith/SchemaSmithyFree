@@ -10,6 +10,47 @@ namespace Schema.UnitTests.Utility;
 public class IdentifierTests
 {
     [Test]
+    public void EscapeDelimited_SqlServer_DoublesClosingBracket()
+    {
+        Assert.That(Identifier.EscapeDelimited("weird]name", Platform.SqlServer), Is.EqualTo("weird]]name"));
+    }
+
+    [Test]
+    public void EscapeDelimited_PostgreSql_DoublesDoubleQuote()
+    {
+        Assert.That(Identifier.EscapeDelimited("weird\"name", Platform.PostgreSQL), Is.EqualTo("weird\"\"name"));
+    }
+
+    [Test]
+    public void EscapeDelimited_MySql_DoublesBacktick()
+    {
+        Assert.That(Identifier.EscapeDelimited("weird`name", Platform.MySQL), Is.EqualTo("weird``name"));
+    }
+
+    [Test]
+    public void EscapeDelimited_MariaDb_UsesMySqlBacktickRules()
+    {
+        Assert.That(Identifier.EscapeDelimited("weird`name", Platform.MariaDb), Is.EqualTo("weird``name"));
+    }
+
+    [TestCase(Platform.SqlServer)]
+    [TestCase(Platform.PostgreSQL)]
+    [TestCase(Platform.MySQL)]
+    public void EscapeDelimited_NullOrEmpty_PassesThrough(Platform platform)
+    {
+        Assert.That(Identifier.EscapeDelimited(null, platform), Is.Null);
+        Assert.That(Identifier.EscapeDelimited("", platform), Is.EqualTo(""));
+    }
+
+    [Test]
+    public void EscapeDelimited_RoundTripsThroughUnwrap_SqlServer()
+    {
+        const string name = "a]b]]c";
+        var wrapped = $"[{Identifier.EscapeDelimited(name, Platform.SqlServer)}]";
+        Assert.That(Identifier.Unwrap(wrapped, Platform.SqlServer), Is.EqualTo(name));
+    }
+
+    [Test]
     public void Unwrap_SqlServer_StripsBracketDelimiters()
     {
         Assert.That(Identifier.Unwrap("[dbo]", Platform.SqlServer), Is.EqualTo("dbo"));
