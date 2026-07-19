@@ -74,6 +74,10 @@ The SQL Server demo builds on `mcr.microsoft.com/mssql/server:2022-latest` by de
 
 All three are tested end-to-end — every demo package, including the AdventureWorks full-text catalog and indexes, deploys cleanly.
 
+### Run on your own SQL Server (no Docker)
+
+Already have a SQL Server? Skip Docker and deploy the demo databases straight onto your instance with `SqlServer/deploy-to-endpoint.ps1` (Windows) or `deploy-to-endpoint.sh` (macOS/Linux). It resets and redeploys the same demo set behind a confirmation, and refuses to touch any same-named database it didn't create. Requires the `sqlcmd` client on your `PATH`. Full walkthrough: [Use your own server](../docs/end-user/guide/use-your-own-server.md).
+
 ## Sources & Licensing
 
 Each extracted product folder contains a `PROVENANCE.md` documenting the canonical source, license, and extraction notes. AdventureWorks, Chinook, Northwind, and Sakila are extracted from open-source sample databases using the SchemaSmith toolset. TenantCRM is hand-authored as a schema-template feature demo and has a tutorial `README.md` in place of a `PROVENANCE.md`.
