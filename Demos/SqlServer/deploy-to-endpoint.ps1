@@ -77,17 +77,22 @@ Invoke-Sql -InFile "$here/endpoint/bootstrap.sql" | Out-Null
 
 # --- Quench each product, then stamp its DB ---
 foreach ($r in $rows | Where-Object Type -eq 'product') {
-  Push-Location "$here/$($r.Package)"
+  $pkg = Join-Path $here $r.Package
+  Push-Location $pkg
   $env:SmithySettings_Target__Server = $Server
   # Empty user/password → SchemaQuench builds an Integrated Security connection (Windows Auth).
   $env:SmithySettings_Target__User = if ($WindowsAuth) { '' } else { $User }
   $env:SmithySettings_Target__Password = if ($WindowsAuth) { '' } else { $Password }
   $env:SmithySettings_Target__ConnectionProperties__TrustServerCertificate = 'True'
-  # --SchemaPackagePath=. points SchemaQuench at this package (cwd); the
-  # --ScriptTokens override renames the deployed DB when the manifest NAME
-  # differs from the package default (the collision workaround), and is a
-  # harmless no-op when NAME matches.
-  & schemaquench --SchemaPackagePath=. "--ScriptTokens:$($r.Token)=$($r.Name)"
+  # Configure via SmithySettings_* env vars (the form the Docker demo uses), NOT --CLI
+  # overrides: the generic `--Key=value` override is newer than some released SchemaQuench
+  # builds, so a --SchemaPackagePath override is silently ignored on an older installed CLI.
+  # SchemaPackagePath points at this package; the ScriptTokens override renames the deployed
+  # DB when the manifest NAME differs from the package default (collision workaround), and is
+  # a harmless no-op when NAME matches.
+  $env:SmithySettings_SchemaPackagePath = $pkg
+  Set-Item -Path "env:SmithySettings_ScriptTokens__$($r.Token)" -Value $r.Name
+  & schemaquench
   if ($LASTEXITCODE -ne 0) { Pop-Location; throw "Quench failed for $($r.Name)" }
   Pop-Location
   Invoke-Sql -InFile "$here/endpoint/stamp.sql" -Vars @("Op=add", "Db=$($r.Name)") | Out-Null

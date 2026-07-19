@@ -62,15 +62,19 @@ sql "$HERE/endpoint/bootstrap.sql" >/dev/null
 
 for i in "${!NAMES[@]}"; do
   [ "${TYPES[$i]}" = product ] || continue
-  # --SchemaPackagePath=. points SchemaQuench at this package (cwd); the
-  # --ScriptTokens override renames the deployed DB when the manifest NAME
-  # differs from the package default (the collision workaround), and is a
-  # harmless no-op when NAME matches.
+  # Configure via SmithySettings_* env vars (the form the Docker demo uses), NOT --CLI
+  # overrides: the generic `--Key=value` override is newer than some released SchemaQuench
+  # builds, so a --SchemaPackagePath override is silently ignored on an older installed CLI.
+  # SchemaPackagePath points at this package; the ScriptTokens override renames the deployed
+  # DB when the manifest NAME differs from the package default (collision workaround), and is
+  # a harmless no-op when NAME matches.
   ( cd "$HERE/${PKGS[$i]}"
     export SmithySettings_Target__Server="$SERVER" SmithySettings_Target__User="$USER_" \
            SmithySettings_Target__Password="$PASSWORD" \
-           SmithySettings_Target__ConnectionProperties__TrustServerCertificate=True
-    schemaquench --SchemaPackagePath=. "--ScriptTokens:${TOKENS[$i]}=${NAMES[$i]}" ) \
+           SmithySettings_Target__ConnectionProperties__TrustServerCertificate=True \
+           SmithySettings_SchemaPackagePath="$HERE/${PKGS[$i]}" \
+           "SmithySettings_ScriptTokens__${TOKENS[$i]}=${NAMES[$i]}"
+    schemaquench ) \
     || { echo "Quench failed for ${NAMES[$i]}" >&2; exit 1; }
   sql "$HERE/endpoint/stamp.sql" -v Op=add -v Db="${NAMES[$i]}" >/dev/null
 done
