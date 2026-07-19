@@ -31,7 +31,6 @@ namespace SchemaQuench.IntegrationTests.PostgreSQL;
 public class SchemaTemplateConnectionProfileTests
 {
     private const string ProductName = "SchemaTemplateProduct";
-    private const string TenantBodyTemplate = "TenantBody";
 
     private readonly ILog _errorLog = Substitute.For<ILog>();
     private readonly ILog _progressLog = Substitute.For<ILog>();

@@ -31,7 +31,6 @@ public class ResolvedSqlArtifactIntegrationTests
     private readonly ILog _errorLog = Substitute.For<ILog>();
     private readonly ILog _progressLog = Substitute.For<ILog>();
     private readonly IEnvironment _environment = Substitute.For<IEnvironment>();
-    private readonly string _connectionString;
     private readonly string _mainDbConnectionString;
     private readonly string _mainDb;
     private string _artifactDir = null!;
@@ -41,8 +40,6 @@ public class ResolvedSqlArtifactIntegrationTests
         var config = FactoryContainer.Resolve<IConfigurationRoot>();
         var connProps = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
         _mainDb = config["ScriptTokens:MainDB"];
-        _connectionString = ConnectionString.Build(Platform.PostgreSQL, config["Target:Server"], "postgres",
-            config["Target:User"], config["Target:Password"], config["Target:Port"], connProps);
         _mainDbConnectionString = ConnectionString.Build(Platform.PostgreSQL, config["Target:Server"], _mainDb,
             config["Target:User"], config["Target:Password"], config["Target:Port"], connProps);
     }

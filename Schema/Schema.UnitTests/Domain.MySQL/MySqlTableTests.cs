@@ -12,12 +12,6 @@ namespace Schema.UnitTests.Domain.MySQL
     [TestFixture]
     public class MySqlTableTests
     {
-        private static readonly JsonSerializerSettings NullIgnore = new()
-        {
-            NullValueHandling = NullValueHandling.Ignore,
-            DefaultValueHandling = DefaultValueHandling.Ignore
-        };
-
         [Test]
         public void InheritsFromTable()
         {

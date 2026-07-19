@@ -20,12 +20,10 @@ namespace Schema.IntegrationTests.SqlServer;
 public class MergeScriptHelperIntegrationTests
 {
     private IDbConnection _connection = null!;
-    private string _testDb = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _testDb = FixtureSetup.MainDb;
         _connection = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(FixtureSetup.GetMainDbConnectionString());
         _connection.Open();
     }

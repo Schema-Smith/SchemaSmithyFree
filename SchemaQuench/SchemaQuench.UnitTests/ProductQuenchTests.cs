@@ -2471,13 +2471,6 @@ public class ProductQuenchTests
 
     #region DropTablesRemovedFromProduct cascade (env + product + template, defaultValue: true)
 
-    private static IConfigurationRoot ConfigWith(params (string Key, string Value)[] pairs)
-    {
-        return new ConfigurationBuilder()
-            .AddInMemoryCollection(pairs.ToDictionary(p => p.Key, p => p.Value))
-            .Build();
-    }
-
     [Test]
     public void DropTablesRemoved_AllAbsent_DefaultTrue()
     {

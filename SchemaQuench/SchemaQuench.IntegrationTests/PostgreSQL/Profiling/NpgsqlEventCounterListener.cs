@@ -21,7 +21,6 @@ public sealed class NpgsqlEventCounterListener : EventListener
 {
     private const string NpgsqlEventSourceName = "Npgsql";
     private readonly ConcurrentBag<CounterSample> _samples = new();
-    private EventSource _npgsqlSource;
 
     protected override void OnEventSourceCreated(EventSource eventSource)
     {
@@ -30,7 +29,6 @@ public sealed class NpgsqlEventCounterListener : EventListener
         // OnEventSourceCreated for every source already alive at the moment of subscription,
         // so we handle both cases identically here.
         if (eventSource.Name != NpgsqlEventSourceName) return;
-        _npgsqlSource = eventSource;
         EnableEvents(eventSource, EventLevel.Verbose, EventKeywords.All, new Dictionary<string, string>
         {
             ["EventCounterIntervalSec"] = "0.1",

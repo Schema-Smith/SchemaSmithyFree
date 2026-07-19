@@ -26,13 +26,11 @@ public abstract class TemplateTargetsHappyPathTestsSharedTests
     protected abstract string ProductPlatformFolder { get; }
 
     private const string ProductName = "TemplateTargetsDbAxisProduct";
-    private const string BodyTemplate = "Body";
 
     private readonly ILog _errorLog = Substitute.For<ILog>();
     private readonly ILog _progressLog = Substitute.For<ILog>();
     private readonly IEnvironment _environment = Substitute.For<IEnvironment>();
     private readonly string _connectionString;
-    private readonly string _server;
 
     protected TemplateTargetsHappyPathTestsSharedTests()
     {
@@ -46,7 +44,6 @@ public abstract class TemplateTargetsHappyPathTestsSharedTests
         // connection string here for setup/assertions.
         _connectionString = ConnectionString.Build(Platform, config["Target:Server"], "information_schema",
             config["Target:User"], config["Target:Password"], config["Target:Port"], connProps);
-        _server = config["Target:Server"];
     }
 
     [Test]

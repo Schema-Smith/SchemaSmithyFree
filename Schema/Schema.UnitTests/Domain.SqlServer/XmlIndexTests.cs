@@ -9,12 +9,6 @@ namespace Schema.UnitTests.Domain.SqlServer
     [TestFixture]
     public class XmlIndexTests
     {
-        private static readonly JsonSerializerSettings NullIgnore = new()
-        {
-            NullValueHandling = NullValueHandling.Ignore,
-            DefaultValueHandling = DefaultValueHandling.Ignore
-        };
-
         [Test]
         public void InheritsFromDynamicBase()
         {

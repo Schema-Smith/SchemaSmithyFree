@@ -33,6 +33,87 @@ indent_size = 2
 [*.json]
 indent_size = 2
 
+# SonarAnalyzer triage (see Directory.Build.props). Rules below are intentionally silenced repo-wide
+# with a reason. Rules NOT listed here (S1144 unused-private, S1481 unused-local, S4487 unread-field,
+# S2178 &-vs-&&) were fixed in code and gate at error. severity=none (not "warning") so they stay out
+# of the build entirely under TreatWarningsAsErrors.
+[*.cs]
+
+# Domain-inapplicable (every one of the 63 flagged sites individually verified) — SchemaSmith
+# generates DDL, stored-proc calls, and system-catalog introspection whose only interpolated values
+# are SQL identifiers/predicate fragments sourced from trusted inputs (the source DB's catalog, the
+# loaded product/template package, or operator CLI config — never end-user/runtime input); literals
+# are single-quote-escaped and identifier positions cannot be parameterized.
+dotnet_diagnostic.S2077.severity = none
+# Established pattern (all 51 flagged sites verified) — throwing System.Exception with a contextual
+# message is a deliberate fatal-abort signal; no caller branches on the exception type (where that is
+# needed the code uses a domain type, e.g. TemplateTargetProvisioningException). A separate refactor.
+dotnet_diagnostic.S112.severity = none
+
+# Style / opinion — high churn, no correctness value.
+dotnet_diagnostic.S2629.severity = none  # string concat in log messages vs format template
+dotnet_diagnostic.S2325.severity = none  # member could be static
+dotnet_diagnostic.S3358.severity = none  # nested ternary
+dotnet_diagnostic.S6610.severity = none  # EndsWith(char) overload
+dotnet_diagnostic.S3267.severity = none  # loop could be LINQ
+dotnet_diagnostic.S2365.severity = none  # property returns a collection copy
+dotnet_diagnostic.S1066.severity = none  # mergeable if
+dotnet_diagnostic.S3220.severity = none  # params-overload partial match
+dotnet_diagnostic.S1643.severity = none  # StringBuilder over concatenation
+dotnet_diagnostic.S6617.severity = none  # Contains over Any
+dotnet_diagnostic.S6608.severity = none  # indexer over Enumerable.First/Last
+dotnet_diagnostic.S6612.severity = none  # lambda parameter over captured variable
+dotnet_diagnostic.S2955.severity = none  # generic default() comparison
+dotnet_diagnostic.S2344.severity = none  # enum name 'Enum' suffix
+dotnet_diagnostic.S3260.severity = none  # private class could be sealed
+dotnet_diagnostic.S3973.severity = none  # conditional formatting/indentation
+dotnet_diagnostic.S1104.severity = none  # public field vs property
+dotnet_diagnostic.S3878.severity = none  # array creation vs params
+dotnet_diagnostic.S3871.severity = none  # exception accessibility
+dotnet_diagnostic.S2386.severity = none  # mutable public static
+dotnet_diagnostic.S3887.severity = none  # mutable non-private readonly
+dotnet_diagnostic.S2479.severity = none  # control char in string (intentional in SQL/data literals)
+dotnet_diagnostic.S1118.severity = none  # utility class needs private ctor
+dotnet_diagnostic.S1172.severity = none  # unused method parameter (often signature-shape driven)
+dotnet_diagnostic.S1450.severity = none  # private field could be a local
+dotnet_diagnostic.S2094.severity = none  # empty class
+dotnet_diagnostic.S3928.severity = none  # ArgumentException paramName
+
+# False-positive-prone here: S125's commented-code heuristic misfires on genuine explanatory prose
+# ending in ';'/')' or containing inline pseudo-code — every one of the flagged sites was verified to
+# be a real explanatory comment, not dead code. Suppressed rather than gated.
+dotnet_diagnostic.S125.severity = none
+
+# Verified benign (every flagged site individually checked — no real defect): null-return sentinels
+# whose callers all null-check (S1168), standard percent-decode loop (S127), best-effort empty
+# catches / idiomatic concurrent-collection drains (S108/S2486), log-and-rethrow with context
+# (S2139), complete IDisposable with no leak (S3881), regexes over trusted/bounded operator input
+# (S6444), intentional parameterized test parallelism (S4144), test-only timing/timezone (S2925/S6562),
+# tests asserting by not throwing (S2699), and logging that deliberately omits the exception object to
+# keep the log text integration tests assert on (S6667).
+dotnet_diagnostic.S1168.severity = none
+dotnet_diagnostic.S127.severity = none
+dotnet_diagnostic.S108.severity = none
+dotnet_diagnostic.S2486.severity = none
+dotnet_diagnostic.S2139.severity = none
+dotnet_diagnostic.S3881.severity = none
+dotnet_diagnostic.S6444.severity = none
+dotnet_diagnostic.S4144.severity = none
+dotnet_diagnostic.S2925.severity = none
+dotnet_diagnostic.S6562.severity = none
+dotnet_diagnostic.S2699.severity = none
+dotnet_diagnostic.S6667.severity = none
+
+# S1144 (unused private member) gates at error everywhere EXCEPT these two test files, whose flagged
+# "unused" members are consumed by reflection/serialization and must stay: SchemaGeneratorTests
+# defines fixture-class properties that SchemaGenerator.GenerateSchema(typeof(X)) reflects over and
+# the tests assert on; DataDeliveryListJsonConverterTests's ShouldSerializeDataDelivery is a
+# Newtonsoft ShouldSerialize* callback exercised by the "omit empty list" test.
+[**/SchemaGeneratorTests.cs]
+dotnet_diagnostic.S1144.severity = none
+[**/DataDeliveryListJsonConverterTests.cs]
+dotnet_diagnostic.S1144.severity = none
+
 # C# naming conventions (all suggestion severity — IDE hints only, no build impact)
 [*.cs]
 

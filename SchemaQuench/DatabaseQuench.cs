@@ -1876,7 +1876,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
                     continue;
                 }
 
-                QuenchOneScript(destCmd, script, _runScriptsTwice & ShouldAlwaysRun(script.Name));
+                QuenchOneScript(destCmd, script, _runScriptsTwice && ShouldAlwaysRun(script.Name));
                 if (script.HasBeenQuenched)
                 {
                     _checkpointing.MarkScriptCompleted(DbScope, checkpointSlot.ToString(), script.LogPath);

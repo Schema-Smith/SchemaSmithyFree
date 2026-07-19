@@ -40,7 +40,6 @@ public abstract class PreFlight_PreviewTargetsTestsSharedTests
     protected abstract string ProductPlatformFolder { get; }
 
     private const string DbAxisProductName = "TemplateTargetsDbAxisProduct";
-    private const string BodyTemplate = "Body";
     private const string ValidProductName = "ValidProduct";
 
     private readonly ILog _errorLog = Substitute.For<ILog>();

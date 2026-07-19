@@ -991,7 +991,7 @@ SELECT s.name, s.schema_id
             }
         }
 
-        foreach (var (name, schemaId) in schemas)
+        foreach (var (name, _) in schemas)
         {
             var escapedName = EscapeSql(name);
             var script = $"IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = N'{escapedName}')\r\n" +

@@ -39,7 +39,6 @@ public class SchemaTemplatePerfSmokeTests
     private readonly IEnvironment _environment = Substitute.For<IEnvironment>();
     private readonly string _connectionString;
     private readonly string _mainDb;
-    private readonly string _server;
 
     public SchemaTemplatePerfSmokeTests()
     {
@@ -48,7 +47,6 @@ public class SchemaTemplatePerfSmokeTests
         _connectionString = ConnectionString.Build(Platform.PostgreSQL, config["Target:Server"], "postgres",
             config["Target:User"], config["Target:Password"], config["Target:Port"], connProps);
         _mainDb = config["ScriptTokens:MainDB"];
-        _server = config["Target:Server"];
     }
 
     [SetUp]

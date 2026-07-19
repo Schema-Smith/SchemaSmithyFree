@@ -10,12 +10,6 @@ namespace Schema.UnitTests.Domain.PostgreSQL
     [TestFixture]
     public class PostgreSqlColumnTests
     {
-        private static readonly JsonSerializerSettings NullIgnore = new()
-        {
-            NullValueHandling = NullValueHandling.Ignore,
-            DefaultValueHandling = DefaultValueHandling.Ignore
-        };
-
         [Test]
         public void InheritsFromColumn()
         {

@@ -11,12 +11,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <!-- SonarAnalyzer adoption is deliberate (see the SonarAnalyzer.CSharp reference below): the
-         46 rules the current tree trips are held as warnings (visible in every build) rather than
-         errors while they are triaged. Rules get FIXED or intentionally suppressed (.editorconfig
-         severity=none), then the curated survivors are REMOVED from this list to ratchet them to
-         error (severity up only, DoD #10). This list should shrink to empty. -->
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);S1066;S108;S1104;S1118;S112;S1144;S1168;S1172;S125;S127;S1450;S1481;S1643;S2077;S2094;S2139;S2178;S2325;S2344;S2365;S2386;S2479;S2486;S2629;S2699;S2925;S2955;S3220;S3260;S3267;S3358;S3871;S3878;S3881;S3887;S3928;S3973;S4144;S4487;S6444;S6562;S6608;S6610;S6612;S6617;S6667</WarningsNotAsErrors>
     <LangVersion>latest</LangVersion>
     <Configurations>Debug;Release;Demo</Configurations>
     <Company>SchemaSmith Contributors</Company>

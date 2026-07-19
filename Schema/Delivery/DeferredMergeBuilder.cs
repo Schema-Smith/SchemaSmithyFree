@@ -202,7 +202,6 @@ internal static class DeferredMergeBuilder
         var table = tableName.Trim().Trim('`');
         var deferredSet = new HashSet<string>(deferredColumns, StringComparer.OrdinalIgnoreCase);
 
-        var matchColumns = helper.GetMatchColumns(keyColumns);
         var columns = helper.GetColumnMetadata(cmd, schemaOrDb, tableName);
         if (columns.Count == 0)
             throw new InvalidOperationException($"No columns found for table `{db}`.`{table}`.");

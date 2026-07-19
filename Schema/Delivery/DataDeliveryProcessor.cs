@@ -195,7 +195,6 @@ public class DataDeliveryProcessor : IDataDelivery
             foreach (var table in tablesToDeliver)
             {
                 var (requiredDeps, deferredColumns) = tableEdges[table];
-                var tableKey = DataDeliveryHelper.GetTableKey(table, platform);
 
                 if (requiredDeps.Any(dep => !delivered.Contains(dep)))
                 {
