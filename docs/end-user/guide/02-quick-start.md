@@ -51,6 +51,8 @@ The launcher runs `build-schemaquench.sh` to compile the SchemaQuench binary (re
 
 > **PostgreSQL or MySQL?** Swap the platform folder: `Demos/PostgreSQL` (port `5432`) or `Demos/MySQL` (port `3306`). Each platform has its own `run-demo.sh` / `run-demo.cmd` launcher, `.env` credentials file, and the same four demo databases (AdventureWorks, Chinook, Northwind, Sakila). On MySQL the demo databases are stored in lowercase (`adventureworks`, `chinook`, `northwind`, `sakila`) because Linux MySQL containers default to `lower_case_table_names=1`; use the lowercase form in your `Database` / `NorthwindDb` config values when the platform is MySQL.
 
+> **Already have a SQL Server?** You can skip Docker entirely — the same demo databases deploy straight onto your own instance. See [Use your own server](use-your-own-server.md).
+
 ## Step 2: Cast with SchemaTongs
 
 Now let's go the other direction. Pretend you already have a database and want to bring it under SchemaSmith management. SchemaTongs grips your live schema and casts it into structured files. Create a SchemaTongs configuration file called `tongs-extract.json`:
