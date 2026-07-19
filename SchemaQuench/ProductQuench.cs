@@ -1896,7 +1896,22 @@ public class ProductQuench
 
             foreach (var sqlScript in scriptList.Where(s => !s.HasBeenQuenched))
             {
-                _progressLog.Error($"{serverMsg}[{initDb}] Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}");
+                // A mid-script server drop (restart/crash/OOM) lands in sqlScript.Error as a raw
+                // provider disconnect. Lead with the purpose-built message naming THIS server (the
+                // per-server product-script loop covers secondaries too); keep the full stack in the
+                // error log. Otherwise surface the raw error as before.
+                var connectionLost = ConnectionLostClassifier.IsConnectionLost(sqlScript.Error);
+                var scriptError = connectionLost
+                    ? ConnectionLostMessage.Build(server, isBefore ? "BeforeScripts" : "AfterScripts")
+                    : sqlScript.Error?.Message ?? $"Unable to quench '{sqlScript.LogPath}'";
+
+                if (connectionLost)
+                {
+                    _progressLog.Error($"{serverMsg}[{initDb}] {scriptError}");
+                    _errorLog.Error($"{serverMsg}[{initDb}] Lost connection quenching '{sqlScript.LogPath}'", sqlScript.Error);
+                }
+                else
+                    _progressLog.Error($"{serverMsg}[{initDb}] Unable to quench '{sqlScript.LogPath}':\r\n{sqlScript.Error}");
 
                 string artifactPath = null;
                 try
@@ -1918,7 +1933,7 @@ public class ProductQuench
                 // Server-scope failure capture (Before/After product scripts) → end-of-run roll-up.
                 _failureRecords.Add(new FailureRecord(
                     isBefore ? "BeforeScripts" : "AfterScripts", $"[{server}]",
-                    sqlScript.Error?.Message ?? $"Unable to quench '{sqlScript.LogPath}'",
+                    scriptError,
                     new[] { $"Unable to quench '{sqlScript.LogPath}'" }, artifactPath));
             }
 

@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using System.Net.Sockets;
+using MySqlConnector;
 using Npgsql;
 using NUnit.Framework;
 
@@ -11,6 +12,40 @@ namespace SchemaQuench.UnitTests;
 [TestFixture]
 public class ConnectionLostClassifierTests
 {
+    // --- Typed-branch coverage via the extracted predicates. The provider exception types
+    //     (SqlException / MySqlException) are sealed with no public constructor, so the number/code
+    //     sets are verified directly here — this is the per-engine "parity guarantee" (a typo in the
+    //     set would otherwise compile and pass every exception-based test silently). ---
+
+    [TestCase(233, true)]   // no process on the other end of the pipe
+    [TestCase(64, true)]    // connection dropped by host
+    [TestCase(20, true)]    // transport-level error
+    [TestCase(10053, true)] // connection aborted
+    [TestCase(10054, true)] // connection reset by peer
+    [TestCase(-2, false)]   // timeout — NOT a drop
+    [TestCase(1205, false)] // deadlock — DeadlockClassifier's job, not a drop
+    [TestCase(2601, false)] // duplicate-key — a schema/data error
+    public void SqlServerNumber_Classification(int number, bool expected)
+        => Assert.That(ConnectionLostClassifier.IsSqlServerConnectionLostNumber(number), Is.EqualTo(expected));
+
+    [TestCase(MySqlErrorCode.ServerShutdown, true)]
+    [TestCase(MySqlErrorCode.UnableToConnectToHost, true)]
+    [TestCase(MySqlErrorCode.LockDeadlock, false)]        // deadlock — not a drop
+    [TestCase(MySqlErrorCode.DuplicateKeyEntry, false)]   // schema/data error
+    public void MySqlCode_Classification(MySqlErrorCode code, bool expected)
+        => Assert.That(ConnectionLostClassifier.IsMySqlConnectionLostCode(code), Is.EqualTo(expected));
+
+    [TestCase("08006", true)]  // connection failure
+    [TestCase("08003", true)]  // connection does not exist
+    [TestCase("57P01", true)]  // admin shutdown
+    [TestCase("57P02", true)]  // crash shutdown
+    [TestCase("40P01", false)] // deadlock — not a drop
+    [TestCase("42P01", false)] // undefined table — schema error
+    [TestCase(null, false)]
+    public void PostgresState_Classification(string sqlState, bool expected)
+        => Assert.That(ConnectionLostClassifier.IsPostgresConnectionLostState(sqlState), Is.EqualTo(expected));
+
+
     // --- Positive: the server went away mid-deploy ---
 
     [Test] // the literal #353 surface: a provider error wrapping an inner SocketException
@@ -70,6 +105,13 @@ public class ConnectionLostClassifierTests
     public void Deadlock_IsNotConnectionLost()
     {
         var ex = new SqlServerErrorException(1205, "Transaction was deadlocked on lock resources");
+        Assert.That(ConnectionLostClassifier.IsConnectionLost(ex), Is.False);
+    }
+
+    [Test] // PostgreSQL deadlock (40P01) must not be classified as a connection loss
+    public void PostgresDeadlock_40P01_IsNotConnectionLost()
+    {
+        var ex = new PostgresException("deadlock detected", "ERROR", "ERROR", "40P01");
         Assert.That(ConnectionLostClassifier.IsConnectionLost(ex), Is.False);
     }
 

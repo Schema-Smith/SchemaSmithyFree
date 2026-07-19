@@ -20,9 +20,30 @@ namespace SchemaQuench;
 ///
 /// <para>Only invoked at DB-operation catch sites (the quench work loop and the top-level
 /// deploy net), so a transport <see cref="IOException"/> in the chain is unambiguous there.</para>
+///
+/// <para>Unlike <see cref="DeadlockClassifier"/> (which matches both <c>SqlServerErrorException</c>
+/// and <c>SqlException</c> for 1205), there is no <c>SqlServerErrorException</c> branch here: a
+/// connection that has actually gone away cannot deliver the <c>InfoMessage</c> that produces a
+/// <c>SqlServerErrorException</c>, so a connection loss only ever arrives as a raw
+/// <see cref="SqlException"/> or an inner <see cref="SocketException"/>.</para>
 /// </summary>
 internal static class ConnectionLostClassifier
 {
+    /// <summary>SQL Server error numbers meaning the connection/transport dropped (NOT -2 timeout, NOT schema errors).</summary>
+    public static bool IsSqlServerConnectionLostNumber(int number) =>
+        number is 233 or 64 or 20 or 10053 or 10054;
+
+    /// <summary>MySQL error codes meaning the server is shutting down mid-run or can no longer be reached.
+    /// (A "lost connection during query" drop surfaces instead as an inner <see cref="IOException"/>.)</summary>
+    public static bool IsMySqlConnectionLostCode(MySqlErrorCode code) =>
+        code is MySqlErrorCode.ServerShutdown or MySqlErrorCode.UnableToConnectToHost;
+
+    /// <summary>PostgreSQL SQLSTATEs meaning the connection dropped: connection-exception class (08*)
+    /// plus admin (57P01) / crash (57P02) shutdown. String literals avoid depending on Npgsql constant names.</summary>
+    public static bool IsPostgresConnectionLostState(string sqlState) =>
+        sqlState != null &&
+        (sqlState.StartsWith("08", StringComparison.Ordinal) || sqlState == "57P01" || sqlState == "57P02");
+
     public static bool IsConnectionLost(Exception ex)
     {
         for (var e = ex; e != null; e = e.InnerException)
@@ -35,23 +56,13 @@ internal static class ConnectionLostClassifier
                 case IOException:
                     return true;
 
-                // SQL Server transport / server-gone numbers (deliberately NOT -2 timeout, and
-                // NOT schema-error numbers).
-                case SqlException { Number: 233 or 64 or 20 or 10053 or 10054 }:
+                case SqlException sql when IsSqlServerConnectionLostNumber(sql.Number):
                     return true;
 
-                // PostgreSQL: connection-exception class (08*) + admin/crash shutdown. String
-                // literals avoid depending on Npgsql constant names.
-                case PostgresException pg when pg.SqlState != null &&
-                    (pg.SqlState.StartsWith("08", StringComparison.Ordinal)
-                     || pg.SqlState == "57P01"   // admin_shutdown
-                     || pg.SqlState == "57P02"):  // crash_shutdown
+                case PostgresException pg when IsPostgresConnectionLostState(pg.SqlState):
                     return true;
 
-                // MySQL: server shutting down mid-run, or the server can no longer be reached.
-                // A "lost connection during query" drop surfaces as an inner IOException (above).
-                case MySqlException { ErrorCode: MySqlErrorCode.ServerShutdown
-                                              or MySqlErrorCode.UnableToConnectToHost }:
+                case MySqlException my when IsMySqlConnectionLostCode(my.ErrorCode):
                     return true;
             }
 

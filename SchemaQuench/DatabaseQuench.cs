@@ -790,8 +790,9 @@ public class DatabaseQuench
             // pre-flight connection test, so at this point a lost connection is a mid-run drop.
             if (ConnectionLostClassifier.IsConnectionLost(e))
             {
-                var lost = ConnectionLostMessage.Build(_server, $"Template:{_template?.Name}");
-                _errorLog.Error($"Lost connection during Template:{_template?.Name}", e);
+                var phase = _template?.Name is { } tn ? $"Template:{tn}" : null;
+                var lost = ConnectionLostMessage.Build(_server, phase);
+                _errorLog.Error($"Lost connection during {phase ?? "deployment"}", e);
                 SafeProgressLogError(lost);
                 LastFailure = FailureCtx.ToRecord(lost, null);
                 SafeProgressLogError($"*** FAILED [Template:{_template?.Name}] ***");
