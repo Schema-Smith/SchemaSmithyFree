@@ -76,4 +76,67 @@ WHERE a.attrelid = '""{schema}"".""{tableName}""'::regclass AND a.attname = 'his
         cmd.ExecuteNonQuery();
         conn.Close();
     }
+
+    // Regression guard for the PostgreSQL 17 fresh-deploy bug: on PG 17 a GENERATED ALWAYS identity
+    // column is still phantom-flagged "modified", but when it is the ONLY flagged column (identity +
+    // plain types, no sibling column needs altering — the Chinook shape) the entire ALTER body was
+    // empty, so ModifiedTableQuench emitted a bare "ALTER TABLE t\n;" -> 42601 "syntax error at end
+    // of input" on the very first (fresh) deploy. Exposed when postgis:latest advanced to PG 17 and
+    // the "Recreate Generated Columns (PG < 17)" step no longer runs. The ModifiedTableQuench pass
+    // must emit nothing at all for such a table, not a bare header.
+    [Test]
+    public void TableQuench_IdentityColumn_FreshDeployNoSiblingModifications_Converges()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var schema = $"IdentityFresh_{uniqueId}";
+        var tableName = $"catalog_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        // Schema exists but the table does NOT — SchemaSmith creates it fresh, then ModifiedTableQuench
+        // runs against it in the same quench (the exact fresh-deploy path Chinook trips).
+        cmd.CommandText = $@"CREATE SCHEMA IF NOT EXISTS ""{schema}"";";
+        cmd.ExecuteNonQuery();
+
+        // Mirrors the Chinook `album` shape: the identity column's declared Generated carries the
+        // sequence suffix `(START WITH .. INCREMENT BY ..)` (as SchemaTongs extracts it), which the
+        // read-back strips — so the identity is perpetually flagged "modified" while nothing else
+        // changes. That is the exact fresh-deploy trigger.
+        var json = $$"""
+{
+    "Schema": "{{schema}}",
+    "Name": "{{tableName}}",
+    "Columns": [
+        { "Name": "album_id",  "DataType": "int4",         "Generated": "GENERATED ALWAYS AS IDENTITY(START WITH 1 INCREMENT BY 1)", "Storage": "PLAIN",    "Compression": "DEFAULT" },
+        { "Name": "artist_id", "DataType": "int4",         "Generated": "NEVER", "Storage": "PLAIN",    "Compression": "DEFAULT" },
+        { "Name": "title",     "DataType": "varchar(160)", "Generated": "NEVER", "Storage": "EXTENDED", "Compression": "DEFAULT" }
+    ],
+    "Indexes": [
+        { "Name": "pk_{{tableName}}", "PrimaryKey": true, "Unique": true, "IndexColumns": "album_id", "AccessMethod": "btree", "FillFactor": 90 }
+    ]
+}
+""";
+
+        // Pre-fix this throws 42601 (bare ALTER TABLE header, empty body) on the fresh deploy.
+        Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, json, productName: productName),
+            "Fresh deploy of an identity + plain-types table must not emit a bare ALTER TABLE header");
+
+        cmd.CommandText = $@"SELECT a.attidentity FROM pg_attribute a
+WHERE a.attrelid = '""{schema}"".""{tableName}""'::regclass AND a.attname = 'album_id';";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("a"),
+            "album_id must be created as a GENERATED ALWAYS identity column");
+
+        // Re-quench: still nothing to change, must converge cleanly.
+        Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, json, productName: productName),
+            "Re-quench must converge without error");
+
+        cmd.CommandText = $@"DROP TABLE ""{schema}"".""{tableName}""; DROP SCHEMA ""{schema}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
 }
