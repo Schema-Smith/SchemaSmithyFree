@@ -74,9 +74,9 @@ The SQL Server demo builds on `mcr.microsoft.com/mssql/server:2022-latest` by de
 
 All three are tested end-to-end — every demo package, including the AdventureWorks full-text catalog and indexes, deploys cleanly.
 
-### Run on your own SQL Server (no Docker)
+### Run on your own server (no Docker)
 
-Already have a SQL Server? Skip Docker and deploy the demo databases straight onto your instance with `SqlServer/deploy-to-endpoint.ps1` (Windows) or `deploy-to-endpoint.sh` (macOS/Linux). It resets and redeploys the same demo set behind a confirmation, and refuses to touch any same-named database it didn't create. Requires the `sqlcmd` client on your `PATH`. Full walkthrough: [Use your own server](../docs/end-user/guide/use-your-own-server.md).
+Already have a server? Skip Docker and deploy the demo databases straight onto your instance with the `deploy-to-endpoint.ps1` (Windows) / `deploy-to-endpoint.sh` (macOS/Linux) helper in the engine's demo folder — `SqlServer/`, `PostgreSQL/`, `MySQL/`, or `MariaDb/`. It resets and redeploys the same demo set behind a confirmation, and refuses to touch any same-named database it didn't create. Requires the engine's command-line client on your `PATH` (`sqlcmd` / `psql` / `mysql` / `mariadb`). Full walkthrough: [Use your own server](../docs/end-user/guide/use-your-own-server.md).
 
 ## Sources & Licensing
 
