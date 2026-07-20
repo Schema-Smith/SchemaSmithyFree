@@ -6,7 +6,7 @@ it up, work through the labs, tear it down.
 
 ## Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) (Desktop or Engine) with Compose v2.
+- [Docker](https://docs.docker.com/get-docker/) (Desktop or Engine) with Compose v2 — for the throwaway sandbox. Already run one of these engines? Skip Docker entirely: see [Use your own server](#use-your-own-server-instead-no-docker) below.
 
 ## Start the sandbox
 
@@ -50,6 +50,25 @@ with a default SQL Server, PostgreSQL, or MySQL you may already be running local
 cd docker
 docker compose down -v     # -v also removes the data volumes
 ```
+
+## Use your own server instead (no Docker)
+
+Already run SQL Server, PostgreSQL, MySQL, or MariaDB? You don't need Docker for the labs. From this
+directory, point the helper at your server and it creates — or cleanly resets — the empty `learn`
+database, the no-Docker equivalent of the sandbox above:
+
+```bash
+./deploy-to-endpoint.sh --engine postgres --server your-host --port 5432 --user you --password '…'
+#   --engine:  sqlserver | postgres | mysql | mariadb
+#   Windows :  .\deploy-to-endpoint.ps1 -Engine … -Server … -Port … -User … -Password …
+```
+
+It needs that engine's command-line client on your `PATH` (`sqlcmd` / `psql` / `mysql` / `mariadb`).
+SQL Server also accepts Windows Authentication — omit `--user`/`--password`. The helper stamps the
+database it creates and only ever drops a stamped `learn`; an existing `learn` it didn't create is
+refused, never touched. Then set each lab's `connect.settings.json` to your host, port, and
+credentials instead of the sandbox values. Full walkthrough:
+[Use your own server](https://github.com/Schema-Smith/SchemaSmith/blob/main/docs/end-user/guide/use-your-own-server.md).
 
 ## How this relates to the other demos
 
