@@ -129,6 +129,14 @@ If `KindleTheForge` is already `true` but the helper objects look wrong (someone
 
 **Fix:** Declare a custom folder in the `BetweenTablesAndKeys` slot via `Template.ScriptFolders` and put your data fixup or migration scripts there. See [Edge Cases -- Migration Scripts](11-edge-cases.md#migration-scripts) and the [SchemaQuench Reference](../reference/schemaquench.md#database-quench-sequence) for the full sequence.
 
+### Lost connection to the server mid-deployment
+
+**Symptom:** The deployment fails partway through with a message like `Lost connection to <server> during <phase> — the server stopped responding mid-deploy (it may have restarted, crashed, or run out of memory)`, rather than a SQL or credentials error.
+
+**Cause:** The target server went away *after* SchemaQuench had connected and started work — it restarted, crashed, or ran out of memory (common on a memory-constrained container backend). This is an environment problem, not a schema error. An *initial* connect failure — wrong host or credentials, or a server that never came up — is reported separately by the pre-flight connection test, so this message specifically means the connection was live and then dropped.
+
+**Fix:** Check the server/container logs and give the engine more memory (or use a lighter engine image). Then re-run — SchemaQuench is idempotent and will converge cleanly from wherever it stopped; there is nothing to undo.
+
 ### Validation script returns false
 
 **Symptom:** The progress log shows `Validate Server` followed by `Invalid server for this product` and the deployment stops.

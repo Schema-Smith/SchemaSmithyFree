@@ -112,7 +112,7 @@ public class JsonHelperTests
         _mockFile.Exists(@"C:\Product.json").Returns(true);
         _mockFile.ReadAllText(@"C:\Product.json").Returns("{\"Name\":\"Test\",\"Platform\":\"MySQL\"}");
 
-        var result = JsonHelper.ProductLoad(@"C:\Product.json");
+        JsonHelper.ProductLoad(@"C:\Product.json");
 
         _mockFile.Received().ReadAllText(@"C:\Product.json");
     }

@@ -55,7 +55,22 @@ public static class Program
         if (!CommandLineParser.ContainsSwitch("ResumeQuench"))
             CleanupCheckpoints();
 
-        productQuench.QuenchProduct(skipKindlingForge);
+        try
+        {
+            productQuench.QuenchProduct(skipKindlingForge);
+        }
+        catch (Exception e) when (ConnectionLostClassifier.IsConnectionLost(e))
+        {
+            // Last-resort net for a mid-deploy drop that escapes the per-server/per-database seams
+            // (which name the specific server): surface the disconnect message instead of a raw
+            // AppDomain stack. The failing server is not reliably known here, so the message stays
+            // generic ("the target server") rather than falsely asserting the primary. Non-connection
+            // exceptions still reach the AppDomain UnhandledException handler unchanged.
+            LogFactory.GetLogger("ProgressLog").Error(ConnectionLostMessage.Build(null, "deployment"));
+            LogFactory.GetLogger("ErrorLog").Error("Lost connection during deployment", e);
+            LogBackup.BackupLogsAndExit("SchemaQuench", 2);
+            return;
+        }
 
         // Clean up checkpoint files only on a clean success — a failed run must preserve
         // checkpoints so the next invocation can resume.

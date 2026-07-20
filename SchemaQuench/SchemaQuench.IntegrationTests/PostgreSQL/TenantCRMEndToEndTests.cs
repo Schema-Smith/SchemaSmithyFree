@@ -33,7 +33,6 @@ public class TenantCRMEndToEndTests
 {
     private const string ProductName = "TenantCRM";
     private const string TenantWorkspaceTemplate = "TenantWorkspace";
-    private const string SharedTemplate = "Shared";
 
     private static readonly string[] InitialTenants = ["tenant_acme", "tenant_beta", "tenant_globex"];
     private const string FourthTenant = "tenant_fourth";

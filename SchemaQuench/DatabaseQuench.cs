@@ -783,6 +783,22 @@ public class DatabaseQuench
         }
         catch (Exception e)
         {
+            // A target-server drop mid-deploy (restart / crash / OOM) surfaces here as a raw
+            // provider disconnect (e.g. SocketException) that is indistinguishable from a schema
+            // error without classification. Lead with a purpose-built message; the full stack is
+            // preserved in the error log. Initial-connect failures are handled earlier by the
+            // pre-flight connection test, so at this point a lost connection is a mid-run drop.
+            if (ConnectionLostClassifier.IsConnectionLost(e))
+            {
+                var phase = _template?.Name is { } tn ? $"Template:{tn}" : null;
+                var lost = ConnectionLostMessage.Build(_server, phase);
+                _errorLog.Error($"Lost connection during {phase ?? "deployment"}", e);
+                SafeProgressLogError(lost);
+                LastFailure = FailureCtx.ToRecord(lost, null);
+                SafeProgressLogError($"*** FAILED [Template:{_template?.Name}] ***");
+                return;
+            }
+
             SafeProgressLogError($"FAILED to quench:\r\n{e.Message}");
             if (!string.IsNullOrWhiteSpace(_debugFileLocation))
                 SafeProgressLogError($"Resolved SQL written to: {_debugFileLocation}");
@@ -1164,9 +1180,9 @@ public class DatabaseQuench
     /// </summary>
     internal static string QuoteUseDatabase(string dbName, Platform platform) => platform.GetBasePlatform() switch
     {
-        Platform.SqlServer => $"USE [{dbName}]",
+        Platform.SqlServer => $"USE [{Identifier.EscapeDelimited(dbName, platform)}]",
         Platform.PostgreSQL => dbName, // PostgreSQL uses ChangeDatabase API
-        Platform.MySQL => $"USE `{dbName}`",
+        Platform.MySQL => $"USE `{Identifier.EscapeDelimited(dbName, platform)}`",
         _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, null)
     };
 
@@ -1177,9 +1193,9 @@ public class DatabaseQuench
     /// </summary>
     internal static string QuoteIdentifier(string name, Platform platform) => platform.GetBasePlatform() switch
     {
-        Platform.SqlServer => $"[{name}]",
-        Platform.PostgreSQL => $"\"{name}\"",
-        Platform.MySQL => $"`{name}`",
+        Platform.SqlServer => $"[{Identifier.EscapeDelimited(name, platform)}]",
+        Platform.PostgreSQL => $"\"{Identifier.EscapeDelimited(name, platform)}\"",
+        Platform.MySQL => $"`{Identifier.EscapeDelimited(name, platform)}`",
         _ => name
     };
 
@@ -1288,7 +1304,7 @@ public class DatabaseQuench
 DECLARE @TableDefinitions VARCHAR(MAX)= '{EscapeSqlLiteral(IterationTableSchema)}',
         @UpdateFillFactor BIT = {updateFillFactor}
 {ForgeKindler.GetParseTableJsonScript(Platform.SqlServer)}
-EXEC [{_databaseName}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {_whatIfOnly}";
+EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {_whatIfOnly}";
                 break;
             }
             case Platform.PostgreSQL:
@@ -1330,7 +1346,7 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
         switch (_product.Platform.GetBasePlatform())
         {
             case Platform.SqlServer:
-                tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}";
+                tableCommand.CommandText = $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}";
                 break;
             case Platform.PostgreSQL:
                 tableCommand.CommandText = $@"
@@ -1371,8 +1387,8 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
-                    ? $"EXEC [{_databaseName}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}"
-                    : $"EXEC [{_databaseName}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
+                    ? $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}"
+                    : $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
                 break;
             }
             case Platform.PostgreSQL:
@@ -1428,7 +1444,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         switch (_product.Platform.GetBasePlatform())
         {
             case Platform.SqlServer:
-                tableCommand.CommandText = $"EXEC [{_databaseName}].SchemaSmith.ForeignKeyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
+                tableCommand.CommandText = $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.ForeignKeyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
                 break;
             case Platform.PostgreSQL:
                 tableCommand.CommandText = $@"CALL ""SchemaSmith"".""ForeignKeyQuench""(p_WhatIf := {_whatIfOnly});";
@@ -1860,7 +1876,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
                     continue;
                 }
 
-                QuenchOneScript(destCmd, script, _runScriptsTwice & ShouldAlwaysRun(script.Name));
+                QuenchOneScript(destCmd, script, _runScriptsTwice && ShouldAlwaysRun(script.Name));
                 if (script.HasBeenQuenched)
                 {
                     _checkpointing.MarkScriptCompleted(DbScope, checkpointSlot.ToString(), script.LogPath);

@@ -9,12 +9,6 @@ namespace Schema.UnitTests.Domain.MySQL
     [TestFixture]
     public class MySqlIndexTests
     {
-        private static readonly JsonSerializerSettings NullIgnore = new()
-        {
-            NullValueHandling = NullValueHandling.Ignore,
-            DefaultValueHandling = DefaultValueHandling.Ignore
-        };
-
         [Test]
         public void InheritsFromIndex()
         {

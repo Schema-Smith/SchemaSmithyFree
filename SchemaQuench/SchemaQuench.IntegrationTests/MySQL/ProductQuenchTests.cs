@@ -46,7 +46,6 @@ public class ProductUpdateTests
     private string _connectionString = null!;
     private string _secondaryDb = null!;
     private string _mainDb = null!;
-    private string _server = null!;
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -62,7 +61,6 @@ public class ProductUpdateTests
         _connectionString = FixtureSetup.ConnectionString + "Database=information_schema;";
         _mainDb = FixtureSetup.MainDb;
         _secondaryDb = FixtureSetup.SecondaryDb;
-        _server = FixtureSetup.Config["Target:Server"] ?? "localhost";
     }
 
     [Test]

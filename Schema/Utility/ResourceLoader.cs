@@ -44,7 +44,6 @@ public static class ResourceLoader
     internal static Stream GetPlatformResourceStream(string scriptName, Platform platform, Assembly assembly)
     {
         var resourceNames = assembly.GetManifestResourceNames();
-        var scriptNameUpper = scriptName.Trim().ToUpper();
 
         // Try variant-specific folder first (e.g., Scripts/SqlServer.Azure/scriptName)
         var basePlatform = platform.GetBasePlatform();

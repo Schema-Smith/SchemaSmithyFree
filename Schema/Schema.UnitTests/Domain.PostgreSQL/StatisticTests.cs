@@ -9,12 +9,6 @@ namespace Schema.UnitTests.Domain.PostgreSQL
     [TestFixture]
     public class PostgreSqlStatisticTests
     {
-        private static readonly JsonSerializerSettings NullIgnore = new()
-        {
-            NullValueHandling = NullValueHandling.Ignore,
-            DefaultValueHandling = DefaultValueHandling.Ignore
-        };
-
         [Test]
         public void InheritsFromDynamicBase()
         {

@@ -10,6 +10,24 @@ namespace SchemaTongs.UnitTests;
 [TestFixture]
 public class HelperMethodTests
 {
+    #region FormatBaseType delimiter-escaping (regression)
+
+    [Test]
+    public void FormatBaseType_TypeNameWithBracket_EscapesTheDelimiter()
+    {
+        // A user-defined type whose name contains the SQL Server delimiter would otherwise
+        // generate broken DDL (e.g. [weird]type]). It must be doubled to [weird]]type].
+        Assert.That(SchemaTongs.FormatBaseType("weird]type", -1, 0, 0), Is.EqualTo("[weird]]type]"));
+    }
+
+    [Test]
+    public void FormatBaseType_SystemType_Unaffected()
+    {
+        Assert.That(SchemaTongs.FormatBaseType("int", -1, 0, 0), Is.EqualTo("[int]"));
+    }
+
+    #endregion
+
     #region EscapeSql Tests
 
     [Test]

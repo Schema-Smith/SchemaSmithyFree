@@ -142,7 +142,6 @@ INSERT INTO [dbo].[{tableName}] ([Id], [Code], [Name], [Value]) VALUES (1, 'A01'
             command.ExecuteNonQuery();
 
             // Generate merge script (Upsert: mergeUpdate=true, mergeDelete=false)
-            var selectColumns = _dataTongs.GetSelectColumns(command, "dbo", tableName);
             var tableData = @"[{""Code"":""A01"",""Id"":1,""Name"":""Updated"",""Value"":20.00},{""Code"":""A02"",""Id"":2,""Name"":""New"",""Value"":30.00}]";
             var script = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, command, "dbo", tableName, tableData, "[Id]",
                 mergeUpdate: true, mergeDelete: false, disableTriggers: false,

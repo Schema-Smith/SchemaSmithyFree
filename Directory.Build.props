@@ -18,6 +18,16 @@
     <Copyright>© SchemaSmith Contributors. Licensed under the SSCL v2.0</Copyright>
   </PropertyGroup>
 
+  <!-- Static-analysis quality gate: SonarAnalyzer runs inside every `dotnet build` (local + CI,
+       no separate job). PrivateAssets=all keeps it dev-only — never flows into the packed
+       SchemaSmith.Schema NuGet. Being introduced deliberately: measure the finding inventory,
+       triage to a curated set, then ratchet the curated rules to error (severity up only). -->
+  <ItemGroup>
+    <PackageReference Include="SonarAnalyzer.CSharp">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
   <!-- Strip PDB files from Release/Demo publish output so ZIPs and MSIs never include them -->
   <PropertyGroup Condition="'$(Configuration)' != 'Debug'">
     <DebugType>none</DebugType>

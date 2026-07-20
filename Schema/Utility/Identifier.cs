@@ -20,6 +20,26 @@ public static class Identifier
     /// identifiers (<c>`name`</c>) are unwrapped; embedded delimiter escape sequences
     /// (<c>]]</c>, <c>""</c>, <c>``</c>) are collapsed.
     /// </summary>
+    /// <summary>
+    /// Escapes the platform delimiter inside a raw identifier so it can be safely wrapped:
+    /// SQL Server <c>]</c>→<c>]]</c>, PostgreSQL <c>"</c>→<c>""</c>, MySQL/MariaDB <c>`</c>→<c>``</c>.
+    /// The caller supplies the surrounding delimiters (e.g. <c>[{EscapeDelimited(name, p)}]</c>).
+    /// Null/empty pass through unchanged. This is the write-side inverse of <see cref="Unwrap"/>:
+    /// an identifier from trusted metadata that happens to contain the delimiter character would
+    /// otherwise produce broken (not injected) SQL.
+    /// </summary>
+    public static string EscapeDelimited(string value, Platform platform)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return platform.GetBasePlatform() switch
+        {
+            Platform.SqlServer => value.Replace("]", "]]"),
+            Platform.PostgreSQL => value.Replace("\"", "\"\""),
+            Platform.MySQL => value.Replace("`", "``"),
+            _ => value
+        };
+    }
+
     public static string Unwrap(string value, Platform platform)
     {
         if (string.IsNullOrEmpty(value)) return value;

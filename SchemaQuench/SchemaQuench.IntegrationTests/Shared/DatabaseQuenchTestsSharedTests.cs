@@ -24,17 +24,12 @@ public abstract class DatabaseQuenchTestsSharedTests
     protected abstract string MainConnectionString { get; }
 
     private IDbConnection _connection;
-    private string _testFixturePath;
 
     [SetUp]
     public void SetUp()
     {
         _connection = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(MainConnectionString);
         _connection.Open();
-
-        // Get the path to test fixtures relative to the test assembly
-        var assemblyLocation = Path.GetDirectoryName(typeof(DatabaseQuenchTestsSharedTests).Assembly.Location);
-        _testFixturePath = Path.Combine(assemblyLocation!, "TestFixtures", "TestProduct");
     }
 
     [TearDown]

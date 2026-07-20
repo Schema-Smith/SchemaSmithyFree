@@ -318,7 +318,6 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
         while (reader.Read())
         {
             var dataType = reader.GetString(1).ToLowerInvariant();
-            var columnType = reader.GetString(2);
             var maxLen = reader.IsDBNull(3) ? 0 : Convert.ToInt64(reader.GetValue(3));
             var precision = reader.IsDBNull(4) ? 0 : Convert.ToInt32(reader.GetValue(4));
             var scale = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5));

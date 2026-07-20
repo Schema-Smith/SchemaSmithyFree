@@ -814,7 +814,7 @@ BEGIN
                   OR (COALESCE(ic."Storage", '') != '' AND COALESCE(ic."Storage", '') != COALESCE(iec."Storage", ''))
                   OR (COALESCE(ic."Compression", '') != '' AND COALESCE(ic."Compression", '') != COALESCE(iec."Compression", '')))) || ')'';' || CHR(10) ||
            'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '"' || CHR(10) ||
-           STRING_AGG(RTRIM(TRIM(TRAILING ',' FROM
+           STRING_AGG(NULLIF(RTRIM(TRIM(TRAILING ',' FROM
                       CASE WHEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(ec."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') OR COALESCE(c."Collation", '') != COALESCE(ec."Collation", '')
                            THEN ' ALTER COLUMN "' || c."Name" || '" SET DATA TYPE ' || c."DataType" ||
                                                     CASE WHEN COALESCE(c."Collation", '') != '' THEN ' COLLATE "' || c."Collation" || '"' ELSE '' END || ','
@@ -845,7 +845,7 @@ BEGIN
                            ELSE '' END ||
                       CASE WHEN COALESCE(c."Compression", '') != COALESCE(ec."Compression", '') AND COALESCE(c."Compression", '') != ''
                            THEN ' ALTER COLUMN "' || c."Name" || '" SET COMPRESSION ' || COALESCE(c."Compression", '') || ','
-                           ELSE '' END)), ',' || CHR(10)) || ';' AS "code"
+                           ELSE '' END)), ''), ',' || CHR(10)) || ';' AS "code"
       FROM temp_columns c
       JOIN temp_existing_columns ec ON ec."TableSchema" = c."TableSchema"
                                    AND ec."TableName" = c."TableName"
