@@ -18,8 +18,10 @@ namespace SchemaQuench;
 /// "SocketException: Success" surface seen when SQL Server is torn down mid-command
 /// (SchemaSmith#353). Walks the inner-exception chain.
 ///
-/// <para>Only invoked at DB-operation catch sites (the quench work loop and the top-level
-/// deploy net), so a transport <see cref="IOException"/> in the chain is unambiguous there.</para>
+/// <para>Invoked at deploy-operation catch sites — the quench work loop, the product-script
+/// path, and a top-level deploy net — where a transport <see cref="IOException"/> in the chain
+/// is the overwhelmingly likely cause. The top-level net is a last resort: it still logs the raw
+/// exception, so at worst a non-transport IOException there gets a slightly off headline.</para>
 ///
 /// <para>Unlike <see cref="DeadlockClassifier"/> (which matches both <c>SqlServerErrorException</c>
 /// and <c>SqlException</c> for 1205), there is no <c>SqlServerErrorException</c> branch here: a

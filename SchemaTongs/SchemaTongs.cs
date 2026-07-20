@@ -995,7 +995,7 @@ SELECT s.name, s.schema_id
         {
             var escapedName = EscapeSql(name);
             var script = $"IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = N'{escapedName}')\r\n" +
-                         $"EXEC sys.sp_executesql N'CREATE SCHEMA [{name}]'\r\n";
+                         $"EXEC sys.sp_executesql N'CREATE SCHEMA [{EscapeSql(Identifier.EscapeDelimited(name, Platform.SqlServer))}]'\r\n";
 
             var extProps = GetExtendedProperties(command, "SCHEMA", name);
             if (extProps.Length > 0)
@@ -1105,7 +1105,7 @@ SELECT s.name AS SchemaName, t.name AS TypeName,
             var typeSpec = FormatBaseType(baseType, maxLength, precision, scale);
             var nullSpec = isNullable ? "NULL" : "NOT NULL";
             var script = $"IF NOT EXISTS (SELECT * FROM sys.types st JOIN sys.schemas ss ON st.schema_id = ss.schema_id WHERE st.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
-                         $"CREATE TYPE [{schema}].[{name}] FROM {typeSpec} {nullSpec}";
+                         $"CREATE TYPE [{Identifier.EscapeDelimited(schema, Platform.SqlServer)}].[{Identifier.EscapeDelimited(name, Platform.SqlServer)}] FROM {typeSpec} {nullSpec}";
 
             var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
             script = RewriteSqlBodyForSchemaTemplate(script, fileName);
@@ -1213,27 +1213,27 @@ SELECT cc.name, cc.definition
             }
 
             var lines = new List<string>();
-            lines.Add($"CREATE TYPE [{schema}].[{name}] AS TABLE(");
+            lines.Add($"CREATE TYPE [{Identifier.EscapeDelimited(schema, Platform.SqlServer)}].[{Identifier.EscapeDelimited(name, Platform.SqlServer)}] AS TABLE(");
 
             for (var i = 0; i < columns.Count; i++)
             {
                 var col = columns[i];
                 string typeSpec;
                 if (col.UserTypeName != null)
-                    typeSpec = $"[{col.UserTypeSchema}].[{col.UserTypeName}]";
+                    typeSpec = $"[{Identifier.EscapeDelimited(col.UserTypeSchema, Platform.SqlServer)}].[{Identifier.EscapeDelimited(col.UserTypeName, Platform.SqlServer)}]";
                 else
                     typeSpec = FormatBaseType(col.TypeName, col.MaxLength, col.Precision, col.Scale);
 
                 var nullSpec = col.IsNullable ? "NULL" : "NOT NULL";
                 var comma = (i < columns.Count - 1 || indexes.Count > 0 || checkConstraints.Count > 0) ? "," : "";
-                lines.Add($"\t[{col.Name}] {typeSpec} {nullSpec}{comma}");
+                lines.Add($"\t[{Identifier.EscapeDelimited(col.Name, Platform.SqlServer)}] {typeSpec} {nullSpec}{comma}");
             }
 
             var constraintEntries = new List<string>();
             foreach (var kvp in indexes)
             {
                 var idx = kvp.Value;
-                var colList = string.Join(",\r\n", idx.Columns.Select(c => $"\t[{c.ColumnName}] " + (c.IsDescending ? "DESC" : "ASC")));
+                var colList = string.Join(",\r\n", idx.Columns.Select(c => $"\t[{Identifier.EscapeDelimited(c.ColumnName, Platform.SqlServer)}] " + (c.IsDescending ? "DESC" : "ASC")));
 
                 if (idx.IsPrimaryKey)
                     constraintEntries.Add($"\tPRIMARY KEY {idx.TypeDesc} \r\n(\r\n{colList}\r\n)");
@@ -1489,7 +1489,7 @@ SELECT s.name AS TableSchema, pt.name AS TableName, tr.name AS TriggerName
             var escapedSchema = Regex.Escape(tableSchema);
             var escapedTable = Regex.Escape(tableName);
             var tablePattern = $@"(?<=\bON\s+)\[?{escapedSchema}\]?\.\[?{escapedTable}\]?";
-            sql = Regex.Replace(sql, tablePattern, $"[{tableSchema}].[{tableName}]", RegexOptions.IgnoreCase);
+            sql = Regex.Replace(sql, tablePattern, $"[{Identifier.EscapeDelimited(tableSchema, Platform.SqlServer)}].[{Identifier.EscapeDelimited(tableName, Platform.SqlServer)}]", RegexOptions.IgnoreCase);
 
             // Schema-template mode: drop the schema-qualified prefix in the filename.
             var encodedFile = _isSchemaTemplate
@@ -1530,7 +1530,7 @@ SELECT name
         foreach (var name in catalogs)
         {
             var script = $"IF NOT EXISTS (SELECT * FROM sysfulltextcatalogs ftc WHERE ftc.name = N'{EscapeSql(name)}')\r\n" +
-                         $"CREATE FULLTEXT CATALOG [{name}] ";
+                         $"CREATE FULLTEXT CATALOG [{Identifier.EscapeDelimited(name, Platform.SqlServer)}]";
 
             var fileName = ResolveOutputPath(castPath, EncodeFileName(name, ".sql"));
             _progressLog.Info($"  Casting {fileName}");
@@ -1578,11 +1578,11 @@ SELECT stopword, language
 
             var script = $"IF NOT EXISTS (SELECT * FROM sys.fulltext_stoplists ftsl WHERE ftsl.name = N'{EscapeSql(name)}')\r\n" +
                          $"BEGIN\r\n" +
-                         $"CREATE FULLTEXT STOPLIST [{name}]\r\n" +
+                         $"CREATE FULLTEXT STOPLIST [{Identifier.EscapeDelimited(name, Platform.SqlServer)}]\r\n" +
                          $";\r\n";
 
             foreach (var (word, language) in stopWords)
-                script += $"ALTER FULLTEXT STOPLIST [{name}] ADD '{EscapeSql(word)}' LANGUAGE '{EscapeSql(language)}';\r\n";
+                script += $"ALTER FULLTEXT STOPLIST [{Identifier.EscapeDelimited(name, Platform.SqlServer)}] ADD '{EscapeSql(word)}' LANGUAGE '{EscapeSql(language)}';\r\n";
 
             script += "END\r\n";
 
@@ -1656,7 +1656,7 @@ SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
 
             var escapedName = Regex.Escape(triggerName);
             var namePattern = $@"(?<=TRIGGER\s+)\[?{escapedName}\]?";
-            definition = Regex.Replace(definition, namePattern, $"[{triggerName}]", RegexOptions.IgnoreCase);
+            definition = Regex.Replace(definition, namePattern, $"[{Identifier.EscapeDelimited(triggerName, Platform.SqlServer)}]", RegexOptions.IgnoreCase);
 
             definition = Regex.Replace(definition, @"(?<=\bAS[ \t]*\r\n)([ \t]*)(?=\S)", "$1\r\n");
 
@@ -1709,8 +1709,8 @@ SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
             var xmlContent = (string)command.ExecuteScalar();
 
             var script =
-                $"IF NOT EXISTS (SELECT * FROM sys.xml_schema_collections c, sys.schemas s WHERE c.schema_id = s.schema_id AND (quotename(s.name) + '.' + quotename(c.name)) = N'[{schema}].[{name}]')\r\n" +
-                $"CREATE XML SCHEMA COLLECTION [{schema}].[{name}] AS N'{xmlContent}'";
+                $"IF NOT EXISTS (SELECT * FROM sys.xml_schema_collections c, sys.schemas s WHERE c.schema_id = s.schema_id AND (quotename(s.name) + '.' + quotename(c.name)) = N'[{EscapeSql(Identifier.EscapeDelimited(schema, Platform.SqlServer))}].[{EscapeSql(Identifier.EscapeDelimited(name, Platform.SqlServer))}]')\r\n" +
+                $"CREATE XML SCHEMA COLLECTION [{Identifier.EscapeDelimited(schema, Platform.SqlServer)}].[{Identifier.EscapeDelimited(name, Platform.SqlServer)}] AS N'{xmlContent}'";
             script = FormatXmlInScript(script);
 
             var extProps = GetExtendedProperties(command, "SCHEMA", schema, "XML SCHEMA COLLECTION", name);
@@ -1739,7 +1739,7 @@ SELECT sm.definition, sm.uses_ansi_nulls, sm.uses_quoted_identifier
         var namePattern = $@"\[?{escapedSchema}\]?\.\[?{escapedName}\]?";
         var match = Regex.Match(result, namePattern, RegexOptions.IgnoreCase);
         if (match.Success)
-            result = result.Substring(0, match.Index) + $"[{schemaName}].[{objectName}]" + result.Substring(match.Index + match.Length);
+            result = result.Substring(0, match.Index) + $"[{Identifier.EscapeDelimited(schemaName, Platform.SqlServer)}].[{Identifier.EscapeDelimited(objectName, Platform.SqlServer)}]" + result.Substring(match.Index + match.Length);
 
         return result;
     }
@@ -2768,21 +2768,21 @@ SELECT cc.name AS [Name],
         {
             case "nvarchar":
             case "nchar":
-                return maxLength == -1 ? $"[{baseType}](max)" : $"[{baseType}]({maxLength / 2})";
+                return maxLength == -1 ? $"[{Identifier.EscapeDelimited(baseType, Platform.SqlServer)}](max)" : $"[{Identifier.EscapeDelimited(baseType, Platform.SqlServer)}]({maxLength / 2})";
             case "varchar":
             case "char":
             case "varbinary":
             case "binary":
-                return maxLength == -1 ? $"[{baseType}](max)" : $"[{baseType}]({maxLength})";
+                return maxLength == -1 ? $"[{Identifier.EscapeDelimited(baseType, Platform.SqlServer)}](max)" : $"[{Identifier.EscapeDelimited(baseType, Platform.SqlServer)}]({maxLength})";
             case "decimal":
             case "numeric":
-                return $"[{baseType}]({precision}, {scale})";
+                return $"[{Identifier.EscapeDelimited(baseType, Platform.SqlServer)}]({precision}, {scale})";
             case "datetime2":
             case "datetimeoffset":
             case "time":
-                return scale != 7 ? $"[{baseType}]({scale})" : $"[{baseType}]";
+                return scale != 7 ? $"[{Identifier.EscapeDelimited(baseType, Platform.SqlServer)}]({scale})" : $"[{Identifier.EscapeDelimited(baseType, Platform.SqlServer)}]";
             default:
-                return $"[{baseType}]";
+                return $"[{Identifier.EscapeDelimited(baseType, Platform.SqlServer)}]";
         }
     }
 
