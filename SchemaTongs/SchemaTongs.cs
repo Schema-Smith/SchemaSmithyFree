@@ -6,6 +6,7 @@ using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using log4net;
@@ -1576,19 +1577,21 @@ SELECT stopword, language
                     stopWords.Add((reader.GetString(0), reader.GetString(1)));
             }
 
-            var script = $"IF NOT EXISTS (SELECT * FROM sys.fulltext_stoplists ftsl WHERE ftsl.name = N'{EscapeSql(name)}')\r\n" +
-                         $"BEGIN\r\n" +
-                         $"CREATE FULLTEXT STOPLIST [{Identifier.EscapeDelimited(name, Platform.SqlServer)}]\r\n" +
-                         $";\r\n";
+            var escapedListName = Identifier.EscapeDelimited(name, Platform.SqlServer);
+            var script = new StringBuilder()
+                .Append($"IF NOT EXISTS (SELECT * FROM sys.fulltext_stoplists ftsl WHERE ftsl.name = N'{EscapeSql(name)}')\r\n")
+                .Append("BEGIN\r\n")
+                .Append($"CREATE FULLTEXT STOPLIST [{escapedListName}]\r\n")
+                .Append(";\r\n");
 
             foreach (var (word, language) in stopWords)
-                script += $"ALTER FULLTEXT STOPLIST [{Identifier.EscapeDelimited(name, Platform.SqlServer)}] ADD '{EscapeSql(word)}' LANGUAGE '{EscapeSql(language)}';\r\n";
+                script.Append($"ALTER FULLTEXT STOPLIST [{escapedListName}] ADD '{EscapeSql(word)}' LANGUAGE '{EscapeSql(language)}';\r\n");
 
-            script += "END\r\n";
+            script.Append("END\r\n");
 
             var fileName = ResolveOutputPath(castPath, EncodeFileName(name, ".sql"));
             _progressLog.Info($"  Casting {fileName}");
-            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            FileWrapper.GetFromFactory().WriteAllText(fileName, script.ToString());
             _stats.FullTextStopLists++;
         }
     }
