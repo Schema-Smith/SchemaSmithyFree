@@ -1562,6 +1562,7 @@ SELECT stoplist_id, name
             }
         }
 
+        var script = new StringBuilder();
         foreach (var (id, name) in stopLists)
         {
             command.CommandText = $@"
@@ -1578,8 +1579,8 @@ SELECT stopword, language
             }
 
             var escapedListName = Identifier.EscapeDelimited(name, Platform.SqlServer);
-            var script = new StringBuilder()
-                .Append($"IF NOT EXISTS (SELECT * FROM sys.fulltext_stoplists ftsl WHERE ftsl.name = N'{EscapeSql(name)}')\r\n")
+            script.Clear();
+            script.Append($"IF NOT EXISTS (SELECT * FROM sys.fulltext_stoplists ftsl WHERE ftsl.name = N'{EscapeSql(name)}')\r\n")
                 .Append("BEGIN\r\n")
                 .Append($"CREATE FULLTEXT STOPLIST [{escapedListName}]\r\n")
                 .Append(";\r\n");
