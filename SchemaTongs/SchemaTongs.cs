@@ -1530,7 +1530,7 @@ SELECT name
         foreach (var name in catalogs)
         {
             var script = $"IF NOT EXISTS (SELECT * FROM sysfulltextcatalogs ftc WHERE ftc.name = N'{EscapeSql(name)}')\r\n" +
-                         $"CREATE FULLTEXT CATALOG [{Identifier.EscapeDelimited(name, Platform.SqlServer)}]";
+                         $"CREATE FULLTEXT CATALOG [{Identifier.EscapeDelimited(name, Platform.SqlServer)}] ";
 
             var fileName = ResolveOutputPath(castPath, EncodeFileName(name, ".sql"));
             _progressLog.Info($"  Casting {fileName}");
