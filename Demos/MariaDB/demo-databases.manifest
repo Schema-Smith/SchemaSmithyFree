@@ -1,0 +1,14 @@
+# Databases the own-server helper (deploy-to-endpoint) manages on YOUR MariaDB server.
+# Format:  TYPE|NAME|TOKEN|PACKAGE
+#   TYPE    = bootstrap (created directly) | product (deployed by SchemaQuench)
+#   NAME    = database name (lowercase; MariaDB runs lower_case_table_names=1). Rename
+#             here to avoid colliding with a real database of the same name on your
+#             server; the helper drops/creates this name.
+#   TOKEN   = (product rows) the DB-name script token overridden into SchemaQuench.
+#   PACKAGE = (product rows) the package folder under Demos/MariaDb/.
+# Lines starting with # and blank lines are ignored.
+bootstrap|TestMain||
+product|adventureworks|AdventureWorksDb|AdventureWorks
+product|northwind|NorthwindDb|Northwind
+product|sakila|SakilaDb|Sakila
+product|chinook|ChinookDb|Chinook
