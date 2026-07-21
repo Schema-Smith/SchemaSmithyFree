@@ -24,6 +24,10 @@ confirm_db() {
       docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS \`${db}\`" >/dev/null 2>&1
       out=$(docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${db}'" 2>/dev/null)
       ;;
+    mariadb)
+      docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS \`${db}\`" >/dev/null 2>&1
+      out=$(docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${db}'" 2>/dev/null)
+      ;;
   esac
   if echo "$out" | grep -qE 'READY|1'; then
     echo "PASS"
@@ -54,9 +58,12 @@ for db in "${databases[@]}"; do confirm_db postgres "$db"; done
 echo "MySQL"
 for db in "${databases[@]}"; do confirm_db mysql "$db"; done
 
+echo "MariaDB"
+for db in "${databases[@]}"; do confirm_db mariadb "$db"; done
+
 echo
 if [ "$fail" -eq 0 ]; then
-  echo "All 27 databases are ready."
+  echo "All 36 databases are ready."
   exit 0
 else
   echo "One or more databases could not be created. Is the sandbox up? See Demos/Learn/README.md."

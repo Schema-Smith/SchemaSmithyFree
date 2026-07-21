@@ -19,6 +19,7 @@ apply_sql() {
     sqlserver) docker exec -i learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d ${db}" < "$file" >/dev/null 2>&1 ;;
     postgres)  docker exec -i learn-postgres psql -U postgres -d "${db}" -v ON_ERROR_STOP=1 < "$file" >/dev/null 2>&1 ;;
     mysql)     docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd "${db}" < "$file" >/dev/null 2>&1 ;;
+    mariadb)   docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd "${db}" < "$file" >/dev/null 2>&1 ;;
   esac
 }
 
@@ -30,12 +31,14 @@ seed_db() {
     sqlserver) docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -Q \"IF DB_ID('${db}') IS NULL CREATE DATABASE [${db}]\"" >/dev/null 2>&1 ;;
     postgres)  docker exec learn-postgres psql -U postgres -d postgres -c "CREATE DATABASE ${db}" >/dev/null 2>&1 ;;
     mysql)     docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS \`${db}\`" >/dev/null 2>&1 ;;
+    mariadb)   docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS \`${db}\`" >/dev/null 2>&1 ;;
   esac
   apply_sql "$engine" "$db" "$SCRIPT_DIR/seed/$engine/shop.sql"
   case "$engine" in
     sqlserver) out=$(docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -d ${db} -Q \"SELECT 'READY' WHERE OBJECT_ID('dbo.Customer') IS NOT NULL\"" 2>/dev/null) ;;
     postgres)  out=$(docker exec learn-postgres psql -U postgres -d "${db}" -tAc "SELECT 1 FROM information_schema.tables WHERE table_name='customer'" 2>/dev/null) ;;
     mysql)     out=$(docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema='${db}' AND table_name='Customer'" 2>/dev/null) ;;
+    mariadb)   out=$(docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema='${db}' AND table_name='Customer'" 2>/dev/null) ;;
   esac
   if echo "$out" | grep -qE 'READY|1'; then echo "PASS"; else echo "FAIL"; fail=1; fi
 }
@@ -55,6 +58,8 @@ apply_role() {
                out=$(docker exec learn-postgres psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='datafix_user'" 2>/dev/null) ;;
     mysql)     docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd < "$file" >/dev/null 2>&1
                out=$(docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM mysql.user WHERE user='datafix_user'" 2>/dev/null) ;;
+    mariadb)   docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd < "$file" >/dev/null 2>&1
+               out=$(docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM mysql.user WHERE user='datafix_user'" 2>/dev/null) ;;
   esac
   if echo "$out" | grep -qE 'READY|1'; then echo "PASS"; else echo "FAIL"; fail=1; fi
 }
@@ -73,9 +78,13 @@ echo "MySQL"
 for db in "${tenants[@]}"; do seed_db mysql "$db"; done
 apply_role mysql
 
+echo "MariaDB"
+for db in "${tenants[@]}"; do seed_db mariadb "$db"; done
+apply_role mariadb
+
 echo
 if [ "$fail" -eq 0 ]; then
-  echo "All 9 databases are seeded and the datafix_user role is created (3 SQL Server, 3 PostgreSQL, 3 MySQL)."
+  echo "All 12 databases are seeded and the datafix_user role is created (3 SQL Server, 3 PostgreSQL, 3 MySQL, 3 MariaDB)."
   exit 0
 else
   echo "One or more databases could not be seeded. Is the sandbox up? See Demos/Learn/README.md."

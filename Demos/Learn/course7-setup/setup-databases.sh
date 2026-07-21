@@ -16,6 +16,7 @@ apply_seed() {
     sqlserver) docker exec -i learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b" < "$file" >/dev/null 2>&1 ;;
     postgres)  docker exec -i learn-postgres psql -U postgres -v ON_ERROR_STOP=1 < "$file" >/dev/null 2>&1 ;;
     mysql)     docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd < "$file" >/dev/null 2>&1 ;;
+    mariadb)   docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd < "$file" >/dev/null 2>&1 ;;
   esac
 }
 
@@ -25,6 +26,7 @@ count_tenants() {
     sqlserver) docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -Q \"SET NOCOUNT ON; SELECT COUNT(*) FROM sys.databases WHERE name LIKE 'fleet[_]tenant[_]%'\"" 2>/dev/null | tr -d '[:space:]' ;;
     postgres)  docker exec learn-postgres psql -U postgres -tAc "SELECT COUNT(*) FROM pg_database WHERE datname LIKE 'fleet\_tenant\_%'" 2>/dev/null | tr -d '[:space:]' ;;
     mysql)     docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name LIKE 'fleet\_tenant\_%'" 2>/dev/null | tr -d '[:space:]' ;;
+    mariadb)   docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name LIKE 'fleet\_tenant\_%'" 2>/dev/null | tr -d '[:space:]' ;;
   esac
 }
 
@@ -39,10 +41,11 @@ seed_engine() {
 seed_engine sqlserver "SQL Server"
 seed_engine postgres  "PostgreSQL"
 seed_engine mysql     "MySQL"
+seed_engine mariadb   "MariaDB"
 
 echo
 if [ "$fail" -eq 0 ]; then
-  echo "All 15 tenant databases created (5 SQL Server, 5 PostgreSQL, 5 MySQL) — empty, ready for Module 1."
+  echo "All 20 tenant databases created (5 SQL Server, 5 PostgreSQL, 5 MySQL, 5 MariaDB) — empty, ready for Module 1."
   exit 0
 else
   echo "One or more engines could not be set up. Is the sandbox up? See Demos/Learn/README.md."
