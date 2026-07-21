@@ -1,0 +1,9 @@
+{
+    "Name": "ColumnDependentProtection",
+    "ValidationScript": "SELECT EXISTS(SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{{MainDB}}')",
+    "TemplateOrder": ["Main"],
+    "ScriptFolders": [],
+    "ScriptTokens": { "MainDB": "TestMain" },
+    "Platform": "MariaDb",
+    "DropTablesRemovedFromProduct": true
+}
