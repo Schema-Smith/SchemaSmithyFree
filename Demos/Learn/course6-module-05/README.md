@@ -3,14 +3,14 @@
 Goal: ship a schema change to production **fast**, as a minimal object-level patch — without a full release,
 and without collateral damage. You'll see the disaster a naive hand-carved subset causes (it drops the tables
 it doesn't mention), then watch **SchemaShears** build a patch that carves the same change safely: it stamps
-the emitted package so the omitted objects can't be dropped. All three engines.
+the emitted package so the omitted objects can't be dropped. All four engines.
 
 This is the Course 6 finale. Module 1 fixed bad *data* as a scoped datafix; here you ship the *schema* side of
 an incident response — the object-level patch that a full-product deploy would be overkill (and dangerous) for.
 
 ## Before you start
 
-- The [sandbox](../docker) is up and verified (all three engines healthy).
+- The [sandbox](../docker) is up and verified (all four engines healthy).
 - The CLI is on your PATH — `schemaquench --version` and `schemashears --version` answer **2.3.0** or later.
 
 The lab uses two **dedicated** databases per engine — `shop_patch_canary` (where the safe patch lands) and
@@ -32,7 +32,7 @@ both tenants. Create + seed them, then deploy the baseline. SQL Server:
 
 ```bash
 cd sqlserver
-# create + seed both tenants (repeat the pattern for postgres/mysql with their seed)
+# create + seed both tenants (repeat the pattern for postgres/mysql/mariadb with their seed)
 for db in shop_patch_canary shop_patch_scratch; do
   docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
     -Q "IF DB_ID('$db') IS NULL CREATE DATABASE [$db]"
@@ -77,8 +77,8 @@ Could not create constraint or index. See previous errors.
 ```
 
 Three tables gone — and the run then fails, because `OrderItem`'s foreign keys now point at tables that no
-longer exist. That's the cost of carving a subset by hand. (PostgreSQL and MySQL drop the same three tables;
-the message wording differs by engine.)
+longer exist. That's the cost of carving a subset by hand. (PostgreSQL, MySQL, and MariaDB drop the same three
+tables; the message wording differs by engine.)
 
 ## Step 2: Carve the patch with SchemaShears
 
@@ -102,7 +102,7 @@ Manifest      Templates\Main\Tables\dbo.OrderItem.json
 Scaffolding   Templates\Main\Template.json
 ```
 
-(PostgreSQL and MySQL reports name their own engine's file — `public.orderitem.json` and `OrderItem.json` respectively.)
+(PostgreSQL, MySQL, and MariaDB reports name their own engine's file — `public.orderitem.json`, `OrderItem.json`, and `OrderItem.json` respectively.)
 
 And it **stamps** the emitted `patch/Product.json` so the omitted objects can't be dropped — every drop
 category flips to `false`:
@@ -166,6 +166,7 @@ docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 
 docker exec learn-postgres psql -U postgres -c "DROP DATABASE IF EXISTS shop_patch_canary WITH (FORCE)"
 docker exec learn-postgres psql -U postgres -c "DROP DATABASE IF EXISTS shop_patch_scratch WITH (FORCE)"
 docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
+docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
 ```
 
 ## The principle

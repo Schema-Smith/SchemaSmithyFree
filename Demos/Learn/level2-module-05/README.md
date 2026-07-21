@@ -62,6 +62,7 @@ One run created the table and delivered its rows.
 # SQL Server (from a SQL client): SELECT COUNT(*) FROM dbo.IsoCurrency;   -- 5
 docker exec learn-postgres  psql -U postgres -d learn -tAc "SELECT count(*) FROM public.isocurrency"
 docker exec learn-mysql     mysql -uroot -p"Learn!Passw0rd" -D learn -N -e "SELECT COUNT(*) FROM IsoCurrency"
+docker exec learn-mariadb   mariadb -uroot -p"Learn!Passw0rd" -D learn -N -e "SELECT COUNT(*) FROM IsoCurrency"
 ```
 
 Five rows. Run `schemaquench` again — still five. Delivery MERGEs declared rows against what's there,

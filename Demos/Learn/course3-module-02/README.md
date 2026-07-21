@@ -19,7 +19,7 @@ course3-module-02/
   pipeline/<engine>/     pipeline.sh + pipeline.ps1 — runnable twins that drive the whole flow
 ```
 
-`<engine>` is `sqlserver`, `postgres`, or `mysql`. Each `starter/` and `solution/` carries its own
+`<engine>` is `sqlserver`, `postgres`, `mysql`, or `mariadb`. Each `starter/` and `solution/` carries its own
 `Package/` plus a single shared **`base.settings.json`** — connection details and the package-path
 default. Everything that varies per environment is injected as an env var at run time.
 
@@ -42,14 +42,14 @@ Environment-variable mapping follows the standard convention: prefix `SmithySett
 
 ## Before you start
 
-- The [sandbox](../docker) is up (`docker compose up -d`) and all three engines are healthy.
+- The [sandbox](../docker) is up (`docker compose up -d`) and all four engines are healthy.
 - The target databases exist. Run the Course 3 setup once (idempotent — safe to re-run):
 
   ```bash
   pwsh ../course3-setup/setup-environments.ps1     # or: ../course3-setup/setup-environments.sh
   ```
 
-  It creates the nine `ordersservice_{dev,staging,prod}` databases and reports `PASS` for each.
+  It creates the twelve `ordersservice_{dev,staging,prod}` databases and reports `PASS` for each.
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0`).
 
 ## Run the pipeline
@@ -57,7 +57,7 @@ Environment-variable mapping follows the standard convention: prefix `SmithySett
 Pick your engine and shell. The scripts are real twins — same flow, native to each shell:
 
 ```bash
-cd pipeline/<engine>      # sqlserver | postgres | mysql
+cd pipeline/<engine>      # sqlserver | postgres | mysql | mariadb
 ./pipeline.sh             # bash (Git Bash, Linux, macOS)
 ```
 
@@ -97,6 +97,12 @@ The per-engine WhatIf wording differs, but each one previews the same single cha
 | SQL Server | `CREATE NONCLUSTERED INDEX [IX_Customer_Email] ON [dbo].[Customer] ([Email]) ...` |
 | PostgreSQL | `CREATE INDEX "ix_customer_email" ON "public"."Customer" USING btree ("Email") ...` |
 | MySQL      | ``CREATE INDEX `IX_Customer_Email` ON `ordersservice_staging`.`Customer` (Email) USING BTREE`` |
+| MariaDB    | ``CREATE INDEX `IX_Customer_Email` ON `ordersservice_staging`.`Customer` (Email) USING BTREE`` |
+
+*MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native
+package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics
+(invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for
+you.*
 
 Immediately after the WhatIf step the script checks the catalog and prints `ABSENT` — WhatIf ran the
 whole deploy path and changed nothing. That's the gate: if the change can't be planned cleanly, the
@@ -117,6 +123,10 @@ docker exec learn-postgres psql -U postgres -d ordersservice_prod -tAc \
 
 # MySQL
 docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mysql mysql -uroot -N -e \
+  "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_prod' AND INDEX_NAME='IX_Customer_Email'"
+
+# MariaDB
+docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mariadb mariadb -uroot -N -e \
   "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_prod' AND INDEX_NAME='IX_Customer_Email'"
 ```
 

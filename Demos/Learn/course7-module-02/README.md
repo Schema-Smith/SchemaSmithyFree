@@ -10,16 +10,16 @@ keep straight:
 - **`Target.Databases`** — *narrows* whatever was discovered (or overridden) down to a subset for this
   one run. The roster is unchanged; you just touch fewer of it.
 
-All three engines. This builds directly on Module 1 (database-per-tenant fan-out) — do that one first.
+All four engines. This builds directly on Module 1 (database-per-tenant fan-out) — do that one first.
 
 ## Before you start
 
-- The [sandbox](../docker) is up and verified (all three engines healthy).
+- The [sandbox](../docker) is up and verified (all four engines healthy).
 - The fleet exists — run [`../course7-setup`](../course7-setup) once (creates `fleet_tenant_001`…`005`,
   on each engine). Module 1 recommended first.
 - The CLI is on your PATH — `schemaquench --version` answers **2.3.0** or later.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the same native `Shop` `Package/` as
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the same native `Shop` `Package/` as
 Module 1 (the catalog `DatabaseIdentificationScript` is retained — that's what the config *overrides*),
 plus **four** settings files:
 
@@ -133,11 +133,12 @@ tells you what *was* available:
 Target filter rejection for template 'Main': One or more Target.* filter values do not match the discovered work-unit set. Target.Databases value(s) not discovered: [fleet_tenant_999]. Available: [fleet_tenant_001,fleet_tenant_002,fleet_tenant_003,fleet_tenant_004,fleet_tenant_005].
 ```
 
-## Step 5: Do it on PostgreSQL and MySQL
+## Step 5: Do it on PostgreSQL, MySQL, and MariaDB
 
-Same four steps in `postgres/` and `mysql/`. The `TemplateTargets` and `Target.Databases` config is
-**identical** on all three engines — only the (retained) catalog dialect in `Template.json` differs, and
-that's only consulted when you *don't* override. Each engine replaces discovery with a dev/prod roster,
+Same four steps in `postgres/`, `mysql/`, and `mariadb/`. The `TemplateTargets` and `Target.Databases`
+config is **identical** on all four engines — only the (retained) catalog dialect in `Template.json`
+differs, and that's only consulted when you *don't* override. Each engine replaces discovery with a
+dev/prod roster,
 refuses an override with no script, and narrows to a one-tenant canary exactly the same way.
 
 ## Replace vs narrow

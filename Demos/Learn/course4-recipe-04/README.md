@@ -4,7 +4,7 @@ Goal: ship a **binary asset** (a logo) and a **reference dataset** (category row
 have them land correctly on every engine with no per-engine editing. The same `logo.png` becomes the
 platform's own binary literal — `0x…` on SQL Server and MySQL, `E'\x…'::bytea` on PostgreSQL — automatically.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package/` (including
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the full `Package/` (including
 `Package/resources/logo.png` and `Package/resources/seed-categories.sql`) plus `deploy.settings.json`,
 targeting `cookbook_r4`.
 
@@ -51,9 +51,12 @@ docker exec learn-postgres psql -U postgres -d cookbook_r4 -tAc "SELECT octet_le
 
 # MySQL
 docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT LENGTH(Image), LOWER(HEX(Image)) FROM cookbook_r4.BrandAssets WHERE AssetName='Default'"
+
+# MariaDB
+docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT LENGTH(Image), LOWER(HEX(Image)) FROM cookbook_r4.BrandAssets WHERE AssetName='Default'"
 ```
 
-All three return length `69` and the same hex (`89504e47…ae426082` — the PNG signature and bytes of
+All four return length `69` and the same hex (`89504e47…ae426082` — the PNG signature and bytes of
 `resources/logo.png`). And the reference data is in:
 
 ```bash
@@ -69,12 +72,14 @@ docker exec learn-postgres psql -U postgres -d cookbook_r4 -tAc "SELECT string_a
 | `<*BinaryFile*>` literal | `0x89504E47…` | `E'\\x89504E47…'::bytea` | `0x89504E47…` |
 | Read bytes back | `CONVERT(…, 2)` | `encode(…, 'hex')` | `HEX(…)` |
 
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
+
 You author one `<*BinaryFile*>` token; the resolver picks the right literal form for each target. The `.png`
-in the package is identical across all three engine folders — only the emitted SQL literal differs.
+in the package is identical across all four engine folders — only the emitted SQL literal differs.
 
 ## The principle
 
 A logo, a certificate, a signing key, a static reference set — content that belongs *with* the schema but
 isn't schema. `<*BinaryFile*>` and `<*File*>` let it ride inside the package and land at deploy time as
-whatever the target accepts, so the same package seeds the same assets into SQL Server, PostgreSQL, and MySQL
-with nothing hand-edited per engine. The asset travels with the metal.
+whatever the target accepts, so the same package seeds the same assets into SQL Server, PostgreSQL, MySQL,
+and MariaDB with nothing hand-edited per engine. The asset travels with the metal.

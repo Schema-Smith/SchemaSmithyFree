@@ -7,7 +7,7 @@ phase, read the error, recover.
 
 ## Prerequisites
 
-- The three-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
+- The four-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
 - `schemaquench --version` answers on your PATH. New to the CLI? [Course 1, Module 1](https://learn.schemasmith.com/01-install-connect/).
 
 ## Step 1 — create the sandbox database
@@ -20,7 +20,7 @@ Prints `PASS` per engine once `diag_structure` exists. Re-running is safe (guard
 ## Step 2 — deploy the baseline (green)
 
 ```
-cd sqlserver            # or postgres, or mysql
+cd sqlserver            # or postgres, mysql, or mariadb
 schemaquench --ConfigFile:quench.settings.baseline.json --LogPath:"$PWD/logs"
 ```
 
@@ -70,26 +70,27 @@ Now a column *alter*. `beat2-broken/` narrows `FullName` from `NVARCHAR(200)` to
 schemaquench --ConfigFile:quench.settings.beat2-broken.json --LogPath:"$PWD/logs"
 ```
 
-This one fails the **same way on all three** — exit `2` at `Quenching modified tables`:
+This one fails the **same way on all four** — exit `2` at `Quenching modified tables`:
 
 | Engine | Error |
 | --- | --- |
 | **SQL Server** | `String or binary data would be truncated in table 'diag_structure.dbo.Customer', column 'FullName'.` (error `8152`) |
 | **PostgreSQL** | `22001: value too long for type character varying(10)` |
 | **MySQL** | `Data too long for column 'FullName' at row 1` (error `1406`) |
+| **MariaDB** | `Data too long for column 'FullName' at row 1` (error `1406`) |
 
 **The fix is data, not schema** — the existing values are too long for the shape you asked for.
 Shorten them, then redeploy the same change:
 
 ```
--- SQL Server (PG / MySQL analogous)
+-- SQL Server (PG / MySQL / MariaDB analogous)
 UPDATE dbo.Customer SET FullName = LEFT(FullName, 10);
 ```
 ```
 schemaquench --ConfigFile:quench.settings.beat2-broken.json --LogPath:"$PWD/logs"
 ```
 
-Green on all three — the narrow now applies. (This redeploy runs on the checkpointed
+Green on all four — the narrow now applies. (This redeploy runs on the checkpointed
 `ModifiedTables` phase with the failed run's checkpoint still present; PostgreSQL re-converges
 cleanly here.)
 

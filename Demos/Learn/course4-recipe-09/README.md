@@ -8,7 +8,7 @@ every table, with all its Extensions — shreds it, and `MERGE`s a queryable **`
 every quench, so the dictionary is always in sync with what the schema files declare. The schema files are the
 single source of truth; the dictionary is derived from them and can't drift.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package/` plus `deploy.settings.json`,
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the full `Package/` plus `deploy.settings.json`,
 all targeting `cookbook_r9`.
 
 ## Before you start
@@ -39,7 +39,7 @@ schemaquench --ConfigFile:deploy.settings.json
 ```
 
 The `[ALWAYS]` script reads the whole-template model token, shreds it (`OPENJSON` on SQL Server,
-`jsonb_array_elements` on PostgreSQL, `JSON_TABLE` on MySQL), and populates `DataDictionary` — one row per
+`jsonb_array_elements` on PostgreSQL, `JSON_TABLE` on MySQL and MariaDB), and populates `DataDictionary` — one row per
 column:
 
 ```bash
@@ -73,6 +73,8 @@ lab (`Demos/Learn/course6-module-03`). Author here; enforce there.
 | Reach into Extensions | `'$.Extensions.SensitivityLevel'` | `->'Extensions'->>'SensitivityLevel'` | `PATH '$.Extensions.SensitivityLevel'` |
 | Upsert + prune | `MERGE … WHEN NOT MATCHED BY SOURCE THEN DELETE` | `INSERT … ON CONFLICT` + `DELETE … NOT EXISTS` | `INSERT … ON DUPLICATE KEY` + `DELETE … NOT EXISTS` |
 | Schema key | `$.Schema` (`dbo`) | `$.Schema` (`public`) | `DATABASE()` — MySQL has no schema namespace |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.* Same `DATABASE()` schema key as MySQL.
 
 Same shape everywhere: read the declared model as JSON, walk tables then columns, reach into `Extensions`, and
 keep a derived table in sync. Only the JSON-shredding dialect differs.

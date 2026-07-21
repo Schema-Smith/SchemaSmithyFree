@@ -8,14 +8,14 @@ Your team is about to push a schema update to three tenant databases across a fl
 
 ## Before you start
 
-- The three-engine sandbox is up (`Demos/Learn/docker`) and `course6-setup` has been run — it seeds `shop_tenant_a`, `shop_tenant_b`, and `shop_tenant_c` on each engine.
+- The four-engine sandbox is up (`Demos/Learn/docker`) and `course6-setup` has been run — it seeds `shop_tenant_a`, `shop_tenant_b`, and `shop_tenant_c` on each engine.
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later). The `--TestConnection` and `--PreviewTargets` switches shipped in v2.2.0; if `schemaquench --help` does not list them, upgrade to v2.3.0 or later.
 
 ## Scenario 1 — `--TestConnection` pass
 
 `--TestConnection` connects to every configured server, checks that the detected version meets `Product.json`'s `MinimumVersion`, and exits. Exit code 0 means the deployment is clear to proceed on connectivity grounds; exit code 2 means at least one server failed the check.
 
-Run from any of the three engine directories:
+Run from any of the four engine directories:
 
 ```
 schemaquench --ConfigFile:quench.settings.json --TestConnection
@@ -32,7 +32,7 @@ Validate Minimum Version
 RESULT: PASS (connections and minimum version validated)
 ```
 
-Exit code: `0`. PostgreSQL and MySQL produce the same shape (`connection succeeded` line, then `RESULT: PASS`) with their respective connection identifiers.
+Exit code: `0`. PostgreSQL, MySQL, and MariaDB produce the same shape (`connection succeeded` line, then `RESULT: PASS`) with their respective connection identifiers.
 
 ## Scenario 2 — `--TestConnection` fail: raise the floor above the server
 
@@ -70,7 +70,7 @@ MySQL output (floor `9.9`, detected version `8.0.45`):
   localhost: detected version 8.0.45 is below the product's declared MinimumVersion 9.9
 ```
 
-Exit code: `2` on all three engines. The manifest names the server, the detected version, and the declared floor — enough information to act without opening a separate database client.
+Exit code: `2` on all four engines. The manifest names the server, the detected version, and the declared floor — enough information to act without opening a separate database client.
 
 **Restore `MinimumVersion`** to its original value before continuing (`2019` for SQL Server, `15` for PostgreSQL, `8.0` for MySQL).
 
@@ -100,7 +100,7 @@ Template: Main [required]
 RESULT: PASS
 ```
 
-Exit code: `0`. PostgreSQL and MySQL produce the same target tree (three tenant databases under `Template: Main [required]`), exit 0.
+Exit code: `0`. PostgreSQL, MySQL, and MariaDB produce the same target tree (three tenant databases under `Template: Main [required]`), exit 0.
 
 ## Scenario 4 — `--PreviewTargets` fail: point discovery at a pattern that matches nothing
 
@@ -120,13 +120,13 @@ Change it to:
 "DatabaseIdentificationScript": "SELECT [Name] FROM master.sys.databases WHERE [Name] LIKE 'shop_tenant_z%'"
 ```
 
-Apply the equivalent change to the PostgreSQL or MySQL `Template.json` if you're running those engines. Re-run:
+Apply the equivalent change to the PostgreSQL, MySQL, or MariaDB `Template.json` if you're running those engines. Re-run:
 
 ```
 schemaquench --ConfigFile:quench.settings.json --PreviewTargets
 ```
 
-Output — the failure message is identical on all three engines (the preceding `Locate Databases To Quench` line carries the engine's own server token):
+Output — the failure message is identical on all four engines (the preceding `Locate Databases To Quench` line carries the engine's own server token):
 
 ```
 Template: Main [required]
@@ -173,7 +173,9 @@ The exit codes — 0 and 2 — are the contract. Whether the gate is GitHub Acti
 | Detected version display | `16` | `160013` | `8.0.45` |
 | Pass floor used | `2019` | `15` | `8.0` |
 
-MySQL has no schema-within-database layer, so `--PreviewTargets` lists databases only — no `schemas:` sub-lines under each database entry. On SQL Server and PostgreSQL, a schema-template package would add those lines; that pattern is out of scope for this database-level module.
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
+
+MySQL and MariaDB have no schema-within-database layer, so `--PreviewTargets` lists databases only — no `schemas:` sub-lines under each database entry. On SQL Server and PostgreSQL, a schema-template package would add those lines; that pattern is out of scope for this database-level module.
 
 ## What you proved
 

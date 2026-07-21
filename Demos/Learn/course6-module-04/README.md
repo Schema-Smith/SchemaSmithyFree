@@ -1,6 +1,6 @@
 # Course 6, Module 4 — Runtime validation gates (validation scripts) (lab)
 
-**Goal:** make a deployment refuse the wrong server and refuse to run an older release over a newer one — before it touches the schema. This lab exercises SchemaQuench's runtime validation gates: the product-level `ValidationScript` (a server-identity / dependency / version gate) and the template-level `BaselineValidationScript` + `VersionStampScript` (the anti-rollback pairing). SQL Server, PostgreSQL, and MySQL.
+**Goal:** make a deployment refuse the wrong server and refuse to run an older release over a newer one — before it touches the schema. This lab exercises SchemaQuench's runtime validation gates: the product-level `ValidationScript` (a server-identity / dependency / version gate) and the template-level `BaselineValidationScript` + `VersionStampScript` (the anti-rollback pairing). SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ## The scenario
 
@@ -18,7 +18,7 @@ The **version registry** (`SchemaVersion` / `schema_version`) is standing infras
 
 ## Before you start
 
-1. The shared sandbox must be running and `course6-setup` must have seeded `shop_tenant_a/b/c` on all three engines (see [`../course6-setup/README.md`](../course6-setup/README.md)).
+1. The shared sandbox must be running and `course6-setup` must have seeded `shop_tenant_a/b/c` on all four engines (see [`../course6-setup/README.md`](../course6-setup/README.md)).
 2. **Provision the version registry** in each tenant database. It is standing infrastructure, so you create it once. On the sandbox:
 
    **SQL Server** (run for `shop_tenant_a`, `_b`, `_c`):
@@ -34,12 +34,16 @@ The **version registry** (`SchemaVersion` / `schema_version`) is standing infras
    ```sql
    CREATE TABLE IF NOT EXISTS schema_version (product VARCHAR(128) NOT NULL PRIMARY KEY, version INT NOT NULL);
    ```
+   **MariaDB** (each tenant):
+   ```sql
+   CREATE TABLE IF NOT EXISTS schema_version (product VARCHAR(128) NOT NULL PRIMARY KEY, version INT NOT NULL);
+   ```
 3. The `quench.settings.json` files carry `"KindleTheForge": true` (on by default; shown here for clarity). The first deploy into a fresh database installs SchemaSmith's helper objects ("kindles the forge") before it does anything else.
 4. The validation-script family is in the stable release; run the lab with the installed `schemaquench` (no from-source build needed). Each command below is run from an engine/version directory, e.g. `sqlserver/v1`.
 
 ## Scenario 1 — ValidationScript pass
 
-From `sqlserver/v1` (swap `sqlserver` for `postgres` / `mysql`):
+From `sqlserver/v1` (swap `sqlserver` for `postgres` / `mysql` / `mariadb`):
 
 ```
 schemaquench --ConfigFile:quench.settings.json
@@ -66,7 +70,7 @@ Exit code 3. Nothing is deployed — the quench never reaches a target database.
 
 ## Scenario 3 — the truthy contract
 
-A validation script must return a **truthy scalar** or the gate fails: `NULL` counts as *false*. Each engine spells the check natively — `SELECT CAST(... AS BIT)` on SQL Server, `SELECT EXISTS(...)` (native boolean) on PostgreSQL, `SELECT EXISTS(...)` (0/1) on MySQL — but the contract is identical: non-zero / true passes, everything else aborts.
+A validation script must return a **truthy scalar** or the gate fails: `NULL` counts as *false*. Each engine spells the check natively — `SELECT CAST(... AS BIT)` on SQL Server, `SELECT EXISTS(...)` (native boolean) on PostgreSQL, `SELECT EXISTS(...)` (0/1) on MySQL and MariaDB — but the contract is identical: non-zero / true passes, everything else aborts.
 
 ## Scenario 4 — anti-rollback (the money shot)
 
@@ -97,22 +101,22 @@ UPDATE dbo.SchemaVersion SET Version = 1 WHERE Product = 'Shop';
 UPDATE dbo.SchemaVersion SET Version = 2 WHERE Product = 'Shop';
 ```
 
-(PostgreSQL: `UPDATE public.schema_version SET version = … WHERE product = 'Shop';`. MySQL: `UPDATE schema_version SET version = … WHERE product = 'Shop';`.)
+(PostgreSQL: `UPDATE public.schema_version SET version = … WHERE product = 'Shop';`. MySQL/MariaDB: `UPDATE schema_version SET version = … WHERE product = 'Shop';`.)
 
 Run v1 across the fleet. `shop_tenant_a` aborts (`Invalid baseline for this release`) while `shop_tenant_b` and `shop_tenant_c` pass and re-stamp. The run continues past the blocked tenant and reports the failure; exit code 2. The gate is evaluated independently for each database.
 
 ## Scenario 6 — the same gates at product scope (note)
 
-`BaselineValidationScript` and `VersionStampScript` also exist at **product** level (`Product.json`), where they run once against the admin database instead of per target database — for a single server-wide version registry rather than a per-database one. This lab uses the template-level (per-database) gates because they carry the version alongside the schema they guard and behave identically on all three engines; the product-level equivalents are there when you want one server-wide gate.
+`BaselineValidationScript` and `VersionStampScript` also exist at **product** level (`Product.json`), where they run once against the admin database instead of per target database — for a single server-wide version registry rather than a per-database one. This lab uses the template-level (per-database) gates because they carry the version alongside the schema they guard and behave identically on all four engines; the product-level equivalents are there when you want one server-wide gate.
 
 ## Resetting the lab
 
 To return to a clean first-deploy state:
 
 1. Re-run `course6-setup` (re-seeds the Shop tables).
-2. **Empty the version registry** — `course6-setup` does not touch it. In each tenant: `DELETE FROM dbo.SchemaVersion;` (SQL Server), `DELETE FROM public.schema_version;` (PostgreSQL), or `DELETE FROM schema_version;` (MySQL) — or drop and re-create it per *Before you start*.
+2. **Empty the version registry** — `course6-setup` does not touch it. In each tenant: `DELETE FROM dbo.SchemaVersion;` (SQL Server), `DELETE FROM public.schema_version;` (PostgreSQL), or `DELETE FROM schema_version;` (MySQL / MariaDB) — or drop and re-create it per *Before you start*.
 3. **Clear the checkpoint cache** — delete the `schemaquench-checkpoints` directory in your temp folder (`%TEMP%\schemaquench-checkpoints` on Windows, `$TMPDIR/schemaquench-checkpoints` or `/tmp/schemaquench-checkpoints` on macOS/Linux). SchemaQuench keeps per-run checkpoints there; if a database is reset out from under a checkpoint, the next run may skip steps it believes are already done.
 
 ## Cross-platform
 
-The workflow is identical on all three engines; only the native SQL spelling differs. The admin database the product `ValidationScript` runs against is `master` (SQL Server), `postgres` (PostgreSQL), or `information_schema` (MySQL). Identifier quoting and types follow each engine (`dbo` + `SYSNAME`/`INT`; lowercase `public` + `text`/`integer`; backtick-quoted + `VARCHAR`/`INT`). The gate names, the abort messages, and the exit codes (3 for a failed server validation, 2 for a failed baseline) are the same everywhere.
+The workflow is identical on all four engines; only the native SQL spelling differs. The admin database the product `ValidationScript` runs against is `master` (SQL Server), `postgres` (PostgreSQL), or `information_schema` (MySQL, MariaDB). Identifier quoting and types follow each engine (`dbo` + `SYSNAME`/`INT`; lowercase `public` + `text`/`integer`; backtick-quoted + `VARCHAR`/`INT` on MySQL and MariaDB). The gate names, the abort messages, and the exit codes (3 for a failed server validation, 2 for a failed baseline) are the same everywhere.

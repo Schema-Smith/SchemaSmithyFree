@@ -1,8 +1,8 @@
 # Course 4 — Database Setup
 
 These scripts create the nine cookbook databases on every sandbox engine (SQL Server, PostgreSQL,
-MySQL) — 27 databases in total. Each database is dedicated to one recipe so labs stay hermetic and
-do not clash with one another.
+MySQL, and MariaDB) — 36 databases in total. Each database is dedicated to one recipe so labs stay
+hermetic and do not clash with one another.
 
 ## Prerequisite
 
@@ -25,7 +25,7 @@ cd Demos\Learn\course4-setup
 .\setup-databases.ps1
 ```
 
-Both scripts print `PASS` or `FAIL` for each of the 27 databases:
+Both scripts print `PASS` or `FAIL` for each of the 36 databases:
 
 ```
 SQL Server
@@ -44,8 +44,11 @@ PostgreSQL
 MySQL
   cookbook_r1_prod           PASS
   ...
+MariaDB
+  cookbook_r1_prod           PASS
+  ...
 
-All 27 databases are ready.
+All 36 databases are ready.
 ```
 
 ## Databases created
@@ -61,13 +64,14 @@ All 27 databases are ready.
 | 8 — authoring recyclebin hooks | `cookbook_r8` | Custom drop/restore hook authoring recipe |
 | 9 — Extensions as a source of truth | `cookbook_r9` | Data-dictionary-from-metadata recipe |
 
-Each database is created on all three engines:
+Each database is created on all four engines:
 
 | Engine     | Databases |
 | ---------- | --------- |
 | SQL Server | `cookbook_r1_prod`, `cookbook_r1_nonprod`, `cookbook_r2`, `cookbook_r3`, `cookbook_r4`, `cookbook_r5`, `cookbook_r6`, `cookbook_r8`, `cookbook_r9` |
 | PostgreSQL | `cookbook_r1_prod`, `cookbook_r1_nonprod`, `cookbook_r2`, `cookbook_r3`, `cookbook_r4`, `cookbook_r5`, `cookbook_r6`, `cookbook_r8`, `cookbook_r9` |
 | MySQL      | `cookbook_r1_prod`, `cookbook_r1_nonprod`, `cookbook_r2`, `cookbook_r3`, `cookbook_r4`, `cookbook_r5`, `cookbook_r6`, `cookbook_r8`, `cookbook_r9` |
+| MariaDB    | `cookbook_r1_prod`, `cookbook_r1_nonprod`, `cookbook_r2`, `cookbook_r3`, `cookbook_r4`, `cookbook_r5`, `cookbook_r6`, `cookbook_r8`, `cookbook_r9` |
 
 ## Connection details
 
@@ -78,6 +82,7 @@ These are throwaway sandbox credentials — **never reuse them anywhere real.**
 | SQL Server | `localhost` | `11433` | `sa`       | `Learn!Passw0rd` |
 | PostgreSQL | `localhost` | `15432` | `postgres` | `Learn!Passw0rd` |
 | MySQL      | `localhost` | `13306` | `root`     | `Learn!Passw0rd` |
+| MariaDB    | `localhost` | `13307` | `root`     | `Learn!Passw0rd` |
 
 ## Re-running is safe
 

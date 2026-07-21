@@ -25,7 +25,7 @@ The recyclebin contract is the same one the reference hooks use; what changes is
 The full-featured reference implementation (a `recyclebin` schema, retention/expiration, a scheduled
 `CleanupJob`) ships with the Northwind demos — this recipe shows how to author your own to fit your shop.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships two packages — `Package` (with `Coupon`) and
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships two packages — `Package` (with `Coupon`) and
 `Package-NoCoupon` (without it) — plus `install-audit-hooks.sql`, all targeting `cookbook_r8`.
 
 ## Before you start
@@ -43,6 +43,8 @@ docker exec -i learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localho
 docker exec -i learn-postgres psql -U postgres -d cookbook_r8 -f - < install-audit-hooks.sql
 # MySQL
 docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd cookbook_r8 < install-audit-hooks.sql
+# MariaDB
+docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd cookbook_r8 < install-audit-hooks.sql
 ```
 
 Installing the procedures opts this database into the recyclebin — no settings change needed. SchemaQuench
@@ -103,11 +105,13 @@ docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost 
 | Strip constraints | FK / CHECK / DEFAULT / UNIQUE / PK | all constraints + indexes | foreign keys (PK/index names are per-table) |
 | "Who" | `SUSER_SNAME()` | `current_user` | `CURRENT_USER()` |
 
-The engine calls the drop hook with schema (or database, on MySQL) and table name only — it never passes a
-retention value. SQL Server and PostgreSQL default it at the parameter level; MySQL can't, so it's hard-coded
-in the body.
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.* Its hook body mirrors the MySQL column exactly.
 
-> **MySQL gotcha:** SchemaSmith creates `SchemaSmith_ProductOwnership` as `utf8mb4_unicode_ci`. Comparing its
+The engine calls the drop hook with schema (or database, on MySQL/MariaDB) and table name only — it never
+passes a retention value. SQL Server and PostgreSQL default it at the parameter level; MySQL and MariaDB
+can't, so it's hard-coded in the body.
+
+> **MySQL/MariaDB gotcha:** SchemaSmith creates `SchemaSmith_ProductOwnership` as `utf8mb4_unicode_ci`. Comparing its
 > columns against a procedure parameter (server-default collation) raises *"Illegal mix of collations"* — so
 > the hook coerces the params with `COLLATE utf8mb4_unicode_ci` in the ownership `DELETE`.
 

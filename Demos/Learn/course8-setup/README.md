@@ -3,7 +3,7 @@
 This lab does two things:
 
 1. Stands up the **diagnostics baseline database** — one empty `diag_baseline` per engine
-   (SQL Server, PostgreSQL, MySQL) on the shared sandbox.
+   (SQL Server, PostgreSQL, MySQL, MariaDB) on the shared sandbox.
 2. Walks a **successful** deploy of the `Shop` schema into it, so you can open the evidence a
    *healthy* run leaves behind — the logs, the phase-named resolved-SQL artifacts — and see the one
    thing that is **absent** on success: a checkpoint. That contrast is the whole diagnostic method
@@ -15,7 +15,7 @@ The `diag_` prefix keeps this course's databases clear of Course 6's `shop_tenan
 
 ## Prerequisites
 
-- The three-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
+- The four-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
 - `schemaquench --version` answers **2.3.0** or later on your PATH. New to the CLI? Install it in
   [Course 1, Module 1](https://learn.schemasmith.com/01-install-connect/).
 
@@ -46,14 +46,14 @@ the base logs land next to the package (a relative `--LogPath` leaves them in th
 **macOS / Linux**
 
 ```bash
-cd sqlserver          # or postgres, or mysql
+cd sqlserver          # or postgres, mysql, or mariadb
 schemaquench --ConfigFile:quench.settings.json --LogPath:"$PWD/logs"
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-cd sqlserver          # or postgres, or mysql
+cd sqlserver          # or postgres, mysql, or mariadb
 schemaquench --ConfigFile:quench.settings.json --LogPath:"$PWD\logs"
 ```
 

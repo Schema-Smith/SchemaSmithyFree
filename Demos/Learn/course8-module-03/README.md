@@ -7,7 +7,7 @@ error, recover.
 
 ## Prerequisites
 
-- The three-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
+- The four-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
 - `schemaquench --version` answers **2.3.0** or later on your PATH. New to the CLI? [Course 1, Module 1](https://learn.schemasmith.com/01-install-connect/).
 
 ## Step 1 — create the sandbox database
@@ -20,7 +20,7 @@ Prints `PASS` per engine once `diag_keys` exists. Re-running is safe (guarded `C
 ## Step 2 — deploy the baseline (green)
 
 ```
-cd sqlserver            # or postgres, or mysql
+cd sqlserver            # or postgres, mysql, or mariadb
 schemaquench --ConfigFile:quench.settings.baseline.json --LogPath:"$PWD/logs"
 ```
 
@@ -45,13 +45,14 @@ at the index phase — where it meets the duplicate emails:
 schemaquench --ConfigFile:quench.settings.beat1-broken.json --LogPath:"$PWD/logs"
 ```
 
-Fails **the same way on all three** — exit `2` at `Quenching indexes and constraints`:
+Fails **the same way on all four** — exit `2` at `Quenching indexes and constraints`:
 
 | Engine | Error (in `SchemaQuench - Progress.log`, the `FAILED to quench:` block) |
 | --- | --- |
 | **SQL Server** | `The CREATE UNIQUE INDEX statement terminated because a duplicate key was found for the object name 'dbo.Customer' and the index name 'IX_Customer_Email'. The duplicate key value is (ana.f@shop.test).` (error `1505`) |
 | **PostgreSQL** | `23505: could not create unique index "ix_customer_email"` |
 | **MySQL** | `Duplicate entry 'ana.f@shop.test' for key 'Customer.IX_Customer_Email'` (error `1062`) |
+| **MariaDB** | `Duplicate entry 'ana.f@shop.test' for key 'Customer.IX_Customer_Email'` (error `1062`) |
 
 The phase left a **copy-runnable** artifact — `artifacts/SchemaQuench - Quench Indexes ….sql` — a one
 -line `EXEC`/`CALL …MissingIndexesAndConstraintsQuench`. Paste it into your client and the phase fails
@@ -61,14 +62,14 @@ identically: that is your reproduction.
 then redeploy the same flip:
 
 ```
--- SQL Server (PG / MySQL analogous)
+-- SQL Server (PG / MySQL / MariaDB analogous)
 UPDATE dbo.Customer SET Email = 'ana.f7@shop.test' WHERE CustomerId = 7;
 ```
 ```
 schemaquench --ConfigFile:quench.settings.beat1-broken.json --LogPath:"$PWD/logs"
 ```
 
-Green on all three — the unique index now builds, PostgreSQL included.
+Green on all four — the unique index now builds, PostgreSQL included.
 
 ## Beat 2 — adding a foreign key over an orphan row (`547` / `23503` / `1452`)
 
@@ -80,13 +81,14 @@ here, at the last structural phase, not earlier:
 schemaquench --ConfigFile:quench.settings.beat2-broken.json --LogPath:"$PWD/logs"
 ```
 
-Fails **the same way on all three** — exit `2` at `Quenching foreign keys`:
+Fails **the same way on all four** — exit `2` at `Quenching foreign keys`:
 
 | Engine | Error |
 | --- | --- |
 | **SQL Server** | `The ALTER TABLE statement conflicted with the FOREIGN KEY constraint "FK_SalesOrder_Customer". The conflict occurred in database "diag_keys", table "dbo.Customer", column 'CustomerId'.` (error `547`) |
 | **PostgreSQL** | `23503: insert or update on table "salesorder" violates foreign key constraint "fk_salesorder_customer"` |
 | **MySQL** | `Cannot add or update a child row: a foreign key constraint fails (… CONSTRAINT \`FK_SalesOrder_Customer\` FOREIGN KEY (\`CustomerId\`) REFERENCES \`Customer\` (\`CustomerId\`))` (error `1452`) |
+| **MariaDB** | `Cannot add or update a child row: a foreign key constraint fails (… CONSTRAINT \`FK_SalesOrder_Customer\` FOREIGN KEY (\`CustomerId\`) REFERENCES \`Customer\` (\`CustomerId\`))` (error `1452`) |
 
 Same shape as Beat 1: a copy-runnable `artifacts/SchemaQuench - Quench Foreign Keys ….sql` (an
 `EXEC`/`CALL …ForeignKeyQuench`) reproduces it by hand.
@@ -95,14 +97,16 @@ Same shape as Beat 1: a copy-runnable `artifacts/SchemaQuench - Quench Foreign K
 delete it), then redeploy the same FK add:
 
 ```
--- SQL Server (PG / MySQL analogous)
+-- SQL Server (PG / MySQL / MariaDB analogous)
 UPDATE dbo.SalesOrder SET CustomerId = 1 WHERE CustomerId = 999;
 ```
 ```
 schemaquench --ConfigFile:quench.settings.beat2-broken.json --LogPath:"$PWD/logs"
 ```
 
-Green on all three — the foreign key is created and trusted.
+Green on all four — the foreign key is created and trusted.
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 ## What each folder is
 

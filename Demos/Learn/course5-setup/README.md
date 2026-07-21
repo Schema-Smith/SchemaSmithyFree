@@ -1,7 +1,7 @@
 # Course 5 — Database Setup
 
 These scripts create and **seed** the Course 5 migration-track databases on the sandbox engines —
-13 databases in total. Each one is the *post-migration state* a source tool would have left behind:
+17 databases in total. Each one is the *post-migration state* a source tool would have left behind:
 the shared e-commerce **shop schema** (`Customer`, `Product`, `SalesOrder`, `OrderItem`) plus that
 tool's own **bookkeeping table**. You do not run Flyway, Liquibase, or EF Core yourself — the setup
 hands you the database in the exact state those tools produce, so each lab can go straight to the
@@ -43,8 +43,11 @@ PostgreSQL
 MySQL
   shop_from_flyway           PASS
   ...
+MariaDB
+  shop_from_flyway           PASS
+  ...
 
-All 13 databases are seeded and ready (5 SQL Server, 4 PostgreSQL, 4 MySQL).
+All 17 databases are seeded and ready (5 SQL Server, 4 PostgreSQL, 4 MySQL, 4 MariaDB).
 ```
 
 ## Databases created
@@ -60,15 +63,16 @@ table the source tool leaves behind — the table each lab teaches you to leave 
 | 4 — SSDT/DACPAC | `shop_from_dacpac`    | SSDT/DACPAC | *(none — DACPAC keeps no runtime history table)* |
 | 5 — hand-rolled | `shop_from_scripts`   | hand-rolled scripts | `schema_version` |
 
-Engine coverage mirrors the course: Modules 1–3 and 5 are seeded on all three engines; **Module 4
+Engine coverage mirrors the course: Modules 1–3 and 5 are seeded on all four engines; **Module 4
 (SSDT/DACPAC) is SQL Server only** — DACPAC is a SQL Server technology, so `shop_from_dacpac` is not
-created on PostgreSQL or MySQL.
+created on PostgreSQL, MySQL, or MariaDB.
 
 | Engine     | Databases |
 | ---------- | --------- |
 | SQL Server | `shop_from_flyway`, `shop_from_liquibase`, `shop_from_efcore`, `shop_from_scripts`, `shop_from_dacpac` |
 | PostgreSQL | `shop_from_flyway`, `shop_from_liquibase`, `shop_from_efcore`, `shop_from_scripts` |
 | MySQL      | `shop_from_flyway`, `shop_from_liquibase`, `shop_from_efcore`, `shop_from_scripts` |
+| MariaDB    | `shop_from_flyway`, `shop_from_liquibase`, `shop_from_efcore`, `shop_from_scripts` |
 
 ## Connection details
 
@@ -79,6 +83,7 @@ These are throwaway sandbox credentials — **never reuse them anywhere real.**
 | SQL Server | `localhost` | `11433` | `sa`       | `Learn!Passw0rd` |
 | PostgreSQL | `localhost` | `15432` | `postgres` | `Learn!Passw0rd` |
 | MySQL      | `localhost` | `13306` | `root`     | `Learn!Passw0rd` |
+| MariaDB    | `localhost` | `13307` | `root`     | `Learn!Passw0rd` |
 
 ## Re-running is safe
 

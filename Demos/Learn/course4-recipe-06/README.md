@@ -7,7 +7,7 @@ drop hook (instead of a hard `DROP`), and calls your restore hook when the table
 recreate it empty if the hook already did. These hooks "soft-drop" by renaming the table aside, so its
 structure **and** data ride through the rebuild.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships `install-recyclebin.sql`, a `Package/` (with a
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships `install-recyclebin.sql`, a `Package/` (with a
 `Promotion` table) and a `Package-NoPromotion/` (the same product *without* `Promotion`), plus
 `deploy.settings.json` and `remove-promotion.settings.json`, all targeting `cookbook_r6`.
 
@@ -34,6 +34,9 @@ docker exec -i learn-postgres psql -U postgres -d cookbook_r6 < install-recycleb
 
 # MySQL
 docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd cookbook_r6 < install-recyclebin.sql
+
+# MariaDB
+docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd cookbook_r6 < install-recyclebin.sql
 ```
 
 ## Step 2: Put data in the table
@@ -78,6 +81,8 @@ The original rows survived the round-trip. The data was never dropped — it was
 | Hook procedures | `SchemaSmith.CustomTableDrop` / `…Restore` | `"SchemaSmith"."CustomTableDrop"` / `…Restore` | `SchemaSmith_CustomTableDrop` / `…Restore` (in the target DB) |
 | Parameters | `@SchemaName, @TableName` | `p_Schema, p_Table` | `p_DatabaseName, p_TableName` |
 | Soft-drop mechanism | `sp_rename` | `ALTER TABLE … RENAME TO` | `ALTER TABLE … RENAME TO` |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 SchemaQuench detects the hooks by procedure existence, per database. The names and parameter conventions
 differ per engine; the behavior — route the drop, restore before recreate — is identical.

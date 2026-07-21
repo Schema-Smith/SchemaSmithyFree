@@ -11,12 +11,12 @@ You'll deploy `CookbookShop` with `prod.settings.json` (→ `cookbook_r1_prod`) 
 - a **performance index** that exists **only in production**, and
 - a **diagnostic column** that exists **only outside production**.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package/` plus
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the full `Package/` plus
 `prod.settings.json` and `nonprod.settings.json`.
 
 ## Before you start
 
-- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all three engines `PASS`).
+- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all four engines `PASS`).
 - The Course 4 databases exist — run [`../course4-setup`](../course4-setup) once (creates `cookbook_r1_prod`
   and `cookbook_r1_nonprod`, among others).
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later).
@@ -86,7 +86,9 @@ object it governs — not in a second copy of the file.
 | Database switch | `{{TargetDb}}` in `DatabaseIdentificationScript` | same | same (schema = database) |
 | Gate predicate | `'{{Purpose}}' = 'PerfOnly' AND '{{DeployEnv}}' = 'Production'` | same | same |
 
-The mechanism is identical on all three engines — a component's own `Extensions` becomes a bare token in
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
+
+The mechanism is identical on all four engines — a component's own `Extensions` becomes a bare token in
 its `ShouldApplyExpression`, the deploy token rides alongside. Only the dialect's names and types differ.
 
 ## The principle

@@ -3,20 +3,20 @@
 Goal: take a database that **EF Core migrations** built — shop schema plus `__EFMigrationsHistory` —
 and move it to SchemaSmith with **extract-and-go**. You'll cast the live database to declarative files,
 leave EF's history table behind, and quench to a clean no-op that proves the cast is faithful. All
-three engines.
+four engines.
 
 You do **not** run EF. The `before/` folder shows a real EF Core project for reference; the setup
 already applied its model's end state to `shop_from_efcore` on each engine.
 
 ## Before you start
 
-- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all three engines `PASS`).
+- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all four engines `PASS`).
 - The Course 5 databases exist — run [`../course5-setup`](../course5-setup) once (creates and seeds
   `shop_from_efcore`, among others).
 - The CLI is on your PATH (`schematongs --version` and `schemaquench --version` answer). New to the
   CLI? Course 1, Module 1 walks the install.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships a `SchemaTongs.settings.json` (the
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships a `SchemaTongs.settings.json` (the
 extract config), a `quench.settings.json` (the deploy config), and the `Package/` this lab produced —
 so you can diff your own extract against it.
 
@@ -72,15 +72,18 @@ docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost 
 # → __EFMigrationsHistory  (left exactly where it was)
 ```
 
-## Step 4: Do it on PostgreSQL and MySQL
+## Step 4: Do it on PostgreSQL, MySQL, and MariaDB
 
-Same three steps in `postgres/` and `mysql/`. The `before/` EF project is shown for the SQL Server
-provider; the same `ShopContext` on Npgsql (PostgreSQL) or Pomelo (MySQL) produces the identical four
-tables, and the sandbox databases were seeded to that end state. Only the whitelist's dialect differs:
+Same three steps in `postgres/`, `mysql/`, and `mariadb/`. The `before/` EF project is shown for the SQL
+Server provider; the same `ShopContext` on Npgsql (PostgreSQL) or Pomelo (MySQL/MariaDB) produces the
+identical four tables, and the sandbox databases were seeded to that end state. Only the whitelist's
+dialect differs:
 
-| | SQL Server | PostgreSQL | MySQL |
-| --- | --- | --- | --- |
-| `ObjectList` | `dbo.Customer,…` | `public.customer,…` | `Customer,…` |
+| | SQL Server | PostgreSQL | MySQL | MariaDB |
+| --- | --- | --- | --- | --- |
+| `ObjectList` | `dbo.Customer,…` | `public.customer,…` | `Customer,…` | `Customer,…` |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 Each one extracts four tables, leaves `__EFMigrationsHistory` behind, and quenches to a clean no-op.
 

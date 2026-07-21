@@ -5,7 +5,7 @@ drive two things at deploy time — a column's `Default` and a check constraint 
 Change the policy number, re-quench, and the column **default follows** the new value. The numbers live in
 one place; the schema reads them.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package/` plus `deploy.settings.json`,
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the full `Package/` plus `deploy.settings.json`,
 all targeting `cookbook_r2`.
 
 ## Before you start
@@ -61,7 +61,7 @@ Edit the metadata — `ArchiveDays` from `90` to `30` — and re-quench:
 schemaquench --ConfigFile:deploy.settings.json
 ```
 
-The column default re-derives from the new number, identically on all three engines:
+The column default re-derives from the new number, identically on all four engines:
 
 ```bash
 # PostgreSQL
@@ -82,7 +82,9 @@ own object, and each lives in exactly one place.)
 | Check from metadata | `([RetentionDays]<=(365))` | `CHECK ((retentiondays <= 365))` | `` (`RetentionDays` <= 365) `` |
 | Default follows a policy change | ✅ | ✅ | ✅ |
 
-The `Default` and the check are both authored once on the table and resolve identically across the three
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
+
+The `Default` and the check are both authored once on the table and resolve identically across all four
 engines; only the dialect's constraint syntax differs.
 
 ## The principle

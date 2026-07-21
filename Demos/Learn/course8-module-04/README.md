@@ -21,7 +21,7 @@ end — so `FAILED to quench:` alone doesn't mean "mechanical." The **per-item l
 
 ## Prerequisites
 
-- The three-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
+- The four-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
 - `schemaquench --version` answers on your PATH. New to the CLI? [Course 1, Module 1](https://learn.schemasmith.com/01-install-connect/).
 - No from-source override — this module uses only long-shipped features (script slots + `DataDelivery`).
 
@@ -35,7 +35,7 @@ Prints `PASS` per engine once `diag_scripts` exists. Re-running is safe (guarded
 ## Step 2 — deploy the baseline (green)
 
 ```
-cd sqlserver            # or postgres, or mysql
+cd sqlserver            # or postgres, mysql, or mariadb
 schemaquench --ConfigFile:quench.settings.baseline.json --LogPath:"$PWD/logs"
 ```
 
@@ -62,6 +62,7 @@ the per-script line — **`Unable to quench '.\beat1-broken\…\02_backfill_cust
 | **SQL Server** | `Cannot insert the value NULL into column 'Email', table 'diag_scripts.dbo.Customer'; column does not allow nulls. INSERT fails.` (error `515`) |
 | **PostgreSQL** | `23502: null value in column "email" of relation "customer" violates not-null constraint` |
 | **MySQL** | `Column 'Email' cannot be null` (error `1048`) |
+| **MariaDB** | `Column 'Email' cannot be null` (error `1048`) |
 
 Open the artifact it names — `artifacts/SchemaQuench - Failed 02_backfill_customers ….sql`. Its header
 repeats the error, and a **`-- >>> FAILING BATCH (#N) >>>`** marker sits on the exact statement that
@@ -69,8 +70,9 @@ blew up:
 
 - On **SQL Server** and **PostgreSQL** the script splits into two batches (SS on `GO`, PG on `;`), so
   the marker reads **`(#2)`** — the `INSERT`, not the tidy-up `UPDATE` before it.
-- On **MySQL** the whole script runs as **one** batch, so the marker reads **`(#1)`**. (MySQL's batch
-  splitter doesn't break a plain `;`-separated script apart — a per-engine difference worth knowing.)
+- On **MySQL** and **MariaDB** the whole script runs as **one** batch, so the marker reads **`(#1)`**.
+  (Neither engine's batch splitter breaks a plain `;`-separated script apart — a per-engine difference
+  worth knowing.)
 
 That is a *user-supplied* failure: the engine ran your script verbatim and your data broke a rule.
 
@@ -104,6 +106,9 @@ to resolve dependencies — you'll see `Delivering SalesOrder` attempted, then t
 | **SQL Server** | `The MERGE statement conflicted with the FOREIGN KEY constraint "FK_SalesOrder_Customer". The conflict occurred in database "diag_scripts", table "dbo.Customer", column 'CustomerId'.` (error `547`) |
 | **PostgreSQL** | `23503: insert or update on table "salesorder" violates foreign key constraint "fk_salesorder_customer"` |
 | **MySQL** | `Cannot add or update a child row: a foreign key constraint fails (…CONSTRAINT \`FK_SalesOrder_Customer\`…)` (error `1452`) |
+| **MariaDB** | `Cannot add or update a child row: a foreign key constraint fails (…CONSTRAINT \`FK_SalesOrder_Customer\`…)` (error `1452`) |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 The artifact — `artifacts/SchemaQuench - Failed DataDelivery SalesOrder#0 ….sql` — is the **generated
 MERGE**, copy-runnable (on SQL Server, `OPENJSON` shredding your `.tabledata` into a `MERGE`). Paste it

@@ -30,6 +30,9 @@ docker exec -i learn-postgres psql -U postgres -d learn < postgres/seed.sql
 
 # MySQL
 docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd < mysql/seed.sql
+
+# MariaDB
+docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd < mariadb/seed.sql
 ```
 
 Spot-check it's there (SQL Server shown): `SELECT name FROM chinook.sys.tables;` — seven tables, none
@@ -75,7 +78,8 @@ miss transcribing a schema by hand.
 
 Per-engine differences are cosmetic: SQL Server quotes with `[brackets]` and reports `INT IDENTITY`;
 PostgreSQL folds names to lowercase (`public.album.json`) and reports types like `int4`; MySQL quotes
-with `` `backticks` `` and records `AutoIncrement` plus the storage engine.
+with `` `backticks` `` and records `AutoIncrement` plus the storage engine. MariaDB matches MySQL's
+quoting and casing here — it's a fourth platform in the MySQL family, not the MySQL package retargeted.
 
 ## Step 4: Compare against the solution
 
@@ -93,4 +97,6 @@ docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 
 docker exec learn-postgres psql -U postgres -d learn -c "DROP DATABASE chinook"
 # MySQL
 docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "DROP DATABASE chinook"
+# MariaDB
+docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "DROP DATABASE chinook"
 ```
