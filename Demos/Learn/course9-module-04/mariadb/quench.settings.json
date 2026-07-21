@@ -1,8 +1,0 @@
-{
-  "Target": { "Databases": ["sessions"], "ConnectionProperties": {} },
-  "WhatIfONLY": false,
-  "SchemaPackagePath": "./package",
-  "KindleTheForge": true,
-  "ArtifactPath": "./artifacts",
-  "CheckpointDirectory": "./checkpoints"
-}
