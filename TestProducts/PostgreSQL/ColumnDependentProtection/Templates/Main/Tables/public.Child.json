@@ -1,0 +1,19 @@
+{
+    "Schema": "public",
+    "Name": "Child",
+    "Columns": [
+        { "Name": "Id", "DataType": "INTEGER", "Nullable": false },
+        { "Name": "Status", "DataType": "INTEGER", "Nullable": true },
+        {
+            "Name": "Extra",
+            "DataType": "VARCHAR(30)",
+            "Nullable": true,
+            "Default": "'x'::character varying",
+            "CheckExpression": "length((\"Extra\")::text) >= 0"
+        }
+    ],
+    "Indexes": [
+        { "Name": "PK_Child", "PrimaryKey": true, "Unique": true, "IndexColumns": "Id" },
+        { "Name": "IX_Child_Extra", "IndexColumns": "Extra" }
+    ]
+}

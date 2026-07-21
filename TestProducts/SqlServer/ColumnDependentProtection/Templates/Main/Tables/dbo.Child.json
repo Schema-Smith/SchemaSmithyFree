@@ -1,0 +1,44 @@
+{
+    "Schema": "[dbo]",
+    "Name": "[Child]",
+    "Columns": [
+        {
+            "Name": "[Id]",
+            "DataType": "INT",
+            "Nullable": false
+        },
+        {
+            "Name": "[Status]",
+            "DataType": "INT",
+            "Nullable": true
+        },
+        {
+            "Name": "[Extra]",
+            "DataType": "NVARCHAR(30)",
+            "Nullable": true,
+            "Default": "('x')",
+            "CheckExpression": "LEN([Extra])>=(0)"
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "[PK_Child]",
+            "PrimaryKey": true,
+            "Unique": true,
+            "Clustered": true,
+            "IndexColumns": "[Id]"
+        },
+        {
+            "Name": "[IX_Child_Extra]",
+            "IndexColumns": "[Extra]"
+        }
+    ],
+    "Statistics": [
+        {
+            "Name": "[ST_Extra]",
+            "Columns": "[Extra]",
+            "SampleSize": 100,
+            "FilterExpression": ""
+        }
+    ]
+}
