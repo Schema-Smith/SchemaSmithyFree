@@ -15,12 +15,12 @@ check constraint). They're consumed two ways:
 - **Via `{{TableSchema}}`** (Module 4) — the system token serializes the entire model *including*
   `Extensions`, so a deploy-time script can read your metadata and act on it. This lab uses this path.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package/` and a
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the full `Package/` and a
 `deploy.settings.json`.
 
 ## Before you start
 
-- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all three engines `PASS`).
+- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all four engines `PASS`).
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later).
 
 ## Step 1: Look at the metadata
@@ -97,6 +97,8 @@ it's computed from your declared model.
 | --- | --- | --- | --- |
 | JSON walk | `OPENJSON` + `CROSS APPLY` | `jsonb_array_elements` | `JSON_TABLE` + `NESTED PATH` |
 | Object names in `{{TableSchema}}` | bare (`Customer`) | folded lowercase (`customer`) | backticked (`` `Customer` ``) — stripped with `REPLACE` |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 The metadata you author and the JSON keys you read (`$.Name`, `$.Extensions.Classification`) are
 identical across engines. Only the dialect's JSON-shredding syntax differs.

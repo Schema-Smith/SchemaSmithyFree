@@ -38,7 +38,7 @@ widen `Name` from 100 to 200, and add a nullable `Price` column. On **SQL Server
 }
 ```
 
-The other two engines are the same edit with their own type names — the finished files are in each
+The other engines are the same edit with their own type names — the finished files are in each
 engine's `solution/Package/.../Tables/`:
 
 | Engine     | File name            | Type names                                          |
@@ -46,6 +46,8 @@ engine's `solution/Package/.../Tables/`:
 | SQL Server | `dbo.Widget.json`    | `NVARCHAR(200)`, `DECIMAL(10,2)`                    |
 | PostgreSQL | `public.Widget.json` | `VARCHAR(200)`, `DECIMAL(10,2)` (reported `NUMERIC`) |
 | MySQL      | `Widget.json`        | `VARCHAR(200)`, `DECIMAL(10,2)`                     |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 ## Step 2: Preview with WhatIf
 

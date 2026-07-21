@@ -43,7 +43,7 @@ Create a table file under `starter/Package/Templates/Main/Tables/`. On **SQL Ser
 }
 ```
 
-The other two engines are the same shape with small dialect differences — the exact files are in each
+The other engines are the same shape with small dialect differences — the exact files are in each
 engine's `solution/Package/.../Tables/`:
 
 | Engine     | File name            | Differences from above |
@@ -51,6 +51,8 @@ engine's `solution/Package/.../Tables/`:
 | SQL Server | `dbo.Widget.json`    | `NVARCHAR`, clustered PK named `PK_Widget` |
 | PostgreSQL | `public.Widget.json` | `Schema: public`, `VARCHAR`, PK named `pk_widget` |
 | MySQL      | `Widget.json`        | no `Schema`, `VARCHAR`, PK index **must** be named `PRIMARY` |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 ## Step 3: Deploy it
 

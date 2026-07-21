@@ -16,12 +16,12 @@ Data delivery declares the rows that belong with a table right in the package:
 SchemaQuench delivers the data on every quench by MERGEing the content file into the table — the same
 declarative, idempotent model it uses for schema.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package/`, a
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the full `Package/`, a
 `deploy.settings.json`, and a `tongs.settings.json` (for the DataTongs step).
 
 ## Before you start
 
-- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all three engines `PASS`).
+- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all four engines `PASS`).
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later;
   `datatongs --version` is available too).
 
@@ -117,6 +117,8 @@ Look in the generated `cast/` folder. Two artifacts, and the difference matters:
 | Merge idiom | `MERGE` + `OPENJSON` | `MERGE` + `jsonb_to_recordset` | `INSERT … ON DUPLICATE KEY UPDATE` (+ `DELETE` for full sync) |
 | Content file | `data/dbo.IsoCurrency.tabledata` | `data/public.isocurrency.tabledata` | `data/IsoCurrency.tabledata` |
 | Identifier case | bracketed, mixed-case | folded to lowercase | backticked |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 `MergeType`, `MatchColumns`, and the `.tabledata` shape are identical across engines — SchemaSmith
 emits the right merge per engine. PostgreSQL (15+) and SQL Server have native `MERGE`; MySQL uses
