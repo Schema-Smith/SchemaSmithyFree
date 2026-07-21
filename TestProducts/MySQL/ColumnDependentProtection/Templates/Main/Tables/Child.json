@@ -1,0 +1,19 @@
+{
+    "Name": "`Child`",
+    "Engine": "InnoDB",
+    "Columns": [
+        { "Name": "`Id`", "DataType": "INT", "Nullable": false },
+        { "Name": "`Status`", "DataType": "INT", "Nullable": true },
+        {
+            "Name": "`Extra`",
+            "DataType": "VARCHAR(30)",
+            "Nullable": true,
+            "Default": "'x'",
+            "CheckExpression": "LENGTH(`Extra`) >= 0"
+        }
+    ],
+    "Indexes": [
+        { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`Id`" },
+        { "Name": "IX_Child_Extra", "IndexColumns": "`Extra`" }
+    ]
+}

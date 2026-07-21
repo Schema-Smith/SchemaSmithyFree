@@ -82,7 +82,7 @@ BEGIN
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop and recreate modified foreign keys');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName,
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName,
                       '` DROP FOREIGN KEY `', ConstraintName, '`')
         FROM _SchemaSmith_ModifiedFKs;
     ELSE
@@ -103,12 +103,12 @@ BEGIN
         -- referenced twice in one statement. AUTO_INCREMENT RowId is monotonic across the two,
         -- so the FK drops (inserted first) always get lower RowIds than the index drops.
         INSERT INTO _SchemaSmith_FKModStmts (Stmt)
-        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+        SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
                       GROUP_CONCAT(CONCAT('DROP FOREIGN KEY `', ConstraintName, '`') ORDER BY ConstraintName SEPARATOR ', '))
         FROM _SchemaSmith_ModifiedFKs
         GROUP BY TableName;
         INSERT INTO _SchemaSmith_FKModStmts (Stmt)
-        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', m.TableName, '` ',
+        SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', m.TableName, '` ',
                       GROUP_CONCAT(CONCAT('DROP INDEX `', m.ConstraintName, '`') ORDER BY m.ConstraintName SEPARATOR ', '))
         FROM _SchemaSmith_ModifiedFKs m
         JOIN INFORMATION_SCHEMA.STATISTICS s
@@ -136,13 +136,13 @@ BEGIN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing foreign keys');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
         SELECT CONNECTION_ID(), CONCAT(
-                      'ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', f.TableName,
+                      'ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', f.TableName,
                       ' ADD CONSTRAINT ', f.KeyName,
                       ' FOREIGN KEY (', f.Columns, ')',
                       ' REFERENCES ',
                       CASE WHEN f.RelatedTableSchema IS NOT NULL AND f.RelatedTableSchema != ''
                            THEN CONCAT('`', f.RelatedTableSchema, '`.')
-                           ELSE CONCAT('`', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.')
+                           ELSE CONCAT('`', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.')
                       END,
                       f.RelatedTable, ' (', f.RelatedColumns, ')',
                       ' ON DELETE ', f.DeleteAction,
@@ -189,7 +189,7 @@ BEGIN
         CREATE TEMPORARY TABLE _SchemaSmith_FKCreateStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         INSERT INTO _SchemaSmith_FKCreateStmts (Stmt)
-        SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.', f.TableName, ' ',
+        SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', f.TableName, ' ',
                       GROUP_CONCAT(
                           CONCAT(
                               'ADD CONSTRAINT ', f.KeyName,
@@ -197,7 +197,7 @@ BEGIN
                               ' REFERENCES ',
                               CASE WHEN f.RelatedTableSchema IS NOT NULL AND f.RelatedTableSchema != ''
                                    THEN CONCAT('`', f.RelatedTableSchema, '`.')
-                                   ELSE CONCAT('`', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.')
+                                   ELSE CONCAT('`', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.')
                               END,
                               f.RelatedTable, ' (', f.RelatedColumns, ')',
                               ' ON DELETE ', f.DeleteAction,
@@ -264,8 +264,8 @@ BEGIN
             SUBSTRING_INDEX(po.ObjectName, '.', 1) AS TableName,
             SUBSTRING_INDEX(po.ObjectName, '.', -1) AS ConstraintName
         FROM SchemaSmith_ProductOwnership po
-        WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
-          AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+        WHERE po.ProductName COLLATE utf8mb4_unicode_ci = CONVERT(p_ProductName USING utf8mb4) COLLATE utf8mb4_unicode_ci
+          AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci
           AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'FOREIGN KEY' COLLATE utf8mb4_unicode_ci
           -- Not in current definition
           AND NOT EXISTS (
@@ -313,8 +313,8 @@ BEGIN
             SUBSTRING_INDEX(po.ObjectName, '.', 1) AS TableName,
             SUBSTRING_INDEX(po.ObjectName, '.', -1) AS ConstraintName
         FROM SchemaSmith_ProductOwnership po
-        WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
-          AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+        WHERE po.ProductName COLLATE utf8mb4_unicode_ci = CONVERT(p_ProductName USING utf8mb4) COLLATE utf8mb4_unicode_ci
+          AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci
           AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'FOREIGN KEY' COLLATE utf8mb4_unicode_ci
           -- Not in current definition
           AND NOT EXISTS (
@@ -339,7 +339,7 @@ BEGIN
         IF p_WhatIf = 1 THEN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unknown foreign keys');
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-            SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName,
+            SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName,
                           '` DROP FOREIGN KEY `', ConstraintName, '`')
             FROM _SchemaSmith_FKsToDrop;
         ELSE
@@ -355,12 +355,12 @@ BEGIN
             -- Two separate INSERTs (MySQL TEMPORARY table can't be referenced twice per statement);
             -- FK drops inserted first get lower RowIds than the index drops.
             INSERT INTO _SchemaSmith_FKDropStmts (Stmt)
-            SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+            SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
                           GROUP_CONCAT(CONCAT('DROP FOREIGN KEY `', ConstraintName, '`') ORDER BY ConstraintName SEPARATOR ', '))
             FROM _SchemaSmith_FKsToDrop
             GROUP BY TableName;
             INSERT INTO _SchemaSmith_FKDropStmts (Stmt)
-            SELECT CONCAT('ALTER TABLE `', p_DatabaseName COLLATE utf8mb4_unicode_ci, '`.`', d.TableName, '` ',
+            SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', d.TableName, '` ',
                           GROUP_CONCAT(CONCAT('DROP INDEX `', d.ConstraintName, '`') ORDER BY d.ConstraintName SEPARATOR ', '))
             FROM _SchemaSmith_FKsToDrop d
             JOIN INFORMATION_SCHEMA.STATISTICS s
@@ -391,8 +391,8 @@ BEGIN
             DELETE po FROM SchemaSmith_ProductOwnership po
             INNER JOIN _SchemaSmith_FKsToDrop ftd
                 ON po.ObjectName COLLATE utf8mb4_unicode_ci = CONCAT(ftd.TableName, '.', ftd.ConstraintName) COLLATE utf8mb4_unicode_ci
-            WHERE po.ProductName COLLATE utf8mb4_unicode_ci = p_ProductName COLLATE utf8mb4_unicode_ci
-              AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = p_DatabaseName COLLATE utf8mb4_unicode_ci
+            WHERE po.ProductName COLLATE utf8mb4_unicode_ci = CONVERT(p_ProductName USING utf8mb4) COLLATE utf8mb4_unicode_ci
+              AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci
               AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'FOREIGN KEY' COLLATE utf8mb4_unicode_ci;
         END IF;
 

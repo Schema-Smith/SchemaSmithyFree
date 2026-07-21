@@ -315,7 +315,22 @@ BEGIN TRY
                             AND c.[TableName] = t.[Name]
                             AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = COLUMN_NAME)
         AND NOT (t.IsTemporal = 1 AND COLUMN_NAME IN ('ValidFrom', 'ValidTo'))
-  
+
+  -- #358: A DropOnly column whose drop is SUPPRESSED (env PreventDrop forces
+  -- @DropColumnsRemovedFromProduct = 0, or the per-table cascade opts out) survives -- so its
+  -- dependent objects (index / statistics / FK / default / check) must survive with it. Collect those
+  -- columns and exclude them from the dependent-cleanup passes below, which otherwise clear the way for
+  -- a column drop that never happens. Genuinely-modified columns (DropOnly = 0) are never listed here,
+  -- so their transient drop-and-recreate cleanup is untouched.
+  RAISERROR('Identify suppressed column drops whose dependents must be retained (#358)', 10, 100) WITH NOWAIT
+  DROP TABLE IF EXISTS #SuppressedColumnDrops
+  SELECT cc.[Schema], cc.[TableName], cc.[ColumnName]
+    INTO #SuppressedColumnDrops
+    FROM #ColumnChanges cc WITH (NOLOCK)
+    JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = cc.[Schema] AND t.[Name] = cc.[TableName]
+    WHERE cc.DropOnly = 1
+      AND (@DropColumnsRemovedFromProduct = 0 OR ISNULL(t.[DropColumnsRemovedFromProduct], 1) = 0)
+
   -- No-drop protection tier (#270): when protected mode is active the caller forces
   -- @DropForeignKeysRemovedFromProduct to 0 so the drop block below never runs. Record the foreign
   -- keys that WOULD have been dropped by absence (present on the table, absent from the package,
@@ -356,9 +371,11 @@ BEGIN TRY
   SELECT DISTINCT cc.[Schema], cc.[TableName]
     INTO #FTIndexesToDropForChanges
     FROM sys.fulltext_index_columns ic WITH (NOLOCK)
-    JOIN #ColumnChanges cc WITH (NOLOCK) ON ic.[object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName]) 
+    JOIN #ColumnChanges cc WITH (NOLOCK) ON ic.[object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
                                         AND COL_NAME(ic.[object_id], ic.column_id) = SchemaSmith.fn_StripBracketWrapping(cc.ColumnName)
-  
+                                        AND NOT EXISTS (SELECT 1 FROM #SuppressedColumnDrops s WITH (NOLOCK)
+                                                          WHERE s.[Schema] = cc.[Schema] AND s.[TableName] = cc.[TableName] AND s.[ColumnName] = cc.[ColumnName])  -- #358
+
   RAISERROR('Drop FullText Indexes Referencing Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping fulltext index on ' + di.[Schema] + '.' + di.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'DROP FULLTEXT INDEX ON ' + di.[Schema] + '.' + di.[TableName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
@@ -393,6 +410,8 @@ BEGIN TRY
     INTO #IndexesToDropForColumnChanges
     FROM sys.indexes i WITH (NOLOCK)
     JOIN #ColumnChanges cc WITH (NOLOCK) ON i.[object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName]) 
+    AND NOT EXISTS (SELECT 1 FROM #SuppressedColumnDrops s WITH (NOLOCK)
+                      WHERE s.[Schema] = cc.[Schema] AND s.[TableName] = cc.[TableName] AND s.[ColumnName] = cc.[ColumnName])  -- #358
     LEFT JOIN sys.index_columns ic WITH (NOLOCK) ON ic.[object_id] = i.[object_id]
                                                 AND ic.[index_id] = i.[index_id]
                                                 AND COL_NAME(ic.[object_id], ic.column_id) = SchemaSmith.fn_StripBracketWrapping(cc.ColumnName)
@@ -734,6 +753,8 @@ BEGIN TRY
     INTO #StatisticsToDropForChanges
     FROM sys.stats i WITH (NOLOCK) 
     JOIN #ColumnChanges cc WITH (NOLOCK) ON i.[object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName]) 
+    AND NOT EXISTS (SELECT 1 FROM #SuppressedColumnDrops s WITH (NOLOCK)
+                      WHERE s.[Schema] = cc.[Schema] AND s.[TableName] = cc.[TableName] AND s.[ColumnName] = cc.[ColumnName])  -- #358
     LEFT JOIN sys.stats_columns ic WITH (NOLOCK) ON ic.[object_id] = i.[object_id]
                                                 AND ic.[stats_id] = i.[stats_id]
                                                 AND COL_NAME(ic.[object_id], ic.column_id) = SchemaSmith.fn_StripBracketWrapping(cc.ColumnName)
@@ -756,7 +777,9 @@ BEGIN TRY
                                          AND SchemaSmith.fn_StripBracketWrapping(cc.ColumnName) = COL_NAME(fc.[parent_object_id], fc.parent_column_id))
                                          OR (OBJECT_ID(cc.[Schema] + '.' + cc.[TableName]) = fk.referenced_object_id
                                          AND SchemaSmith.fn_StripBracketWrapping(cc.ColumnName) = COL_NAME(fc.[referenced_object_id], fc.referenced_column_id))
-  
+    WHERE NOT EXISTS (SELECT 1 FROM #SuppressedColumnDrops s WITH (NOLOCK)  -- #358
+                        WHERE s.[Schema] = cc.[Schema] AND s.[TableName] = cc.[TableName] AND s.[ColumnName] = cc.[ColumnName])
+
   RAISERROR('Drop Foreign Keys Referencing Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + df.[FKName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
@@ -768,9 +791,11 @@ BEGIN TRY
   SELECT cc.[Schema], cc.[TableName], DefaultName = dc.[name]
     INTO #DefaultsToDropForChanges
     FROM sys.default_constraints dc WITH (NOLOCK)
-    JOIN #ColumnChanges cc WITH (NOLOCK) ON dc.[parent_object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName]) 
+    JOIN #ColumnChanges cc WITH (NOLOCK) ON dc.[parent_object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
                                         AND COL_NAME(dc.parent_object_id, dc.parent_column_id) = SchemaSmith.fn_StripBracketWrapping(cc.ColumnName)
-  
+                                        AND NOT EXISTS (SELECT 1 FROM #SuppressedColumnDrops s WITH (NOLOCK)
+                                                          WHERE s.[Schema] = cc.[Schema] AND s.[TableName] = cc.[TableName] AND s.[ColumnName] = cc.[ColumnName])  -- #358
+
   RAISERROR('Drop Defaults Referencing Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping default ' + dd.[Schema] + '.' + dd.[TableName] + '.' + dd.[DefaultName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + dd.[Schema] + '.' + dd.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + dd.[DefaultName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
@@ -785,7 +810,9 @@ BEGIN TRY
     JOIN #ColumnChanges cc WITH (NOLOCK) ON ck.[parent_object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName]) 
                                         AND ((ck.parent_column_id <> 0 AND COL_NAME(ck.parent_object_id, ck.parent_column_id) = SchemaSmith.fn_StripBracketWrapping(cc.ColumnName))
                                           OR (ck.parent_column_id = 0 AND ck.[definition] LIKE '%' + SchemaSmith.fn_StripBracketWrapping(cc.ColumnName) + '%'))
-  
+                                        AND NOT EXISTS (SELECT 1 FROM #SuppressedColumnDrops s WITH (NOLOCK)
+                                                          WHERE s.[Schema] = cc.[Schema] AND s.[TableName] = cc.[TableName] AND s.[ColumnName] = cc.[ColumnName])  -- #358
+
   RAISERROR('Drop Check Constraints Referencing Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping check constraint ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.CheckName + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + fc.CheckName + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
