@@ -362,6 +362,20 @@ When the supported range across your targets diverges, SchemaSmith adapts the DD
 
 In both cases the end state is identical. On PostgreSQL 15 and 16, SchemaSmith takes the longer path that those engine versions support. You can deploy the same package to PostgreSQL 15, 16, or 17 and the result is the same database.
 
+### MariaDB (MySQL family) — where the native DDL diverges
+
+MariaDB is its own platform (`Platform: MariaDb` in `Product.json`), with its own native DDL generation. It shares dialect kinship and much of the same engine base with MySQL -- close enough that the two are often described together as the "MySQL family" -- but that kinship is dialect similarity, not package portability. You select the platform (`SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb`), and SchemaSmith emits the correct native DDL for that target; a package built for MySQL does not deploy to MariaDB, and vice versa.
+
+Within that shared family, three DDL surfaces diverge between the two engines:
+
+| Feature | MySQL | MariaDB |
+|---------|-------|---------|
+| **Invisible indexes** | `INVISIBLE` keyword; visibility read back from `INFORMATION_SCHEMA.STATISTICS.IS_VISIBLE` | No `INVISIBLE` keyword -- an index is hidden with `CREATE INDEX … IGNORED`; visibility read back from the inverted `INFORMATION_SCHEMA.STATISTICS.IGNORED` column (`'YES'` = ignored/invisible) |
+| **Dropping CHECK constraints** | `ALTER TABLE … DROP CHECK name` (MySQL 8.0.16+) | Rejects `DROP CHECK` -- uses the generic `ALTER TABLE … DROP CONSTRAINT name` |
+| **Column-default normalization** | Canonical form -- no normalization needed | `INFORMATION_SCHEMA.COLUMNS.COLUMN_DEFAULT` reports differently: quotes string literals, emits a literal `NULL` marker for a no-default nullable column, and adds parens to function defaults (`current_timestamp()`); SchemaSmith folds these back to the MySQL canonical form so an unchanged column doesn't phantom-modify on every deploy |
+
+SchemaSmith detects each target's platform and emits the right native form automatically -- the divergence above is handled for you, not something you configure.
+
 ---
 
 ## Quench Slots
