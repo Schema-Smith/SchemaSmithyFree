@@ -1,12 +1,12 @@
 # Configuration Reference
 
-Applies to: SchemaQuench, SchemaTongs, DataTongs — SQL Server, PostgreSQL, and MySQL.
+Applies to: SchemaQuench, SchemaTongs, DataTongs — SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ---
 
-Every SchemaSmith CLI tool shares the same configuration spine -- one consistent system for settings files, environment variables, and command-line switches. Learn it once and it works the same way whether you're casting schemas, quenching databases, or extracting data, and whether your target is SQL Server, PostgreSQL, or MySQL. Tool-specific settings live on each tool's own reference page; this page covers the shared foundation.
+Every SchemaSmith CLI tool shares the same configuration spine -- one consistent system for settings files, environment variables, and command-line switches. Learn it once and it works the same way whether you're casting schemas, quenching databases, or extracting data, and whether your target is SQL Server, PostgreSQL, MySQL, or MariaDB. Tool-specific settings live on each tool's own reference page; this page covers the shared foundation.
 
-The **platform** each operation runs against is not a CLI switch or an environment variable -- it's a property of the schema package itself. `Product.json` declares `Platform` (`SqlServer`, `PostgreSQL`, or `MySQL`), and the tools adapt their behavior accordingly. One tool, three engines, same muscle memory.
+The **platform** each operation runs against is not a CLI switch or an environment variable -- it's a property of the schema package itself. `Product.json` declares `Platform` (`SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb`), and the tools adapt their behavior accordingly. One tool, four engines, same muscle memory.
 
 ---
 
@@ -547,7 +547,7 @@ Protects a single table from drop-by-absence, and makes that protection *sticky*
 
 The marker is refreshed to match the package value on every run while the table is still declared. To un-protect: set `PreventDrop: false` and re-deploy while the table is still in the package (this clears the sticky marker), then remove it — or drop the table explicitly with a migration script. Ownership is reconciled against the live catalog each run, so a table dropped out-of-band has its marker pruned automatically.
 
-> **Note:** `PreventDrop` is persisted per engine — a `PreventDrop` extended property on SQL Server, a `PreventDrop` column on the `ProductOwnership` table for PostgreSQL and MySQL — but behaves identically on all three.
+> **Note:** `PreventDrop` is persisted per engine — a `PreventDrop` extended property on SQL Server, a `PreventDrop` column on the `ProductOwnership` table for PostgreSQL, MySQL, and MariaDB — but behaves identically on all four.
 
 For full guidance — the persistence model, inbound-foreign-key preservation, and the deliberate two-step un-protect — see [PreventDrop](schemaquench.md#preventdrop) in the SchemaQuench reference.
 
@@ -679,7 +679,7 @@ Controls whether SchemaQuench drops a **product-owned** index (one SchemaSmith c
 | Template | `DropIndexesRemovedFromProduct` in `Template.json` | (inherit) |
 | Table | `DropIndexesRemovedFromProduct` in a table's `.json` file | (inherit) |
 
-Same explicit-false-sticky semantics as the other drop-control flags; a primary key is never dropped by this path. All three engines gate the removed-from-product index drop directly through this flag — MySQL previously coupled it to `DropUnknownIndexes` and is now at parity with SQL Server and PostgreSQL (a product-owned index removed from the definition drops by default).
+Same explicit-false-sticky semantics as the other drop-control flags; a primary key is never dropped by this path. All four engines gate the removed-from-product index drop directly through this flag — MySQL previously coupled it to `DropUnknownIndexes` and is now at parity with SQL Server and PostgreSQL (a product-owned index removed from the definition drops by default).
 
 > **Note:** All tiers absent preserves existing behavior (default `true`).
 
@@ -689,7 +689,7 @@ For full guidance, see [DropIndexesRemovedFromProduct](schemaquench.md#dropindex
 
 ## DropUnknownIndexes
 
-Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package — *out-of-band* indexes SchemaSmith never created (distinct from [DropIndexesRemovedFromProduct](#dropindexesremovedfromproduct), which handles product-owned indexes removed from the definition). Three tiers compose to produce the effective value, resolved environment → product → template. Identical on all three engines — MySQL previously never dropped an out-of-band index and is now at parity with SQL Server and PostgreSQL.
+Controls whether SchemaQuench drops indexes on managed tables that aren't defined in the schema package — *out-of-band* indexes SchemaSmith never created (distinct from [DropIndexesRemovedFromProduct](#dropindexesremovedfromproduct), which handles product-owned indexes removed from the definition). Three tiers compose to produce the effective value, resolved environment → product → template. Identical on all four engines — MySQL previously never dropped an out-of-band index and is now at parity with SQL Server and PostgreSQL.
 
 | Scope | Where to set | Default |
 |---|---|---|

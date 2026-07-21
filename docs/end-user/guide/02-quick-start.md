@@ -253,6 +253,6 @@ No migration scripts. No ordered chains of ALTERs. No guessing what the target l
 
 ## What's Next
 
-You just did state-based schema management. Now let's understand what is happening under the hood -- products, templates, tokens, and the deployment pipeline that makes it all work. Same concepts across all three platforms.
+You just did state-based schema management. Now let's understand what is happening under the hood -- products, templates, tokens, and the deployment pipeline that makes it all work. Same concepts across all four platforms.
 
 Next: [Core Concepts](03-core-concepts.md)

@@ -2,7 +2,7 @@
 
 Lookup tables, configuration rows, seed data -- every database has reference data that needs to travel with the schema. DataTongs grips that data from a live database and produces self-contained synchronization scripts that bring it into any target. Point it at a source, list the tables you care about, and it produces one SQL file per table -- ready to drop into a schema package's `Table Data` folder or run directly against any compatible instance.
 
-DataTongs supports **SQL Server**, **PostgreSQL**, and **MySQL**. The script syntax adapts per platform: SQL Server and PostgreSQL use `MERGE`, MySQL uses `INSERT ... ON DUPLICATE KEY UPDATE` (paired with a conditional `DELETE WHERE NOT EXISTS` step when full delete sync is enabled). The configuration shape and the workflow are identical across all three.
+DataTongs supports **SQL Server**, **PostgreSQL**, **MySQL**, and **MariaDB**. The script syntax adapts per platform: SQL Server and PostgreSQL use `MERGE`, MySQL and MariaDB use `INSERT ... ON DUPLICATE KEY UPDATE` (paired with a conditional `DELETE WHERE NOT EXISTS` step when full delete sync is enabled). The configuration shape and the workflow are identical across all four.
 
 ---
 
@@ -66,7 +66,7 @@ A complete `DataTongs.settings.json`:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `Source:Platform` | string | _(required)_ | One of `"SqlServer"`, `"PostgreSQL"`, or `"MySQL"`. Selects the script generator. |
+| `Source:Platform` | string | _(required)_ | One of `"SqlServer"`, `"PostgreSQL"`, `"MySQL"`, or `"MariaDb"`. Selects the script generator. |
 | `Source:Server` | string | _(required)_ | Database server hostname or IP. |
 | `Source:Port` | string | platform default | TCP port. SQL Server `1433`, PostgreSQL `5432`, MySQL `3306`. |
 | `Source:User` | string | _(empty)_ | Login username. SQL Server allows blank for Windows authentication. |
@@ -103,7 +103,7 @@ The typical placement inside a schema package is `ScriptPath` pointing at `Templ
 | `ShouldCast:OutputContentFiles` | bool | `true` | Write raw data to sibling `.tabledata` content files. Set to `false` to skip writing content files (and, transitively, to skip `ConfigureDataDelivery` since the configurator needs a content file path to record). |
 | `ShouldCast:DisableTriggers` | bool | `false` | Wraps the generated script with platform-appropriate trigger disable/enable. |
 | `ShouldCast:MergeUpdate` | bool | `true` | Includes the update branch (matched rows whose data has changed). |
-| `ShouldCast:MergeDelete` | bool | `true` | Includes the delete branch (target rows missing from the source). On all three platforms: SQL Server / PostgreSQL emit `WHEN NOT MATCHED BY SOURCE THEN DELETE` inside the `MERGE`; MySQL emits an `INSERT ... ON DUPLICATE KEY UPDATE` followed by a separate `DELETE WHERE NOT EXISTS` step (because MySQL has no `MERGE`). |
+| `ShouldCast:MergeDelete` | bool | `true` | Includes the delete branch (target rows missing from the source). On all four platforms: SQL Server / PostgreSQL emit `WHEN NOT MATCHED BY SOURCE THEN DELETE` inside the `MERGE`; MySQL and MariaDB emit an `INSERT ... ON DUPLICATE KEY UPDATE` followed by a separate `DELETE WHERE NOT EXISTS` step (because neither has `MERGE`). |
 | `ShouldCast:MergeType` | string | `Insert/Update` | Default `DataDelivery:MergeType` for tables that don't set it explicitly. Values: `None`, `Insert`, `Insert/Update`, `Insert/Update/Delete`. Used when writing `DataDelivery` blocks via `--ConfigureDataDelivery`. |
 | `ShouldCast:ConfigureDataDelivery` | bool | `false` | After extraction, write a `DataDelivery` block into each matching table's JSON file. See [--ConfigureDataDelivery](#--configuredatadelivery). |
 | `ShouldCast:TokenizeScripts` | bool | `true` | **SQL Server only.** Replaces the source database name with script tokens in the generated merge scripts, matching SchemaTongs' tokenization behavior. Set to `false` to disable tokenization and keep the literal database name in generated scripts. |

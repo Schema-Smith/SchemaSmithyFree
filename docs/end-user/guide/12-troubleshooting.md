@@ -479,7 +479,7 @@ These map to `Target:Server`, `Target:User`, and `Target:Password` in the config
 
 **Cause:** The `Platform` value in `Product.json` doesn't match the target server. If your product was extracted from PostgreSQL but you point SchemaQuench at a SQL Server target, the DDL adapter mismatch will produce very strange errors.
 
-**Fix:** Verify `Product.json` has the right `Platform` value (`SqlServer`, `PostgreSQL`, or `MySQL`) and that your target connection points to a matching server. One repository can host products targeting different platforms -- just never mix them at deployment time.
+**Fix:** Verify `Product.json` has the right `Platform` value (`SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb`) and that your target connection points to a matching server. One repository can host products targeting different platforms -- just never mix them at deployment time.
 
 ---
 

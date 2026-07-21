@@ -1,8 +1,8 @@
 # SchemaTongs Reference
 
-Cast your live database into version-controlled code with a single command. SchemaTongs grips every object in your database -- on **SQL Server**, **PostgreSQL**, or **MySQL** -- and extracts them into a clean schema package: tables as JSON, programmable objects as SQL scripts, everything organized and ready to commit to source control. Point it at a database, run it, and you have a deployable package that SchemaQuench can quench onto any compatible target.
+Cast your live database into version-controlled code with a single command. SchemaTongs grips every object in your database -- on **SQL Server**, **PostgreSQL**, **MySQL**, or **MariaDB** -- and extracts them into a clean schema package: tables as JSON, programmable objects as SQL scripts, everything organized and ready to commit to source control. Point it at a database, run it, and you have a deployable package that SchemaQuench can quench onto any compatible target.
 
-The same tool, the same package format, three engines. Whatever your team runs, SchemaTongs casts it.
+The same tool, the same package format, four engines. Whatever your team runs, SchemaTongs casts it.
 
 ---
 
@@ -140,7 +140,7 @@ The platform-specific `ShouldCast` flags are simply ignored when they don't appl
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `Source:Platform` | string | _(required)_ | One of `"SqlServer"`, `"PostgreSQL"`, or `"MySQL"`. Determines which extraction adapter runs. |
+| `Source:Platform` | string | _(required)_ | One of `"SqlServer"`, `"PostgreSQL"`, `"MySQL"`, or `"MariaDb"`. Determines which extraction adapter runs. |
 | `Source:Server` | string | _(required)_ | Database server hostname or IP. |
 | `Source:Port` | string | platform default | TCP port. SQL Server `1433`, PostgreSQL `5432`, MySQL `3306`. |
 | `Source:User` | string | _(empty)_ | Login username. SQL Server allows blank for Windows authentication. |
@@ -183,7 +183,7 @@ Control exactly what gets cast from the database. Each object type can be indivi
 
 | Flag | Default | What It Extracts |
 |---|---|---|
-| `Schemas` | `true` | Schema creation scripts (MySQL doesn't have schemas distinct from databases) |
+| `Schemas` | `true` | Schema creation scripts (MySQL and MariaDB don't have schemas distinct from databases) |
 
 ### SQL Server only
 
@@ -487,7 +487,7 @@ SchemaTongs automatically excludes the platform's system schemas and internal in
 
 You have N tenant schemas hand-replicated inside one database. One is the canonical copy. Instead of maintaining those copies by hand, point SchemaTongs at the canonical schema, give it the name, and it extracts a schema template: unqualified filenames, source-schema references rewritten to `{{SchemaName}}`, and a `Template.json` stub wired for schema-level fan-out. SchemaQuench can then govern every tenant schema from that single template.
 
-Schema-template extraction is supported on **SQL Server and PostgreSQL only**. MySQL has no schema-inside-database concept -- use `DatabaseIdentificationScript` with a database-per-tenant template instead.
+Schema-template extraction is supported on **SQL Server and PostgreSQL only**. MySQL and MariaDB have no schema-inside-database concept -- use `DatabaseIdentificationScript` with a database-per-tenant template instead.
 
 ### Activation
 

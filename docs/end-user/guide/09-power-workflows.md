@@ -311,7 +311,7 @@ The canonical use is anti-rollback protection. Pair `BaselineValidationScript` w
 
 **Version floor.** `MinimumVersion` is the declarative companion -- set it in `Product.json` and SchemaQuench enforces a hard engine version floor before running anything. Use it for the unconditional floor ("this package requires PostgreSQL 15 or later"); write `ValidationScript` logic for conditional gates or checks that need to read server state.
 
-For the full property reference -- Product vs. Template scope, return type requirements, token availability, and worked examples across all three platforms -- see [Schema Packages](../reference/schema-packages.md) and [SchemaQuench](../reference/schemaquench.md).
+For the full property reference -- Product vs. Template scope, return type requirements, token availability, and worked examples across all four platforms -- see [Schema Packages](../reference/schema-packages.md) and [SchemaQuench](../reference/schemaquench.md).
 
 ## Secondary server support (SQL Server)
 

@@ -71,9 +71,9 @@ Already know what you're looking for? Jump straight to the details.
 
 | Reference | Covers |
 |-----------|--------|
-| [SchemaTongs](reference/schematongs.md) | Schema extraction across SQL Server, PostgreSQL, and MySQL — object types, config, orphan detection, validation |
+| [SchemaTongs](reference/schematongs.md) | Schema extraction across SQL Server, PostgreSQL, MySQL, and MariaDB — object types, config, orphan detection, validation |
 | [SchemaQuench](reference/schemaquench.md) | Deployment engine — execution flow, slots, WhatIf, migration tracking |
-| [Recyclebin](reference/recyclebin.md) | Soft-drop and restore hooks for recoverable table removal across SQL Server, PostgreSQL, and MySQL |
+| [Recyclebin](reference/recyclebin.md) | Soft-drop and restore hooks for recoverable table removal across SQL Server, PostgreSQL, MySQL, and MariaDB |
 | [DataTongs](reference/datatongs.md) | Data extraction — MERGE generation, type handling, key detection |
 | [SchemaShears](reference/schemashears.md) | Patch builder — carve an object-level patch package from a full product via a manifest |
 | [Configuration](reference/configuration.md) | Shared CLI switches, config hierarchy, environment variables, logging |
@@ -93,4 +93,4 @@ Nothing beats working with real data. The repository includes demo products you 
 - **Northwind** — the canonical getting-started schema
 - **Sakila** — the DVD rental store schema
 
-All four demos are deployed on all three platforms (SQL Server, PostgreSQL, MySQL) by the per-platform `docker-compose.yml` files under `Demos/`. Each one was extracted and deployed end-to-end with SchemaSmith tools.
+All four demos are deployed on all four platforms (SQL Server, PostgreSQL, MySQL, and MariaDB) by the per-platform `docker-compose.yml` files under `Demos/`. Each one was extracted and deployed end-to-end with SchemaSmith tools.

@@ -1,6 +1,6 @@
 # Error Codes & Reporting Channels
 
-When a deployment fails, the *same* logical problem — an orphaned foreign key, a duplicate value, a null in a required column — surfaces differently on SQL Server, PostgreSQL, and MySQL. The error text differs, the numeric code differs, and even *which log file* carries the detail differs. This page is the lookup table: how each engine reports back, where to read it, and what the codes mean across all three platforms.
+When a deployment fails, the *same* logical problem — an orphaned foreign key, a duplicate value, a null in a required column — surfaces differently on SQL Server, PostgreSQL, MySQL, and MariaDB. The error text differs, the numeric code differs, and even *which log file* carries the detail differs. This page is the lookup table: how each engine reports back, where to read it, and what the codes mean across all four platforms.
 
 ---
 
@@ -14,6 +14,8 @@ SchemaSmith runs the same convergence engine on every database, but each engine 
 | **PostgreSQL** | `Notice` stream | Server notices flow to the log; routine "already exists, skipping" / "does not exist, skipping" noise is filtered out. |
 | **MySQL** | `SchemaSmith_StatusMessages` sidecar | Progress is written to a table and polled — MySQL has no async message event. |
 
+> **MariaDB:** MariaDB reports through the same channel as MySQL — the `SchemaSmith_StatusMessages` sidecar table polled on a second connection — with MySQL-compatible error codes. Everywhere this page names MySQL, MariaDB behaves the same. Four platforms, three reporting channels.
+
 > **MySQL:** MySQL runs the whole deployment on a single connection and its driver has no equivalent of the SQL Server `InfoMessage` or PostgreSQL `Notice` event, so it can't push a message while that connection is busy doing work. Instead, the engine writes progress rows to a `SchemaSmith_StatusMessages` table and a separate polling connection flushes them to the log every few hundred milliseconds. The rows are cleaned up when the run ends, so the durable record is the progress log, not the table.
 
 ## Where errors are logged
@@ -22,7 +24,7 @@ SchemaSmith writes two logs per run — a progress log (everything that happened
 
 > **SQL Server:** the errors log is populated — each fault lands there with its message and the line number (`at Line: N`), in addition to the progress log. It's the fastest place to read what went wrong.
 
-> **PostgreSQL and MySQL:** the errors log is **empty**. The fault detail — including the SQLSTATE on PostgreSQL — is in the *progress* log only. Don't go looking in the errors log; it won't be there.
+> **PostgreSQL, MySQL, and MariaDB:** the errors log is **empty**. The fault detail — including the SQLSTATE on PostgreSQL — is in the *progress* log only. Don't go looking in the errors log; it won't be there.
 
 ## Failure triage roll-up
 
@@ -40,7 +42,7 @@ It's always on and adds nothing to a clean run (no banner, no roll-up, an empty 
 
 With it off (the default), a `PRINT` or a low-severity `RAISERROR` from one of your scripts is filtered out of the log. Turn it on and those messages surface. It affects **your scripts' output only** — SchemaSmith's own phase progress always shows regardless (the engine emits its progress with an always-surface flag), so turning `VerboseLogging` on won't reveal any hidden SchemaSmith progress; it only unmutes your scripts.
 
-> **PostgreSQL and MySQL:** the switch has no effect. PostgreSQL surfaces its `RAISE NOTICE` output by default, and MySQL user scripts have no progress channel at all — so there's nothing for the dial to gate on either engine.
+> **PostgreSQL, MySQL, and MariaDB:** the switch has no effect. PostgreSQL surfaces its `RAISE NOTICE` output by default, and MySQL and MariaDB user scripts have no progress channel at all — so there's nothing for the dial to gate on any of these engines.
 
 Set it in the settings file (`"VerboseLogging": true`), as an environment variable (`SmithySettings_VerboseLogging=true`), or on the command line:
 

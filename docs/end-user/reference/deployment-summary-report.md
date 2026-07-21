@@ -56,7 +56,7 @@ The JSON is the frozen contract: camelCase keys, enum values as their names, ind
   "toolVersion": "2.2.0.0",
   "run": {
     "product": "Northwind",
-    "platform": "SqlServer",        // SqlServer | PostgreSQL | MySQL
+    "platform": "SqlServer",        // SqlServer | PostgreSQL | MySQL | MariaDb
     "startedUtc": "2026-07-09T14:03:11.204Z",
     "finishedUtc": "2026-07-09T14:03:47.881Z",
     "durationMs": 36677,            // run wall-clock
@@ -140,7 +140,7 @@ The JSON is the frozen contract: camelCase keys, enum values as their names, ind
 | Key | Meaning |
 | --- | --- |
 | `product` | The product name from `Product.json`. |
-| `platform` | `SqlServer`, `PostgreSQL`, or `MySQL`. |
+| `platform` | `SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb`. |
 | `startedUtc` / `finishedUtc` | Run start and end, UTC. |
 | `durationMs` | Wall-clock milliseconds for the whole run. |
 | `mode` | `Quench` (a real deploy), `WhatIf` (a dry run), or `Validate`. |
@@ -241,7 +241,7 @@ These appear as `details[]` rows with their real `objectType` and `action` even 
 
 ## Cross-platform
 
-The report shape is identical on SQL Server, PostgreSQL, and MySQL — same keys, same nesting, same enum values. The `platform` field tells you which engine produced it, and a few `details[]` object types are engine-specific (the SQL Server statistics and index types above, PostgreSQL exclude constraints), but the contract is one shape across all three. A dashboard that parses a SQL Server report parses a MySQL one unchanged.
+The report shape is identical on SQL Server, PostgreSQL, MySQL, and MariaDB — same keys, same nesting, same enum values. The `platform` field tells you which engine produced it, and a few `details[]` object types are engine-specific (the SQL Server statistics and index types above, PostgreSQL exclude constraints), but the contract is one shape across all four. A dashboard that parses a SQL Server report parses a MySQL one unchanged.
 
 ## What's next
 

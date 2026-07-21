@@ -1,6 +1,6 @@
 # Script Tokens Reference
 
-Applies to: SchemaQuench, SchemaTongs, DataTongs — SQL Server, PostgreSQL, and MySQL.
+Applies to: SchemaQuench, SchemaTongs, DataTongs — SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ---
 
@@ -182,7 +182,7 @@ Schema templates make the active iteration's schema name available everywhere to
 
 - In a regular template (`Template.json` without `SchemaIdentificationScript`), `{{SchemaName}}` is unresolved. The engine produces a clear error if it appears in a context where it would need to substitute.
 - In product-level scripts (`Product.json` `BaselineValidationScript`, `VersionStampScript`) — those run at product scope, before and after all template iterations, with no iteration in scope.
-- On MySQL — MySQL has no schema-inside-database concept and schema templates are not supported on that platform. See [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md#mysql----database-per-tenant-only) for the MySQL alternative.
+- On MySQL and MariaDB — neither has a schema-inside-database concept, and schema templates are not supported on those platforms. See [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md#mysql-and-mariadb----database-per-tenant-only) for the MySQL and MariaDB alternative.
 
 ### In script files
 
@@ -329,9 +329,10 @@ The token resolves to the platform-appropriate binary literal form automatically
 
 - **SQL Server** — `0x89504E47...` (`VARBINARY` literal)
 - **MySQL** — `0x89504E47...` (`BLOB` literal)
+- **MariaDB** — `0x89504E47...` (`BLOB` literal, same hex form as MySQL)
 - **PostgreSQL** — `E'\\x89504E47...'::bytea` (`BYTEA` literal with escape-string + explicit cast)
 
-The same `<*BinaryFile*>` token works across all three engines with no per-environment editing. The resolver reads the file once and emits the correct literal form for the target; your SQL script just sees `{{DefaultLogo}}` land as whatever that engine will accept.
+The same `<*BinaryFile*>` token works across all four engines with no per-environment editing. The resolver reads the file once and emits the correct literal form for the target; your SQL script just sees `{{DefaultLogo}}` land as whatever that engine will accept.
 
 ### Example — query the target server for a value
 

@@ -286,7 +286,7 @@ Both patterns deploy from the same schema package format. The choice is a databa
 | **Backup granularity** | Per-tenant backup and point-in-time restore | Database-level backup only |
 | **Deployment blast radius** | Bounded to one tenant | Full database on failure (mitigated by `ContinueOnSchemaFailure`) |
 | **Tenant onboarding cost** | Provision a new database | Create a schema and a row |
-| **MySQL support** | Yes | No -- MySQL has no schema-inside-database concept |
+| **MySQL / MariaDB support** | Yes | No -- MySQL and MariaDB have no schema-inside-database concept |
 | **Best fit when** | Regulatory isolation required; per-tenant SLAs; SQL Server licensing is per-instance | High tenant count; per-tenant license cost is prohibitive; operational simplicity matters |
 
 Neither pattern is better in the abstract. The four tradeoffs -- license cost, operational isolation, backup granularity, blast radius -- usually pick the winner before you consult any other factor.
@@ -381,13 +381,13 @@ SchemaTongs extracts the schema's tables and procedures, then replaces qualified
 
 The full mechanics live in the SchemaTongs reference's new extraction section: [SchemaTongs -- Schema-Template Extraction](../reference/schematongs.md#schema-template-extraction).
 
-## MySQL -- database-per-tenant only
+## MySQL and MariaDB -- database-per-tenant only
 
-MySQL does not have a schema-inside-database concept that maps to the pattern described in this chapter. A MySQL "database" and a MySQL "schema" are the same thing -- `CREATE DATABASE` and `CREATE SCHEMA` are synonyms. There is no way to create isolated object namespaces inside a single MySQL database.
+Neither MySQL nor MariaDB has a schema-inside-database concept that maps to the pattern described in this chapter. On both engines a "database" and a "schema" are the same thing -- `CREATE DATABASE` and `CREATE SCHEMA` are synonyms. There is no way to create isolated object namespaces inside a single MySQL or MariaDB database.
 
-Multi-tenant deployments on MySQL use database-per-tenant: one database per tenant, `DatabaseIdentificationScript` returning every tenant database name. Everything described in the [Database-per-tenant](#database-per-tenant) section applies. The schema-template fields (`SchemaIdentificationScript`, `CreateSchemaIfMissing`, `AllowParallel`, `ContinueOnSchemaFailure`) are supported on SQL Server and PostgreSQL only.
+Multi-tenant deployments on MySQL and MariaDB use database-per-tenant: one database per tenant, `DatabaseIdentificationScript` returning every tenant database name. Everything described in the [Database-per-tenant](#database-per-tenant) section applies. The schema-template fields (`SchemaIdentificationScript`, `CreateSchemaIfMissing`, `AllowParallel`, `ContinueOnSchemaFailure`) are supported on SQL Server and PostgreSQL only.
 
-> **MySQL:** If you're deploying TenantCRM or a similar multi-tenant product to MySQL, model each tenant as their own database. The `DatabaseIdentificationScript` returning a list of tenant databases is the direct equivalent -- one iteration per tenant, the same schema package fanned out across all of them.
+> **MySQL and MariaDB:** If you're deploying TenantCRM or a similar multi-tenant product to MySQL or MariaDB, model each tenant as their own database. The `DatabaseIdentificationScript` returning a list of tenant databases is the direct equivalent -- one iteration per tenant, the same schema package fanned out across all of them.
 
 ---
 

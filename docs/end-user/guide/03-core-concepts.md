@@ -63,7 +63,7 @@ A **product** is a deployable unit -- the top-level container for everything Sch
 }
 ```
 
-The `Platform` field (`SqlServer`, `PostgreSQL`, or `MySQL`) is the linchpin -- it tells every SchemaSmith tool which adapter, DDL flavor, and object-type set to use. Everything else -- validation scripts, script tokens, template order -- works the same on every platform.
+The `Platform` field (`SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb`) is the linchpin -- it tells every SchemaSmith tool which adapter, DDL flavor, and object-type set to use. Everything else -- validation scripts, script tokens, template order -- works the same on every platform.
 
 A **template** targets a specific database (or set of databases). It lives in a subdirectory under `Templates/` and has its own `Template.json`:
 

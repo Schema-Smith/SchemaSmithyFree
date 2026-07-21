@@ -241,7 +241,7 @@ The combination catches problems at every stage. WhatIf catches SQL errors, miss
 
 ## Operational Profiles
 
-SchemaQuench has one config surface — a handful of top-level boolean settings — but your pipeline has more than one job. A full release pipeline, a patch-only datafix pipeline, a PR validation check, and an idempotency gate each call for a different posture. These six settings control which posture you're in, and all six work identically on SQL Server, PostgreSQL, and MySQL.
+SchemaQuench has one config surface — a handful of top-level boolean settings — but your pipeline has more than one job. A full release pipeline, a patch-only datafix pipeline, a PR validation check, and an idempotency gate each call for a different posture. These six settings control which posture you're in, and all six work identically on SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ### Full release pipeline
 
@@ -318,7 +318,7 @@ The pattern is the same regardless of platform: store the credential in the plat
 
 **Separate config per environment with env vars.** The same schema package deploys everywhere. Environment variables differentiate targets -- server, credentials, script tokens. No environment-specific config files to maintain, no risk of deploying the wrong config to the wrong server.
 
-**Validate before deploying.** Wire up JSON Schema validation on every PR to catch structural problems without a database. The SchemaSmith repository ships a complete, working example at `.github/workflows/validate-demo-schemas.yml` -- a per-PR, no-database validation workflow covering SQL Server, PostgreSQL, and MySQL using a content-type matrix. Copy it and adapt the paths for your own packages. See [Testing and Validation](06-testing-and-validation.md#schema-validation-in-ci) for the full pattern.
+**Validate before deploying.** Wire up JSON Schema validation on every PR to catch structural problems without a database. The SchemaSmith repository ships a complete, working example at `.github/workflows/validate-demo-schemas.yml` -- a per-PR, no-database validation workflow covering SQL Server, PostgreSQL, MySQL, and MariaDB using a content-type matrix. Copy it and adapt the paths for your own packages. See [Testing and Validation](06-testing-and-validation.md#schema-validation-in-ci) for the full pattern.
 
 **WhatIf for tricky changes.** Reach for WhatIf when you're validating a complex migration, deploying an unfamiliar package, or working with an unfamiliar target. It costs minutes in CI and surfaces exactly which SQL statement or token would fail before it hits a real database. Once you trust the package and the pipeline, direct deploys are the normal mode.
 

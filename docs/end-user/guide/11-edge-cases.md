@@ -271,7 +271,7 @@ Some databases aren't yours to ALTER. A database receiving replicated data is ow
 - **Replicated databases.** The replica is indexed for the producer's write workload. You want indexes tuned for your read patterns -- reports, dashboards, ETL queries -- without touching the replicated table structure. `IndexOnlyTableQuenches` manages your supplementary indexes across every deployment without ever attempting a structural change the replica won't accept.
 - **Third-party products.** You can't ALTER the vendor's tables, but you can add indexes to improve your usage. Put your index definitions in a template with `IndexOnlyTableQuenches`, and SchemaSmith manages those objects cleanly alongside your own schema.
 
-This works across SQL Server, PostgreSQL, and MySQL -- wherever you can add indexes to tables you don't control, SchemaQuench manages them.
+This works across SQL Server, PostgreSQL, MySQL, and MariaDB -- wherever you can add indexes to tables you don't control, SchemaQuench manages them.
 
 > **Note:** `IndexOnlyTableQuenches` is a template-level flag (default `false`). Each template in your product runs independently, so you can mix an index-only template for the third-party schema alongside a normal template for your own tables, all in one product.
 
