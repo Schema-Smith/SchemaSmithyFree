@@ -43,12 +43,13 @@ schemaquench --ConfigFile:quench.settings.beat1-broken.json --LogPath:"$PWD/logs
 | **SQL Server** | **Fails, exit `2`** at `Quenching missing tables and columns`: *"ALTER TABLE only allows columns to be added that can contain nulls, or have a DEFAULT … Column 'LoyaltyTier' cannot be added to non-empty table 'Customer'…"* (error `4901`). |
 | **PostgreSQL** | **Fails, exit `2`** at the same phase: `23502: column "loyaltytier" of relation "customer" contains null values`. |
 | **MySQL** | **Exits `0`.** No failure — MySQL adds the column and **silently backfills `''`** into every existing row. Even in `STRICT_TRANS_TABLES` mode. |
+| **MariaDB** | **Exits `0`.** Identical to MySQL — it adds the column and **silently backfills `''`** into every existing row, even in `STRICT_TRANS_TABLES` mode. |
 
-That MySQL row is the lesson: **the engine that fails loud is protecting you.** SQL Server and
-PostgreSQL refuse a required column with no value for the rows already there. MySQL just fills blanks
-— you get a `LoyaltyTier` column full of empty strings and no warning. (This is MySQL engine
-behavior, not SchemaSmith — SchemaSmith issues the same correct `ALTER` everywhere; MySQL chooses to
-fill rather than refuse.)
+That MySQL/MariaDB row is the lesson: **the engine that fails loud is protecting you.** SQL Server and
+PostgreSQL refuse a required column with no value for the rows already there. MySQL and MariaDB just fill
+blanks — you get a `LoyaltyTier` column full of empty strings and no warning. (This is engine
+behavior, not SchemaSmith — SchemaSmith issues the same correct `ALTER` everywhere; the two MySQL-family
+engines choose to fill rather than refuse.)
 
 **The fix** is what SQL Server / PostgreSQL were asking for: give the new column a `Default`, so the
 rows already in the table get a real value. `beat1-fixed/` does exactly that (`Default 'Standard'`):
@@ -57,9 +58,10 @@ rows already in the table get a real value. `beat1-fixed/` does exactly that (`D
 schemaquench --ConfigFile:quench.settings.beat1-fixed.json --LogPath:"$PWD/logs"
 ```
 
-Green on all three. On SQL Server / PostgreSQL the existing rows now read `Standard`. **On MySQL they
-stay `''`** — the column was already added back in `beat1-broken`, and a default only applies to
-*new* rows. If MySQL had failed loud like the others, you'd have caught it before the blanks landed.
+Green on all four. On SQL Server / PostgreSQL the existing rows now read `Standard`. **On MySQL and
+MariaDB they stay `''`** — the column was already added back in `beat1-broken`, and a default only
+applies to *new* rows. If MySQL and MariaDB had failed loud like the others, you'd have caught it
+before the blanks landed.
 
 ## Beat 2 — narrowing a column that still holds long data (`8152` / `22001` / `1406`)
 

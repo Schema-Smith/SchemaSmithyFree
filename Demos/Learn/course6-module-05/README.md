@@ -42,6 +42,17 @@ done
 schemaquench --ConfigFile:quench.settings.baseline.json      # deploys baseline/ to both tenants (takes ownership)
 ```
 
+MariaDB is the same pattern with its own client and seed:
+
+```bash
+cd mariadb
+for db in shop_patch_canary shop_patch_scratch; do
+  docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS \`$db\`"
+  docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd "$db" < ../../course6-setup/seed/mariadb/shop.sql
+done
+schemaquench --ConfigFile:quench.settings.baseline.json
+```
+
 Now both tenants carry the owned `Shop` schema. Neither has `PriceReviewBatch` yet — that's the change we ship.
 
 ## The change: one column, as an emergency patch
