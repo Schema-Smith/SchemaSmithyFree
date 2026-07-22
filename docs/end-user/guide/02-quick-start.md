@@ -218,6 +218,8 @@ SchemaQuench --ConfigFile:quench-whatif.json
 
 In the output, you'll see `[WhatIf]` entries showing the computed changes. SchemaQuench compared the declared state (your JSON with the new Email column) against the live `Northwind` database (which has no Email column) and determined that an `ALTER TABLE ... ADD` is needed. No changes were applied -- WhatIf mode is read-only. Preview before you commit. Confidence before you deploy.
 
+Rather than scan the full log, read the summary: every run writes a human-readable **`SchemaQuench - Summary.md`** next to the logs, and in WhatIf mode it lists exactly what *would* be applied, skipped, or delivered -- the at-a-glance view of the plan. Its twin `SchemaQuench - Summary.json` is the same facts as a stable, machine-readable contract for CI. Both are always on; see the [Deployment Summary Report reference](../reference/deployment-summary-report.md).
+
 Now apply it for real. Re-run the original `quench-deploy.json` from Step 4 -- it already has `WhatIfONLY: false`, so this run actually writes the change:
 
 ```bash
