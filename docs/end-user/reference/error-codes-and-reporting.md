@@ -14,6 +14,8 @@ SchemaSmith runs the same convergence engine on every database, but each engine 
 | **PostgreSQL** | `Notice` stream | Server notices flow to the log; routine "already exists, skipping" / "does not exist, skipping" noise is filtered out. |
 | **MySQL** | `SchemaSmith_StatusMessages` sidecar | Progress is written to a table and polled — MySQL has no async message event. |
 
+> **MariaDB:** MariaDB reports through the same channel as MySQL — the `SchemaSmith_StatusMessages` sidecar table polled on a second connection — with MySQL-compatible error codes. Everywhere this page names MySQL, MariaDB behaves the same. Four platforms, three reporting channels.
+
 > **MySQL:** MySQL runs the whole deployment on a single connection and its driver has no equivalent of the SQL Server `InfoMessage` or PostgreSQL `Notice` event, so it can't push a message while that connection is busy doing work. Instead, the engine writes progress rows to a `SchemaSmith_StatusMessages` table and a separate polling connection flushes them to the log every few hundred milliseconds. The rows are cleaned up when the run ends, so the durable record is the progress log, not the table.
 
 ## Where errors are logged

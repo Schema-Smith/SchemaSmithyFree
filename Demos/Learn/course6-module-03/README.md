@@ -1,6 +1,6 @@
 # Course 6, Module 3 — CI schema validation & Extensions governance (lab)
 
-**Goal:** validate a schema package structurally on every pull request with no database, then turn the generated `.json-schemas` into a governance contract — requiring and constraining custom `Extensions` metadata at the table and column level — and wire it all into a CI gate. SQL Server, PostgreSQL, and MySQL.
+**Goal:** validate a schema package structurally on every pull request with no database, then turn the generated `.json-schemas` into a governance contract — requiring and constraining custom `Extensions` metadata at the table and column level — and wire it all into a CI gate. SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ## The scenario
 
@@ -9,7 +9,7 @@ Your schema lives in Git. Before anything reaches a database, you want two guara
 ## Before you start
 
 - This lab needs no sandbox and no running database — it validates JSON files against JSON Schema.
-- Each engine package under `sqlserver/`, `postgres/`, and `mysql/` already ships its generated `.json-schemas/` with a governance fragment applied. You can validate them as-is, or regenerate and re-apply to practice the workflow.
+- Each engine package under `sqlserver/`, `postgres/`, `mysql/`, and `mariadb/` already ships its generated `.json-schemas/` with a governance fragment applied. You can validate them as-is, or regenerate and re-apply to practice the workflow.
 - To validate locally you need Node. This lab uses `ajv-cli`: `npx ajv-cli@5 ...`. In CI, the `GrantBirki/json-yaml-validate` action does the same thing with no setup.
 - To regenerate the schemas you need the SchemaSmith CLI on your PATH (`schematongs --version`). Regeneration is database-free.
 
@@ -17,7 +17,7 @@ Your schema lives in Git. Before anything reaches a database, you want two guara
 
 ## Scenario 1 — structural validation (the base gate)
 
-Every package ships generated `.json-schemas/*.schema` files — one per content type, per platform. Validate a table file against its schema (SQL Server shown; swap the infix for `postgresql` / `mysql`):
+Every package ships generated `.json-schemas/*.schema` files — one per content type, per platform. Validate a table file against its schema (SQL Server shown; swap the infix for `postgresql` / `mysql` / `mariadb`):
 
 ```
 cp sqlserver/Package/.json-schemas/tables.sqlserver.schema /tmp/tables.json
@@ -66,14 +66,14 @@ Regenerate the schemas (database-free):
 SmithySettings_Product__Path="$(pwd)/sqlserver/Package" schematongs --WriteSchemasOnly
 ```
 
-(Run the equivalent for the `postgres/Package` and `mysql/Package` directories to regenerate those engines.)
+(Run the equivalent for the `postgres/Package`, `mysql/Package`, and `mariadb/Package` directories to regenerate those engines.)
 
 Both the **table-level** and **column-level** `Extensions` fragments survive the round-trip — your `OwningTeam` and `DataClassification` rules are still enforced after regeneration. Governance is regeneration-safe at both levels.
 
 ## Scenario 5 — wire it into CI
 
-`ci/validate-schemas.yml` is a copy-ready workflow. Copy it into your repository's `.github/workflows/` and adjust the paths to your package layout. Each matrix entry names a schema file and a glob of JSON files; `GrantBirki/json-yaml-validate` validates them on every pull request and comments on failures — no database, no credentials. The SchemaSmith repository's own `.github/workflows/validate-demo-schemas.yml` is the same pattern at production scale across all three engines.
+`ci/validate-schemas.yml` is a copy-ready workflow. Copy it into your repository's `.github/workflows/` and adjust the paths to your package layout. Each matrix entry names a schema file and a glob of JSON files; `GrantBirki/json-yaml-validate` validates them on every pull request and comments on failures — no database, no credentials. The SchemaSmith repository's own `.github/workflows/validate-demo-schemas.yml` is the same pattern at production scale across all four engines.
 
 ## Cross-platform
 
-The workflow is identical on all three engines. Only the identifier quoting and native type spellings differ (`dbo` schema and `NVARCHAR` on SQL Server; lowercase `public` and `varchar` on PostgreSQL; backtick-quoted identifiers on MySQL). The switch names, the schema filenames, the CI action, and the pass/fail behavior are the same everywhere.
+The workflow is identical on all four engines. Only the identifier quoting and native type spellings differ (`dbo` schema and `NVARCHAR` on SQL Server; lowercase `public` and `varchar` on PostgreSQL; backtick-quoted identifiers on MySQL and MariaDB). The switch names, the schema filenames, the CI action, and the pass/fail behavior are the same everywhere.

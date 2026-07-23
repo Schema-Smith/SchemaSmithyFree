@@ -3,7 +3,7 @@
 Goal: take a database that a **home-grown script pipeline** built — shop schema plus a hand-maintained
 `schema_version` table — and move it to SchemaSmith with **extract-and-go**. You'll cast the live
 database to declarative files, leave the numbered-script pile and its tracker behind, and quench to a
-clean no-op that proves the cast is faithful. All three engines.
+clean no-op that proves the cast is faithful. All four engines.
 
 You do **not** run the scripts. The `before/` folder shows a real hand-rolled pipeline for reference —
 numbered SQL files with inconsistent idempotency guards and a manual `schema_version` insert in each;
@@ -11,13 +11,13 @@ the setup already applied their end state to `shop_from_scripts` on each engine.
 
 ## Before you start
 
-- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all three engines `PASS`).
+- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all four engines `PASS`).
 - The Course 5 databases exist — run [`../course5-setup`](../course5-setup) once (creates and seeds
   `shop_from_scripts`, among others).
 - The CLI is on your PATH (`schematongs --version` and `schemaquench --version` answer). New to the
   CLI? Course 1, Module 1 walks the install.
 
-The `sqlserver/`, `postgres/`, and `mysql/` folders each ship a `SchemaTongs.settings.json` (the extract
+The `sqlserver/`, `postgres/`, `mysql/`, and `mariadb/` folders each ship a `SchemaTongs.settings.json` (the extract
 config), a `quench.settings.json` (the deploy config), and the `Package/` this lab produced — so you can
 diff your own extract against it.
 
@@ -76,15 +76,17 @@ docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost 
 # → schema_version  (left exactly where it was)
 ```
 
-## Step 4: Do it on PostgreSQL and MySQL
+## Step 4: Do it on PostgreSQL, MySQL, and MariaDB
 
-Same three steps in `postgres/` and `mysql/`. The `before/` scripts are shown in their SQL Server form;
-the PostgreSQL and MySQL sandbox databases were seeded to the identical end state, so the extract works
-the same on each. Only the whitelist's dialect differs:
+Same three steps in `postgres/`, `mysql/`, and `mariadb/`. The `before/` scripts are shown in their SQL
+Server form; the PostgreSQL, MySQL, and MariaDB sandbox databases were seeded to the identical end
+state, so the extract works the same on each. Only the whitelist's dialect differs:
 
-| | SQL Server | PostgreSQL | MySQL |
-| --- | --- | --- | --- |
-| `ObjectList` | `dbo.Customer,…` | `public.customer,…` | `Customer,…` |
+| | SQL Server | PostgreSQL | MySQL | MariaDB |
+| --- | --- | --- | --- | --- |
+| `ObjectList` | `dbo.Customer,…` | `public.customer,…` | `Customer,…` | `Customer,…` |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 Each one extracts four tables, leaves `schema_version` behind, and quenches to a clean no-op.
 

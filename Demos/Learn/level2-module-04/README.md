@@ -16,14 +16,14 @@ the most specific winning:
 Overrides can only change tokens the package already declares — the package owns the contract, the
 environment fills in the values.
 
-This lab ships one product, `BillingService`, on all three engines. Each engine folder
-(`sqlserver/`, `postgres/`, `mysql/`) has the full `Package/` plus **two** settings files —
+This lab ships one product, `BillingService`, on all four engines. Each engine folder
+(`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) has the full `Package/` plus **two** settings files —
 `dev.settings.json` (rides the package defaults) and `prod.settings.json` (overrides two tokens).
 
 ## Before you start
 
 - The [sandbox](../docker) is up (`docker compose up -d`) and verified (`./verify-sandbox.sh` /
-  `.\verify-sandbox.ps1` — all three engines `PASS`).
+  `.\verify-sandbox.ps1` — all four engines `PASS`).
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later).
 
 ## Step 1: Look at the token contract
@@ -149,7 +149,9 @@ fresh environment label, to see it land). Unset the variable when you're done.
 | Identifier case | mixed-case, bracketed | folded to lowercase | backticked |
 | Idempotent stamp | `INSERT … WHERE NOT EXISTS` | `INSERT … WHERE NOT EXISTS` | `INSERT IGNORE` (MySQL forbids referencing an insert's target table in a subquery, so idempotency rides on the `Environment` primary key) |
 
-The token mechanics are identical across all three: declare in `Product.json`, override per run, and
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
+
+The token mechanics are identical across all four: declare in `Product.json`, override per run, and
 let `<*Query*>` compute live values against the target. Only the SQL dialect inside the tokens and the
 engine's DDL wording differ.
 

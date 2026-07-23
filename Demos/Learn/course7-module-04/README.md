@@ -3,13 +3,13 @@
 Goal: run a schema change across the **whole fleet at once** — and come out the other side with the fleet
 whole even when one tenant goes wrong. You'll preview the roster before you touch anything, tune how hard
 the run hits your servers, watch one drifted tenant fail while the rest sail through, then **resume** —
-redeploying only the tenant you fixed, not the ones already done. All three engines.
+redeploying only the tenant you fixed, not the ones already done. All four engines.
 
 This is the capstone. Do Modules 1–3 first — you're now *operating* the fleet those modules built.
 
 ## Before you start
 
-- The [sandbox](../docker) is up and verified (all three engines healthy).
+- The [sandbox](../docker) is up and verified (all four engines healthy).
 - The fleet exists — run [`../course7-setup`](../course7-setup) once (creates `fleet_tenant_001`…`005`).
 - The CLI is on your PATH — `schemaquench --version` answers **2.3.0** or later.
 
@@ -108,9 +108,10 @@ One or more database quenches FAILED
 ```
 
 Four of five succeeded; one failed; the run exits `2` (partial failure). The exact reconcile error is
-engine-specific — PostgreSQL says `column "sku" of relation "product" contains null values`, MySQL says
-`Invalid use of NULL value` — but the fleet-level behavior is identical on all three: one fails, the rest
-finish, exit `2`, and `Template 'Main' had 1 failed work unit(s)` names the count.
+engine-specific — PostgreSQL says `column "sku" of relation "product" contains null values`, MySQL (and
+MariaDB, which mirrors it) says `Invalid use of NULL value` — but the fleet-level behavior is identical on
+all four: one fails, the rest finish, exit `2`, and `Template 'Main' had 1 failed work unit(s)` names the
+count.
 
 > **The opposite posture.** Set `"ContinueOnDatabaseFailure": false` on the `Main` template (in
 > `Package/Templates/Main/Template.json`) and the run **aborts at the first failure** instead — tenants
@@ -152,12 +153,13 @@ they do **no real work**. Only `fleet_tenant_003`, stopped at `Completed Steps: 
 steps back up and finishes. The run exits `0`, and on that clean success the checkpoint files are deleted.
 On a thousand-tenant fleet where 999 succeeded, resume means you redeploy **one** — not all thousand.
 
-## Step 5: Do it on PostgreSQL and MySQL
+## Step 5: Do it on PostgreSQL, MySQL, and MariaDB
 
-Same five moves in `postgres/` and `mysql/`. `--PreviewTargets`, `MaxThreads`, `ContinueOnDatabaseFailure`,
-and `--ResumeQuench` behave identically on all three engines — only the drifted-tenant reconcile message
-differs (shown above). Use each engine's `drift-tenant-003.sql` / `reset-tenant-003.sql` (they run against
-the `fleet_tenant_003` database directly — see the header comment in each file).
+Same five moves in `postgres/`, `mysql/`, and `mariadb/`. `--PreviewTargets`, `MaxThreads`,
+`ContinueOnDatabaseFailure`, and `--ResumeQuench` behave identically on all four engines — only the
+drifted-tenant reconcile message differs (shown above). Use each engine's `drift-tenant-003.sql` /
+`reset-tenant-003.sql` (they run against the `fleet_tenant_003` database directly — see the header
+comment in each file).
 
 ## Cleanup
 
@@ -166,7 +168,7 @@ ran the abort-mode aside, revert the `Template.json` edit too. Delete any leftov
 (the successful resume removes the checkpoint files; the empty folder is harmless):
 
 ```bash
-rm -rf sqlserver/checkpoints postgres/checkpoints mysql/checkpoints
+rm -rf sqlserver/checkpoints postgres/checkpoints mysql/checkpoints mariadb/checkpoints
 ```
 
 ## The principle

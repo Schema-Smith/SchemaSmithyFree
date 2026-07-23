@@ -18,6 +18,7 @@ apply_sql() {
     sqlserver) docker exec -i learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d ${db}" < "$file" >/dev/null 2>&1 ;;
     postgres)  docker exec -i learn-postgres psql -U postgres -d "${db}" -v ON_ERROR_STOP=1 < "$file" >/dev/null 2>&1 ;;
     mysql)     docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd "${db}" < "$file" >/dev/null 2>&1 ;;
+    mariadb)   docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd "${db}" < "$file" >/dev/null 2>&1 ;;
   esac
 }
 
@@ -29,6 +30,7 @@ seed_db() {
     sqlserver) docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -Q \"IF DB_ID('${db}') IS NULL CREATE DATABASE [${db}]\"" >/dev/null 2>&1 ;;
     postgres)  docker exec learn-postgres psql -U postgres -d postgres -c "CREATE DATABASE ${db}" >/dev/null 2>&1 ;;
     mysql)     docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS \`${db}\`" >/dev/null 2>&1 ;;
+    mariadb)   docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS \`${db}\`" >/dev/null 2>&1 ;;
   esac
   apply_sql "$engine" "$db" "$SCRIPT_DIR/seed/$engine/shop.sql"
   if [ -n "$tracker" ]; then apply_sql "$engine" "$db" "$SCRIPT_DIR/seed/$engine/$tracker.sql"; fi
@@ -36,6 +38,7 @@ seed_db() {
     sqlserver) out=$(docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -d ${db} -Q \"SELECT 'READY' WHERE OBJECT_ID('dbo.Customer') IS NOT NULL\"" 2>/dev/null) ;;
     postgres)  out=$(docker exec learn-postgres psql -U postgres -d "${db}" -tAc "SELECT 1 FROM information_schema.tables WHERE table_name='customer'" 2>/dev/null) ;;
     mysql)     out=$(docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema='${db}' AND table_name='Customer'" 2>/dev/null) ;;
+    mariadb)   out=$(docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema='${db}' AND table_name='Customer'" 2>/dev/null) ;;
   esac
   if echo "$out" | grep -qE 'READY|1'; then echo "PASS"; else echo "FAIL"; fail=1; fi
 }
@@ -59,9 +62,12 @@ for pair in "${three_engine_dbs[@]}"; do seed_db postgres "${pair%%:*}" "${pair#
 echo "MySQL"
 for pair in "${three_engine_dbs[@]}"; do seed_db mysql "${pair%%:*}" "${pair##*:}"; done
 
+echo "MariaDB"
+for pair in "${three_engine_dbs[@]}"; do seed_db mariadb "${pair%%:*}" "${pair##*:}"; done
+
 echo
 if [ "$fail" -eq 0 ]; then
-  echo "All 13 databases are seeded and ready (5 SQL Server, 4 PostgreSQL, 4 MySQL)."
+  echo "All 17 databases are seeded and ready (5 SQL Server, 4 PostgreSQL, 4 MySQL, 4 MariaDB)."
   exit 0
 else
   echo "One or more databases could not be seeded. Is the sandbox up? See Demos/Learn/README.md."

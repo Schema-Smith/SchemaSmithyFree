@@ -3,7 +3,7 @@
 Goal: roll out a new unique index across the whole fleet, watch **two** tenants fail in **two different
 phases**, and work through the exact sequence a real operator uses to locate each tenant's evidence, name its
 phase, remediate it, and resume the run. You'll do all of this on SQL Server, then repeat the same moves on
-PostgreSQL and MySQL.
+PostgreSQL, MySQL, and MariaDB.
 
 This is the diagnostic capstone of Course 7. Do Modules 1–4 first — you already know how to build the
 fleet, tune it, handle drift, and resume a partial failure. M5 is the middle step those modules skipped:
@@ -11,7 +11,7 @@ fleet, tune it, handle drift, and resume a partial failure. M5 is the middle ste
 
 ## Before you start
 
-- The [sandbox](../docker) is up and verified (all three engines healthy).
+- The [sandbox](../docker) is up and verified (all four engines healthy).
 - The fleet exists — run [`../course7-setup`](../course7-setup) once if you haven't already.
 - The CLI is on your PATH — `schemaquench --version` answers **2.3.0** or later.
 
@@ -212,15 +212,20 @@ Read the step counts: 001/003/005 are at 4 — all steps already done, they do n
 from step 4 (FK phase only). 002 restarts from step 2 (indexes onward). The checkpoint is the engine's
 memory of exactly how far it got, so resume is surgical: you redeploy *only what didn't finish*.
 
-## Step 6: Do it on PostgreSQL and MySQL
+## Step 6: Do it on PostgreSQL, MySQL, and MariaDB
 
-Same six moves in `postgres/` and `mysql/`. The fleet behavior is identical — two tenants fail, exit `2`,
-resume exits `0`. Only the error text changes:
+Same six moves in `postgres/`, `mysql/`, and `mariadb/`. The fleet behavior is identical — two tenants fail,
+exit `2`, resume exits `0`. Only the error text changes:
 
 | Failure | SQL Server | PostgreSQL | MySQL |
 | --- | --- | --- | --- |
 | Index phase (002) | `The CREATE UNIQUE INDEX statement terminated because a duplicate key was found for the object name 'dbo.Customer' and the index name 'UQ_Customer_Email'. The duplicate key value is (dupe@shop.example).` | `23505: could not create unique index "uq_customer_email"` | `Duplicate entry 'dupe@shop.example' for key 'Customer.UQ_Customer_Email'` |
 | FK phase (004) | `The ALTER TABLE statement conflicted with the FOREIGN KEY constraint "FK_OrderItem_Product". The conflict occurred in database "fleet_tenant_004", table "dbo.Product", column 'ProductId'.` | `23503: insert or update on table "orderitem" violates foreign key constraint "fk_orderitem_product"` | `Cannot add or update a child row: a foreign key constraint fails` |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native
+> package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics
+> (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for
+> you.* Its error text for both failures here matches the MySQL column above.
 
 **Stage drift on PostgreSQL:**
 
@@ -236,14 +241,22 @@ docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd < mysql/drift-tenant-00
 docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd < mysql/drift-tenant-004.sql
 ```
 
-Run, diagnose, reset, and resume from each engine's folder. The checkpoint `[Completed Steps]` counts and
-the artifact naming pattern are the same across all three engines — only the error surface differs (on
-PostgreSQL, detail lands in `ProgressLog`; on MySQL, it surfaces via the `SchemaSmith_StatusMessages` sidecar
-and `ProgressLog` FAILED block — `Errors.log` is empty on both non-SS engines).
+**Stage drift on MariaDB:**
 
-> **Note on Failures.log across engines:** `SchemaQuench - Failures.log` is produced on all three engines
-> (SQL Server, PostgreSQL, MySQL). The block format and phase context trail are identical; only the error
-> text inside each block changes per engine.
+```bash
+docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd < mariadb/drift-tenant-002.sql
+docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd < mariadb/drift-tenant-004.sql
+```
+
+Run, diagnose, reset, and resume from each engine's folder. The checkpoint `[Completed Steps]` counts and
+the artifact naming pattern are the same across all four engines — only the error surface differs (on
+PostgreSQL, detail lands in `ProgressLog`; on MySQL and MariaDB, it surfaces via the
+`SchemaSmith_StatusMessages` sidecar and `ProgressLog` FAILED block — `Errors.log` is empty on all
+non-SS engines).
+
+> **Note on Failures.log across engines:** `SchemaQuench - Failures.log` is produced on all four engines
+> (SQL Server, PostgreSQL, MySQL, MariaDB). The block format and phase context trail are identical; only
+> the error text inside each block changes per engine.
 
 ## Cleanup
 
@@ -254,6 +267,7 @@ checkpoint files automatically; if you bailed out early, remove leftover directo
 rm -rf sqlserver/checkpoints sqlserver/artifacts
 rm -rf postgres/checkpoints postgres/artifacts
 rm -rf mysql/checkpoints mysql/artifacts
+rm -rf mariadb/checkpoints mariadb/artifacts
 ```
 
 ## The principle

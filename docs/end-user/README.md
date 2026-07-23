@@ -93,4 +93,4 @@ Nothing beats working with real data. The repository includes demo products you 
 - **Northwind** — the canonical getting-started schema
 - **Sakila** — the DVD rental store schema
 
-All four demos are deployed on all four platforms (SQL Server, PostgreSQL, MySQL, MariaDB) by the per-platform `docker-compose.yml` files under `Demos/`. Each one was extracted and deployed end-to-end with SchemaSmith tools.
+All four demos are deployed on all four platforms (SQL Server, PostgreSQL, MySQL, and MariaDB) by the per-platform `docker-compose.yml` files under `Demos/`. Each one was extracted and deployed end-to-end with SchemaSmith tools.

@@ -8,7 +8,7 @@ A pricing bug double-applied a discount: every `OrderItem` on a **May 2026** `Sa
 
 ## Before you start
 
-- The three-engine sandbox is up (`Demos/Learn/docker`) and `schemaquench --version` answers on your PATH (build from `main` if needed).
+- The four-engine sandbox is up (`Demos/Learn/docker`) and `schemaquench --version` answers on your PATH (build from `main` if needed).
 - Run **[`course6-setup`](../course6-setup/)** first. It seeds `shop_tenant_a`, `shop_tenant_b`, `shop_tenant_c` on each engine with the price defect, and creates the scoped **`datafix_user`** role (see [`course6-setup/seed/<engine>/datafix_role.sql`](../course6-setup/seed/)).
 
 Confirm the defect is present (SQL Server shown; swap the client per engine):
@@ -45,7 +45,7 @@ The four flags are the **datafix profile**: SchemaSmith runs your migration scri
 ## Step 3 — Canary: deploy to one tenant, as the scoped account
 
 ```bash
-cd sqlserver        # or postgres / mysql
+cd sqlserver        # or postgres / mysql / mariadb
 schemaquench --ConfigFile:quench.settings.json
 ```
 
@@ -60,7 +60,7 @@ The log shows it connect **as `datafix_user`**, filter **1 of 3** discovered dat
 
 ## Step 4 — Verify the canary
 
-SQL Server shown; adapt the schema/identifier style per the [per-engine notes](#per-engine-notes) below for PostgreSQL (`datafix.orderitem_pricefix_backup`, lowercase) and MySQL (`OrderItem_PriceFix_Backup` in the tenant db).
+SQL Server shown; adapt the schema/identifier style per the [per-engine notes](#per-engine-notes) below for PostgreSQL (`datafix.orderitem_pricefix_backup`, lowercase) and MySQL/MariaDB (`OrderItem_PriceFix_Backup` in the tenant db).
 
 ```sql
 -- backup captured the 10 originals (in the datafix schema the account owns)
@@ -102,7 +102,9 @@ Denied. The account can back up and fix data; it cannot alter or drop the produc
 | Why the account can't drop | no `ALTER ON SCHEMA::dbo` (owns `datafix` instead) | not the owner of `public` tables; no `CREATE` on `public` | no `DROP` privilege granted |
 | Connection | `localhost,11433` | `localhost:15432` | `localhost:13306` |
 
-MySQL has no schema-within-database layer, so its backup table lives in the tenant database directly and its boundary comes from simply never granting `DROP`. The two schema-capable engines (SQL Server, PostgreSQL) put the backup in a dedicated, account-owned `datafix` schema — same principle, native to each engine.
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
+
+MySQL and MariaDB have no schema-within-database layer, so their backup table lives in the tenant database directly and their boundary comes from simply never granting `DROP`. The two schema-capable engines (SQL Server, PostgreSQL) put the backup in a dedicated, account-owned `datafix` schema — same principle, native to each engine.
 
 ## What you proved
 

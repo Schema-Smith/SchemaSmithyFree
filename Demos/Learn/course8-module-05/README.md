@@ -19,7 +19,7 @@ situations a plain redeploy doesn't cover, and *when to reach for which*.
 
 ## Prerequisites
 
-- The three-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
+- The four-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
 - `schemaquench --version` answers on your PATH. No from-source override — this module uses only
   long-shipped features (checkpointing, `--ResumeQuench`, `CompletedMigrationScripts`).
 
@@ -33,7 +33,7 @@ Prints `PASS` per engine once `diag_recovery` exists.
 ## Step 2 — deploy the baseline (green)
 
 ```
-cd sqlserver            # or postgres, or mysql
+cd sqlserver            # or postgres, mysql, or mariadb
 schemaquench --ConfigFile:quench.settings.baseline.json --LogPath:"$PWD/logs"
 ```
 
@@ -113,7 +113,7 @@ VALUES ('After Scripts/03_seed_catalog_broken.sql','Shop','After','Main','');
 INSERT INTO "SchemaSmith"."CompletedMigrationScripts" ("ScriptPath","ProductName","QuenchSlot",template_name,schema_name)
 VALUES ('After Scripts/03_seed_catalog_broken.sql','Shop','After','Main','');
 
--- MySQL
+-- MySQL / MariaDB
 INSERT INTO SchemaSmith_CompletedMigrationScripts (ScriptPath,ProductName,QuenchSlot,template_name,schema_name)
 VALUES ('After Scripts/03_seed_catalog_broken.sql','Shop','After','Main','');
 ```

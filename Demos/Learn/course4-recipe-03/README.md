@@ -4,7 +4,7 @@ Goal: resolve a token from a **live query against the target database** at deplo
 scripts run. The package reads which feature flags are switched on *right now* on the server it's deploying
 to, and records them — a value that only exists on the target, pulled in at the moment of the quench.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package/`, a `seed-server.sql`, and
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the full `Package/`, a `seed-server.sql`, and
 `deploy.settings.json`, all targeting `cookbook_r3`.
 
 ## Before you start
@@ -21,6 +21,9 @@ schema package.
 ```bash
 # SQL Server
 docker exec -i learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d cookbook_r3" < sqlserver/seed-server.sql
+
+# MariaDB
+docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd cookbook_r3 < mariadb/seed-server.sql
 ```
 
 ## Step 2: Look at the query token
@@ -78,7 +81,9 @@ package changed — the package asked the server, and the server's answer had ch
 | Token scope | template-level (resolves against the target DB) | same | same |
 | Deploy-log timestamp default | `SYSUTCDATETIME()` | `clock_timestamp()` | `CURRENT_TIMESTAMP(6)` |
 
-The `<*Query*>` mechanism is identical on all three engines; only the aggregate function's dialect differs.
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
+
+The `<*Query*>` mechanism is identical on all four engines; only the aggregate function's dialect differs.
 
 ## The principle
 

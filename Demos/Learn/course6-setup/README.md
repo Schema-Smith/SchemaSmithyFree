@@ -1,6 +1,6 @@
 # Course 6 — Database Setup
 
-These scripts create and **seed** the Course 6 datafix databases on the sandbox engines — 9 databases
+These scripts create and **seed** the Course 6 datafix databases on the sandbox engines — 12 databases
 in total. Each tenant database carries the identical Shop schema (`Customer`, `Product`, `SalesOrder`,
 `OrderItem`) and a **deterministic price-defect batch**: `OrderItem` rows on orders placed in May 2026
 store `UnitPrice = ROUND(Product.UnitPrice * 0.81, 2)` — a 10% discount applied twice (the bug).
@@ -54,8 +54,13 @@ MySQL
   shop_tenant_b              PASS
   shop_tenant_c              PASS
   datafix_user role          PASS
+MariaDB
+  shop_tenant_a              PASS
+  shop_tenant_b              PASS
+  shop_tenant_c              PASS
+  datafix_user role          PASS
 
-All 9 databases are seeded and the datafix_user role is created (3 SQL Server, 3 PostgreSQL, 3 MySQL).
+All 12 databases are seeded and the datafix_user role is created (3 SQL Server, 3 PostgreSQL, 3 MySQL, 3 MariaDB).
 ```
 
 ## Databases created
@@ -66,7 +71,7 @@ All 9 databases are seeded and the datafix_user role is created (3 SQL Server, 3
 | `shop_tenant_b` | Shop schema + price-defect batch (identical to `a`) |
 | `shop_tenant_c` | Shop schema + price-defect batch (identical to `a`) |
 
-All three tenant databases are created on all three engines (SQL Server, PostgreSQL, MySQL).
+All three tenant databases are created on all four engines (SQL Server, PostgreSQL, MySQL, MariaDB).
 
 ## Connection details
 
@@ -77,6 +82,7 @@ These are throwaway sandbox credentials — **never reuse them anywhere real.**
 | SQL Server | `localhost` | `11433` | `sa`       | `Learn!Passw0rd` |
 | PostgreSQL | `localhost` | `15432` | `postgres` | `Learn!Passw0rd` |
 | MySQL      | `localhost` | `13306` | `root`     | `Learn!Passw0rd` |
+| MariaDB    | `localhost` | `13307` | `root`     | `Learn!Passw0rd` |
 
 The admin accounts above are for seeding and inspection. The Module 1 lab deploys *as* the scoped
 `datafix_user` account (password `DataFix!Demo123`) created by the setup — that's the whole point of
@@ -107,6 +113,16 @@ WHERE  so.orderdate >= '2026-05-01'
 ```
 
 **MySQL** — run against each tenant database:
+
+```sql
+SELECT COUNT(*) AS bad_batch_rows
+FROM   `OrderItem`  oi
+JOIN   `SalesOrder` so ON so.OrderId = oi.OrderId
+WHERE  so.OrderDate >= '2026-05-01'
+  AND  so.OrderDate  < '2026-06-01';
+```
+
+**MariaDB** — run against each tenant database (same query as MySQL):
 
 ```sql
 SELECT COUNT(*) AS bad_batch_rows

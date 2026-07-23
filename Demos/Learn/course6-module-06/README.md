@@ -1,6 +1,6 @@
 # Course 6, Module 6 — Lint before you deploy: the `--Validate` semantic linter (lab)
 
-**Goal:** catch the cross-object errors JSON Schema can't express — a dangling foreign key, an ungated duplicate column, an undefined token, a stale editor schema, a drifted file name — with a single static command that needs no database, no credentials, and no running engine. Read a broken package's findings board, fix each error to green, prove the linter is *semantic* (not dumb), surface a misnamed-file warning that never gates the exit code, clear an induced staleness finding, then wire it in as a CI gate. SQL Server, PostgreSQL, and MySQL.
+**Goal:** catch the cross-object errors JSON Schema can't express — a dangling foreign key, an ungated duplicate column, an undefined token, a stale editor schema, a drifted file name — with a single static command that needs no database, no credentials, and no running engine. Read a broken package's findings board, fix each error to green, prove the linter is *semantic* (not dumb), surface a misnamed-file warning that never gates the exit code, clear an induced staleness finding, then wire it in as a CI gate. SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ## The scenario
 
@@ -12,13 +12,13 @@ Structural validation (Module 3) catches the typo — a missing `DataType`, a mi
 
 - **No sandbox, no database, no credentials.** `--Validate` (and `schematongs --WriteSchemasOnly`, used later) never connect to an engine. This lab is entirely database-free.
 - **The CLI is on your PATH** — `schemaquench --version` answers **2.3.0** or later.
-- Each engine package under `sqlserver/`, `postgres/`, and `mysql/` ships **deliberately broken** — that's the starting point. You'll fix it.
+- Each engine package under `sqlserver/`, `postgres/`, `mysql/`, and `mariadb/` ships **deliberately broken** — that's the starting point. You'll fix it.
 
 > **Path binding note:** if `--SchemaPackagePath:./sqlserver/Package` doesn't bind in your shell, pass the absolute path via the environment instead: `SmithySettings_SchemaPackagePath="$(pwd)/sqlserver/Package" schemaquench --Validate`. Run `schematongs --WriteSchemasOnly` from *inside* a `Package` directory (it defaults to `.`).
 
 ## Scenario 1 — read the board
 
-Run the linter against the broken SQL Server package (swap `sqlserver` for `postgres` / `mysql` — the same three errors reproduce on every engine):
+Run the linter against the broken SQL Server package (swap `sqlserver` for `postgres` / `mysql` / `mariadb` — the same three errors reproduce on every engine):
 
 ```
 schemaquench --Validate --SchemaPackagePath:./sqlserver/Package
@@ -85,7 +85,7 @@ Every finding so far has been an error. `--Validate` also has a warning tier, an
    Exit `0`. The count line reads `0 error(s), 1 warning(s)` — a warning-only board still passes.
 3. Rename the file back to `dbo.OrderItem.json`. This is an induced scenario — the committed package files stay canonical.
 
-Identity lives in the table's *content* (`Schema` / `Name` / `VariantName`), never its filename — a misnamed file still deploys correctly. The canonical name is there for you: it keeps a table's variants sorted together in source control and keeps the filename a reliable pointer to the table inside it. Canonical shape is `<schema>.<table>[.<VariantName>].json`. This scenario is database-free like every other one in this lab, and it works the same on all three engines — on PostgreSQL and MySQL the canonical name is schema-less (`<table>.json`); on SQL Server it keeps the schema segment (`dbo.<table>.json`).
+Identity lives in the table's *content* (`Schema` / `Name` / `VariantName`), never its filename — a misnamed file still deploys correctly. The canonical name is there for you: it keeps a table's variants sorted together in source control and keeps the filename a reliable pointer to the table inside it. Canonical shape is `<schema>.<table>[.<VariantName>].json`. This scenario is database-free like every other one in this lab, and it works the same on all four engines — on PostgreSQL, MySQL, and MariaDB the canonical name is schema-less (`<table>.json`); on SQL Server it keeps the schema segment (`dbo.<table>.json`).
 
 ## Scenario 5 — when your schemas drift
 
@@ -109,8 +109,8 @@ The editor `.json-schemas` that give you red-squiggle validation in your IDE are
 
 ## Cross-platform
 
-The same three-error board reproduces on all three engines. Only the identifier quoting and native type spellings differ (`[dbo]` schema and bracket quoting on SQL Server; lowercase `public` and unquoted lowercase identifiers on PostgreSQL; backtick-quoted, schema-less names on MySQL). On MySQL, foreign-key resolution is **name-only** — there are no schemas within a database — so `SS-FK-002` resolves `Supplier` by bare name.
+The same three-error board reproduces on all four engines. Only the identifier quoting and native type spellings differ (`[dbo]` schema and bracket quoting on SQL Server; lowercase `public` and unquoted lowercase identifiers on PostgreSQL; backtick-quoted, schema-less names on MySQL and MariaDB). On MySQL and MariaDB, foreign-key resolution is **name-only** — there are no schemas within a database — so `SS-FK-002` resolves `Supplier` by bare name.
 
-`SS-FILE-NAME-003`'s canonical name carries the same schema rule: SQL Server keeps it (`dbo.<table>.json`, from the table's `"Schema": "[dbo]"`), while PostgreSQL and MySQL are schema-less (`<table>.json`) — PostgreSQL because these packages leave `Schema` empty and rely on the default `public`, MySQL because it has no schemas within a database at all.
+`SS-FILE-NAME-003`'s canonical name carries the same schema rule: SQL Server keeps it (`dbo.<table>.json`, from the table's `"Schema": "[dbo]"`), while PostgreSQL, MySQL, and MariaDB are schema-less (`<table>.json`) — PostgreSQL because these packages leave `Schema` empty and rely on the default `public`, MySQL and MariaDB because they have no schemas within a database at all.
 
 The finding codes, the switch names, the exit behavior, and the pass/fail semantics are identical everywhere — a naming warning never flips a pass to a fail, on any engine.

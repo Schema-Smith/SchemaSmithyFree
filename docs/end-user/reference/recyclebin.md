@@ -2,6 +2,8 @@
 
 When `DropTablesRemovedFromProduct` is on, a table that disappears from your product definition is gone — a clean drop, no safety net. That's the right call for CI, where you want the database to match the product exactly. In production, though, a plain drop can leave you relying on a full restore to recover data that might still be needed. The recyclebin hooks give you a third path: auto-drops stay on, but a removed table moves into a recyclebin instead of being destroyed. It lives there for a retention window, auto-restores if the table reappears in a later deployment, and gets purged only when the window expires.
 
+> **MariaDB:** Recyclebin on MariaDB works exactly as it does on MySQL — the same schema-less model, the same `CREATE EVENT` cleanup scheduler, and the same hook names and signatures. Throughout this page, wherever a row or note says *MySQL*, it applies to MariaDB as well. MariaDB is its own `Platform: MariaDB` selection in the MySQL family — a separate native package, not the MySQL package retargeted.
+
 ---
 
 ## Two Rollback-Friendly Postures

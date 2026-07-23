@@ -329,6 +329,7 @@ The token resolves to the platform-appropriate binary literal form automatically
 
 - **SQL Server** — `0x89504E47...` (`VARBINARY` literal)
 - **MySQL** — `0x89504E47...` (`BLOB` literal)
+- **MariaDB** — `0x89504E47...` (`BLOB` literal, same hex form as MySQL)
 - **PostgreSQL** — `E'\\x89504E47...'::bytea` (`BYTEA` literal with escape-string + explicit cast)
 
 The same `<*BinaryFile*>` token works across all four engines with no per-environment editing. The resolver reads the file once and emits the correct literal form for the target; your SQL script just sees `{{DefaultLogo}}` land as whatever that engine will accept.

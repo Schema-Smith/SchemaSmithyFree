@@ -19,6 +19,7 @@ function Invoke-SqlFile {
         'sqlserver' { docker cp $File learn-sqlserver:/tmp/seed.sql | Out-Null; docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d $Db -i /tmp/seed.sql | Out-Null }
         'postgres'  { $sql | docker exec -i learn-postgres psql -U postgres -d $Db -v ON_ERROR_STOP=1 | Out-Null }
         'mysql'     { $sql | docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd $Db 2>$null | Out-Null }
+        'mariadb'   { $sql | docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd $Db 2>$null | Out-Null }
     }
 }
 
@@ -29,6 +30,7 @@ function Initialize-Db {
         'sqlserver' { docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -Q "IF DB_ID('$Db') IS NULL CREATE DATABASE [$Db]" 2>$null | Out-Null }
         'postgres'  { docker exec learn-postgres psql -U postgres -d postgres -c "CREATE DATABASE $Db" 2>$null | Out-Null }
         'mysql'     { docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS ``$Db``" 2>$null | Out-Null }
+        'mariadb'   { docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS ``$Db``" 2>$null | Out-Null }
     }
     Invoke-SqlFile $Engine $Db (Join-Path $PSScriptRoot "seed/$Engine/shop.sql")
     $out = ''
@@ -36,6 +38,7 @@ function Initialize-Db {
         'sqlserver' { $out = docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -d $Db -Q "SELECT 'READY' WHERE OBJECT_ID('dbo.Customer') IS NOT NULL" 2>$null }
         'postgres'  { $out = docker exec learn-postgres psql -U postgres -d $Db -tAc "SELECT 1 FROM information_schema.tables WHERE table_name='customer'" 2>$null }
         'mysql'     { $out = docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema='$Db' AND table_name='Customer'" 2>$null }
+        'mariadb'   { $out = docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema='$Db' AND table_name='Customer'" 2>$null }
     }
     if (($out -join '') -match 'READY|1') { Write-Host 'PASS' } else { Write-Host 'FAIL'; $script:failed = $true }
 }
@@ -57,6 +60,8 @@ function Set-DatafixRole {
                       $out = docker exec learn-postgres psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='datafix_user'" 2>$null }
         'mysql'     { $sql | docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd 2>$null | Out-Null
                       $out = docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM mysql.user WHERE user='datafix_user'" 2>$null }
+        'mariadb'   { $sql | docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd 2>$null | Out-Null
+                      $out = docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM mysql.user WHERE user='datafix_user'" 2>$null }
     }
     if (($out -join '') -match 'READY|1') { Write-Host 'PASS' } else { Write-Host 'FAIL'; $script:failed = $true }
 }
@@ -75,9 +80,13 @@ Write-Host 'MySQL'
 foreach ($db in $tenants) { Initialize-Db 'mysql' $db }
 Set-DatafixRole 'mysql'
 
+Write-Host 'MariaDB'
+foreach ($db in $tenants) { Initialize-Db 'mariadb' $db }
+Set-DatafixRole 'mariadb'
+
 Write-Host ''
 if (-not $failed) {
-    Write-Host 'All 9 databases are seeded and the datafix_user role is created (3 SQL Server, 3 PostgreSQL, 3 MySQL).'
+    Write-Host 'All 12 databases are seeded and the datafix_user role is created (3 SQL Server, 3 PostgreSQL, 3 MySQL, 3 MariaDB).'
     exit 0
 } else {
     Write-Host 'One or more databases could not be seeded. Is the sandbox up? See Demos/Learn/README.md.'

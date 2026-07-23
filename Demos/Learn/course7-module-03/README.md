@@ -4,14 +4,14 @@ Goal: onboard a brand-new tenant in a **single deploy**. In Module 1 you ran `CR
 and let discovery find it. Here the config roster names a tenant that *doesn't exist yet* —
 `fleet_tenant_006` — and `CreateIfMissing: true` makes SchemaSmith stand the database up itself, on the
 admin connection, then forge the `Shop` schema into it. Safe by default, dry-runnable, idempotent, and
-permission-gated. All three engines.
+permission-gated. All four engines.
 
 This builds on Module 2 — `CreateIfMissing` is a flag on the same `TemplateTargets` roster. Do Modules 1
 and 2 first.
 
 ## Before you start
 
-- The [sandbox](../docker) is up and verified (all three engines healthy).
+- The [sandbox](../docker) is up and verified (all four engines healthy).
 - The fleet exists — run [`../course7-setup`](../course7-setup) once (creates `fleet_tenant_001`…`005`).
 - `fleet_tenant_006` does **not** exist yet (that's the point). If a Module 1 run left it, drop it first.
 - The CLI is on your PATH — `schemaquench --version` answers **2.3.0** or later.
@@ -40,8 +40,8 @@ schemaquench --ConfigFile:quench.settings.skip.json
 ```
 
 `001` deploys; `006` is skipped with that line and **not created**. The default never conjures a database
-you didn't ask for. (On PostgreSQL and MySQL the line is identical but for the host prefix — `[localhost]`
-without a port.)
+you didn't ask for. (On PostgreSQL, MySQL, and MariaDB the line is identical but for the host prefix —
+`[localhost]` without a port.)
 
 ## Step 2: Dry-run before you let it create anything
 
@@ -118,10 +118,16 @@ differs by engine:
 | PostgreSQL | `postgres` | `CREATEDB` | `42501: permission denied to create database` |
 | MySQL | `information_schema` | `CREATE` | `Access denied … to database 'fleet_tenant_006'` |
 
-The message shape is identical on all three engines — only the admin-database name and the underlying
-error differ (the last two columns above). On PostgreSQL you'll see `… admin database (postgres).
-Underlying error: 42501: permission denied to create database`; on MySQL `… admin database
-(information_schema). Underlying error: Access denied … to database 'fleet_tenant_006'`.
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native
+> package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics
+> (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for
+> you.*
+
+The message shape is identical on all four engines — only the admin-database name and the underlying
+error differ (the last two columns above, plus MariaDB which mirrors MySQL's shape). On PostgreSQL
+you'll see `… admin database (postgres). Underlying error: 42501: permission denied to create database`;
+on MySQL and MariaDB `… admin database (information_schema). Underlying error: Access denied … to
+database 'fleet_tenant_006'`.
 
 A reader/writer principal without the create right lands here — with a message that names the database and
 the missing privilege, not a mystery failure. The deploy account needs rights for *every* action the tool
@@ -129,12 +135,13 @@ takes, reads included: it validates the server by querying the catalog before it
 an account too restricted to even read the fleet fails at that earlier gate. The principal shown here can
 read the fleet but can't create — the realistic reader-without-`CREATE` case.
 
-## Step 6: Do it on PostgreSQL and MySQL
+## Step 6: Do it on PostgreSQL, MySQL, and MariaDB
 
-Same five steps in `postgres/` and `mysql/`. The `CreateIfMissing` config is identical on all three
-engines; only the create DDL SchemaSmith emits differs (`[fleet_tenant_006]` on SQL Server,
-`"fleet_tenant_006"` on PostgreSQL, `` `fleet_tenant_006` `` on MySQL). Each one skips by default,
-dry-runs, provisions + forges in one run, re-runs clean, and fails fast without the create grant.
+Same five steps in `postgres/`, `mysql/`, and `mariadb/`. The `CreateIfMissing` config is identical on
+all four engines; only the create DDL SchemaSmith emits differs (`[fleet_tenant_006]` on SQL Server,
+`"fleet_tenant_006"` on PostgreSQL, `` `fleet_tenant_006` `` on MySQL and MariaDB). Each one skips by
+default, dry-runs, provisions + forges in one run, re-runs clean, and fails fast without the create
+grant.
 
 ## Cleanup
 
@@ -145,6 +152,7 @@ docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 
   -Q "ALTER DATABASE [fleet_tenant_006] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [fleet_tenant_006]"
 docker exec learn-postgres psql -U postgres -c "DROP DATABASE IF EXISTS fleet_tenant_006"
 docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "DROP DATABASE IF EXISTS fleet_tenant_006"
+docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "DROP DATABASE IF EXISTS fleet_tenant_006"
 ```
 
 ## The principle

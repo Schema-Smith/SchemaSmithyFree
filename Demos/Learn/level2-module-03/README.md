@@ -8,12 +8,12 @@ granularities**. You'll deploy `OrderService` with `dev.settings.json` and `prod
 2. **Folder-level `ShouldApplyExpression`** — a `TestData` folder that runs only in Development.
 3. **Per-script sentinel** — a backfill migration that decides at runtime to skip itself.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package/` plus
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the full `Package/` plus
 `dev.settings.json` and `prod.settings.json`.
 
 ## Before you start
 
-- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all three engines `PASS`).
+- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all four engines `PASS`).
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later
   — folder-level `ShouldApplyExpression` token resolution shipped in v2.1.0).
 
@@ -100,6 +100,8 @@ shown by the per-deploy log and the index appearing only after the prod run.)
 | Folder gate | `SELECT CASE WHEN … THEN 1 ELSE 0 END` | same | same |
 | Sentinel raise | `RAISERROR('SCHEMASMITH: SHOULD NOT APPLY', 16, 1)` (sev ≥ 11; add `RETURN`) | `RAISE EXCEPTION 'SCHEMASMITH: SHOULD NOT APPLY'` in a `DO $$ … $$` block | `SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SCHEMASMITH: SHOULD NOT APPLY'` |
 | Runtime branching | inline in the batch | a `DO` block | inside a short stored routine — MySQL can't branch in a plain batch, so the backfill creates a throwaway procedure, `CALL`s it, and drops it |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 The three mechanisms are identical across engines; only the dialect's way of writing a predicate, a
 scalar SELECT, and a conditional raise differs.

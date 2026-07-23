@@ -1,12 +1,12 @@
 # Course 7, Module 6 — Reading the deployment summary report (lab)
 
-Goal: roll a real, mixed change across the whole fleet — a new table, a new unique index, a widened column, a new column, a dropped index, and a re-applied view — with one tenant pre-seeded to fail, then read the run's structured receipt end to end. You'll pull apart `SchemaQuench - Summary.json`: the run verdict, every target's outcome, where the milliseconds went, the failure as data, and — the centerpiece — the verified `objectChanges` audit. SQL Server, then PostgreSQL and MySQL.
+Goal: roll a real, mixed change across the whole fleet — a new table, a new unique index, a widened column, a new column, a dropped index, and a re-applied view — with one tenant pre-seeded to fail, then read the run's structured receipt end to end. You'll pull apart `SchemaQuench - Summary.json`: the run verdict, every target's outcome, where the milliseconds went, the failure as data, and — the centerpiece — the verified `objectChanges` audit. SQL Server, then PostgreSQL, MySQL, and MariaDB.
 
 This is the reporting capstone of Course 7. Module 5 taught you to *hunt* a failure through `Failures.log`, checkpoints, and artifacts. Module 6 opens the one structured file that names every target's fate and every verified change in a single read — the file a dashboard or a release gate parses without a human scrolling logs.
 
 ## Before you start
 
-- The [sandbox](../docker) is up and verified (all three engines healthy).
+- The [sandbox](../docker) is up and verified (all four engines healthy).
 - The fleet exists — run [`../course7-setup`](../course7-setup) once if you haven't already (`fleet_tenant_001`–`005` on every engine).
 - **The CLI is on your PATH** — `schemaquench --version` answers **2.3.0** or later.
 
@@ -73,9 +73,9 @@ schemaquench --ConfigFile:quench.settings.after.json --report ./out/deploy-summa
 
 Exit `0`, `outcome: "Success"`, empty `failures[]`, and `objectChanges` now shows only what this second run changed — the structure already converged, so the counts are near-empty except the view, which re-runs every time (`scriptsRan`). That contrast — a busy first run, a quiet idempotent second — is the audit telling the truth about what each run actually did.
 
-## Step 6: Do it on PostgreSQL and MySQL
+## Step 6: Do it on PostgreSQL, MySQL, and MariaDB
 
-Same steps in `postgres/` and `mysql/`. The report shape is identical; only the dialect in the names and errors changes. Stage the drift with each engine's client:
+Same steps in `postgres/`, `mysql/`, and `mariadb/`. The report shape is identical; only the dialect in the names and errors changes. Stage the drift with each engine's client:
 
 **PostgreSQL:**
 
@@ -89,6 +89,12 @@ docker exec -i learn-postgres psql -U postgres -d fleet_tenant_003 < postgres/dr
 docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd fleet_tenant_003 < mysql/drift-tenant-003.sql
 ```
 
+**MariaDB:**
+
+```bash
+docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd fleet_tenant_003 < mariadb/drift-tenant-003.sql
+```
+
 Then run the `after` deploy from that engine's folder with the same `--report` switch, and read its `objectChanges`. The counts move a little per engine — the phase where the failing tenant dies, and how each engine orders its object-script slot, shift a bucket or two — which is exactly the point: every run's summary is that run's own certified record, not a fixed script.
 
 ## Cleanup
@@ -99,6 +105,7 @@ The report and artifacts live under each engine folder — remove them when you'
 rm -rf sqlserver/out sqlserver/artifacts
 rm -rf postgres/out postgres/artifacts
 rm -rf mysql/out mysql/artifacts
+rm -rf mariadb/out mariadb/artifacts
 ```
 
 To return the fleet to a clean slate for another module, re-run [`../course7-setup`](../course7-setup) after dropping the tenant databases, or deploy the `baseline/` package again.

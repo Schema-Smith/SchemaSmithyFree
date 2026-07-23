@@ -1,6 +1,6 @@
 # Course 4, Recipe 7 — Conditional / multi-delivery data delivery (lab)
 
-**Goal:** ship a table's reference data *conditionally* — different rows to different targets from one package — by gating each `DataDelivery` with its own `ShouldApplyExpression`. One deploy fans out to a `_dev` database and a `_main` database, and the gates decide what data lands where: dev-only fixtures, a rich-vs-lean catalog per environment, and additive reference slices. SQL Server, PostgreSQL, and MySQL.
+**Goal:** ship a table's reference data *conditionally* — different rows to different targets from one package — by gating each `DataDelivery` with its own `ShouldApplyExpression`. One deploy fans out to a `_dev` database and a `_main` database, and the gates decide what data lands where: dev-only fixtures, a rich-vs-lean catalog per environment, and additive reference slices. SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ## The scenario
 
@@ -15,12 +15,16 @@ And `DataDelivery` is now either a single object (as before) or an **array** of 
 
 ## Before you start
 
-- **The sandbox is up.** SQL Server (`localhost,11433`), PostgreSQL (`localhost:15432`), MySQL (`localhost:13306`), all `…/Learn!Passw0rd`.
+- **The sandbox is up.** SQL Server (`localhost,11433`), PostgreSQL (`localhost:15432`), MySQL (`localhost:13306`), MariaDB (`localhost:13307`), all `…/Learn!Passw0rd`.
 - **The CLI is on your PATH** — `schemaquench --version` answers **2.3.0** or later.
 - **Two databases per engine.** The lab creates `cookbook_r7_dev` and `cookbook_r7_main`; the template's `DatabaseIdentificationScript` targets both, so **one quench deploys to both** and the gates steer the data. Create them first (SQL Server shown):
   ```sql
   CREATE DATABASE cookbook_r7_dev;
   CREATE DATABASE cookbook_r7_main;
+  ```
+  MariaDB:
+  ```bash
+  docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS cookbook_r7_dev; CREATE DATABASE IF NOT EXISTS cookbook_r7_main"
   ```
 
 ## Deploy once, watch the gates decide
@@ -95,7 +99,7 @@ On `cookbook_r7_main` both slices deliver — three core (GLOBAL) rows plus two 
 
 **Prove the partitioning.** Deploy the five rows, remove `HELD` from `dbo.StatusCode.core.tabledata`, and redeploy — `HELD` is deleted (it fell out of the GLOBAL source) while `EMEA` and `APAC` stay put (a different partition the core slice can't reach). Full-sync gives each slice authority; the disjoint filter keeps that authority in its lane.
 
-> **Portability.** The `MergeFilter` alias is `Target` (the row already in the table) on all three engines — `Target.Region` on SQL Server and MySQL, `"Target".region` (PostgreSQL folds unquoted names to lowercase). Full-sync delivery uses a partitioned `MERGE`; PostgreSQL handles it on 16 as well as 17 (this lab's sandbox runs 16.13).
+> **Portability.** The `MergeFilter` alias is `Target` (the row already in the table) on all four engines — `Target.Region` on SQL Server, MySQL, and MariaDB, `"Target".region` (PostgreSQL folds unquoted names to lowercase). Full-sync delivery uses a partitioned `MERGE`; PostgreSQL handles it on 16 as well as 17 (this lab's sandbox runs 16.13).
 
 ## One rule and one caveat
 
@@ -104,11 +108,13 @@ On `cookbook_r7_main` both slices deliver — three core (GLOBAL) rows plus two 
 
 ## Cross-platform
 
-The gate mechanism is identical on all three engines; only the "which database am I?" predicate is native:
+The gate mechanism is identical on all four engines; only the "which database am I?" predicate is native:
 
 | | SQL Server | PostgreSQL | MySQL |
 | --- | --- | --- | --- |
 | Current-database predicate | `DB_NAME()` | `current_database()` | `DATABASE()` |
 | Identifier form | `[dbo]`, bracketed | lowercase `public` | backtick-quoted, schema-less |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.* MariaDB's current-database predicate is `DATABASE()`, same as MySQL.
 
 `ShouldApplyExpression`, `VariantName`, the object-or-array shape, the all-gates-apply semantics, and the skip logging are the same everywhere — only the predicate dialect changes.

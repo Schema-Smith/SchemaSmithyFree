@@ -44,5 +44,5 @@ WHERE dd.schema_name = DATABASE() AND NOT EXISTS (
            t VARCHAR(128) PATH '$.Name',
            NESTED PATH '$.Columns[*]' COLUMNS ( c VARCHAR(128) PATH '$.Name' )
          )) AS m
-  WHERE REPLACE(m.t, '`', '') = dd.table_name AND REPLACE(m.c, '`', '') = dd.column_name
+  WHERE REPLACE(m.t, '`', '') COLLATE utf8mb4_general_ci = dd.table_name AND REPLACE(m.c, '`', '') COLLATE utf8mb4_general_ci = dd.column_name
 );

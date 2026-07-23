@@ -4,7 +4,7 @@ One induced failure on one database (`diag_blackbox`), read end to end. Module 0
 
 ## Prerequisites
 
-- The three-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
+- The four-engine sandbox is up (`Demos/Learn/docker`) — see [`../README.md`](../README.md).
 - `schemaquench --version` answers **2.3.0** or later on your PATH. New to the CLI? [Course 1, Module 1](https://learn.schemasmith.com/01-install-connect/).
 
 ## Step 1 — create the sandbox database
@@ -17,7 +17,7 @@ Prints `PASS` per engine once `diag_blackbox` exists. Re-running is safe (guarde
 ## Step 2 — deploy the baseline (green)
 
 ```
-cd sqlserver            # or postgres, or mysql
+cd sqlserver            # or postgres, mysql, or mariadb
 schemaquench --ConfigFile:quench.settings.baseline.json --LogPath:"$PWD/logs"
 ```
 
@@ -52,6 +52,9 @@ Context (last 25 lines):   [trail abbreviated here — the full 25-line context 
 | **SQL Server** | `The CREATE UNIQUE INDEX statement terminated because a duplicate key was found for the object name 'dbo.Customer' and the index name 'IX_Customer_Email'. The duplicate key value is (ana.f@shop.test).` (error `1505`) |
 | **PostgreSQL** | `23505: could not create unique index "ix_customer_email"` |
 | **MySQL** | `Duplicate entry 'ana.f@shop.test' for key 'Customer.IX_Customer_Email'` (error `1062`) |
+| **MariaDB** | `Duplicate entry 'ana.f@shop.test' for key 'Customer.IX_Customer_Email'` (error `1062`) |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 The line just above it points at the artifact: `Resolved SQL written to: ./artifacts/SchemaQuench - Quench Indexes ….sql`. That file is **copy-runnable** — a single proc call:
 
@@ -59,7 +62,7 @@ The line just above it points at the artifact: `Resolved SQL written to: ./artif
 EXEC [diag_blackbox].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = 'Shop', @WhatIf = 0
 ```
 
-Paste it into your client and the phase fails identically, by hand — that's your reproduction. There's no `>>> FAILING BATCH` marker here; that's a *user-script* thing (Module 4). A mechanical phase like this one puts the error in `Progress.log` and hands you the one-line proc call. (On SQL Server the error also lands in `Errors.log`; on PostgreSQL and MySQL that file stays empty — `Progress.log` is the cross-engine place to read.)
+Paste it into your client and the phase fails identically, by hand — that's your reproduction. There's no `>>> FAILING BATCH` marker here; that's a *user-script* thing (Module 4). A mechanical phase like this one puts the error in `Progress.log` and hands you the one-line proc call. (On SQL Server the error also lands in `Errors.log`; on PostgreSQL, MySQL, and MariaDB that file stays empty — `Progress.log` is the cross-engine place to read.)
 
 **Name the phase:** `Quenching indexes and constraints`. That's what turns a wall of SQL into "the unique index couldn't be created because the data has duplicates." And notice `checkpoints/` — the failed run **left a checkpoint** behind (a green run deletes it; a failure keeps it).
 
@@ -68,7 +71,7 @@ Paste it into your client and the phase fails identically, by hand — that's yo
 The index definition is right; the *data* isn't unique yet. Give the duplicate its own address:
 
 ```sql
--- SQL Server (PG / MySQL analogous)
+-- SQL Server (PG / MySQL / MariaDB analogous)
 UPDATE dbo.Customer SET Email = 'ana.f7@shop.test' WHERE CustomerId = 7;
 ```
 
@@ -78,7 +81,7 @@ Then redeploy the same change:
 schemaquench --ConfigFile:quench.settings.after.json --LogPath:"$PWD/logs"
 ```
 
-Green on all three. The unique index takes, and the leftover checkpoint is **deleted** on the way through — Module 0's punchline, confirmed again: a green run leaves no checkpoint.
+Green on all four. The unique index takes, and the leftover checkpoint is **deleted** on the way through — Module 0's punchline, confirmed again: a green run leaves no checkpoint.
 
 ## What each folder is
 

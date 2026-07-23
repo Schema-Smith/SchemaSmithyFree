@@ -2,7 +2,7 @@
 
 These scripts stand up the **tenant fleet** that the Course 7 labs deploy into: five **empty**
 databases per engine — `fleet_tenant_001` through `fleet_tenant_005` — on SQL Server, PostgreSQL,
-and MySQL (15 databases in all).
+MySQL, and MariaDB (20 databases in all).
 
 Nothing is seeded into them. The Module 1 deploy is what forges the `Shop` schema (`Customer`,
 `Product`, `SalesOrder`, `OrderItem`) into every tenant in a single fan-out run — that is the whole
@@ -44,6 +44,7 @@ guarded, so setup is idempotent.
 | [`seed/sqlserver/01_create_tenant_databases.sql`](seed/sqlserver/01_create_tenant_databases.sql) | `CREATE DATABASE fleet_tenant_001..005` (guarded on `DB_ID`). |
 | [`seed/postgres/01_create_tenant_databases.sql`](seed/postgres/01_create_tenant_databases.sql) | Generates + `\gexec`s the missing `CREATE DATABASE` statements (PostgreSQL has no `IF NOT EXISTS` for databases). |
 | [`seed/mysql/01_create_tenant_databases.sql`](seed/mysql/01_create_tenant_databases.sql) | `CREATE DATABASE IF NOT EXISTS fleet_tenant_001..005`. |
+| [`seed/mariadb/01_create_tenant_databases.sql`](seed/mariadb/01_create_tenant_databases.sql) | `CREATE DATABASE IF NOT EXISTS fleet_tenant_001..005` (MariaDB native package). |
 
 ## Verify by hand
 
@@ -61,6 +62,10 @@ docker exec learn-postgres psql -U postgres -c \
 
 # MySQL
 docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e \
+  "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'fleet\_tenant\_%' ORDER BY schema_name"
+
+# MariaDB
+docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e \
   "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'fleet\_tenant\_%' ORDER BY schema_name"
 ```
 

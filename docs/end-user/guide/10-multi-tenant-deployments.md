@@ -286,7 +286,7 @@ Both patterns deploy from the same schema package format. The choice is a databa
 | **Backup granularity** | Per-tenant backup and point-in-time restore | Database-level backup only |
 | **Deployment blast radius** | Bounded to one tenant | Full database on failure (mitigated by `ContinueOnSchemaFailure`) |
 | **Tenant onboarding cost** | Provision a new database | Create a schema and a row |
-| **MySQL support** | Yes | No -- MySQL has no schema-inside-database concept |
+| **MySQL / MariaDB support** | Yes | No -- MySQL and MariaDB have no schema-inside-database concept |
 | **Best fit when** | Regulatory isolation required; per-tenant SLAs; SQL Server licensing is per-instance | High tenant count; per-tenant license cost is prohibitive; operational simplicity matters |
 
 Neither pattern is better in the abstract. The four tradeoffs -- license cost, operational isolation, backup granularity, blast radius -- usually pick the winner before you consult any other factor.

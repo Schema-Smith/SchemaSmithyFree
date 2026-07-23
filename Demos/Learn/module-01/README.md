@@ -68,6 +68,8 @@ Run the other engine folders the same way. Same flow, different connection detai
 | MySQL      | `mysql/`     | `localhost` + port `13306`          | `root`     |
 | MariaDB    | `mariadb/`   | `localhost` + port `13307`          | `root`     |
 
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
+
 ## What you just proved
 
 Two things have to be true before SchemaQuench can deploy: the CLI is **installed and on your

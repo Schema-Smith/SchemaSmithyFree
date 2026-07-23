@@ -20,13 +20,13 @@ DBA-adjacent concerns in their own product. The three-product shape you're model
 **common + per-server-type + an adjacent DBA product** — this lab builds the first two; the third is
 the same move again.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) has both products, each with its own
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) has both products, each with its own
 `Package/` and `deploy.settings.json`.
 
 ## Before you start
 
 - The [sandbox](../docker) is up (`docker compose up -d`) and verified (`./verify-sandbox.sh` /
-  `.\verify-sandbox.ps1` — all three engines `PASS`).
+  `.\verify-sandbox.ps1` — all four engines `PASS`).
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later).
 
 ## Step 1: Look at the two products
@@ -160,8 +160,10 @@ deploying somewhere it shouldn't.
 | PostgreSQL | `public`, `VARCHAR`      | `pk_currency`           | `Create new table public.Currency`  |
 | MySQL      | no schema, backticks, `VARCHAR` | PK index named `PRIMARY` | ``Create table `Currency` ``  |
 
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
+
 These are the same dialect differences you met in Module 2 — the product-boundary lesson is identical
-across all three engines.
+across all four engines.
 
 ## The principle
 

@@ -8,7 +8,7 @@ second declaration to keep in sync — the generated object is computed from the
 This is different from cataloging your metadata (Course 2 reads the model into a table of *rows about* the
 schema). Here the script **emits schema** — `CREATE TABLE`, `ALTER TABLE`, `INSERT` — built from the model.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships the full `Package/` plus `deploy.settings.json`,
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the full `Package/` plus `deploy.settings.json`,
 all targeting `cookbook_r5`.
 
 ## Before you start
@@ -82,8 +82,8 @@ script it drives is **index-aware**. This package declares a `vProductSummary` v
 - **PostgreSQL** (`Refresh Materialized View [ALWAYS].sql`) — emits `REFRESH MATERIALIZED VIEW CONCURRENTLY`
   when the model declares a unique index (Postgres *requires* one for a concurrent refresh), or a plain
   `REFRESH` when it doesn't. The refresh mode is computed from the declared index model, so it can't drift.
-- **MySQL** — no indexed or materialized view type, so no view-model token and no view generator here (the
-  `Product` snapshot above still applies).
+- **MySQL and MariaDB** — neither has an indexed or materialized view type, so no view-model token and no
+  view generator here (the `Product` snapshot above still applies).
 
 ```json
 // SQL Server  — Templates/Main/Template.json
@@ -112,7 +112,9 @@ docker exec learn-postgres psql -U postgres -d cookbook_r5 -tAc "SELECT matviewn
 | Run generated DDL | `EXEC(@sql)` | `EXECUTE` in a `DO` block | `PREPARE` / `EXECUTE` |
 | Snapshot timestamp | `SYSUTCDATETIME()` | `clock_timestamp()` | `CURRENT_TIMESTAMP(6)` |
 
-Same shape on all three — read the model as JSON, build `CREATE`/`ALTER`/`INSERT` from the column list, run
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
+
+Same shape on all four — read the model as JSON, build `CREATE`/`ALTER`/`INSERT` from the column list, run
 it. Only the dialect's JSON-shredding and dynamic-execution syntax differ.
 
 ## The principle

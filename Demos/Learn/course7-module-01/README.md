@@ -4,21 +4,21 @@ Goal: deploy one product schema — the four-table `Shop` — across a **fleet**
 single run. You won't name the databases in the package. Instead the template's
 `DatabaseIdentificationScript` asks each engine's catalog *"who's in the fleet?"* and SchemaSmith forges
 the schema into every tenant it finds. Then you'll onboard a brand-new tenant without touching the
-package at all. All three engines.
+package at all. All four engines.
 
 This is the **database axis** of fan-out — many databases of the same engine. (Course 2, Module 2
 covered the *schema* axis — many schemas inside one database. Different axis; don't confuse them.)
 
 ## Before you start
 
-- The [sandbox](../docker) is up and verified (all three engines healthy).
+- The [sandbox](../docker) is up and verified (all four engines healthy).
 - The fleet exists — run [`../course7-setup`](../course7-setup) once (creates `fleet_tenant_001`…`005`,
   **empty**, on each engine).
 - The CLI is on your PATH — `schemaquench --version` answers **2.3.0** or later. New to the CLI?
   Course 1, Module 1 walks the install.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships a `quench.settings.json` (the deploy
-config) and the `Package/` — the same `Shop` package, three native forms.
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships a `quench.settings.json`
+(the deploy config) and the `Package/` — the same `Shop` package, four native forms.
 
 ## Step 1: See who's in the fleet
 
@@ -101,15 +101,20 @@ Discovery now returns **six**. Only `fleet_tenant_006` is forged; `001`–`005` 
 the catalog, so onboarding is a `CREATE DATABASE`, not a package edit. (Clean up with
 `DROP DATABASE [fleet_tenant_006]` when you're done, to return to the five-tenant baseline.)
 
-## Step 5: Do it on PostgreSQL and MySQL
+## Step 5: Do it on PostgreSQL, MySQL, and MariaDB
 
-Same five steps in `postgres/` and `mysql/`. The package is native per engine, and only the catalog the
-`DatabaseIdentificationScript` reads differs:
+Same five steps in `postgres/`, `mysql/`, and `mariadb/`. The package is native per engine, and only the
+catalog the `DatabaseIdentificationScript` reads differs:
 
 | | SQL Server | PostgreSQL | MySQL |
 | --- | --- | --- | --- |
 | Catalog | `sys.databases` | `pg_database` | `information_schema.schemata` |
 | Discovery predicate | `[Name] LIKE 'fleet[_]tenant[_]%'` | `datname LIKE 'fleet\_tenant\_%'` | `SCHEMA_NAME LIKE 'fleet\_tenant\_%'` |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native
+> package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics
+> (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for
+> you.*
 
 Each one fans the `Shop` schema across all five tenants, re-runs to a clean no-op, and onboards a sixth
 the moment its database exists.

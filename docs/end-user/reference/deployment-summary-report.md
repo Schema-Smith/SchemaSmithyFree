@@ -56,7 +56,7 @@ The JSON is the frozen contract: camelCase keys, enum values as their names, ind
   "toolVersion": "2.2.0.0",
   "run": {
     "product": "Northwind",
-    "platform": "SqlServer",        // SqlServer | PostgreSQL | MySQL
+    "platform": "SqlServer",        // SqlServer | PostgreSQL | MySQL | MariaDb
     "startedUtc": "2026-07-09T14:03:11.204Z",
     "finishedUtc": "2026-07-09T14:03:47.881Z",
     "durationMs": 36677,            // run wall-clock

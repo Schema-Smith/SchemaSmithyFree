@@ -3,20 +3,20 @@
 Goal: take a database that **Liquibase** built — shop schema plus `DATABASECHANGELOG` and
 `DATABASECHANGELOGLOCK` — and move it to SchemaSmith with **extract-and-go**. You'll cast the live
 database to declarative files, leave both Liquibase ledgers behind, and quench to a clean no-op that
-proves the cast is faithful. All three engines.
+proves the cast is faithful. All four engines.
 
 You do **not** run Liquibase. The `before/` folder shows a real Liquibase project for reference; the
 setup already applied its end state to `shop_from_liquibase` on each engine.
 
 ## Before you start
 
-- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all three engines `PASS`).
+- The [sandbox](../docker) is up (`docker compose up -d`) and verified (all four engines `PASS`).
 - The Course 5 databases exist — run [`../course5-setup`](../course5-setup) once (creates and seeds
   `shop_from_liquibase`, among others).
 - The CLI is on your PATH (`schematongs --version` and `schemaquench --version` answer). New to the
   CLI? Course 1, Module 1 walks the install.
 
-Each engine folder (`sqlserver/`, `postgres/`, `mysql/`) ships a `SchemaTongs.settings.json` (the
+Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships a `SchemaTongs.settings.json` (the
 extract config), a `quench.settings.json` (the deploy config), and the `Package/` this lab produced —
 so you can diff your own extract against it.
 
@@ -72,15 +72,17 @@ docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost 
 # → DATABASECHANGELOG, DATABASECHANGELOGLOCK  (left exactly where they were)
 ```
 
-## Step 4: Do it on PostgreSQL and MySQL
+## Step 4: Do it on PostgreSQL, MySQL, and MariaDB
 
-Same three steps in `postgres/` and `mysql/`. The `before/` Liquibase changelog is engine-agnostic XML
-— the same changelog drives all three — and the sandbox databases were seeded to the identical end
-state, so the extract works the same on each. Only the whitelist's dialect differs:
+Same three steps in `postgres/`, `mysql/`, and `mariadb/`. The `before/` Liquibase changelog is
+engine-agnostic XML — the same changelog drives all four — and the sandbox databases were seeded to
+the identical end state, so the extract works the same on each. Only the whitelist's dialect differs:
 
-| | SQL Server | PostgreSQL | MySQL |
-| --- | --- | --- | --- |
-| `ObjectList` | `dbo.Customer,…` | `public.customer,…` | `Customer,…` |
+| | SQL Server | PostgreSQL | MySQL | MariaDB |
+| --- | --- | --- | --- | --- |
+| `ObjectList` | `dbo.Customer,…` | `public.customer,…` | `Customer,…` | `Customer,…` |
+
+> *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 
 Each one extracts four tables, leaves both ledgers behind, and quenches to a clean no-op.
 

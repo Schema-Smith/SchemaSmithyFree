@@ -24,6 +24,11 @@ function Confirm-Db {
             $out = docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$Db'" 2>$null
             $ok = (($out -join '') -match '1')
         }
+        'mariadb' {
+            docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS ``$Db``" 2>$null | Out-Null
+            $out = docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$Db'" 2>$null
+            $ok = (($out -join '') -match '1')
+        }
     }
     if ($ok) { Write-Host 'PASS' } else { Write-Host 'FAIL'; $script:failed = $true }
 }
@@ -37,9 +42,12 @@ foreach ($env in @('dev', 'staging', 'prod')) { Confirm-Db 'postgres' "ordersser
 Write-Host 'MySQL'
 foreach ($env in @('dev', 'staging', 'prod')) { Confirm-Db 'mysql' "ordersservice_$env" }
 
+Write-Host 'MariaDB'
+foreach ($env in @('dev', 'staging', 'prod')) { Confirm-Db 'mariadb' "ordersservice_$env" }
+
 Write-Host ''
 if (-not $failed) {
-    Write-Host 'All nine databases are ready.'
+    Write-Host 'All twelve databases are ready.'
     exit 0
 } else {
     Write-Host 'One or more databases could not be created. Is the sandbox up? See Demos/Learn/README.md.'

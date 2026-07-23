@@ -18,6 +18,7 @@ function Invoke-Seed {
         'sqlserver' { docker cp $file learn-sqlserver:/tmp/seed.sql | Out-Null; docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -i /tmp/seed.sql | Out-Null }
         'postgres'  { docker cp $file learn-postgres:/tmp/seed.sql | Out-Null; docker exec learn-postgres psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/seed.sql | Out-Null }
         'mysql'     { docker cp $file learn-mysql:/tmp/seed.sql | Out-Null; docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e 'source /tmp/seed.sql' 2>$null | Out-Null }
+        'mariadb'   { docker cp $file learn-mariadb:/tmp/seed.sql | Out-Null; docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e 'source /tmp/seed.sql' 2>$null | Out-Null }
     }
 }
 
@@ -27,6 +28,7 @@ function Get-BlackboxCount {
         'sqlserver' { (docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.databases WHERE name = 'diag_blackbox'" 2>$null).Trim() }
         'postgres'  { (docker exec learn-postgres psql -U postgres -tAc "SELECT COUNT(*) FROM pg_database WHERE datname = 'diag_blackbox'" 2>$null).Trim() }
         'mysql'     { (docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'diag_blackbox'" 2>$null).Trim() }
+        'mariadb'   { (docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'diag_blackbox'" 2>$null).Trim() }
     }
 }
 
@@ -42,10 +44,11 @@ function Initialize-Engine {
 Initialize-Engine 'sqlserver' 'SQL Server'
 Initialize-Engine 'postgres'  'PostgreSQL'
 Initialize-Engine 'mysql'     'MySQL'
+Initialize-Engine 'mariadb'   'MariaDB'
 
 Write-Host ''
 if (-not $failed) {
-    Write-Host 'black-box sandbox database ready on all 3 engines — empty, ready for schema deploy.'
+    Write-Host 'black-box sandbox database ready on all 4 engines — empty, ready for schema deploy.'
     exit 0
 } else {
     Write-Host 'One or more engines could not be set up. Is the sandbox up? See Demos/Learn/README.md.'
