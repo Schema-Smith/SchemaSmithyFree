@@ -2,7 +2,7 @@
 
 The [Quick Start](02-quick-start.md) walked you through the full cycle: cast, review, quench, change, redeploy. This chapter explains the mental model behind what you just did, so the patterns make sense as your schema packages grow more complex.
 
-Think of this as the "why it works" behind the "how it works." Everything here applies to **SQL Server**, **PostgreSQL**, and **MySQL** -- the concepts are identical across platforms.
+Think of this as the "why it works" behind the "how it works." Everything here applies to **SQL Server**, **PostgreSQL**, **MySQL**, and **MariaDB** -- the concepts are identical across platforms.
 
 ## State-based vs migration-based
 

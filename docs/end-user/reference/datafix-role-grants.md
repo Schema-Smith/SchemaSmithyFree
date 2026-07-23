@@ -4,7 +4,7 @@ Running a datafix through SchemaSmith means deploying under a *scoped* account �
 
 The grant sets below are the recommended starting point for a `datafix_user` account on each supported engine. They are scoped to the minimum required for the Course 6 lab scenario: a price-defect fix across three tenant databases (`shop_tenant_a`, `shop_tenant_b`, `shop_tenant_c`). Treat them as a baseline to tighten per environment — production accounts should carry only the grants that the specific fix has been proven to need.
 
-> **Provisional:** Treat these as the minimal baseline the Course 6 lab exercises across all three engines. Certify them against your own fix and environment — any grant a specific datafix doesn't actually exercise should be removed.
+> **Provisional:** Treat these as the minimal baseline a datafix deploy role needs across all four engines (the Course 6 lab exercises SQL Server, PostgreSQL, and MySQL; MariaDB uses the same grant set as MySQL). Certify them against your own fix and environment — any grant a specific datafix doesn't actually exercise should be removed.
 
 ---
 
@@ -103,9 +103,9 @@ FLUSH PRIVILEGES;
 
 ## Privilege summary across engines
 
-| Capability | SQL Server | PostgreSQL | MySQL |
-|---|---|---|---|
-| Reader/writer on data | `GRANT SELECT, INSERT, UPDATE ON SCHEMA::dbo` | `GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public` | `GRANT SELECT, INSERT, UPDATE ON db.*` |
-| Backup table creation | `GRANT CREATE TABLE` + `CREATE SCHEMA datafix AUTHORIZATION datafix_user` (owns the schema) | `CREATE SCHEMA datafix AUTHORIZATION datafix_user` (owns it; no `CREATE` on `public`) | `GRANT CREATE ON db.*` |
-| Temp space | Implicit for authenticated logins | `GRANT TEMPORARY ON DATABASE` | `GRANT CREATE TEMPORARY TABLES ON db.*` |
-| Execute ancillary routines | `GRANT EXECUTE ON SCHEMA::dbo` | `GRANT EXECUTE ON ALL FUNCTIONS/PROCEDURES IN SCHEMA public` | `GRANT EXECUTE ON db.*` |
+| Capability | SQL Server | PostgreSQL | MySQL | MariaDB |
+|---|---|---|---|---|
+| Reader/writer on data | `GRANT SELECT, INSERT, UPDATE ON SCHEMA::dbo` | `GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public` | `GRANT SELECT, INSERT, UPDATE ON db.*` | `GRANT SELECT, INSERT, UPDATE ON db.*` |
+| Backup table creation | `GRANT CREATE TABLE` + `CREATE SCHEMA datafix AUTHORIZATION datafix_user` (owns the schema) | `CREATE SCHEMA datafix AUTHORIZATION datafix_user` (owns it; no `CREATE` on `public`) | `GRANT CREATE ON db.*` | `GRANT CREATE ON db.*` |
+| Temp space | Implicit for authenticated logins | `GRANT TEMPORARY ON DATABASE` | `GRANT CREATE TEMPORARY TABLES ON db.*` | `GRANT CREATE TEMPORARY TABLES ON db.*` |
+| Execute ancillary routines | `GRANT EXECUTE ON SCHEMA::dbo` | `GRANT EXECUTE ON ALL FUNCTIONS/PROCEDURES IN SCHEMA public` | `GRANT EXECUTE ON db.*` | `GRANT EXECUTE ON db.*` |

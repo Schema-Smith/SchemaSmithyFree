@@ -104,7 +104,7 @@ public static class DeploymentSummaryAssembler
     {
         var wouldDrop = changeAudit is { Instrumented: true }
             ? changeAudit.Snapshot()
-                .Where(r => r.Action == "wouldDrop")
+                .Where(r => r.Action == "dropSuppressed")
                 .Select(r => new WouldDropEntry(r.ObjectType, r.ObjectName))
                 .ToArray()
             : Array.Empty<WouldDropEntry>();
@@ -134,30 +134,37 @@ public static class DeploymentSummaryAssembler
         int Count(string type, string action) =>
             rows.Count(r => r.ObjectType == type && r.Action == action);
 
+        // WhatIf preview actions (#363) map into the same buckets as their executed counterparts:
+        // wouldCreate -> created, wouldModify -> modified, wouldDrop -> dropped. The run's mode field
+        // tells a reader whether these are previews or executed changes.
+        int Count2(string type, string executed, string previewed) =>
+            rows.Count(r => r.ObjectType == type && (r.Action == executed || r.Action == previewed));
+
         var created = new CreatedCounts(
-            Tables: Count("table", "created"),
-            Indexes: Count("index", "created"),
-            Constraints: Count("constraint", "created"),
-            ForeignKeys: Count("foreignKey", "created"),
+            Tables: Count2("table", "created", "wouldCreate"),
+            Indexes: Count2("index", "created", "wouldCreate"),
+            Constraints: Count2("constraint", "created", "wouldCreate"),
+            ForeignKeys: Count2("foreignKey", "created", "wouldCreate"),
             Procedures: 0,
             Views: 0,
             Functions: 0);
 
         var modified = new ModifiedCounts(
-            Tables: Count("table", "modified") + Count("table", "renamed"),
-            Columns: Count("column", "modified"));
+            Tables: Count2("table", "modified", "wouldModify") + Count("table", "renamed"),
+            Columns: Count2("column", "modified", "wouldModify"));
 
         var dropped = new DroppedCounts(
-            Tables: Count("table", "dropped"),
-            Indexes: Count("index", "dropped"),
-            Constraints: Count("constraint", "dropped"),
-            ForeignKeys: Count("foreignKey", "dropped"));
+            Tables: Count2("table", "dropped", "wouldDrop"),
+            Indexes: Count2("index", "dropped", "wouldDrop"),
+            Constraints: Count2("constraint", "dropped", "wouldDrop"),
+            ForeignKeys: Count2("foreignKey", "dropped", "wouldDrop"));
 
         var scriptsRan = rows.Count(r => r.Action == "ran");
-        // 'wouldDrop' rows are protection-suppressed drops, not changes that occurred — they belong
-        // to the PreventDropSummary manifest, not the object-change detail.
+        // 'dropSuppressed' rows are protection-suppressed drops, not changes that would occur — they
+        // belong to the PreventDropSummary manifest, not the object-change detail. WhatIf 'would*'
+        // rows ARE previewed changes and stay in the detail.
         var details = rows
-            .Where(r => r.Action != "wouldDrop")
+            .Where(r => r.Action != "dropSuppressed")
             .Select(r => new ObjectChangeDetail(r.ObjectType, r.ObjectName, r.Action))
             .ToArray();
 

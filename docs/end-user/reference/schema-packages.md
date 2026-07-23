@@ -1,6 +1,6 @@
 # Schema Packages Reference
 
-A schema package is your database's source of truth -- the complete, version-controlled definition of what your databases should look like. Every tool in the SchemaSmith toolset revolves around this one structure: SchemaTongs casts packages from live databases, SchemaQuench quenches them onto target servers, and DataTongs adds reference data alongside your schema. The same package format works for **SQL Server**, **PostgreSQL**, **MySQL**, and **MariaDB** -- one shape, one workflow, four engines.
+A schema package is your database's source of truth -- the complete, version-controlled definition of what your databases should look like. Every tool in the SchemaSmith toolset revolves around this one structure: SchemaTongs casts packages from live databases, SchemaQuench quenches them onto target servers, and DataTongs adds reference data alongside your schema. The same package format works for **SQL Server**, **PostgreSQL**, **MySQL**, and **MariaDB** -- one shape, one workflow, four engines. Each package is bound to its declared platform, so the four package types stay distinct even where MySQL and MariaDB share an engine family.
 
 This document is the authoritative reference for every file, folder, property, and format in a schema package.
 
@@ -142,7 +142,7 @@ The value is token-resolvable (`"IdentificationDatabase": "{{ControlDb}}"`), so 
 
 > **PostgreSQL:** this is the only way to read a registry table at enumeration time. A PostgreSQL connection is bound to a single database and cannot cross-database-query, so without `IdentificationDatabase` a registry-table roster is unreachable -- the init database (`postgres`) has no access to a table in another database.
 
-**SkipIfReadOnly** -- Enables graceful handling of read-only replicas. On SQL Server, this is the Availability Group secondary handling. On PostgreSQL and MySQL, the same flag covers logical/physical replicas exposed as databases. With `SkipIfReadOnly: true`, read-only databases are silently skipped and the deployment continues with the writable primaries. Independent of `RequireAtLeastOneTarget` -- a template can require at least one target while still skipping individual read-only databases within the result set.
+**SkipIfReadOnly** -- Enables graceful handling of read-only replicas. On SQL Server, this is the Availability Group secondary handling. On PostgreSQL, MySQL, and MariaDB, the same flag covers logical/physical replicas exposed as databases. With `SkipIfReadOnly: true`, read-only databases are silently skipped and the deployment continues with the writable primaries. Independent of `RequireAtLeastOneTarget` -- a template can require at least one target while still skipping individual read-only databases within the result set.
 
 **IndexOnlyTableQuenches** -- Lets you manage indexes on tables you don't own. Two primary use cases: different indexing on replicated databases (tuned for the consumer's workload, not the producer's), and adding indexes to third-party products where you can't modify the table structure. Scripted objects (procedures, views, functions) still deploy when this flag is on -- so you can deploy custom views and procedures alongside supplementary indexes.
 
@@ -331,7 +331,7 @@ Then declare `ServerToQuench` on your product-level folders:
 
 `ServerToQuench` accepts `Primary`, `Secondary`, or `Both`. The default is `Primary`. Scripts in folders with `Both` (or scripts marked for the active server type) execute on every server in the list, in parallel. The CLI logs the per-server progress so you can see exactly what landed where.
 
-> **Multi-platform note:** PostgreSQL and MySQL deployments use a single connection only -- the secondary-server feature is SQL Server-specific because Availability Groups are a SQL Server concept.
+> **Multi-platform note:** PostgreSQL, MySQL, and MariaDB deployments use a single connection only -- the secondary-server feature is SQL Server-specific because Availability Groups are a SQL Server concept.
 
 ---
 
@@ -343,7 +343,7 @@ A schema package is a predictable directory tree. Every tool in the SchemaSmith 
 MyProduct/
   Product.json                      Product configuration (required)
   .json-schemas/                    JSON Schema files for IDE validation (generated)
-    products.<platform>.schema      <platform> = sqlserver, postgresql, or mysql
+    products.<platform>.schema      <platform> = sqlserver, postgresql, mysql, or mariadb
     templates.<platform>.schema
     tables.<platform>.schema
     indexedviews.sqlserver.schema             SQL Server packages
@@ -365,7 +365,7 @@ MyProduct/
       <custom folders>              Anything you declared in ScriptFolders
 ```
 
-Table JSON files are named `schema.tablename.json` (e.g., `dbo.Customer.json`, `public.order_lines.json`). For MySQL the `schema` segment is the database/schema name. If a table or schema name contains filesystem-illegal characters, the encoded form is used in the filename (see [Filesystem-Illegal Character Encoding](#filesystem-illegal-character-encoding)).
+Table JSON files are named `schema.tablename.json` (e.g., `dbo.Customer.json`, `public.order_lines.json`). For MySQL and MariaDB the `schema` segment is the database/schema name. If a table or schema name contains filesystem-illegal characters, the encoded form is used in the filename (see [Filesystem-Illegal Character Encoding](#filesystem-illegal-character-encoding)).
 
 ### File naming
 
@@ -532,7 +532,7 @@ When a database uses user-defined types (`CREATE TYPE` / `CREATE DOMAIN`), the `
 { "Name": "FullName", "ComputedExpression": "[FirstName] + ' ' + [LastName]", "Persisted": true }
 ```
 
-(SQL Server uses `ComputedExpression`; PostgreSQL and MySQL use `GenerationExpression` with the platform's syntax.)
+(SQL Server uses `ComputedExpression`; PostgreSQL, MySQL, and MariaDB use `GenerationExpression` with the platform's syntax.)
 
 ---
 
@@ -540,7 +540,7 @@ When a database uses user-defined types (`CREATE TYPE` / `CREATE DOMAIN`), the `
 
 Always Encrypted lets SQL Server store sensitive column data in encrypted form that the server itself cannot read — only authorized clients holding the Column Master Key can decrypt. SchemaTongs extracts encrypted columns and captures all three encryption properties; SchemaQuench declares them with the exact `ENCRYPTED WITH (…)` syntax SQL Server requires. Extract once, deploy everywhere the CMK is distributed — no hand-written DDL.
 
-> **SQL Server only:** Always Encrypted is a SQL Server feature with no equivalent on PostgreSQL or MySQL. No parity gap — there is no cross-platform AE analogue to implement.
+> **SQL Server only:** Always Encrypted is a SQL Server feature with no equivalent on PostgreSQL, MySQL, or MariaDB. No parity gap — there is no cross-platform AE analogue to implement.
 
 ### Column properties
 
@@ -1085,7 +1085,7 @@ Data deliveries are the one exception to "one match wins": when a table declares
 
 Your IDE can help you write correct JSON if you point it at the right schemas. The `.json-schemas/` directory at the package root contains JSON Schema definition files generated automatically by SchemaTongs **on the fly** from the live C# domain types -- no embedded files, no shipped artifacts, just a snapshot of the engine's exact current shape.
 
-Each file carries a platform infix matching the package's platform -- `<platform>` is `sqlserver`, `postgresql`, or `mysql`:
+Each file carries a platform infix matching the package's platform -- `<platform>` is `sqlserver`, `postgresql`, `mysql`, or `mariadb`:
 
 | File | Validates |
 |---|---|
@@ -1144,7 +1144,7 @@ SchemaQuench decodes these filenames transparently when reading definitions. You
 
 Schema templates fan a single declarative template out across multiple schemas inside one database. You write the template once -- tables, procedures, views, migration scripts -- and SchemaQuench runs it once per schema returned by the `SchemaIdentificationScript` query, injecting the active schema name as the `{{SchemaName}}` token at every step. The most common use is multi-tenant SaaS where each tenant owns their own schema, but any pattern that needs the same object shape replicated across schemas works the same way. For a full narrative walkthrough, see [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md).
 
-Schema templates are supported on **SQL Server and PostgreSQL only**. MySQL uses a database-per-tenant model instead -- there is no sub-database schema namespace to fan out across. On MySQL the `SchemaIdentificationScript` field is still *accepted*, but only as a **deprecated backward-compat alias** for `DatabaseIdentificationScript` (MySQL conflates schema and database): its value migrates into `DatabaseIdentificationScript` when that field is empty, a deprecation warning advises renaming, and no schema fan-out occurs. New MySQL packages should use `DatabaseIdentificationScript` directly.
+Schema templates are supported on **SQL Server and PostgreSQL only**. MySQL and MariaDB use a database-per-tenant model instead -- there is no sub-database schema namespace to fan out across. On MySQL and MariaDB the `SchemaIdentificationScript` field is still *accepted*, but only as a **deprecated backward-compat alias** for `DatabaseIdentificationScript` (they conflate schema and database): its value migrates into `DatabaseIdentificationScript` when that field is empty, a deprecation warning advises renaming, and no schema fan-out occurs. New MySQL and MariaDB packages should use `DatabaseIdentificationScript` directly.
 
 ### Discovery query
 

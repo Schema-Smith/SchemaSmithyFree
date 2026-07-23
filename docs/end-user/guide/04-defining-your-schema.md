@@ -2,7 +2,7 @@
 
 You understand the [core concepts](03-core-concepts.md). Now it's time to give your database form. This chapter covers the workflows you'll reach for every day -- adding tables, shaping columns, writing stored procedures, casting changes from live databases, and bootstrapping new environments from scratch. Each one replaces a manual, error-prone process with something you can trust. And they build on each other naturally.
 
-The examples use SQL Server bracket notation, but the same workflows apply verbatim on **PostgreSQL** and **MySQL** -- swap the quoting style and the data type flavor, and everything else is identical.
+The examples use SQL Server bracket notation, but the same workflows apply verbatim on **PostgreSQL**, **MySQL**, and **MariaDB** -- swap the quoting style and the data type flavor, and everything else is identical.
 
 ## Adding a table
 
@@ -48,7 +48,7 @@ SchemaQuench reads the JSON, sees that `dbo.Promotions` doesn't exist in the tar
 
 **Compare this to the traditional approach:** write a `CREATE TABLE` script, write a migration file with a sequence number, make sure the sequence number doesn't collide with anyone else's, add an `IF NOT EXISTS` guard, add a corresponding rollback script, update a migrations tracking table. With SchemaSmith, you created one file and ran one command. No migration scripts. No dependency ordering. No collision worries.
 
-### PostgreSQL and MySQL shape
+### PostgreSQL, MySQL, and MariaDB shape
 
 The same table on PostgreSQL:
 
@@ -73,7 +73,7 @@ The same table on PostgreSQL:
 }
 ```
 
-The MySQL variant uses `INT AUTO_INCREMENT`, `VARCHAR(100)`, `DECIMAL(5,2)`, and `TINYINT(1)` or `BOOLEAN`. The file structure is identical; only the data types and quoting change. Your team can manage all three platforms with the same mental model.
+The MySQL and MariaDB variants use `INT AUTO_INCREMENT`, `VARCHAR(100)`, `DECIMAL(5,2)`, and `TINYINT(1)` or `BOOLEAN` -- they're separate packages (each declares its own `Platform`), even where the DDL shape lines up. The file structure is identical; only the data types and quoting change. Your team can manage all four platforms with the same mental model.
 
 ## Modifying a table
 
@@ -263,7 +263,7 @@ The `[ALWAYS]` marker tells SchemaQuench to run this script every time the Initi
 
 `TemplateOrder` ensures Initialize runs first. If the database doesn't exist, Initialize creates it, then the Northwind template deploys the full schema. If the database already exists, Initialize is skipped and Northwind deploys any pending changes.
 
-The same pattern works on PostgreSQL and MySQL -- swap the identification script to use `pg_database` or `information_schema.schemata`, and the `CREATE DATABASE` / `CREATE SCHEMA` statement to match. One `docker compose up` bootstraps everything from an empty server. Subsequent runs skip Initialize automatically and apply only schema changes. Fresh environment or existing environment, same command, same result.
+The same pattern works on PostgreSQL, MySQL, and MariaDB -- swap the identification script to use `pg_database` or `information_schema.schemata`, and the `CREATE DATABASE` / `CREATE SCHEMA` statement to match. One `docker compose up` bootstraps everything from an empty server. Subsequent runs skip Initialize automatically and apply only schema changes. Fresh environment or existing environment, same command, same result.
 
 ## Advanced engine features
 

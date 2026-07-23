@@ -155,6 +155,18 @@ BEGIN
               AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
               AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
         );
+
+        -- #363: WhatIf twin of the ELSE-branch 'foreignKey'/'created' audit; same source/predicate, wouldCreate.
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'foreignKey', CONCAT(SchemaSmith_StripBacktickWrapping(f.TableName), '.', SchemaSmith_StripBacktickWrapping(f.KeyName)), 'wouldCreate'
+        FROM _SchemaSmith_ForeignKeys f
+        WHERE NOT EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.TableName)
+              AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
+              AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
+        );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing foreign keys');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
@@ -288,7 +300,7 @@ BEGIN
                           LIMIT 1), 1) = 1;
 
         INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-        SELECT CONNECTION_ID(), 'foreignKey', CONCAT(TableName, '.', ConstraintName), 'wouldDrop'
+        SELECT CONNECTION_ID(), 'foreignKey', CONCAT(TableName, '.', ConstraintName), 'dropSuppressed'
         FROM _SchemaSmith_WouldDropFKs;
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropFKs;
@@ -341,6 +353,11 @@ BEGIN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
             SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName,
                           '` DROP FOREIGN KEY `', ConstraintName, '`')
+            FROM _SchemaSmith_FKsToDrop;
+
+            -- #363: WhatIf twin of the ELSE-branch 'foreignKey'/'dropped' audit; same source, wouldDrop.
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'foreignKey', CONCAT(TableName, '.', ConstraintName), 'wouldDrop'
             FROM _SchemaSmith_FKsToDrop;
         ELSE
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unknown foreign keys');

@@ -110,7 +110,7 @@ The registry tracks every soft-dropped table and drives the cleanup job.
 | Recycled name | The name the table was moved to in the recyclebin. |
 | Recycled date | Timestamp when the soft-drop occurred. |
 | RetentionDays | Retention window in days. Default 90. |
-| Expiration date | The date after which the recycled table is eligible for purge. SQL Server computes this as a persisted computed column (`DATEADD(day, RetentionDays, RecycledDate)`); PostgreSQL and MySQL insert the value explicitly at soft-drop time. |
+| Expiration date | The date after which the recycled table is eligible for purge. SQL Server computes this as a persisted computed column (`DATEADD(day, RetentionDays, RecycledDate)`); PostgreSQL, MySQL, and MariaDB insert the value explicitly at soft-drop time. |
 
 ---
 

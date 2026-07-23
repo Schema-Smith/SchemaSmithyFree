@@ -117,7 +117,7 @@ If a package has no `.json-schemas/` directory at all, this check has nothing to
 | --- | --- | --- |
 | `SS-FILE-NAME-003` | Warning | A table file's on-disk name differs from the canonical `<schema>.<table>[.<VariantName>].json` derived from its `Schema`, `Name`, and `VariantName`. |
 
-A table's identity lives in its file *content*, never its filename, so a misnamed file still deploys correctly -- this is a **lean, not a gate** (Warning only, never an Error, never changes the exit code). The canonical name keeps a table's conditional variants sorted together in source control and makes a file's name a reliable pointer to the table it holds. The schema segment is omitted for MySQL and schema-template packages (which carry no per-table schema). SchemaTongs writes canonical names on extraction; this check catches hand-authored files that have drifted.
+A table's identity lives in its file *content*, never its filename, so a misnamed file still deploys correctly -- this is a **lean, not a gate** (Warning only, never an Error, never changes the exit code). The canonical name keeps a table's conditional variants sorted together in source control and makes a file's name a reliable pointer to the table it holds. The schema segment is omitted for MySQL, MariaDB, and schema-template packages (which carry no per-table schema). SchemaTongs writes canonical names on extraction; this check catches hand-authored files that have drifted.
 
 ### Data types
 

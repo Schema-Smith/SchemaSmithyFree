@@ -24,6 +24,16 @@ BEGIN TRY
                           AND sf.[name] = SchemaSmith.fn_StripBracketWrapping(f.[KeyName]))
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
+  -- #363: WhatIf twin of the embedded 'foreignKey'/'created' audit above; same predicate.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'foreignKey', f.[Schema] + '.' + f.[TableName] + '.' + f.[KeyName], 'wouldCreate'
+        FROM #ForeignKeys f WITH (NOLOCK)
+        WHERE NOT EXISTS (SELECT *
+                            FROM sys.foreign_keys sf WITH (NOLOCK)
+                            WHERE sf.[parent_object_id] = OBJECT_ID(f.[Schema] + '.' + f.[TableName])
+                              AND sf.[name] = SchemaSmith.fn_StripBracketWrapping(f.[KeyName]))
+
   SET NOCOUNT OFF
 END TRY
 BEGIN CATCH

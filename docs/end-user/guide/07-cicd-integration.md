@@ -2,7 +2,7 @@
 
 SchemaSmith tools are self-contained executables. No SDK to install. No runtime to configure. No package manager plugins to maintain. Drop them into any pipeline and your database deployments become as automated as your application builds. One binary, a handful of environment variables, and your schema changes flow from pull request to production without anyone writing a deployment script.
 
-This works identically whether you're deploying to **SQL Server**, **PostgreSQL**, or **MySQL** -- the `Platform` value on `Product.json` tells SchemaQuench which adapter to use, and your pipeline YAML stays the same.
+This works identically whether you're deploying to **SQL Server**, **PostgreSQL**, **MySQL**, or **MariaDB** -- the `Platform` value on `Product.json` tells SchemaQuench which adapter to use, and your pipeline YAML stays the same.
 
 ## The build and deploy model
 
@@ -62,7 +62,7 @@ jobs:
         run: schemaquench
 ```
 
-This uses a self-hosted runner with SchemaQuench pre-installed. Credentials flow from GitHub Repository Secrets -- never stored in the workflow file, never printed in logs. The `workflow_dispatch` trigger lets you run deployments manually when needed. Nothing in this YAML is platform-specific -- the same workflow deploys a SQL Server, PostgreSQL, or MySQL package.
+This uses a self-hosted runner with SchemaQuench pre-installed. Credentials flow from GitHub Repository Secrets -- never stored in the workflow file, never printed in logs. The `workflow_dispatch` trigger lets you run deployments manually when needed. Nothing in this YAML is platform-specific -- the same workflow deploys a SQL Server, PostgreSQL, MySQL, or MariaDB package.
 
 ### Jenkins
 
@@ -224,7 +224,7 @@ jobs:
           schemaquench
 ```
 
-The exact same shape works for PostgreSQL (swap the service image to `postgres:16` and use `Host=localhost;...` credentials) and MySQL (swap to `mysql:8.4`). The SchemaQuench invocation is identical -- the platform adapter comes from the package.
+The exact same shape works for PostgreSQL (swap the service image to `postgres:16` and use `Host=localhost;...` credentials), MySQL (swap to `mysql:8.4`), and MariaDB (swap to `mariadb:11.4`). The SchemaQuench invocation is identical -- the platform adapter comes from the package.
 
 If WhatIf fails, the PR check fails. The author sees exactly which SQL statement would have broken, which token was missing, which dependency couldn't be resolved. Fix it in the PR, not in production.
 
@@ -260,7 +260,7 @@ The standard deployment profile. Structural changes land, helper procedures stay
 
 ### Datafix patch pipeline
 
-Migration scripts only. No DDL, no table quenching, no tracking inserts for run-once scripts — *SchemaSmith itself* performs no structural changes under this profile. Your migration scripts, though, often still need targeted rights: a fix that backs up the rows it changes needs `CREATE TABLE`. You can grant that without any power over your product tables by giving the deploy account its own schema to create backups in. See the [datafix-role grants reference](../reference/datafix-role-grants.md) for least-privilege grant sets on SQL Server, PostgreSQL, and MySQL.
+Migration scripts only. No DDL, no table quenching, no tracking inserts for run-once scripts — *SchemaSmith itself* performs no structural changes under this profile. Your migration scripts, though, often still need targeted rights: a fix that backs up the rows it changes needs `CREATE TABLE`. You can grant that without any power over your product tables by giving the deploy account its own schema to create backups in. See the [datafix-role grants reference](../reference/datafix-role-grants.md) for least-privilege grant sets on SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ```json
 {

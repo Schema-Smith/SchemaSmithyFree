@@ -53,6 +53,17 @@ BEGIN
                       AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped));
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+  -- #363: WhatIf twin of the embedded computed-column 'created' audit above; same predicate.
+  IF p_WhatIf THEN
+    INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+      SELECT pg_backend_pid(), 'column', tt."Schema" || '.' || tt."Name" || '.' || tc."Name", 'wouldCreate'
+        FROM temp_tables tt
+        JOIN temp_columns tc ON tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
+        WHERE EXISTS(SELECT * FROM information_schema.tables t WHERE t.table_schema = tt."Schema" AND t.table_name = tt."Name")
+          AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
+          AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped);
+  END IF;
+
   RAISE NOTICE 'Add Missing Indexes'; -- Includes Primary Keys and Unique Constraints
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing ' || CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey" THEN 'Constraint ' ELSE 'Index ' END || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."Name" || CASE WHEN COALESCE(ti."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(ti."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey"
@@ -85,6 +96,22 @@ BEGIN
                         JOIN pg_class i ON i.oid = idx.indexrelid
                         WHERE i.relname = ti."Name");
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
+  -- #363: WhatIf twin of the embedded 'index'/'constraint' 'created' audit above; same predicate.
+  IF p_WhatIf THEN
+    INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+      SELECT pg_backend_pid(), CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey" THEN 'constraint' ELSE 'index' END,
+             ti."TableSchema" || '.' || ti."TableName" || '.' || ti."Name", 'wouldCreate'
+        FROM temp_indexes ti
+        WHERE NOT EXISTS (SELECT *
+                            FROM pg_index idx
+                            JOIN pg_class tc ON tc.oid = idx.indrelid
+                                            AND tc.relkind = 'r'
+                                            AND tc.relname = ti."TableName"
+                                            AND tc.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = ti."TableSchema")
+                            JOIN pg_class i ON i.oid = idx.indexrelid
+                            WHERE i.relname = ti."Name");
+  END IF;
 
   RAISE NOTICE 'Fixup Table Cluster';
   SELECT STRING_AGG('RAISE NOTICE ''  Fixing up attributes for ' || t."Schema" || '.' || t."Name" || ''';' || CHR(10) ||
@@ -123,6 +150,20 @@ BEGIN
                         WHERE ste.stxname = ts."Name");
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+  -- #363: WhatIf twin of the embedded 'statistic'/'created' audit above; same predicate.
+  IF p_WhatIf THEN
+    INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+      SELECT pg_backend_pid(), 'statistic', ts."TableSchema" || '.' || ts."TableName" || '.' || ts."Name", 'wouldCreate'
+        FROM temp_statistics ts
+        WHERE NOT EXISTS (SELECT 1
+                            FROM pg_statistic_ext ste
+                            JOIN pg_class rel ON rel.oid = ste.stxrelid
+                            JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+                                                 AND nsp.nspname = ts."TableSchema"
+                                                 AND rel.relname = ts."TableName"
+                            WHERE ste.stxname = ts."Name");
+  END IF;
+
   RAISE NOTICE 'Add Missing Exclude Constraints';
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing exclude constraint ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ADD CONSTRAINT "' || tc."Name" || '" EXCLUDE' || 
@@ -145,6 +186,21 @@ BEGIN
                           AND con.conname = tc."Name");
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+  -- #363: WhatIf twin of the embedded exclude-constraint 'created' audit above; same predicate.
+  IF p_WhatIf THEN
+    INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+      SELECT pg_backend_pid(), 'constraint', tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name", 'wouldCreate'
+        FROM temp_excludes tc
+        WHERE NOT EXISTS (SELECT 1
+                            FROM pg_constraint con
+                            JOIN pg_class rel ON rel.oid = con.conrelid
+                            JOIN pg_namespace nsp ON nsp.oid = con.connamespace
+                                                 AND nsp.nspname = tc."TableSchema"
+                                                 AND rel.relname = tc."TableName"
+                            WHERE con.contype = 'x'
+                              AND con.conname = tc."Name");
+  END IF;
+
   RAISE NOTICE 'Add Missing Defaults';
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing default for ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ALTER COLUMN "' || tc."Name" || '" SET DEFAULT ' || tc."Default" ||';' || CHR(10) ||
@@ -154,6 +210,15 @@ BEGIN
     WHERE NULLIF(tc."Default", '') IS NOT NULL
       AND EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped AND NOT a.atthasdef);
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
+  -- #363: WhatIf twin of the embedded default-constraint 'created' audit above; same predicate.
+  IF p_WhatIf THEN
+    INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+      SELECT pg_backend_pid(), 'constraint', tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || ' (default)', 'wouldCreate'
+        FROM temp_columns tc
+        WHERE NULLIF(tc."Default", '') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped AND NOT a.atthasdef);
+  END IF;
 
   RAISE NOTICE 'Add Missing Check Constraints';
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing check constraint ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
@@ -173,6 +238,21 @@ BEGIN
                           AND con.conname = tc."Name");
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+  -- #363: WhatIf twin of the embedded check-constraint 'created' audit above; same predicate.
+  IF p_WhatIf THEN
+    INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+      SELECT pg_backend_pid(), 'constraint', tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name", 'wouldCreate'
+        FROM temp_checks tc
+        WHERE NOT EXISTS (SELECT 1
+                            FROM pg_constraint con
+                            JOIN pg_class rel ON rel.oid = con.conrelid
+                            JOIN pg_namespace nsp ON nsp.oid = con.connamespace
+                                                 AND nsp.nspname = tc."TableSchema"
+                                                 AND rel.relname = tc."TableName"
+                            WHERE con.contype = 'c'
+                              AND con.conname = tc."Name");
+  END IF;
+
   -- Column-level checks get a deterministic name (CK_<table>_<column>) so create-idempotency
   -- and modify-detection (in ModifiedTableQuench) can both key on it.
   RAISE NOTICE 'Add Missing Column Check Constraints';
@@ -191,6 +271,22 @@ BEGIN
                         WHERE con.contype = 'c'
                           AND con.conname = 'CK_' || tc."TableName" || '_' || tc."Name");
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
+  -- #363: WhatIf twin of the embedded column-check 'created' audit above; same predicate.
+  IF p_WhatIf THEN
+    INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+      SELECT pg_backend_pid(), 'constraint', tc."TableSchema" || '.' || tc."TableName" || '.CK_' || tc."TableName" || '_' || tc."Name", 'wouldCreate'
+        FROM temp_columns tc
+        WHERE NULLIF(tc."CheckExpression", '') IS NOT NULL
+          AND NOT EXISTS (SELECT 1
+                            FROM pg_constraint con
+                            JOIN pg_class rel ON rel.oid = con.conrelid
+                            JOIN pg_namespace nsp ON nsp.oid = con.connamespace
+                                                 AND nsp.nspname = tc."TableSchema"
+                                                 AND rel.relname = tc."TableName"
+                            WHERE con.contype = 'c'
+                              AND con.conname = 'CK_' || tc."TableName" || '_' || tc."Name");
+  END IF;
 
 END
 $$;

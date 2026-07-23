@@ -10,7 +10,7 @@ The demo included with SchemaSmith ships Docker Compose files that stand up comp
 cd Demos/SqlServer && ./run-demo.sh
 ```
 
-That single command does everything: starts a database server (SQL Server, PostgreSQL, or MySQL depending on which `Demos/` folder you launched), waits for it to be healthy, then deploys the matching schema package. When it finishes, you have a fully quenched database running locally. Swap `Demos/SqlServer` for `Demos/PostgreSQL` or `Demos/MySQL` to target a different engine.
+That single command does everything: starts a database server (SQL Server, PostgreSQL, MySQL, or MariaDB depending on which `Demos/` folder you launched), waits for it to be healthy, then deploys the matching schema package. When it finishes, you have a fully quenched database running locally. Swap `Demos/SqlServer` for `Demos/PostgreSQL`, `Demos/MySQL`, or `Demos/MariaDB` to target a different engine.
 
 Here's how the compose pattern is structured:
 

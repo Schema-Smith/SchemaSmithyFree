@@ -182,7 +182,7 @@ Schema templates make the active iteration's schema name available everywhere to
 
 - In a regular template (`Template.json` without `SchemaIdentificationScript`), `{{SchemaName}}` is unresolved. The engine produces a clear error if it appears in a context where it would need to substitute.
 - In product-level scripts (`Product.json` `BaselineValidationScript`, `VersionStampScript`) — those run at product scope, before and after all template iterations, with no iteration in scope.
-- On MySQL and MariaDB — neither has a schema-inside-database concept, and schema templates are not supported on those platforms. See [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md#mysql-and-mariadb----database-per-tenant-only) for the MySQL and MariaDB alternative.
+- On MySQL and MariaDB — MySQL and MariaDB have no schema-inside-database concept and schema templates are not supported on those platforms. See [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md#mysql-and-mariadb----database-per-tenant-only) for the alternative.
 
 ### In script files
 
@@ -279,7 +279,7 @@ The advanced tags:
 | Tag | Purpose |
 |---|---|
 | `<*File*>relative\path\file.sql` | Replace the token value with the contents of a text file, resolved relative to the product directory |
-| `<*BinaryFile*>relative\path\image.png` | Replace the token value with the file contents as a platform-appropriate binary literal -- `0x<hex>` for SQL Server and MySQL, `E'\\x<hex>'::bytea` for PostgreSQL |
+| `<*BinaryFile*>relative\path\image.png` | Replace the token value with the file contents as a platform-appropriate binary literal -- `0x<hex>` for SQL Server, MySQL, and MariaDB, `E'\\x<hex>'::bytea` for PostgreSQL |
 | `<*Query*>SELECT ... FROM ...` | Execute a SQL query against the deployment target before substitution and replace the token value with the first column's rows joined by newlines |
 | `<*QueryFile*>relative\path\query.sql` | Same as `<*Query*>` but the query body is loaded from a file first |
 | `<*SpecificTable*>schema.tablename` | Replace the token value with the full serialized JSON of one specific table in the current template |
@@ -610,7 +610,7 @@ For staging, drop a `ScriptTokens.RegistryDb` override into `SchemaQuench.settin
 
 ### Cross-database references with multiple tokens
 
-When templates need to reference sibling schema managed by other templates, product-level tokens keep the references consistent. The token pattern is the same across platforms; the naming the tokens encode differs because each engine isolates differently -- SQL Server and MySQL use separate databases, PostgreSQL uses schemas within one database.
+When templates need to reference sibling schema managed by other templates, product-level tokens keep the references consistent. The token pattern is the same across platforms; the naming the tokens encode differs because each engine isolates differently -- SQL Server, MySQL, and MariaDB use separate databases, PostgreSQL uses schemas within one database.
 
 **SQL Server** -- separate databases, three-part names:
 

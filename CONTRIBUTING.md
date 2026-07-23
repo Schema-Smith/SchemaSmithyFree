@@ -6,7 +6,7 @@ This document is the rules of the road for contributing. We point at it when we 
 
 ## Ways to Contribute
 
-- **Report bugs** — Open an issue with detailed steps to reproduce, the platform you hit it on (SQL Server, PostgreSQL, or MySQL — including version), and any relevant logs.
+- **Report bugs** — Open an issue with detailed steps to reproduce, the platform you hit it on (SQL Server, PostgreSQL, MySQL, or MariaDB — including version), and any relevant logs.
 - **Suggest enhancements** — Open an issue describing the use case and the shape of the feature. Larger features benefit from a design conversation in the issue before code lands.
 - **Submit code** — Fix bugs, add features, improve docs. For non-trivial changes, open an issue first so we can align on direction before you invest implementation time.
 - **Improve docs** — The [documentation site](https://schemasmith.com/), in-repo `docs/` directory, README, and CHANGELOG are all fair game.
@@ -23,7 +23,7 @@ For anything beyond a typo fix or a one-line bug repro, please skim this whole d
 
 - **Tests come first.** We practice TDD. PRs that add behavior without tests, or that lower coverage without a documented reason, will be sent back.
 - **OS portability is non-negotiable.** Code that ships in the CLI tools must run correctly on Windows, Linux, and macOS, on x64 and ARM64. CI runs the OS matrix on every push.
-- **Database Platform parity is non-negotiable.** Code that touches a database platform must work on SQL Server, PostgreSQL, and MySQL where the feature applies. CI runs all three platforms on every push.
+- **Database Platform parity is non-negotiable.** Code that touches a database platform must work on SQL Server, PostgreSQL, MySQL, and MariaDB where the feature applies. CI runs all four platforms on every push. (MariaDB runs on the MySQL engine, so parity there is usually automatic — but it has its own CI job and can diverge, e.g. JSON and collation handling.)
 
 ## Development Setup
 
@@ -113,9 +113,9 @@ CI runs the test matrix across the supported operating systems and database plat
 
 Unit tests should mock the database (and other dependencies) to stay fast and focused on the unit under test. That's the norm and is encouraged — `Schema.UnitTests`, `SchemaQuench.UnitTests`, and friends do exactly this throughout the codebase.
 
-Integration tests that validate SQL behavior — query plans, type coercion, transaction semantics, MERGE behavior, error codes — MUST run against the real database platforms via the Docker matrix. These behaviors can only be validated against the actual database, which is why the integration tests against live SQL Server, PostgreSQL, and MySQL containers exist.
+Integration tests that validate SQL behavior — query plans, type coercion, transaction semantics, MERGE behavior, error codes — MUST run against the real database platforms via the Docker matrix. These behaviors can only be validated against the actual database, which is why the integration tests against live SQL Server, PostgreSQL, MySQL, and MariaDB containers exist.
 
-Integration tests for non-DB concerns (file access, deserialization, isolator behavior) can mock the DB to avoid combinatorial test runs across all three platforms — the goal there is to exercise the non-DB code path without paying the multi-platform cost for behavior that's platform-agnostic anyway.
+Integration tests for non-DB concerns (file access, deserialization, isolator behavior) can mock the DB to avoid combinatorial test runs across all four platforms — the goal there is to exercise the non-DB code path without paying the multi-platform cost for behavior that's platform-agnostic anyway.
 
 If you find yourself reaching for a DB mock to avoid spinning up a container in a test that IS about SQL behavior, please don't. File an issue if there's a real gap in the integration test infrastructure.
 
@@ -212,7 +212,7 @@ Before you click "Ready for review," walk through this list against your own dif
 - [ ] Coverage maintained or improved on touched code (or a documented reason for any reduction).
 - [ ] No new compiler warnings or analyzer hints introduced.
 - [ ] OS portability considered: paths, line endings, case sensitivity, culture-dependent string formatting.
-- [ ] Database Platform parity considered if the change touches database-platform-specific code: does the same behavior need a corresponding implementation on SQL Server, PostgreSQL, and MySQL?
+- [ ] Database Platform parity considered if the change touches database-platform-specific code: does the same behavior need a corresponding implementation on SQL Server, PostgreSQL, MySQL, and MariaDB?
 - [ ] No unused usings, dead code, or commented-out blocks left behind.
 - [ ] Comments explain *why*, not *what*; new identifiers are descriptive enough that the comment isn't needed.
 - [ ] Copyright header on any new `.cs` or `Schema/Scripts/*.sql` files.

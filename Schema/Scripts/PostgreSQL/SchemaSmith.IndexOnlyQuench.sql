@@ -172,7 +172,7 @@ BEGIN
     -- p_DropIndexesRemovedFromProduct to FALSE, so the by-absence branches of temp_indexes_to_drop above
     -- stay empty and the drop pass below skips them. Record the indexes that WOULD be dropped by absence
     -- -- unknown/out-of-band, and product-owned indexes removed from the definition with the per-table
-    -- cascade tightening still honored -- as 'wouldDrop'. Same by-absence predicates as those branches
+    -- cascade tightening still honored -- as 'dropSuppressed'. Same by-absence predicates as those branches
     -- minus the env gates; the modified branch is not by-absence and is never suppressed, so it is
     -- excluded. ObjectName/ObjectType mirror the drop pass's 'dropped' index audit form.
     IF p_CaptureWouldDrop THEN
@@ -181,7 +181,7 @@ BEGIN
         SELECT pg_backend_pid(),
                CASE WHEN ei."PrimaryKey" OR ei."UniqueConstraint" THEN 'constraint' ELSE 'index' END,
                ei."TableSchema" || '.' || ei."TableName" || '.' || ei."IndexName",
-               'wouldDrop'
+               'dropSuppressed'
           FROM temp_existing_indexes ei
           WHERE NOT EXISTS (SELECT 1 -- Unknown Index (minus the p_DropUnknownIndexes gate)
                               FROM temp_indexes i

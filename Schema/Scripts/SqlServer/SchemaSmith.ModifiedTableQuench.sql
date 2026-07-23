@@ -71,14 +71,14 @@ BEGIN TRY
   -- No-drop protection tier (#270): when protected mode is active the caller forces
   -- @DropTablesRemovedFromProduct to 0 so the drop block below never runs. Record the tables that
   -- WOULD have been dropped by absence (owned by this product, absent from the package, not already
-  -- sticky-PreventDrop) to the ChangeAudit seam as 'wouldDrop' so the run can surface a manifest.
+  -- sticky-PreventDrop) to the ChangeAudit seam as 'dropSuppressed' so the run can surface a manifest.
   -- Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture tables suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
     SELECT @v_SQL = STRING_AGG(CAST(
       'RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.TableName + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + tp.[Schema] + '.[' + tp.TableName + ']'', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + tp.[Schema] + '.[' + tp.TableName + ']'', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
       FROM #TableProperties tp
       WHERE tp.PropertyName = 'ProductName'
         AND tp.[value] = @ProductName
@@ -143,6 +143,14 @@ BEGIN TRY
         JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']')
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
+      -- #363: WhatIf twin of the embedded 'foreignKey'/'dropped' audit above (which rides the DROP
+      -- CONSTRAINT DDL, executed only on a real run). Same source, same ObjectName shape.
+      IF @WhatIf = 1
+        INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+          SELECT @@SPID, 'foreignKey', '[' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '].[' + fk.[name] + ']', 'wouldDrop'
+            FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+            JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']')
+
       RAISERROR('Drop tables removed from the product', 10, 100) WITH NOWAIT
       SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping table ' + t.[Schema] + '.' + t.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                       CASE WHEN OBJECT_ID('SchemaSmith.CustomTableDrop') IS NOT NULL
@@ -152,6 +160,12 @@ BEGIN TRY
                                       'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + t.[Schema] + '.[' + t.[TableName] + ']'', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #TablesRemovedFromProduct t WITH (NOLOCK)
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+      -- #363: WhatIf twin of the embedded 'table'/'dropped' audit above.
+      IF @WhatIf = 1
+        INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+          SELECT @@SPID, 'table', t.[Schema] + '.[' + t.[TableName] + ']', 'wouldDrop'
+            FROM #TablesRemovedFromProduct t WITH (NOLOCK)
 
       -- Drop the now-orphaned history tables of removed temporal tables (versioning was turned off
       -- above). Skipped when a CustomTableDrop hook is installed -- that hook owns table removal,
@@ -334,14 +348,14 @@ BEGIN TRY
   -- No-drop protection tier (#270): when protected mode is active the caller forces
   -- @DropForeignKeysRemovedFromProduct to 0 so the drop block below never runs. Record the foreign
   -- keys that WOULD have been dropped by absence (present on the table, absent from the package,
-  -- and the per-table cascade tightening not opting out) to the ChangeAudit seam as 'wouldDrop' so
+  -- and the per-table cascade tightening not opting out) to the ChangeAudit seam as 'dropSuppressed' so
   -- the run can surface a manifest. Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture foreign keys suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
     SELECT @v_SQL = STRING_AGG(CAST(
       'RAISERROR(''  Foreign key ' + t.[Schema] + '.' + t.[Name] + '.' + fk.[name] + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + t.[Schema] + '.' + t.[Name] + '.' + fk.[name] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + t.[Schema] + '.' + t.[Name] + '.' + fk.[name] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
       FROM #Tables t WITH (NOLOCK)
       JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.parent_object_id = OBJECT_ID(t.[Schema] + '.' + t.[Name])
       WHERE NOT EXISTS (SELECT * FROM #ForeignKeys fk2 WITH (NOLOCK) WHERE t.[Schema] = fk2.[Schema] AND t.[Name] = fk2.[TableName] AND fk.[name] = SchemaSmith.fn_StripBracketWrapping(fk2.[KeyName]))
@@ -365,7 +379,13 @@ BEGIN TRY
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #FKsToDrop df WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
+  -- #363: WhatIf twin of the embedded 'foreignKey'/'dropped' audit above.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'foreignKey', df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName], 'wouldDrop'
+        FROM #FKsToDrop df WITH (NOLOCK)
+
   RAISERROR('Identify Fulltext Indexes To Drop Based On Column Changes', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #FTIndexesToDropForChanges
   SELECT DISTINCT cc.[Schema], cc.[TableName]
@@ -430,6 +450,15 @@ BEGIN TRY
       AND t.[CompressionType] IN ('NONE', 'ROW', 'PAGE')
       AND COALESCE(p.data_compression_desc COLLATE DATABASE_DEFAULT, 'NONE') <> t.[CompressionType]
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+  -- #363: WhatIf twin of the embedded 'table'/'modified' (compression) audit above.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'table', t.[Schema] + '.' + t.[Name], 'wouldModify'
+        FROM #Tables t WITH (NOLOCK)
+        LEFT JOIN sys.partitions AS p WITH (NOLOCK) ON p.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name]) AND p.index_id < 2
+        WHERE t.NewTable = 0 AND t.[CompressionType] IN ('NONE', 'ROW', 'PAGE')
+          AND COALESCE(p.data_compression_desc COLLATE DATABASE_DEFAULT, 'NONE') <> t.[CompressionType]
 
   -- Handle index compression changes
   RAISERROR('Fixup Index Compression', 10, 100) WITH NOWAIT
@@ -642,7 +671,7 @@ BEGIN TRY
     RAISERROR('Capture indexes suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
     SELECT @v_SQL = STRING_AGG(CAST(
       'RAISERROR(''  ' + [ObjName] + ' removed from product but PreventDrop is active -- skipping ' + [ObjType] + ' drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + [ObjType] + ''', ''' + [ObjName] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + [ObjType] + ''', ''' + [ObjName] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
       FROM (
         -- Arm (a): indexes removed from the product (ownership-stamped) -- @DropIndexesRemovedFromProduct
         -- env gate stripped; per-table cascade-tightening opt-out (ISNULL(...) = 1) kept.
@@ -733,8 +762,13 @@ BEGIN TRY
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ''', ''' + di.[Schema] + '.' + di.[TableName] + '.' + di.[IndexName] + ''', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY CASE WHEN [IsClustered] = 0 THEN 0 ELSE 1 END)
     FROM #IndexesToDrop di WITH (NOLOCK)
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
-  
+
+  -- #363: WhatIf twin of the embedded 'index'/'constraint' 'dropped' audit above.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END, di.[Schema] + '.' + di.[TableName] + '.' + di.[IndexName], 'wouldDrop'
+        FROM #IndexesToDrop di WITH (NOLOCK)
+
   RAISERROR('Fixup Modified Fillfactors', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Fixup ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' fillfactor in ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 100) WITH NOWAIT; ' + 
                                   'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD WITH (FILLFACTOR = ' + CONVERT(NVARCHAR(5), i.[FillFactor]) + ', SORT_IN_TEMPDB = ON);' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
@@ -903,13 +937,13 @@ BEGIN TRY
   -- @DropColumnsRemovedFromProduct to 0 so the drop block below never runs. Record the columns that
   -- WOULD have been dropped by absence (present on the table, absent from the package -- #ColumnChanges
   -- DropOnly rows -- and the per-table cascade tightening not opting out) to the ChangeAudit seam as
-  -- 'wouldDrop' so the run can surface a manifest. Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
+  -- 'dropSuppressed' so the run can surface a manifest. Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture columns suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
     SELECT @v_SQL = STRING_AGG(CAST(
       'RAISERROR(''  Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''column'', ''' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''column'', ''' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
       FROM #ColumnChanges cc WITH (NOLOCK)
       JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = cc.[Schema] AND t.[Name] = cc.[TableName]
       WHERE cc.DropOnly = 1
@@ -1079,14 +1113,14 @@ BEGIN TRY
   -- @DropStatisticsRemovedFromProduct to 0 so the drop block below never runs. Record the user-created
   -- statistics that WOULD have been dropped by absence (same by-absence set as the drop pass -- absent
   -- from the product, not already handled by the modified or column-change stats passes, per-table
-  -- cascade tightening not opting out) to the ChangeAudit seam as 'wouldDrop' so the run can surface a
+  -- cascade tightening not opting out) to the ChangeAudit seam as 'dropSuppressed' so the run can surface a
   -- manifest. Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture statistics suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
     SELECT @v_SQL = STRING_AGG(CAST(
       'RAISERROR(''  Statistic ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + '] removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''statistic'', ''' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + ']'', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''statistic'', ''' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + ']'', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
       FROM #ExistingStats es WITH (NOLOCK)
       JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = es.[Schema] AND t.[Name] = es.[TableName]
       WHERE t.NewTable = 0
@@ -1169,14 +1203,14 @@ BEGIN TRY
   -- @DropCheckConstraintsRemovedFromProduct to 0 so the drop block below never runs. Record the
   -- table-level check constraints that WOULD have been dropped by absence (same by-absence set as the
   -- drop pass -- table-level only, absent from the product, per-table cascade tightening not opting out)
-  -- to the ChangeAudit seam as 'wouldDrop' so the run can surface a manifest. Audit rows only -- no DDL
+  -- to the ChangeAudit seam as 'dropSuppressed' so the run can surface a manifest. Audit rows only -- no DDL
   -- so this runs regardless of @WhatIf.
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture check constraints suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
     SELECT @v_SQL = STRING_AGG(CAST(
       'RAISERROR(''  Check constraint ' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
       FROM #ExistingCheckConstraints ec WITH (NOLOCK)
       JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
       WHERE (ec.[CheckColumn] IS NULL
@@ -1221,6 +1255,26 @@ BEGIN TRY
                           AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
+  -- #363: WhatIf twin of the embedded 'constraint'/'dropped' (check) audit above; same predicate.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'constraint', ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName], 'wouldDrop'
+        FROM #ExistingCheckConstraints ec WITH (NOLOCK)
+        JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
+        WHERE (ec.[CheckColumn] IS NULL
+               OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK)
+                            WHERE c.[Schema] = ec.[Schema]
+                              AND c.[TableName] = ec.[TableName]
+                              AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = ec.[CheckColumn]
+                              AND ISNULL(c.[CheckExpression], '') = ''))
+          AND t.NewTable = 0
+          AND @DropCheckConstraintsRemovedFromProduct = 1
+          AND ISNULL(t.[DropCheckConstraintsRemovedFromProduct], 1) = 1
+          AND NOT EXISTS (SELECT * FROM #CheckConstraints cc WITH (NOLOCK)
+                            WHERE ec.[Schema] = cc.[Schema]
+                              AND ec.[TableName] = cc.[TableName]
+                              AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
+
   RAISERROR('Alter Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ALTER COLUMN ' + cc.[ColumnName] + ' ' +
@@ -1231,7 +1285,16 @@ BEGIN TRY
           AND [MustSwapColumn] = 0
           AND [DropOnly] = 0
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
+  -- #363: WhatIf twin of the embedded 'column'/'modified' audit above; same predicate.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'column', cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName], 'wouldModify'
+        FROM #ColumnChanges cc WITH (NOLOCK)
+        WHERE [MustDropAndRecreate] = 0
+          AND [MustSwapColumn] = 0
+          AND [DropOnly] = 0
+
   RAISERROR('Identify Existing Clustered Index Conflicts', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #MissingClusteredIndexTables
   SELECT DISTINCT i.[Schema], i.[TableName]

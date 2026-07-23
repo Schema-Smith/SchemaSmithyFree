@@ -97,8 +97,17 @@ BEGIN TRY
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.indexes si WITH (NOLOCK)
                         WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) 
-                          AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))    
+                          AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+  -- #363: WhatIf twin of the embedded 'index'/'constraint' 'created' audit above; same predicate.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END, i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName], 'wouldCreate'
+        FROM #Indexes i WITH (NOLOCK)
+        WHERE NOT EXISTS (SELECT * FROM sys.indexes si WITH (NOLOCK)
+                            WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName])
+                              AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
 
   RAISERROR('Add Missing Xml Indexes', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Creating index ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + CASE WHEN RTRIM(ISNULL(i.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(i.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
@@ -111,9 +120,18 @@ BEGIN TRY
     WHERE NOT EXISTS (SELECT * 
                         FROM sys.xml_indexes si WITH (NOLOCK)
                         WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) 
-                          AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))    
+                          AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
+  -- #363: WhatIf twin of the embedded 'xmlIndex'/'created' audit above; same predicate.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'xmlIndex', i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName], 'wouldCreate'
+        FROM #XmlIndexes i WITH (NOLOCK)
+        WHERE NOT EXISTS (SELECT * FROM sys.xml_indexes si WITH (NOLOCK)
+                            WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName])
+                              AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
+
   RAISERROR('Turn on Temporal Tracking for tables defined as temporal', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Turn ON Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD [ValidFrom] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL DEFAULT ''0001-01-01 00:00:00.0000000'', ' +
@@ -160,6 +178,15 @@ BEGIN TRY
                           AND ss.[name] = SchemaSmith.fn_StripBracketWrapping(s.[StatisticName]))
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
+  -- #363: WhatIf twin of the embedded 'statistic'/'created' audit above; same predicate.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'statistic', s.[Schema] + '.' + s.[TableName] + '.' + s.[StatisticName], 'wouldCreate'
+        FROM #Statistics s WITH (NOLOCK)
+        WHERE NOT EXISTS (SELECT * FROM sys.stats ss WITH (NOLOCK)
+                            WHERE ss.[object_id] = OBJECT_ID(s.[Schema] + '.' + s.[TableName])
+                              AND ss.[name] = SchemaSmith.fn_StripBracketWrapping(s.[StatisticName]))
+
   RAISERROR('Add Missing Defaults', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering Column ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ADD DEFAULT ' + c.[Default] + ' FOR ' + c.[ColumnName] + ';' + CHAR(13) + CHAR(10) +
@@ -171,7 +198,17 @@ BEGIN TRY
                         WHERE dc.[parent_object_id] = OBJECT_ID(c.[Schema] + '.' + c.[TableName]) 
                           AND COL_NAME(dc.parent_object_id, dc.parent_column_id) = SchemaSmith.fn_StripBracketWrapping(c.ColumnName))
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
+  -- #363: WhatIf twin of the embedded default-constraint 'created' audit above; same predicate.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'constraint', c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ' (default)', 'wouldCreate'
+        FROM #Columns c WITH (NOLOCK)
+        WHERE RTRIM(ISNULL(c.[Default], '')) <> ''
+          AND NOT EXISTS (SELECT * FROM sys.default_constraints dc WITH (NOLOCK)
+                            WHERE dc.[parent_object_id] = OBJECT_ID(c.[Schema] + '.' + c.[TableName])
+                              AND COL_NAME(dc.parent_object_id, dc.parent_column_id) = SchemaSmith.fn_StripBracketWrapping(c.ColumnName))
+
   RAISERROR('Add Missing Check Constraints', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ConstraintName] + CASE WHEN RTRIM(ISNULL(cc.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(cc.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ADD CONSTRAINT [' + SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]) + '] CHECK (' + cc.[Expression] + ');' + CHAR(13) + CHAR(10) +
@@ -182,7 +219,16 @@ BEGIN TRY
                         WHERE sc.[parent_object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName]) 
                           AND sc.[name] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-  
+
+  -- #363: WhatIf twin of the embedded check-constraint 'created' audit above; same predicate.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'constraint', cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ConstraintName], 'wouldCreate'
+        FROM #CheckConstraints cc WITH (NOLOCK)
+        WHERE NOT EXISTS (SELECT * FROM sys.check_constraints sc WITH (NOLOCK)
+                            WHERE sc.[parent_object_id] = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
+                              AND sc.[name] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
+
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding check constrain to column ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ADD CHECK (' + c.[CheckExpression] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
     FROM #Columns c WITH (NOLOCK)
@@ -202,6 +248,13 @@ BEGIN TRY
     FROM #FullTextIndexes fi WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * FROM sys.fulltext_indexes ft WITH (NOLOCK) WHERE ft.[object_id] = OBJECT_ID(fi.[Schema] + '.' + fi.[TableName]))
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+  -- #363: WhatIf twin of the embedded 'fullTextIndex'/'created' audit above; same predicate.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'fullTextIndex', fi.[Schema] + '.' + fi.[TableName], 'wouldCreate'
+        FROM #FullTextIndexes fi WITH (NOLOCK)
+        WHERE NOT EXISTS (SELECT * FROM sys.fulltext_indexes ft WITH (NOLOCK) WHERE ft.[object_id] = OBJECT_ID(fi.[Schema] + '.' + fi.[TableName]))
 
   SET NOCOUNT OFF
 END TRY

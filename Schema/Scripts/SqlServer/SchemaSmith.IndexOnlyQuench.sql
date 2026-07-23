@@ -481,14 +481,14 @@ BEGIN TRY
   -- #IndexesToDrop above contribute nothing and the drop pass below skips them. Record the indexes that
   -- WOULD have been dropped by absence -- unknown/out-of-band, and product-owned indexes removed from the
   -- definition with the per-table cascade tightening not opting out -- to the ChangeAudit seam as
-  -- 'wouldDrop' so the run can surface a manifest. Same by-absence predicates as those branches minus the
+  -- 'dropSuppressed' so the run can surface a manifest. Same by-absence predicates as those branches minus the
   -- env gates; the modified branches are not by-absence and are never suppressed, so they are excluded.
   -- Audit rows only -- no DDL -- so this runs regardless of @WhatIf.
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture indexes suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
     SELECT @v_SQL = STRING_AGG(CAST(
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + w.[ObjectType] + ''', ''' + w.[Schema] + '.' + w.[TableName] + '.' + w.[IndexName] + ''', ''wouldDrop'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + w.[ObjectType] + ''', ''' + w.[Schema] + '.' + w.[TableName] + '.' + w.[IndexName] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
       FROM (
         -- Indexes removed from the product (minus the @DropIndexesRemovedFromProduct gate; per-table opt-out kept)
         SELECT [Schema] = CAST(ir.[Schema] AS NVARCHAR(500)), [TableName] = CAST(ir.[TableName] AS NVARCHAR(500)),

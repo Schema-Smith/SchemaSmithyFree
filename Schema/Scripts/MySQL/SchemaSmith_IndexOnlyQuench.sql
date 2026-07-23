@@ -331,7 +331,7 @@ BEGIN
           );
 
         INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-        SELECT CONNECTION_ID(), 'index', CONCAT(TableName, '.', IndexName), 'wouldDrop'
+        SELECT CONNECTION_ID(), 'index', CONCAT(TableName, '.', IndexName), 'dropSuppressed'
         FROM _SchemaSmith_WouldDropIndexes;
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropIndexes;

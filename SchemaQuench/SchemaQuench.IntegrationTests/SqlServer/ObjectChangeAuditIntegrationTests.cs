@@ -78,6 +78,67 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
         conn.Close();
     }
 
+    [Test]
+    public void TableQuench_WhatIf_EmitsWouldChangeAudit_WithoutRunningDdl()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        DropIfExists(cmd, "dbo.AuditChild");
+        DropIfExists(cmd, "dbo.AuditParent");
+        DropIfExists(cmd, "dbo.AuditDrop");
+        DropIfExists(cmd, "dbo.AuditNew");
+        ClearAudit(cmd);
+
+        // Baseline: really create the parent + child + a to-be-dropped table.
+        RunTableQuenchProc(cmd, CreateJson, productName: Product);
+        ClearAudit(cmd);
+
+        // WhatIf re-quench (#363): add a new table + a new column (wouldCreate), widen Name
+        // (wouldModify), and drop the index/FK/check by absence + AuditDrop by absence (wouldDrop).
+        RunTableQuenchProc(cmd, WhatIfJson, productName: Product, whatIf: true, dropTablesRemovedFromProduct: true);
+        var wi = ReadAudit(cmd);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(wi.Any(r => r is { Type: "table", Action: "wouldCreate" } && r.Name.Contains("AuditNew")),
+                "expected table/wouldCreate for AuditNew");
+            Assert.That(wi.Any(r => r is { Type: "column", Action: "wouldCreate" } && r.Name.Contains("Extra")),
+                "expected column/wouldCreate for the new Extra column");
+            Assert.That(wi.Any(r => r is { Type: "column", Action: "wouldModify" } && r.Name.Contains("Name")),
+                "expected column/wouldModify for the widened Name column");
+            Assert.That(wi.Any(r => r is { Type: "index", Action: "wouldCreate" } && r.Name.Contains("IX_AuditChild_Extra")),
+                "expected index/wouldCreate for the new IX_AuditChild_Extra");
+            Assert.That(wi.Any(r => r is { Type: "constraint", Action: "wouldCreate" } && r.Name.Contains("PK_AuditNew")),
+                "expected constraint/wouldCreate for PK_AuditNew");
+            Assert.That(wi.Any(r => r is { Type: "index", Action: "wouldDrop" } && r.Name.Contains("IX_AuditChild_Name")),
+                "expected index/wouldDrop for IX_AuditChild_Name");
+            Assert.That(wi.Any(r => r is { Type: "foreignKey", Action: "wouldDrop" }),
+                "expected foreignKey/wouldDrop for FK_AuditChild_Parent");
+            Assert.That(wi.Any(r => r is { Type: "table", Action: "wouldDrop" } && r.Name.Contains("AuditDrop")),
+                "expected table/wouldDrop for AuditDrop");
+
+            // WhatIf must not touch the schema: no real actions, and the DDL did not run.
+            Assert.That(wi.All(r => r.Action is not ("created" or "modified" or "dropped")),
+                "WhatIf must not emit executed-change actions");
+        });
+
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.AuditNew')";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(System.DBNull.Value), "WhatIf must not create AuditNew");
+        cmd.CommandText = "SELECT OBJECT_ID('dbo.AuditDrop')";
+        Assert.That(cmd.ExecuteScalar(), Is.Not.EqualTo(System.DBNull.Value), "WhatIf must not drop AuditDrop");
+        cmd.CommandText = "SELECT CAST(max_length AS INT) FROM sys.columns WHERE object_id = OBJECT_ID('dbo.AuditChild') AND name = 'Name'";
+        Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(100), "WhatIf must not widen Name (NVARCHAR(50) => 100 bytes)");
+
+        DropIfExists(cmd, "dbo.AuditChild");
+        DropIfExists(cmd, "dbo.AuditParent");
+        DropIfExists(cmd, "dbo.AuditDrop");
+        conn.Close();
+    }
+
     private const string CreateJson = """
         [
         {
@@ -134,6 +195,36 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
             "Statistics": [
                 { "Name": "ST_AuditChild_Id", "Columns": "[Id]" }
             ]
+        }
+        ]
+        """;
+
+    private const string WhatIfJson = """
+        [
+        {
+            "Schema": "[dbo]", "Name": "[AuditParent]",
+            "Columns": [ { "Name": "[Id]", "DataType": "INT", "Nullable": false } ],
+            "Indexes": [ { "Name": "[PK_AuditParent]", "PrimaryKey": true, "IndexColumns": "[Id]" } ]
+        },
+        {
+            "Schema": "[dbo]", "Name": "[AuditChild]",
+            "Columns": [
+                { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+                { "Name": "[ParentId]", "DataType": "INT", "Nullable": false },
+                { "Name": "[Name]", "DataType": "NVARCHAR(100)", "Nullable": true },
+                { "Name": "[Calc]", "DataType": "INT", "ComputedExpression": "[Id]+[ParentId]" },
+                { "Name": "[Extra]", "DataType": "INT", "Nullable": true }
+            ],
+            "Indexes": [
+                { "Name": "[PK_AuditChild]", "PrimaryKey": true, "IndexColumns": "[Id]" },
+                { "Name": "[IX_AuditChild_Extra]", "IndexColumns": "[Extra]" }
+            ],
+            "Statistics": [ { "Name": "ST_AuditChild_Id", "Columns": "[Id]" } ]
+        },
+        {
+            "Schema": "[dbo]", "Name": "[AuditNew]",
+            "Columns": [ { "Name": "[Id]", "DataType": "INT", "Nullable": false } ],
+            "Indexes": [ { "Name": "[PK_AuditNew]", "PrimaryKey": true, "IndexColumns": "[Id]" } ]
         }
         ]
         """;

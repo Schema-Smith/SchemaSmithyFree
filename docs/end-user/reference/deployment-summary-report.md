@@ -190,7 +190,7 @@ Empty on a clean run. Each entry mirrors the failure triage roll-up exactly — 
 
 ### `whatIf`
 
-`null` for a real quench. On a `WhatIf`-mode run it holds the plan, split three ways — and every entry carries a script *path*, never a SQL body.
+`null` for a real quench. On a `WhatIf`-mode run it holds the plan, split three ways — and every entry carries a script *path*, never a SQL body. This block is the *script-level* plan; the engine-generated structural changes a WhatIf run would make (tables, columns, indexes, constraints, foreign keys) preview in [`objectChanges`](#objectchanges--what-actually-changed) with `would*` actions.
 
 | Key | Meaning |
 | --- | --- |
@@ -203,6 +203,8 @@ Empty on a clean run. Each entry mirrors the failure triage roll-up exactly — 
 Timing tells you where the run spent its seconds; `objectChanges` tells you what it *did to your schema*. This is the section a DBA reads after a release: how many tables were created, which columns were modified, what got dropped. But it draws a hard, honest line between changes SchemaSmith *verified* and scripts it merely *ran* — and understanding that line is the whole point of the section.
 
 **Verified counts.** As the four table-quench procedures run DDL, they record each real change to a session-scoped audit that SchemaSmith drains back in-process. Those captured rows are the `created`, `modified`, and `dropped` counts — genuine, observed structural changes to tables, columns, indexes, constraints, and foreign keys. If the count says one table created and three columns modified, that is what happened, read back from the engine.
+
+**Under WhatIf.** A `WhatIf` run records what it *would* change with the parallel actions `wouldCreate` / `wouldModify` / `wouldDrop`, which roll into the same `created` / `modified` / `dropped` buckets — so a dry run's `objectChanges` previews the structural changes it would make rather than reporting an empty section. The counts read the same as a real run; the report's `mode` field (`WhatIf` vs `Quench`) is how you tell a preview from an applied change.
 
 **Scripts that ran.** Object scripts — your stored procedures, views, and functions — are a different story. SchemaSmith re-applies them idempotently on *every* run, so a procedure script executes whether or not its body changed anything. SchemaSmith refuses to guess. It will not tell you a procedure was "created" or "modified" when all it honestly knows is that the script *ran*. So object scripts never touch the created/modified counts. Instead they contribute to `scriptsRan` (a count) and to `details[]` rows carrying `"action": "ran"`.
 
@@ -219,7 +221,7 @@ Timing tells you where the run spent its seconds; `objectChanges` tells you what
 
 ### `details[]`
 
-Where the counts are the summary, `details[]` is the itemized list — one row per recorded change or run, each with `objectType`, `objectName`, and `action`. The actions you'll see are `created`, `modified`, `dropped`, and `ran`.
+Where the counts are the summary, `details[]` is the itemized list — one row per recorded change or run, each with `objectType`, `objectName`, and `action`. The actions you'll see are `created`, `modified`, `dropped`, and `ran` on a real quench — and their `wouldCreate` / `wouldModify` / `wouldDrop` previews on a `WhatIf` run.
 
 `details[]` also carries object types that have no dedicated count bucket. The verified-change audit records more kinds of object than the count fields cover, and those surface here rather than being dropped:
 
@@ -241,7 +243,7 @@ These appear as `details[]` rows with their real `objectType` and `action` even 
 
 ## Cross-platform
 
-The report shape is identical on SQL Server, PostgreSQL, MySQL, and MariaDB — same keys, same nesting, same enum values. The `platform` field tells you which engine produced it, and a few `details[]` object types are engine-specific (the SQL Server statistics and index types above, PostgreSQL exclude constraints), but the contract is one shape across all four. A dashboard that parses a SQL Server report parses a MySQL one unchanged.
+The report shape is identical on SQL Server, PostgreSQL, MySQL, and MariaDB — same keys, same nesting, same enum values. The `platform` field tells you which engine produced it, and a few `details[]` object types are engine-specific (the SQL Server statistics and index types above, PostgreSQL exclude constraints), but the contract is one shape across all four. A dashboard that parses a SQL Server report parses a MySQL or MariaDB one unchanged.
 
 ## What's next
 

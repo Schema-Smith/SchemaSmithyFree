@@ -68,7 +68,7 @@ services:
     # MariaDB delivery note in the end-user docs.
     command: --log-bin-trust-function-creators=1 --max-connections=2000 --max-allowed-packet=64M
     ports:
-      - "${MARIADB_PORT:-3306}:3306"
+      - "${MARIADB_PORT:-3317}:3306"
     environment:
       MARIADB_DATABASE: TestMain
       MARIADB_USER: ${MARIADB_USER}

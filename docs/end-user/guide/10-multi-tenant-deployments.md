@@ -358,7 +358,7 @@ Commit the change to source control. The next CI deployment finds the three exis
 
 Other regions are unaffected. Their settings files declare their own rosters; their own deployments reconcile only against their own targets. The same package, fanned out everywhere, with environment-owned membership.
 
-> **Tip:** The pattern composes with the database axis too. `TemplateTargets.<template>.Databases` declares per-template database fan-out the same way; with `CreateIfMissing: true`, SchemaQuench provisions missing databases (using the engine's admin connection) before deploying. Pure-database-fan-out templates that don't need schema iteration -- such as a per-tenant shared-services bundle -- can use just `Databases`, and database-per-tenant deployments on MySQL use this exclusively.
+> **Tip:** The pattern composes with the database axis too. `TemplateTargets.<template>.Databases` declares per-template database fan-out the same way; with `CreateIfMissing: true`, SchemaQuench provisions missing databases (using the engine's admin connection) before deploying. Pure-database-fan-out templates that don't need schema iteration -- such as a per-tenant shared-services bundle -- can use just `Databases`, and database-per-tenant deployments on MySQL and MariaDB use this exclusively.
 
 ## Migrating from manual duplication
 
@@ -383,7 +383,7 @@ The full mechanics live in the SchemaTongs reference's new extraction section: [
 
 ## MySQL and MariaDB -- database-per-tenant only
 
-Neither MySQL nor MariaDB has a schema-inside-database concept that maps to the pattern described in this chapter. On both engines a "database" and a "schema" are the same thing -- `CREATE DATABASE` and `CREATE SCHEMA` are synonyms. There is no way to create isolated object namespaces inside a single MySQL or MariaDB database.
+MySQL and MariaDB do not have a schema-inside-database concept that maps to the pattern described in this chapter. A MySQL or MariaDB "database" and "schema" are the same thing -- `CREATE DATABASE` and `CREATE SCHEMA` are synonyms. There is no way to create isolated object namespaces inside a single MySQL or MariaDB database.
 
 Multi-tenant deployments on MySQL and MariaDB use database-per-tenant: one database per tenant, `DatabaseIdentificationScript` returning every tenant database name. Everything described in the [Database-per-tenant](#database-per-tenant) section applies. The schema-template fields (`SchemaIdentificationScript`, `CreateSchemaIfMissing`, `AllowParallel`, `ContinueOnSchemaFailure`) are supported on SQL Server and PostgreSQL only.
 

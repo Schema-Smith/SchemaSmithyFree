@@ -1,6 +1,6 @@
 # Edge Cases and Escape Hatches
 
-Most of the time, SchemaSmith's [state-based approach](03-core-concepts.md#state-based-vs-migration-based) handles everything. You declare the desired state, quench, and the tooling figures out the diff. But some situations are inherently imperative -- data transforms, rename operations, dependency tangles, version constraints. For those, SchemaSmith provides deliberate escape hatches. You won't need these every day, but when you do, here's exactly how to reach for them. These apply across **SQL Server**, **PostgreSQL**, and **MySQL** with minor syntax differences noted where they matter.
+Most of the time, SchemaSmith's [state-based approach](03-core-concepts.md#state-based-vs-migration-based) handles everything. You declare the desired state, quench, and the tooling figures out the diff. But some situations are inherently imperative -- data transforms, rename operations, dependency tangles, version constraints. For those, SchemaSmith provides deliberate escape hatches. You won't need these every day, but when you do, here's exactly how to reach for them. These apply across **SQL Server**, **PostgreSQL**, **MySQL**, and **MariaDB** with minor syntax differences noted where they matter.
 
 ## Migration scripts
 

@@ -318,6 +318,44 @@ BEGIN
               -- AUTO_INCREMENT removal/addition (live EXTRA vs declared IsAutoIncrement) — parity with identity removal
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
           );
+
+        -- #363: WhatIf twin of the ELSE-branch 'column'/'modified' audit; same source/predicate, wouldModify.
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'column', CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'wouldModify'
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+            AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+        WHERE t.NewTable = 0
+          AND c.NewColumn = 0
+          AND NOT (
+              ((isc.GENERATION_EXPRESSION IS NOT NULL AND isc.GENERATION_EXPRESSION != '')
+               AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = ''))
+              OR
+              ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
+               AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
+          )
+          AND (
+              CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
+                     OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
+                   THEN BINARY SchemaSmith_UpperDataType(isc.COLUMN_TYPE) != BINARY SchemaSmith_UpperDataType(c.DataType)
+                   ELSE SchemaSmith_StripIntDisplayWidth(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC'))
+                     != SchemaSmith_StripIntDisplayWidth(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')) END
+              OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)
+              OR (isc.IS_NULLABLE = 'NO' AND c.IsNullable = 1)
+              OR (c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) != '' AND c.IsAutoIncrement = 0
+                  AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
+                      CASE WHEN c.DefaultValue LIKE '''%'''
+                           THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
+                           ELSE c.DefaultValue END))
+              OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
+              OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
+              OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
+                  AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
+              OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+          );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Modify columns');
 
@@ -682,7 +720,7 @@ BEGIN
           AND COALESCE(t.DropColumnsRemovedFromProduct, 1) = 1;
 
         INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-        SELECT CONNECTION_ID(), 'column', CONCAT(p_DatabaseName, '.', TableName, '.', ColumnName), 'wouldDrop'
+        SELECT CONNECTION_ID(), 'column', CONCAT(p_DatabaseName, '.', TableName, '.', ColumnName), 'dropSuppressed'
         FROM _SchemaSmith_WouldDropColumns;
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropColumns;
@@ -1208,7 +1246,7 @@ BEGIN
     -- No-drop protection tier (#270): when protected mode is active the caller forces
     -- p_DropTablesRemovedFromProduct to 0 so STEP 8 is skipped. Record the tables that WOULD have
     -- been dropped by absence (owned, present in the catalog, absent from the package, not sticky
-    -- PreventDrop) to the ChangeAudit seam as 'wouldDrop' so the run can surface a manifest. Same
+    -- PreventDrop) to the ChangeAudit seam as 'dropSuppressed' so the run can surface a manifest. Same
     -- by-absence predicate as STEP 8; materialized first (INFORMATION_SCHEMA read out of the DML,
     -- Index-B crash-safety), then a discrete audit insert. Audit rows only, so it runs regardless
     -- of p_WhatIf.
@@ -1237,7 +1275,7 @@ BEGIN
           );
 
         INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-        SELECT CONNECTION_ID(), 'table', CONCAT(p_DatabaseName, '.', TableName), 'wouldDrop'
+        SELECT CONNECTION_ID(), 'table', CONCAT(p_DatabaseName, '.', TableName), 'dropSuppressed'
         FROM _SchemaSmith_WouldDropTables;
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropTables;
@@ -1373,6 +1411,25 @@ BEGIN
                     AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
               )
               -- Not in current definition
+              AND NOT EXISTS (
+                  SELECT 1 FROM _SchemaSmith_Tables t
+                  WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+              );
+
+            -- #363: WhatIf twin of the ELSE-branch 'table'/'dropped' audit; same predicate, ObjectName
+            -- is po.ObjectName (= _SchemaSmith_TablesToDrop.TableName in the real branch).
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'table', po.ObjectName, 'wouldDrop'
+            FROM SchemaSmith_ProductOwnership po
+            WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+              AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+              AND po.ObjectType = 'TABLE'
+              AND COALESCE(po.PreventDrop, 0) = 0
+              AND EXISTS (
+                  SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+                  WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                    AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+              )
               AND NOT EXISTS (
                   SELECT 1 FROM _SchemaSmith_Tables t
                   WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)

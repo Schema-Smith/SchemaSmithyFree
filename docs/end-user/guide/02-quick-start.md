@@ -49,7 +49,7 @@ The launcher runs `build-schemaquench.sh` to compile the SchemaQuench binary (re
 | User     | `TestUser` |
 | Password | _(see `Demos/SqlServer/.env`)_ |
 
-> **PostgreSQL or MySQL?** Swap the platform folder: `Demos/PostgreSQL` (port `5432`) or `Demos/MySQL` (port `3306`). Each platform has its own `run-demo.sh` / `run-demo.cmd` launcher, `.env` credentials file, and the same four demo databases (AdventureWorks, Chinook, Northwind, Sakila). On MySQL the demo databases are stored in lowercase (`adventureworks`, `chinook`, `northwind`, `sakila`) because Linux MySQL containers default to `lower_case_table_names=1`; use the lowercase form in your `Database` / `NorthwindDb` config values when the platform is MySQL.
+> **PostgreSQL, MySQL, or MariaDB?** Swap the platform folder: `Demos/PostgreSQL` (port `5432`), `Demos/MySQL` (port `3306`), or `Demos/MariaDB` (port `3317`). Each platform has its own `run-demo.sh` / `run-demo.cmd` launcher, `.env` credentials file, and the same four demo databases (AdventureWorks, Chinook, Northwind, Sakila). On MySQL and MariaDB the demo databases are stored in lowercase (`adventureworks`, `chinook`, `northwind`, `sakila`) because their Linux containers default to `lower_case_table_names=1`; use the lowercase form in your `Database` / `NorthwindDb` config values when the platform is MySQL or MariaDB.
 
 > **Already have a SQL Server?** You can skip Docker entirely — the same demo databases deploy straight onto your own instance. See [Use your own server](use-your-own-server.md).
 
@@ -93,7 +93,7 @@ Now let's go the other direction. Pretend you already have a database and want t
 }
 ```
 
-> **PostgreSQL or MySQL?** Set `"Platform"` to `"PostgreSQL"` or `"MySQL"` and adjust the connection string. The `ShouldCast` flags you don't need are simply ignored. Schemas, sequences, materialized views, exclude constraints, full-text indexes, events -- all the per-platform object types are toggled from the same flag list.
+> **PostgreSQL, MySQL, or MariaDB?** Set `"Platform"` to `"PostgreSQL"`, `"MySQL"`, or `"MariaDb"` and adjust the connection string. The `ShouldCast` flags you don't need are simply ignored. Schemas, sequences, materialized views, exclude constraints, full-text indexes, events -- all the per-platform object types are toggled from the same flag list.
 
 Run the extraction:
 

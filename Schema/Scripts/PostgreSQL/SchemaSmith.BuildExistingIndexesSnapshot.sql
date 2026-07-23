@@ -41,7 +41,7 @@ BEGIN
            COALESCE(con.condeferrable, FALSE) AS "Deferrable",
            COALESCE(con.condeferred, FALSE) AS "InitiallyDeferred"
       FROM temp_tables t
-      JOIN pg_index idx ON idx.indrelid = ('"' || t."Schema" || '"' ||  '.' || '"' ||  t."Name" || '"')::regclass
+      JOIN pg_index idx ON idx.indrelid = to_regclass('"' || t."Schema" || '"' ||  '.' || '"' ||  t."Name" || '"')
       JOIN pg_class i ON i.oid = idx.indexrelid
       LEFT JOIN pg_catalog.pg_constraint con ON con.contype IN ('p','u') AND con.conrelid = idx.indrelid AND con.conname = i.relname;
 END $$;

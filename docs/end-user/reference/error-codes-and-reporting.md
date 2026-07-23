@@ -42,7 +42,7 @@ It's always on and adds nothing to a clean run (no banner, no roll-up, an empty 
 
 With it off (the default), a `PRINT` or a low-severity `RAISERROR` from one of your scripts is filtered out of the log. Turn it on and those messages surface. It affects **your scripts' output only** — SchemaSmith's own phase progress always shows regardless (the engine emits its progress with an always-surface flag), so turning `VerboseLogging` on won't reveal any hidden SchemaSmith progress; it only unmutes your scripts.
 
-> **PostgreSQL, MySQL, and MariaDB:** the switch has no effect. PostgreSQL surfaces its `RAISE NOTICE` output by default, and MySQL and MariaDB user scripts have no progress channel at all — so there's nothing for the dial to gate on any of these engines.
+> **PostgreSQL, MySQL, and MariaDB:** the switch has no effect. PostgreSQL surfaces its `RAISE NOTICE` output by default, and MySQL and MariaDB user scripts have no progress channel at all — so there's nothing for the dial to gate on those engines.
 
 Set it in the settings file (`"VerboseLogging": true`), as an environment variable (`SmithySettings_VerboseLogging=true`), or on the command line:
 
@@ -54,16 +54,16 @@ SchemaQuench --VerboseLogging=true
 
 ## Per-platform error codes
 
-The same failure carries a different code on each engine. SQL Server usually prints the *message* (the number isn't always shown); PostgreSQL prints the SQLSTATE literally; MySQL prints its classic error message. Use this table to recognize the same fault across platforms.
+The same failure carries a different code on each engine. SQL Server usually prints the *message* (the number isn't always shown); PostgreSQL prints the SQLSTATE literally; MySQL and MariaDB print the classic MySQL-family error message. MariaDB inherits MySQL's error-number space, so the two share codes. Use this table to recognize the same fault across platforms.
 
-| Failure | SQL Server | PostgreSQL | MySQL |
-| --- | --- | --- | --- |
-| Foreign-key violation (orphan) | `547` | `23503` | `1452` |
-| NOT NULL violation | `515` | `23502` | `1048` |
-| Duplicate / unique-key | `1505` (index build) / `2601` / `2627` | `23505` | `1062` |
-| String or binary truncation | `8152` | `22001` | `1406` |
-| Type / conversion mismatch | `245` / `8115` | `22P02` | `1366` |
-| Deadlock (retried automatically) | `1205` | `40P01` | — (message-matched) |
+| Failure | SQL Server | PostgreSQL | MySQL | MariaDB |
+| --- | --- | --- | --- | --- |
+| Foreign-key violation (orphan) | `547` | `23503` | `1452` | `1452` |
+| NOT NULL violation | `515` | `23502` | `1048` | `1048` |
+| Duplicate / unique-key | `1505` (index build) / `2601` / `2627` | `23505` | `1062` | `1062` |
+| String or binary truncation | `8152` | `22001` | `1406` | `1406` |
+| Type / conversion mismatch | `245` / `8115` | `22P02` | `1366` | `1366` |
+| Deadlock (retried automatically) | `1205` | `40P01` | — (message-matched) | — (message-matched) |
 
 > **Note:** Deadlocks are retried for you — SchemaSmith detects the deadlock code and re-runs the operation with backoff, so a transient lock collision resolves itself rather than failing the deploy.
 

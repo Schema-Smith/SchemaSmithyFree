@@ -14,7 +14,7 @@ Schema packages work with git exactly the way your application code does. Branch
 
 **History tells a real story.** Every commit describes a change to the declared state of your schema. Six months from now, `git log` shows you exactly when `LoyaltyTier` was added, who added it, and what the table looked like before and after. With migration scripts, you see that someone ran an ALTER -- but reconstructing the full table state at any point requires replaying every migration in sequence.
 
-This is where schema-as-files really shines. Your schema evolves in pull requests, with reviews, approvals, and a full history -- exactly like your application code already does. The workflow is identical across **SQL Server**, **PostgreSQL**, and **MySQL** -- one repository can host products targeting any mix of platforms, all reviewed the same way.
+This is where schema-as-files really shines. Your schema evolves in pull requests, with reviews, approvals, and a full history -- exactly like your application code already does. The workflow is identical across **SQL Server**, **PostgreSQL**, **MySQL**, and **MariaDB** -- one repository can host products targeting any mix of platforms, all reviewed the same way.
 
 ## Code review with state-based diffs
 
