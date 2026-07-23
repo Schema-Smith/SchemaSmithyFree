@@ -81,9 +81,9 @@ public class DeploymentSummaryAssemblerTests
     public void Assemble_PreventDrop_ManifestFromWouldDropRows_WhenProtectionOn()
     {
         var cap = new ChangeAuditCapture();
-        cap.Record("table", "dbo.Orders", "wouldDrop");
-        cap.Record("table", "dbo.Audit", "wouldDrop");
-        cap.Record("table", "dbo.Kept", "created"); // not a wouldDrop — must not appear in the manifest
+        cap.Record("table", "dbo.Orders", "dropSuppressed");
+        cap.Record("table", "dbo.Audit", "dropSuppressed");
+        cap.Record("table", "dbo.Kept", "created"); // not a dropSuppressed — must not appear in the manifest
         cap.MarkInstrumented();
 
         var summary = AssembleWith(changeAudit: cap, protectedModeEnabled: true);
@@ -92,8 +92,31 @@ public class DeploymentSummaryAssemblerTests
         Assert.That(summary.PreventDrop.Enabled, Is.True);
         Assert.That(summary.PreventDrop.WouldDrop.Select(w => w.ObjectName),
             Is.EquivalentTo(new[] { "dbo.Orders", "dbo.Audit" }));
-        // wouldDrop rows are protection-suppressed, not changes that occurred — excluded from object-change detail.
-        Assert.That(summary.ObjectChanges.Details.Select(d => d.Action), Does.Not.Contain("wouldDrop"));
+        // dropSuppressed rows are protection-suppressed, not changes that occurred — excluded from object-change detail.
+        Assert.That(summary.ObjectChanges.Details.Select(d => d.Action), Does.Not.Contain("dropSuppressed"));
+    }
+
+    [Test]
+    public void Assemble_ObjectChanges_WhatIfWouldActions_MapIntoCreatedModifiedDroppedBuckets()
+    {
+        var cap = new ChangeAuditCapture();
+        cap.Record("table", "dbo.New", "wouldCreate");
+        cap.Record("index", "dbo.New.IX_New", "wouldCreate");
+        cap.Record("column", "dbo.Existing.Name", "wouldModify");
+        cap.Record("foreignKey", "dbo.Existing.FK_Old", "wouldDrop");
+        cap.Record("constraint", "dbo.Existing.CK_Old", "wouldDrop");
+        cap.MarkInstrumented();
+
+        var oc = AssembleWith(changeAudit: cap, protectedModeEnabled: false).ObjectChanges;
+
+        Assert.That(oc.Created.Tables, Is.EqualTo(1), "wouldCreate table maps into created.tables");
+        Assert.That(oc.Created.Indexes, Is.EqualTo(1), "wouldCreate index maps into created.indexes");
+        Assert.That(oc.Modified.Columns, Is.EqualTo(1), "wouldModify column maps into modified.columns");
+        Assert.That(oc.Dropped.ForeignKeys, Is.EqualTo(1), "wouldDrop FK maps into dropped.foreignKeys");
+        Assert.That(oc.Dropped.Constraints, Is.EqualTo(1), "wouldDrop constraint maps into dropped.constraints");
+        // WhatIf previews ARE changes — they stay in the detail (unlike protection-suppressed dropSuppressed).
+        Assert.That(oc.Details.Select(d => d.Action),
+            Is.EquivalentTo(new[] { "wouldCreate", "wouldCreate", "wouldModify", "wouldDrop", "wouldDrop" }));
     }
 
     [Test]

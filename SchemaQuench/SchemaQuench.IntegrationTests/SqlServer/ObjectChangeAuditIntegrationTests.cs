@@ -110,7 +110,11 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
                 "expected column/wouldCreate for the new Extra column");
             Assert.That(wi.Any(r => r is { Type: "column", Action: "wouldModify" } && r.Name.Contains("Name")),
                 "expected column/wouldModify for the widened Name column");
-            Assert.That(wi.Any(r => r is { Type: "index", Action: "wouldDrop" } && r.Name.Contains("IX_AuditChild")),
+            Assert.That(wi.Any(r => r is { Type: "index", Action: "wouldCreate" } && r.Name.Contains("IX_AuditChild_Extra")),
+                "expected index/wouldCreate for the new IX_AuditChild_Extra");
+            Assert.That(wi.Any(r => r is { Type: "constraint", Action: "wouldCreate" } && r.Name.Contains("PK_AuditNew")),
+                "expected constraint/wouldCreate for PK_AuditNew");
+            Assert.That(wi.Any(r => r is { Type: "index", Action: "wouldDrop" } && r.Name.Contains("IX_AuditChild_Name")),
                 "expected index/wouldDrop for IX_AuditChild_Name");
             Assert.That(wi.Any(r => r is { Type: "foreignKey", Action: "wouldDrop" }),
                 "expected foreignKey/wouldDrop for FK_AuditChild_Parent");
@@ -211,7 +215,10 @@ public class ObjectChangeAuditIntegrationTests : BaseTableQuenchTests
                 { "Name": "[Calc]", "DataType": "INT", "ComputedExpression": "[Id]+[ParentId]" },
                 { "Name": "[Extra]", "DataType": "INT", "Nullable": true }
             ],
-            "Indexes": [ { "Name": "[PK_AuditChild]", "PrimaryKey": true, "IndexColumns": "[Id]" } ],
+            "Indexes": [
+                { "Name": "[PK_AuditChild]", "PrimaryKey": true, "IndexColumns": "[Id]" },
+                { "Name": "[IX_AuditChild_Extra]", "IndexColumns": "[Extra]" }
+            ],
             "Statistics": [ { "Name": "ST_AuditChild_Id", "Columns": "[Id]" } ]
         },
         {
