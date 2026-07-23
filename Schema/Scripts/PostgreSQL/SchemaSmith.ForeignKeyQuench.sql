@@ -29,5 +29,20 @@ BEGIN
                         WHERE con.contype = 'f'
                           AND con.conname = fk."Name");
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
+  -- #363: WhatIf twin of the embedded 'foreignKey'/'created' audit above; same predicate.
+  IF p_WhatIf THEN
+    INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+      SELECT pg_backend_pid(), 'foreignKey', fk."TableSchema" || '.' || fk."TableName" || '.' || fk."Name", 'wouldCreate'
+        FROM temp_fks fk
+        WHERE NOT EXISTS (SELECT 1
+                            FROM pg_constraint con
+                            JOIN pg_class rel ON rel.oid = con.conrelid
+                            JOIN pg_namespace nsp ON nsp.oid = con.connamespace
+                                                 AND nsp.nspname = fk."TableSchema"
+                                                 AND rel.relname = fk."TableName"
+                            WHERE con.contype = 'f'
+                              AND con.conname = fk."Name");
+  END IF;
 END
 $$;
