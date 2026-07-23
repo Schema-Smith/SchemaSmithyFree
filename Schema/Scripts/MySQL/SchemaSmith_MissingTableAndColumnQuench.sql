@@ -123,6 +123,22 @@ BEGIN
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
         ORDER BY c.TableName, c.OrdinalPosition;
 
+        -- #363: WhatIf twins of the ELSE-branch 'table'/'created' (cursor loop) and 'column'/'created'
+        -- audits. Set-based over the same temp-table sources; the new-table's own columns are covered
+        -- by the table row (NewTable = 0 only for the column twin), matching the real audits.
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'table', t.TableName, 'wouldCreate'
+        FROM _SchemaSmith_Tables t
+        WHERE t.NewTable = 1;
+
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'column', CONCAT(c.TableName, '.', c.ColumnName), 'wouldCreate'
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        WHERE t.NewTable = 0
+          AND c.NewColumn = 1
+          AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '');
+
     ELSE
         -- CustomTableRestore hook: attempt to restore tables being added in case they were
         -- custom-dropped (recycled) previously, then mark any that now exist as not-new so the

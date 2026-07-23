@@ -53,6 +53,16 @@ BEGIN
           AND TRIM(c.GeneratedExpression) != ''
           AND c.NewColumn = 1
         ORDER BY c.TableName, c.DependencyLevel, c.OrdinalPosition;
+
+        -- #363: WhatIf twin of the ELSE-branch generated-column 'created' audit; same source, same
+        -- AuditName form as _SchemaSmith_GenColStmts.AuditName.
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'column', CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'wouldCreate'
+        FROM _SchemaSmith_Columns c
+        INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        WHERE c.GeneratedExpression IS NOT NULL
+          AND TRIM(c.GeneratedExpression) != ''
+          AND c.NewColumn = 1;
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Add missing generated columns');
 
@@ -298,6 +308,23 @@ BEGIN
                 AND CONVERT(s.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
                 AND CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
           );
+
+        -- #363: WhatIf twin of the ELSE-branch 'index'/'created' audit; same predicate, set-based wouldCreate.
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'index', CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName)), 'wouldCreate'
+        FROM _SchemaSmith_Indexes i
+        WHERE i.IsPrimaryKey = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_IndexRenames r
+              WHERE r.TableName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
+                AND r.NewIndexName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
+              WHERE CONVERT(s.TABLE_SCHEMA USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                AND CONVERT(s.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
+                AND CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
+          );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing indexes');
 
@@ -478,7 +505,7 @@ BEGIN
                 AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName)));
 
         INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-        SELECT CONNECTION_ID(), 'constraint', CONCAT(TableName, '.', ConstraintName), 'wouldDrop'
+        SELECT CONNECTION_ID(), 'constraint', CONCAT(TableName, '.', ConstraintName), 'dropSuppressed'
         FROM _SchemaSmith_WouldDropChecks;
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropChecks;
@@ -524,6 +551,11 @@ BEGIN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
             SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ', SchemaSmith_DropCheckClause(), ' `', ConstraintName, '`')
             FROM _SchemaSmith_ChecksToDropByAbsence;
+
+            -- #363: WhatIf twin of the ELSE-branch 'constraint'/'dropped' audit; same source, wouldDrop.
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'constraint', CONCAT(TableName, '.', ConstraintName), 'wouldDrop'
+            FROM _SchemaSmith_ChecksToDropByAbsence;
         ELSE
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop check constraints removed from product');
 
@@ -560,6 +592,18 @@ BEGIN
         SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
                       ' ADD CONSTRAINT ', c.ConstraintName,
                       ' CHECK (', c.Expression, ')')
+        FROM _SchemaSmith_CheckConstraints c
+        WHERE NOT EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
+              AND tc.CONSTRAINT_TYPE = 'CHECK'
+        );
+
+        -- #363: WhatIf twin of the ELSE-branch 'constraint'/'created' (check) audit; same predicate, wouldCreate.
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'constraint', CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName)), 'wouldCreate'
         FROM _SchemaSmith_CheckConstraints c
         WHERE NOT EXISTS (
             SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
@@ -831,7 +875,7 @@ BEGIN
           );
 
         INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-        SELECT CONNECTION_ID(), 'index', CONCAT(TableName, '.', IndexName), 'wouldDrop'
+        SELECT CONNECTION_ID(), 'index', CONCAT(TableName, '.', IndexName), 'dropSuppressed'
         FROM _SchemaSmith_WouldDropStep8Indexes;
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_WouldDropStep8Indexes;
@@ -977,6 +1021,11 @@ BEGIN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unknown indexes');
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
             SELECT CONNECTION_ID(), CONCAT('DROP INDEX `', IndexName, '` ON `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`')
+            FROM _SchemaSmith_IndexesToDrop;
+
+            -- #363: WhatIf twin of the ELSE-branch 'index'/'dropped' audit; same source + AuditName form.
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'index', CONCAT(TableName, '.', IndexName), 'wouldDrop'
             FROM _SchemaSmith_IndexesToDrop;
         ELSE
             -- First, drop any foreign keys that reference unique indexes we're about to drop.
