@@ -20,7 +20,7 @@ Run it from the directory containing `SchemaQuench.settings.json`, or point `Sch
 SchemaQuench --Validate --SchemaPackagePath:./MyProduct
 ```
 
-No `Target`, no `--ConnectionString`, no credentials of any kind -- `--Validate` never opens a connection. It reads `Product.json` to determine the declared `Platform` (`SqlServer`, `PostgreSQL`, or `MySQL`), loads the package through that platform's domain types, runs every check, prints the findings, and exits.
+No `Target`, no `--ConnectionString`, no credentials of any kind -- `--Validate` never opens a connection. It reads `Product.json` to determine the declared `Platform` (`SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb`), loads the package through that platform's domain types, runs every check, prints the findings, and exits.
 
 ---
 
@@ -117,7 +117,7 @@ If a package has no `.json-schemas/` directory at all, this check has nothing to
 | --- | --- | --- |
 | `SS-FILE-NAME-003` | Warning | A table file's on-disk name differs from the canonical `<schema>.<table>[.<VariantName>].json` derived from its `Schema`, `Name`, and `VariantName`. |
 
-A table's identity lives in its file *content*, never its filename, so a misnamed file still deploys correctly -- this is a **lean, not a gate** (Warning only, never an Error, never changes the exit code). The canonical name keeps a table's conditional variants sorted together in source control and makes a file's name a reliable pointer to the table it holds. The schema segment is omitted for MySQL and schema-template packages (which carry no per-table schema). SchemaTongs writes canonical names on extraction; this check catches hand-authored files that have drifted.
+A table's identity lives in its file *content*, never its filename, so a misnamed file still deploys correctly -- this is a **lean, not a gate** (Warning only, never an Error, never changes the exit code). The canonical name keeps a table's conditional variants sorted together in source control and makes a file's name a reliable pointer to the table it holds. The schema segment is omitted for MySQL, MariaDB, and schema-template packages (which carry no per-table schema). SchemaTongs writes canonical names on extraction; this check catches hand-authored files that have drifted.
 
 ### Data types
 
@@ -180,7 +180,7 @@ jobs:
         run: schemaquench --Validate
 ```
 
-Because `--Validate` exits `2` on any Error, the job fails naturally on a broken package -- no extra scripting needed to interpret the result. Cross-platform: the same command works whether `MyProduct/Product.json` declares `SqlServer`, `PostgreSQL`, or `MySQL` as its `Platform` -- `--Validate` reads the declared platform and loads the package through the matching domain model automatically.
+Because `--Validate` exits `2` on any Error, the job fails naturally on a broken package -- no extra scripting needed to interpret the result. Cross-platform: the same command works whether `MyProduct/Product.json` declares `SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb` as its `Platform` -- `--Validate` reads the declared platform and loads the package through the matching domain model automatically.
 
 Pair it with the connection-based gates for a layered pipeline: `--Validate` on every PR (fast, no database), `--TestConnection` and `--PreviewTargets` immediately before a real deployment window (see [Pre-Flight Diagnostics](schemaquench.md#pre-flight-diagnostics)), and `WhatIfONLY` when you want to see the actual generated SQL for a tricky change (see [WhatIf Mode](schemaquench.md#whatif-mode)).
 

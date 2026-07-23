@@ -1,16 +1,18 @@
 # SchemaSmith Community Demos
 
-Demo database schema packages for SQL Server, PostgreSQL, and MySQL, deployed by [SchemaSmith](https://github.com/Schema-Smith/SchemaSmith) (SchemaQuench).
+Demo database schema packages for SQL Server, PostgreSQL, MySQL, and MariaDB, deployed by [SchemaSmith](https://github.com/Schema-Smith/SchemaSmith) (SchemaQuench).
 
 ## Demo Products
 
-| Product | SQL Server | PostgreSQL | MySQL |
-|---------|:---:|:---:|:---:|
-| AdventureWorks | Done | Done | Done |
-| Chinook | Done | Done | Done |
-| Northwind | Done | Done | Done |
-| Sakila | Done | Done | Done |
-| TenantCRM | Done | Done | n/a — schema templates are SQL Server + PostgreSQL only |
+| Product | SQL Server | PostgreSQL | MySQL | MariaDB |
+|---------|:---:|:---:|:---:|:---:|
+| AdventureWorks | Done | Done | Done | Done |
+| Chinook | Done | Done | Done | Done |
+| Northwind | Done | Done | Done | Done |
+| Sakila | Done | Done | Done | Done |
+| TenantCRM | Done | Done | n/a¹ | n/a¹ |
+
+¹ Schema templates (schema-per-tenant fan-out) are SQL Server + PostgreSQL only.
 
 TenantCRM is a hand-authored multi-tenant CRM showcasing the **schema-per-tenant** pattern — one schema-template definition fanned out across an arbitrary number of tenant schemas inside a single database. See the [SQL Server](SqlServer/TenantCRM/README.md) or [PostgreSQL](PostgreSQL/TenantCRM/README.md) demo READMEs for the walkthrough.
 
@@ -39,6 +41,9 @@ cd PostgreSQL && run-demo.cmd
 
 :: MySQL
 cd MySQL && run-demo.cmd
+
+:: MariaDB
+cd MariaDB && run-demo.cmd
 ```
 
 macOS / Linux (bash):
@@ -52,6 +57,9 @@ cd PostgreSQL && ./run-demo.sh
 
 # MySQL
 cd MySQL && ./run-demo.sh
+
+# MariaDB
+cd MariaDB && ./run-demo.sh
 ```
 
 The launcher publishes SchemaQuench from source (via `build-schemaquench.cmd` / `.sh` — requires the .NET SDK on the host), then runs `docker compose up --build -d` to start the database server and deploy the demo schemas.

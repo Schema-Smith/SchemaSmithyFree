@@ -2,7 +2,7 @@
 
 The [Quick Start](02-quick-start.md) walked you through the full cycle: cast, review, quench, change, redeploy. This chapter explains the mental model behind what you just did, so the patterns make sense as your schema packages grow more complex.
 
-Think of this as the "why it works" behind the "how it works." Everything here applies to **SQL Server**, **PostgreSQL**, and **MySQL** -- the concepts are identical across platforms.
+Think of this as the "why it works" behind the "how it works." Everything here applies to **SQL Server**, **PostgreSQL**, **MySQL**, and **MariaDB** -- the concepts are identical across platforms.
 
 ## State-based vs migration-based
 
@@ -63,7 +63,7 @@ A **product** is a deployable unit -- the top-level container for everything Sch
 }
 ```
 
-The `Platform` field (`SqlServer`, `PostgreSQL`, or `MySQL`) is the linchpin -- it tells every SchemaSmith tool which adapter, DDL flavor, and object-type set to use. Everything else -- validation scripts, script tokens, template order -- works the same on every platform.
+The `Platform` field (`SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb`) is the linchpin -- it tells every SchemaSmith tool which adapter, DDL flavor, and object-type set to use. Everything else -- validation scripts, script tokens, template order -- works the same on every platform.
 
 A **template** targets a specific database (or set of databases). It lives in a subdirectory under `Templates/` and has its own `Template.json`:
 

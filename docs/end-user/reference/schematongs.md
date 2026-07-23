@@ -1,8 +1,8 @@
 # SchemaTongs Reference
 
-Cast your live database into version-controlled code with a single command. SchemaTongs grips every object in your database -- on **SQL Server**, **PostgreSQL**, or **MySQL** -- and extracts them into a clean schema package: tables as JSON, programmable objects as SQL scripts, everything organized and ready to commit to source control. Point it at a database, run it, and you have a deployable package that SchemaQuench can quench onto any compatible target.
+Cast your live database into version-controlled code with a single command. SchemaTongs grips every object in your database -- on **SQL Server**, **PostgreSQL**, **MySQL**, or **MariaDB** -- and extracts them into a clean schema package: tables as JSON, programmable objects as SQL scripts, everything organized and ready to commit to source control. Point it at a database, run it, and you have a deployable package that SchemaQuench can quench onto any compatible target.
 
-The same tool, the same package format, three engines. Whatever your team runs, SchemaTongs casts it.
+The same tool, the same package format, four engines. Whatever your team runs, SchemaTongs casts it.
 
 ---
 
@@ -320,7 +320,7 @@ SchemaTongs writes each table file under a canonical name derived from the table
 <schema>.<table>[.<VariantName>].json
 ```
 
-The optional `VariantName` segment comes after the schema and table, so a table's [conditional variants](schema-packages.md#conditional-application) sort together in source control and in a file listing. The schema segment is omitted for MySQL and schema-template packages, which carry no per-table schema (`<table>[.<VariantName>].json`).
+The optional `VariantName` segment comes after the schema and table, so a table's [conditional variants](schema-packages.md#conditional-application) sort together in source control and in a file listing. The schema segment is omitted for MySQL, MariaDB, and schema-template packages, which carry no per-table schema (`<table>[.<VariantName>].json`).
 
 A table's identity lives in its file *content* -- `Schema`, `Name`, and `VariantName` -- not in its filename. SchemaTongs matches an existing file to an extracted table by that content identity, so a file you renamed by hand is still found and refreshed in place rather than duplicated. The canonical name is a convention, not a contract: if a file's name drifts from canonical, the deploy still works and [`--Validate`](validate.md#file-naming) emits an `SS-FILE-NAME-003` warning pointing at the canonical name.
 
@@ -487,7 +487,7 @@ SchemaTongs automatically excludes the platform's system schemas and internal in
 
 You have N tenant schemas hand-replicated inside one database. One is the canonical copy. Instead of maintaining those copies by hand, point SchemaTongs at the canonical schema, give it the name, and it extracts a schema template: unqualified filenames, source-schema references rewritten to `{{SchemaName}}`, and a `Template.json` stub wired for schema-level fan-out. SchemaQuench can then govern every tenant schema from that single template.
 
-Schema-template extraction is supported on **SQL Server and PostgreSQL only**. MySQL has no schema-inside-database concept -- use `DatabaseIdentificationScript` with a database-per-tenant template instead.
+Schema-template extraction is supported on **SQL Server and PostgreSQL only**. MySQL and MariaDB have no schema-inside-database concept -- use `DatabaseIdentificationScript` with a database-per-tenant template instead.
 
 ### Activation
 

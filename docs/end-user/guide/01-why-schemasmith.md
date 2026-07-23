@@ -18,17 +18,17 @@ SchemaSmith brings that same model to relational databases. You declare what eve
 
 No migration scripts. No dependency ordering. No guessing what the target looks like. You describe the destination, and the forge does the rest.
 
-## One toolset, three engines
+## One toolset, four engines
 
-SchemaSmith Community supports **SQL Server**, **PostgreSQL**, and **MySQL** as first-class peers. Not "SQL Server with PostgreSQL bolted on." Three adapters, one shared schema package format, one workflow, one mental model. Whether your team runs a single platform or a heterogeneous mix of all three, SchemaSmith speaks the native DDL of each while you work in one consistent declaration surface.
+SchemaSmith Community supports **SQL Server**, **PostgreSQL**, **MySQL**, and **MariaDB** as first-class peers. Not "SQL Server with PostgreSQL bolted on." Four adapters, one shared package *format*, one workflow, one mental model. Each package declares its own platform and speaks that engine's native DDL -- and packages are platform-specific, not interchangeable: a MariaDB package targets MariaDB, a MySQL package targets MySQL, and neither applies to the other. Whether your team runs a single platform or a heterogeneous mix, SchemaSmith gives you one consistent declaration surface across all four.
 
-The platform is a property of each product, not of the tool. Point SchemaQuench at a SQL Server product and it quenches SQL Server. Point it at a PostgreSQL product and it quenches PostgreSQL. Same binary, same command line, same CI pipeline shape.
+The platform is a property of each product, not of the tool. Point SchemaQuench at a SQL Server product and it quenches SQL Server. Point it at a MariaDB product and it quenches MariaDB. Same binary, same command line, same CI pipeline shape.
 
 ## Four tools, one lifecycle
 
 SchemaSmith is a toolset of four components that cover the full schema lifecycle -- extraction to deployment:
 
-**[SchemaTongs](../reference/schematongs.md)** grips your live database and casts it into a clean, organized package -- tables as JSON, programmable objects as SQL files, everything structured for humans to read and source control to track. Works against SQL Server, PostgreSQL, and MySQL.
+**[SchemaTongs](../reference/schematongs.md)** grips your live database and casts it into a clean, organized package -- tables as JSON, programmable objects as SQL files, everything structured for humans to read and source control to track. Works against SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 **[SchemaQuench](../reference/schemaquench.md)** deploys a schema package to any compatible server -- the moment your declared state hardens into a live database. It reads your declaration, compares it to the target, and applies only the changes needed. No migration ordering. No manual diffing. Run it against dev, staging, and production -- same package, correct results everywhere. Boring, predictable, reliable deployments. That's the goal.
 
@@ -46,13 +46,13 @@ The developer thinks in terms of table design. The DBA reviews table design. The
 
 ## What you get
 
-**A complete, capable toolset for state-based schema management across three database engines -- free.** This is not a stripped-down preview of something bigger. Community contains everything a production team needs to manage schemas as code: conditional deployment with `ShouldApplyExpression`, advanced token tags that embed file contents or live query results into scripts, custom metadata via the `Extensions` carrier, secondary-server support for Availability Groups, custom script folders to fit your deployment lifecycle, per-platform materialized views, PostgreSQL exclude constraints, MySQL multi-column full-text indexes -- the full feature surface. Three engines. One workflow.
+**A complete, capable toolset for state-based schema management across four database engines -- free.** This is not a stripped-down preview of something bigger. Community contains everything a production team needs to manage schemas as code: conditional deployment with `ShouldApplyExpression`, advanced token tags that embed file contents or live query results into scripts, custom metadata via the `Extensions` carrier, secondary-server support for Availability Groups, custom script folders to fit your deployment lifecycle, per-platform materialized views, PostgreSQL exclude constraints, MySQL multi-column full-text indexes -- the full feature surface. Four engines. One workflow.
 
 Self-contained executables -- download, extract, run. No .NET runtime to install, no dependency chains to manage. Available for Windows, macOS, and Linux on both x64 and ARM64.
 
 Licensed under the SchemaSmith Community License (SSCL v2.0). Manage databases for your own products and services -- any size organization, any revenue, any number of environments, any database size. No usage caps, no nickel-and-diming. What the license does restrict is redistributing SchemaSmith as a standalone product, bundling it inside another product you sell to third parties, or offering it as a hosted or managed service. See the [LICENSE](../../LICENSE) for the full terms. Otherwise: free means free.
 
-Production-tested against real-world schemas. The demo products include Northwind, AdventureWorks, Chinook, and Sakila across all three platforms so you can see it work before pointing it at your own databases.
+Production-tested against real-world schemas. The demo products include Northwind, AdventureWorks, Chinook, and Sakila across all four platforms so you can see it work before pointing it at your own databases.
 
 This is a production-grade schema management ecosystem -- completely free, built by people who've spent decades solving exactly the problems you're facing. The tools are ready. Your databases are waiting.
 

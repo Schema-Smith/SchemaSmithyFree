@@ -26,7 +26,7 @@
   },
   "MariaDB": {
     "Server": "127.0.0.1",
-    "Port": "3306",
+    "Port": "3317",
     "User": "TestUser",
     "Password": "aCa2d805-41E5@40c4!98e7#92F93zzxo176"
   },

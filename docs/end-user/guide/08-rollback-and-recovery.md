@@ -1,6 +1,6 @@
 # Rollback and Recovery
 
-What if rolling back a database change was as simple as deploying the previous version? With state-based deployments, it's exactly that. Deploy the prior release's schema package, and SchemaQuench computes the delta to bring the database back to that state. No rollback scripts. No pre-planned undo steps. The same tool that deploys forward also deploys backward, on **SQL Server**, **PostgreSQL**, and **MySQL** alike.
+What if rolling back a database change was as simple as deploying the previous version? With state-based deployments, it's exactly that. Deploy the prior release's schema package, and SchemaQuench computes the delta to bring the database back to that state. No rollback scripts. No pre-planned undo steps. The same tool that deploys forward also deploys backward, on **SQL Server**, **PostgreSQL**, **MySQL**, and **MariaDB** alike.
 
 ## What rolls back automatically
 
@@ -29,9 +29,9 @@ SchemaSmith's rollback semantics are the same across platforms, but the individu
 
 - **PostgreSQL** supports fully transactional DDL. Many migration patterns can be wrapped in `BEGIN` / `COMMIT`, and a failed statement rolls back the whole batch.
 - **SQL Server** supports transactional DDL for most statements, but some (like `ALTER DATABASE`) cannot participate in user transactions.
-- **MySQL** does **not** support transactional DDL. Each DDL statement is implicitly committed. A failed multi-statement deployment on MySQL cannot be rolled back by the engine itself -- recovery means re-quenching the prior package.
+- **MySQL and MariaDB** do **not** support transactional DDL. Each DDL statement is implicitly committed. A failed multi-statement deployment on MySQL or MariaDB cannot be rolled back by the engine itself -- recovery means re-quenching the prior package.
 
-> **Warning:** Regardless of platform, rolling back with SchemaSmith means deploying the prior package. On MySQL especially, test rollbacks carefully because the engine won't unwind a half-applied deployment for you.
+> **Warning:** Regardless of platform, rolling back with SchemaSmith means deploying the prior package. On MySQL and MariaDB especially, test rollbacks carefully because the engine won't unwind a half-applied deployment for you.
 
 ## What needs migration scripts
 
@@ -78,7 +78,7 @@ Most rollbacks don't require migration scripts. Data preservation is only needed
 
 **Test rollbacks regularly.** Practice rollback procedures in dev or staging. When you need to roll back production, you'll already know the process works.
 
-**Back up major rollbacks.** For significant rollbacks, take a database backup first. This gives you a safety net if you discover unexpected data dependencies after the rollback completes. Especially important on MySQL, where the engine can't unwind partial DDL on its own.
+**Back up major rollbacks.** For significant rollbacks, take a database backup first. This gives you a safety net if you discover unexpected data dependencies after the rollback completes. Especially important on MySQL and MariaDB, where the engine can't unwind partial DDL on its own.
 
 **WhatIf first, always.** Never roll back production without running WhatIf mode and reading every line of the generated SQL. The same discipline that applies to forward deployments applies to rollbacks.
 

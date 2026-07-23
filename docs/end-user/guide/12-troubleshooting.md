@@ -157,11 +157,11 @@ If `KindleTheForge` is already `true` but the helper objects look wrong (someone
 **Fix:** Walk through the connection settings:
 
 - `Target:Server` -- the server hostname or IP address
-- `Target:Port` -- if the server isn't on the platform's default port (SQL Server `1433`, PostgreSQL `5432`, MySQL `3306`)
-- `Target:User` and `Target:Password` -- credentials (SQL Server allows blank for Windows auth; PostgreSQL and MySQL do not)
-- `Target:ConnectionProperties` -- platform-specific keys (`TrustServerCertificate` on SQL Server, `SslMode` on PostgreSQL / MySQL)
+- `Target:Port` -- if the server isn't on the platform's default port (SQL Server `1433`, PostgreSQL `5432`, MySQL and MariaDB `3306`)
+- `Target:User` and `Target:Password` -- credentials (SQL Server allows blank for Windows auth; PostgreSQL, MySQL, and MariaDB do not)
+- `Target:ConnectionProperties` -- platform-specific keys (`TrustServerCertificate` on SQL Server, `SslMode` on PostgreSQL / MySQL / MariaDB)
 
-If using SQL Server Windows authentication, omit `User` and `Password` entirely. For PostgreSQL and MySQL, always provide explicit credentials.
+If using SQL Server Windows authentication, omit `User` and `Password` entirely. For PostgreSQL, MySQL, and MariaDB, always provide explicit credentials.
 
 ### WhatIf shows unexpected changes
 
@@ -479,7 +479,7 @@ These map to `Target:Server`, `Target:User`, and `Target:Password` in the config
 
 **Cause:** The `Platform` value in `Product.json` doesn't match the target server. If your product was extracted from PostgreSQL but you point SchemaQuench at a SQL Server target, the DDL adapter mismatch will produce very strange errors.
 
-**Fix:** Verify `Product.json` has the right `Platform` value (`SqlServer`, `PostgreSQL`, or `MySQL`) and that your target connection points to a matching server. One repository can host products targeting different platforms -- just never mix them at deployment time.
+**Fix:** Verify `Product.json` has the right `Platform` value (`SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb`) and that your target connection points to a matching server. One repository can host products targeting different platforms -- just never mix them at deployment time.
 
 ---
 

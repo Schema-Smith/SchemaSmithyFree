@@ -2,7 +2,7 @@
 
 SchemaSmith tools are self-contained executables. No SDK to install. No runtime to configure. No package manager plugins to maintain. Drop them into any pipeline and your database deployments become as automated as your application builds. One binary, a handful of environment variables, and your schema changes flow from pull request to production without anyone writing a deployment script.
 
-This works identically whether you're deploying to **SQL Server**, **PostgreSQL**, or **MySQL** -- the `Platform` value on `Product.json` tells SchemaQuench which adapter to use, and your pipeline YAML stays the same.
+This works identically whether you're deploying to **SQL Server**, **PostgreSQL**, **MySQL**, or **MariaDB** -- the `Platform` value on `Product.json` tells SchemaQuench which adapter to use, and your pipeline YAML stays the same.
 
 ## The build and deploy model
 
@@ -62,7 +62,7 @@ jobs:
         run: schemaquench
 ```
 
-This uses a self-hosted runner with SchemaQuench pre-installed. Credentials flow from GitHub Repository Secrets -- never stored in the workflow file, never printed in logs. The `workflow_dispatch` trigger lets you run deployments manually when needed. Nothing in this YAML is platform-specific -- the same workflow deploys a SQL Server, PostgreSQL, or MySQL package.
+This uses a self-hosted runner with SchemaQuench pre-installed. Credentials flow from GitHub Repository Secrets -- never stored in the workflow file, never printed in logs. The `workflow_dispatch` trigger lets you run deployments manually when needed. Nothing in this YAML is platform-specific -- the same workflow deploys a SQL Server, PostgreSQL, MySQL, or MariaDB package.
 
 ### Jenkins
 
@@ -224,7 +224,7 @@ jobs:
           schemaquench
 ```
 
-The exact same shape works for PostgreSQL (swap the service image to `postgres:16` and use `Host=localhost;...` credentials) and MySQL (swap to `mysql:8.4`). The SchemaQuench invocation is identical -- the platform adapter comes from the package.
+The exact same shape works for PostgreSQL (swap the service image to `postgres:16` and use `Host=localhost;...` credentials), MySQL (swap to `mysql:8.4`), and MariaDB (swap to `mariadb:11.4`). The SchemaQuench invocation is identical -- the platform adapter comes from the package.
 
 If WhatIf fails, the PR check fails. The author sees exactly which SQL statement would have broken, which token was missing, which dependency couldn't be resolved. Fix it in the PR, not in production.
 
@@ -241,7 +241,7 @@ The combination catches problems at every stage. WhatIf catches SQL errors, miss
 
 ## Operational Profiles
 
-SchemaQuench has one config surface — a handful of top-level boolean settings — but your pipeline has more than one job. A full release pipeline, a patch-only datafix pipeline, a PR validation check, and an idempotency gate each call for a different posture. These six settings control which posture you're in, and all six work identically on SQL Server, PostgreSQL, and MySQL.
+SchemaQuench has one config surface — a handful of top-level boolean settings — but your pipeline has more than one job. A full release pipeline, a patch-only datafix pipeline, a PR validation check, and an idempotency gate each call for a different posture. These six settings control which posture you're in, and all six work identically on SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ### Full release pipeline
 
@@ -260,7 +260,7 @@ The standard deployment profile. Structural changes land, helper procedures stay
 
 ### Datafix patch pipeline
 
-Migration scripts only. No DDL, no table quenching, no tracking inserts for run-once scripts — *SchemaSmith itself* performs no structural changes under this profile. Your migration scripts, though, often still need targeted rights: a fix that backs up the rows it changes needs `CREATE TABLE`. You can grant that without any power over your product tables by giving the deploy account its own schema to create backups in. See the [datafix-role grants reference](../reference/datafix-role-grants.md) for least-privilege grant sets on SQL Server, PostgreSQL, and MySQL.
+Migration scripts only. No DDL, no table quenching, no tracking inserts for run-once scripts — *SchemaSmith itself* performs no structural changes under this profile. Your migration scripts, though, often still need targeted rights: a fix that backs up the rows it changes needs `CREATE TABLE`. You can grant that without any power over your product tables by giving the deploy account its own schema to create backups in. See the [datafix-role grants reference](../reference/datafix-role-grants.md) for least-privilege grant sets on SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ```json
 {
@@ -318,7 +318,7 @@ The pattern is the same regardless of platform: store the credential in the plat
 
 **Separate config per environment with env vars.** The same schema package deploys everywhere. Environment variables differentiate targets -- server, credentials, script tokens. No environment-specific config files to maintain, no risk of deploying the wrong config to the wrong server.
 
-**Validate before deploying.** Wire up JSON Schema validation on every PR to catch structural problems without a database. The SchemaSmith repository ships a complete, working example at `.github/workflows/validate-demo-schemas.yml` -- a per-PR, no-database validation workflow covering SQL Server, PostgreSQL, and MySQL using a content-type matrix. Copy it and adapt the paths for your own packages. See [Testing and Validation](06-testing-and-validation.md#schema-validation-in-ci) for the full pattern.
+**Validate before deploying.** Wire up JSON Schema validation on every PR to catch structural problems without a database. The SchemaSmith repository ships a complete, working example at `.github/workflows/validate-demo-schemas.yml` -- a per-PR, no-database validation workflow covering SQL Server, PostgreSQL, MySQL, and MariaDB using a content-type matrix. Copy it and adapt the paths for your own packages. See [Testing and Validation](06-testing-and-validation.md#schema-validation-in-ci) for the full pattern.
 
 **WhatIf for tricky changes.** Reach for WhatIf when you're validating a complex migration, deploying an unfamiliar package, or working with an unfamiliar target. It costs minutes in CI and surfaces exactly which SQL statement or token would fail before it hits a real database. Once you trust the package and the pipeline, direct deploys are the normal mode.
 

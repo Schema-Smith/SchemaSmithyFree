@@ -311,7 +311,7 @@ The canonical use is anti-rollback protection. Pair `BaselineValidationScript` w
 
 **Version floor.** `MinimumVersion` is the declarative companion -- set it in `Product.json` and SchemaQuench enforces a hard engine version floor before running anything. Use it for the unconditional floor ("this package requires PostgreSQL 15 or later"); write `ValidationScript` logic for conditional gates or checks that need to read server state.
 
-For the full property reference -- Product vs. Template scope, return type requirements, token availability, and worked examples across all three platforms -- see [Schema Packages](../reference/schema-packages.md) and [SchemaQuench](../reference/schemaquench.md).
+For the full property reference -- Product vs. Template scope, return type requirements, token availability, and worked examples across all four platforms -- see [Schema Packages](../reference/schema-packages.md) and [SchemaQuench](../reference/schemaquench.md).
 
 ## Secondary server support (SQL Server)
 
@@ -432,7 +432,7 @@ The `DataDelivery` block on a table doesn't have to be a single object. Make it 
 ]
 ```
 
-Both deliveries share a gate, so on `AppMain` both apply -- but each is scoped to its own `Category` slice by `MergeFilter`, so neither delivery's delete pass touches the other's rows. Skip that discipline and you've got a foot-gun: two `Insert/Update/Delete` deliveries without disjoint filters will delete each other's data on every quench. See [Schema Packages -- Multiple Deliveries](../reference/schema-packages.md#multiple-deliveries) for the full pattern, the delete-overlap warning, and gate examples across all three engines.
+Both deliveries share a gate, so on `AppMain` both apply -- but each is scoped to its own `Category` slice by `MergeFilter`, so neither delivery's delete pass touches the other's rows. Skip that discipline and you've got a foot-gun: two `Insert/Update/Delete` deliveries without disjoint filters will delete each other's data on every quench. See [Schema Packages -- Multiple Deliveries](../reference/schema-packages.md#multiple-deliveries) for the full pattern, the delete-overlap warning, and gate examples across all four engines.
 
 ### Hand-written scripts still welcome
 

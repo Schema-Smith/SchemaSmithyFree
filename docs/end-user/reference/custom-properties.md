@@ -1,6 +1,6 @@
 # Custom Properties Reference
 
-Applies to: SchemaQuench, SchemaTongs — SQL Server, PostgreSQL, and MySQL.
+Applies to: SchemaQuench, SchemaTongs — SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ---
 
@@ -233,7 +233,7 @@ If you want editor validation for *your* `Extensions` shape, you can hand-edit t
 
 The `Extensions` governance pattern turns the schema package into a contract surface your team owns. You define what keys are required, what values are acceptable, and the CI pipeline enforces it automatically on every pull request -- no database, no deployment, no extra tooling beyond what the schema validation workflow already does.
 
-**A real demo.** The `Demos/Learn/level2-module-06` packages carry governance-style Extensions on both tables and columns -- table-level `OwningTeam` and column-level `Classification` markers across SQL Server, PostgreSQL, and MySQL:
+**A real demo.** The `Demos/Learn/level2-module-06` packages carry governance-style Extensions on both tables and columns -- table-level `OwningTeam` and column-level `Classification` markers across SQL Server, PostgreSQL, MySQL, and MariaDB:
 
 ```json
 {

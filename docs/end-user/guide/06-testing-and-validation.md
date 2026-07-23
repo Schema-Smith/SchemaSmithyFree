@@ -10,7 +10,7 @@ The demo included with SchemaSmith ships Docker Compose files that stand up comp
 cd Demos/SqlServer && ./run-demo.sh
 ```
 
-That single command does everything: starts a database server (SQL Server, PostgreSQL, or MySQL depending on which `Demos/` folder you launched), waits for it to be healthy, then deploys the matching schema package. When it finishes, you have a fully quenched database running locally. Swap `Demos/SqlServer` for `Demos/PostgreSQL` or `Demos/MySQL` to target a different engine.
+That single command does everything: starts a database server (SQL Server, PostgreSQL, MySQL, or MariaDB depending on which `Demos/` folder you launched), waits for it to be healthy, then deploys the matching schema package. When it finishes, you have a fully quenched database running locally. Swap `Demos/SqlServer` for `Demos/PostgreSQL`, `Demos/MySQL`, or `Demos/MariaDB` to target a different engine.
 
 Here's how the compose pattern is structured:
 
@@ -26,7 +26,7 @@ The key patterns to carry into your own projects:
 - **Health checks enforce readiness.** The server health check prevents SchemaQuench from connecting before the database is ready to accept connections.
 - **Volume-mounted packages.** The schema package is mounted into the container, not baked into the image. Change files on disk, run compose again, see the results.
 - **Sequential dependencies.** `depends_on` with `condition: service_healthy` and `condition: service_completed_successfully` guarantees deployment order.
-- **One compose file per platform, or one per product.** Your team can test SQL Server, PostgreSQL, and MySQL deployments independently or side-by-side depending on what your real environments look like.
+- **One compose file per platform, or one per product.** Your team can test SQL Server, PostgreSQL, MySQL, and MariaDB deployments independently or side-by-side depending on what your real environments look like.
 
 The testing workflow becomes a tight loop: make changes to your schema files, run `docker compose up`, verify success, and tear down with `docker compose down -v` to reset completely. Every run starts from zero, which means you're testing the full deployment path -- not just incremental changes against a database that might have drifted.
 
@@ -64,7 +64,7 @@ What each validator catches:
 
 This is the first line of defense. No database, no deployment, no credentials required -- just structural validation that runs in seconds. A typo in a column definition or a missing required field gets caught here, long before it could cause a deployment failure.
 
-**A working example you can copy from.** The SchemaSmith repository ships a complete, runnable workflow at `.github/workflows/validate-demo-schemas.yml` that does exactly this across all three engines -- SQL Server, PostgreSQL, and MySQL -- on every pull request that touches a demo JSON file. It uses a matrix to run one validator job per content type per demo package (products, templates, tables, and for PostgreSQL packages, materialized views). Each matrix entry names a schema file and a file glob, and the `GrantBirki/json-yaml-validate@v3.3.0` action does the rest. No database containers, no credentials, no setup -- the workflow passes or fails in seconds. The matrix pattern scales naturally: add a new demo or a new content type and you add one matrix entry. The pattern for your own repository is identical: one entry per content type per package, each pointing at the `.json-schemas/*.schema` file that already lives alongside your source.
+**A working example you can copy from.** The SchemaSmith repository ships a complete, runnable workflow at `.github/workflows/validate-demo-schemas.yml` that does exactly this across all four engines -- SQL Server, PostgreSQL, MySQL, and MariaDB -- on every pull request that touches a demo JSON file. It uses a matrix to run one validator job per content type per demo package (products, templates, tables, and for PostgreSQL packages, materialized views). Each matrix entry names a schema file and a file glob, and the `GrantBirki/json-yaml-validate@v3.3.0` action does the rest. No database containers, no credentials, no setup -- the workflow passes or fails in seconds. The matrix pattern scales naturally: add a new demo or a new content type and you add one matrix entry. The pattern for your own repository is identical: one entry per content type per package, each pointing at the `.json-schemas/*.schema` file that already lives alongside your source.
 
 ## Custom Extensions validation
 

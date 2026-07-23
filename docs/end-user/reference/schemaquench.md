@@ -2,7 +2,7 @@
 
 Take your declared schema and harden it onto a live database -- that's what SchemaQuench does. It reads a schema package, connects to the target server, and transforms each database to match the desired state. No hand-written ALTER scripts, no guessing what changed. Run it against dev, staging, and production with the same package, the same confidence, and the same boring, predictable result every time. SchemaQuench compares current state against desired state, makes only the changes necessary, and tracks migration scripts so they execute only once.
 
-One executable, three platforms. The product's `Platform` value (`SqlServer`, `PostgreSQL`, or `MySQL`) tells SchemaQuench which adapter, which DDL flavor, and which set of helper procedures to use. Everything else looks the same.
+One executable, four platforms. The product's `Platform` value (`SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb`) tells SchemaQuench which adapter, which DDL flavor, and which set of helper procedures to use. Everything else looks the same.
 
 ---
 
@@ -126,7 +126,7 @@ SQL Server deployments targeting Availability Groups can quench to a primary plu
 
 When a secondary list is configured, SchemaQuench routes each product-level folder to the right server based on its `ServerToQuench` setting (`Primary`, `Secondary`, or `Both`). Templates target the primary; product-level scripts can target either side. See [Schema Packages -- Secondary Servers](schema-packages.md#secondary-servers) for the package side of the configuration.
 
-> **PostgreSQL and MySQL** deployments use a single connection. Replication and read-only standbys are typically managed at the database engine level, not by the deployment tool.
+> **PostgreSQL, MySQL, and MariaDB** deployments use a single connection. Replication and read-only standbys are typically managed at the database engine level, not by the deployment tool.
 
 ---
 
@@ -199,7 +199,7 @@ String array. Replaces the result of the named template's `DatabaseIdentificatio
 
 String array. Replaces the result of the named template's `SchemaIdentificationScript` for this run. Same shape, same recommended placeholder: `"SELECT 'CONFIG-DRIVEN' AS SchemaName WHERE 1=0"`. When both axes are overridden on a schema template, the cross-product becomes the work-unit set: two databases × two schemas = four iterations.
 
-> **MySQL:** The schema axis does not apply -- MySQL has no schema-inside-database concept. `TemplateTargets.<template>.Schemas` is rejected on MySQL templates by the same validation that rejects `SchemaIdentificationScript` on MySQL. Use the database axis instead; multi-tenant on MySQL is database-per-tenant.
+> **MySQL and MariaDB:** The schema axis does not apply -- MySQL and MariaDB have no schema-inside-database concept. `TemplateTargets.<template>.Schemas` is rejected on MySQL and MariaDB templates by the same validation that rejects `SchemaIdentificationScript`. Use the database axis instead; multi-tenant on MySQL and MariaDB is database-per-tenant.
 
 ### CreateIfMissing
 
@@ -282,7 +282,7 @@ When SchemaQuench runs, the product quench executes these steps in order:
 
 1. **Log product info** -- Logs the product name, platform, template order, validation script, and any configured script tokens.
 2. **Test server connection** -- Opens a connection to the target server and runs a platform-appropriate liveness check. Aborts if the connection fails.
-3. **Validate server** -- If `Product.ValidationScript` is configured, executes it against the platform's administrative database (`master` on SQL Server, `postgres` on PostgreSQL, `information_schema` on MySQL). Aborts if the result is falsy.
+3. **Validate server** -- If `Product.ValidationScript` is configured, executes it against the platform's administrative database (`master` on SQL Server, `postgres` on PostgreSQL, `information_schema` on MySQL and MariaDB). Aborts if the result is falsy.
 4. **Validate baseline** -- If `Product.BaselineValidationScript` is configured, executes it. Aborts if the result is falsy.
 5. **Product Before scripts** -- Executes scripts from `Before Product` folder(s). On SQL Server with secondary servers, scripts run in parallel to all eligible servers.
 6. **Quench each template** -- For each template name in `Product.TemplateOrder`:
@@ -328,7 +328,7 @@ When `UpdateTables` is `false`, steps 4 through 16 are skipped entirely. When `I
 
 ## Engine Version Compatibility
 
-SchemaSmith deploys the same package to SQL Server, PostgreSQL, and MySQL — and within each platform, it adapts to the target server's version rather than demanding uniformity. You declare one package; SchemaQuench detects the engine version of each target and does the right thing for that target. When you need to enforce a version floor, declare it once in `Product.json`.
+SchemaSmith deploys the same package to SQL Server, PostgreSQL, MySQL, and MariaDB — and within each platform, it adapts to the target server's version rather than demanding uniformity. You declare one package; SchemaQuench detects the engine version of each target and does the right thing for that target. When you need to enforce a version floor, declare it once in `Product.json`.
 
 ### Supported engine floors
 
@@ -344,7 +344,7 @@ These are the minimum versions SchemaSmith supports for deployment:
 
 You can raise the floor for a specific product by declaring `MinimumVersion` in `Product.json`. Before any deployment work begins, SchemaQuench detects the version of every resolved target. If any target is below the declared floor, the entire run aborts with a manifest naming each below-floor server and its detected version. Nothing is deployed -- no partial work, no side effects on any target.
 
-See [Schema Packages -- Product.json](schema-packages.md#productjson) for the accepted value formats (`16` or `2022` for SQL Server; `15` for PostgreSQL; `8.0` for MySQL) and configuration details.
+See [Schema Packages -- Product.json](schema-packages.md#productjson) for the accepted value formats (`16` or `2022` for SQL Server; `15` for PostgreSQL; `8.0` for MySQL; `11.4` for MariaDB) and configuration details.
 
 If a target's version cannot be determined, that is a hard error -- SchemaQuench never deploys blind against an unknown version. An unparseable `MinimumVersion` value fails at startup before any connections open.
 
@@ -816,7 +816,7 @@ Some tables you never want the deployment tool to drop -- not on a rollback, not
 }
 ```
 
-**Sticky by design.** The protection is persisted in SchemaSmith's ownership tracking, so it survives the table leaving the package. On SQL Server it's a `PreventDrop` extended property stamped on the table; on PostgreSQL and MySQL it's a `PreventDrop` column on the `ProductOwnership` tracking table. Each run, while the table is still in the package, SchemaSmith refreshes the marker to match the package value -- so the stored protection always tracks what your JSON declares.
+**Sticky by design.** The protection is persisted in SchemaSmith's ownership tracking, so it survives the table leaving the package. On SQL Server it's a `PreventDrop` extended property stamped on the table; on PostgreSQL, MySQL, and MariaDB it's a `PreventDrop` column on the `ProductOwnership` tracking table. Each run, while the table is still in the package, SchemaSmith refreshes the marker to match the package value -- so the stored protection always tracks what your JSON declares.
 
 **Removed, not dropped.** When a protected table is later removed from the package, SchemaSmith reads the persisted marker, logs that it's retaining the table, and skips the drop. Its inbound foreign keys -- constraints on *other* tables that reference the protected table -- are preserved too, so the table stays fully wired into the schema rather than left as an orphan.
 
@@ -831,7 +831,7 @@ Because the marker is sticky, clearing it is a deliberate, reviewed step -- you 
 
 > **Tip:** Reach for the refresh-then-remove path when you want the removal to flow through the normal declarative pipeline; reach for the migration script when you want the drop recorded as an explicit, reviewable step in the package.
 
-**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, and MySQL -- the persistence mechanism differs per engine, but the contract is the same everywhere.
+**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, MySQL, and MariaDB -- the persistence mechanism differs per engine, but the contract is the same everywhere.
 
 > **Note:** Ownership is reconciled against the live catalog on every run. If a protected table is dropped out-of-band -- by a migration script, a DBA, or a manual change -- SchemaSmith prunes its ownership record (including the sticky marker) because the table no longer exists in the catalog. No stale protection lingers to confuse a future deployment; the marker only ever protects a table that's actually there.
 
@@ -859,7 +859,7 @@ Set `PreventDrop: true` in `SchemaQuench.settings.json` (or the `SmithySettings_
 
 They compose. The environment switch is the outermost guarantee; the cascade and per-table guards still apply beneath it for environments that aren't fully locked down.
 
-**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, and MySQL.
+**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, MySQL, and MariaDB.
 
 ---
 
@@ -880,7 +880,7 @@ The table tier introduces a per-table tightening option that `DropTablesRemovedF
 
 **Explicit-false is sticky — hard guardrail in any direction.** A `false` at any tier locks the effective value to `false` for all lower tiers. A `true` at a lower tier overrides an inherited `true` but can never override an ancestor's explicit `false`. Absent (not set) inherits from the tier above. An environment that sets `false` suppresses column drops for the entire deployment; a product that sets `false` protects its own columns regardless of environment; a table that sets `false` protects its own columns regardless of template and product.
 
-**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, and MySQL. The `DropColumnsRemovedFromProduct` column in the parsed-JSON temp tables lets the per-engine `ModifiedTableQuench` procedure apply the table-tier override alongside the resolved env/product/template value — both must permit the drop before SchemaQuench removes a column.
+**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, MySQL, and MariaDB. The `DropColumnsRemovedFromProduct` column in the parsed-JSON temp tables lets the per-engine `ModifiedTableQuench` procedure apply the table-tier override alongside the resolved env/product/template value — both must permit the drop before SchemaQuench removes a column.
 
 **Environment guidance:**
 
@@ -928,7 +928,7 @@ It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropc
 
 **Only by-absence removal is gated.** A *modified* foreign key — one whose name still appears in the product but whose definition changed (columns, referenced table/columns, or `ON DELETE` / `ON UPDATE` action) — is always dropped and recreated so the new definition takes effect, regardless of this flag. The flag governs only the case where a foreign key has been removed from the product entirely.
 
-**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, and MySQL. On MySQL this flag also closes a gap: foreign-key cleanup previously required enabling `DropUnknownIndexes`, but is now governed solely by `DropForeignKeysRemovedFromProduct`, matching the other engines.
+**Cross-engine.** Identical behavior on SQL Server, PostgreSQL, MySQL, and MariaDB. On MySQL and MariaDB this flag also closes a gap: foreign-key cleanup previously required enabling `DropUnknownIndexes`, but is now governed solely by `DropForeignKeysRemovedFromProduct`, matching the other engines.
 
 ---
 
@@ -940,7 +940,7 @@ It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropc
 
 **Table-level only; modified checks always reconcile.** This flag governs *table-level* checks (the `CheckConstraints` array). A column-level check — one driven by a column's `CheckExpression` — is reconciled by the column passes, not this flag. And only by-absence removal is gated: a check whose expression merely changed is always dropped and recreated so the new expression takes effect.
 
-**Cross-engine — closes a normalization gap.** Previously only PostgreSQL dropped an orphaned table-level check by absence; SQL Server and MySQL dropped a check only as a side effect of dropping its column, leaving a removed check in place. With this flag (default on), all three engines now reconcile orphaned table-level checks identically.
+**Cross-engine — closes a normalization gap.** Previously only PostgreSQL dropped an orphaned table-level check by absence; SQL Server, MySQL, and MariaDB dropped a check only as a side effect of dropping its column, leaving a removed check in place. With this flag (default on), all four engines now reconcile orphaned table-level checks identically.
 
 ---
 
@@ -948,7 +948,7 @@ It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropc
 
 When you remove an EXCLUDE constraint from a table's JSON, `DropExcludeConstraintsRemovedFromProduct` controls whether SchemaQuench drops the constraint still in the database. It's `true` by default.
 
-EXCLUDE constraints are a **PostgreSQL** feature, so this flag applies only to PostgreSQL — it is accepted but has no effect on SQL Server or MySQL. It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct), with the same explicit-false-sticky semantics, and gates only by-absence removal: an exclude constraint whose definition merely changed is always dropped and recreated.
+EXCLUDE constraints are a **PostgreSQL** feature, so this flag applies only to PostgreSQL — it is accepted but has no effect on SQL Server, MySQL, or MariaDB. It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct), with the same explicit-false-sticky semantics, and gates only by-absence removal: an exclude constraint whose definition merely changed is always dropped and recreated.
 
 ---
 
@@ -958,7 +958,7 @@ When you remove a statistics definition from a table's JSON, `DropStatisticsRemo
 
 It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct), with the same explicit-false-sticky semantics. Only by-absence removal is gated — a statistics object whose definition changed is always dropped and recreated — and **auto-created statistics are never touched**, only the named statistics your product defines.
 
-**Cross-engine — closes a normalization gap.** Previously only PostgreSQL dropped an orphaned statistics object by absence; SQL Server dropped one only as a side effect of changing one of its columns. With this flag (default on), SQL Server and PostgreSQL now reconcile orphaned statistics identically. MySQL has no separate statistics objects, so the flag does not apply there.
+**Cross-engine — closes a normalization gap.** Previously only PostgreSQL dropped an orphaned statistics object by absence; SQL Server dropped one only as a side effect of changing one of its columns. With this flag (default on), SQL Server and PostgreSQL now reconcile orphaned statistics identically. MySQL and MariaDB have no separate statistics objects, so the flag does not apply there.
 
 ---
 
@@ -968,7 +968,7 @@ When you remove an index from a table's JSON, `DropIndexesRemovedFromProduct` co
 
 This is distinct from [DropUnknownIndexes](#dropunknownindexes): that flag targets *out-of-band* indexes SchemaSmith never created, while this one targets indexes SchemaSmith owns that have dropped out of the definition. It resolves across the same four tiers as [DropColumnsRemovedFromProduct](#dropcolumnsremovedfromproduct), with the same explicit-false-sticky semantics: a table can tighten to `false` to protect its own indexes but cannot re-enable a higher-tier suppression.
 
-**Index types.** Applies to nonclustered/secondary indexes that SchemaSmith manages; a primary key is never dropped by this path. All three engines gate the removed-from-product drop directly through this flag — MySQL previously coupled it to `DropUnknownIndexes` (so a removed index survived unless that flag was on) and is now brought to parity with SQL Server and PostgreSQL: a product-owned index removed from the definition is dropped by default.
+**Index types.** Applies to nonclustered/secondary indexes that SchemaSmith manages; a primary key is never dropped by this path. All four engines gate the removed-from-product drop directly through this flag — MySQL and MariaDB previously coupled it to `DropUnknownIndexes` (so a removed index survived unless that flag was on) and are now brought to parity with SQL Server and PostgreSQL: a product-owned index removed from the definition is dropped by default.
 
 ---
 

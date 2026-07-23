@@ -1,6 +1,6 @@
 # SchemaSmith Community Edition
 
-*Terraform for SQL Server, Postgres, and MySQL databases*
+*Terraform for SQL Server, Postgres, MySQL, and MariaDB databases*
 
 > **SchemaSmith v2.3.0 released.** A per-object report of what every deploy changed, an environment-level no-drop switch that never removes an object by omission, and a `--Validate` pre-flight linter that stops a bad package before it reaches a target. [Read the v2.3.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/350) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.3.0) · [CHANGELOG](https://github.com/Schema-Smith/SchemaSmith/blob/main/CHANGELOG.md)
 
@@ -18,7 +18,7 @@ Self-contained, single-file executables for Windows, Linux, and macOS. No .NET r
 
 ## Tools
 
-- **SchemaTongs** — Extracts databases into schema packages across all three platforms. Pure SQL extraction with no external SDKs, orphan detection with cleanup-script generation, post-extraction script validation, and subfolder preservation so your repository organization survives re-extraction.
+- **SchemaTongs** — Extracts databases into schema packages across all four platforms. Pure SQL extraction with no external SDKs, orphan detection with cleanup-script generation, post-extraction script validation, and subfolder preservation so your repository organization survives re-extraction.
 - **SchemaQuench** — Deploys schema packages to SQL Server, PostgreSQL, MySQL, and MariaDB. 9 execution slots, conditional deployment via `ShouldApplyExpression`, secondary-server fan-out, FK-aware data delivery, checkpoint/resume, WhatIf analysis, indexed views (SQL Server), materialized views (PostgreSQL), and a token system that reaches every script.
 - **DataTongs** — Extracts table data and generates platform-aware MERGE scripts for SQL Server, PostgreSQL, MySQL, and MariaDB. Auto primary-key detection, complex type support (geometry, hierarchyid, binary), and full token resolution including MySQL.
 - **SchemaShears** — Carves an object-level patch (subset) package from a full product via a manifest. Emitted patches suppress drop-by-absence so omitted objects are preserved.
@@ -75,26 +75,33 @@ cd Demos/PostgreSQL && ./run-demo.sh
 
 # MySQL
 cd Demos/MySQL && ./run-demo.sh
+
+# MariaDB
+cd Demos/MariaDB && ./run-demo.sh
 ```
 
 Each script builds SchemaQuench from source (if not already built), starts a containerized database server, and deploys the AdventureWorks, Chinook, Northwind, and Sakila demo products. Use `run-demo.cmd` on Windows. Connection details for each platform live in the `.env` file inside the platform folder.
 
 ## Running Tests
 
-Integration tests run against all three platforms in parallel and expect database servers on these local ports:
+Integration tests run against all four supported platforms in parallel and expect database servers on these local ports:
 
 | Platform   | Host      | Port |
 |------------|-----------|------|
 | SQL Server | 127.0.0.1 | 1440 |
 | PostgreSQL | 127.0.0.1 | 5432 |
 | MySQL      | 127.0.0.1 | 3306 |
+| MariaDB    | 127.0.0.1 | 3317 |
 
-The simplest way to bring all three up is to run the demo for each platform — the same containers serve as the integration-test backends:
+MariaDB runs on the MySQL engine but binds its own port (3317), so all four containers run side by side.
+
+The simplest way to bring them up is to run the demo for each platform — the same containers serve as the integration-test backends:
 
 ```bash
 cd Demos/SqlServer  && ./run-demo.sh
 cd Demos/PostgreSQL && ./run-demo.sh
 cd Demos/MySQL      && ./run-demo.sh
+cd Demos/MariaDB    && ./run-demo.sh
 ```
 
 Then run tests:
@@ -107,7 +114,7 @@ Integration tests for a platform whose container isn't running will be skipped o
 
 ## Demo Products
 
-Four sample databases ship across all three platforms:
+Four sample databases ship across all four platforms:
 
 - **AdventureWorks** (71 tables) — Microsoft's reference OLTP schema
 - **Chinook** — digital media store, common across DB tutorials
