@@ -56,6 +56,14 @@ BEGIN TRY
             WHERE NewTable = 1) T
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
+  -- Object-change audit (#363): WhatIf twin of the embedded 'table'/'created' row above. That row
+  -- rides the CREATE TABLE DDL (executed only on a real run); under WhatIf the DDL is printed, so
+  -- capture the would-create here from the same #Tables state.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'table', T.[Schema] + '.' + T.[Name], 'wouldCreate'
+        FROM #Tables T WITH (NOLOCK) WHERE NewTable = 1
+
   RAISERROR('Add New Physical Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding ' + CAST(ColumnCount AS NVARCHAR(100)) + ' new columns to ' + T.[Schema] + '.' + T.[Name] +
                                   CASE WHEN RTRIM(ISNULL(VariantList, '')) <> '' THEN ' (variant: ' + VariantList + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
@@ -72,15 +80,15 @@ BEGIN TRY
           AND EXISTS (SELECT * FROM #Columns c WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = '')) T
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
-  -- Object-change audit (#243 E5): one row per physical column added to an EXISTING table. New
+  -- Object-change audit (#243 E5, #363): one row per physical column added to an EXISTING table. New
   -- tables' columns are covered by the table/created row above, so NewTable = 0 only. Per-source-row
   -- (the ALTER above folds a table's new columns into one statement, so this cannot weave into it).
-  IF @WhatIf = 0
-    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-      SELECT @@SPID, 'column', c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName], 'created'
-        FROM #Columns c WITH (NOLOCK)
-        JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = c.[Schema] AND t.[Name] = c.[TableName]
-        WHERE t.NewTable = 0 AND c.NewColumn = 1 AND RTRIM(ISNULL(c.[ComputedExpression], '')) = ''
+  -- Runs regardless of @WhatIf so a WhatIf preview is captured; the action carries the mode.
+  INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+    SELECT @@SPID, 'column', c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName], CASE WHEN @WhatIf = 1 THEN 'wouldCreate' ELSE 'created' END
+      FROM #Columns c WITH (NOLOCK)
+      JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = c.[Schema] AND t.[Name] = c.[TableName]
+      WHERE t.NewTable = 0 AND c.NewColumn = 1 AND RTRIM(ISNULL(c.[ComputedExpression], '')) = ''
 
   SET NOCOUNT OFF
 END TRY
