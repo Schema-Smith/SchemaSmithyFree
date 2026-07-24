@@ -42,16 +42,24 @@ while IFS='|' read -r type name token pkg; do
   TYPES+=("$type"); NAMES+=("$name"); TOKENS+=("$token"); PKGS+=("$pkg")
 done < "$MANIFEST"
 
-TO_DROP=(); COLLIDE=()
+TO_DROP=(); COLLIDE=(); ORPHANED=()
 for i in "${!NAMES[@]}"; do
   res="$(sql "$HERE/endpoint/stamp.sql" -v Op=check -v Db="${NAMES[$i]}")"
   case "$res" in *STAMP_RESULT:stamped*) TO_DROP+=("${NAMES[$i]}");;
-                 *STAMP_RESULT:unstamped*) COLLIDE+=("${NAMES[$i]}");; esac
+                 *STAMP_RESULT:unstamped*) COLLIDE+=("${NAMES[$i]}");;
+                 *STAMP_RESULT:orphaned-file*) ORPHANED+=("${NAMES[$i]}");; esac
 done
 if [ "${#COLLIDE[@]}" -gt 0 ]; then
   echo "These databases already exist on $SERVER but were NOT created by this helper:" >&2
   echo "  ${COLLIDE[*]}" >&2
   echo "Rename the colliding entries in $MANIFEST, then re-run." >&2; exit 2
+fi
+if [ "${#ORPHANED[@]}" -gt 0 ]; then
+  echo "Database files exist on disk on $SERVER but are not attached (a detached database):" >&2
+  echo "  ${ORPHANED[*]}" >&2
+  echo "CREATE DATABASE would fail with SQL Server error 1802. The helper will not touch these files" >&2
+  echo "(they may be your own data). Detach/move the .mdf/.ldf, or rename the colliding entries in" >&2
+  echo "$MANIFEST, then re-run." >&2; exit 2
 fi
 if [ "${#TO_DROP[@]}" -gt 0 ] && [ "$FORCE" -ne 1 ]; then
   echo "WILL DROP and recreate on $SERVER: ${TO_DROP[*]}"

@@ -46,11 +46,12 @@ $rows = Get-Content $ManifestPath | Where-Object { $_ -and $_ -notmatch '^\s*#' 
 }
 
 # --- Teardown scan: classify each managed DB ---
-$toDrop = @(); $collisions = @()
+$toDrop = @(); $collisions = @(); $orphanedFiles = @()
 foreach ($r in $rows) {
   $res = (Invoke-Sql -InFile "$here/endpoint/stamp.sql" -Vars @("Op=check", "Db=$($r.Name)")) -join ''
-  if     ($res -match 'STAMP_RESULT:stamped')   { $toDrop += $r.Name }
-  elseif ($res -match 'STAMP_RESULT:unstamped') { $collisions += $r.Name }
+  if     ($res -match 'STAMP_RESULT:stamped')       { $toDrop += $r.Name }
+  elseif ($res -match 'STAMP_RESULT:unstamped')     { $collisions += $r.Name }
+  elseif ($res -match 'STAMP_RESULT:orphaned-file') { $orphanedFiles += $r.Name }
   # 'absent' => nothing to do
 }
 if ($collisions.Count -gt 0) {
@@ -59,6 +60,16 @@ These databases already exist on $Server but were NOT created by this helper:
   $($collisions -join ', ')
 Refusing to drop databases the helper didn't create. To proceed, rename the
 colliding entries in $ManifestPath (and their TOKEN stays the same), then re-run.
+"@
+  exit 2
+}
+if ($orphanedFiles.Count -gt 0) {
+  Write-Error @"
+Database files already exist on disk on $Server but are not attached (a detached database):
+  $($orphanedFiles -join ', ')
+CREATE DATABASE would fail with SQL Server error 1802. The helper will not touch these files —
+they may be your own data. Detach/move the .mdf/.ldf, or rename the colliding entries in
+$ManifestPath (their TOKEN stays the same, so they deploy under the new name), then re-run.
 "@
   exit 2
 }
