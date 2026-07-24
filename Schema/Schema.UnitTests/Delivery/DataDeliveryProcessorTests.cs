@@ -1165,6 +1165,64 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
+    public void DeliverTables_RecoversOnRetry_WritesNoFailureArtifact()
+    {
+        // A delivery that fails an early dependency-ordering pass but succeeds on retry must NOT
+        // leave a "Failed DataDelivery" artifact. The artifact is deferred and flushed only for
+        // deliveries that never recover, so a green deploy carries no misleading failure artifact.
+        var invocations = new List<string>();
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable { Name = "Alpha", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "a.json" } } },
+            new TestTable { Name = "Bravo", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "b.json" } } }
+        };
+
+        var context = MakeContext(tables);
+        var bravoAttempts = 0;
+        context.ExecuteScript = (name, script) =>
+        {
+            if (name == "Bravo")
+            {
+                bravoAttempts++;
+                if (bravoAttempts == 1) throw new Exception("transient dependency-ordering failure");
+            }
+            _executedScripts.Add(script);
+        };
+        context.WriteResolvedSqlArtifact = (label, sql) => invocations.Add(label);
+
+        Assert.DoesNotThrow(() => processor.DeliverTables(context));
+
+        Assert.That(invocations, Is.Empty, "A delivery that recovered on retry must not write a failure artifact");
+        Assert.That(bravoAttempts, Is.EqualTo(2), "Bravo should have failed once then succeeded on retry");
+    }
+
+    [Test]
+    public void DeliverTables_PermanentFailure_WritesFailureArtifactOnce()
+    {
+        // The complement of the recovery case: a delivery that never succeeds does get exactly one
+        // artifact, flushed at the end alongside the aggregate failure.
+        var invocations = new List<string>();
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable { Name = "Broken", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "x.json" } } }
+        };
+
+        var context = MakeContext(tables);
+        context.ExecuteScript = (name, script) => throw new Exception("permanent failure");
+        context.WriteResolvedSqlArtifact = (label, sql) => invocations.Add(label);
+
+        Assert.Throws<InvalidOperationException>(() => processor.DeliverTables(context));
+
+        Assert.That(invocations, Has.Count.EqualTo(1), "A permanently-failed delivery must write exactly one artifact");
+        Assert.That(invocations[0], Does.Contain("Broken"));
+    }
+
+    [Test]
     public void DeliverTables_OnMergeFailure_ExistingErrorLogStillFires()
     {
         // Regression guard: adding the artifact callback must not suppress the existing error log.
