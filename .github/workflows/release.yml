@@ -22,7 +22,7 @@ jobs:
       version: ${{ steps.get-version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
@@ -90,10 +90,10 @@ jobs:
         rid: [win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -104,7 +104,7 @@ jobs:
           done
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-${{ matrix.rid }}
           path: |
@@ -125,7 +125,7 @@ jobs:
         rid: [win-x64, win-arm64]
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-${{ matrix.rid }}
           path: bins
@@ -145,7 +145,7 @@ jobs:
           Get-ChildItem $staging | ForEach-Object { Write-Host "  $($_.Name)" }
 
       - name: Sign binaries
-        uses: azure/artifact-signing-action@v1
+        uses: azure/artifact-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -174,7 +174,7 @@ jobs:
           }
 
       - name: Re-upload signed artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-${{ matrix.rid }}-signed
           path: bins/
@@ -188,7 +188,7 @@ jobs:
         rid: [win-x64, win-arm64]
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-${{ matrix.rid }}-signed
           path: bins
@@ -209,7 +209,7 @@ jobs:
           cd zip-staging && zip -r "../SchemaSmith-${VERSION}-${{ matrix.rid }}.zip" .
 
       - name: Upload ZIP
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: zip-${{ matrix.rid }}
           path: "SchemaSmith-*.zip"
@@ -223,7 +223,7 @@ jobs:
         rid: [linux-x64, linux-arm64, osx-x64, osx-arm64]
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-${{ matrix.rid }}
           path: bins
@@ -245,7 +245,7 @@ jobs:
           tar -czf "SchemaSmith-${VERSION}-${{ matrix.rid }}.tar.gz" -C tar-staging .
 
       - name: Upload tarball
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: tar-${{ matrix.rid }}
           path: "SchemaSmith-*.tar.gz"
@@ -261,7 +261,7 @@ jobs:
         arch: [amd64, arm64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Map matrix arch to RID
         id: rid
@@ -272,7 +272,7 @@ jobs:
           esac
 
       - name: Download build artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-${{ steps.rid.outputs.rid }}
           path: bins
@@ -334,7 +334,7 @@ jobs:
           ls -la output/
 
       - name: Upload package
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: linux-pkg-${{ matrix.arch }}-${{ matrix.fmt }}
           path: "output/*.${{ matrix.fmt }}"
@@ -345,26 +345,26 @@ jobs:
     needs: [package-zip-windows, package-tar-unix, package-linux, read-version]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
       - name: Download all ZIPs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: zip-*
           path: release-assets
           merge-multiple: true
 
       - name: Download all tarballs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: tar-*
           path: release-assets
           merge-multiple: true
 
       - name: Download all Linux packages
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: linux-pkg-*
           path: release-assets
