@@ -387,6 +387,18 @@ public class ProductQuench
         Server = server
     };
 
+    /// <summary>
+    /// Reads <c>Target:ConnectionProperties</c> and applies the <c>-Encrypt</c>/<c>-NoEncrypt</c>
+    /// transport-security switch (if present) for the product's platform, so every target connection
+    /// this run builds honors the flag consistently.
+    /// </summary>
+    private Dictionary<string, string> ReadTargetConnectionProperties()
+    {
+        var props = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        CommandLineParser.ApplyTransportSecuritySwitch(_product.Platform, props);
+        return props;
+    }
+
     internal virtual IDbCommand GetCommand(string server)
     {
         var initDb = GetInitDatabase(_product.Platform);
@@ -404,7 +416,7 @@ public class ProductQuench
         }
         else
         {
-            var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+            var connectionProperties = ReadTargetConnectionProperties();
             connectionString = ConnectionString.Build(_product.Platform, server, initDb, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
         }
         var factory = DbConnectionFactory.ForPlatform(_product.Platform);
@@ -482,7 +494,7 @@ public class ProductQuench
         if (!string.IsNullOrEmpty(connectionStringOverride) && server == _primaryServer)
             return ConnectionString.RetargetDatabase(connectionStringOverride, identificationDb, _product.Platform);
 
-        var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        var connectionProperties = ReadTargetConnectionProperties();
         return ConnectionString.Build(_product.Platform, server, identificationDb, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
     }
 
@@ -537,7 +549,7 @@ public class ProductQuench
             }
             return ConnectionString.RetargetDatabase(connectionStringOverride, initDb, _product.Platform);
         }
-        var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        var connectionProperties = ReadTargetConnectionProperties();
         return ConnectionString.Build(_product.Platform, server, initDb,
             _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
     }
@@ -1684,7 +1696,7 @@ public class ProductQuench
         }
         else
         {
-            var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+            var connectionProperties = ReadTargetConnectionProperties();
             connectionString = ConnectionString.Build(_product.Platform, server, databaseName,
                 _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
         }

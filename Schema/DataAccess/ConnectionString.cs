@@ -68,9 +68,19 @@ public static class ConnectionString
         var server = !string.IsNullOrWhiteSpace(port) ? $"{serverName},{port}" : serverName;
 
         var sb = new StringBuilder($"data source={server};Initial Catalog={dbName};{security};");
+        // Declare Encrypt explicitly (default secure) unless the operator overrode it via
+        // ConnectionProperties. Matches the Microsoft.Data.SqlClient default (Encrypt=True) — no
+        // behavior change — but states transport-security intent instead of relying on a driver
+        // default that has flipped across major versions.
+        if (!HasProperty(connectionProperties, "Encrypt"))
+            sb.Append("Encrypt=True;");
         AppendConnectionProperties(sb, connectionProperties);
         return sb.ToString();
     }
+
+    private static bool HasProperty(Dictionary<string, string> connectionProperties, string key) =>
+        connectionProperties != null &&
+        connectionProperties.Keys.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
 
     private static string BuildPostgreSql(string serverName, string dbName, string user, string password, string port,
         Dictionary<string, string> connectionProperties)

@@ -39,6 +39,37 @@ public class ConnectionStringTests
     }
 
     [Test]
+    public void Build_SqlServer_EmitsExplicitEncryptTrue_ByDefault()
+    {
+        var result = ConnectionString.Build(Platform.SqlServer, "myserver", "mydb", "u", "p");
+
+        Assert.That(result, Does.Contain("Encrypt=True"));
+    }
+
+    [Test]
+    public void Build_SqlServer_OperatorEncryptOverride_Wins_AndNotDuplicated()
+    {
+        var props = new Dictionary<string, string> { ["Encrypt"] = "False" };
+
+        var result = ConnectionString.Build(Platform.SqlServer, "myserver", "mydb", "u", "p", null, props);
+
+        Assert.That(result, Does.Contain("Encrypt=False"));
+        Assert.That(System.Text.RegularExpressions.Regex.Matches(result, "Encrypt=").Count, Is.EqualTo(1),
+            "Encrypt must appear exactly once — the operator override replaces the default, not adds to it");
+    }
+
+    [Test]
+    public void Build_SqlServer_OperatorEncryptOverride_IsCaseInsensitive()
+    {
+        var props = new Dictionary<string, string> { ["encrypt"] = "False" };
+
+        var result = ConnectionString.Build(Platform.SqlServer, "myserver", "mydb", "u", "p", null, props);
+
+        Assert.That(System.Text.RegularExpressions.Regex.Matches(result, "(?i)encrypt=").Count, Is.EqualTo(1),
+            "a lower-case operator 'encrypt' key must still suppress the default, not double up");
+    }
+
+    [Test]
     public void Build_PostgreSQL_ReturnsCorrectFormat()
     {
         var result = ConnectionString.Build(Platform.PostgreSQL, "pghost", "pgdb", "pguser", "pgpass");

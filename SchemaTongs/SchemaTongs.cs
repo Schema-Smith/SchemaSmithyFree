@@ -214,6 +214,7 @@ public class SchemaTongs
         var connectionProperties = ConnectionString.ReadProperties(config, "Source:ConnectionProperties");
         if (connectionProperties.Count == 0)
             connectionProperties = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
+        CommandLineParser.ApplyTransportSecuritySwitch(_platform, connectionProperties);
 
         var connectionString = ConnectionString.Build(_platform, server, targetDb, user, password, port, connectionProperties);
         var connectionFactory = GetConnectionFactory();

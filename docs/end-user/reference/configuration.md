@@ -47,6 +47,7 @@ Every SchemaSmith CLI tool recognizes these switches. They're processed before a
 | `--ConfigFile:<path>` | | Path to the settings file. Overrides the default `<ToolName>.settings.json`. |
 | `--LogPath:<path>` | | Directory for log files and backup subdirectories. Defaults to the tool's executable directory. |
 | `--ConnectionString:<connstr>` | | Full ADO.NET / Npgsql / MySqlConnector connection string appropriate to the target platform. When provided, this bypasses all individual connection settings (`Server`, `Port`, `User`, `Password`, `ConnectionProperties`). |
+| `-Encrypt` / `-NoEncrypt` | | Force transport encryption on or off using the right property per engine (SQL Server `Encrypt`, PostgreSQL `SSL Mode`, MySQL/MariaDB `SslMode`). Wins over `ConnectionProperties`. Applies to SchemaQuench, SchemaTongs, and DataTongs. |
 
 ### Examples
 
@@ -237,6 +238,11 @@ Each tool has one connection section. SchemaQuench uses a `Target` section (it w
 - *MySQL* — `SslMode`, `ConnectionTimeout`, `AllowPublicKeyRetrieval`, etc. (MySqlConnector keys)
 
 Whatever you put in `ConnectionProperties` is appended to the connection string for that platform's client library. Consult the corresponding driver documentation for the exhaustive list.
+
+**Transport encryption.** SchemaSmith connects to SQL Server with `Encrypt=True` declared explicitly (matching the Microsoft.Data.SqlClient default) — connections are encrypted unless you opt out. PostgreSQL and MySQL/MariaDB follow their own driver defaults. To change the posture for a run:
+
+- **`-NoEncrypt`** turns encryption off; **`-Encrypt`** forces it on. The switch sets the correct property for the target engine (SQL Server `Encrypt`, PostgreSQL `SSL Mode`, MySQL/MariaDB `SslMode`) and wins over `ConnectionProperties`. Use `-NoEncrypt` for an older or hardened SQL Server instance that classic `sqlcmd` reaches unencrypted but whose TLS handshake the modern driver cannot complete.
+- Or set it explicitly through `ConnectionProperties` (`Encrypt` for SQL Server, `SslMode`/`SSL Mode` for MySQL/PostgreSQL), or with the equivalent `--Target__ConnectionProperties__Encrypt=false` override.
 
 ### Full connection string override
 
