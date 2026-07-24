@@ -80,6 +80,38 @@ namespace Schema.UnitTests.Utility
         }
 
         [Test]
+        public void Detect_SqlServer_WithDatabaseName_CapturesCompatibilityLevel()
+        {
+            var cmd = Substitute.For<IDbCommand>();
+            cmd.ExecuteScalar().Returns("14", 130);   // version query -> 14, compat query -> 130
+
+            var info = TargetVersionDetector.Detect(cmd, Platform.SqlServer, "MyDb");
+
+            Assert.That(info.ServerComparable, Is.EqualTo(14));
+            Assert.That(info.CompatibilityLevel, Is.EqualTo(130));
+        }
+
+        [Test]
+        public void Detect_SqlServer_WithoutDatabaseName_LeavesCompatibilityLevelNull()
+        {
+            var cmd = CommandReturning("14");
+
+            var info = TargetVersionDetector.Detect(cmd, Platform.SqlServer);
+
+            Assert.That(info.CompatibilityLevel, Is.Null);
+        }
+
+        [Test]
+        public void Detect_PostgreSql_WithDatabaseName_LeavesCompatibilityLevelNull()
+        {
+            var cmd = CommandReturning("160004");
+
+            var info = TargetVersionDetector.Detect(cmd, Platform.PostgreSQL, "MyDb");
+
+            Assert.That(info.CompatibilityLevel, Is.Null);
+        }
+
+        [Test]
         public void GetVersionQuery_Throws_OnUnknownPlatform()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => TargetVersionDetector.GetVersionQuery((Platform)999));

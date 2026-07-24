@@ -341,6 +341,8 @@ These are the minimum versions SchemaSmith supports for deployment:
 | MySQL | 8.0 |
 | MariaDB | 10.6 |
 
+**These floors are enforced automatically — you don't declare anything.** Before any deployment (SchemaQuench) or extraction (SchemaTongs) work begins, the target server's version is detected and logged; a below-floor server aborts the run with a clear "unsupported version" message instead of failing later with a raw engine error. For SQL Server, the target database's `compatibility_level` is checked too — it must be `140` or higher (SQL Server 2017), even on a 2017+ server, because the engine scripts use `STRING_AGG`; a database left at a lower compatibility level is reported distinctly from a too-old server. `MinimumVersion` (below) is a separate, opt-in gate for raising the floor *further* per product.
+
 ### MinimumVersion pre-flight gate
 
 You can raise the floor for a specific product by declaring `MinimumVersion` in `Product.json`. Before any deployment work begins, SchemaQuench detects the version of every resolved target. If any target is below the declared floor, the entire run aborts with a manifest naming each below-floor server and its detected version. Nothing is deployed -- no partial work, no side effects on any target.

@@ -150,6 +150,42 @@ namespace SchemaQuench.UnitTests
         }
 
         [Test]
+        public void ValidateServerVersionFloor_Throws_WhenBelowIntrinsicFloor_NoMinimumVersionDeclared()
+        {
+            lock (FactoryContainer.SharedLockObject)
+            {
+                FactoryContainer.Clear();
+                try
+                {
+                    ConfigureProduct("SqlServer", minimumVersion: "");   // no declared floor at all
+                    var quench = new StubDetectProductQuench("11");        // SQL Server 2012, below floor 14
+
+                    var ex = Assert.Throws<Exception>(() => quench.ValidateServerVersionFloor());
+                    Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
+                    Assert.That(ex.Message, Does.Contain("primary-server"));
+                }
+                finally { FactoryContainer.Clear(); }
+            }
+        }
+
+        [Test]
+        public void ValidateServerVersionFloor_DoesNotThrow_WhenAtFloor()
+        {
+            lock (FactoryContainer.SharedLockObject)
+            {
+                FactoryContainer.Clear();
+                try
+                {
+                    ConfigureProduct("SqlServer", minimumVersion: "");
+                    var quench = new StubDetectProductQuench("14");   // SQL Server 2017 == floor
+
+                    Assert.DoesNotThrow(() => quench.ValidateServerVersionFloor());
+                }
+                finally { FactoryContainer.Clear(); }
+            }
+        }
+
+        [Test]
         public void ValidateMinimumVersion_Throws_WhenMinimumVersionUnparseable()
         {
             lock (FactoryContainer.SharedLockObject)

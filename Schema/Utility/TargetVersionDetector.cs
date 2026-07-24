@@ -21,7 +21,7 @@ namespace Schema.Utility
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "Unsupported platform for version detection")
         };
 
-        public static TargetVersionInfo Detect(IDbCommand command, Platform platform)
+        public static TargetVersionInfo Detect(IDbCommand command, Platform platform, string databaseName = null)
         {
             command.CommandText = GetVersionQuery(platform);
             var raw = command.ExecuteScalar()?.ToString();
@@ -38,7 +38,24 @@ namespace Schema.Utility
             var comparable = VersionHelper.ParseDetectedVersion(raw, platform);
             if (comparable == null)
                 throw new Exception($"Unable to determine the {platform} server version (got '{raw ?? "<null>"}').");
-            return new TargetVersionInfo(platform, raw, comparable.Value);
+
+            int? compatibilityLevel = null;
+            if (platform.GetBasePlatform() == Platform.SqlServer && !string.IsNullOrWhiteSpace(databaseName))
+                compatibilityLevel = DetectSqlServerCompatibilityLevel(command, databaseName);
+
+            return new TargetVersionInfo(platform, raw, comparable.Value, compatibilityLevel);
+        }
+
+        // The target database's compatibility_level gates STRING_AGG (needs 140) independently of the
+        // server major version — a 2017+ server can still host a database left at compat 130. The
+        // database name comes from trusted configuration/package data; it is escaped as a string
+        // literal (the codebase idiom) rather than parameterized so detection stays self-contained.
+        private static int? DetectSqlServerCompatibilityLevel(IDbCommand command, string databaseName)
+        {
+            command.CommandText =
+                $"SELECT compatibility_level FROM sys.databases WHERE name = N'{databaseName.Replace("'", "''")}'";
+            var result = command.ExecuteScalar();
+            return result != null && int.TryParse(result.ToString(), out var level) ? level : (int?)null;
         }
     }
 }

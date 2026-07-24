@@ -213,6 +213,10 @@ public class ProductQuenchTests
             CommandServers.Add(server);
             var command = Substitute.For<IDbCommand>();
             command.Connection.Returns(Substitute.For<IDbConnection>());
+            // Answer the server-version-floor pre-flight (a real SQL Server reports its major version);
+            // all other queries keep returning null so unrelated behavior is unchanged.
+            command.ExecuteScalar().Returns(_ =>
+                (command.CommandText ?? "").Contains("ProductMajorVersion") ? (object)16 : null);
             return command;
         }
     }
@@ -2413,6 +2417,10 @@ public class ProductQuenchTests
             var command = Substitute.For<IDbCommand>();
             command.Connection.Returns(Substitute.For<IDbConnection>());
             command.ExecuteReader().Returns(_ => new InMemoryRowReader(rows));
+            // Answer the server-version-floor pre-flight (a real SQL Server reports its major version);
+            // all other scalar queries keep returning null so unrelated behavior is unchanged.
+            command.ExecuteScalar().Returns(_ =>
+                (command.CommandText ?? "").Contains("ProductMajorVersion") ? (object)16 : null);
             return command;
         }
     }

@@ -234,6 +234,27 @@ public class SchemaTongs
         };
     }
 
+    /// <summary>
+    /// Source version pre-flight — detects the extraction source's engine version (and, for SQL Server,
+    /// the target database's compatibility level), logs it, and enforces SchemaSmith's intrinsic version
+    /// floor before any extraction. Run from the CLI entry before <see cref="CastTemplate"/> so an
+    /// unsupported source (e.g. SQL Server 2012, where the kindling scripts' STRING_AGG would otherwise
+    /// die with a raw "not a recognized built-in function" error) fails fast with a clear message.
+    /// </summary>
+    public void PreFlightSourceVersion()
+    {
+        var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
+        var targetDb = config["Source:Database"] ?? config["Source:Schema"];
+        var server = config["Source:Server"] ?? config["Target:Server"] ?? "source";
+        using var connection = GetConnection(targetDb);
+        using var command = connection.CreateCommand();
+        var info = TargetVersionDetector.Detect(command, _platform,
+            _platform.GetBasePlatform() == Platform.SqlServer ? targetDb : null);
+        _progressLog.Info($"Source {info.Platform} version {VersionHelper.DisplayVersion(info)}" +
+                          (info.CompatibilityLevel is { } lvl ? $" (compatibility level {lvl})" : ""));
+        PreFlightVersionGuard.CheckOrThrow(info, server, targetDb);
+    }
+
     public void CastTemplate()
     {
         _stopwatch.Start();

@@ -456,6 +456,19 @@ public class DatabaseQuench
                     _postgreSqlServerVersionNum = TargetVersionDetector.Detect(versionCmd, Platform.PostgreSQL).ServerComparable;
                 }
 
+                // SQL Server: STRING_AGG in the kindling scripts needs the target *database* at
+                // compatibility level 140+, which a 2017+ server can still leave lower. Detect and
+                // guard per database (logging the compat level) before kindling, so a below-compat
+                // database fails with a clear message instead of a raw STRING_AGG error at kindle.
+                if (_product.Platform.GetBasePlatform() == Platform.SqlServer && !_suppressKindling)
+                {
+                    using var compatCmd = connection.CreateCommand();
+                    var info = TargetVersionDetector.Detect(compatCmd, _product.Platform, _databaseName);
+                    SafeProgressLog($"  [{_databaseName}] detected SQL Server version {VersionHelper.DisplayVersion(info)}" +
+                                    (info.CompatibilityLevel is { } lvl ? $" (compatibility level {lvl})" : ""));
+                    PreFlightVersionGuard.CheckOrThrow(info, _server, _databaseName);
+                }
+
                 // Step: Kindle the forge
                 // Intentionally NOT wrapped in `_checkpointing.Track` — mirrors the
                 // MissingTablesAndColumns un-wrap below. KindleForge is cheap and
