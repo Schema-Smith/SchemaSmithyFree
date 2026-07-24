@@ -1,0 +1,8 @@
+{
+  "tag_name": "v2.3.0",
+  "assets": [
+    { "name": "SchemaSmith-2.3.0-linux-x64.tar.gz", "browser_download_url": "https://example/linux-x64.tar.gz" },
+    { "name": "SchemaSmith-2.3.0-win-x64.zip", "browser_download_url": "https://example/win-x64.zip" },
+    { "name": "SchemaSmith-2.3.0-osx-arm64.tar.gz", "browser_download_url": "https://example/osx-arm64.tar.gz" }
+  ]
+}
