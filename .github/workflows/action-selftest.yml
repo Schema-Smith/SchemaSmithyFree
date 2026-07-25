@@ -1,0 +1,32 @@
+name: Action Self-Test
+on:
+  pull_request:
+    paths: ['action.yml', 'action/**', '.github/workflows/action-selftest.yml']
+  workflow_dispatch:
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run action unit tests
+        shell: bash
+        run: bash action/tests/run-tests.sh
+      - name: Validate a demo package via the action
+        id: ss
+        uses: ./
+        with:
+          mode: validate
+          product-path: Demos/PostgreSQL/Northwind
+          version: latest
+      - name: Assert outputs present
+        shell: bash
+        run: |
+          echo "exit-code=${{ steps.ss.outputs.exit-code }}"
+          echo "log-dir=${{ steps.ss.outputs.log-dir }}"
+          test "${{ steps.ss.outputs.exit-code }}" = "0"
+          test -n "${{ steps.ss.outputs.log-dir }}"
