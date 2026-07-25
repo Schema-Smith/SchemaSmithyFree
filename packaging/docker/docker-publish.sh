@@ -53,6 +53,8 @@ set -e   # direct-execution (publish) mode: fail fast on login/build/push errors
 
 main() {
   local repo="Schema-Smith/SchemaSmith" version="$SS_VERSION"
+  # Tag derivation assumes clean 3-part semver; a 4-part token would mistag (X.Y.Z.0 -> X.Y=X.Y.Z).
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::SS_VERSION '$version' is not 3-part semver"; exit 1; }
   echo "Publishing SchemaQuench $version (push_hub=${SS_PUSH_HUB:-false})"
 
   # Registry auth (raw docker login — no third-party login action to pin).
@@ -80,9 +82,8 @@ main() {
   docker buildx build --platform linux/amd64,linux/arm64 --provenance=false \
     -f packaging/docker/Dockerfile "${label_args[@]}" "${tag_args[@]}" --push .
 
-  # Confirm the multi-arch manifest resolved on the first tag.
-  local first; first="$(printf '%s\n' "${tag_args[@]}" | grep -v '^-t$' | head -n1)"
-  docker buildx imagetools inspect "$first"
+  # Confirm the multi-arch manifest resolved on the first tag (tag_args = [-t ref -t ref ...]).
+  docker buildx imagetools inspect "${tag_args[1]}"
 }
 
 main "$@"

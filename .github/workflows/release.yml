@@ -345,7 +345,10 @@ jobs:
     # exact linux binaries this release built. Part of the gated release run only — never a
     # standalone runnable workflow. GHCR always (GITHUB_TOKEN); Docker Hub when its secret exists.
     runs-on: ubuntu-latest
-    needs: [read-version, build-release]
+    # After create-release so the image only publishes once the version's tag + (draft) release
+    # exist — no public image for a version that has no tag. Still needs build-release for the
+    # linux artifacts and read-version for the version string.
+    needs: [read-version, build-release, create-release]
     environment: release
     permissions:
       contents: read
