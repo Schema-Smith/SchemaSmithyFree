@@ -1,0 +1,103 @@
+name: Action Self-Test
+on:
+  pull_request:
+    paths: ['action.yml', 'action/**', '.github/workflows/action-selftest.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    # Cross-OS proof of the ACTION's contract: fetch the release, extract, exec
+    # SchemaQuench, capture outputs — on every runner OS. SchemaQuench's own
+    # --Validate verdict is version-coupled (a checkout package's .json-schemas can
+    # be ahead of the released CLI the action fetches) and is NOT the action's
+    # concern, so the action step is allowed to exit non-zero; we assert the action
+    # populated its outputs, which only happens after it ran the binary.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run action unit tests
+        shell: bash
+        run: bash action/tests/run-tests.sh
+      - name: Exercise the action end-to-end (fetch / extract / exec / outputs)
+        id: ss
+        continue-on-error: true
+        uses: ./
+        with:
+          mode: validate
+          product-path: Demos/PostgreSQL/Northwind
+          version: latest
+      - name: Assert the action ran the binary and captured outputs
+        shell: bash
+        run: |
+          echo "exit-code=${{ steps.ss.outputs.exit-code }}"
+          echo "log-dir=${{ steps.ss.outputs.log-dir }}"
+          # Outputs are written only after the action fetched + extracted + executed
+          # SchemaQuench. A populated exit-code proves the binary ran on this OS; a
+          # populated log-dir proves the run/log path was established.
+          test -n "${{ steps.ss.outputs.exit-code }}"
+          test -n "${{ steps.ss.outputs.log-dir }}"
+
+  deploy:
+    # Real end-to-end proof: deploy an actual demo package to a Postgres service.
+    # `deploy` never runs the --Validate staleness linter, so a real demo (schemas
+    # intact) deploys clean. SchemaQuench bootstraps via the `postgres` maintenance DB
+    # and the demo's Initialize template keys off the `TestMain` database (as CI does).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: TestMain
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U testuser" --health-interval 5s
+          --health-timeout 5s --health-retries 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Deploy a demo package to Postgres via the action
+        id: ss
+        uses: ./
+        with:
+          mode: deploy
+          product-path: Demos/PostgreSQL/Northwind
+          server: 127.0.0.1
+          user: testuser
+          password: testpass
+          version: latest
+      - name: Assert clean deploy + summary produced
+        shell: bash
+        run: |
+          echo "exit-code=${{ steps.ss.outputs.exit-code }}"
+          echo "summary-path=${{ steps.ss.outputs.summary-path }}"
+          test "${{ steps.ss.outputs.exit-code }}" = "0"
+          test -f "${{ steps.ss.outputs.summary-path }}"
+      # WhatIf runs AFTER deploy: it previews against the now-existing, converged
+      # database (exit 0). WhatIf on a *fresh* target fails for multi-template
+      # products whose later template targets a DB an earlier template would create
+      # (WhatIf doesn't create it) — a SchemaQuench behavior, not an action concern.
+      - name: WhatIf preview against the deployed database via the action
+        id: whatif
+        uses: ./
+        with:
+          mode: whatif
+          product-path: Demos/PostgreSQL/Northwind
+          server: 127.0.0.1
+          user: testuser
+          password: testpass
+          version: latest
+      - name: Assert clean WhatIf + summary produced
+        shell: bash
+        run: |
+          echo "whatif exit-code=${{ steps.whatif.outputs.exit-code }}"
+          echo "whatif summary-path=${{ steps.whatif.outputs.summary-path }}"
+          test "${{ steps.whatif.outputs.exit-code }}" = "0"
+          test -f "${{ steps.whatif.outputs.summary-path }}"

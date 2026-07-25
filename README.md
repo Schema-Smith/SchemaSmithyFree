@@ -10,6 +10,8 @@
 [![License: SSCL v2.0](https://img.shields.io/badge/license-SSCL%20v2.0-blue)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/stargazers)
 
+**Featured in:** [![Mentioned in Awesome MariaDB](https://awesome.re/mentioned-badge.svg)](https://github.com/Vettabase/awesome-mariadb)
+
 SchemaSmith is a state-based database schema management toolset for SQL Server, PostgreSQL, MySQL, and MariaDB. Define your desired database state as metadata — tables, views, procedures, indexes, constraints, data — and SchemaSmith transforms any target server to match. Same toolset, same package format, four engines — no migration scripts to author or order.
 
 Self-contained, single-file executables for Windows, Linux, and macOS. No .NET runtime install needed.
@@ -61,6 +63,37 @@ For self-contained publishing of the CLI tools:
 # Linux/macOS
 ./build-schemaquench.sh
 ```
+
+## GitHub Action (CI/CD)
+
+Run SchemaQuench in a workflow with the **SchemaSmith Deploy** action — WhatIf on pull requests, deploy on merge:
+
+```yaml
+- name: WhatIf on PR
+  if: github.event_name == 'pull_request'
+  uses: Schema-Smith/SchemaSmith@main
+  with:
+    mode: whatif
+    product-path: ./schema
+    server: ${{ secrets.DB_SERVER }}
+    user: ${{ secrets.DB_USER }}
+    password: ${{ secrets.DB_PASSWORD }}
+
+- name: Deploy on merge
+  if: github.ref == 'refs/heads/main'
+  uses: Schema-Smith/SchemaSmith@main
+  with:
+    mode: deploy
+    product-path: ./schema
+    server: ${{ secrets.DB_SERVER }}
+    user: ${{ secrets.DB_USER }}
+    password: ${{ secrets.DB_PASSWORD }}
+```
+
+The action fetches the matching self-contained binary for the runner OS at run time — no runtime install. `@main` tracks the latest action; **for production, pin to a release tag** (e.g. `@vX.Y.Z`) — a tag pins both the action and the CLI version it runs (the `version` input defaults from the ref).
+
+- **Inputs:** `version`, `mode` (`deploy` / `whatif` / `validate` / `test-connection` / `preview-targets`), `product-path`, `server`, `user`, `password` (passed via env, never on the command line), `extra-args` (raw `--Key:value` passthrough — port, template/database/schema filters, `Drop*` toggles, connection properties, and more).
+- **Outputs:** `exit-code`, `log-dir`, `summary-path` (the `SchemaQuench - Summary.md`/`.json` — e.g. post a WhatIf summary as a PR comment).
 
 ## Quick Start
 

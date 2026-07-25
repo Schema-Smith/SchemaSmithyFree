@@ -137,8 +137,12 @@ $env:SmithySettings_ScriptTokens__ReleaseVersion = "2.4.0-ci.99"
 schemaquench --ConfigFile:dev.settings.json
 ```
 
-The `Development` row's `ReleaseVersion` updates on the next stamp (clear the row first, or check a
-fresh environment label, to see it land). Unset the variable when you're done.
+The stamp is **insert-once per `Environment`** (`WHERE NOT EXISTS` on the environment name), so
+overriding `ReleaseVersion` on its own does **not** rewrite the existing `Development` row — the
+override only lands on a row that isn't there yet. To watch `2.4.0-ci.99` stamp in, clear the
+`Development` row first (or point at a fresh `Environment` label) and re-run. Unset the variable when
+you're done. Whether a re-deploy overwrites, ignores, or *appends* a history row is a choice your
+stamp script makes, not the token engine's — this demo deliberately keeps one row per environment.
 
 ## Per-engine notes
 
