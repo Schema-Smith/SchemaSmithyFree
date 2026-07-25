@@ -123,7 +123,7 @@ public static class DeploymentSummaryAssembler
         if (changeAudit is not { Instrumented: true })
             return new ObjectChangeSummary(
                 Instrumented: false,
-                Created: new CreatedCounts(0, 0, 0, 0, 0, 0, 0),
+                Created: new CreatedCounts(0, 0, 0, 0, 0, 0, 0, 0),
                 Modified: new ModifiedCounts(0, 0),
                 Dropped: new DroppedCounts(0, 0, 0, 0),
                 ScriptsRan: 0,
@@ -142,6 +142,7 @@ public static class DeploymentSummaryAssembler
 
         var created = new CreatedCounts(
             Tables: Count2("table", "created", "wouldCreate"),
+            Columns: Count2("column", "created", "wouldCreate"),
             Indexes: Count2("index", "created", "wouldCreate"),
             Constraints: Count2("constraint", "created", "wouldCreate"),
             ForeignKeys: Count2("foreignKey", "created", "wouldCreate"),

@@ -34,10 +34,10 @@ jobs:
       contents: read
       checks: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -69,7 +69,7 @@ jobs:
         run: dotnet test SchemaQuench/SchemaQuench.IntegrationTests/SchemaQuench.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=Validate" --logger trx --results-directory TestResults
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
           name: unit-test-results
@@ -78,7 +78,7 @@ jobs:
           retention-days: 7
 
       - name: Test Summary
-        uses: dorny/test-reporter@v3
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
         if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
         with:
           name: Unit Tests
@@ -140,10 +140,10 @@ jobs:
             ALTER LOGIN [sa] WITH NAME = [$TEST_USER];
           "
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -158,7 +158,7 @@ jobs:
           dotnet test DataTongs/DataTongs.IntegrationTests/DataTongs.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=SqlServer" --logger trx --results-directory TestResults
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
           name: sqlserver-test-results
@@ -167,7 +167,7 @@ jobs:
           retention-days: 7
 
       - name: Test Summary
-        uses: dorny/test-reporter@v3
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
         if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
         with:
           name: SQL Server Integration Tests
@@ -228,10 +228,10 @@ jobs:
           echo "PostgreSQL max_connections=$actual"
           [ "$actual" = "2000" ] || { echo "ERROR: could not raise PostgreSQL max_connections to 2000 (got '$actual')"; exit 1; }
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -246,7 +246,7 @@ jobs:
           dotnet test DataTongs/DataTongs.IntegrationTests/DataTongs.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=PostgreSQL" --logger trx --results-directory TestResults
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
           name: postgresql-test-results
@@ -255,7 +255,7 @@ jobs:
           retention-days: 7
 
       - name: Test Summary
-        uses: dorny/test-reporter@v3
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
         if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
         with:
           name: PostgreSQL Integration Tests
@@ -288,10 +288,10 @@ jobs:
           --health-retries 10
           --health-start-period 30s
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -314,7 +314,7 @@ jobs:
           dotnet test DataTongs/DataTongs.IntegrationTests/DataTongs.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=MySQL" --logger trx --results-directory TestResults
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
           name: mysql-test-results
@@ -323,7 +323,7 @@ jobs:
           retention-days: 7
 
       - name: Test Summary
-        uses: dorny/test-reporter@v3
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
         if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
         with:
           name: MySQL Integration Tests
@@ -359,10 +359,10 @@ jobs:
           --health-retries 10
           --health-start-period 30s
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -385,7 +385,7 @@ jobs:
           dotnet test DataTongs/DataTongs.IntegrationTests/DataTongs.IntegrationTests.csproj --no-build -c Debug --settings coverage.runsettings --collect "XPlat Code Coverage" --filter "Category=MariaDb" --logger trx --results-directory TestResults
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
           name: mariadb-test-results
@@ -394,7 +394,7 @@ jobs:
           retention-days: 7
 
       - name: Test Summary
-        uses: dorny/test-reporter@v3
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
         if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
         with:
           name: MariaDB Integration Tests
@@ -408,10 +408,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-unit-tests, integration-tests-sqlserver, integration-tests-postgresql, integration-tests-mysql, integration-tests-mariadb]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -419,7 +419,7 @@ jobs:
         run: dotnet tool install -g dotnet-reportgenerator-globaltool
 
       - name: Download coverage artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: coverage-artifacts
           pattern: '*-test-results'

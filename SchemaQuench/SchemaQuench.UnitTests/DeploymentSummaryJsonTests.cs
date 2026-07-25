@@ -87,7 +87,7 @@ public class DeploymentSummaryJsonTests
 
         var objectChanges = new ObjectChangeSummary(
             Instrumented: false,
-            Created: new CreatedCounts(0, 0, 0, 0, 0, 0, 0),
+            Created: new CreatedCounts(0, 0, 0, 0, 0, 0, 0, 0),
             Modified: new ModifiedCounts(0, 0),
             Dropped: new DroppedCounts(0, 0, 0, 0),
             ScriptsRan: 0,
@@ -222,7 +222,7 @@ public class DeploymentSummaryJsonTests
     {
         var json = JObject.Parse(DeploymentSummaryJson.Serialize(BuildFullyPopulatedSummary()));
 
-        foreach (var key in new[] { "tables", "indexes", "constraints", "foreignKeys", "procedures", "views", "functions" })
+        foreach (var key in new[] { "tables", "columns", "indexes", "constraints", "foreignKeys", "procedures", "views", "functions" })
             Assert.That(json.SelectToken($"objectChanges.created.{key}"), Is.Not.Null, $"created.{key} missing");
         foreach (var key in new[] { "tables", "columns" })
             Assert.That(json.SelectToken($"objectChanges.modified.{key}"), Is.Not.Null, $"modified.{key} missing");

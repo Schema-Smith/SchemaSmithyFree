@@ -106,7 +106,7 @@ The JSON is the frozen contract: camelCase keys, enum values as their names, ind
   "whatIf": null,                   // populated only for a WhatIf-mode run
   "objectChanges": {
     "instrumented": true,
-    "created":  { "tables": 1, "indexes": 4, "constraints": 2, "foreignKeys": 1, "procedures": 0, "views": 0, "functions": 0 },
+    "created":  { "tables": 1, "columns": 2, "indexes": 4, "constraints": 2, "foreignKeys": 1, "procedures": 0, "views": 0, "functions": 0 },
     "modified": { "tables": 1, "columns": 3 },
     "dropped":  { "tables": 0, "indexes": 1, "constraints": 0, "foreignKeys": 0 },
     "scriptsRan": 12,
@@ -214,7 +214,7 @@ Timing tells you where the run spent its seconds; `objectChanges` tells you what
 
 | Bucket | Object types counted |
 | --- | --- |
-| `created` | `tables`, `indexes`, `constraints`, `foreignKeys`, plus `procedures` / `views` / `functions` fields that stay `0` by design (object scripts don't count as created). |
+| `created` | `tables`, `columns` (columns added to an already-existing table — a new table's own columns count under that table's creation, not here), `indexes`, `constraints`, `foreignKeys`, plus `procedures` / `views` / `functions` fields that stay `0` by design (object scripts don't count as created). |
 | `modified` | `tables`, `columns`. |
 | `dropped` | `tables`, `indexes`, `constraints`, `foreignKeys`. |
 | `scriptsRan` | Total object scripts that ran this run. |

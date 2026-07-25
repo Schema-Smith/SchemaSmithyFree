@@ -155,7 +155,7 @@ public static class DeploymentSummaryText
         var created = objectChanges.Created;
         var modified = objectChanges.Modified;
         var dropped = objectChanges.Dropped;
-        lines.Add($"- Created: tables={created.Tables}, indexes={created.Indexes}, constraints={created.Constraints}, foreignKeys={created.ForeignKeys}, procedures={created.Procedures}, views={created.Views}, functions={created.Functions}");
+        lines.Add($"- Created: tables={created.Tables}, columns={created.Columns}, indexes={created.Indexes}, constraints={created.Constraints}, foreignKeys={created.ForeignKeys}, procedures={created.Procedures}, views={created.Views}, functions={created.Functions}");
         lines.Add($"- Modified: tables={modified.Tables}, columns={modified.Columns}");
         lines.Add($"- Dropped: tables={dropped.Tables}, indexes={dropped.Indexes}, constraints={dropped.Constraints}, foreignKeys={dropped.ForeignKeys}");
         lines.Add($"- Ran (object scripts): {objectChanges.ScriptsRan}");

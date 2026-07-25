@@ -1,0 +1,60 @@
+name: 'SchemaSmith Deploy'
+description: 'State-based schema deployment for SQL Server, PostgreSQL, MySQL and MariaDB (runs SchemaQuench).'
+branding:
+  icon: 'database'
+  color: 'blue'
+inputs:
+  version:
+    description: 'SchemaSmith release to use (e.g. v2.3.0, or latest). Default: the pinned action tag if any, else latest.'
+    required: false
+    default: ''
+  mode:
+    description: 'deploy | whatif | validate | test-connection | preview-targets'
+    required: false
+    default: 'deploy'
+  product-path:
+    description: 'Path to the schema package (SchemaPackagePath).'
+    required: false
+    default: '.'
+  server:
+    description: 'Target server (required unless mode: validate).'
+    required: false
+    default: ''
+  user:
+    description: 'Target user (blank = Windows auth on SQL Server).'
+    required: false
+    default: ''
+  password:
+    description: 'Target password (passed via env, never on the command line).'
+    required: false
+    default: ''
+  extra-args:
+    description: 'Raw --Key:value overrides appended to SchemaQuench (port, filters, Drop* toggles, ConnectionProperties, MaxThreads, …).'
+    required: false
+    default: ''
+outputs:
+  exit-code:
+    description: 'SchemaQuench exit code (0 success, 2 failed/partial).'
+    value: ${{ steps.run.outputs.exit-code }}
+  log-dir:
+    description: 'Directory containing the run logs.'
+    value: ${{ steps.run.outputs.log-dir }}
+  summary-path:
+    description: 'Path to SchemaQuench - Summary.md (empty if not produced).'
+    value: ${{ steps.run.outputs.summary-path }}
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/action/schemasmith-deploy.sh"
+      env:
+        SS_VERSION: ${{ inputs.version }}
+        SS_ACTION_REF: ${{ github.action_ref }}
+        SS_MODE: ${{ inputs.mode }}
+        SS_PRODUCT_PATH: ${{ inputs.product-path }}
+        SS_SERVER: ${{ inputs.server }}
+        SS_USER: ${{ inputs.user }}
+        SS_PASSWORD: ${{ inputs.password }}
+        SS_EXTRA_ARGS: ${{ inputs.extra-args }}
+        GH_TOKEN: ${{ github.token }}

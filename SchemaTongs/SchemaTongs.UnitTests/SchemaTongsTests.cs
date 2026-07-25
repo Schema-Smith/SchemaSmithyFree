@@ -2319,5 +2319,52 @@ public class SchemaTongsTests
         }
     }
 
+    [Test]
+    public void PreFlightSourceVersion_BelowFloor_ThrowsClearMessage()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            RegisterConfig(Platform.SqlServer, new Dictionary<string, string>
+            {
+                ["Source:Server"] = "SQL2K12",
+                ["Source:Database"] = "LegacyDb"
+            });
+            RegisterConnectionFactory(Platform.SqlServer);
+            _command.ExecuteScalar().Returns("11");   // SQL Server 2012, below the 2017 floor
+
+            var tongs = new SchemaTongs(Platform.SqlServer);
+
+            var ex = Assert.Throws<Exception>(() => tongs.PreFlightSourceVersion());
+            Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
+            Assert.That(ex.Message, Does.Contain("SQL2K12"));
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void PreFlightSourceVersion_SupportedVersion_DoesNotThrow()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            RegisterConfig(Platform.SqlServer, new Dictionary<string, string>
+            {
+                ["Source:Database"] = "ModernDb"
+            });
+            RegisterConnectionFactory(Platform.SqlServer);
+            _command.ExecuteScalar().Returns("16", 150);   // SQL Server 2022, compat 150 (>= 140)
+
+            var tongs = new SchemaTongs(Platform.SqlServer);
+
+            Assert.DoesNotThrow(() => tongs.PreFlightSourceVersion());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
     #endregion
 }

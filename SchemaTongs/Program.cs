@@ -26,7 +26,9 @@ public static class Program
 
         var platform = ResolvePlatform();
 
-        new SchemaTongs(platform).CastTemplate();
+        var tongs = new SchemaTongs(platform);
+        tongs.PreFlightSourceVersion();   // fail fast on an unsupported source before kindling
+        tongs.CastTemplate();
         LogBackup.BackupLogsAndExit("SchemaTongs");
     }
 

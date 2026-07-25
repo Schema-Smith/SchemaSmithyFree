@@ -170,11 +170,15 @@ public class DataDeliveryProcessor : IDataDelivery
 
         var delivered = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
         var pass2Units = new List<(IDeliverableTable Table, int Index, DataDelivery Delivery, List<string> DeferredColumns)>();
-        // Tracks artifact keys (table key + delivery variant/index) whose failing SQL has already
-        // been written to an artifact, so the retry/fallback architecture (a table can be attempted
-        // in the while loop AND again in the circular-fallback loop) writes exactly one artifact per
-        // failed (table, delivery) rather than one per attempt.
-        var artifactWritten = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+        // Failing SQL per (table, delivery), recorded on failure but NOT written to an artifact yet.
+        // A delivery that fails an early dependency-ordering pass often succeeds on retry, so writing
+        // the artifact inline would leave a misleading "Failed DataDelivery" artifact on a green
+        // deploy. An entry is removed when its delivery later succeeds, so what remains after every
+        // pass is exactly the deliveries that never recovered — those are flushed to artifacts
+        // alongside the aggregate failure below. (Keyed by artifact key = table key + variant/index,
+        // so a table attempted in both the while loop and the circular-fallback loop yields one
+        // artifact per failed delivery, not one per attempt.)
+        var pendingArtifacts = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
         // Per-delivery success tracking: a table with multiple deliveries can be re-attempted
         // (dependency retry loop + circular-fallback loop). A delivery that already succeeded on a
         // prior attempt must not re-run when a *sibling* delivery's failure re-queues the table.
@@ -204,7 +208,7 @@ public class DataDeliveryProcessor : IDataDelivery
 
                 try
                 {
-                    DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Units, false, artifactWritten, deliverySucceeded, appliedByTable[table]);
+                    DeliverTable(context, table, tableDataMap, deferredColumns, delivered, pass2Units, false, pendingArtifacts, deliverySucceeded, appliedByTable[table]);
                 }
                 catch (Exception ex)
                 {
@@ -230,7 +234,7 @@ public class DataDeliveryProcessor : IDataDelivery
         {
             try
             {
-                DeliverTable(context, table, tableDataMap, new List<string>(), delivered, pass2Units, true, artifactWritten, deliverySucceeded, appliedByTable[table]);
+                DeliverTable(context, table, tableDataMap, new List<string>(), delivered, pass2Units, true, pendingArtifacts, deliverySucceeded, appliedByTable[table]);
             }
             catch (Exception ex)
             {
@@ -273,8 +277,7 @@ public class DataDeliveryProcessor : IDataDelivery
                     }
                     catch (Exception ex)
                     {
-                        if (artifactWritten.Add(artifactKey))
-                            context.WriteResolvedSqlArtifact?.Invoke(artifactKey, mergeScript);
+                        pendingArtifacts[artifactKey] = mergeScript;
                         logError($"    Error in pass 2 for {tableKey}: {ex.Message}");
                         permanentFailures.Add(tableKey);
                     }
@@ -286,6 +289,13 @@ public class DataDeliveryProcessor : IDataDelivery
                 permanentFailures.Add(DataDeliveryHelper.GetTableKey(table, platform));
             }
         }
+
+        // Flush the deferred failure artifacts. Only deliveries that never recovered remain in
+        // pendingArtifacts (successful retries removed their entries), so each one is a genuine
+        // permanent failure worth a "Failed DataDelivery" artifact — no artifact is left behind for a
+        // delivery that failed an early pass but succeeded on retry.
+        foreach (var kvp in pendingArtifacts)
+            context.WriteResolvedSqlArtifact?.Invoke(kvp.Key, kvp.Value);
 
         if (permanentFailures.Count > 0)
         {
@@ -299,7 +309,7 @@ public class DataDeliveryProcessor : IDataDelivery
         Dictionary<(IDeliverableTable Table, int Index), string> tableDataMap, List<string> deferredColumns,
         HashSet<string> delivered,
         List<(IDeliverableTable Table, int Index, DataDelivery Delivery, List<string> DeferredColumns)> pass2Units,
-        bool isCircularFallback, HashSet<string> artifactWritten, HashSet<string> deliverySucceeded,
+        bool isCircularFallback, Dictionary<string, string> pendingArtifacts, HashSet<string> deliverySucceeded,
         List<(int Index, DataDelivery Delivery)> appliedDeliveries)
     {
         var platform = context.Platform;
@@ -342,11 +352,11 @@ public class DataDeliveryProcessor : IDataDelivery
                 }
                 catch
                 {
-                    if (artifactWritten.Add(artifactKey))
-                        context.WriteResolvedSqlArtifact?.Invoke(artifactKey, mergeScript);
+                    pendingArtifacts[artifactKey] = mergeScript;   // defer; flushed only if it never recovers
                     throw;
                 }
 
+                pendingArtifacts.Remove(artifactKey);   // pass-1 succeeded — clear any earlier deferred artifact
                 pass2Units.Add((table, index, delivery, deferredColumns));
                 deliverySucceeded.Add(deliveryKey);
             }
@@ -366,10 +376,10 @@ public class DataDeliveryProcessor : IDataDelivery
                 }
                 catch
                 {
-                    if (artifactWritten.Add(artifactKey))
-                        context.WriteResolvedSqlArtifact?.Invoke(artifactKey, mergeScript);
+                    pendingArtifacts[artifactKey] = mergeScript;   // defer; flushed only if it never recovers
                     throw;
                 }
+                pendingArtifacts.Remove(artifactKey);   // delivery succeeded — clear any earlier deferred artifact
                 deliverySucceeded.Add(deliveryKey);
             }
         }

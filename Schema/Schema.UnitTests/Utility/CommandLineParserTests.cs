@@ -1,6 +1,9 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
+using System.Collections.Generic;
 using NSubstitute;
+using Schema.Domain;
 using Schema.Isolators;
 using Schema.Utility;
 
@@ -432,5 +435,93 @@ public class CommandLineParserTests
         Assert.That(overrides["A"], Is.EqualTo("1"));
         Assert.That(overrides["B:C"], Is.EqualTo("2"));
         Assert.That(overrides["LogPath"], Is.EqualTo("x"));
+    }
+
+    [Test]
+    public void ApplyTransportSecurity_NoFlag_LeavesPropertiesUnchanged()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Server:localhost");
+        var props = new Dictionary<string, string>();
+
+        CommandLineParser.ApplyTransportSecuritySwitch(Platform.SqlServer, props);
+
+        Assert.That(props, Is.Empty);
+    }
+
+    [Test]
+    public void ApplyTransportSecurity_NoEncrypt_SqlServer_SetsEncryptFalse()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --NoEncrypt");
+        var props = new Dictionary<string, string>();
+
+        CommandLineParser.ApplyTransportSecuritySwitch(Platform.SqlServer, props);
+
+        Assert.That(props["Encrypt"], Is.EqualTo("False"));
+    }
+
+    [Test]
+    public void ApplyTransportSecurity_Encrypt_SqlServer_SetsEncryptTrue()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Encrypt");
+        var props = new Dictionary<string, string>();
+
+        CommandLineParser.ApplyTransportSecuritySwitch(Platform.SqlServer, props);
+
+        Assert.That(props["Encrypt"], Is.EqualTo("True"));
+    }
+
+    [Test]
+    public void ApplyTransportSecurity_Encrypt_PostgreSql_SetsSslModeRequire()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Encrypt");
+        var props = new Dictionary<string, string>();
+
+        CommandLineParser.ApplyTransportSecuritySwitch(Platform.PostgreSQL, props);
+
+        Assert.That(props["SSL Mode"], Is.EqualTo("Require"));
+    }
+
+    [Test]
+    public void ApplyTransportSecurity_NoEncrypt_MySql_SetsSslModeNone()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --NoEncrypt");
+        var props = new Dictionary<string, string>();
+
+        CommandLineParser.ApplyTransportSecuritySwitch(Platform.MySQL, props);
+
+        Assert.That(props["SslMode"], Is.EqualTo("None"));
+    }
+
+    [Test]
+    public void ApplyTransportSecurity_Encrypt_MariaDb_UsesMySqlSslMode()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Encrypt");
+        var props = new Dictionary<string, string>();
+
+        CommandLineParser.ApplyTransportSecuritySwitch(Platform.MariaDb, props);
+
+        Assert.That(props["SslMode"], Is.EqualTo("Required"));
+    }
+
+    [Test]
+    public void ApplyTransportSecurity_Flag_OverwritesExistingPropertyValue()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --NoEncrypt");
+        var props = new Dictionary<string, string> { ["Encrypt"] = "True" };
+
+        CommandLineParser.ApplyTransportSecuritySwitch(Platform.SqlServer, props);
+
+        Assert.That(props["Encrypt"], Is.EqualTo("False"));
+    }
+
+    [Test]
+    public void ApplyTransportSecurity_BothFlags_Throws()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --Encrypt --NoEncrypt");
+        var props = new Dictionary<string, string>();
+
+        var ex = Assert.Throws<Exception>(() =>
+            CommandLineParser.ApplyTransportSecuritySwitch(Platform.SqlServer, props));
+        Assert.That(ex.Message, Does.Contain("Encrypt").And.Contain("NoEncrypt"));
     }
 }

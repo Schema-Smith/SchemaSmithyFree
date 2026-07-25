@@ -86,7 +86,7 @@ public class DeploymentSummaryTextTests
 
         var objectChanges = new ObjectChangeSummary(
             Instrumented: false,
-            Created: new CreatedCounts(0, 0, 0, 0, 0, 0, 0),
+            Created: new CreatedCounts(0, 0, 0, 0, 0, 0, 0, 0),
             Modified: new ModifiedCounts(0, 0),
             Dropped: new DroppedCounts(0, 0, 0, 0),
             ScriptsRan: 0,
@@ -257,7 +257,7 @@ public class DeploymentSummaryTextTests
             ObjectChanges = summary.ObjectChanges with
             {
                 Instrumented = true,
-                Created = new CreatedCounts(Tables: 3, Indexes: 1, Constraints: 0, ForeignKeys: 0, Procedures: 0, Views: 0, Functions: 0),
+                Created = new CreatedCounts(Tables: 3, Columns: 0, Indexes: 1, Constraints: 0, ForeignKeys: 0, Procedures: 0, Views: 0, Functions: 0),
                 ScriptsRan = 2
             }
         };

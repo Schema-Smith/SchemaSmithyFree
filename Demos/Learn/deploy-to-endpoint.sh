@@ -49,7 +49,15 @@ sql() {
 check_sql() { case "$ENGINE" in
   sqlserver) cat <<'EOF'
 SET NOCOUNT ON;
-IF DB_ID('learn') IS NULL BEGIN PRINT 'STAMP_RESULT:absent'; RETURN; END;
+IF DB_ID('learn') IS NULL
+BEGIN
+    -- Detached-file guard: a detached 'learn' slips past DB_ID, then CREATE DATABASE dies on error
+    -- 1802. Probe for an orphaned 'learn.mdf'; NEVER delete (it may be the user's own data).
+    DECLARE @mdf NVARCHAR(4000) = CAST(SERVERPROPERTY('InstanceDefaultDataPath') AS NVARCHAR(4000)) + 'learn.mdf';
+    DECLARE @fe INT; EXEC master.dbo.xp_fileexist @mdf, @fe OUTPUT;
+    PRINT 'STAMP_RESULT:' + CASE WHEN @fe = 1 THEN 'orphaned-file' ELSE 'absent' END;
+    RETURN;
+END;
 DECLARE @s BIT;
 EXEC sp_executesql N'SELECT @s = CASE WHEN EXISTS (SELECT 1 FROM [learn].sys.extended_properties WHERE class = 0 AND name = ''SchemaSmith_DemoProvisioned'') THEN 1 ELSE 0 END', N'@s BIT OUTPUT', @s = @s OUTPUT;
 PRINT 'STAMP_RESULT:' + CASE WHEN @s = 1 THEN 'stamped' ELSE 'unstamped' END;
@@ -103,6 +111,11 @@ case "$RES" in
     echo "A database named 'learn' already exists on $SERVER but was NOT created by this helper." >&2
     echo "Refusing to drop a database the helper didn't create. If that 'learn' is yours, move or" >&2
     echo "rename it first; the helper always manages a database literally named 'learn'." >&2
+    exit 2 ;;
+  *STAMP_RESULT:orphaned-file*)
+    echo "A database file 'learn.mdf' exists on disk on $SERVER but is not attached (a detached database)." >&2
+    echo "CREATE DATABASE would fail with SQL Server error 1802. The helper will not touch this file" >&2
+    echo "(it may be your own data). Detach/move the .mdf/.ldf, then re-run." >&2
     exit 2 ;;
 esac
 EXISTS=0; case "$RES" in *STAMP_RESULT:stamped*) EXISTS=1;; esac

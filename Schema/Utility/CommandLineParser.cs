@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Schema.Domain;
 using Schema.Isolators;
 
 namespace Schema.Utility;
@@ -103,6 +104,30 @@ public static class CommandLineParser
         return result;
     }
 
+    /// <summary>
+    /// Applies the <c>-Encrypt</c> / <c>-NoEncrypt</c> convenience switch to <paramref name="props"/>,
+    /// writing the transport-security connection property appropriate to <paramref name="platform"/>
+    /// (SQL Server <c>Encrypt</c>, PostgreSQL <c>SSL Mode</c>, MySQL/MariaDB <c>SslMode</c>). The flag
+    /// wins over any value already sourced from ConnectionProperties. No switch leaves
+    /// <paramref name="props"/> untouched; specifying both switches is an error.
+    /// </summary>
+    public static void ApplyTransportSecuritySwitch(Platform platform, Dictionary<string, string> props)
+    {
+        var on = ContainsSwitch("Encrypt");
+        var off = ContainsSwitch("NoEncrypt");
+        if (!on && !off) return;
+        if (on && off)
+            throw new Exception("Specify only one of -Encrypt / -NoEncrypt.");
+
+        var (key, value) = platform.GetBasePlatform() switch
+        {
+            Platform.PostgreSQL => ("SSL Mode", on ? "Require" : "Disable"),
+            Platform.MySQL => ("SslMode", on ? "Required" : "None"),
+            _ => ("Encrypt", on ? "True" : "False")
+        };
+        props[key] = value;
+    }
+
     public static void HandleCommonSwitches(string app, Action toolSpecificSwitches = null)
     {
         if (ContainsSwitch("v") || ContainsSwitch("ver") || ContainsSwitch("version")) ShowVersionAndExit(app);
@@ -158,6 +183,7 @@ public static class CommandLineParser
         Console.WriteLine("  --LogPath:<logpath>              Path to write logs and create backup directories. The default is the executable's directory.");
         Console.WriteLine("  --ConfigFile:<filepath>          Path and file name of the config file. The default is <toolname>.settings.json in the current path.");
         Console.WriteLine("  --ConnectionString:<connstr>     Override the connection string. Bypasses all connection settings in the config file.");
+        Console.WriteLine("  --Encrypt | --NoEncrypt          Force transport encryption on/off (SQL Server Encrypt, PostgreSQL SSL Mode, MySQL/MariaDB SslMode). Wins over ConnectionProperties.");
         Console.WriteLine("  --<Key>=<value>                  Override any configuration option (also --<Key>:<value>; nest with '__', e.g. --Source__Server=host). Logged at startup; sensitive values scrubbed.");
         toolSpecificSwitches?.Invoke();
         Console.WriteLine("  --help                           Show the command line options");

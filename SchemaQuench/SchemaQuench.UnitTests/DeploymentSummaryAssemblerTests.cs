@@ -156,6 +156,19 @@ public class DeploymentSummaryAssemblerTests
     }
 
     [Test]
+    public void Assemble_CountsCreatedColumns_WhenColumnAdded()
+    {
+        var cap = new ChangeAuditCapture();
+        cap.Record("column", "dbo.Orders.NewCol", "created");
+        cap.Record("column", "dbo.Orders.PreviewCol", "wouldCreate");
+        cap.MarkInstrumented();
+
+        var oc = AssembleWith(changeAudit: cap).ObjectChanges;
+
+        Assert.That(oc.Created.Columns, Is.EqualTo(2));
+    }
+
+    [Test]
     public void Assemble_NotInstrumented_WhenCaptureNotMarked()
     {
         var oc = AssembleWith(changeAudit: new ChangeAuditCapture()).ObjectChanges;
@@ -313,7 +326,7 @@ public class DeploymentSummaryAssemblerTests
         var summary = AssembleWith();
 
         Assert.That(summary.ObjectChanges.Instrumented, Is.False);
-        Assert.That(summary.ObjectChanges.Created, Is.EqualTo(new CreatedCounts(0, 0, 0, 0, 0, 0, 0)));
+        Assert.That(summary.ObjectChanges.Created, Is.EqualTo(new CreatedCounts(0, 0, 0, 0, 0, 0, 0, 0)));
         Assert.That(summary.ObjectChanges.Modified, Is.EqualTo(new ModifiedCounts(0, 0)));
         Assert.That(summary.ObjectChanges.Dropped, Is.EqualTo(new DroppedCounts(0, 0, 0, 0)));
         Assert.That(summary.ObjectChanges.Details, Is.Empty);

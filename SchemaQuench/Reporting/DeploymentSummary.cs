@@ -90,6 +90,7 @@ public sealed record ObjectChangeSummary(
 
 public sealed record CreatedCounts(
     int Tables,
+    int Columns,
     int Indexes,
     int Constraints,
     int ForeignKeys,

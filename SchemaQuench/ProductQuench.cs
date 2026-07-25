@@ -306,6 +306,33 @@ public class ProductQuench
             .ToList();
     }
 
+    /// <summary>
+    /// Enforces SchemaSmith's intrinsic per-engine version floor on every target server, independent
+    /// of the opt-in <c>Product.MinimumVersion</c> guardrail, and logs each server's detected version.
+    /// Fails fast with a clear "unsupported version" message before any kindling — so a below-floor
+    /// server (e.g. SQL Server 2012, where the engine scripts' STRING_AGG would otherwise die with a
+    /// raw "not a recognized built-in function" error) is caught up front.
+    /// </summary>
+    internal void ValidateServerVersionFloor()
+    {
+        _progressLog.Info("Validate server version floor");
+        foreach (var server in _secondaryServers.Union([_primaryServer]))
+        {
+            using var command = GetCommand(server);
+            try
+            {
+                var info = TargetVersionDetector.Detect(command, _product.Platform);
+                _progressLog.Info($"  {server}: detected {info.Platform} version {VersionHelper.DisplayVersion(info)}");
+                PreFlightVersionGuard.CheckOrThrow(info, server);
+            }
+            finally
+            {
+                command.Connection?.Close();
+                command.Connection?.Dispose();
+            }
+        }
+    }
+
     internal void ValidateMinimumVersion()
     {
         if (string.IsNullOrWhiteSpace(_product.MinimumVersion))
@@ -387,6 +414,18 @@ public class ProductQuench
         Server = server
     };
 
+    /// <summary>
+    /// Reads <c>Target:ConnectionProperties</c> and applies the <c>-Encrypt</c>/<c>-NoEncrypt</c>
+    /// transport-security switch (if present) for the product's platform, so every target connection
+    /// this run builds honors the flag consistently.
+    /// </summary>
+    private Dictionary<string, string> ReadTargetConnectionProperties()
+    {
+        var props = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        CommandLineParser.ApplyTransportSecuritySwitch(_product.Platform, props);
+        return props;
+    }
+
     internal virtual IDbCommand GetCommand(string server)
     {
         var initDb = GetInitDatabase(_product.Platform);
@@ -404,7 +443,7 @@ public class ProductQuench
         }
         else
         {
-            var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+            var connectionProperties = ReadTargetConnectionProperties();
             connectionString = ConnectionString.Build(_product.Platform, server, initDb, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
         }
         var factory = DbConnectionFactory.ForPlatform(_product.Platform);
@@ -482,7 +521,7 @@ public class ProductQuench
         if (!string.IsNullOrEmpty(connectionStringOverride) && server == _primaryServer)
             return ConnectionString.RetargetDatabase(connectionStringOverride, identificationDb, _product.Platform);
 
-        var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        var connectionProperties = ReadTargetConnectionProperties();
         return ConnectionString.Build(_product.Platform, server, identificationDb, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
     }
 
@@ -537,7 +576,7 @@ public class ProductQuench
             }
             return ConnectionString.RetargetDatabase(connectionStringOverride, initDb, _product.Platform);
         }
-        var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+        var connectionProperties = ReadTargetConnectionProperties();
         return ConnectionString.Build(_product.Platform, server, initDb,
             _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
     }
@@ -547,8 +586,9 @@ public class ProductQuench
         _progressLog.Info($"Pre-flight diagnostics for {_product.Name} ({(previewTargets ? "--PreviewTargets" : "--TestConnection")})");
         try
         {
-            TestServerConnections();   // throws on failure
-            ValidateMinimumVersion();  // throws on failure
+            TestServerConnections();      // throws on failure
+            ValidateServerVersionFloor(); // intrinsic engine floor — throws below floor
+            ValidateMinimumVersion();     // opt-in product floor — throws on failure
         }
         catch (Exception e)
         {
@@ -663,6 +703,8 @@ public class ProductQuench
         LogProductInfo();
 
         TestServerConnections();
+
+        ValidateServerVersionFloor();
 
         ValidateMinimumVersion();
 
@@ -1684,7 +1726,7 @@ public class ProductQuench
         }
         else
         {
-            var connectionProperties = ConnectionString.ReadProperties(_config, "Target:ConnectionProperties");
+            var connectionProperties = ReadTargetConnectionProperties();
             connectionString = ConnectionString.Build(_product.Platform, server, databaseName,
                 _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
         }

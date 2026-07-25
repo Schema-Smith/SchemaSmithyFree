@@ -341,6 +341,8 @@ These are the minimum versions SchemaSmith supports for deployment:
 | MySQL | 8.0 |
 | MariaDB | 10.6 |
 
+**These floors are enforced automatically — you don't declare anything.** Before any deployment (SchemaQuench) or extraction (SchemaTongs) work begins, the target server's version is detected and logged; a below-floor server aborts the run with a clear "unsupported version" message instead of failing later with a raw engine error. For SQL Server, the target database's `compatibility_level` is checked too — it must be `140` or higher (SQL Server 2017), even on a 2017+ server, because the engine scripts use `STRING_AGG`; a database left at a lower compatibility level is reported distinctly from a too-old server. `MinimumVersion` (below) is a separate, opt-in gate for raising the floor *further* per product.
+
 ### MinimumVersion pre-flight gate
 
 You can raise the floor for a specific product by declaring `MinimumVersion` in `Product.json`. Before any deployment work begins, SchemaQuench detects the version of every resolved target. If any target is below the declared floor, the entire run aborts with a manifest naming each below-floor server and its detected version. Nothing is deployed -- no partial work, no side effects on any target.
@@ -375,6 +377,8 @@ Within that shared family, three DDL surfaces diverge between the two engines:
 | **Column-default normalization** | Canonical form -- no normalization needed | `INFORMATION_SCHEMA.COLUMNS.COLUMN_DEFAULT` reports differently: quotes string literals, emits a literal `NULL` marker for a no-default nullable column, and adds parens to function defaults (`current_timestamp()`); SchemaSmith folds these back to the MySQL canonical form so an unchanged column doesn't phantom-modify on every deploy |
 
 SchemaSmith detects each target's platform and emits the right native form automatically -- the divergence above is handled for you, not something you configure.
+
+> **MariaDB 11.4+ default collation — a note for your own SQL.** This one is not about the DDL SchemaSmith generates; it's about comparison SQL *you* write in migration scripts, After Scripts, or `ValidationScript`. MariaDB 11.4 changed the default collation for `utf8mb4` to `utf8mb4_uca1400_ai_ci`. When you compare a string produced at runtime (for example a value derived from `JSON_TABLE`, which takes that new default) against a table column stored under a different collation, MariaDB raises `Illegal mix of collations` rather than coercing. If you hit this on MariaDB 11.4+, add an explicit `COLLATE` to one side of the comparison (e.g. `WHERE t.name = j.name COLLATE utf8mb4_general_ci`) so both operands share a collation. (Distinct from a `latin1` *target database* charset, which SchemaSmith handles internally.)
 
 ---
 
@@ -421,6 +425,8 @@ See exactly what SchemaQuench would do before it touches a single table. Set `Wh
 - **Object scripts** (Objects, AfterTablesObjects, Table Data) are logged but not executed.
 - **Product Before/After scripts** are logged but not executed.
 - **Version stamp scripts** aren't executed; a log message indicates the stamp would occur.
+
+**Console verbosity — `--WhatIfDetail`.** By default WhatIf prints one line per script (`Would APPLY: …` / `Would SKIP …` / `Would DELIVER …`), which is thorough but noisy on a large package. Pass `--WhatIfDetail:concise` to collapse each section into a per-category count (for example `12 would apply, 3 would skip`); `--WhatIfDetail:normal` (the default) keeps the per-script lines; `--WhatIfDetail:verbose` is reserved for future extra detail and currently matches `normal`. This affects only the **console** stream — the `SchemaQuench - Summary.md`/`.json` files always carry the full per-script listing regardless of the switch.
 
 **Important limitation:** WhatIf shows the top level of changes, not the full cascade. Because nothing actually executes, WhatIf can't show ripple effects that depend on earlier changes having been applied. For example, if an object script drops an index, that script doesn't run in WhatIf mode, so the index still exists when WhatIf analyzes table changes -- meaning the table diff won't show the index as needing to be recreated. WhatIf is a confidence check, not a guarantee. It catches the majority of issues but the full deployment may produce additional changes that WhatIf couldn't predict.
 

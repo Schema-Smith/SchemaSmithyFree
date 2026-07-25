@@ -56,7 +56,15 @@ function Invoke-Sql([string]$Sql) {
 $checkSql = switch ($Engine) {
   'sqlserver' { @"
 SET NOCOUNT ON;
-IF DB_ID('$db') IS NULL BEGIN PRINT 'STAMP_RESULT:absent'; RETURN; END;
+IF DB_ID('$db') IS NULL
+BEGIN
+    -- Detached-file guard: a detached '$db' (files on disk, nothing in the catalog) slips past DB_ID,
+    -- then CREATE DATABASE dies on SQL Server error 1802. Probe for an orphaned '$db.mdf'; NEVER delete.
+    DECLARE @mdf NVARCHAR(4000) = CAST(SERVERPROPERTY('InstanceDefaultDataPath') AS NVARCHAR(4000)) + '$db.mdf';
+    DECLARE @fe INT; EXEC master.dbo.xp_fileexist @mdf, @fe OUTPUT;
+    PRINT 'STAMP_RESULT:' + CASE WHEN @fe = 1 THEN 'orphaned-file' ELSE 'absent' END;
+    RETURN;
+END;
 DECLARE @s BIT;
 EXEC sp_executesql N'SELECT @s = CASE WHEN EXISTS (SELECT 1 FROM [$db].sys.extended_properties WHERE class = 0 AND name = ''$stamp'') THEN 1 ELSE 0 END', N'@s BIT OUTPUT', @s = @s OUTPUT;
 PRINT 'STAMP_RESULT:' + CASE WHEN @s = 1 THEN 'stamped' ELSE 'unstamped' END;
@@ -92,6 +100,14 @@ if ($res -match 'STAMP_RESULT:unstamped') {
 A database named '$db' already exists on $Server but was NOT created by this helper.
 Refusing to drop a database the helper didn't create. If that '$db' is yours, move or
 rename it first; the helper always manages a database literally named '$db'.
+"@
+  exit 2
+}
+if ($res -match 'STAMP_RESULT:orphaned-file') {
+  Write-Error @"
+A database file '$db.mdf' already exists on disk on $Server but is not attached (a detached database).
+CREATE DATABASE would fail with SQL Server error 1802. The helper will not touch this file — it may
+be your own data. Detach/move the .mdf/.ldf, then re-run.
 "@
   exit 2
 }
