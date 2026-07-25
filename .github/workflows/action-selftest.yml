@@ -63,6 +63,23 @@ jobs:
           --health-timeout 5s --health-retries 15
     steps:
       - uses: actions/checkout@v6
+      - name: WhatIf preview against Postgres via the action
+        id: whatif
+        uses: ./
+        with:
+          mode: whatif
+          product-path: Demos/PostgreSQL/Northwind
+          server: 127.0.0.1
+          user: testuser
+          password: testpass
+          version: latest
+      - name: Assert clean WhatIf + summary produced
+        shell: bash
+        run: |
+          echo "whatif exit-code=${{ steps.whatif.outputs.exit-code }}"
+          echo "whatif summary-path=${{ steps.whatif.outputs.summary-path }}"
+          test "${{ steps.whatif.outputs.exit-code }}" = "0"
+          test -f "${{ steps.whatif.outputs.summary-path }}"
       - name: Deploy a demo package to Postgres via the action
         id: ss
         uses: ./

@@ -50,13 +50,13 @@ if [ "${1:-}" = "--lib-only" ]; then return 0 2>/dev/null || exit 0; fi
 gh_api() { # $1 = url ; authenticated if GH_TOKEN present
   local auth=()
   [ -n "${GH_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GH_TOKEN")
-  curl -sfL "${auth[@]}" -H "Accept: application/vnd.github+json" "$1"
+  curl -sfL ${auth[@]+"${auth[@]}"} -H "Accept: application/vnd.github+json" "$1"
 }
 
 main() {
   local repo="Schema-Smith/SchemaSmith"
   local mode="${SS_MODE:-deploy}"
-  local rid version rel_json url work bin logdir sw summary code
+  local rid version rel_json url work bin logdir sw summary code pkg_win dest_win
 
   # required-input validation per mode
   if [ "$mode" != "validate" ] && [ -z "${SS_SERVER:-}" ]; then
@@ -79,12 +79,18 @@ main() {
 
   work="$(mktemp -d)"
   echo "Downloading $url"
-  curl -sfL "$url" -o "$work/pkg"
+  curl -sfL "$url" -o "$work/pkg" || { echo "::error::download failed: $url"; exit 1; }
   case "$url" in
     *.tar.gz) tar -xzf "$work/pkg" -C "$work" ;;
     *.zip)
-      if command -v unzip >/dev/null 2>&1; then unzip -q "$work/pkg" -d "$work"
-      else powershell -NoProfile -Command "Expand-Archive -Path '$work/pkg' -DestinationPath '$work' -Force"; fi ;;
+      if command -v unzip >/dev/null 2>&1; then
+        unzip -q "$work/pkg" -d "$work"
+      else
+        # PowerShell fallback (Windows without unzip): translate the git-bash POSIX
+        # paths to Windows paths so Expand-Archive resolves them.
+        pkg_win="$(cygpath -w "$work/pkg")"; dest_win="$(cygpath -w "$work")"
+        powershell -NoProfile -Command "Expand-Archive -Path '$pkg_win' -DestinationPath '$dest_win' -Force"
+      fi ;;
     *) echo "::error::unrecognized archive: $url"; exit 1 ;;
   esac
 
