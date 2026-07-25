@@ -340,6 +340,50 @@ jobs:
           path: "output/*.${{ matrix.fmt }}"
           retention-days: 5
 
+  publish-docker:
+    # Publish SchemaQuench as a multi-arch container image (Docker Hub + GHCR) from the
+    # exact linux binaries this release built. Part of the gated release run only — never a
+    # standalone runnable workflow. GHCR always (GITHUB_TOKEN); Docker Hub when its secret exists.
+    runs-on: ubuntu-latest
+    needs: [read-version, build-release]
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Download linux-x64 binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-linux-x64
+          path: dl/x64
+
+      - name: Download linux-arm64 binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-linux-arm64
+          path: dl/arm64
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Buildx (multi-platform builder)
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Publish images (GHCR always; Docker Hub if configured)
+        env:
+          SS_VERSION: ${{ needs.read-version.outputs.version }}
+          SS_PUSH_HUB: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+          DL_X64: dl/x64
+          DL_ARM64: dl/arm64
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: bash packaging/docker/docker-publish.sh
+
   create-release:
     runs-on: ubuntu-latest
     needs: [package-zip-windows, package-tar-unix, package-linux, read-version]

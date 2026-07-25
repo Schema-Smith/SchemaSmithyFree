@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # SchemaQuench Docker publish — entrypoint + resolution library.
-# Sourced with --lib-only by unit tests; run directly by docker-publish.yml.
+# Sourced with --lib-only by unit tests; run directly by release.yml's publish-docker job.
+# GHCR is always published (GITHUB_TOKEN); Docker Hub only when SS_PUSH_HUB=true.
 set -uo pipefail
+
+GHCR_REPO="ghcr.io/schema-smith/schemaquench"
+HUB_REPO="schemasmithyfree/schemaquench"
 
 # derive_tags <version> -> newline list: full, major.minor, major, latest
 derive_tags() {
@@ -15,8 +19,65 @@ image_refs() {
   while IFS= read -r tag; do printf '%s:%s\n' "$repo" "$tag"; done < <(derive_tags "$version")
 }
 
+# collect_tag_args -> "-t ref -t ref ..." across active registries.
+# Reads SS_VERSION (required) and SS_PUSH_HUB (true|false). GHCR always; Hub if enabled.
+collect_tag_args() {
+  local ref args=()
+  while IFS= read -r ref; do args+=(-t "$ref"); done < <(image_refs "$GHCR_REPO" "$SS_VERSION")
+  if [ "${SS_PUSH_HUB:-false}" = "true" ]; then
+    while IFS= read -r ref; do args+=(-t "$ref"); done < <(image_refs "$HUB_REPO" "$SS_VERSION")
+  fi
+  printf '%s ' "${args[@]}"
+}
+
+# stage_arch <arch> <artifact_dir> : copy SchemaQuench + its ICU libs out of a
+# release-<rid> build artifact into publish/linux/<arch>/ (the Dockerfile COPY source).
+stage_arch() {
+  local arch="$1" dl="$2" dest="publish/linux/$1" srcbin srcdir
+  srcbin="$(find "$dl" -type f -path '*/publish/SchemaQuench' | head -n1)"
+  [ -n "$srcbin" ] || { echo "::error::SchemaQuench binary not found under $dl"; exit 1; }
+  srcdir="$(dirname "$srcbin")"
+  mkdir -p "$dest"
+  cp "$srcbin" "$dest/"
+  cp "$srcdir"/libicu*.so.* "$dest/"
+  chmod 0755 "$dest/SchemaQuench"
+}
+
 # When sourced with --lib-only, expose functions and stop (no main run).
 if [ "${1:-}" = "--lib-only" ]; then return 0 2>/dev/null || exit 0; fi
 
-main() { :; }   # filled in Task 3
+main() {
+  local repo="Schema-Smith/SchemaSmith" version="$SS_VERSION"
+  echo "Publishing SchemaQuench $version (push_hub=${SS_PUSH_HUB:-false})"
+
+  # Registry auth (raw docker login — no third-party login action to pin).
+  echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_ACTOR" --password-stdin
+  if [ "${SS_PUSH_HUB:-false}" = "true" ]; then
+    echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+  fi
+
+  stage_arch amd64 "$DL_X64"
+  stage_arch arm64 "$DL_ARM64"
+
+  local label_args=(
+    --label "org.opencontainers.image.source=https://github.com/$repo"
+    --label "org.opencontainers.image.description=SchemaQuench — state-based schema deployment (SQL Server, PostgreSQL, MySQL, MariaDB)"
+    --label "org.opencontainers.image.licenses=LicenseRef-SSCL-2.0"
+    --label "org.opencontainers.image.version=$version"
+  )
+
+  local tag_args; read -r -a tag_args <<< "$(collect_tag_args)"
+  [ "${#tag_args[@]}" -gt 0 ] || { echo "::error::no push targets resolved"; exit 1; }
+  echo "buildx tags: ${tag_args[*]}"
+
+  # The multi-platform builder (docker-container driver) is provided by the workflow's
+  # docker/setup-buildx-action step; QEMU by docker/setup-qemu-action.
+  docker buildx build --platform linux/amd64,linux/arm64 --provenance=false \
+    -f packaging/docker/Dockerfile "${label_args[@]}" "${tag_args[@]}" --push .
+
+  # Confirm the multi-arch manifest resolved on the first tag.
+  local first; first="$(printf '%s\n' "${tag_args[@]}" | grep -v '^-t$' | head -n1)"
+  docker buildx imagetools inspect "$first"
+}
+
 main "$@"
