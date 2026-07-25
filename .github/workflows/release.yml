@@ -463,7 +463,9 @@ jobs:
 
   cleanup-artifacts:
     runs-on: ubuntu-latest
-    needs: create-release
+    # Also wait on publish-docker: it consumes the release-linux-* artifacts and is the slowest
+    # job (QEMU arm64 build), so cleanup must not delete them out from under its download step.
+    needs: [create-release, publish-docker]
     permissions:
       actions: write
     steps:

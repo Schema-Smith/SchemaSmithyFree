@@ -41,10 +41,15 @@ stage_arch() {
   cp "$srcbin" "$dest/"
   cp "$srcdir"/libicu*.so.* "$dest/"
   chmod 0755 "$dest/SchemaQuench"
+  chmod 0644 "$dest"/libicu*.so.*
 }
 
 # When sourced with --lib-only, expose functions and stop (no main run).
+# NB: --lib-only returns BEFORE `set -e` below, so the test harness (which relies on
+# non-zero exits from grep etc.) is unaffected; fail-fast applies only to a real publish.
 if [ "${1:-}" = "--lib-only" ]; then return 0 2>/dev/null || exit 0; fi
+
+set -e   # direct-execution (publish) mode: fail fast on login/build/push errors
 
 main() {
   local repo="Schema-Smith/SchemaSmith" version="$SS_VERSION"
