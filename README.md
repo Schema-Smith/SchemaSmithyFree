@@ -64,6 +64,28 @@ For self-contained publishing of the CLI tools:
 ./build-schemaquench.sh
 ```
 
+### Docker
+
+SchemaQuench ships as a container image on Docker Hub and GHCR — run a deploy with no .NET install:
+
+```bash
+# Docker Hub
+docker run --rm \
+  -e SmithySettings_SchemaPackagePath=/pkg \
+  -e SmithySettings_Target__Server=db.example.com \
+  -e SmithySettings_Target__User=deploy \
+  -e SmithySettings_Target__Password="$DB_PASSWORD" \
+  -v "$PWD/schema:/pkg" \
+  schemasmithyfree/schemaquench:latest
+
+# GHCR (reliable pulls behind corporate NAT / Docker Hub's anonymous rate limit)
+docker run --rm -v "$PWD/schema:/pkg" \
+  -e SmithySettings_SchemaPackagePath=/pkg \
+  ghcr.io/schema-smith/schemaquench:2.3.0 --Validate
+```
+
+Tags: `latest`, `X.Y.Z` (immutable), `X.Y`, `X`. Multi-arch (`linux/amd64` + `linux/arm64`). Configure via `SmithySettings_` environment variables (`__` denotes nesting) or a mounted `SchemaQuench.settings.json`; append `--Key:value` overrides as needed.
+
 ## GitHub Action (CI/CD)
 
 Run SchemaQuench in a workflow with the **SchemaSmith Deploy** action — WhatIf on pull requests, deploy on merge:
