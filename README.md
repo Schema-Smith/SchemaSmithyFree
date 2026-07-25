@@ -71,7 +71,7 @@ Run SchemaQuench in a workflow with the **SchemaSmith Deploy** action — WhatIf
 ```yaml
 - name: WhatIf on PR
   if: github.event_name == 'pull_request'
-  uses: Schema-Smith/SchemaSmith@v2.3.0
+  uses: Schema-Smith/SchemaSmith@main
   with:
     mode: whatif
     product-path: ./schema
@@ -81,7 +81,7 @@ Run SchemaQuench in a workflow with the **SchemaSmith Deploy** action — WhatIf
 
 - name: Deploy on merge
   if: github.ref == 'refs/heads/main'
-  uses: Schema-Smith/SchemaSmith@v2.3.0
+  uses: Schema-Smith/SchemaSmith@main
   with:
     mode: deploy
     product-path: ./schema
@@ -90,7 +90,7 @@ Run SchemaQuench in a workflow with the **SchemaSmith Deploy** action — WhatIf
     password: ${{ secrets.DB_PASSWORD }}
 ```
 
-The action fetches the matching self-contained binary for the runner OS at run time — no runtime install. Pinning `@v2.3.0` pins both the action and the CLI version it runs.
+The action fetches the matching self-contained binary for the runner OS at run time — no runtime install. `@main` tracks the latest action; **for production, pin to a release tag** (e.g. `@vX.Y.Z`) — a tag pins both the action and the CLI version it runs (the `version` input defaults from the ref).
 
 - **Inputs:** `version`, `mode` (`deploy` / `whatif` / `validate` / `test-connection` / `preview-targets`), `product-path`, `server`, `user`, `password` (passed via env, never on the command line), `extra-args` (raw `--Key:value` passthrough — port, template/database/schema filters, `Drop*` toggles, connection properties, and more).
 - **Outputs:** `exit-code`, `log-dir`, `summary-path` (the `SchemaQuench - Summary.md`/`.json` — e.g. post a WhatIf summary as a PR comment).
