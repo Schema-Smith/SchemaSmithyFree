@@ -378,6 +378,8 @@ Within that shared family, three DDL surfaces diverge between the two engines:
 
 SchemaSmith detects each target's platform and emits the right native form automatically -- the divergence above is handled for you, not something you configure.
 
+> **MariaDB 11.4+ default collation — a note for your own SQL.** This one is not about the DDL SchemaSmith generates; it's about comparison SQL *you* write in migration scripts, After Scripts, or `ValidationScript`. MariaDB 11.4 changed the default collation for `utf8mb4` to `utf8mb4_uca1400_ai_ci`. When you compare a string produced at runtime (for example a value derived from `JSON_TABLE`, which takes that new default) against a table column stored under a different collation, MariaDB raises `Illegal mix of collations` rather than coercing. If you hit this on MariaDB 11.4+, add an explicit `COLLATE` to one side of the comparison (e.g. `WHERE t.name = j.name COLLATE utf8mb4_general_ci`) so both operands share a collation. (Distinct from a `latin1` *target database* charset, which SchemaSmith handles internally.)
+
 ---
 
 ## Quench Slots
