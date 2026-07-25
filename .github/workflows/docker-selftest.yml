@@ -9,6 +9,9 @@ on:
     paths: ['packaging/docker/**', '.github/workflows/docker-selftest.yml']
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-smoke:
     runs-on: ubuntu-latest
