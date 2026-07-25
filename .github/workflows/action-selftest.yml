@@ -43,3 +43,40 @@ jobs:
           # populated log-dir proves the run/log path was established.
           test -n "${{ steps.ss.outputs.exit-code }}"
           test -n "${{ steps.ss.outputs.log-dir }}"
+
+  deploy:
+    # Real end-to-end proof: deploy an actual demo package to a Postgres service.
+    # `deploy` never runs the --Validate staleness linter, so a real demo (schemas
+    # intact) deploys clean. SchemaQuench bootstraps via the `postgres` maintenance DB
+    # and the demo's Initialize template keys off the `TestMain` database (as CI does).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: TestMain
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U testuser" --health-interval 5s
+          --health-timeout 5s --health-retries 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Deploy a demo package to Postgres via the action
+        id: ss
+        uses: ./
+        with:
+          mode: deploy
+          product-path: Demos/PostgreSQL/Northwind
+          server: 127.0.0.1
+          user: testuser
+          password: testpass
+          version: latest
+      - name: Assert clean deploy + summary produced
+        shell: bash
+        run: |
+          echo "exit-code=${{ steps.ss.outputs.exit-code }}"
+          echo "summary-path=${{ steps.ss.outputs.summary-path }}"
+          test "${{ steps.ss.outputs.exit-code }}" = "0"
+          test -f "${{ steps.ss.outputs.summary-path }}"
