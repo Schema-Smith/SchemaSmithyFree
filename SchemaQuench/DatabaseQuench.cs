@@ -2177,40 +2177,55 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
     #region WhatIf Logging
 
+    // Console verbosity for the WhatIf per-script lines (--WhatIfDetail). Default 'normal' preserves
+    // the one-line-per-script output; 'concise' collapses each section to per-category counts. The
+    // WhatIf?.Record(...) calls below are unconditional — the summary file is never affected by this.
+    private static WhatIfDetail WhatIfConsoleDetail =>
+        WhatIfConsoleFormatter.ParseDetail(CommandLineParser.ValueOfSwitch("WhatIfDetail", "normal"));
+
     private void WhatIfLogScripts(List<SqlScript> scripts, DatabaseScriptSlot slot)
     {
+        var entries = new List<WhatIfConsoleEntry>();
         foreach (var script in scripts)
         {
-            SafeProgressLog($"    Would APPLY: {script.LogPath}");
+            entries.Add(new WhatIfConsoleEntry("apply", "APPLY", script.LogPath));
             WhatIf?.Record(WhatIfCategory.Apply, LogPrefix, script.LogPath);
         }
+        foreach (var line in WhatIfConsoleFormatter.Render(entries, WhatIfConsoleDetail))
+            SafeProgressLog(line);
     }
 
     private void WhatIfLogTableDataScripts(List<SqlScript> scripts)
     {
+        var entries = new List<WhatIfConsoleEntry>();
         foreach (var script in scripts)
         {
-            SafeProgressLog($"    Would DELIVER: {Path.GetFileNameWithoutExtension(script.LogPath)}");
+            entries.Add(new WhatIfConsoleEntry("deliver", "DELIVER", Path.GetFileNameWithoutExtension(script.LogPath)));
             WhatIf?.Record(WhatIfCategory.Deliver, LogPrefix, script.LogPath);
         }
+        foreach (var line in WhatIfConsoleFormatter.Render(entries, WhatIfConsoleDetail))
+            SafeProgressLog(line);
     }
 
     private void WhatIfLogTemplateScripts(IDbCommand destCmd, string slot, List<SqlScript> scripts, DatabaseScriptSlot checkpointSlot)
     {
         var alreadyRan = _trackRunOnceMigrations ? GetCompletedEntriesBySlot(destCmd, slot) : [];
+        var entries = new List<WhatIfConsoleEntry>();
         foreach (var script in scripts)
         {
             if (!ShouldAlwaysRun(script.Name) && alreadyRan.Contains(GetRelativeScriptPath(script.LogPath)))
             {
-                SafeProgressLog($"    Would SKIP (previously quenched): {script.LogPath}");
+                entries.Add(new WhatIfConsoleEntry("skip", "SKIP (previously quenched)", script.LogPath));
                 WhatIf?.Record(WhatIfCategory.Skip, LogPrefix, script.LogPath);
             }
             else
             {
-                SafeProgressLog($"    Would APPLY: {script.LogPath}");
+                entries.Add(new WhatIfConsoleEntry("apply", "APPLY", script.LogPath));
                 WhatIf?.Record(WhatIfCategory.Apply, LogPrefix, script.LogPath);
             }
         }
+        foreach (var line in WhatIfConsoleFormatter.Render(entries, WhatIfConsoleDetail))
+            SafeProgressLog(line);
     }
 
 #endregion

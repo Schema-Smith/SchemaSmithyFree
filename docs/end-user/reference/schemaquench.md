@@ -424,6 +424,8 @@ See exactly what SchemaQuench would do before it touches a single table. Set `Wh
 - **Product Before/After scripts** are logged but not executed.
 - **Version stamp scripts** aren't executed; a log message indicates the stamp would occur.
 
+**Console verbosity — `--WhatIfDetail`.** By default WhatIf prints one line per script (`Would APPLY: …` / `Would SKIP …` / `Would DELIVER …`), which is thorough but noisy on a large package. Pass `--WhatIfDetail:concise` to collapse each section into a per-category count (for example `12 would apply, 3 would skip`); `--WhatIfDetail:normal` (the default) keeps the per-script lines; `--WhatIfDetail:verbose` is reserved for future extra detail and currently matches `normal`. This affects only the **console** stream — the `SchemaQuench - Summary.md`/`.json` files always carry the full per-script listing regardless of the switch.
+
 **Important limitation:** WhatIf shows the top level of changes, not the full cascade. Because nothing actually executes, WhatIf can't show ripple effects that depend on earlier changes having been applied. For example, if an object script drops an index, that script doesn't run in WhatIf mode, so the index still exists when WhatIf analyzes table changes -- meaning the table diff won't show the index as needing to be recreated. WhatIf is a confidence check, not a guarantee. It catches the majority of issues but the full deployment may produce additional changes that WhatIf couldn't predict.
 
 ### Debug SQL output
