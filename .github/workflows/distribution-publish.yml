@@ -1,0 +1,57 @@
+name: Distribution Publish
+
+# Publishes SchemaSmith to external distribution channels (container registries, winget, AUR)
+# when a release is PUBLISHED. It fires ONLY on the gated, deliberate "publish release" action —
+# there is deliberately no workflow_dispatch lever, so this is not a manually-runnable publish.
+# Each channel job no-ops when its channel's secret is absent, so unconfigured channels are skipped
+# rather than failing the run. Channels build from the PUBLISHED release's public assets, so the
+# published artifact is exactly what a user downloads.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - name: Resolve version from release tag
+        id: v
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  docker:
+    # Multi-arch (amd64+arm64) image to GHCR (always, via GITHUB_TOKEN) and Docker Hub (only when
+    # DOCKERHUB_TOKEN exists), built from the published release's linux tarballs.
+    runs-on: ubuntu-latest
+    needs: version
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Buildx (multi-platform builder)
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Publish images (GHCR always; Docker Hub if configured)
+        env:
+          SS_VERSION: ${{ needs.version.outputs.version }}
+          SS_PUSH_HUB: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+          GH_TOKEN: ${{ github.token }}
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: bash packaging/docker/docker-publish.sh

@@ -4,6 +4,7 @@
 # GHCR is always published (GITHUB_TOKEN); Docker Hub only when SS_PUSH_HUB=true.
 set -uo pipefail
 
+REPO="Schema-Smith/SchemaSmith"
 GHCR_REPO="ghcr.io/schema-smith/schemaquench"
 HUB_REPO="schemasmithyfree/schemaquench"
 
@@ -30,11 +31,11 @@ collect_tag_args() {
   printf '%s ' "${args[@]}"
 }
 
-# stage_arch <arch> <artifact_dir> : copy SchemaQuench + its ICU libs out of a
-# release-<rid> build artifact into publish/linux/<arch>/ (the Dockerfile COPY source).
+# stage_arch <arch> <dir> : copy SchemaQuench + its ICU libs out of an extracted release
+# tarball (flat layout) into publish/linux/<arch>/ (the Dockerfile COPY source).
 stage_arch() {
   local arch="$1" dl="$2" dest="publish/linux/$1" srcbin srcdir
-  srcbin="$(find "$dl" -type f -path '*/publish/SchemaQuench' | head -n1)"
+  srcbin="$(find "$dl" -type f -name SchemaQuench | head -n1)"
   [ -n "$srcbin" ] || { echo "::error::SchemaQuench binary not found under $dl"; exit 1; }
   srcdir="$(dirname "$srcbin")"
   mkdir -p "$dest"
@@ -42,6 +43,18 @@ stage_arch() {
   cp "$srcdir"/libicu*.so.* "$dest/"
   chmod 0755 "$dest/SchemaQuench"
   chmod 0644 "$dest"/libicu*.so.*
+}
+
+# download_stage <docker_arch> <rid> : fetch the published release's tarball for <rid>,
+# extract it, and stage SchemaQuench + ICU into publish/linux/<docker_arch>/.
+download_stage() {
+  local arch="$1" rid="$2" tmp
+  local tb="SchemaSmith-${SS_VERSION}-${rid}.tar.gz"
+  tmp="$(mktemp -d)"
+  gh release download "v${SS_VERSION}" --repo "$REPO" --pattern "$tb" --dir "$tmp"
+  mkdir -p "$tmp/x"
+  tar -xzf "$tmp/$tb" -C "$tmp/x"
+  stage_arch "$arch" "$tmp/x"
 }
 
 # When sourced with --lib-only, expose functions and stop (no main run).
@@ -52,7 +65,7 @@ if [ "${1:-}" = "--lib-only" ]; then return 0 2>/dev/null || exit 0; fi
 set -e   # direct-execution (publish) mode: fail fast on login/build/push errors
 
 main() {
-  local repo="Schema-Smith/SchemaSmith" version="$SS_VERSION"
+  local version="$SS_VERSION"
   # Tag derivation assumes clean 3-part semver; a 4-part token would mistag (X.Y.Z.0 -> X.Y=X.Y.Z).
   [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::SS_VERSION '$version' is not 3-part semver"; exit 1; }
   echo "Publishing SchemaQuench $version (push_hub=${SS_PUSH_HUB:-false})"
@@ -63,11 +76,12 @@ main() {
     echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
   fi
 
-  stage_arch amd64 "$DL_X64"
-  stage_arch arm64 "$DL_ARM64"
+  # Stage the exact linux binaries from the PUBLISHED release (image == release, zero skew).
+  download_stage amd64 linux-x64
+  download_stage arm64 linux-arm64
 
   local label_args=(
-    --label "org.opencontainers.image.source=https://github.com/$repo"
+    --label "org.opencontainers.image.source=https://github.com/$REPO"
     --label "org.opencontainers.image.description=SchemaQuench — state-based schema deployment (SQL Server, PostgreSQL, MySQL, MariaDB)"
     --label "org.opencontainers.image.licenses=LicenseRef-SSCL-2.0"
     --label "org.opencontainers.image.version=$version"
