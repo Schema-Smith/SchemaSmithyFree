@@ -114,6 +114,53 @@ END");
         conn.Close();
     }
 
+    // Two-deploy declarative rename against a recyclebin target: v1 creates + owns the table under
+    // its old name; v2 renames it via OldName WITH autodrop on. The removed-drop pass must NOT route
+    // the renamed-away old name through CustomTableDrop (which would fail on the now-missing table).
+    [Test]
+    public void RenamedTableIsNotRoutedThroughCustomTableDropHook()
+    {
+        var db = UniqueDb("hookrename");
+        using var conn = OpenServerConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+        try
+        {
+            CreateAndKindle(conn, cmd, db);
+
+            Exec(cmd, $"CREATE TABLE `{db}`.`HookLog` (Action VARCHAR(20), ObjName VARCHAR(128))");
+            Exec(cmd, $@"
+CREATE PROCEDURE `{db}`.`SchemaSmith_CustomTableDrop`(IN p_DatabaseName VARCHAR(128), IN p_TableName VARCHAR(128))
+BEGIN
+    INSERT INTO HookLog (Action, ObjName) VALUES ('DROP', p_TableName);
+    SET @s = CONCAT('DROP TABLE `', p_DatabaseName, '`.`', p_TableName, '`');
+    PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+END");
+
+            // v1: create + own OrderHeader, then add data.
+            Quench(cmd, db, "[{\"Name\":\"OrderHeader\",\"Columns\":[{\"Name\":\"`Id`\",\"DataType\":\"int\",\"Nullable\":false},{\"Name\":\"`Val`\",\"DataType\":\"int\",\"Nullable\":false}],\"Indexes\":[{\"Name\":\"PRIMARY\",\"PrimaryKey\":true,\"Unique\":true,\"IndexColumns\":\"`Id`\"}]}]", false);
+            Exec(cmd, $"INSERT INTO `{db}`.`OrderHeader` (Id, Val) VALUES (1, 42)");
+
+            // v2: rename OrderHeader -> SalesOrder via OldName, autodrop on.
+            Quench(cmd, db, "[{\"Name\":\"SalesOrder\",\"OldName\":\"OrderHeader\",\"Columns\":[{\"Name\":\"`Id`\",\"DataType\":\"int\",\"Nullable\":false},{\"Name\":\"`Val`\",\"DataType\":\"int\",\"Nullable\":false}],\"Indexes\":[{\"Name\":\"PRIMARY\",\"PrimaryKey\":true,\"Unique\":true,\"IndexColumns\":\"`Id`\"}]}]", true);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(ScalarInt(cmd, $"SELECT COUNT(*) FROM `{db}`.`HookLog` WHERE ObjName='OrderHeader'"), Is.EqualTo(0),
+                    "CustomTableDrop must NOT be invoked for a table that was renamed away.");
+                Assert.That(TableExists(cmd, db, "SalesOrder"), Is.True, "Renamed table should exist.");
+                Assert.That(TableExists(cmd, db, "OrderHeader"), Is.False, "Old table name should be gone.");
+                Assert.That(ScalarInt(cmd, $"SELECT COUNT(*) FROM `{db}`.`SalesOrder` WHERE Id = 1 AND Val = 42"), Is.EqualTo(1),
+                    "Data must be preserved across the rename.");
+            });
+        }
+        finally
+        {
+            DropDb(cmd, db);
+        }
+        conn.Close();
+    }
+
     private IDbConnection OpenServerConnection()
     {
         var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(BaseConnectionString);

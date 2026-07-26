@@ -506,4 +506,185 @@ INSERT INTO `{_mainDb}`.`{tableName}` (id, price) VALUES (1, 100.00);
 
         conn.Close();
     }
+
+    // Two-deploy declarative rename: v1 creates + owns the table under its old name; v2 renames it
+    // via OldName. Exercises the real deploy-over-a-prior-state path the capstone hit (the existing
+    // single-deploy rename coverage does not seed ProductOwnership, so it never reproduced this).
+    [Test]
+    public void ShouldRenameTableViaOldNameAcrossTwoDeploys()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var oldTableName = $"old_ord_{uniqueId}";
+        var newTableName = $"new_ord_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        // v1 deploy: create the table under its old name (records ProductOwnership under old name)
+        var jsonV1 = $$"""
+        [{
+            "Name": "{{oldTableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT", "Nullable": false},
+                {"Name": "val", "DataType": "INT", "Nullable": false}
+            ],
+            "Indexes": [
+                {"Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "IndexColumns": "id"}
+            ]
+        }]
+        """;
+        cmd.CommandText = $"CALL SchemaSmith_TableQuench('{productName}', '{_mainDb}', '{jsonV1.Replace("'", "''")}', 0, 0, 0)";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"INSERT INTO `{_mainDb}`.`{oldTableName}` (id, val) VALUES (1, 42)";
+        cmd.ExecuteNonQuery();
+
+        // v2 deploy: rename the table to the new name via OldName
+        var jsonV2 = $$"""
+        [{
+            "Name": "{{newTableName}}",
+            "OldName": "{{oldTableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT", "Nullable": false},
+                {"Name": "val", "DataType": "INT", "Nullable": false}
+            ],
+            "Indexes": [
+                {"Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "IndexColumns": "id"}
+            ]
+        }]
+        """;
+        cmd.CommandText = $"CALL SchemaSmith_TableQuench('{productName}', '{_mainDb}', '{jsonV2.Replace("'", "''")}', 0, 0, 0)";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{oldTableName}'";
+        Assert.That(Convert.ToInt64(cmd.ExecuteScalar()), Is.EqualTo(0), "Old table should no longer exist after rename");
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{newTableName}'";
+        Assert.That(Convert.ToInt64(cmd.ExecuteScalar()), Is.EqualTo(1), "New table should exist after rename");
+
+        cmd.CommandText = $"SELECT val FROM `{_mainDb}`.`{newTableName}` WHERE id = 1";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(42), "Data should be preserved after rename");
+
+        conn.Close();
+    }
+
+    // Two-deploy declarative column rename: v1 creates + owns the table; v2 renames a column via its
+    // OldName. Exercises the column-rename path across a prior-state deploy.
+    [Test]
+    public void ShouldRenameColumnViaOldNameAcrossTwoDeploys()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"col_rn_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var jsonV1 = $$"""
+        [{
+            "Name": "{{tableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT", "Nullable": false},
+                {"Name": "old_col", "DataType": "INT", "Nullable": false}
+            ],
+            "Indexes": [
+                {"Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "IndexColumns": "id"}
+            ]
+        }]
+        """;
+        cmd.CommandText = $"CALL SchemaSmith_TableQuench('{productName}', '{_mainDb}', '{jsonV1.Replace("'", "''")}', 0, 0, 0)";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"INSERT INTO `{_mainDb}`.`{tableName}` (id, old_col) VALUES (1, 99)";
+        cmd.ExecuteNonQuery();
+
+        var jsonV2 = $$"""
+        [{
+            "Name": "{{tableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT", "Nullable": false},
+                {"Name": "new_col", "OldName": "old_col", "DataType": "INT", "Nullable": false}
+            ],
+            "Indexes": [
+                {"Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "IndexColumns": "id"}
+            ]
+        }]
+        """;
+        cmd.CommandText = $"CALL SchemaSmith_TableQuench('{productName}', '{_mainDb}', '{jsonV2.Replace("'", "''")}', 0, 0, 0)";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{tableName}' AND COLUMN_NAME = 'old_col'";
+        Assert.That(Convert.ToInt64(cmd.ExecuteScalar()), Is.EqualTo(0), "Old column name should no longer exist");
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{tableName}' AND COLUMN_NAME = 'new_col'";
+        Assert.That(Convert.ToInt64(cmd.ExecuteScalar()), Is.EqualTo(1), "New column name should exist");
+        cmd.CommandText = $"SELECT new_col FROM `{_mainDb}`.`{tableName}` WHERE id = 1";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(99), "Data should be preserved after column rename");
+
+        conn.Close();
+    }
+
+    // A single deploy that BOTH renames the table (via OldName) AND adds a brand-new column. The
+    // rename must run before the add-columns pass, or the ADD COLUMN targets a table that does not
+    // exist yet (error 1146). This is the case the rename-first restructure specifically enables.
+    [Test]
+    public void ShouldRenameTableAndAddColumnInSameDeploy()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var oldTableName = $"ra_old_{uniqueId}";
+        var newTableName = $"ra_new_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var jsonV1 = $$"""
+        [{
+            "Name": "{{oldTableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT", "Nullable": false},
+                {"Name": "val", "DataType": "INT", "Nullable": false}
+            ],
+            "Indexes": [
+                {"Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "IndexColumns": "id"}
+            ]
+        }]
+        """;
+        cmd.CommandText = $"CALL SchemaSmith_TableQuench('{productName}', '{_mainDb}', '{jsonV1.Replace("'", "''")}', 0, 0, 0)";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"INSERT INTO `{_mainDb}`.`{oldTableName}` (id, val) VALUES (1, 42)";
+        cmd.ExecuteNonQuery();
+
+        // v2: rename the table AND add a new nullable column in the same deploy.
+        var jsonV2 = $$"""
+        [{
+            "Name": "{{newTableName}}",
+            "OldName": "{{oldTableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT", "Nullable": false},
+                {"Name": "val", "DataType": "INT", "Nullable": false},
+                {"Name": "note", "DataType": "VARCHAR(50)", "Nullable": true}
+            ],
+            "Indexes": [
+                {"Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "IndexColumns": "id"}
+            ]
+        }]
+        """;
+        cmd.CommandText = $"CALL SchemaSmith_TableQuench('{productName}', '{_mainDb}', '{jsonV2.Replace("'", "''")}', 0, 0, 0)";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{newTableName}'";
+        Assert.That(Convert.ToInt64(cmd.ExecuteScalar()), Is.EqualTo(1), "Renamed table should exist");
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{newTableName}' AND COLUMN_NAME = 'note'";
+        Assert.That(Convert.ToInt64(cmd.ExecuteScalar()), Is.EqualTo(1), "Newly-added column should exist on the renamed table");
+        cmd.CommandText = $"SELECT val FROM `{_mainDb}`.`{newTableName}` WHERE id = 1";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(42), "Data should be preserved across rename+add-column");
+
+        conn.Close();
+    }
 }
