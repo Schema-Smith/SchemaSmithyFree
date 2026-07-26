@@ -48,7 +48,7 @@ jobs:
       - name: Publish images (GHCR always; Docker Hub if configured)
         env:
           SS_VERSION: ${{ needs.version.outputs.version }}
-          SS_PUSH_HUB: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+          SS_PUSH_HUB: ${{ secrets.DOCKERHUB_TOKEN != '' && secrets.DOCKERHUB_USERNAME != '' }}
           GH_TOKEN: ${{ github.token }}
           GHCR_ACTOR: ${{ github.actor }}
           GHCR_TOKEN: ${{ github.token }}

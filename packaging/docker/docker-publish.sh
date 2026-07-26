@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SchemaQuench Docker publish — entrypoint + resolution library.
-# Sourced with --lib-only by unit tests; run directly by release.yml's publish-docker job.
+# Sourced with --lib-only by unit tests; run directly by distribution-publish.yml's docker job.
 # GHCR is always published (GITHUB_TOKEN); Docker Hub only when SS_PUSH_HUB=true.
 set -uo pipefail
 
