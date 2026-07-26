@@ -4,9 +4,11 @@ Goal: one continuous story, start to finish. Build `OrdersService`, **promote** 
 prod exactly as in Module 4, then watch someone ship a **careless declarative rename** that looks clean
 in dev and staging — and turns into a silent drop-and-recreate the moment it reaches prod, where the
 data actually lives. The **recyclebin** from Module 3 catches the dropped table before it's gone for
-good, and rolling back to the known-good package **automatically restores it, rows and all**. The
-takeaway: a rename that isn't expressed as a rename is a drop in disguise, and the recyclebin is what
-turns that mistake into a bad afternoon instead of a lost table.
+good, and rolling back to the known-good package **automatically restores it, rows and all**. Then the
+coda: the *right* way to make the same rename — one property, `OldName`, that tells SchemaQuench "same
+table, new name," so it renames in place with nothing recycled at all. The takeaway: a rename that
+isn't expressed as a rename is a drop in disguise, the recyclebin is what turns that mistake into a bad
+afternoon instead of a lost table, and one line is all it takes to avoid the mistake in the first place.
 
 The spine, recapped:
 
@@ -25,11 +27,12 @@ and puts a real mistake in front of it.
 course3-module-05/
   v1/<engine>/       known-good release: Customer + OrderHeader, FK'd, plus the recyclebin
   v2-bad/<engine>/   the same package, but OrderHeader renamed to SalesOrder the careless way
+  v2-fixed/<engine>/ the SAME rename done right — one OldName line makes it an in-place rename
 ```
 
-`<engine>` is `sqlserver`, `postgres`, `mysql`, or `mariadb`. Each `v1/` and `v2-bad/` carries its own
-`Package/` plus a shared **`base.settings.json`** (connection details and package-path default). The
-target database rides on the `{{TargetDb}}` script token, exactly as in Modules 2 and 4.
+`<engine>` is `sqlserver`, `postgres`, `mysql`, or `mariadb`. Each `v1/`, `v2-bad/`, and `v2-fixed/`
+carries its own `Package/` plus a shared **`base.settings.json`** (connection details and package-path
+default). The target database rides on the `{{TargetDb}}` script token, exactly as in Modules 2 and 4.
 
 `v2-bad` renames `OrderHeader` to `SalesOrder` by simply changing the table name in the package — no
 rename hint, nothing telling SchemaQuench "this is the same table, just renamed." SchemaQuench reads two
@@ -37,6 +40,11 @@ independent facts: a table it knows about (`OrderHeader`) is no longer in the pr
 never seen (`SalesOrder`) now is. Declaratively, that's indistinguishable from "drop one table, add
 another" — because that's exactly what it is. `v1/<engine>/seed-prod.sql` seeds **prod only** with 3
 customers and 4 orders, so there's real data on the line when the rename reaches it.
+
+`v2-fixed` is `v2-bad` with **one line added** to the `SalesOrder` table — `"OldName": "OrderHeader"`.
+That single property is the rename hint the careless version was missing: it tells SchemaQuench the new
+table *is* the old one under a new name, so instead of drop-and-recreate it issues an in-place rename and
+the data never moves. Everything else — columns, keys, the recyclebin — is identical to `v1`.
 
 ## Before you start
 
@@ -56,7 +64,7 @@ customers and 4 orders, so there's real data on the line when the rename reaches
 
 ## The flow
 
-Five beats, run in order. Pick an engine — the SQL Server form is fully worked below; the other three
+Six beats, run in order. Pick an engine — the SQL Server form is fully worked below; the other three
 engines follow with the same commands, just a different folder and a different `docker exec` client.
 
 1. **Establish** — deploy `v1` to `ordersservice_dev`.
@@ -68,6 +76,9 @@ engines follow with the same commands, just a different folder and a different `
    and its 4 orders are dropped — caught by the recyclebin — and `SalesOrder` is created empty.
 5. **Roll back** — WhatIf `v1` against prod first (preview only), then apply it. SchemaQuench recreates
    `OrderHeader`, and the recyclebin's restore hook brings the data back automatically.
+6. **Ship it the right way** — deploy `v2-fixed` to dev, staging, then prod. The only difference from
+   `v2-bad` is a single `OldName` line, and it changes everything: SchemaQuench renames `OrderHeader` to
+   `SalesOrder` *in place*, data intact, nothing recycled.
 
 ### SQL Server
 
@@ -116,6 +127,18 @@ SmithySettings_ScriptTokens__TargetDb=ordersservice_prod \
   schemaquench --ConfigFile:./base.settings.json
 ```
 
+```bash
+cd ../../v2-fixed/sqlserver   # step 6 runs from here — the same rename, done right
+
+# 6. Ship it the right way: v2-fixed to dev, staging, then prod — in-place rename, data preserved
+SmithySettings_ScriptTokens__TargetDb=ordersservice_dev \
+  schemaquench --ConfigFile:./base.settings.json
+SmithySettings_ScriptTokens__TargetDb=ordersservice_staging \
+  schemaquench --ConfigFile:./base.settings.json
+SmithySettings_ScriptTokens__TargetDb=ordersservice_prod \
+  schemaquench --ConfigFile:./base.settings.json
+```
+
 PowerShell equivalent (set the vars, run, then clear them):
 
 ```powershell
@@ -141,12 +164,20 @@ $env:SmithySettings_WhatIfONLY = 'true'
 schemaquench --ConfigFile:.\base.settings.json                                   # 5a. WhatIf rollback (prod) — preview only
 Remove-Item Env:SmithySettings_WhatIfONLY
 schemaquench --ConfigFile:.\base.settings.json                                   # 5b. apply rollback (prod) — auto-restore
+
+cd ..\..\v2-fixed\sqlserver
+$env:SmithySettings_ScriptTokens__TargetDb = 'ordersservice_dev'
+schemaquench --ConfigFile:.\base.settings.json                                   # 6a. right way (dev) — in-place rename
+$env:SmithySettings_ScriptTokens__TargetDb = 'ordersservice_staging'
+schemaquench --ConfigFile:.\base.settings.json                                   # 6b. right way (staging)
+$env:SmithySettings_ScriptTokens__TargetDb = 'ordersservice_prod'
+schemaquench --ConfigFile:.\base.settings.json                                   # 6c. right way (prod) — data intact, nothing recycled
 Remove-Item Env:SmithySettings_ScriptTokens__TargetDb
 ```
 
 ### PostgreSQL, MySQL, MariaDB
 
-Same five beats, same commands — swap `sqlserver` for `postgres`, `mysql`, or `mariadb` in every `cd`,
+Same six beats, same commands — swap `sqlserver` for `postgres`, `mysql`, or `mariadb` in every `cd`,
 and use that engine's client for the prod seed and any manual verification:
 
 | Engine | Folder | Seed / verify client |
@@ -162,8 +193,9 @@ cd v1/postgres
 docker exec -i learn-postgres psql -U postgres -d ordersservice_prod < seed-prod.sql
 ```
 
-Everything else — the five beats, the env vars, the WhatIf-then-apply rollback — is identical across
-all four engines. That's the whole point of the spine: one flow, every platform.
+Everything else — the six beats, the env vars, the WhatIf-then-apply rollback, the `v2-fixed` in-place
+rename — is identical across all four engines. That's the whole point of the spine: one flow, every
+platform.
 
 ## What you'll see
 
@@ -228,6 +260,30 @@ docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mariadb mariadb -uroot -N -e \
 `OrderHeader` is back with all **4** rows, `SalesOrder` is gone, and prod matches the known-good `v1`
 package again — data intact, no hand-written recovery script, no restore from backup.
 
+**Step 6 (the right way):** now the same rename, expressed *as* a rename. `v2-fixed`'s `SalesOrder` table
+carries one extra line the careless version didn't — `"OldName": "OrderHeader"` — and that's the whole
+difference. Promote it dev to staging to prod and SchemaQuench renames the table in place on every engine
+(the SQL Server log reads it plainly):
+
+```
+Handle Table Renames
+  Rename [dbo].[OrderHeader] to [dbo].[SalesOrder]
+```
+
+No drop, no data to restore — `SalesOrder` simply *is* the old `OrderHeader`, all 4 rows carried across.
+Confirm it on prod:
+
+```bash
+# SQL Server — SalesOrder carries the data straight across the rename
+docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_prod -h -1 -W \
+  -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM dbo.SalesOrder"
+```
+
+`SalesOrder` reads `4`. Unlike step 4, nothing data-bearing hit the recyclebin this time — `OrderHeader`
+wasn't dropped, it was *renamed*, so its rows never left the table. (The bin still holds the empty
+`SalesOrder` shells the break and rollback left behind — all zero-row clutter, safe to ignore.) Same
+rename, same product, opposite outcome — and the only thing that changed was one line.
+
 ## The principle
 
 A declarative rename that isn't expressed as a rename isn't a rename at all — it's a drop and an add,
@@ -239,6 +295,11 @@ included. And because SchemaQuench's rollback is just "deploy the package that w
 the same promotion discipline that shipped the mistake (Module 4), recovering is the same tool, the same
 command shape, no different from any other quench — WhatIf first, then apply, and the recyclebin's
 restore hook does the rest.
+
+But the recyclebin is the net, not the fix. The fix for a careless rename was never a bigger net — it was
+saying what you meant. `v2-fixed` is `v2-bad` plus one line, `"OldName": "OrderHeader"`, and that single
+property is the difference between a drop-and-recreate and an in-place rename. The recyclebin catches the
+mistakes you don't see coming; `OldName` is how you don't make this one.
 
 ## Teardown
 

@@ -1,0 +1,8 @@
+{
+  "Name": "OrdersService",
+  "ValidationScript": "SELECT CASE WHEN DB_ID('{{TargetDb}}') IS NOT NULL THEN 1 ELSE 0 END",
+  "TemplateOrder": ["Main"],
+  "ScriptTokens": { "TargetDb": "ordersservice_dev" },
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}
