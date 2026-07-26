@@ -1,0 +1,24 @@
+{
+  "Name": "SalesOrder",
+  "Columns": [
+    { "Name": "OrderId", "DataType": "INT", "AutoIncrement": true },
+    { "Name": "CustomerId", "DataType": "INT" },
+    { "Name": "OrderDate", "DataType": "DATETIME" },
+    { "Name": "TotalAmount", "DataType": "DECIMAL(10,2)" }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "OrderId" },
+    { "Name": "FK_SalesOrder_Customer", "IndexColumns": "CustomerId" }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_SalesOrder_Customer",
+      "Columns": "CustomerId",
+      "RelatedTable": "Customer",
+      "RelatedColumns": "CustomerId",
+      "DeleteAction": "NO ACTION",
+      "UpdateAction": "NO ACTION",
+      "RelatedTableSchema": ""
+    }
+  ]
+}
