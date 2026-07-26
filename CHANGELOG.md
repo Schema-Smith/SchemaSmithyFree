@@ -8,6 +8,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ### Added
 
+- **AUR (Arch Linux).** Install with `yay -S schemasmith-bin` (or any AUR helper) — the `schemasmith-bin` package installs all four CLIs from the official release binaries; the PKGBUILD is updated on each release.
 - **winget (Windows).** Install with `winget install SchemaSmith.SchemaSmith` — all four CLI commands (SchemaQuench, SchemaTongs, DataTongs, SchemaShears) land on PATH. The manifest is submitted to microsoft/winget-pkgs on each release.
 - **Docker images.** SchemaQuench is now published as a multi-arch (`linux/amd64` + `linux/arm64`) container image on Docker Hub (`schemasmithyfree/schemaquench`) and GHCR (`ghcr.io/schema-smith/schemaquench`) with each release. Tags: `latest`, `X.Y.Z` (immutable), `X.Y`, and `X`. Run a deploy with no .NET install — configure via `SmithySettings_` environment variables or a mounted `SchemaQuench.settings.json`.
 - **GitHub Action — `SchemaSmith Deploy`.** A composite action for running SchemaQuench in CI/CD (WhatIf on pull requests, deploy on merge) across SQL Server, PostgreSQL, MySQL, and MariaDB. Fetches the matching self-contained binary for the runner OS at run time (no runtime install); inputs cover `mode`, `product-path`, connection settings (password passed via env), and raw `extra-args`, with `exit-code` / `log-dir` / `summary-path` outputs. Pinning `@vX.Y.Z` pins both the action and the CLI version it runs.

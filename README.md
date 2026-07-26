@@ -57,6 +57,14 @@ Installs all four CLI commands (`SchemaQuench`, `SchemaTongs`, `DataTongs`, `Sch
 
 Download self-contained ZIP packages from the [latest release](https://github.com/Schema-Smith/SchemaSmith/releases/latest). Extract and run — no .NET runtime required.
 
+### Arch Linux (AUR)
+
+```bash
+yay -S schemasmith-bin
+```
+
+Installs the CLI tools (`schemaquench`, `schematongs`, `datatongs`, `schemashears`) from the official release binaries. Works with any AUR helper.
+
 ### Build from Source
 
 ```bash
