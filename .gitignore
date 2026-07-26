@@ -32,6 +32,9 @@ x86/
 *.exe
 *.pdb
 publish/
+publish-*/
+_certcli/
+**/checkpoints/
 
 ## OS files
 .DS_Store

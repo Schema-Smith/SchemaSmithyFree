@@ -1,0 +1,22 @@
+{
+  "Schema": "dbo",
+  "Name": "SalesOrder",
+  "Columns": [
+    { "Name": "OrderId", "DataType": "INT IDENTITY(1,1)" },
+    { "Name": "CustomerId", "DataType": "INT" },
+    { "Name": "OrderDate", "DataType": "DATETIME2" },
+    { "Name": "TotalAmount", "DataType": "DECIMAL(10,2)" }
+  ],
+  "Indexes": [
+    { "Name": "PK_SalesOrder", "PrimaryKey": true, "Clustered": true, "IndexColumns": "OrderId" }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "FK_SalesOrder_Customer",
+      "Columns": "CustomerId",
+      "RelatedTable": "Customer",
+      "RelatedColumns": "CustomerId",
+      "RelatedTableSchema": "dbo"
+    }
+  ]
+}
