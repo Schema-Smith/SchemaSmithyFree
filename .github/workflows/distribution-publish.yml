@@ -55,3 +55,36 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: bash packaging/docker/docker-publish.sh
+
+  winget:
+    # Submit/update the SchemaSmith.SchemaSmith manifest in microsoft/winget-pkgs from the
+    # published Windows release zips. Skipped when WINGET_PAT is absent.
+    runs-on: windows-latest
+    needs: version
+    environment: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Gate on WINGET_PAT
+        id: gate
+        shell: bash
+        env:
+          HAS: ${{ secrets.WINGET_PAT != '' }}
+        run: echo "has=$HAS" >> "$GITHUB_OUTPUT"
+
+      - name: Install wingetcreate
+        if: steps.gate.outputs.has == 'true'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri 'https://github.com/microsoft/winget-create/releases/download/v1.12.13.0/wingetcreate.exe' -OutFile "$env:RUNNER_TEMP\wingetcreate.exe"
+          Add-Content -Path $env:GITHUB_PATH -Value $env:RUNNER_TEMP
+
+      - name: Render + submit manifest
+        if: steps.gate.outputs.has == 'true'
+        shell: pwsh
+        env:
+          SS_VERSION: ${{ needs.version.outputs.version }}
+          WINGET_PAT: ${{ secrets.WINGET_PAT }}
+          GH_TOKEN: ${{ github.token }}
+        run: .\packaging\winget\submit.ps1

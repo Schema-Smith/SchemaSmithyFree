@@ -45,6 +45,14 @@ choco install schemasmith
 
 Installs `schemaquench`, `schematongs`, and `datatongs` onto your PATH as a single combined package. Binaries are Authenticode-signed via Azure Trusted Signing — no SmartScreen warnings.
 
+### winget (Windows)
+
+```powershell
+winget install SchemaSmith.SchemaSmith
+```
+
+Installs all four CLI commands (`SchemaQuench`, `SchemaTongs`, `DataTongs`, `SchemaShears`) onto your PATH from the Authenticode-signed release zip.
+
 ### GitHub Releases
 
 Download self-contained ZIP packages from the [latest release](https://github.com/Schema-Smith/SchemaSmith/releases/latest). Extract and run — no .NET runtime required.
