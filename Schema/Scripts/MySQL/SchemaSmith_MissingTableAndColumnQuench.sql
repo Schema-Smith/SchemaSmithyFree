@@ -75,6 +75,26 @@ BEGIN
     IF p_WhatIf = 1 THEN
         -- WhatIf mode: output the actual SQL that would be executed
 
+        -- Declarative renames would run here (before add-columns). Log the statements only.
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('RENAME TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`',
+                      SchemaSmith_StripBacktickWrapping(t.OldName), '` TO `',
+                      CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', SchemaSmith_StripBacktickWrapping(t.TableName), '`')
+        FROM _SchemaSmith_Tables t
+        WHERE t.OldName IS NOT NULL
+          AND t.NewTable = 0
+          AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.OldName))
+          AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName));
+
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                      ' RENAME COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
+                      '` TO `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`')
+        FROM _SchemaSmith_Columns c
+        WHERE c.OldName IS NOT NULL
+          AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName) AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.OldName))
+          AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName) AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName));
+
         IF @has_custom_restore = 1 THEN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Attempt custom table restore for tables being added');
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
@@ -140,6 +160,137 @@ BEGIN
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '');
 
     ELSE
+        -- =======================
+        -- DECLARATIVE RENAMES (OldName) — run BEFORE create/add-columns
+        -- =======================
+        -- Table + column renames execute here, ahead of add-columns, so a carried column (unchanged
+        -- across the rename) or a newly-added column targets the post-rename table name — parity with
+        -- SQL Server / PostgreSQL, which rename before adding columns. ProductOwnership is reconciled
+        -- old->new later by ModifiedTableQuench (which has the product name). BINARY comparisons avoid
+        -- collation clashes between INFORMATION_SCHEMA (utf8mb3), SchemaSmith functions
+        -- (utf8mb4_unicode_ci), and connection params (utf8mb4_0900_ai_ci).
+
+        -- Table renames: fold all old->new pairs into one multi-target RENAME TABLE, then drain.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TableRenameStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_TableRenameStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_TableRenameStmts (Stmt)
+        SELECT CONCAT('RENAME TABLE ',
+                      GROUP_CONCAT(
+                          CONCAT('`', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', SchemaSmith_StripBacktickWrapping(t.OldName), '` TO `',
+                                 CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', SchemaSmith_StripBacktickWrapping(t.TableName), '`')
+                          ORDER BY t.TableName SEPARATOR ', '))
+        FROM _SchemaSmith_Tables t
+        WHERE t.OldName IS NOT NULL
+          AND t.NewTable = 0
+          AND EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+              WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.OldName)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+              WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+          )
+        HAVING COUNT(*) > 0;
+
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Rename table `', SchemaSmith_StripBacktickWrapping(t.OldName), '` to `', SchemaSmith_StripBacktickWrapping(t.TableName), '`')
+        FROM _SchemaSmith_Tables t
+        WHERE t.OldName IS NOT NULL
+          AND t.NewTable = 0
+          AND EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+              WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.OldName)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
+              WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+          );
+
+        SET @v_tablerename_id := (SELECT MIN(RowId) FROM _SchemaSmith_TableRenameStmts);
+        WHILE @v_tablerename_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_TableRenameStmts WHERE RowId = @v_tablerename_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_tablerename_id := (SELECT MIN(RowId) FROM _SchemaSmith_TableRenameStmts WHERE RowId > @v_tablerename_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TableRenameStmts;
+
+        -- Column renames: fold each table's column renames into one multi-clause ALTER, then drain.
+        -- Catalog-based predicate (old column present, new column absent) so a column rename that
+        -- rides a table rename also fires — its parse-time NewColumn flag is unreliable because the
+        -- new table name did not exist when the flag was computed.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ColRenameStmts;
+        CREATE TEMPORARY TABLE _SchemaSmith_ColRenameStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_ColRenameStmts (Stmt)
+        SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName, ' ',
+                      GROUP_CONCAT(
+                          CONCAT('RENAME COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
+                                 '` TO `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`')
+                          ORDER BY c.ColumnName SEPARATOR ', '))
+        FROM _SchemaSmith_Columns c
+        WHERE c.OldName IS NOT NULL
+          AND EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
+              WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.OldName)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
+              WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+          )
+        GROUP BY c.TableName;
+
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Rename column: ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                      ' RENAME COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
+                      '` TO `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`')
+        FROM _SchemaSmith_Columns c
+        WHERE c.OldName IS NOT NULL
+          AND EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
+              WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.OldName)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
+              WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+          );
+
+        SET @v_colrename_id := (SELECT MIN(RowId) FROM _SchemaSmith_ColRenameStmts);
+        WHILE @v_colrename_id IS NOT NULL DO
+            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_ColRenameStmts WHERE RowId = @v_colrename_id;
+            PREPARE stmt FROM @exec_sql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+            SET @v_colrename_id := (SELECT MIN(RowId) FROM _SchemaSmith_ColRenameStmts WHERE RowId > @v_colrename_id);
+        END WHILE;
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ColRenameStmts;
+
+        -- After renames, clear NewColumn for any column now present under its (possibly renamed)
+        -- table: parse flagged carried/renamed columns as new because it checked under the
+        -- post-rename table name, which did not exist yet. Without this, add-columns below would try
+        -- to re-add an existing column (duplicate-column error). Mirrors the CustomTableRestore fixup.
+        UPDATE _SchemaSmith_Columns c
+        SET c.NewColumn = 0
+        WHERE c.NewColumn = 1
+          AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS ic
+                      WHERE CONVERT(ic.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                        AND CONVERT(ic.TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(c.TableName) USING utf8mb4)
+                        AND CONVERT(ic.COLUMN_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(c.ColumnName) USING utf8mb4));
+
         -- CustomTableRestore hook: attempt to restore tables being added in case they were
         -- custom-dropped (recycled) previously, then mark any that now exist as not-new so the
         -- create step below does not recreate them empty (preserving restored data).

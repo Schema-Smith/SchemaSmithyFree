@@ -7,3 +7,8 @@
 # Windows batch files keep CRLF — cmd.exe expects it.
 *.cmd text eol=crlf
 *.bat text eol=crlf
+
+# The AUR PKGBUILD is sourced by makepkg (bash) on Linux — CR characters break it.
+# It has no extension, so pin it explicitly.
+packaging/aur/PKGBUILD text eol=lf
+

@@ -479,6 +479,118 @@ INSERT INTO public.{tableName} (id, old_col) VALUES (1, 99);
         conn.Close();
     }
 
+    // Two-deploy declarative rename: v1 creates + owns the table under its old name; v2 renames it
+    // via OldName (WITH autodrop on, so the removed-drop pass runs against the stale old-name
+    // ownership row). Guards the vanilla (non-recyclebin) path — the committed single-deploy rename
+    // tests never seeded ownership, so they never exercised deploy-over-a-prior-state.
+    [Test]
+    public void ShouldRenameTableViaOldNameAcrossTwoDeploys()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var oldTableName = $"two_old_tbl_{uniqueId}";
+        var newTableName = $"two_new_tbl_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        // v1 deploy: create + own the table under its old name, then add data.
+        var jsonV1 = $$"""
+        {
+            "Schema": "public",
+            "Name": "{{oldTableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT4", "Nullable": false},
+                {"Name": "val", "DataType": "INT4", "Nullable": false}
+            ]
+        }
+        """;
+        cmd.CommandText = $"CALL \"SchemaSmith\".\"TableQuench\"(p_ProductName := '{productName}', p_TableDefinitions := '{jsonV1.Replace("'", "''")}', p_DropTablesRemovedFromProduct := true, p_DropUnknownIndexes := false)";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"INSERT INTO public.{oldTableName} (id, val) VALUES (1, 42)";
+        cmd.ExecuteNonQuery();
+
+        // v2 deploy: rename via OldName, autodrop on.
+        var jsonV2 = $$"""
+        {
+            "Schema": "public",
+            "Name": "{{newTableName}}",
+            "OldName": "{{oldTableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT4", "Nullable": false},
+                {"Name": "val", "DataType": "INT4", "Nullable": false}
+            ]
+        }
+        """;
+        cmd.CommandText = $"CALL \"SchemaSmith\".\"TableQuench\"(p_ProductName := '{productName}', p_TableDefinitions := '{jsonV2.Replace("'", "''")}', p_DropTablesRemovedFromProduct := true, p_DropUnknownIndexes := false)";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{oldTableName}'";
+        Assert.That((long)cmd.ExecuteScalar()!, Is.EqualTo(0), "Old table should no longer exist");
+        cmd.CommandText = $"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{newTableName}'";
+        Assert.That((long)cmd.ExecuteScalar()!, Is.EqualTo(1), "New table should exist");
+        cmd.CommandText = $"SELECT val FROM public.{newTableName} WHERE id = 1";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(42), "Data should be preserved after rename");
+
+        conn.Close();
+    }
+
+    // Two-deploy declarative column rename: v1 creates + owns the table; v2 renames a column via
+    // its OldName (autodrop on). Guards the column-rename path across a prior-state deploy.
+    [Test]
+    public void ShouldRenameColumnViaOldNameAcrossTwoDeploys()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"two_col_rn_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var jsonV1 = $$"""
+        {
+            "Schema": "public",
+            "Name": "{{tableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT4", "Nullable": false},
+                {"Name": "old_col", "DataType": "INT4", "Nullable": false}
+            ]
+        }
+        """;
+        cmd.CommandText = $"CALL \"SchemaSmith\".\"TableQuench\"(p_ProductName := '{productName}', p_TableDefinitions := '{jsonV1.Replace("'", "''")}', p_DropTablesRemovedFromProduct := true, p_DropUnknownIndexes := false)";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"INSERT INTO public.{tableName} (id, old_col) VALUES (1, 99)";
+        cmd.ExecuteNonQuery();
+
+        var jsonV2 = $$"""
+        {
+            "Schema": "public",
+            "Name": "{{tableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT4", "Nullable": false},
+                {"Name": "new_col", "OldName": "old_col", "DataType": "INT4", "Nullable": false}
+            ]
+        }
+        """;
+        cmd.CommandText = $"CALL \"SchemaSmith\".\"TableQuench\"(p_ProductName := '{productName}', p_TableDefinitions := '{jsonV2.Replace("'", "''")}', p_DropTablesRemovedFromProduct := true, p_DropUnknownIndexes := false)";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{tableName}' AND column_name = 'old_col'";
+        Assert.That((long)cmd.ExecuteScalar()!, Is.EqualTo(0), "Old column name should no longer exist");
+        cmd.CommandText = $"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{tableName}' AND column_name = 'new_col'";
+        Assert.That((long)cmd.ExecuteScalar()!, Is.EqualTo(1), "New column name should exist");
+        cmd.CommandText = $"SELECT new_col FROM public.{tableName} WHERE id = 1";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(99), "Data should be preserved after column rename");
+
+        conn.Close();
+    }
+
     [Test]
     public void ShouldAddExcludeConstraint()
     {

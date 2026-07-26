@@ -104,6 +104,55 @@ END $$");
         }
     }
 
+    // Two-deploy declarative rename against a recyclebin target: v1 creates + owns the table under
+    // its old name; v2 renames it via OldName WITH autodrop on. The removed-drop pass must NOT route
+    // the renamed-away old name through CustomTableDrop (which would fail on the now-missing table) —
+    // the exact capstone failure. Regression for the OldName exclusion in ModifiedTableQuench.
+    [Test]
+    public void ModifiedTableQuench_DoesNotRouteRenamedTableThroughCustomTableDropHook()
+    {
+        var db = UniqueDb("hookrename");
+        CreateDb(db);
+        try
+        {
+            using var conn = (NpgsqlConnection)DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(DbConnString(db));
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandTimeout = 300;
+            ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL);
+
+            Exec(cmd, "CREATE TABLE public.\"HookLog\" (\"Action\" TEXT, \"ObjName\" TEXT)");
+            Exec(cmd, @"
+CREATE OR REPLACE PROCEDURE ""SchemaSmith"".""CustomTableDrop""(p_Schema TEXT, p_Table TEXT) LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO public.""HookLog""(""Action"", ""ObjName"") VALUES ('DROP', p_Table);
+  EXECUTE 'DROP TABLE ""' || p_Schema || '"".""' || p_Table || '""';
+END $$");
+
+            // v1: create + own OrderHeader, then add data.
+            Quench(cmd, "[{\"Schema\":\"public\",\"Name\":\"OrderHeader\",\"Columns\":[{\"Name\":\"Id\",\"DataType\":\"integer\",\"Nullable\":false},{\"Name\":\"Val\",\"DataType\":\"integer\",\"Nullable\":false}],\"Indexes\":[{\"Name\":\"PK_OrderHeader\",\"PrimaryKey\":true,\"Unique\":true,\"IndexColumns\":\"Id\"}]}]", false);
+            Exec(cmd, "INSERT INTO public.\"OrderHeader\" (\"Id\", \"Val\") VALUES (1, 42)");
+
+            // v2: rename OrderHeader -> SalesOrder via OldName, WITH autodrop on (exercises the removed-drop pass).
+            Quench(cmd, "[{\"Schema\":\"public\",\"Name\":\"SalesOrder\",\"OldName\":\"OrderHeader\",\"Columns\":[{\"Name\":\"Id\",\"DataType\":\"integer\",\"Nullable\":false},{\"Name\":\"Val\",\"DataType\":\"integer\",\"Nullable\":false}],\"Indexes\":[{\"Name\":\"PK_SalesOrder\",\"PrimaryKey\":true,\"Unique\":true,\"IndexColumns\":\"Id\"}]}]", true);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(ScalarLong(cmd, "SELECT COUNT(*) FROM public.\"HookLog\" WHERE \"ObjName\"='OrderHeader'"), Is.EqualTo(0),
+                    "CustomTableDrop must NOT be invoked for a table that was renamed away.");
+                Assert.That(ScalarBool(cmd, "SELECT to_regclass('public.\"SalesOrder\"') IS NOT NULL"), Is.True, "Renamed table should exist.");
+                Assert.That(ScalarBool(cmd, "SELECT to_regclass('public.\"OrderHeader\"') IS NULL"), Is.True, "Old table name should be gone.");
+                Assert.That(ScalarLong(cmd, "SELECT COUNT(*) FROM public.\"SalesOrder\" WHERE \"Id\" = 1 AND \"Val\" = 42"), Is.EqualTo(1),
+                    "Data must be preserved across the rename.");
+            });
+            conn.Close();
+        }
+        finally
+        {
+            DropDb(db);
+        }
+    }
+
     private void Quench(IDbCommand cmd, string json, bool autoDrop)
     {
         cmd.CommandText = $"CALL \"SchemaSmith\".\"TableQuench\"(p_ProductName := '{Product}', p_TableDefinitions := '{json.Replace("'", "''")}', p_WhatIf := false, p_DropTablesRemovedFromProduct := {(autoDrop ? "true" : "false")}, p_DropUnknownIndexes := false)";

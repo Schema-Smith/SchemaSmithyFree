@@ -45,9 +45,25 @@ choco install schemasmith
 
 Installs `schemaquench`, `schematongs`, and `datatongs` onto your PATH as a single combined package. Binaries are Authenticode-signed via Azure Trusted Signing — no SmartScreen warnings.
 
+### winget (Windows)
+
+```powershell
+winget install SchemaSmith.SchemaSmith
+```
+
+Installs all four CLI commands (`SchemaQuench`, `SchemaTongs`, `DataTongs`, `SchemaShears`) onto your PATH from the Authenticode-signed release zip.
+
 ### GitHub Releases
 
 Download self-contained ZIP packages from the [latest release](https://github.com/Schema-Smith/SchemaSmith/releases/latest). Extract and run — no .NET runtime required.
+
+### Arch Linux (AUR)
+
+```bash
+yay -S schemasmith-bin
+```
+
+Installs the CLI tools (`schemaquench`, `schematongs`, `datatongs`, `schemashears`) from the official release binaries. Works with any AUR helper.
 
 ### Build from Source
 
@@ -63,6 +79,28 @@ For self-contained publishing of the CLI tools:
 # Linux/macOS
 ./build-schemaquench.sh
 ```
+
+### Docker
+
+SchemaQuench ships as a container image on Docker Hub and GHCR — run a deploy with no .NET install:
+
+```bash
+# Docker Hub
+docker run --rm \
+  -e SmithySettings_SchemaPackagePath=/pkg \
+  -e SmithySettings_Target__Server=db.example.com \
+  -e SmithySettings_Target__User=deploy \
+  -e SmithySettings_Target__Password="$DB_PASSWORD" \
+  -v "$PWD/schema:/pkg" \
+  schemasmithyfree/schemaquench:latest
+
+# GHCR (reliable pulls behind corporate NAT / Docker Hub's anonymous rate limit)
+docker run --rm -v "$PWD/schema:/pkg" \
+  -e SmithySettings_SchemaPackagePath=/pkg \
+  ghcr.io/schema-smith/schemaquench:2.3.0 --Validate
+```
+
+Tags: `latest`, `X.Y.Z` (immutable), `X.Y`, `X`. Multi-arch (`linux/amd64` + `linux/arm64`). Configure via `SmithySettings_` environment variables (`__` denotes nesting) or a mounted `SchemaQuench.settings.json`; append `--Key:value` overrides as needed.
 
 ## GitHub Action (CI/CD)
 

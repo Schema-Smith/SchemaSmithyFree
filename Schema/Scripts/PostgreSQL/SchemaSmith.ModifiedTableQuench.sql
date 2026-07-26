@@ -19,6 +19,21 @@ DECLARE
   sql_script TEXT = '';
   protect_notice TEXT;
 BEGIN
+    -- OldName rename parity: a table renamed via OldName still has its PRE-rename name in
+    -- temp_product_ownership (owned on the prior deploy). It is NOT removed from the product — the
+    -- physical table now lives under the new name (MissingTableAndColumnQuench already did the
+    -- ALTER ... RENAME) — so drop the stale old-name row from the ownership working set before ANY
+    -- removed-table pass below. Otherwise the drop pass routes the already-renamed old name through
+    -- CustomTableDrop (recyclebin targets) or DROP TABLE and errors / emits false drop audits.
+    -- The persistent ProductOwnership row is reconciled old->new later by FixupTableOwnership
+    -- (its catalog-existence prune drops the old name; the new name is inserted).
+    DELETE FROM temp_product_ownership tp
+      WHERE tp."IndexName" IS NULL
+        AND EXISTS (SELECT 1
+                      FROM temp_tables t2
+                      WHERE t2."Schema" = tp."Schema"
+                        AND NULLIF(t2."OldName", '') = tp."TableName");
+
     -- No-drop protection tier (#270): when protected mode is active the caller forces
     -- p_DropTablesRemovedFromProduct to FALSE so the table-drop pass below is skipped. Record the
     -- tables that WOULD have been dropped by absence (owned, absent from the package, not sticky

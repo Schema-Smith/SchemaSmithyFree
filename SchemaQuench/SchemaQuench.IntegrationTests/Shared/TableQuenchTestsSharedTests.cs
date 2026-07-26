@@ -1405,13 +1405,12 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0)";
+        // Table renames now run in MissingTableAndColumnQuench (before add-columns), so drive the
+        // rename through that proc rather than ModifiedTableQuench.
+        command.CommandText = "CALL SchemaSmith_MissingTableAndColumnQuench(@databaseName, @whatIf)";
         command.Parameters.Clear();
-        command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
-        command.AddParameterWithValue("@dropTables", 0);
-        command.AddParameterWithValue("@dropRemovedCols", 1);
         command.ExecuteNonQuery();
 
         // Verify old table doesn't exist
@@ -1472,13 +1471,12 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0)";
+        // Column renames now run in MissingTableAndColumnQuench (before add-columns), so drive the
+        // rename through that proc rather than ModifiedTableQuench.
+        command.CommandText = "CALL SchemaSmith_MissingTableAndColumnQuench(@databaseName, @whatIf)";
         command.Parameters.Clear();
-        command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
-        command.AddParameterWithValue("@dropTables", 0);
-        command.AddParameterWithValue("@dropRemovedCols", 1);
         command.ExecuteNonQuery();
 
         // Verify old column doesn't exist
