@@ -219,6 +219,7 @@ public static class ForgeKindler
                 new("SchemaSmith.StripParenWrapping.sql"),
                 new("SchemaSmith.StripTypeCast.sql"),
                 new("SchemaSmith.ServerVersionNum.sql"),
+                new("SchemaSmith.UnsupportedFeaturePolicy.sql"),
                 new("SchemaSmith.StripLeadingSelect.sql"),
                 new("SchemaSmith.ValidateTableOwnership.sql"),
                 new("SchemaSmith.FixupTableOwnership.sql"),
