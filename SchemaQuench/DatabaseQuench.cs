@@ -1637,6 +1637,19 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
         connection.Open();
 
+        // Set the unsupported-feature policy on every convergence connection (built directly to the
+        // target database, so no ChangeDatabase resets the session): version-gated emit sites read it
+        // via SchemaSmith.UnsupportedFeaturePolicy() to choose degrade-with-warning (default) vs abort.
+        // PostgreSQL now; SQL Server (SESSION_CONTEXT) and MySQL/MariaDB (user var) land with their
+        // floor-lowering phases. The SQL helper defaults to 'warn', so only an explicit 'fail' matters.
+        if (_product.Platform.GetBasePlatform() == Platform.PostgreSQL)
+        {
+            var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
+            using var policyCmd = connection.CreateCommand();
+            policyCmd.CommandText = $"SET schemasmith.unsupported_policy = '{policy}'";
+            policyCmd.ExecuteNonQuery();
+        }
+
         // MySQL: start status message monitor
         if (_product.Platform.GetBasePlatform() == Platform.MySQL && _statusMonitor == null)
         {
