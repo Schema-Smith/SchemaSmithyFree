@@ -52,8 +52,9 @@ public class DataTongs
         if (connectionProperties.Count == 0)
             connectionProperties = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
         CommandLineParser.ApplyTransportSecuritySwitch(_platform, connectionProperties);
+        var integratedSecurity = string.Equals(config["Source:IntegratedSecurity"] ?? config["Target:IntegratedSecurity"], "true", StringComparison.OrdinalIgnoreCase);
 
-        var connectionString = ConnectionString.Build(_platform, server, targetDb, user, password, port, connectionProperties);
+        var connectionString = ConnectionString.Build(_platform, server, targetDb, user, password, port, connectionProperties, integratedSecurity: integratedSecurity);
         var connectionFactory = GetConnectionFactory();
         var connection = connectionFactory.GetDbConnection(connectionString);
         connection.Open();

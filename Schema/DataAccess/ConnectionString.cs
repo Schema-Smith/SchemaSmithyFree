@@ -15,11 +15,11 @@ namespace Schema.DataAccess;
 public static class ConnectionString
 {
     public static string Build(Platform platform, string serverName, string dbName, string user, string password,
-        string port = null, Dictionary<string, string> connectionProperties = null)
+        string port = null, Dictionary<string, string> connectionProperties = null, bool integratedSecurity = false)
     {
         return platform.GetBasePlatform() switch
         {
-            Platform.SqlServer => BuildSqlServer(serverName, dbName, user, password, port, connectionProperties),
+            Platform.SqlServer => BuildSqlServer(serverName, dbName, user, password, port, connectionProperties, integratedSecurity),
             Platform.PostgreSQL => BuildPostgreSql(serverName, dbName, user, password, port, connectionProperties),
             Platform.MySQL => BuildMySql(serverName, dbName, user, password, port, connectionProperties),
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
@@ -58,9 +58,13 @@ public static class ConnectionString
     }
 
     private static string BuildSqlServer(string serverName, string dbName, string user, string password, string port,
-        Dictionary<string, string> connectionProperties)
+        Dictionary<string, string> connectionProperties, bool integratedSecurity = false)
     {
-        var security = !string.IsNullOrEmpty(user) && !string.IsNullOrEmpty(password)
+        // Integrated Security when explicitly requested (Target:IntegratedSecurity=true) OR when no
+        // credential is supplied. The explicit flag exists because an override cannot clear a
+        // credential a settings file already carries — on Windows, setting an env var to empty deletes
+        // it, leaving the file's value in place — so the credential must be superseded, not cleared.
+        var security = !integratedSecurity && !string.IsNullOrEmpty(user) && !string.IsNullOrEmpty(password)
             ? $"User ID={user};Password={password}"
             : "Integrated Security=True";
 
