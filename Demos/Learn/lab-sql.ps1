@@ -85,6 +85,103 @@ function Invoke-LabSql {
     return $text
 }
 
+function Invoke-LabSqlFile {
+    param(
+        [Parameter(Mandatory)][string]$Engine,
+        [Parameter(Mandatory)][string]$Database,
+        [Parameter(Mandatory)][string]$Path
+    )
+    if (-not (Test-Path $Path)) { throw "LAB-SQL: no such SQL file '$Path'." }
+    $ErrorActionPreference = 'Continue'
+    $out = $null
+    if (Test-LabOwnServer) {
+        # Local clients read the file directly, so PowerShell 5.1's BOM-on-pipe problem
+        # never arises and nothing has to be copied into a container.
+        $client = Get-LabClient $Engine
+        $server = $env:LEARN_SERVER; $port = $env:LEARN_PORT
+        $user = $env:LEARN_USER; $password = $env:LEARN_PASSWORD
+        switch ($Engine) {
+            'sqlserver' { $out = & sqlcmd -S "$server,$port" -U $user -P $password -C -b -d $Database -i $Path 2>&1 }
+            'postgres'  { $env:PGPASSWORD = $password
+                          $out = & psql -h $server -p $port -U $user -d $Database -w -v ON_ERROR_STOP=1 --no-psqlrc -f $Path 2>&1 }
+            default     { $env:MYSQL_PWD = $password
+                          $out = & $client -h $server -P $port -u $user -D $Database -e "source $Path" 2>&1 }
+        }
+    }
+    else {
+        $container = Get-LabContainer $Engine
+        docker cp $Path "${container}:/tmp/lab-seed.sql" 2>&1 | Out-Null
+        switch ($Engine) {
+            'sqlserver' { $out = docker exec $container /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d $Database -i /tmp/lab-seed.sql 2>&1 }
+            'postgres'  { $out = docker exec $container psql -U postgres -d $Database -v ON_ERROR_STOP=1 -f /tmp/lab-seed.sql 2>&1 }
+            'mysql'     { $out = docker exec -e MYSQL_PWD=Learn!Passw0rd $container mysql -uroot -D $Database -e 'source /tmp/lab-seed.sql' 2>&1 }
+            'mariadb'   { $out = docker exec -e MYSQL_PWD=Learn!Passw0rd $container mariadb -uroot -D $Database -e 'source /tmp/lab-seed.sql' 2>&1 }
+        }
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "LAB-SQL: failed running '$([System.IO.Path]::GetFileName($Path))' against $Engine at $(Get-LabEndpointLabel $Engine) [database '$Database'] -- $(ConvertTo-LabText $out)"
+    }
+}
+
+$LabStamp = 'SchemaSmith_DemoProvisioned'
+
+function Add-LabStamp {
+    param([Parameter(Mandatory)][string]$Engine, [Parameter(Mandatory)][string]$Database)
+    switch ($Engine) {
+        'sqlserver' { Invoke-LabSql -Engine $Engine -Database $Database -Sql "IF NOT EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 0 AND name = '$LabStamp') EXEC sys.sp_addextendedproperty @name = N'$LabStamp', @value = N'1'" | Out-Null }
+        'postgres'  { Invoke-LabSql -Engine $Engine -Database $Database -Sql "COMMENT ON DATABASE ""$Database"" IS '$LabStamp'" | Out-Null }
+        default     { Invoke-LabSql -Engine $Engine -Database $Database -Sql "CREATE TABLE IF NOT EXISTS ``$LabStamp`` (marker TINYINT NOT NULL)" | Out-Null }
+    }
+}
+
+function Get-LabAdminDatabase {
+    param([Parameter(Mandatory)][string]$Engine)
+    return @{ sqlserver = 'master'; postgres = 'postgres'; mysql = 'information_schema'; mariadb = 'information_schema' }[$Engine]
+}
+
+# Creates the database if it's absent and stamps it as lab-provisioned. An existing
+# database that carries the stamp is reused. An existing database WITHOUT the stamp is
+# adopted in the sandbox (the container is a throwaway we created, and sandboxes built
+# before this helper carry no stamp) but REFUSED on your own server, where it is far
+# more likely to be a real database of yours that a deploy would damage.
+function Confirm-LabDatabase {
+    param([Parameter(Mandatory)][string]$Engine, [Parameter(Mandatory)][string]$Database)
+    $admin = Get-LabAdminDatabase $Engine
+
+    $existsSql = switch ($Engine) {
+        'sqlserver' { "SELECT COUNT(*) FROM sys.databases WHERE name = '$Database'" }
+        'postgres'  { "SELECT COUNT(*) FROM pg_database WHERE datname = '$Database'" }
+        default     { "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = '$Database'" }
+    }
+    if ((Invoke-LabSql -Engine $Engine -Database $admin -Sql $existsSql) -eq '0') {
+        $createSql = switch ($Engine) {
+            'sqlserver' { "CREATE DATABASE [$Database]" }
+            'postgres'  { "CREATE DATABASE ""$Database""" }
+            default     { "CREATE DATABASE ``$Database`` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" }
+        }
+        Invoke-LabSql -Engine $Engine -Database $admin -Sql $createSql | Out-Null
+        Add-LabStamp -Engine $Engine -Database $Database
+        return 'created'
+    }
+
+    $stampedSql = switch ($Engine) {
+        'sqlserver' { "SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name = '$LabStamp'" }
+        'postgres'  { "SELECT COUNT(*) FROM pg_database WHERE datname = current_database() AND COALESCE(shobj_description(oid, 'pg_database'), '') = '$LabStamp'" }
+        default     { "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$Database' AND table_name = '$LabStamp'" }
+    }
+    if ((Invoke-LabSql -Engine $Engine -Database $Database -Sql $stampedSql) -ne '0') { return 'reused' }
+
+    if (Test-LabOwnServer) {
+        throw @"
+LAB-SQL: a database named '$Database' already exists on $(Get-LabEndpointLabel $Engine) but was NOT created by the labs.
+The labs will not touch a database they didn't create -- deploying into it could drop columns.
+Rename or move your '$Database', then re-run this setup script.
+"@
+    }
+    Add-LabStamp -Engine $Engine -Database $Database
+    return 'reused'
+}
+
 # Called as a command rather than dot-sourced: lab-sql.ps1 <engine> <database> <sql>
 if ($MyInvocation.InvocationName -ne '.' -and $args.Count -ge 3) {
     Invoke-LabSql -Engine $args[0] -Database $args[1] -Sql ($args[2..($args.Count - 1)] -join ' ')

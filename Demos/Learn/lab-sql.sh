@@ -88,6 +88,102 @@ lab_sql() {
   lab_trim "$out"
 }
 
+lab_sql_file() {
+  local engine="$1" db="$2" path="$3" out rc client container
+  if [ ! -f "$path" ]; then
+    echo "LAB-SQL: no such SQL file '$path'." >&2
+    return 1
+  fi
+  if lab_own_server; then
+    # Local clients read the file directly -- nothing has to be copied into a container.
+    client="$(lab_client "$engine")" || return 1
+    case "$engine" in
+      sqlserver) out=$(sqlcmd -S "${LEARN_SERVER},${LEARN_PORT}" -U "$LEARN_USER" -P "$LEARN_PASSWORD" \
+                         -C -b -d "$db" -i "$path" 2>&1); rc=$? ;;
+      postgres)  out=$(PGPASSWORD="$LEARN_PASSWORD" psql -h "$LEARN_SERVER" -p "$LEARN_PORT" -U "$LEARN_USER" \
+                         -d "$db" -w -v ON_ERROR_STOP=1 --no-psqlrc -f "$path" 2>&1); rc=$? ;;
+      *)         out=$(MYSQL_PWD="$LEARN_PASSWORD" "$client" -h "$LEARN_SERVER" -P "$LEARN_PORT" \
+                         -u "$LEARN_USER" -D "$db" -e "source $path" 2>&1); rc=$? ;;
+    esac
+  else
+    container="$(lab_container "$engine")"
+    MSYS_NO_PATHCONV=1 docker cp "$path" "${container}:/tmp/lab-seed.sql" >/dev/null 2>&1
+    case "$engine" in
+      sqlserver) out=$(MSYS_NO_PATHCONV=1 docker exec "$container" /opt/mssql-tools18/bin/sqlcmd \
+                         -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d "$db" -i /tmp/lab-seed.sql 2>&1); rc=$? ;;
+      postgres)  out=$(docker exec "$container" psql -U postgres -d "$db" -v ON_ERROR_STOP=1 -f /tmp/lab-seed.sql 2>&1); rc=$? ;;
+      mysql)     out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mysql -uroot -D "$db" -e 'source /tmp/lab-seed.sql' 2>&1); rc=$? ;;
+      mariadb)   out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mariadb -uroot -D "$db" -e 'source /tmp/lab-seed.sql' 2>&1); rc=$? ;;
+    esac
+  fi
+  if [ "$rc" -ne 0 ]; then
+    echo "LAB-SQL: failed running '$(basename "$path")' against $engine at $(lab_endpoint_label "$engine") [database '$db'] -- $(lab_trim "$out")" >&2
+    return 1
+  fi
+}
+
+LAB_STAMP='SchemaSmith_DemoProvisioned'
+
+lab_admin_db() {
+  case "$1" in
+    sqlserver) printf 'master' ;;
+    postgres)  printf 'postgres' ;;
+    *)         printf 'information_schema' ;;
+  esac
+}
+
+lab_add_stamp() {
+  local engine="$1" db="$2"
+  case "$engine" in
+    sqlserver) lab_sql "$engine" "$db" "IF NOT EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 0 AND name = '$LAB_STAMP') EXEC sys.sp_addextendedproperty @name = N'$LAB_STAMP', @value = N'1'" >/dev/null ;;
+    postgres)  lab_sql "$engine" "$db" "COMMENT ON DATABASE \"$db\" IS '$LAB_STAMP'" >/dev/null ;;
+    *)         lab_sql "$engine" "$db" "CREATE TABLE IF NOT EXISTS \`$LAB_STAMP\` (marker TINYINT NOT NULL)" >/dev/null ;;
+  esac
+}
+
+# Creates the database if it's absent and stamps it as lab-provisioned. An existing
+# database that carries the stamp is reused. An existing database WITHOUT the stamp is
+# adopted in the sandbox (the container is a throwaway we created, and sandboxes built
+# before this helper carry no stamp) but REFUSED on your own server, where it is far
+# more likely to be a real database of yours that a deploy would damage.
+lab_confirm_db() {
+  local engine="$1" db="$2" admin exists_sql create_sql stamped_sql
+  admin="$(lab_admin_db "$engine")"
+
+  case "$engine" in
+    sqlserver) exists_sql="SELECT COUNT(*) FROM sys.databases WHERE name = '$db'" ;;
+    postgres)  exists_sql="SELECT COUNT(*) FROM pg_database WHERE datname = '$db'" ;;
+    *)         exists_sql="SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = '$db'" ;;
+  esac
+  if [ "$(lab_sql "$engine" "$admin" "$exists_sql")" = "0" ]; then
+    case "$engine" in
+      sqlserver) create_sql="CREATE DATABASE [$db]" ;;
+      postgres)  create_sql="CREATE DATABASE \"$db\"" ;;
+      *)         create_sql="CREATE DATABASE \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" ;;
+    esac
+    lab_sql "$engine" "$admin" "$create_sql" >/dev/null || return 1
+    lab_add_stamp "$engine" "$db" || return 1
+    printf 'created'
+    return 0
+  fi
+
+  case "$engine" in
+    sqlserver) stamped_sql="SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name = '$LAB_STAMP'" ;;
+    postgres)  stamped_sql="SELECT COUNT(*) FROM pg_database WHERE datname = current_database() AND COALESCE(shobj_description(oid, 'pg_database'), '') = '$LAB_STAMP'" ;;
+    *)         stamped_sql="SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$db' AND table_name = '$LAB_STAMP'" ;;
+  esac
+  if [ "$(lab_sql "$engine" "$db" "$stamped_sql")" != "0" ]; then printf 'reused'; return 0; fi
+
+  if lab_own_server; then
+    echo "LAB-SQL: a database named '$db' already exists on $(lab_endpoint_label "$engine") but was NOT created by the labs." >&2
+    echo "The labs will not touch a database they didn't create -- deploying into it could drop columns." >&2
+    echo "Rename or move your '$db', then re-run this setup script." >&2
+    return 1
+  fi
+  lab_add_stamp "$engine" "$db" || return 1
+  printf 'reused'
+}
+
 # Called as a command rather than sourced.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   if [ "$#" -lt 3 ]; then

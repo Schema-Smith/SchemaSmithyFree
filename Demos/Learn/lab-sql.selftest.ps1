@@ -51,6 +51,59 @@ Assert-Throws { Invoke-LabSql -Engine sqlserver -Database master -Sql 'SELECT * 
     'could not reach sqlserver' 'a failed query raises rather than returning the error text'
 
 Clear-LabEnv
+Write-Host 'sql files'
+$tmp = Join-Path $env:TEMP 'lab-sql-selftest.sql'
+'CREATE TABLE selftest_marker (id INT);' | Set-Content -Path $tmp -Encoding ASCII
+Invoke-LabSql -Engine sqlserver -Database master -Sql "IF DB_ID('labselftest') IS NULL CREATE DATABASE [labselftest]" | Out-Null
+Invoke-LabSqlFile -Engine sqlserver -Database labselftest -Path $tmp
+Assert-Equal '1' (Invoke-LabSql -Engine sqlserver -Database labselftest `
+        -Sql "SELECT COUNT(*) FROM sys.tables WHERE name = 'selftest_marker'") 'sql file executed'
+Assert-Throws { Invoke-LabSqlFile -Engine sqlserver -Database labselftest -Path 'C:\nope\missing.sql' } `
+    'no such SQL file' 'missing sql file raises'
+
+Invoke-LabSql -Engine sqlserver -Database master `
+    -Sql "ALTER DATABASE [labselftest] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [labselftest];" | Out-Null
+Remove-Item $tmp -ErrorAction SilentlyContinue
+
+Write-Host 'ownership guard (every engine — the stamp SQL differs per engine)'
+$ports = @{ sqlserver = 11433; postgres = 15432; mysql = 13306; mariadb = 13307 }
+function Remove-LabTestDb($Engine, $Db) {
+    $admin = Get-LabAdminDatabase $Engine
+    $sql = switch ($Engine) {
+        'sqlserver' { "IF DB_ID('$Db') IS NOT NULL BEGIN ALTER DATABASE [$Db] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$Db]; END" }
+        'postgres'  { "DROP DATABASE IF EXISTS ""$Db""" }
+        default     { "DROP DATABASE IF EXISTS ``$Db``" }
+    }
+    Invoke-LabSql -Engine $Engine -Database $admin -Sql $sql | Out-Null
+}
+foreach ($e in 'sqlserver', 'postgres', 'mysql', 'mariadb') {
+    Clear-LabEnv
+    Remove-LabTestDb $e 'labguardtest'; Remove-LabTestDb $e 'labguardforeign'
+
+    Assert-Equal 'created' (Confirm-LabDatabase -Engine $e -Database 'labguardtest') "$e`: creates and stamps"
+    Assert-Equal 'reused'  (Confirm-LabDatabase -Engine $e -Database 'labguardtest') "$e`: reuses the stamped database"
+
+    # An unstamped database, as a learner's real one would be.
+    $admin = Get-LabAdminDatabase $e
+    $create = switch ($e) {
+        'sqlserver' { "CREATE DATABASE [labguardforeign]" }
+        'postgres'  { "CREATE DATABASE ""labguardforeign""" }
+        default     { "CREATE DATABASE ``labguardforeign``" }
+    }
+    Invoke-LabSql -Engine $e -Database $admin -Sql $create | Out-Null
+
+    if (Get-Command @{ sqlserver = 'sqlcmd'; postgres = 'psql'; mysql = 'mysql'; mariadb = 'mariadb' }[$e] -ErrorAction SilentlyContinue) {
+        Set-LabEnv $e $ports[$e]
+        Assert-Throws { Confirm-LabDatabase -Engine $e -Database 'labguardforeign' } `
+            'was NOT created by the labs' "$e`: own-server refuses an unstamped database"
+        Clear-LabEnv
+    }
+    else { Write-Host "  SKIP  $e`: own-server refusal (client not on PATH)" }
+
+    Assert-Equal 'reused' (Confirm-LabDatabase -Engine $e -Database 'labguardforeign') "$e`: sandbox adopts and stamps"
+    Remove-LabTestDb $e 'labguardtest'; Remove-LabTestDb $e 'labguardforeign'
+}
+
 Write-Host ''
 if ($failed -eq 0) { Write-Host 'lab-sql self-test: all checks passed'; exit 0 }
 Write-Host "lab-sql self-test: $failed check(s) failed"
