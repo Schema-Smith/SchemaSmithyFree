@@ -2,6 +2,7 @@
 
 ﻿using Schema.DataAccess;
 using Schema.Domain;
+using Schema.Utility;
 using Microsoft.Data.SqlClient;
 using System;
 
@@ -612,6 +613,67 @@ INSERT dbo.RemoveIdentityFromColumn (Column2) VALUES ('Row1'), ('Row2')
 
 
         conn.Close();
+    }
+
+    // Floor coverage: SchemaSmith supports SQL Server databases at compatibility_level 130 (the OPENJSON
+    // JSON ingest parses at 130, STRING_AGG executes at 130 on a 2017+ server). Kindles a dedicated
+    // compat-130 database and deploys a package that exercises the JSON ingest (OPENJSON) plus a
+    // computed column and index (the FOR JSON / STRING_AGG convergence paths), proving the floor works
+    // end to end — not just that the pre-flight guard permits it. Empirically established 2026-07-27.
+    [Test]
+    public void ShouldDeployAgainstCompatibilityLevel130Database()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var compatDb = $"compat130_{uniqueId}";
+        var productName = Guid.NewGuid().ToString();
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        try
+        {
+            cmd.CommandText = $"CREATE DATABASE [{compatDb}]; ALTER DATABASE [{compatDb}] SET COMPATIBILITY_LEVEL = 130;";
+            cmd.ExecuteNonQuery();
+
+            conn.ChangeDatabase(compatDb);
+            // Confirm the database really is at compat 130 (guards against the ALTER silently no-opping).
+            cmd.CommandText = "SELECT compatibility_level FROM sys.databases WHERE database_id = DB_ID()";
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(130), "Test database must be at compatibility level 130");
+
+            ForgeKindler.KindleTheForge(cmd, Platform.SqlServer);
+
+            var json = $$"""
+            [{
+                "Schema": "[dbo]",
+                "Name": "[c130_t]",
+                "Columns": [
+                    {"Name": "[id]", "DataType": "INT", "Nullable": false},
+                    {"Name": "[qty]", "DataType": "INT", "Nullable": false},
+                    {"Name": "[doubled]", "DataType": "AS ([qty] * 2) PERSISTED"}
+                ],
+                "Indexes": [
+                    {"Name": "[PK_c130_t]", "PrimaryKey": true, "IndexColumns": "[id]"},
+                    {"Name": "[IX_c130_t_qty]", "IndexColumns": "[qty]"}
+                ]
+            }]
+            """;
+            cmd.CommandText = $"EXEC SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = N'{json.Replace("'", "''")}', @DropTablesRemovedFromProduct = 0, @DropUnknownIndexes = 0";
+            Assert.DoesNotThrow(() => cmd.ExecuteNonQuery(), "Deploy against a compat-130 database should succeed");
+
+            cmd.CommandText = "SELECT COUNT(*) FROM sys.tables WHERE name = 'c130_t'";
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1), "Table should be created at compat 130");
+            cmd.CommandText = "SELECT COUNT(*) FROM sys.computed_columns WHERE name = 'doubled'";
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1), "Computed column should be created at compat 130");
+        }
+        finally
+        {
+            conn.ChangeDatabase("master");
+            cmd.CommandText = $"IF DB_ID('{compatDb}') IS NOT NULL BEGIN ALTER DATABASE [{compatDb}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{compatDb}]; END";
+            cmd.ExecuteNonQuery();
+            conn.Close();
+        }
     }
 
     [Test]

@@ -15,7 +15,8 @@ namespace Schema.Utility
     {
         // SQL Server release-year -> major-version map (declared-version year alias). Bottoms out at
         // 2017 (major 14): the intrinsic floor. 2016 and older are not declarable — they are below the
-        // version SchemaSmith's engine scripts require (STRING_AGG / DB compatibility level 140).
+        // server-binary version SchemaSmith's engine scripts require (STRING_AGG, 2017). The separate
+        // DB compatibility-level floor is 130 (OPENJSON) — see PreFlightVersionGuard.
         private static readonly Dictionary<int, int> SqlServerYearToMajor = new()
         {
             { 2017, 14 }, { 2019, 15 }, { 2022, 16 }

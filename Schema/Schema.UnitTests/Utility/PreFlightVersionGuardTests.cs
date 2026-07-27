@@ -23,15 +23,25 @@ namespace Schema.UnitTests.Utility
         }
 
         [Test]
-        public void CheckOrThrow_CompatBelow140_Throws_DistinctMessage()
+        public void CheckOrThrow_CompatBelow130_Throws_DistinctMessage()
         {
-            var info = new TargetVersionInfo(Platform.SqlServer, "14", 14, 130);
+            var info = new TargetVersionInfo(Platform.SqlServer, "14", 14, 120);   // SQL Server 2014 compat
 
             var ex = Assert.Throws<Exception>(() =>
                 PreFlightVersionGuard.CheckOrThrow(info, "srv", "OldDb"));
 
-            Assert.That(ex!.Message, Does.Contain("compatibility level 130"));
+            Assert.That(ex!.Message, Does.Contain("compatibility level 120"));
             Assert.That(ex.Message, Does.Contain("OldDb"));
+        }
+
+        [Test]
+        public void CheckOrThrow_CompatAtFloor130_DoesNotThrow()
+        {
+            // compat 130 (SQL Server 2016) is the real floor: OPENJSON parses at 130 and STRING_AGG
+            // executes at 130 on a 2017+ server (empirically verified — floor-lowering spike 2026-07-27).
+            var info = new TargetVersionInfo(Platform.SqlServer, "14", 14, 130);
+
+            Assert.DoesNotThrow(() => PreFlightVersionGuard.CheckOrThrow(info, "srv", "Db"));
         }
 
         [Test]
