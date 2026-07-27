@@ -45,6 +45,7 @@ public static class DeploymentSummaryText
         RenderWhatIf(summary, lines);
         RenderObjectChanges(summary, lines);
         RenderPreventDrop(summary, lines);
+        RenderUnsupportedDowngrade(summary, lines);
 
         return string.Join("\n", lines);
     }
@@ -177,6 +178,19 @@ public static class DeploymentSummaryText
         lines.Add($"- Protection active — {preventDrop.WouldDrop.Count} drop(s) suppressed (object removed from product but not dropped):");
         foreach (var entry in preventDrop.WouldDrop)
             lines.Add($"  - {entry.ObjectType}: {entry.ObjectName}");
+    }
+
+    private static void RenderUnsupportedDowngrade(DeploymentSummary summary, List<string> lines)
+    {
+        var downgrade = summary.UnsupportedDowngrade;
+        if (downgrade == null)
+            return;
+
+        lines.Add("");
+        lines.Add("## Unsupported Feature Downgrades");
+        lines.Add($"- {downgrade.Downgrades.Count} feature(s) declared but unsupported at the target version — emitted without the unsupported aspect:");
+        foreach (var entry in downgrade.Downgrades)
+            lines.Add($"  - {entry.Feature}: {entry.ObjectName}");
     }
 
     private static string FormatScope(string server, string database, string schema)

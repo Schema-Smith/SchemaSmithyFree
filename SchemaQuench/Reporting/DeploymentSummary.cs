@@ -24,7 +24,8 @@ public sealed record DeploymentSummary(
     IReadOnlyList<FailureRecord> Failures,
     WhatIfSummary WhatIf,
     ObjectChangeSummary ObjectChanges,
-    PreventDropSummary PreventDrop = null);
+    PreventDropSummary PreventDrop = null,
+    UnsupportedDowngradeSummary UnsupportedDowngrade = null);
 
 public sealed record RunInfo(
     string Product,
@@ -117,6 +118,21 @@ public sealed record PreventDropSummary(
     IReadOnlyList<WouldDropEntry> WouldDrop);
 
 public sealed record WouldDropEntry(string ObjectType, string ObjectName);
+
+/// <summary>
+/// Unsupported-feature downgrade manifest (Phase 0, version-adaptive codegen). Present only when at
+/// least one model feature was declared that the DETECTED target version could not support and the
+/// run's policy is <c>warn</c> (the default) — the object was emitted WITHOUT the unsupported aspect
+/// and each such downgrade recorded. <c>null</c> (omitted) when nothing was downgraded, so the
+/// common case keeps the v1 shape. Under the <c>fail</c> policy the run aborts before any emit, so
+/// this manifest never carries rows for a failed run. <see cref="UnsupportedDowngradeEntry.Feature"/>
+/// names the exact feature + the version it needs (e.g. <c>NULLS NOT DISTINCT (PG15)</c>);
+/// <see cref="UnsupportedDowngradeEntry.ObjectName"/> names the affected object.
+/// </summary>
+public sealed record UnsupportedDowngradeSummary(
+    IReadOnlyList<UnsupportedDowngradeEntry> Downgrades);
+
+public sealed record UnsupportedDowngradeEntry(string Feature, string ObjectName);
 
 public enum RunMode
 {

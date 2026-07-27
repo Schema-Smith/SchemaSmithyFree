@@ -134,6 +134,31 @@ public class DeploymentSummaryAssemblerTests
     }
 
     [Test]
+    public void Assemble_UnsupportedDowngrade_NullWhenNoDowngradeRows()
+    {
+        Assert.That(AssembleWith().UnsupportedDowngrade, Is.Null);
+    }
+
+    [Test]
+    public void Assemble_UnsupportedDowngrade_ManifestFromDowngradeRows()
+    {
+        var cap = new ChangeAuditCapture();
+        cap.Record("NULLS NOT DISTINCT (PG15)", "public.t.uq_t", "unsupportedDowngrade");
+        cap.Record("index", "public.t.ix_t", "created"); // not a downgrade — must not appear in the manifest
+        cap.MarkInstrumented();
+
+        var summary = AssembleWith(changeAudit: cap);
+
+        Assert.That(summary.UnsupportedDowngrade, Is.Not.Null);
+        Assert.That(summary.UnsupportedDowngrade.Downgrades.Select(d => d.Feature),
+            Is.EquivalentTo(new[] { "NULLS NOT DISTINCT (PG15)" }));
+        Assert.That(summary.UnsupportedDowngrade.Downgrades.Select(d => d.ObjectName),
+            Is.EquivalentTo(new[] { "public.t.uq_t" }));
+        // downgrade rows are manifest items, not object-change detail.
+        Assert.That(summary.ObjectChanges.Details.Select(d => d.Action), Does.Not.Contain("unsupportedDowngrade"));
+    }
+
+    [Test]
     public void Assemble_AggregatesChangeAudit_WhenInstrumented()
     {
         var cap = new ChangeAuditCapture();
