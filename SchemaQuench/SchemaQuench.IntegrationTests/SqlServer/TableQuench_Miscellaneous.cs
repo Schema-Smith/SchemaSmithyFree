@@ -710,6 +710,97 @@ EXEC sp_addextendedproperty @name = N'ProductName', @value = '{productName}', @l
         conn.Close();
     }
 
+    // Cross-engine parity guard for the PG 42P16 constraint-rename bug: rename a table via OldName
+    // AND rename its own PK and FK. SQL Server reconciles this cleanly (object_id-keyed extended-
+    // property ownership survives the rename), so this should pass on the reference engine.
+    [Test]
+    public void ShouldRenameTableAndItsConstraintsViaOldNameAcrossTwoDeploys()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var parentTable = $"CrCust_{uniqueId}";
+        var oldTableName = $"CrOld_{uniqueId}";
+        var newTableName = $"CrNew_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        // v1 deploy: create + own the parent and the table (identity PK + FK) under the old name.
+        var jsonV1 = $$"""
+        [
+            {
+                "Schema": "[dbo]",
+                "Name": "[{{parentTable}}]",
+                "Columns": [{"Name": "[CustomerId]", "DataType": "INT", "Nullable": false}],
+                "Indexes": [{"Name": "[PK_{{parentTable}}]", "PrimaryKey": true, "IndexColumns": "[CustomerId]"}]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[{{oldTableName}}]",
+                "Columns": [
+                    {"Name": "[OrderId]", "DataType": "INT IDENTITY(1,1)"},
+                    {"Name": "[CustomerId]", "DataType": "INT"}
+                ],
+                "Indexes": [{"Name": "[PK_{{oldTableName}}]", "PrimaryKey": true, "IndexColumns": "[OrderId]"}],
+                "ForeignKeys": [{"Name": "[FK_{{oldTableName}}_Customer]", "Columns": "[CustomerId]", "RelatedTableSchema": "[dbo]", "RelatedTable": "[{{parentTable}}]", "RelatedColumns": "[CustomerId]"}]
+            }
+        ]
+        """;
+        cmd.CommandText = $"EXEC SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = '{jsonV1.Replace("'", "''")}', @DropTablesRemovedFromProduct = 1, @DropUnknownIndexes = 0";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"INSERT INTO dbo.{parentTable} (CustomerId) VALUES (7); INSERT INTO dbo.{oldTableName} (CustomerId) VALUES (7)";
+        cmd.ExecuteNonQuery();
+
+        // v2 deploy: rename the table via OldName AND rename its PK and FK.
+        var jsonV2 = $$"""
+        [
+            {
+                "Schema": "[dbo]",
+                "Name": "[{{parentTable}}]",
+                "Columns": [{"Name": "[CustomerId]", "DataType": "INT", "Nullable": false}],
+                "Indexes": [{"Name": "[PK_{{parentTable}}]", "PrimaryKey": true, "IndexColumns": "[CustomerId]"}]
+            },
+            {
+                "Schema": "[dbo]",
+                "Name": "[{{newTableName}}]",
+                "OldName": "[{{oldTableName}}]",
+                "Columns": [
+                    {"Name": "[OrderId]", "DataType": "INT IDENTITY(1,1)"},
+                    {"Name": "[CustomerId]", "DataType": "INT"}
+                ],
+                "Indexes": [{"Name": "[PK_{{newTableName}}]", "PrimaryKey": true, "IndexColumns": "[OrderId]"}],
+                "ForeignKeys": [{"Name": "[FK_{{newTableName}}_Customer]", "Columns": "[CustomerId]", "RelatedTableSchema": "[dbo]", "RelatedTable": "[{{parentTable}}]", "RelatedColumns": "[CustomerId]"}]
+            }
+        ]
+        """;
+        cmd.CommandText = $"EXEC SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = '{jsonV2.Replace("'", "''")}', @DropTablesRemovedFromProduct = 1, @DropUnknownIndexes = 0";
+        Assert.DoesNotThrow(() => cmd.ExecuteNonQuery(), "Renaming a table and its constraints via OldName should not error");
+
+        cmd.CommandText = $"SELECT CAST(CASE WHEN OBJECT_ID('dbo.{oldTableName}') IS NULL THEN 1 ELSE 0 END AS BIT)";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True, "Old table should no longer exist");
+        cmd.CommandText = $"SELECT CustomerId FROM dbo.{newTableName}";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(7), "Data should be preserved after rename");
+
+        // PK renamed to the new name; old-named PK gone; exactly one PK.
+        cmd.CommandText = $"SELECT COUNT(*) FROM sys.key_constraints WHERE parent_object_id = OBJECT_ID('dbo.{newTableName}') AND type = 'PK'";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(1), "Renamed table should have exactly one primary key");
+        cmd.CommandText = $"SELECT COUNT(*) FROM sys.key_constraints WHERE name = 'PK_{newTableName}'";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(1), "PK should exist under its new name");
+        cmd.CommandText = $"SELECT COUNT(*) FROM sys.key_constraints WHERE name = 'PK_{oldTableName}'";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(0), "Old-named PK should be gone");
+
+        // FK renamed to the new name; old-named FK gone.
+        cmd.CommandText = $"SELECT COUNT(*) FROM sys.foreign_keys WHERE name = 'FK_{newTableName}_Customer'";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(1), "FK should exist under its new name");
+        cmd.CommandText = $"SELECT COUNT(*) FROM sys.foreign_keys WHERE name = 'FK_{oldTableName}_Customer'";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(0), "Old-named FK should be gone");
+
+        conn.Close();
+    }
+
     [Test]
     public void ShouldAddIdentityToExistingColumn()
     {

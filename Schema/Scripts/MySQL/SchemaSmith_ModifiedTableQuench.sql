@@ -113,6 +113,20 @@ BEGIN
           AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci
           AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'TABLE' COLLATE utf8mb4_unicode_ci;
 
+        -- OldName constraint-rename parity: INDEX ownership rows are keyed as 'tablename.indexname'
+        -- (see MissingIndexesAndConstraintsQuench). The TABLE update above only moved TABLE rows, so an
+        -- index ownership row still carries the OLD table prefix after the rename. The downstream index
+        -- rename/drop passes key on the NEW table name, so they would miss the carried-over index and
+        -- leave the old-named index behind as a silent duplicate. Rewrite the table prefix old->new for
+        -- INDEX rows on renamed tables so those passes recognise and rename (or drop) it.
+        UPDATE SchemaSmith_ProductOwnership po
+        INNER JOIN _SchemaSmith_TableRenames r
+            ON po.ObjectName COLLATE utf8mb4_unicode_ci LIKE CONCAT(r.OldTableName, '.%') COLLATE utf8mb4_unicode_ci
+        SET po.ObjectName = CONCAT(r.NewTableName, SUBSTRING(po.ObjectName FROM CHAR_LENGTH(r.OldTableName) + 1))
+        WHERE po.ProductName COLLATE utf8mb4_unicode_ci = CONVERT(p_ProductName USING utf8mb4) COLLATE utf8mb4_unicode_ci
+          AND po.ObjectSchema COLLATE utf8mb4_unicode_ci = CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci
+          AND po.ObjectType COLLATE utf8mb4_unicode_ci = _utf8mb4'INDEX' COLLATE utf8mb4_unicode_ci;
+
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_TableRenames;
     END IF;
 

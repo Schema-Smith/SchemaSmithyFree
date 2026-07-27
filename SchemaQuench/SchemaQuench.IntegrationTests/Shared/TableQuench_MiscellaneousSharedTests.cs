@@ -627,6 +627,74 @@ INSERT INTO `{_mainDb}`.`{tableName}` (id, price) VALUES (1, 100.00);
         conn.Close();
     }
 
+    // Cross-engine parity for the PG 42P16 constraint-rename bug. MySQL/MariaDB always name the PK
+    // "PRIMARY" (a declared PK name is cosmetic), so the analog is renaming a NON-PK unique index on
+    // a renamed table: the index's ownership row still carries the old table name, so the removed-
+    // from-product drop pass must not leave the old-named unique index behind as a silent duplicate.
+    [Test]
+    public void ShouldRenameTableAndItsUniqueIndexViaOldNameAcrossTwoDeploys()
+    {
+        var productName = Guid.NewGuid().ToString();
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var oldTableName = $"uq_old_{uniqueId}";
+        var newTableName = $"uq_new_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        // v1 deploy: create + own the table with a named non-PK unique index.
+        var jsonV1 = $$"""
+        [{
+            "Name": "{{oldTableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT", "Nullable": false, "AutoIncrement": true},
+                {"Name": "code", "DataType": "INT", "Nullable": false}
+            ],
+            "Indexes": [
+                {"Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "IndexColumns": "id"},
+                {"Name": "uq_idx_{{oldTableName}}", "Unique": true, "IndexColumns": "code"}
+            ]
+        }]
+        """;
+        cmd.CommandText = $"CALL SchemaSmith_TableQuench('{productName}', '{_mainDb}', '{jsonV1.Replace("'", "''")}', 0, 0, 1)";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"INSERT INTO `{_mainDb}`.`{oldTableName}` (code) VALUES (5)";
+        cmd.ExecuteNonQuery();
+
+        // v2 deploy: rename the table via OldName AND rename its unique index.
+        var jsonV2 = $$"""
+        [{
+            "Name": "{{newTableName}}",
+            "OldName": "{{oldTableName}}",
+            "Columns": [
+                {"Name": "id", "DataType": "INT", "Nullable": false, "AutoIncrement": true},
+                {"Name": "code", "DataType": "INT", "Nullable": false}
+            ],
+            "Indexes": [
+                {"Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "IndexColumns": "id"},
+                {"Name": "uq_idx_{{newTableName}}", "Unique": true, "IndexColumns": "code"}
+            ]
+        }]
+        """;
+        cmd.CommandText = $"CALL SchemaSmith_TableQuench('{productName}', '{_mainDb}', '{jsonV2.Replace("'", "''")}', 0, 0, 1)";
+        Assert.DoesNotThrow(() => cmd.ExecuteNonQuery(), "Renaming a table and its unique index via OldName should not error");
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{oldTableName}'";
+        Assert.That(Convert.ToInt64(cmd.ExecuteScalar()), Is.EqualTo(0), "Old table should no longer exist");
+        cmd.CommandText = $"SELECT code FROM `{_mainDb}`.`{newTableName}` LIMIT 1";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(5), "Data should be preserved after rename");
+
+        // Unique index renamed: new name present, old-named unique index gone (no silent duplicate).
+        cmd.CommandText = $"SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{newTableName}' AND INDEX_NAME = 'uq_idx_{newTableName}'";
+        Assert.That(Convert.ToInt64(cmd.ExecuteScalar()), Is.EqualTo(1), "Unique index should exist under its new name");
+        cmd.CommandText = $"SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{newTableName}' AND INDEX_NAME = 'uq_idx_{oldTableName}'";
+        Assert.That(Convert.ToInt64(cmd.ExecuteScalar()), Is.EqualTo(0), "Old-named unique index should be gone");
+
+        conn.Close();
+    }
+
     // A single deploy that BOTH renames the table (via OldName) AND adds a brand-new column. The
     // rename must run before the add-columns pass, or the ADD COLUMN targets a table that does not
     // exist yet (error 1146). This is the case the rename-first restructure specifically enables.
