@@ -13,17 +13,16 @@
 # the whole pipeline again is a clean no-op on already-converged databases.
 set -euo pipefail
 
-SCHEMAQUENCH="${SCHEMAQUENCH:-schemaquench}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../../../lab-sql.sh"
+
+SCHEMAQUENCH="${SCHEMAQUENCH:-schemaquench}"
 STARTER="$(cd "$HERE/../../starter/postgres" && pwd)"
 SOLUTION="$(cd "$HERE/../../solution/postgres" && pwd)"
 SETTINGS="$SOLUTION/base.settings.json"          # connection + package defaults, shared by every env
 
 index_state() {
-  local out
-  out="$(docker exec learn-postgres psql -U postgres -d "$1" -tAc \
-    "SELECT COALESCE((SELECT indexname FROM pg_indexes WHERE indexname='ix_customer_email'),'ABSENT')")"
-  echo "${out//[$'\t\r\n ']/}"
+  lab_sql postgres "$1" "SELECT COALESCE((SELECT indexname FROM pg_indexes WHERE indexname='ix_customer_email'),'ABSENT')"
 }
 
 echo "=== Step 1: deploy the BASE (starter) to staging — establish current production state ==="
@@ -44,7 +43,7 @@ echo "--- Prove WhatIf applied NOTHING: ix_customer_email on staging should read
 state="$(index_state ordersservice_staging)"
 echo "    staging ix_customer_email: $state"
 if [ "$state" != "ABSENT" ]; then
-  echo "    FAIL: WhatIf should not have created the index." >&2
+  echo "    FAIL: WhatIf should not have created the index, but the catalog reports '$state'." >&2
   exit 1
 fi
 

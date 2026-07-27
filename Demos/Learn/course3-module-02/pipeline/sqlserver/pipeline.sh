@@ -13,21 +13,16 @@
 # the whole pipeline again is a clean no-op on already-converged databases.
 set -euo pipefail
 
-SCHEMAQUENCH="${SCHEMAQUENCH:-schemaquench}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../../../lab-sql.sh"
+
+SCHEMAQUENCH="${SCHEMAQUENCH:-schemaquench}"
 STARTER="$(cd "$HERE/../../starter/sqlserver" && pwd)"
 SOLUTION="$(cd "$HERE/../../solution/sqlserver" && pwd)"
 SETTINGS="$SOLUTION/base.settings.json"          # connection + package defaults, shared by every env
 
-run_query() {
-  # MSYS_NO_PATHCONV keeps Git Bash from rewriting the container's /opt/... path;
-  # it's harmless on Linux/macOS.
-  MSYS_NO_PATHCONV=1 docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd \
-    -S localhost -U sa -P 'Learn!Passw0rd' -C -d "$1" -h -1 -W \
-    -Q "SET NOCOUNT ON; $2"
-}
 index_state() {
-  run_query "$1" "SELECT ISNULL((SELECT name FROM sys.indexes WHERE name='IX_Customer_Email'),'ABSENT')"
+  lab_sql sqlserver "$1" "SELECT ISNULL((SELECT name FROM sys.indexes WHERE name='IX_Customer_Email'),'ABSENT')"
 }
 
 echo "=== Step 1: deploy the BASE (starter) to staging — establish current production state ==="
@@ -48,7 +43,7 @@ echo "--- Prove WhatIf applied NOTHING: IX_Customer_Email on staging should read
 state="$(index_state ordersservice_staging)"
 echo "    staging IX_Customer_Email: $state"
 if [ "$state" != "ABSENT" ]; then
-  echo "    FAIL: WhatIf should not have created the index." >&2
+  echo "    FAIL: WhatIf should not have created the index, but the catalog reports '$state'." >&2
   exit 1
 fi
 

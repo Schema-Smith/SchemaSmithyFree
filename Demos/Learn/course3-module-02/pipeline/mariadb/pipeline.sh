@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Course 3 · Module 2 — local CI/CD pipeline simulation (MySQL)
+# Course 3 · Module 2 — local CI/CD pipeline simulation (MariaDB)
 #
 # Simulates the merge -> staging -> prod flow the chapter describes. The COMMANDS
 # this script runs ARE the contract; a CI YAML is just a wrapper around them.
@@ -13,18 +13,16 @@
 # the whole pipeline again is a clean no-op on already-converged databases.
 set -euo pipefail
 
-SCHEMAQUENCH="${SCHEMAQUENCH:-schemaquench}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STARTER="$(cd "$HERE/../../starter/mysql" && pwd)"
-SOLUTION="$(cd "$HERE/../../solution/mysql" && pwd)"
+. "$HERE/../../../lab-sql.sh"
+
+SCHEMAQUENCH="${SCHEMAQUENCH:-schemaquench}"
+STARTER="$(cd "$HERE/../../starter/mariadb" && pwd)"
+SOLUTION="$(cd "$HERE/../../solution/mariadb" && pwd)"
 SETTINGS="$SOLUTION/base.settings.json"          # connection + package defaults, shared by every env
 
 index_state() {
-  # MYSQL_PWD avoids the client's "password on the command line is insecure" warning.
-  local out
-  out="$(docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mysql mysql -uroot -N -e \
-    "SELECT IFNULL((SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='$1' AND INDEX_NAME='IX_Customer_Email' LIMIT 1),'ABSENT')")"
-  echo "${out//[$'\t\r\n ']/}"
+  lab_sql mariadb "$1" "SELECT IFNULL((SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='$1' AND INDEX_NAME='IX_Customer_Email' LIMIT 1),'ABSENT')"
 }
 
 echo "=== Step 1: deploy the BASE (starter) to staging — establish current production state ==="
@@ -45,7 +43,7 @@ echo "--- Prove WhatIf applied NOTHING: IX_Customer_Email on staging should read
 state="$(index_state ordersservice_staging)"
 echo "    staging IX_Customer_Email: $state"
 if [ "$state" != "ABSENT" ]; then
-  echo "    FAIL: WhatIf should not have created the index." >&2
+  echo "    FAIL: WhatIf should not have created the index, but the catalog reports '$state'." >&2
   exit 1
 fi
 

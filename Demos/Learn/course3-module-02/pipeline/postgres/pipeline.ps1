@@ -11,6 +11,7 @@
 # Re-runnable: every quench converges to the declared state and stops, so running
 # the whole pipeline again is a clean no-op on already-converged databases.
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\..\..\..\lab-sql.ps1"
 
 $SchemaQuench = if ($env:SCHEMAQUENCH) { $env:SCHEMAQUENCH } else { 'schemaquench' }
 $here     = $PSScriptRoot
@@ -24,14 +25,19 @@ function Invoke-Quench {
     $env:SmithySettings_ScriptTokens__TargetDb = $TargetDb
     $env:SmithySettings_WhatIfONLY             = $WhatIf
     & $SchemaQuench "--ConfigFile:$settings"
+    $quenchExit = $LASTEXITCODE
     Remove-Item Env:SmithySettings_SchemaPackagePath, Env:SmithySettings_ScriptTokens__TargetDb, Env:SmithySettings_WhatIfONLY
+    # A failed deploy makes every later step meaningless - stop here rather than let a
+    # downstream check report a confusing symptom of this failure. (The bash twin gets
+    # this from `set -e`.)
+    if ($quenchExit -ne 0) {
+        throw "SchemaQuench failed (exit $quenchExit) deploying $PackagePath to $TargetDb."
+    }
 }
 
 function Get-IndexState {
     param([string]$Db)
-    $out = docker exec learn-postgres psql -U postgres -d $Db -tAc `
-        "SELECT COALESCE((SELECT indexname FROM pg_indexes WHERE indexname='ix_customer_email'),'ABSENT')"
-    ($out | Out-String).Trim()
+    Invoke-LabSql -Engine 'postgres' -Database $Db -Sql "SELECT COALESCE((SELECT indexname FROM pg_indexes WHERE indexname='ix_customer_email'),'ABSENT')"
 }
 
 Write-Host "=== Step 1: deploy the BASE (starter) to staging - establish current production state ==="
@@ -43,7 +49,10 @@ Invoke-Quench "$solution\Package" 'ordersservice_staging' 'true'
 Write-Host "`n--- Prove WhatIf applied NOTHING: ix_customer_email on staging should read ABSENT ---"
 $state = Get-IndexState 'ordersservice_staging'
 Write-Host "    staging ix_customer_email: $state"
-if ($state -ne 'ABSENT') { Write-Error "WhatIf should not have created the index."; exit 1 }
+if ($state -ne 'ABSENT') {
+    Write-Error "WhatIf should not have created the index, but the catalog reports '$state'."
+    exit 1
+}
 
 Write-Host "`n=== Step 3: WhatIf passed - deploy the SOLUTION to staging ==="
 Invoke-Quench "$solution\Package" 'ordersservice_staging' 'false'

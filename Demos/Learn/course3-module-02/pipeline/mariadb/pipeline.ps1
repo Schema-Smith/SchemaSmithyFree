@@ -1,4 +1,4 @@
-# Course 3 - Module 2 - local CI/CD pipeline simulation (MySQL)
+# Course 3 - Module 2 - local CI/CD pipeline simulation (MariaDB)
 #
 # Simulates the merge -> staging -> prod flow the chapter describes. The COMMANDS
 # this script runs ARE the contract; a CI YAML is just a wrapper around them.
@@ -11,11 +11,12 @@
 # Re-runnable: every quench converges to the declared state and stops, so running
 # the whole pipeline again is a clean no-op on already-converged databases.
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\..\..\..\lab-sql.ps1"
 
 $SchemaQuench = if ($env:SCHEMAQUENCH) { $env:SCHEMAQUENCH } else { 'schemaquench' }
 $here     = $PSScriptRoot
-$starter  = (Resolve-Path "$here\..\..\starter\mysql").Path
-$solution = (Resolve-Path "$here\..\..\solution\mysql").Path
+$starter  = (Resolve-Path "$here\..\..\starter\mariadb").Path
+$solution = (Resolve-Path "$here\..\..\solution\mariadb").Path
 $settings = "$solution\base.settings.json"   # connection + package defaults, shared by every env
 
 function Invoke-Quench {
@@ -24,17 +25,19 @@ function Invoke-Quench {
     $env:SmithySettings_ScriptTokens__TargetDb = $TargetDb
     $env:SmithySettings_WhatIfONLY             = $WhatIf
     & $SchemaQuench "--ConfigFile:$settings"
+    $quenchExit = $LASTEXITCODE
     Remove-Item Env:SmithySettings_SchemaPackagePath, Env:SmithySettings_ScriptTokens__TargetDb, Env:SmithySettings_WhatIfONLY
+    # A failed deploy makes every later step meaningless - stop here rather than let a
+    # downstream check report a confusing symptom of this failure. (The bash twin gets
+    # this from `set -e`.)
+    if ($quenchExit -ne 0) {
+        throw "SchemaQuench failed (exit $quenchExit) deploying $PackagePath to $TargetDb."
+    }
 }
 
 function Get-IndexState {
     param([string]$Db)
-    # Pass the password via MYSQL_PWD (-e MYSQL_PWD=...) so the client doesn't print the
-    # "password on the command line is insecure" warning to stderr, which PowerShell 5.1
-    # would otherwise surface as a terminating NativeCommandError under -ErrorActionPreference Stop.
-    $out = docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mysql mysql -uroot -N -e `
-        "SELECT IFNULL((SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='$Db' AND INDEX_NAME='IX_Customer_Email' LIMIT 1),'ABSENT')"
-    ($out | Out-String).Trim()
+    Invoke-LabSql -Engine 'mariadb' -Database $Db -Sql "SELECT IFNULL((SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='$Db' AND INDEX_NAME='IX_Customer_Email' LIMIT 1),'ABSENT')"
 }
 
 Write-Host "=== Step 1: deploy the BASE (starter) to staging - establish current production state ==="
@@ -46,7 +49,10 @@ Invoke-Quench "$solution\Package" 'ordersservice_staging' 'true'
 Write-Host "`n--- Prove WhatIf applied NOTHING: IX_Customer_Email on staging should read ABSENT ---"
 $state = Get-IndexState 'ordersservice_staging'
 Write-Host "    staging IX_Customer_Email: $state"
-if ($state -ne 'ABSENT') { Write-Error "WhatIf should not have created the index."; exit 1 }
+if ($state -ne 'ABSENT') {
+    Write-Error "WhatIf should not have created the index, but the catalog reports '$state'."
+    exit 1
+}
 
 Write-Host "`n=== Step 3: WhatIf passed - deploy the SOLUTION to staging ==="
 Invoke-Quench "$solution\Package" 'ordersservice_staging' 'false'
