@@ -115,6 +115,9 @@ internal static class DeferredMergeBuilder
             ? helper.GetRuleStatements(cmd, schemaOrDb, tableName, updateDescendents)
             : ((string)null, (string)null);
 
+        // PostgreSQL MERGE is a v15 feature; below 15 the (insert-only) deferred pass is emitted as
+        // INSERT ... ON CONFLICT DO NOTHING instead.
+        var legacyUpsert = pgServerVersionNum != 0 && pgServerVersionNum < 15;
         var only = updateDescendents ? "" : "ONLY ";
         var sb = new StringBuilder();
 
@@ -124,41 +127,69 @@ internal static class DeferredMergeBuilder
         sb.AppendLine($"  v_json JSON = '{tableData?.Replace("'", "''")}';");
         sb.AppendLine("  nextval BIGINT;");
         sb.AppendLine("BEGIN");
-        if (disableTriggers) sb.AppendLine($"ALTER TABLE \"{schema}\".\"{table}\" {only}DISABLE TRIGGER ALL;");
-        sb.AppendLine($"MERGE INTO {only}\"{schema}\".\"{table}\" AS \"Target\"");
-        sb.AppendLine("USING (");
-        sb.AppendLine("    WITH my_tables(arr) AS (VALUES(v_json::JSON))");
-        sb.AppendLine($"    SELECT {jsonSelectColumns}");
-        sb.AppendLine("      FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem");
-        sb.AppendLine(") AS \"Source\"");
-        sb.AppendLine($"ON {matchColumns}");
-        sb.AppendLine();
-        sb.AppendLine(" WHEN NOT MATCHED THEN");
-        sb.AppendLine("   INSERT (");
-        sb.AppendLine($" {insertColumns}");
+        // ONLY belongs BEFORE the table name on ALTER TABLE (matching DELETE FROM ONLY elsewhere).
+        if (disableTriggers) sb.AppendLine($"ALTER TABLE {only}\"{schema}\".\"{table}\" DISABLE TRIGGER ALL;");
 
-        if (!string.IsNullOrEmpty(identAndSeq))
+        if (legacyUpsert)
         {
-            var parts = identAndSeq.Split('=');
-            if (parts.Length >= 3)
-                sb.AppendLine($"   ) OVERRIDING {parts[2]} VALUE");
-            else
-                sb.AppendLine("   )");
+            var conflictKeys = string.Join(", ", keyColumns.Split(',')
+                .Select(k => $"\"{k.Trim().TrimStart('*').Trim('"')}\""));
+            var overriding = "";
+            if (!string.IsNullOrEmpty(identAndSeq))
+            {
+                var parts = identAndSeq.Split('=');
+                if (parts.Length >= 3) overriding = $" OVERRIDING {parts[2]} VALUE";
+            }
+            // ONLY is not valid on INSERT (an insert targets the named table directly; inheriting
+            // children are unaffected regardless), so it is omitted here.
+            var selectExprs = string.Join(", ", (insertColumns ?? "").Split(',').Select(c => $"\"Source\".{c.Trim()}"));
+            sb.AppendLine($"INSERT INTO \"{schema}\".\"{table}\" AS \"Target\" (");
+            sb.AppendLine($" {insertColumns}");
+            sb.AppendLine($"   ){overriding}");
+            sb.AppendLine($"  SELECT {selectExprs}");
+            sb.AppendLine("    FROM (WITH my_tables(arr) AS (VALUES(v_json::JSON))");
+            sb.AppendLine($"          SELECT {jsonSelectColumns}");
+            sb.AppendLine("            FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS \"Source\"");
+            sb.AppendLine($"ON CONFLICT ({conflictKeys}) DO NOTHING;");
         }
         else
         {
+            sb.AppendLine($"MERGE INTO {only}\"{schema}\".\"{table}\" AS \"Target\"");
+            sb.AppendLine("USING (");
+            sb.AppendLine("    WITH my_tables(arr) AS (VALUES(v_json::JSON))");
+            sb.AppendLine($"    SELECT {jsonSelectColumns}");
+            sb.AppendLine("      FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem");
+            sb.AppendLine(") AS \"Source\"");
+            sb.AppendLine($"ON {matchColumns}");
+            sb.AppendLine();
+            sb.AppendLine(" WHEN NOT MATCHED THEN");
+            sb.AppendLine("   INSERT (");
+            sb.AppendLine($" {insertColumns}");
+
+            if (!string.IsNullOrEmpty(identAndSeq))
+            {
+                var parts = identAndSeq.Split('=');
+                if (parts.Length >= 3)
+                    sb.AppendLine($"   ) OVERRIDING {parts[2]} VALUE");
+                else
+                    sb.AppendLine("   )");
+            }
+            else
+            {
+                sb.AppendLine("   )");
+            }
+
+            sb.AppendLine("  VALUES (");
+            if (insertColumns != null)
+            {
+                sb.AppendLine(string.Join(",\n", insertColumns.Split(',')
+                    .Select(c => $"        \"Source\".{c.Trim()}")));
+            }
             sb.AppendLine("   )");
+            sb.AppendLine(" ;");
         }
 
-        sb.AppendLine("  VALUES (");
-        if (insertColumns != null)
-        {
-            sb.AppendLine(string.Join(",\n", insertColumns.Split(',')
-                .Select(c => $"        \"Source\".{c.Trim()}")));
-        }
-        sb.AppendLine("   )");
-        sb.AppendLine(" ;");
-        if (disableTriggers) sb.AppendLine($"ALTER TABLE \"{schema}\".\"{table}\" {only}ENABLE TRIGGER ALL;");
+        if (disableTriggers) sb.AppendLine($"ALTER TABLE {only}\"{schema}\".\"{table}\" ENABLE TRIGGER ALL;");
 
         if (!string.IsNullOrEmpty(identAndSeq))
         {
