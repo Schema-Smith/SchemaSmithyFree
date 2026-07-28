@@ -71,8 +71,8 @@ namespace Schema.UnitTests.Utility
         [TestCase(Platform.SqlServer, 13, true)]    // SQL Server 2016
         [TestCase(Platform.SqlServer, 14, false)]   // 2017 floor
         [TestCase(Platform.SqlServer, 16, false)]
-        [TestCase(Platform.PostgreSQL, 14, true)]
-        [TestCase(Platform.PostgreSQL, 15, false)]  // floor
+        [TestCase(Platform.PostgreSQL, 13, true)]
+        [TestCase(Platform.PostgreSQL, 14, false)]  // floor
         [TestCase(Platform.MySQL, 507, true)]       // MySQL 5.7
         [TestCase(Platform.MySQL, 800, false)]      // 8.0 floor
         [TestCase(Platform.MariaDb, 1005, true)]    // MariaDB 10.5
@@ -83,7 +83,7 @@ namespace Schema.UnitTests.Utility
         }
 
         [TestCase(Platform.SqlServer, "2017 (major 14)")]
-        [TestCase(Platform.PostgreSQL, "15")]
+        [TestCase(Platform.PostgreSQL, "14")]
         [TestCase(Platform.MySQL, "8.0")]
         [TestCase(Platform.MariaDb, "10.6")]
         public void HardFloorDisplay_MatchesSupportedFloorsTable(Platform platform, string expected)

@@ -29,7 +29,7 @@ namespace Schema.Utility
         private static int HardFloorComparable(Platform platform) => platform switch
         {
             Platform.SqlServer => 14,     // SQL Server 2017
-            Platform.PostgreSQL => 15,    // PostgreSQL 15
+            Platform.PostgreSQL => 14,    // PostgreSQL 14 (NULLS NOT DISTINCT, a PG15 feature, is degraded below 15)
             Platform.MySQL => 800,        // MySQL 8.0
             Platform.MariaDb => 1006,     // MariaDB 10.6
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "No version floor defined for platform")
@@ -42,7 +42,7 @@ namespace Schema.Utility
         public static string HardFloorDisplay(Platform platform) => platform switch
         {
             Platform.SqlServer => "2017 (major 14)",
-            Platform.PostgreSQL => "15",
+            Platform.PostgreSQL => "14",
             Platform.MySQL => "8.0",
             Platform.MariaDb => "10.6",
             _ => HardFloorComparable(platform).ToString()

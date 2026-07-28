@@ -8,10 +8,13 @@ AS $$
 DECLARE
   -- Version-adaptive catalog read: pg_index.indnullsnotdistinct is PostgreSQL 15+. Referencing it
   -- on an older server errors at PLAN time (42703) even inside a never-taken branch, so the whole
-  -- snapshot SELECT is built dynamically and the column is swapped for a literal FALSE below 15. The
-  -- declared-side NullsNotDistinct is likewise neutralised to false below 15 (in the emit procs), so
-  -- FALSE-vs-FALSE produces no phantom churn on an old server that cannot support the clause.
-  v_nnd_expr TEXT := CASE WHEN "SchemaSmith"."ServerVersionNum"() >= 15 THEN 'idx.indnullsnotdistinct' ELSE 'FALSE' END;
+  -- snapshot SELECT is built dynamically and the column is swapped for a literal FALSE below 15. This
+  -- keys on the REAL server version (server_version_num), NOT the override-aware ServerVersionNum():
+  -- whether the physical column EXISTS is a property of the actual binary, so a test that forces a
+  -- higher version on a genuinely older server must still read the fallback. The declared-side
+  -- NullsNotDistinct is neutralised to false below 15 (override-aware) in the emit procs; the emitted
+  -- index therefore physically lacks the clause, so FALSE-vs-FALSE produces no phantom churn.
+  v_nnd_expr TEXT := CASE WHEN (current_setting('server_version_num')::int / 10000) >= 15 THEN 'idx.indnullsnotdistinct' ELSE 'FALSE' END;
 BEGIN
   -- Session-scoped snapshot of existing indexes, consumed by ModifiedTableQuench,
   -- IndexOnlyQuench, and MissingIndexesAndConstraintsQuench. Extracted to one proc so the

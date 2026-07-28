@@ -122,7 +122,7 @@ namespace SchemaQuench.UnitTests
                 try
                 {
                     ConfigureProduct("PostgreSQL", minimumVersion: "15");
-                    var quench = new StubDetectProductQuench("150010"); // major 15 == floor 15
+                    var quench = new StubDetectProductQuench("150010"); // major 15 meets declared min 15
 
                     Assert.DoesNotThrow(() => quench.ValidateMinimumVersion());
                 }
