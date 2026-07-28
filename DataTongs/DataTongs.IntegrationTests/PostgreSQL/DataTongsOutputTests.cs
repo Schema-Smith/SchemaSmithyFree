@@ -25,6 +25,9 @@ public class DataTongsOutputTests
     private string _connectionString = "";
     private Dictionary<string, string> _connProps = null!;
     private IDbConnection _connection = null!;
+    // The container's real PG major, threaded into the execute-type tests' BuildMergeScript so they
+    // generate the version-correct upsert for the container (shape-assert tests keep the default 0).
+    private int _pgServerVersionNum;
     private global::DataTongs.DataTongs _dataTongs = null!;
     private string _testOutputDir = null!;
 
@@ -47,6 +50,11 @@ public class DataTongsOutputTests
         var dbConnString = ConnectionString.Build(Platform.PostgreSQL, config["PostgreSQL:Server"], _integrationDb, config["PostgreSQL:User"], config["PostgreSQL:Password"], config["PostgreSQL:Port"], _connProps);
         _connection = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(dbConnString);
         _connection.Open();
+        using (var verCmd = _connection.CreateCommand())
+        {
+            verCmd.CommandText = "SELECT current_setting('server_version_num')::int / 10000";
+            _pgServerVersionNum = Convert.ToInt32(verCmd.ExecuteScalar());
+        }
         _dataTongs = new global::DataTongs.DataTongs(Platform.PostgreSQL);
         _testOutputDir = Path.Combine(Path.GetTempPath(), $"DataTongsTest_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testOutputDir);
@@ -161,7 +169,7 @@ public class DataTongsOutputTests
             var keyColumns = MergeScriptHelper.GetKeyColumns(Platform.PostgreSQL, command, "public", tableName);
             var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, "public", tableName, tableData, keyColumns,
                 mergeUpdate: true, mergeDelete: false, disableTriggers: false,
-                tokenizeScripts: false, mergeFilter: null);
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
             // Execute script - PostgreSQL scripts don't need statement splitting
             command.CommandText = script;
@@ -207,7 +215,7 @@ public class DataTongsOutputTests
             var tableData = @"[{""Id"":1,""Name"":""Ignored""},{""Id"":2,""Name"":""New""}]";
             var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, "public", tableName, tableData, "\"Id\"",
                 mergeUpdate: false, mergeDelete: false, disableTriggers: false,
-                tokenizeScripts: false, mergeFilter: null);
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
             // Execute script
             command.CommandText = script;

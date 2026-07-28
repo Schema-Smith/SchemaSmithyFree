@@ -40,7 +40,7 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(mv))
                                     WHEN i.reloptions IS NULL THEN 90
                                     ELSE (REGEXP_MATCH(ARRAY_TO_STRING(i.reloptions, ','), 'fillfactor=(\d+)') ) [1] ::int
                                     END AS "FillFactor",
-                               idx.indnullsnotdistinct AS "NullsNotDistinct"
+                               "SchemaSmith"."IndexNullsNotDistinct"(idx.indexrelid) AS "NullsNotDistinct"
                           FROM pg_index idx
                           JOIN pg_class i ON i.oid = idx.indexrelid
                           WHERE idx.indrelid = c.oid

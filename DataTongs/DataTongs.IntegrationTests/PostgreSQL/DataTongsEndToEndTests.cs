@@ -25,6 +25,9 @@ public class DataTongsEndToEndTests
     private string _connectionString = "";
     private Dictionary<string, string> _connProps = null!;
     private IDbConnection _connection = null!;
+    // The container's real PG major, threaded into BuildMergeScript so the execute-type tests generate
+    // the version-correct upsert (MERGE on 15+, INSERT ... ON CONFLICT below 15) for the container.
+    private int _pgServerVersionNum;
     private global::DataTongs.DataTongs _dataTongs = null!;
     private string _testOutputDir = null!;
 
@@ -46,6 +49,11 @@ public class DataTongsEndToEndTests
         var dbConnString = ConnectionString.Build(Platform.PostgreSQL, config["PostgreSQL:Server"], _integrationDb, config["PostgreSQL:User"], config["PostgreSQL:Password"], config["PostgreSQL:Port"], _connProps);
         _connection = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(dbConnString);
         _connection.Open();
+        using (var verCmd = _connection.CreateCommand())
+        {
+            verCmd.CommandText = "SELECT current_setting('server_version_num')::int / 10000";
+            _pgServerVersionNum = Convert.ToInt32(verCmd.ExecuteScalar());
+        }
         _dataTongs = new global::DataTongs.DataTongs(Platform.PostgreSQL);
         _testOutputDir = Path.Combine(Path.GetTempPath(), $"DataTongsE2E_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testOutputDir);
@@ -121,7 +129,7 @@ public class DataTongsEndToEndTests
             // Generate merge script for target table (Upsert: mergeUpdate=true, mergeDelete=false)
             var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, "public", targetTable, json, keyColumns,
                 mergeUpdate: true, mergeDelete: false, disableTriggers: false,
-                tokenizeScripts: false, mergeFilter: null);
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
             // Write script file
             var scriptFile = Path.Combine(_testOutputDir, $"Populate {targetTable}.sql");
@@ -186,7 +194,7 @@ public class DataTongsEndToEndTests
 
             var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, "public", tableName, json, "\"Id\"",
                 mergeUpdate: false, mergeDelete: false, disableTriggers: false,
-                tokenizeScripts: false, mergeFilter: null);
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
             command.CommandText = script;
             command.ExecuteNonQuery();
@@ -239,7 +247,7 @@ public class DataTongsEndToEndTests
 
             var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, "public", tableName, json, "\"Id\"",
                 mergeUpdate: false, mergeDelete: false, disableTriggers: false,
-                tokenizeScripts: false, mergeFilter: null);
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
             command.CommandText = script;
             command.ExecuteNonQuery();

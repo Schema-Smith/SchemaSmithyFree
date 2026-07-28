@@ -186,6 +186,14 @@ public class DataTongs
         using var sourceConnection = GetConnection(sourceDb);
         var cmd = sourceConnection.CreateCommand();
 
+        // PostgreSQL MERGE is a v15 feature; below 15 the generated merge script must use INSERT ... ON
+        // CONFLICT. DataTongs generates against the source it is extracting from, so the source version
+        // is the proxy for the target the Populate script will run on (the same-version case). A
+        // cross-version extract-then-deploy is not detected here — document if that surfaces.
+        var pgServerVersionNum = _platform.GetBasePlatform() == Platform.PostgreSQL
+            ? TargetVersionDetector.Detect(cmd, Platform.PostgreSQL).ServerComparable
+            : 0;
+
         var tablesProcessed = 0;
         var errors = 0;
 
@@ -307,7 +315,7 @@ public class DataTongs
                 var destSchemaOverride = schemaTemplateMode ? "{{SchemaName}}" : null;
                 var mergeSQL = MergeScriptHelper.BuildMergeScript(_platform, cmd, querySchema, tableName, tableData,
                     keyColumns, mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, table.Filter,
-                    disableRules, updateDescendents, destSchemaOverride);
+                    disableRules, updateDescendents, destSchemaOverride, pgServerVersionNum);
 
                 var scriptFilePath = Path.Combine(scriptPath, $"Populate {encodedDisplayName}.sql");
                 _progressLog.Info($"    Writing merge script to : {scriptFilePath}");
