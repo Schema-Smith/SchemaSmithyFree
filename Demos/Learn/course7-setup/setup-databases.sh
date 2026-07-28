@@ -5,11 +5,9 @@
 # is safe -- creation is idempotent. PASS is reported only after the five databases are
 # confirmed to exist on an engine.
 #
-# Tenant creation goes through lab_confirm_db (rather than the per-engine seed files under
-# seed/<engine>/01_create_tenant_databases.sql, which issue the same guarded CREATE DATABASE
-# statements) so each tenant is stamped as lab-provisioned -- that stamp is what lets
-# --reset safely drop and recreate the fleet on your own server without ever touching a
-# same-named database it didn't create.
+# Tenant creation goes through lab_confirm_db so each tenant is stamped as
+# lab-provisioned -- that stamp is what lets --reset safely drop and recreate the fleet on
+# your own server without ever touching a same-named database it didn't create.
 #
 # --reset drops and recreates the five tenant databases empty. Only databases the labs
 # created are ever dropped -- see lab_remove_db.

@@ -43,15 +43,8 @@ The setup scripts create each tenant through the shared lab connection helper
 ([`Demos/Learn/lab-sql.ps1`](../lab-sql.ps1) / [`lab-sql.sh`](../lab-sql.sh)), which issues the same
 guarded `CREATE DATABASE` per tenant and also stamps it as lab-provisioned — that stamp is what lets
 `-Reset` safely drop and recreate the fleet later without ever touching a same-named database it
-didn't create. The per-engine files below show the equivalent guarded `CREATE DATABASE` statements
-for reference:
-
-| File | Purpose |
-| --- | --- |
-| [`seed/sqlserver/01_create_tenant_databases.sql`](seed/sqlserver/01_create_tenant_databases.sql) | `CREATE DATABASE fleet_tenant_001..005` (guarded on `DB_ID`). |
-| [`seed/postgres/01_create_tenant_databases.sql`](seed/postgres/01_create_tenant_databases.sql) | Generates + `\gexec`s the missing `CREATE DATABASE` statements (PostgreSQL has no `IF NOT EXISTS` for databases). |
-| [`seed/mysql/01_create_tenant_databases.sql`](seed/mysql/01_create_tenant_databases.sql) | `CREATE DATABASE IF NOT EXISTS fleet_tenant_001..005`. |
-| [`seed/mariadb/01_create_tenant_databases.sql`](seed/mariadb/01_create_tenant_databases.sql) | `CREATE DATABASE IF NOT EXISTS fleet_tenant_001..005` (MariaDB native package). |
+didn't create. Each engine's dialect differs (PostgreSQL, for instance, has no `IF NOT EXISTS` for
+databases), and the helper handles that for you.
 
 ## Verify by hand
 
