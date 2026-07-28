@@ -22,13 +22,15 @@ Either path lands you in the same place: the AdventureWorks, Northwind, Sakila, 
 
 The helper uses your engine's command-line client to create, stamp, and drop the demo databases, so that client must be on your `PATH`. None are bundled — install the one for your engine and re-open your shell.
 
-> **SQL Server — `sqlcmd`.** `winget install Microsoft.SQLServer.SqlCmd` (Windows) · `brew install sqlcmd` (macOS) · `mssql-tools18` per the [Microsoft docs](https://learn.microsoft.com/sql/tools/sqlcmd/sqlcmd-utility) (Linux). Verify with `sqlcmd -?`.
+> **SQL Server — `sqlcmd`.** `winget install Microsoft.Sqlcmd` (Windows) · `brew install sqlcmd` (macOS) · `mssql-tools18` per the [Microsoft docs](https://learn.microsoft.com/sql/tools/sqlcmd/sqlcmd-utility) (Linux). Verify with `sqlcmd -?`.
 
-> **PostgreSQL — `psql`.** `winget install PostgreSQL.PostgreSQL` (Windows) · `brew install libpq` or `postgresql` (macOS) · `apt-get install postgresql-client` / `dnf install postgresql` (Linux). Verify with `psql --version`.
+> **PostgreSQL — `psql`.** macOS: `brew install libpq` (client only) or `postgresql`. Linux: `apt-get install postgresql-client` / `dnf install postgresql`. Windows: take the [binary ZIP](https://www.enterprisedb.com/download-postgresql-binaries) and put its `bin\` on your `PATH` — or install the whole server with `winget install PostgreSQL.PostgreSQL.17` (the version suffix is required; the bare id doesn't exist). Verify with `psql --version`.
 
-> **MySQL — `mysql`.** `winget install Oracle.MySQL` (Windows) · `brew install mysql-client` (macOS) · `apt-get install mysql-client` / `dnf install mysql` (Linux). Verify with `mysql --version`.
+> **MySQL — `mysql`.** macOS: `brew install mysql-client`. Linux: `apt-get install mysql-client` / `dnf install mysql`. Windows: the [ZIP archive](https://dev.mysql.com/downloads/mysql/) gives you `bin\mysql.exe` with no server; `winget install Oracle.MySQL` also works but installs the full server. Verify with `mysql --version`.
 
-> **MariaDB — `mariadb`.** `winget install MariaDB.Client` (Windows) · `brew install mariadb` (macOS) · `apt-get install mariadb-client` / `dnf install MariaDB-client` (Linux). Verify with `mariadb --version`. (`mysql` is a legacy symlink being phased out — the helper calls `mariadb`.)
+> **MariaDB — `mariadb`.** macOS: `brew install mariadb`. Linux: `apt-get install mariadb-client` / `dnf install MariaDB-client`. Windows: take the [ZIP package](https://mariadb.org/download/) and use its `bin\mariadb.exe`; `winget install MariaDB.Server` is server-and-all. Verify with `mariadb --version`. (`mysql` is a legacy symlink being phased out — the helper calls `mariadb`.)
+
+> **A client is not a server.** On Windows the vendors mostly ship the client inside the server package, so a `winget install` will put a database service on your machine — bound to a default port, which is exactly where your existing server or containers already live. The ZIP archives above hold the same executables with nothing to install and nothing to collide with. The MariaDB package also drops a `mysql.exe` alias; it is *not* a MySQL client and cannot authenticate to MySQL 8.
 
 Each helper checks for its client and stops with these same instructions if it can't find it.
 
@@ -108,6 +110,22 @@ product|SS_Northwind|NorthwindDb|Northwind
 Re-run the helper. It now deploys the same package to a database named `SS_Northwind`, and your real `Northwind` is never touched. Only the `NAME` column changes — leave `TOKEN` and `PACKAGE` as they are.
 
 > **Full-Text Search is optional (SQL Server).** The AdventureWorks demo includes a full-text catalog, three full-text indexes, and a search procedure. If your server doesn't have Full-Text Search installed, those objects are skipped automatically — you'll see `Skipping folder ... ShouldApplyExpression evaluated false` in the log, telling you exactly what was left out and why — and the rest of AdventureWorks deploys normally. Install Full-Text Search on the server if you want the full-text objects.
+
+## The Learn labs on your own server
+
+The training labs have their own helper, because they provision many small databases per course rather than one demo set. From `Demos/Learn`, **source** the activation script once per shell:
+
+```bash
+. ./use-my-server.sh --engine postgres --server your-host --port 5432 --user you --password '…'
+```
+
+```powershell
+. .\use-my-server.ps1 -Engine postgres -Server your-host -Port 5432 -User you -Password '…'
+```
+
+Every lab command in every course then works exactly as written — no settings file is edited. Each course's setup script creates that course's databases on your server, and stamps them, so a database it didn't create is never dropped or deployed into. Full walkthrough: [`Demos/Learn/README.md`](https://github.com/Schema-Smith/SchemaSmith/blob/main/Demos/Learn/README.md).
+
+> **A SQL login, not Windows Authentication — for now.** The labs override connection settings through environment variables, and on Windows an override can't clear a credential a settings file already declares. Create a SQL login for the labs; Windows Authentication follows in a later release. The demo helper above is unaffected — it takes Windows Authentication today.
 
 ## Bring your own database instead
 
