@@ -337,11 +337,11 @@ These are the minimum versions SchemaSmith supports for deployment:
 | Platform | Minimum supported |
 |----------|------------------|
 | SQL Server | 2017 (major version 14) |
-| PostgreSQL | 15 |
+| PostgreSQL | 14 |
 | MySQL | 8.0 |
 | MariaDB | 10.6 |
 
-**These floors are enforced automatically — you don't declare anything.** Before any deployment (SchemaQuench) or extraction (SchemaTongs) work begins, the target server's version is detected and logged; a below-floor server aborts the run with a clear "unsupported version" message instead of failing later with a raw engine error. For SQL Server, the target database's `compatibility_level` is checked too — it must be `140` or higher (SQL Server 2017), even on a 2017+ server, because the engine scripts use `STRING_AGG`; a database left at a lower compatibility level is reported distinctly from a too-old server. `MinimumVersion` (below) is a separate, opt-in gate for raising the floor *further* per product.
+**These floors are enforced automatically — you don't declare anything.** Before any deployment (SchemaQuench) or extraction (SchemaTongs) work begins, the target server's version is detected and logged; a below-floor server aborts the run with a clear "unsupported version" message instead of failing later with a raw engine error. For SQL Server, the target database's `compatibility_level` is checked too — it must be `130` or higher (SQL Server 2016), even on a 2017+ server, because the JSON ingest uses `OPENJSON` (compatibility-level-gated at 130); a database left at a lower compatibility level is reported distinctly from a too-old server. `MinimumVersion` (below) is a separate, opt-in gate for raising the floor *further* per product.
 
 ### MinimumVersion pre-flight gate
 
@@ -363,6 +363,13 @@ When the supported range across your targets diverges, SchemaSmith adapts the DD
 | **Delete-on-absence** (`Insert/Update/Delete` DataDelivery) | Single `MERGE … WHEN NOT MATCHED BY SOURCE THEN DELETE` | `MERGE` for insert/update, then a follow-on `DELETE … WHERE NOT EXISTS` keyed identically, honoring the same merge filter |
 
 In both cases the end state is identical. On PostgreSQL 15 and 16, SchemaSmith takes the longer path that those engine versions support. You can deploy the same package to PostgreSQL 15, 16, or 17 and the result is the same database.
+
+**PostgreSQL 14 — below-15 features degrade rather than block.** A few constructs are PostgreSQL 15 features. On a 14 target:
+
+- **`NULLS NOT DISTINCT`** (unique indexes/constraints) is emitted *without* the clause, and each affected object is listed under **Unsupported Feature Downgrades** in the deployment summary so you know exactly what was relaxed. This is the default `warn` policy; set `Target:UnsupportedFeaturePolicy=fail` (for example `SmithySettings_Target__UnsupportedFeaturePolicy=fail`) to abort instead with a "requires PostgreSQL 15" message rather than deploy a silently-degraded schema.
+- **Data delivery** (`Insert/Update` / `Insert/Update/Delete`) uses `INSERT … ON CONFLICT` for the insert/update pass, since `MERGE` is a PostgreSQL 15 feature. The delete-on-absence pass is the same version-agnostic `DELETE` used on 15/16.
+
+Everything else deploys identically to 15+.
 
 ### MariaDB (MySQL family) — where the native DDL diverges
 
