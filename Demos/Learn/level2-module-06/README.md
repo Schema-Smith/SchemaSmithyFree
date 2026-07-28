@@ -56,11 +56,11 @@ cd <engine>
 schemaquench --ConfigFile:deploy.settings.json
 ```
 
-```sql
--- SQL Server (from a SQL client):
---   SELECT TableName, ColumnName, ISNULL(Classification,'(none)') AS Classification, OwningTeam
---   FROM dbo.DataCatalog ORDER BY ColumnName;
-docker exec learn-postgres psql -U postgres -d learn -c "SELECT tablename, columnname, COALESCE(classification,'(none)') AS classification, owningteam FROM public.datacatalog ORDER BY columnname"
+```bash
+# SQL Server (from a SQL client):
+#   SELECT TableName, ColumnName, ISNULL(Classification,'(none)') AS Classification, OwningTeam
+#   FROM dbo.DataCatalog ORDER BY ColumnName;
+../lab-sql.sh postgres learn "SELECT tablename, columnname, COALESCE(classification,'(none)') AS classification, owningteam FROM public.datacatalog ORDER BY columnname"
 ```
 
 ```

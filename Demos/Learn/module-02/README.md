@@ -77,8 +77,8 @@ PostgreSQL says `Create new table public.Widget`; MySQL says ``Create table `Wid
 
 ```bash
 # SQL Server (from a SQL client): SELECT name FROM sys.tables WHERE name = 'Widget';
-docker exec learn-postgres psql -U postgres -d learn -tAc "SELECT to_regclass('public.\"Widget\"')"
-docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT table_name FROM information_schema.tables WHERE table_schema='learn' AND table_name='Widget'"
+../../../lab-sql.sh postgres learn "SELECT to_regclass('public.\"Widget\"')"
+../../../lab-sql.sh mysql learn "SELECT table_name FROM information_schema.tables WHERE table_schema='learn' AND table_name='Widget'"
 ```
 
 ## Step 5: Run it again — the "aha"

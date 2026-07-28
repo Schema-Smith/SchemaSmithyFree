@@ -72,7 +72,7 @@ no-op. Idempotency is now the engine's job, not a guard you hand-write into each
 
 ```bash
 # confirm schema_version is still there, untouched — drop it whenever you like
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d shop_from_scripts -Q \"SELECT name FROM sys.tables WHERE name='schema_version'\""
+../../lab-sql.sh sqlserver shop_from_scripts "SELECT name FROM sys.tables WHERE name='schema_version'"
 # → schema_version  (left exactly where it was)
 ```
 

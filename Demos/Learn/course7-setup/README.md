@@ -53,20 +53,16 @@ runs. To confirm the five tenants are present:
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -Q "SELECT name FROM sys.databases WHERE name LIKE 'fleet[_]tenant[_]%' ORDER BY name"
+../lab-sql.sh sqlserver master "SELECT name FROM sys.databases WHERE name LIKE 'fleet[_]tenant[_]%' ORDER BY name"
 
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -c \
-  "SELECT datname FROM pg_database WHERE datname LIKE 'fleet\_tenant\_%' ORDER BY datname"
+../lab-sql.sh postgres postgres "SELECT datname FROM pg_database WHERE datname LIKE 'fleet\_tenant\_%' ORDER BY datname"
 
 # MySQL
-docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e \
-  "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'fleet\_tenant\_%' ORDER BY schema_name"
+../lab-sql.sh mysql information_schema "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'fleet\_tenant\_%' ORDER BY schema_name"
 
 # MariaDB
-docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e \
-  "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'fleet\_tenant\_%' ORDER BY schema_name"
+../lab-sql.sh mariadb information_schema "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'fleet\_tenant\_%' ORDER BY schema_name"
 ```
 
 Onboarding a sixth tenant later (Module 1 demonstrates this) is just another `CREATE DATABASE

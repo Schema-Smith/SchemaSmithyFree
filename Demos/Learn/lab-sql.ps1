@@ -42,11 +42,20 @@ function Get-LabContainer {
 # $ErrorActionPreference='Stop' (set by most lab scripts) turns into a terminating error
 # before we can inspect the exit code. Reading them as plain text keeps our own message
 # the one the learner sees.
-function ConvertTo-LabText($Streams) {
-    $lines = $Streams | ForEach-Object {
+#
+# Keep the two streams APART. Clients chatter on stderr even when they succeed -- MariaDB
+# warns about "insecure passwordless login" on every connection -- and folding that into
+# the result makes a query for a count return "WARNING...\n0" instead of "0". Callers
+# compare results against exact values, so contaminated output silently takes the wrong
+# branch. That is the same failure this helper exists to prevent.
+function Split-LabStreams($Streams) {
+    $text = { param($s) (($s | ForEach-Object {
         if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ }
+    }) -join [Environment]::NewLine).Trim() }
+    return @{
+        Output = & $text @($Streams | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
+        Error  = & $text @($Streams | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
     }
-    return (($lines -join [Environment]::NewLine).Trim())
 }
 
 function Invoke-LabSql {
@@ -78,11 +87,12 @@ function Invoke-LabSql {
             'mariadb'   { $out = docker exec -e MYSQL_PWD=Learn!Passw0rd $container mariadb -uroot -N -s -D $Database -e $Sql 2>&1 }
         }
     }
-    $text = ConvertTo-LabText $out
+    $streams = Split-LabStreams $out
     if ($LASTEXITCODE -ne 0) {
-        throw "LAB-SQL: could not reach $Engine at $(Get-LabEndpointLabel $Engine) [database '$Database'] -- $text"
+        $detail = if ($streams.Error) { $streams.Error } else { $streams.Output }
+        throw "LAB-SQL: could not reach $Engine at $(Get-LabEndpointLabel $Engine) [database '$Database'] -- $detail"
     }
-    return $text
+    return $streams.Output
 }
 
 function Invoke-LabSqlFile {
@@ -119,7 +129,9 @@ function Invoke-LabSqlFile {
         }
     }
     if ($LASTEXITCODE -ne 0) {
-        throw "LAB-SQL: failed running '$([System.IO.Path]::GetFileName($Path))' against $Engine at $(Get-LabEndpointLabel $Engine) [database '$Database'] -- $(ConvertTo-LabText $out)"
+        $streams = Split-LabStreams $out
+        $detail = if ($streams.Error) { $streams.Error } else { $streams.Output }
+        throw "LAB-SQL: failed running '$([System.IO.Path]::GetFileName($Path))' against $Engine at $(Get-LabEndpointLabel $Engine) [database '$Database'] -- $detail"
     }
 }
 
@@ -224,7 +236,15 @@ function Remove-LabDatabase {
     return 'dropped'
 }
 
-# Called as a command rather than dot-sourced: lab-sql.ps1 <engine> <database> <sql>
+# Called as a command rather than dot-sourced:
+#   lab-sql.ps1 <engine> <database> "<sql>"
+#   lab-sql.ps1 <engine> <database> --file <path.sql>
 if ($MyInvocation.InvocationName -ne '.' -and $args.Count -ge 3) {
-    Invoke-LabSql -Engine $args[0] -Database $args[1] -Sql ($args[2..($args.Count - 1)] -join ' ')
+    if ($args[2] -eq '--file') {
+        if ($args.Count -lt 4) { throw 'LAB-SQL: --file needs a path. Usage: lab-sql.ps1 <engine> <database> --file <path.sql>' }
+        Invoke-LabSqlFile -Engine $args[0] -Database $args[1] -Path $args[3]
+    }
+    else {
+        Invoke-LabSql -Engine $args[0] -Database $args[1] -Sql ($args[2..($args.Count - 1)] -join ' ')
+    }
 }

@@ -83,8 +83,7 @@ it — `drift-tenant-003.sql` relaxes `fleet_tenant_003`'s `Product.Sku` to allo
 NULL `Sku` in it:
 
 ```bash
-docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -i /dev/stdin < drift-tenant-003.sql
+../../lab-sql.sh sqlserver fleet_tenant_003 --file drift-tenant-003.sql
 ```
 
 Now run the fleet. Wire a checkpoint directory in — you'll need it in Step 4:
@@ -127,8 +126,7 @@ You've triaged: the failure was one drifted tenant. Fix it — `reset-tenant-003
 row so `Sku` can go back to NOT NULL:
 
 ```bash
-docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -i /dev/stdin < reset-tenant-003.sql
+../../lab-sql.sh sqlserver fleet_tenant_003 --file reset-tenant-003.sql
 ```
 
 Now **resume** the run. The failed run left its checkpoints behind (a clean run deletes them); `--ResumeQuench`

@@ -115,8 +115,8 @@ Both tables now live in the one `learn` database, side by side:
 
 ```bash
 # SQL Server (from a SQL client): SELECT name FROM sys.tables WHERE name IN ('Currency','SalesOrder');
-docker exec learn-postgres psql -U postgres -d learn -tAc "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('Currency','SalesOrder') ORDER BY tablename"
-docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT table_name FROM information_schema.tables WHERE table_schema='learn' AND table_name IN ('Currency','SalesOrder') ORDER BY table_name"
+../../../lab-sql.sh postgres learn "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('Currency','SalesOrder') ORDER BY tablename"
+../../../lab-sql.sh mysql learn "SELECT table_name FROM information_schema.tables WHERE table_schema='learn' AND table_name IN ('Currency','SalesOrder') ORDER BY table_name"
 ```
 
 Two tables, one shared lookup, declared in exactly one place. If `Currency` had been copied into both

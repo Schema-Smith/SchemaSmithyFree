@@ -129,7 +129,7 @@ Each tenant now has its own `Customers` and `Contacts`:
 # SQL Server (from a SQL client):
 #   SELECT s.name + '.' + t.name FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
 #     WHERE s.name IN ('acme','beta','globex') ORDER BY 1;
-docker exec learn-postgres psql -U postgres -d learn -tAc "SELECT table_schema || '.' || table_name FROM information_schema.tables WHERE table_schema IN ('acme','beta','globex') ORDER BY 1"
+../../lab-sql.sh postgres learn "SELECT table_schema || '.' || table_name FROM information_schema.tables WHERE table_schema IN ('acme','beta','globex') ORDER BY 1"
 ```
 
 Six rows: `Customers` and `Contacts` in each of the three tenant schemas — every tenant got the
@@ -141,7 +141,7 @@ This is the heart of the module. Add one tenant row, then run the same command a
 
 ```bash
 # SQL Server:  INSERT INTO dbo.Tenants ([Name],[DisplayName]) VALUES (N'initech', N'Initech Inc');
-docker exec learn-postgres psql -U postgres -d learn -c "INSERT INTO public.tenants (name, display_name) VALUES ('initech','Initech Inc')"
+../../lab-sql.sh postgres learn "INSERT INTO public.tenants (name, display_name) VALUES ('initech','Initech Inc')"
 
 cd <engine>
 schemaquench --ConfigFile:deploy.settings.json

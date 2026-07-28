@@ -44,23 +44,23 @@ Read the stored image back and confirm it's byte-for-byte the file you shipped (
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -d cookbook_r4 -Q \"SELECT DATALENGTH(Image), LOWER(CONVERT(VARCHAR(MAX), Image, 2)) FROM dbo.BrandAssets WHERE AssetName='Default'\""
+../../lab-sql.sh sqlserver cookbook_r4 "SELECT DATALENGTH(Image), LOWER(CONVERT(VARCHAR(MAX), Image, 2)) FROM dbo.BrandAssets WHERE AssetName='Default'"
 
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -d cookbook_r4 -tAc "SELECT octet_length(image), encode(image,'hex') FROM public.brandassets WHERE assetname='Default'"
+../../lab-sql.sh postgres cookbook_r4 "SELECT octet_length(image), encode(image,'hex') FROM public.brandassets WHERE assetname='Default'"
 
 # MySQL
-docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT LENGTH(Image), LOWER(HEX(Image)) FROM cookbook_r4.BrandAssets WHERE AssetName='Default'"
+../../lab-sql.sh mysql cookbook_r4 "SELECT LENGTH(Image), LOWER(HEX(Image)) FROM cookbook_r4.BrandAssets WHERE AssetName='Default'"
 
 # MariaDB
-docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT LENGTH(Image), LOWER(HEX(Image)) FROM cookbook_r4.BrandAssets WHERE AssetName='Default'"
+../../lab-sql.sh mariadb cookbook_r4 "SELECT LENGTH(Image), LOWER(HEX(Image)) FROM cookbook_r4.BrandAssets WHERE AssetName='Default'"
 ```
 
 All four return length `69` and the same hex (`89504e47…ae426082` — the PNG signature and bytes of
 `resources/logo.png`). And the reference data is in:
 
 ```bash
-docker exec learn-postgres psql -U postgres -d cookbook_r4 -tAc "SELECT string_agg(categoryname,',' ORDER BY categoryname) FROM public.category"
+../../lab-sql.sh postgres cookbook_r4 "SELECT string_agg(categoryname,',' ORDER BY categoryname) FROM public.category"
 # → Books,Electronics,Garden
 ```
 

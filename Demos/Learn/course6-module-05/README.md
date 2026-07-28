@@ -34,10 +34,8 @@ both tenants. Create + seed them, then deploy the baseline. SQL Server:
 cd sqlserver
 # create + seed both tenants (repeat the pattern for postgres/mysql/mariadb with their seed)
 for db in shop_patch_canary shop_patch_scratch; do
-  docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-    -Q "IF DB_ID('$db') IS NULL CREATE DATABASE [$db]"
-  docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-    -d $db -i /dev/stdin < ../../course6-setup/seed/sqlserver/shop.sql
+  ../../lab-sql.sh sqlserver master "IF DB_ID('$db') IS NULL CREATE DATABASE [$db]"
+  ../../lab-sql.sh sqlserver "$db" --file ../../course6-setup/seed/sqlserver/shop.sql
 done
 schemaquench --ConfigFile:quench.settings.baseline.json      # deploys baseline/ to both tenants (takes ownership)
 ```
@@ -47,8 +45,8 @@ MariaDB is the same pattern with its own client and seed:
 ```bash
 cd mariadb
 for db in shop_patch_canary shop_patch_scratch; do
-  docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS \`$db\`"
-  docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd "$db" < ../../course6-setup/seed/mariadb/shop.sql
+  ../../lab-sql.sh mariadb information_schema "CREATE DATABASE IF NOT EXISTS \`$db\`"
+  ../../lab-sql.sh mariadb "$db" --file ../../course6-setup/seed/mariadb/shop.sql
 done
 schemaquench --ConfigFile:quench.settings.baseline.json
 ```
@@ -140,8 +138,7 @@ The `PriceReviewBatch` column is added; `Customer`, `Product`, and `SalesOrder` 
 with all their data. Confirm:
 
 ```bash
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 \
-  -Q "SELECT COUNT(*) FROM shop_patch_canary.sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
+../../lab-sql.sh sqlserver shop_patch_canary "SELECT COUNT(*) FROM sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
 # -> 4  (all survive; the stamp held the line)
 ```
 
@@ -172,12 +169,11 @@ when you mean it.
 Drop the two dedicated tenants on each engine:
 
 ```bash
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -Q "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
-docker exec learn-postgres psql -U postgres -c "DROP DATABASE IF EXISTS shop_patch_canary WITH (FORCE)"
-docker exec learn-postgres psql -U postgres -c "DROP DATABASE IF EXISTS shop_patch_scratch WITH (FORCE)"
-docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
-docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
+../../lab-sql.sh sqlserver master "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
+../../lab-sql.sh postgres postgres "DROP DATABASE IF EXISTS shop_patch_canary WITH (FORCE)"
+../../lab-sql.sh postgres postgres "DROP DATABASE IF EXISTS shop_patch_scratch WITH (FORCE)"
+../../lab-sql.sh mysql information_schema "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
+../../lab-sql.sh mariadb information_schema "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
 ```
 
 ## The principle

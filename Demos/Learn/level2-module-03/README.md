@@ -53,7 +53,7 @@ Verify:
 ```bash
 # SQL Server: SELECT COUNT(*) FROM dbo.Orders;  -- 3
 #             index IX_Orders_Region is absent
-docker exec learn-postgres psql -U postgres -d learn -tAc "SELECT count(*) FROM public.orders"
+../../lab-sql.sh postgres learn "SELECT count(*) FROM public.orders"
 ```
 
 ## Step 3: Deploy the SAME package to prod
@@ -79,7 +79,7 @@ Verify the index now exists:
 
 ```bash
 # SQL Server: index IX_Orders_Region is present on dbo.Orders
-docker exec learn-postgres psql -U postgres -d learn -tAc "SELECT indexname FROM pg_indexes WHERE tablename='orders' AND indexname='ix_orders_region'"
+../../lab-sql.sh postgres learn "SELECT indexname FROM pg_indexes WHERE tablename='orders' AND indexname='ix_orders_region'"
 ```
 
 (Both settings target the same `learn` database, so the dev sample rows persist into the prod

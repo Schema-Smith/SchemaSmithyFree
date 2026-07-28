@@ -80,8 +80,7 @@ SchemaSmith creates `fleet_tenant_006` on the admin connection, kindles the forg
 whole `Shop` schema — four tables — into the fresh database. `001` is a no-op. Confirm:
 
 ```bash
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 \
-  -Q "SELECT COUNT(*) FROM fleet_tenant_006.sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
+../../lab-sql.sh sqlserver fleet_tenant_006 "SELECT COUNT(*) FROM sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
 # → 4
 ```
 
@@ -148,11 +147,10 @@ grant.
 Drop `fleet_tenant_006` on each engine to return to the five-tenant baseline:
 
 ```bash
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -Q "ALTER DATABASE [fleet_tenant_006] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [fleet_tenant_006]"
-docker exec learn-postgres psql -U postgres -c "DROP DATABASE IF EXISTS fleet_tenant_006"
-docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "DROP DATABASE IF EXISTS fleet_tenant_006"
-docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "DROP DATABASE IF EXISTS fleet_tenant_006"
+../../lab-sql.sh sqlserver master "ALTER DATABASE [fleet_tenant_006] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [fleet_tenant_006]"
+../../lab-sql.sh postgres postgres "DROP DATABASE IF EXISTS fleet_tenant_006"
+../../lab-sql.sh mysql information_schema "DROP DATABASE IF EXISTS fleet_tenant_006"
+../../lab-sql.sh mariadb information_schema "DROP DATABASE IF EXISTS fleet_tenant_006"
 ```
 
 ## The principle

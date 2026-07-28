@@ -23,7 +23,7 @@ so you can diff your own extract against it.
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d shop_from_flyway -Q \"SELECT name FROM sys.tables ORDER BY name\""
+../lab-sql.sh sqlserver shop_from_flyway "SELECT name FROM sys.tables ORDER BY name"
 # → Customer, OrderItem, Product, SalesOrder, flyway_schema_history
 ```
 
@@ -65,7 +65,7 @@ no-op. That no-op is the proof: the package is a faithful cast of the live datab
 
 ```bash
 # confirm flyway_schema_history is still there, untouched — drop it whenever you like
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d shop_from_flyway -Q \"SELECT name FROM sys.tables WHERE name='flyway_schema_history'\""
+../../lab-sql.sh sqlserver shop_from_flyway "SELECT name FROM sys.tables WHERE name='flyway_schema_history'"
 # → flyway_schema_history  (left exactly where it was)
 ```
 

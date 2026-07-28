@@ -38,13 +38,13 @@ Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships two p
 ```bash
 cd <engine>
 # SQL Server
-docker exec -i learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d cookbook_r8" < install-audit-hooks.sql
+../../lab-sql.sh sqlserver cookbook_r8 --file install-audit-hooks.sql
 # PostgreSQL
-docker exec -i learn-postgres psql -U postgres -d cookbook_r8 -f - < install-audit-hooks.sql
+../../lab-sql.sh postgres cookbook_r8 --file install-audit-hooks.sql
 # MySQL
-docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd cookbook_r8 < install-audit-hooks.sql
+../../lab-sql.sh mysql cookbook_r8 --file install-audit-hooks.sql
 # MariaDB
-docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd cookbook_r8 < install-audit-hooks.sql
+../../lab-sql.sh mariadb cookbook_r8 --file install-audit-hooks.sql
 ```
 
 Installing the procedures opts this database into the recyclebin — no settings change needed. SchemaQuench
@@ -72,7 +72,7 @@ schemaquench --ConfigFile:remove-coupon.settings.json   # Coupon left the produc
 
 ```bash
 # SQL Server — archived table + audit row
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -W -d cookbook_r8 -Q \"SELECT TableName, ArchivedName, RowsArchived, RetentionDays, Action FROM SchemaSmith.TableDropAudit\""
+../../lab-sql.sh sqlserver cookbook_r8 "SELECT TableName, ArchivedName, RowsArchived, RetentionDays, Action FROM SchemaSmith.TableDropAudit"
 # → Coupon  Coupon__dropped_20260704215904493  2  90  DROP
 ```
 
@@ -89,7 +89,7 @@ engine would recreate the table. The rows survive, and the trail is complete:
 
 ```bash
 # SQL Server — Coupon back with its rows, DROP + RESTORE both audited
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -W -d cookbook_r8 -Q \"SELECT CouponId, Code FROM dbo.Coupon; SELECT Action, ArchivedName FROM SchemaSmith.TableDropAudit ORDER BY AuditId\""
+../../lab-sql.sh sqlserver cookbook_r8 "SELECT CouponId, Code FROM dbo.Coupon; SELECT Action, ArchivedName FROM SchemaSmith.TableDropAudit ORDER BY AuditId"
 # → 1 SAVE10 / 2 SAVE20 ;  DROP + RESTORE
 ```
 

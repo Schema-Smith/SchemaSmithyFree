@@ -39,7 +39,7 @@ schemaquench --ConfigFile:deploy.settings.json
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -d cookbook_r5 -Q \"SELECT name FROM sys.columns WHERE object_id=OBJECT_ID('dbo.ProductSnapshot') ORDER BY column_id\""
+../../lab-sql.sh sqlserver cookbook_r5 "SELECT name FROM sys.columns WHERE object_id=OBJECT_ID('dbo.ProductSnapshot') ORDER BY column_id"
 # → SnapshotAt, ProductId, Name, Price
 ```
 
@@ -62,7 +62,7 @@ doesn't have one. It's generated from `Product` every deploy.
 
 ```bash
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -d cookbook_r5 -tAc "SELECT column_name FROM information_schema.columns WHERE table_name='productsnapshot' ORDER BY ordinal_position"
+../../lab-sql.sh postgres cookbook_r5 "SELECT column_name FROM information_schema.columns WHERE table_name='productsnapshot' ORDER BY ordinal_position"
 # → snapshotat, productid, name, price, sku
 ```
 
@@ -96,11 +96,11 @@ Verify after deploy:
 
 ```bash
 # SQL Server — the inventory reflects the view's declared indexes
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -W -d cookbook_r5 -Q \"SELECT IndexName, IsUnique, IsClustered, KeyColumns FROM dbo.IndexedViewInventory WHERE ViewName='vProductSummary'\""
+../../lab-sql.sh sqlserver cookbook_r5 "SELECT IndexName, IsUnique, IsClustered, KeyColumns FROM dbo.IndexedViewInventory WHERE ViewName='vProductSummary'"
 # → CIX_vProductSummary 1 1 Name ;  IX_vProductSummary_Count 0 0 ProductCount
 
 # PostgreSQL — the matview is populated, proving the concurrent refresh ran
-docker exec learn-postgres psql -U postgres -d cookbook_r5 -tAc "SELECT matviewname, ispopulated FROM pg_matviews WHERE matviewname='vproductsummary'"
+../../lab-sql.sh postgres cookbook_r5 "SELECT matviewname, ispopulated FROM pg_matviews WHERE matviewname='vproductsummary'"
 # → vproductsummary|t
 ```
 

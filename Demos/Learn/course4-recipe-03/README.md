@@ -20,10 +20,10 @@ schema package.
 
 ```bash
 # SQL Server
-docker exec -i learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d cookbook_r3" < sqlserver/seed-server.sql
+../lab-sql.sh sqlserver cookbook_r3 --file sqlserver/seed-server.sql
 
 # MariaDB
-docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd cookbook_r3 < mariadb/seed-server.sql
+../lab-sql.sh mariadb cookbook_r3 --file mariadb/seed-server.sql
 ```
 
 ## Step 2: Look at the query token
@@ -53,7 +53,7 @@ after-script records it:
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d cookbook_r3 -Q \"SELECT ActiveFeatures FROM dbo.DeployLog\""
+../../lab-sql.sh sqlserver cookbook_r3 "SELECT ActiveFeatures FROM dbo.DeployLog"
 # → Billing,Reporting
 ```
 
@@ -63,9 +63,9 @@ Switch on `BetaSearch` on the server and quench again:
 
 ```bash
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -d cookbook_r3 -c "UPDATE public.featureflag SET enabled=true WHERE flagname='BetaSearch'"
+../../lab-sql.sh postgres cookbook_r3 "UPDATE public.featureflag SET enabled=true WHERE flagname='BetaSearch'"
 schemaquench --ConfigFile:deploy.settings.json
-docker exec learn-postgres psql -U postgres -d cookbook_r3 -tAc "SELECT activefeatures FROM public.deploylog ORDER BY loggedat"
+../../lab-sql.sh postgres cookbook_r3 "SELECT activefeatures FROM public.deploylog ORDER BY loggedat"
 # → Billing,Reporting
 #   BetaSearch,Billing,Reporting
 ```

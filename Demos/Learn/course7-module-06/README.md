@@ -37,8 +37,7 @@ All five tenants deploy cleanly, exit `0`.
 Plant duplicate emails in a single tenant so the rollout's new unique index fails there — and nowhere else:
 
 ```bash
-docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -i /dev/stdin < drift-tenant-003.sql
+../../lab-sql.sh sqlserver fleet_tenant_003 --file drift-tenant-003.sql
 ```
 
 ## Step 3: Run the rollout and write the report
@@ -66,8 +65,7 @@ Read the report top to bottom — it's built to be read in that order:
 Reset the one tenant and re-run to watch the summary go all-green:
 
 ```bash
-docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -i /dev/stdin < reset-tenant-003.sql
+../../lab-sql.sh sqlserver fleet_tenant_003 --file reset-tenant-003.sql
 schemaquench --ConfigFile:quench.settings.after.json --report ./out/deploy-summary --BottleneckThresholdMs=800
 ```
 
@@ -80,19 +78,19 @@ Same steps in `postgres/`, `mysql/`, and `mariadb/`. The report shape is identic
 **PostgreSQL:**
 
 ```bash
-docker exec -i learn-postgres psql -U postgres -d fleet_tenant_003 < postgres/drift-tenant-003.sql
+../lab-sql.sh postgres fleet_tenant_003 --file postgres/drift-tenant-003.sql
 ```
 
 **MySQL:**
 
 ```bash
-docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd fleet_tenant_003 < mysql/drift-tenant-003.sql
+../lab-sql.sh mysql fleet_tenant_003 --file mysql/drift-tenant-003.sql
 ```
 
 **MariaDB:**
 
 ```bash
-docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd fleet_tenant_003 < mariadb/drift-tenant-003.sql
+../lab-sql.sh mariadb fleet_tenant_003 --file mariadb/drift-tenant-003.sql
 ```
 
 Then run the `after` deploy from that engine's folder with the same `--report` switch, and read its `objectChanges`. The counts move a little per engine — the phase where the failing tenant dies, and how each engine orders its object-script slot, shift a bucket or two — which is exactly the point: every run's summary is that run's own certified record, not a fixed script.

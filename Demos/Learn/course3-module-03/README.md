@@ -224,8 +224,7 @@ swap `sqlserver` for your engine.
 ```bash
 cd v1/sqlserver
 # 1-2. deploy v1, then v2 (as before), then seed a row into the new table:
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_dev \
-  -Q "INSERT INTO dbo.Promotion(Name, Discount) VALUES('Summer Sale', 10.00)"
+../../../lab-sql.sh sqlserver ordersservice_dev "INSERT INTO dbo.Promotion(Name, Discount) VALUES('Summer Sale', 10.00)"
 
 # 3. roll back to v1 — Promotion is recycled (not destroyed), data and all
 SmithySettings_ScriptTokens__TargetDb=ordersservice_dev \
@@ -245,8 +244,7 @@ recyclebin.public_Promotion with a retention of 90 days.` Either way `Promotion`
 schema, but its rows are sitting in the recyclebin — confirm it:
 
 ```bash
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_dev -h -1 -W \
-  -Q "SET NOCOUNT ON; SELECT Name, Discount FROM recyclebin.dbo_Promotion; SELECT OriginalName, RecycledName FROM recyclebin.Registry"
+../../../lab-sql.sh sqlserver ordersservice_dev "SELECT Name, Discount FROM recyclebin.dbo_Promotion; SELECT OriginalName, RecycledName FROM recyclebin.Registry"
 ```
 
 The recycled name follows an `originalschema_table` convention so two recycled copies never collide:
@@ -298,20 +296,16 @@ At any point, check the catalog yourself.
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_dev -h -1 -W \
-  -Q "SET NOCOUNT ON; SELECT name FROM sys.foreign_keys WHERE name='FK_Customer_Promotion'"
+../lab-sql.sh sqlserver ordersservice_dev "SELECT name FROM sys.foreign_keys WHERE name='FK_Customer_Promotion'"
 
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -d ordersservice_dev -tAc \
-  "SELECT column_name FROM information_schema.columns WHERE table_name='Customer' AND column_name='PromotionId'"
+../lab-sql.sh postgres ordersservice_dev "SELECT column_name FROM information_schema.columns WHERE table_name='Customer' AND column_name='PromotionId'"
 
 # MySQL
-docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mysql mysql -uroot -N -e \
-  "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND COLUMN_NAME='PromotionId'"
+../lab-sql.sh mysql ordersservice_dev "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND COLUMN_NAME='PromotionId'"
 
 # MariaDB
-docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mariadb mariadb -uroot -N -e \
-  "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND COLUMN_NAME='PromotionId'"
+../lab-sql.sh mariadb ordersservice_dev "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND COLUMN_NAME='PromotionId'"
 ```
 
 After **Step 2 (deploy v2)** the `Promotion` table, the `Customer.PromotionId` column, and the foreign

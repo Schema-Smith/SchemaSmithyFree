@@ -44,7 +44,7 @@ column:
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -W -d cookbook_r9 -Q \"SELECT TableName, ColumnName, SensitivityLevel, DataSteward FROM dbo.DataDictionary ORDER BY TableName, ColumnName\""
+../../lab-sql.sh sqlserver cookbook_r9 "SELECT TableName, ColumnName, SensitivityLevel, DataSteward FROM dbo.DataDictionary ORDER BY TableName, ColumnName"
 # → Customer/Email PII privacy-office ; SalesOrder/TotalAmount Confidential finance ; …  (6 rows)
 ```
 

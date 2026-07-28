@@ -80,8 +80,8 @@ The preview is read-only. The table is still in its Module 2 shape:
 ```bash
 # SQL Server (from a SQL client): in the `learn` DB —
 #   SELECT name, max_length FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Widget');
-docker exec learn-postgres psql -U postgres -d learn -c "SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_schema='public' AND table_name='Widget' ORDER BY ordinal_position"
-docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT column_name, column_type FROM information_schema.columns WHERE table_schema='learn' AND table_name='Widget' ORDER BY ordinal_position"
+../../../lab-sql.sh postgres learn "SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_schema='public' AND table_name='Widget' ORDER BY ordinal_position"
+../../../lab-sql.sh mysql learn "SELECT column_name, column_type FROM information_schema.columns WHERE table_schema='learn' AND table_name='Widget' ORDER BY ordinal_position"
 ```
 
 `Name` is still 100, and there's no `Price` yet — WhatIf looked but didn't touch.

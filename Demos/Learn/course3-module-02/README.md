@@ -114,20 +114,16 @@ Want to verify the catalog yourself at any point:
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_prod -h -1 -W \
-  -Q "SET NOCOUNT ON; SELECT name FROM sys.indexes WHERE name='IX_Customer_Email'"
+../lab-sql.sh sqlserver ordersservice_prod "SELECT name FROM sys.indexes WHERE name='IX_Customer_Email'"
 
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -d ordersservice_prod -tAc \
-  "SELECT indexname FROM pg_indexes WHERE indexname='ix_customer_email'"
+../lab-sql.sh postgres ordersservice_prod "SELECT indexname FROM pg_indexes WHERE indexname='ix_customer_email'"
 
 # MySQL
-docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mysql mysql -uroot -N -e \
-  "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_prod' AND INDEX_NAME='IX_Customer_Email'"
+../lab-sql.sh mysql ordersservice_prod "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_prod' AND INDEX_NAME='IX_Customer_Email'"
 
 # MariaDB
-docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mariadb mariadb -uroot -N -e \
-  "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_prod' AND INDEX_NAME='IX_Customer_Email'"
+../lab-sql.sh mariadb ordersservice_prod "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_prod' AND INDEX_NAME='IX_Customer_Email'"
 ```
 
 After a full run, each returns the index name on both `ordersservice_staging` and

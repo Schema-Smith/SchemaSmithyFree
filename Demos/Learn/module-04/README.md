@@ -23,16 +23,16 @@ Load `seed.sql` into the sandbox. It creates a `chinook` database and the seven 
 
 ```bash
 # SQL Server
-docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C < sqlserver/seed.sql
+../lab-sql.sh sqlserver master --file sqlserver/seed.sql
 
 # PostgreSQL  (the seed CREATEs the chinook database, then \c switches into it)
-docker exec -i learn-postgres psql -U postgres -d learn < postgres/seed.sql
+../lab-sql.sh postgres learn --file postgres/seed.sql
 
 # MySQL
-docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd < mysql/seed.sql
+../lab-sql.sh mysql information_schema --file mysql/seed.sql
 
 # MariaDB
-docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd < mariadb/seed.sql
+../lab-sql.sh mariadb information_schema --file mariadb/seed.sql
 ```
 
 Spot-check it's there (SQL Server shown): `SELECT name FROM chinook.sys.tables;` — seven tables, none
@@ -92,11 +92,11 @@ To start over, drop the database and re-run the seed:
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -Q "DROP DATABASE chinook"
+../lab-sql.sh sqlserver master "DROP DATABASE chinook"
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -d learn -c "DROP DATABASE chinook"
+../lab-sql.sh postgres learn "DROP DATABASE chinook"
 # MySQL
-docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "DROP DATABASE chinook"
+../lab-sql.sh mysql information_schema "DROP DATABASE chinook"
 # MariaDB
-docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "DROP DATABASE chinook"
+../lab-sql.sh mariadb information_schema "DROP DATABASE chinook"
 ```

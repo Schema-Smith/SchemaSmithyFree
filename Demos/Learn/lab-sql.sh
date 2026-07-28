@@ -56,17 +56,23 @@ lab_trim() {
   printf '%s' "$s"
 }
 
+# Keep stdout and stderr APART. Clients chatter on stderr even when they succeed -- MariaDB
+# warns about "insecure passwordless login" on every connection -- and folding that into the
+# result makes a query for a count return "WARNING...\n0" instead of "0". Callers compare
+# results against exact values, so contaminated output silently takes the wrong branch. That
+# is the same failure this helper exists to prevent.
 lab_sql() {
-  local engine="$1" db="$2" sql="$3" out rc client container
+  local engine="$1" db="$2" sql="$3" out err rc client container errfile
+  errfile="$(mktemp)"
   if lab_own_server; then
-    client="$(lab_client "$engine")" || return 1
+    client="$(lab_client "$engine")" || { rm -f "$errfile"; return 1; }
     case "$engine" in
       sqlserver) out=$(sqlcmd -S "${LEARN_SERVER},${LEARN_PORT}" -U "$LEARN_USER" -P "$LEARN_PASSWORD" \
-                         -C -b -d "$db" -h -1 -W -Q "SET NOCOUNT ON; $sql" 2>&1); rc=$? ;;
+                         -C -b -d "$db" -h -1 -W -Q "SET NOCOUNT ON; $sql" 2>"$errfile"); rc=$? ;;
       postgres)  out=$(PGPASSWORD="$LEARN_PASSWORD" psql -h "$LEARN_SERVER" -p "$LEARN_PORT" -U "$LEARN_USER" \
-                         -d "$db" -w -v ON_ERROR_STOP=1 --no-psqlrc -tAc "$sql" 2>&1); rc=$? ;;
+                         -d "$db" -w -v ON_ERROR_STOP=1 --no-psqlrc -tAc "$sql" 2>"$errfile"); rc=$? ;;
       *)         out=$(MYSQL_PWD="$LEARN_PASSWORD" "$client" -h "$LEARN_SERVER" -P "$LEARN_PORT" \
-                         -u "$LEARN_USER" -N -s -D "$db" -e "$sql" 2>&1); rc=$? ;;
+                         -u "$LEARN_USER" -N -s -D "$db" -e "$sql" 2>"$errfile"); rc=$? ;;
     esac
   else
     container="$(lab_container "$engine")"
@@ -75,14 +81,16 @@ lab_sql() {
       # it's harmless on Linux/macOS.
       sqlserver) out=$(MSYS_NO_PATHCONV=1 docker exec "$container" /opt/mssql-tools18/bin/sqlcmd \
                          -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d "$db" -h -1 -W \
-                         -Q "SET NOCOUNT ON; $sql" 2>&1); rc=$? ;;
-      postgres)  out=$(docker exec "$container" psql -U postgres -d "$db" -v ON_ERROR_STOP=1 -tAc "$sql" 2>&1); rc=$? ;;
-      mysql)     out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mysql -uroot -N -s -D "$db" -e "$sql" 2>&1); rc=$? ;;
-      mariadb)   out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mariadb -uroot -N -s -D "$db" -e "$sql" 2>&1); rc=$? ;;
+                         -Q "SET NOCOUNT ON; $sql" 2>"$errfile"); rc=$? ;;
+      postgres)  out=$(docker exec "$container" psql -U postgres -d "$db" -v ON_ERROR_STOP=1 -tAc "$sql" 2>"$errfile"); rc=$? ;;
+      mysql)     out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mysql -uroot -N -s -D "$db" -e "$sql" 2>"$errfile"); rc=$? ;;
+      mariadb)   out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mariadb -uroot -N -s -D "$db" -e "$sql" 2>"$errfile"); rc=$? ;;
     esac
   fi
+  err="$(cat "$errfile" 2>/dev/null)"
+  rm -f "$errfile"
   if [ "$rc" -ne 0 ]; then
-    echo "LAB-SQL: could not reach $engine at $(lab_endpoint_label "$engine") [database '$db'] -- $(lab_trim "$out")" >&2
+    echo "LAB-SQL: could not reach $engine at $(lab_endpoint_label "$engine") [database '$db'] -- $(lab_trim "${err:-$out}")" >&2
     return 1
   fi
   lab_trim "$out"
@@ -226,11 +234,22 @@ lab_remove_db() {
   printf 'dropped'
 }
 
-# Called as a command rather than sourced.
+# Called as a command rather than sourced:
+#   lab-sql.sh <engine> <database> "<sql>"
+#   lab-sql.sh <engine> <database> --file <path.sql>
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   if [ "$#" -lt 3 ]; then
-    echo "usage: lab-sql.sh <engine> <database> <sql>" >&2
+    echo "usage: lab-sql.sh <engine> <database> \"<sql>\"" >&2
+    echo "       lab-sql.sh <engine> <database> --file <path.sql>" >&2
     exit 2
   fi
-  lab_sql "$1" "$2" "$3"
+  if [ "$3" = "--file" ]; then
+    if [ "$#" -lt 4 ]; then
+      echo "LAB-SQL: --file needs a path. Usage: lab-sql.sh <engine> <database> --file <path.sql>" >&2
+      exit 2
+    fi
+    lab_sql_file "$1" "$2" "$4"
+  else
+    lab_sql "$1" "$2" "$3"
+  fi
 fi

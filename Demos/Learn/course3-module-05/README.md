@@ -65,7 +65,8 @@ the data never moves. Everything else — columns, keys, the recyclebin — is i
 ## The flow
 
 Six beats, run in order. Pick an engine — the SQL Server form is fully worked below; the other three
-engines follow with the same commands, just a different folder and a different `docker exec` client.
+engines follow with the same commands, just a different folder and a different engine name passed to
+`lab-sql.sh`.
 
 1. **Establish** — deploy `v1` to `ordersservice_dev`.
 2. **Promote** — the SAME `v1` package to `ordersservice_staging`, then `ordersservice_prod` (cross-link
@@ -96,8 +97,7 @@ SmithySettings_ScriptTokens__TargetDb=ordersservice_prod \
   schemaquench --ConfigFile:./base.settings.json
 
 # seed prod with real orders
-docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_prod \
-  < seed-prod.sql
+../../../lab-sql.sh sqlserver ordersservice_prod --file seed-prod.sql
 ```
 
 ```bash
@@ -149,7 +149,7 @@ $env:SmithySettings_ScriptTokens__TargetDb = 'ordersservice_staging'
 schemaquench --ConfigFile:.\base.settings.json                                   # 2a. promote (staging)
 $env:SmithySettings_ScriptTokens__TargetDb = 'ordersservice_prod'
 schemaquench --ConfigFile:.\base.settings.json                                   # 2b. promote (prod)
-Get-Content .\seed-prod.sql | docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_prod
+..\..\..\lab-sql.ps1 sqlserver ordersservice_prod --file seed-prod.sql
 
 cd ..\..\v2-bad\sqlserver
 $env:SmithySettings_ScriptTokens__TargetDb = 'ordersservice_dev'
@@ -178,19 +178,13 @@ Remove-Item Env:SmithySettings_ScriptTokens__TargetDb
 ### PostgreSQL, MySQL, MariaDB
 
 Same six beats, same commands — swap `sqlserver` for `postgres`, `mysql`, or `mariadb` in every `cd`,
-and use that engine's client for the prod seed and any manual verification:
-
-| Engine | Folder | Seed / verify client |
-| ------ | ------ | --------------------- |
-| PostgreSQL | `postgres` | `docker exec -i learn-postgres psql -U postgres -d ordersservice_prod` |
-| MySQL | `mysql` | `docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd ordersservice_prod` |
-| MariaDB | `mariadb` | `docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd ordersservice_prod` |
+and pass that engine's name to `lab-sql.sh` for the prod seed and any manual verification.
 
 For example, seeding prod on PostgreSQL:
 
 ```bash
 cd v1/postgres
-docker exec -i learn-postgres psql -U postgres -d ordersservice_prod < seed-prod.sql
+../../../lab-sql.sh postgres ordersservice_prod --file seed-prod.sql
 ```
 
 Everything else — the six beats, the env vars, the WhatIf-then-apply rollback, the `v2-fixed` in-place
@@ -210,19 +204,19 @@ just not where the application expects it anymore. Verify both halves of that:
 
 ```bash
 # SQL Server — SalesOrder is empty, OrderHeader shows up recycled in the registry
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_prod -h -1 -W \
-  -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM dbo.SalesOrder; SELECT OriginalName, RecycledName FROM recyclebin.Registry"
+../../lab-sql.sh sqlserver ordersservice_prod \
+  "SELECT COUNT(*) FROM dbo.SalesOrder; SELECT OriginalName, RecycledName FROM recyclebin.Registry"
 
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -d ordersservice_prod -tAc \
+../../lab-sql.sh postgres ordersservice_prod \
   "SELECT COUNT(*) FROM public.\"SalesOrder\"; SELECT original_name, recycled_name FROM recyclebin.registry"
 
 # MySQL
-docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mysql mysql -uroot -N -e \
+../../lab-sql.sh mysql ordersservice_prod \
   "SELECT COUNT(*) FROM ordersservice_prod.SalesOrder; SELECT OriginalName, RecycledName FROM ordersservice_prod.recyclebin_Registry"
 
 # MariaDB
-docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mariadb mariadb -uroot -N -e \
+../../lab-sql.sh mariadb ordersservice_prod \
   "SELECT COUNT(*) FROM ordersservice_prod.SalesOrder; SELECT OriginalName, RecycledName FROM ordersservice_prod.recyclebin_Registry"
 ```
 
@@ -241,20 +235,16 @@ table, `CustomTableRestore` intercepts and restores the recycled copy: rows and 
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_prod -h -1 -W \
-  -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM dbo.OrderHeader"
+../../lab-sql.sh sqlserver ordersservice_prod "SELECT COUNT(*) FROM dbo.OrderHeader"
 
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -d ordersservice_prod -tAc \
-  'SELECT COUNT(*) FROM public."OrderHeader"'
+../../lab-sql.sh postgres ordersservice_prod 'SELECT COUNT(*) FROM public."OrderHeader"'
 
 # MySQL
-docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mysql mysql -uroot -N -e \
-  "SELECT COUNT(*) FROM ordersservice_prod.OrderHeader"
+../../lab-sql.sh mysql ordersservice_prod "SELECT COUNT(*) FROM ordersservice_prod.OrderHeader"
 
 # MariaDB
-docker exec -e MYSQL_PWD=Learn!Passw0rd learn-mariadb mariadb -uroot -N -e \
-  "SELECT COUNT(*) FROM ordersservice_prod.OrderHeader"
+../../lab-sql.sh mariadb ordersservice_prod "SELECT COUNT(*) FROM ordersservice_prod.OrderHeader"
 ```
 
 `OrderHeader` is back with all **4** rows, `SalesOrder` is gone, and prod matches the known-good `v1`
@@ -275,8 +265,7 @@ Confirm it on prod:
 
 ```bash
 # SQL Server — SalesOrder carries the data straight across the rename
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d ordersservice_prod -h -1 -W \
-  -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM dbo.SalesOrder"
+../../lab-sql.sh sqlserver ordersservice_prod "SELECT COUNT(*) FROM dbo.SalesOrder"
 ```
 
 `SalesOrder` reads `4`. Unlike step 4, nothing data-bearing hit the recyclebin this time — `OrderHeader`

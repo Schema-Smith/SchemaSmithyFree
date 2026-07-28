@@ -39,7 +39,7 @@ The default and the check are both built from the metadata:
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d cookbook_r2 -Q \"SELECT definition FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.Document')\""
+../../lab-sql.sh sqlserver cookbook_r2 "SELECT definition FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.Document')"
 # → ([RetentionDays]<=(365))
 ```
 
@@ -65,7 +65,7 @@ The column default re-derives from the new number, identically on all four engin
 
 ```bash
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -d cookbook_r2 -tAc "SELECT column_default FROM information_schema.columns WHERE table_name='document' AND column_name='archiveafterdays'"
+../../lab-sql.sh postgres cookbook_r2 "SELECT column_default FROM information_schema.columns WHERE table_name='document' AND column_name='archiveafterdays'"
 # → 30
 ```
 

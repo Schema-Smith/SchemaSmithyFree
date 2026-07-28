@@ -50,15 +50,13 @@ failure modes before the rollout:
 **Stage the index failure on tenant 002** (duplicate emails):
 
 ```bash
-docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -i /dev/stdin < drift-tenant-002.sql
+../../lab-sql.sh sqlserver fleet_tenant_002 --file drift-tenant-002.sql
 ```
 
 **Stage the FK failure on tenant 004** (dropped FK + orphan row):
 
 ```bash
-docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -i /dev/stdin < drift-tenant-004.sql
+../../lab-sql.sh sqlserver fleet_tenant_004 --file drift-tenant-004.sql
 ```
 
 Look at the comments at the top of each drift file — they describe exactly what broke and why the rollout
@@ -180,15 +178,13 @@ that succeeded skip past all their already-completed steps instantly.
 **Fix tenant 002** (deduplicate the emails):
 
 ```bash
-docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -i /dev/stdin < reset-tenant-002.sql
+../../lab-sql.sh sqlserver fleet_tenant_002 --file reset-tenant-002.sql
 ```
 
 **Fix tenant 004** (remove the orphan):
 
 ```bash
-docker exec -i learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -i /dev/stdin < reset-tenant-004.sql
+../../lab-sql.sh sqlserver fleet_tenant_004 --file reset-tenant-004.sql
 ```
 
 **Resume the run:**
@@ -230,22 +226,22 @@ exit `2`, resume exits `0`. Only the error text changes:
 **Stage drift on PostgreSQL:**
 
 ```bash
-docker exec -i learn-postgres psql -U postgres -d fleet_tenant_002 < postgres/drift-tenant-002.sql
-docker exec -i learn-postgres psql -U postgres -d fleet_tenant_004 < postgres/drift-tenant-004.sql
+../lab-sql.sh postgres fleet_tenant_002 --file postgres/drift-tenant-002.sql
+../lab-sql.sh postgres fleet_tenant_004 --file postgres/drift-tenant-004.sql
 ```
 
 **Stage drift on MySQL:**
 
 ```bash
-docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd < mysql/drift-tenant-002.sql
-docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd < mysql/drift-tenant-004.sql
+../lab-sql.sh mysql fleet_tenant_002 --file mysql/drift-tenant-002.sql
+../lab-sql.sh mysql fleet_tenant_004 --file mysql/drift-tenant-004.sql
 ```
 
 **Stage drift on MariaDB:**
 
 ```bash
-docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd < mariadb/drift-tenant-002.sql
-docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd < mariadb/drift-tenant-004.sql
+../lab-sql.sh mariadb fleet_tenant_002 --file mariadb/drift-tenant-002.sql
+../lab-sql.sh mariadb fleet_tenant_004 --file mariadb/drift-tenant-004.sql
 ```
 
 Run, diagnose, reset, and resume from each engine's folder. The checkpoint `[Completed Steps]` counts and

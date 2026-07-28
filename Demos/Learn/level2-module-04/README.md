@@ -104,7 +104,7 @@ Read the table back — two rows, written by one package:
 ```bash
 # SQL Server (from a SQL client):
 #   SELECT Environment, ProductName, ReleaseVersion, EngineVersion FROM dbo.DeploymentLog ORDER BY Environment;
-docker exec learn-postgres psql -U postgres -d learn -c "SELECT environment, product_name, release_version, engine_version FROM public.deploymentlog ORDER BY environment"
+../lab-sql.sh postgres learn "SELECT environment, product_name, release_version, engine_version FROM public.deploymentlog ORDER BY environment"
 ```
 
 SQL Server result:

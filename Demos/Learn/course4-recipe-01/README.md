@@ -53,7 +53,7 @@ The production shape: the perf index **is** built, the diagnostic column is **no
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d cookbook_r1_prod -Q \"SELECT name FROM sys.columns WHERE object_id=OBJECT_ID('dbo.Customer')\""
+../../lab-sql.sh sqlserver cookbook_r1_prod "SELECT name FROM sys.columns WHERE object_id=OBJECT_ID('dbo.Customer')"
 # → CustomerId, Email  (no DebugPayload)
 # index IX_Customer_Email is present
 ```
@@ -68,9 +68,9 @@ Now the calls flip — the perf index is **skipped**, the diagnostic column **is
 
 ```bash
 # PostgreSQL
-docker exec learn-postgres psql -U postgres -d cookbook_r1_nonprod -tAc "SELECT column_name FROM information_schema.columns WHERE table_name='customer' ORDER BY ordinal_position"
+../../lab-sql.sh postgres cookbook_r1_nonprod "SELECT column_name FROM information_schema.columns WHERE table_name='customer' ORDER BY ordinal_position"
 # → customerid, email, debugpayload
-docker exec learn-postgres psql -U postgres -d cookbook_r1_nonprod -tAc "SELECT indexname FROM pg_indexes WHERE tablename='customer'"
+../../lab-sql.sh postgres cookbook_r1_nonprod "SELECT indexname FROM pg_indexes WHERE tablename='customer'"
 # → pk_customer  (no ix_customer_email)
 ```
 

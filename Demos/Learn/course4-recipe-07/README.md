@@ -24,7 +24,8 @@ And `DataDelivery` is now either a single object (as before) or an **array** of 
   ```
   MariaDB:
   ```bash
-  docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS cookbook_r7_dev; CREATE DATABASE IF NOT EXISTS cookbook_r7_main"
+  ../lab-sql.sh mariadb information_schema "CREATE DATABASE IF NOT EXISTS cookbook_r7_dev"
+  ../lab-sql.sh mariadb information_schema "CREATE DATABASE IF NOT EXISTS cookbook_r7_main"
   ```
 
 ## Deploy once, watch the gates decide

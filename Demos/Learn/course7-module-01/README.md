@@ -67,8 +67,7 @@ Confirm the `Shop` schema landed in every tenant:
 
 ```bash
 for n in 001 002 003 004 005; do
-  docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 \
-    -Q "SELECT '$n', COUNT(*) FROM fleet_tenant_$n.sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
+  ../../lab-sql.sh sqlserver fleet_tenant_$n "SELECT COUNT(*) FROM sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
 done
 # → each tenant reports 4
 ```
@@ -87,8 +86,7 @@ five-way no-op. Re-running the whole fleet is always safe.
 A new customer signs up. Stand up their database:
 
 ```bash
-docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C \
-  -Q "CREATE DATABASE [fleet_tenant_006]"
+../../lab-sql.sh sqlserver master "CREATE DATABASE [fleet_tenant_006]"
 ```
 
 Deploy again — you edit nothing:

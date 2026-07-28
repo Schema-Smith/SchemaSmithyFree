@@ -78,21 +78,57 @@ docker compose down -v     # -v also removes the data volumes
 
 ## Use your own server instead (no Docker)
 
-Already run SQL Server, PostgreSQL, MySQL, or MariaDB? You don't need Docker for the labs. From this
-directory, point the helper at your server and it creates — or cleanly resets — the empty `learn`
-database, the no-Docker equivalent of the sandbox above:
+Already run SQL Server, PostgreSQL, MySQL, or MariaDB? You don't need Docker for any of it. Every
+course works against a server you already have.
+
+You need that engine's command-line client on your `PATH` (`sqlcmd` / `psql` / `mysql` / `mariadb`)
+and a login that can create databases. Then, from this directory, **source** the activation script
+once per shell:
+
+```bash
+. ./use-my-server.sh --engine postgres --server your-host --port 5432 --user you --password '…'
+```
+
+```powershell
+. .\use-my-server.ps1 -Engine postgres -Server your-host -Port 5432 -User you -Password '…'
+```
+
+That's the whole setup. **Every lab command in every course then works exactly as written** — you
+don't edit a single settings file. SchemaSmith layers `SmithySettings_*` environment variables over
+each lab's settings, and the activation script sets them; the lab helper scripts read the matching
+`LEARN_*` values so their database creation and catalog checks land on your server too. It's the
+same override mechanism Course 3 teaches, pointed at you.
+
+Then work the courses normally. Each course has a setup script that creates that course's databases
+— run it before that course's labs, exactly as the sandbox path does:
+
+```bash
+cd course3-setup && ./setup-environments.sh
+```
+
+Four things are worth knowing:
+
+- **One engine at a time.** The activation is global to your shell, so a course runs against the
+  engine you activated. Working through a course on a second engine? Source the script again with
+  the other engine's details. (Course 9 is the exception — it runs three services on three engines
+  together, so the sandbox is the easier path for that one.)
+- **Per shell.** A new terminal needs the activation sourced again. `--off` / `-Off` returns you to
+  the sandbox.
+- **A SQL login, not Windows Authentication — for now.** A credential declared in a settings file
+  can't currently be cleared by an environment override on Windows, so the lab's own user would win.
+  Create a SQL login for the labs. Windows Authentication follows in a later release.
+- **Your databases are safe.** Setup scripts stamp what they create and will never drop or deploy
+  into a same-named database they didn't create — they stop and tell you to rename or move it. The
+  `--reset` switch each setup script carries honours the same rule.
+
+Want just the `learn` database from Courses 1–2 without the rest? `deploy-to-endpoint` still does
+exactly that:
 
 ```bash
 ./deploy-to-endpoint.sh --engine postgres --server your-host --port 5432 --user you --password '…'
-#   --engine:  sqlserver | postgres | mysql | mariadb
-#   Windows :  .\deploy-to-endpoint.ps1 -Engine … -Server … -Port … -User … -Password …
 ```
 
-It needs that engine's command-line client on your `PATH` (`sqlcmd` / `psql` / `mysql` / `mariadb`).
-SQL Server also accepts Windows Authentication — omit `--user`/`--password`. The helper stamps the
-database it creates and only ever drops a stamped `learn`; an existing `learn` it didn't create is
-refused, never touched. Then set each lab's `connect.settings.json` to your host, port, and
-credentials instead of the sandbox values. Full walkthrough:
+Full walkthrough, including how to install each engine's client:
 [Use your own server](https://github.com/Schema-Smith/SchemaSmith/blob/main/docs/end-user/guide/use-your-own-server.md).
 
 ## How this relates to the other demos

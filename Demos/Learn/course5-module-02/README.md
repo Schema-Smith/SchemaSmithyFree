@@ -24,7 +24,7 @@ so you can diff your own extract against it.
 
 ```bash
 # SQL Server
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d shop_from_liquibase -Q \"SELECT name FROM sys.tables ORDER BY name\""
+../lab-sql.sh sqlserver shop_from_liquibase "SELECT name FROM sys.tables ORDER BY name"
 # → Customer, DATABASECHANGELOG, DATABASECHANGELOGLOCK, OrderItem, Product, SalesOrder
 ```
 
@@ -68,7 +68,7 @@ no-op. That no-op is the proof: the package is a faithful cast of the live datab
 
 ```bash
 # confirm both Liquibase tables are still there, untouched — drop them whenever you like
-docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -d shop_from_liquibase -Q \"SELECT name FROM sys.tables WHERE name LIKE 'DATABASECHANGE%'\""
+../../lab-sql.sh sqlserver shop_from_liquibase "SELECT name FROM sys.tables WHERE name LIKE 'DATABASECHANGE%'"
 # → DATABASECHANGELOG, DATABASECHANGELOGLOCK  (left exactly where they were)
 ```
 
