@@ -2351,7 +2351,14 @@ public class DatabaseQuenchTests
             var mockConn = Substitute.For<System.Data.IDbConnection>();
             var mockCmd = CreateMockCommand();
             mockCmd.ExecuteScalar().Returns("160000"); // PG version detection (D3: TargetVersionDetector)
-            mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => throw new Exception("simulated generated-SQL failure"));
+            // The per-connection session GUCs (SET schemasmith.unsupported_policy / version_override) run
+            // on this same mock during connection setup; on a real server they succeed. Only the
+            // generated-SQL step should fail here, so let the SET statements through.
+            mockCmd.When(c => c.ExecuteNonQuery()).Do(_ =>
+            {
+                if (mockCmd.CommandText?.StartsWith("SET schemasmith") == true) return;
+                throw new Exception("simulated generated-SQL failure");
+            });
             mockConn.CreateCommand().Returns(mockCmd);
             mockConn.Database.Returns("pgdb");
             var mockConnFactory = Substitute.For<Schema.DataAccess.IDbConnectionFactory>();
