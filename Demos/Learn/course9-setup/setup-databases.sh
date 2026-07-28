@@ -1,53 +1,96 @@
 #!/usr/bin/env bash
-# Create the Course 9 Northwind Commerce service databases on each sandbox engine:
-# orders on SQL Server, catalog on PostgreSQL, sessions on MySQL. No schema is
-# seeded — each course module deploys its own native package into these databases.
-# Re-running is safe; all CREATE DDL is guarded. PASS is reported only after the
-# database is confirmed to exist on an engine.
+# Create the Course 9 Northwind Commerce service databases on each sandbox engine, or on
+# your own server's single activated engine (LEARN_SERVER): orders on SQL Server, catalog
+# on PostgreSQL, sessions on MySQL. No schema is seeded -- each course module deploys its
+# own native package into these databases. Re-running is safe -- lab_confirm_db only
+# creates what's missing. PASS is reported only after the database is confirmed to exist
+# (a create that silently fails reports FAIL, never a false PASS).
+#
+# --reset drops and recreates them empty. Use it any time you want a clean slate -- e.g.
+# after a module's deploy fails partway and leaves a service in a state a later module
+# doesn't expect. Only databases the labs created are ever dropped -- see lab_remove_db.
 set -u
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../lab-sql.sh"
+
+reset=0
+[ "${1:-}" = "--reset" ] && reset=1
+
 fail=0
+total=0
+ready_dbs=""
 
-apply_seed() {
-  local engine="$1" file="$SCRIPT_DIR/seed/$1/01_create_service_databases.sql"
-  if [ ! -f "$file" ]; then echo "  MISSING $file"; fail=1; return 1; fi
-  # Copy the script into the container and run it there rather than piping on stdin:
-  # keeps behaviour identical across bash, Windows PowerShell 5.1 (which injects a
-  # UTF-8 BOM sqlcmd rejects on piped input), and pwsh 7.
-  case "$engine" in
-    sqlserver) docker cp "$file" learn-sqlserver:/tmp/seed.sql >/dev/null; docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -i /tmp/seed.sql >/dev/null 2>&1 ;;
-    postgres)  docker cp "$file" learn-postgres:/tmp/seed.sql >/dev/null; docker exec learn-postgres psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/seed.sql >/dev/null 2>&1 ;;
-    mysql)     docker cp "$file" learn-mysql:/tmp/seed.sql >/dev/null; docker exec learn-mysql sh -c 'mysql -uroot -pLearn!Passw0rd < /tmp/seed.sql' >/dev/null 2>&1 ;;
+label() {
+  case "$1" in
+    sqlserver) printf 'Orders (SQL Server)' ;;
+    postgres)  printf 'Catalog (PostgreSQL)' ;;
+    mysql)     printf 'Sessions (MySQL)' ;;
   esac
 }
 
-count_db() {
-  local engine="$1"
-  case "$engine" in
-    sqlserver) docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -Q \"SET NOCOUNT ON; SELECT COUNT(*) FROM sys.databases WHERE name = 'orders'\"" 2>/dev/null | tr -d '[:space:]' ;;
-    postgres)  docker exec learn-postgres psql -U postgres -tAc "SELECT COUNT(*) FROM pg_database WHERE datname = 'catalog'" 2>/dev/null | tr -d '[:space:]' ;;
-    mysql)     docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'sessions'" 2>/dev/null | tr -d '[:space:]' ;;
+db_for() {
+  case "$1" in
+    sqlserver) printf 'orders' ;;
+    postgres)  printf 'catalog' ;;
+    mysql)     printf 'sessions' ;;
   esac
 }
 
-seed_engine() {
-  local engine="$1" label="$2"
-  printf '%-30s ' "$label"
-  apply_seed "$engine"
-  local n; n="$(count_db "$engine")"
-  if [ "$n" = "1" ]; then echo "PASS (service database ready)"; else echo "FAIL (found '${n}', expected 1)"; fail=1; fi
+is_service_engine() {
+  case "$1" in
+    sqlserver|postgres|mysql) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
-seed_engine sqlserver "Orders (SQL Server)"
-seed_engine postgres  "Catalog (PostgreSQL)"
-seed_engine mysql     "Sessions (MySQL)"
+engines="$(lab_engines)" || exit 1
+for engine in $engines; do
+  is_service_engine "$engine" || continue
+  db="$(db_for "$engine")"
+  printf '%-30s ' "$(label "$engine")"
+  total=$((total + 1))
+  rc=0
+  err=''
+  if [ "$reset" -eq 1 ]; then
+    removed="$(lab_remove_db "$engine" "$db" 2>/dev/null)"
+    if [ "$removed" = "refused" ]; then
+      err="    '$db' exists but wasn't created by the labs, so it will not be dropped. Rename or move it, then re-run."
+      rc=1
+    fi
+  fi
+  if [ "$rc" -eq 0 ]; then
+    err="$(lab_confirm_db "$engine" "$db" 2>&1 1>/dev/null)"
+    rc=$?
+  fi
+  if [ "$rc" -eq 0 ]; then
+    if [ "$reset" -eq 1 ]; then echo "PASS (reset)"; else echo "PASS (service database ready)"; fi
+    ready_dbs="${ready_dbs:+$ready_dbs, }$db"
+  else
+    echo "FAIL"
+    echo "$err" | sed 's/^/    /'
+    fail=1
+  fi
+done
 
 echo
-if [ "$fail" -eq 0 ]; then
-  echo "All three service databases are ready — orders, catalog, sessions."
+if [ "$total" -eq 0 ]; then
+  echo "Course 9 doesn't use ${LEARN_ENGINE:-your engine} -- it needs SQL Server, PostgreSQL, and MySQL together. Point use-my-server at one of those instead, or use the sandbox for this course."
+  exit 1
+elif [ "$fail" -eq 0 ]; then
+  if [ "$total" -eq 1 ]; then
+    echo "The $ready_dbs service database is ready."
+  else
+    echo "All $total service databases are ready -- $ready_dbs."
+  fi
+  if lab_own_server && [ "$total" -lt 3 ]; then
+    echo
+    echo "Course 9 runs all three services together, so it needs SQL Server, PostgreSQL, and MySQL."
+    echo "You have $total of the three. If you run the other engines too, re-source use-my-server for"
+    echo "each one and run this script again -- otherwise use the sandbox for this course."
+  fi
   exit 0
 else
-  echo "One or more engines could not be set up. Is the sandbox up? See Demos/Learn/README.md."
+  echo "One or more engines could not be set up. Is the sandbox up (or your own server reachable)? See Demos/Learn/README.md."
   exit 1
 fi

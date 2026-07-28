@@ -111,9 +111,9 @@ lab_sql_file() {
     case "$engine" in
       sqlserver) out=$(MSYS_NO_PATHCONV=1 docker exec "$container" /opt/mssql-tools18/bin/sqlcmd \
                          -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d "$db" -i /tmp/lab-seed.sql 2>&1); rc=$? ;;
-      postgres)  out=$(docker exec "$container" psql -U postgres -d "$db" -v ON_ERROR_STOP=1 -f /tmp/lab-seed.sql 2>&1); rc=$? ;;
-      mysql)     out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mysql -uroot -D "$db" -e 'source /tmp/lab-seed.sql' 2>&1); rc=$? ;;
-      mariadb)   out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mariadb -uroot -D "$db" -e 'source /tmp/lab-seed.sql' 2>&1); rc=$? ;;
+      postgres)  out=$(MSYS_NO_PATHCONV=1 docker exec "$container" psql -U postgres -d "$db" -v ON_ERROR_STOP=1 -f /tmp/lab-seed.sql 2>&1); rc=$? ;;
+      mysql)     out=$(MSYS_NO_PATHCONV=1 docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mysql -uroot -D "$db" -e 'source /tmp/lab-seed.sql' 2>&1); rc=$? ;;
+      mariadb)   out=$(MSYS_NO_PATHCONV=1 docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mariadb -uroot -D "$db" -e 'source /tmp/lab-seed.sql' 2>&1); rc=$? ;;
     esac
   fi
   if [ "$rc" -ne 0 ]; then

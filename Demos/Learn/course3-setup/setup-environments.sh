@@ -40,7 +40,7 @@ for engine in $engines; do
     if [ "$reset" -eq 1 ]; then
       removed="$(lab_remove_db "$engine" "$db" 2>/dev/null)"
       if [ "$removed" = "refused" ]; then
-        err="    '$db' exists but wasn't created by the labs, so it will not be dropped. Rename or move it, then re-run."
+        err="'$db' exists but wasn't created by the labs, so it will not be dropped. Rename or move it, then re-run."
         rc=1
       fi
     fi

@@ -3,6 +3,14 @@
 # then run a trivial connection/query against it. Prints PASS/FAIL per engine.
 set -u
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../lab-sql.sh"
+if lab_own_server; then
+  echo "This script verifies the Docker sandbox, which you're not using - you're pointed at ${LEARN_SERVER}:${LEARN_PORT}."
+  echo "Nothing to verify here. Run each course's setup script instead."
+  exit 0
+fi
+
 fail=0
 
 wait_healthy() {

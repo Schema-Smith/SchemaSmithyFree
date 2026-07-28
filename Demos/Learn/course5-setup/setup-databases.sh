@@ -1,46 +1,74 @@
 #!/usr/bin/env bash
-# Create + seed the Course 5 migration-track databases on each sandbox engine.
-# Each database is the post-migration state a source tool would have left behind:
-# the shared shop schema plus that tool's own bookkeeping table. Re-running is
-# safe — all DDL is idempotent. PASS is reported only after a shop table is
-# confirmed to exist (a seed that silently fails reports FAIL, never a false PASS).
+# Create + seed the Course 5 migration-track databases on each sandbox engine, or on your
+# own server's single activated engine (LEARN_SERVER). Each database is the post-migration
+# state a source tool would have left behind: the shared shop schema plus that tool's own
+# bookkeeping table. Re-running is safe -- all DDL is idempotent. PASS is reported only
+# after a shop table is confirmed to exist (a seed that silently fails reports FAIL, never
+# a false PASS).
+#
+# --reset drops and recreates the databases empty before reseeding. Only databases the labs
+# created are ever dropped -- see lab_remove_db.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPT_DIR/../lab-sql.sh"
+
+reset=0
+[ "${1:-}" = "--reset" ] && reset=1
+
 fail=0
 
-# Run a .sql file's contents into a database via the engine's client over stdin.
-# sqlcmd is wrapped in `bash -c` so Git Bash on Windows doesn't rewrite /opt/...
-apply_sql() {
-  local engine="$1" db="$2" file="$3"
-  if [ ! -f "$file" ]; then echo "    MISSING $file"; fail=1; return 1; fi
-  case "$engine" in
-    sqlserver) docker exec -i learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d ${db}" < "$file" >/dev/null 2>&1 ;;
-    postgres)  docker exec -i learn-postgres psql -U postgres -d "${db}" -v ON_ERROR_STOP=1 < "$file" >/dev/null 2>&1 ;;
-    mysql)     docker exec -i learn-mysql mysql -uroot -pLearn!Passw0rd "${db}" < "$file" >/dev/null 2>&1 ;;
-    mariadb)   docker exec -i learn-mariadb mariadb -uroot -pLearn!Passw0rd "${db}" < "$file" >/dev/null 2>&1 ;;
+label() {
+  case "$1" in
+    sqlserver) printf 'SQL Server' ;;
+    postgres)  printf 'PostgreSQL' ;;
+    mysql)     printf 'MySQL' ;;
+    mariadb)   printf 'MariaDB' ;;
   esac
 }
 
-# create_db + apply shop + (optional) tracker + confirm a shop table exists.
-seed_db() {
-  local engine="$1" db="$2" tracker="$3" out=""
+# create/reset + seed shop + optional tracker + confirm a shop table exists.
+init_db() {
+  local engine="$1" db="$2" tracker="$3" err out ready_sql removed
+
   printf '  %-26s ' "$db"
+
+  if [ "$reset" -eq 1 ]; then
+    removed="$(lab_remove_db "$engine" "$db" 2>/dev/null)"
+    if [ "$removed" = "refused" ]; then
+      echo "FAIL"
+      echo "    '$db' exists but wasn't created by the labs, so it will not be dropped. Rename or move it, then re-run."
+      fail=1
+      return 1
+    fi
+  fi
+
+  err="$(lab_confirm_db "$engine" "$db" 2>&1 1>/dev/null)"
+  if [ $? -ne 0 ]; then echo "FAIL"; echo "$err" | sed 's/^/    /'; fail=1; return 1; fi
+
+  err="$(lab_sql_file "$engine" "$db" "$SCRIPT_DIR/seed/$engine/shop.sql" 2>&1)"
+  if [ $? -ne 0 ]; then echo "FAIL"; echo "$err" | sed 's/^/    /'; fail=1; return 1; fi
+
+  if [ -n "$tracker" ]; then
+    err="$(lab_sql_file "$engine" "$db" "$SCRIPT_DIR/seed/$engine/$tracker.sql" 2>&1)"
+    if [ $? -ne 0 ]; then echo "FAIL"; echo "$err" | sed 's/^/    /'; fail=1; return 1; fi
+  fi
+
   case "$engine" in
-    sqlserver) docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -Q \"IF DB_ID('${db}') IS NULL CREATE DATABASE [${db}]\"" >/dev/null 2>&1 ;;
-    postgres)  docker exec learn-postgres psql -U postgres -d postgres -c "CREATE DATABASE ${db}" >/dev/null 2>&1 ;;
-    mysql)     docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS \`${db}\`" >/dev/null 2>&1 ;;
-    mariadb)   docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e "CREATE DATABASE IF NOT EXISTS \`${db}\`" >/dev/null 2>&1 ;;
+    sqlserver) ready_sql="SELECT 'READY' WHERE OBJECT_ID('dbo.Customer') IS NOT NULL" ;;
+    postgres)  ready_sql="SELECT 1 FROM information_schema.tables WHERE table_name='customer'" ;;
+    *)         ready_sql="SELECT 1 FROM information_schema.tables WHERE table_schema='$db' AND table_name='Customer'" ;;
   esac
-  apply_sql "$engine" "$db" "$SCRIPT_DIR/seed/$engine/shop.sql"
-  if [ -n "$tracker" ]; then apply_sql "$engine" "$db" "$SCRIPT_DIR/seed/$engine/$tracker.sql"; fi
-  case "$engine" in
-    sqlserver) out=$(docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -d ${db} -Q \"SELECT 'READY' WHERE OBJECT_ID('dbo.Customer') IS NOT NULL\"" 2>/dev/null) ;;
-    postgres)  out=$(docker exec learn-postgres psql -U postgres -d "${db}" -tAc "SELECT 1 FROM information_schema.tables WHERE table_name='customer'" 2>/dev/null) ;;
-    mysql)     out=$(docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema='${db}' AND table_name='Customer'" 2>/dev/null) ;;
-    mariadb)   out=$(docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT 1 FROM information_schema.tables WHERE table_schema='${db}' AND table_name='Customer'" 2>/dev/null) ;;
-  esac
-  if echo "$out" | grep -qE 'READY|1'; then echo "PASS"; else echo "FAIL"; fail=1; fi
+  out="$(lab_sql "$engine" "$db" "$ready_sql" 2>&1)"
+  if [ $? -ne 0 ]; then echo "FAIL"; echo "$out" | sed 's/^/    /'; fail=1; return 1; fi
+  if ! echo "$out" | grep -qE 'READY|1'; then
+    echo "FAIL"
+    echo "    seed completed but the shop schema's Customer table was not found."
+    fail=1
+    return 1
+  fi
+
+  if [ "$reset" -eq 1 ]; then echo "PASS (reset)"; else echo "PASS"; fi
 }
 
 # database : tracker-file-stem  (empty tracker = no bookkeeping table, e.g. DACPAC)
@@ -51,25 +79,28 @@ three_engine_dbs=(
   "shop_from_scripts:tracker_scripts"
 )
 
-echo "SQL Server"
-for pair in "${three_engine_dbs[@]}"; do seed_db sqlserver "${pair%%:*}" "${pair##*:}"; done
-# DACPAC is a SQL Server technology (Course 5 Module 4 is SQL-Server-only by design); no tracker table.
-seed_db sqlserver shop_from_dacpac ""
-
-echo "PostgreSQL"
-for pair in "${three_engine_dbs[@]}"; do seed_db postgres "${pair%%:*}" "${pair##*:}"; done
-
-echo "MySQL"
-for pair in "${three_engine_dbs[@]}"; do seed_db mysql "${pair%%:*}" "${pair##*:}"; done
-
-echo "MariaDB"
-for pair in "${three_engine_dbs[@]}"; do seed_db mariadb "${pair%%:*}" "${pair##*:}"; done
+engines="$(lab_engines)" || exit 1
+total=0
+parts=""
+for engine in $engines; do
+  echo "$(label "$engine")"
+  n=0
+  for pair in "${three_engine_dbs[@]}"; do
+    if init_db "$engine" "${pair%%:*}" "${pair##*:}"; then n=$((n + 1)); fi
+  done
+  # DACPAC is a SQL Server technology (Course 5 Module 4 is SQL-Server-only by design); no tracker table.
+  if [ "$engine" = "sqlserver" ]; then
+    if init_db "$engine" shop_from_dacpac ""; then n=$((n + 1)); fi
+  fi
+  total=$((total + n))
+  parts="${parts}${parts:+, }${n} $(label "$engine")"
+done
 
 echo
 if [ "$fail" -eq 0 ]; then
-  echo "All 17 databases are seeded and ready (5 SQL Server, 4 PostgreSQL, 4 MySQL, 4 MariaDB)."
+  echo "All ${total} databases are seeded and ready (${parts})."
   exit 0
 else
-  echo "One or more databases could not be seeded. Is the sandbox up? See Demos/Learn/README.md."
+  echo "One or more databases could not be seeded. Is the sandbox up (or your own server reachable)? See Demos/Learn/README.md."
   exit 1
 fi

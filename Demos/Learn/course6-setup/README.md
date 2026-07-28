@@ -140,3 +140,24 @@ with orders 105–109 carrying 10 affected `OrderItem` rows in total).
 The seed scripts are idempotent — every table is dropped and recreated, so a second run restores the
 exact starting state and still reports `PASS` for every database. Run them as often as you like; if a
 lab leaves a database in an odd state, re-run the setup to reset it.
+
+## Starting over: `-Reset`
+
+Re-running the setup already restores each table to its starting state, but the database itself is
+never touched. `-Reset` goes a step further — it drops and recreates the three tenant databases
+before reseeding, so the price-defect batch is exactly as described above again on all three
+tenants. The `datafix_user` role isn't dropped; it's simply reconfirmed against the freshly reseeded
+databases (grants are idempotent):
+
+```bash
+bash setup-databases.sh --reset
+```
+
+```powershell
+.\setup-databases.ps1 -Reset
+```
+
+Each tenant database is dropped and recreated, then reseeded, reported as `PASS (reset)`. **Only
+databases these scripts created are ever dropped.** On your own server, a database carrying one of
+these names that the labs didn't create is refused and left untouched — you'll be told to rename or
+move it. Nothing of yours is at risk.

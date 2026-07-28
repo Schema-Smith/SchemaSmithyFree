@@ -39,6 +39,13 @@ guarded, so setup is idempotent.
 
 ## What each script does
 
+The setup scripts create each tenant through the shared lab connection helper
+([`Demos/Learn/lab-sql.ps1`](../lab-sql.ps1) / [`lab-sql.sh`](../lab-sql.sh)), which issues the same
+guarded `CREATE DATABASE` per tenant and also stamps it as lab-provisioned — that stamp is what lets
+`-Reset` safely drop and recreate the fleet later without ever touching a same-named database it
+didn't create. The per-engine files below show the equivalent guarded `CREATE DATABASE` statements
+for reference:
+
 | File | Purpose |
 | --- | --- |
 | [`seed/sqlserver/01_create_tenant_databases.sql`](seed/sqlserver/01_create_tenant_databases.sql) | `CREATE DATABASE fleet_tenant_001..005` (guarded on `DB_ID`). |
@@ -71,3 +78,23 @@ docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e \
 
 Onboarding a sixth tenant later (Module 1 demonstrates this) is just another `CREATE DATABASE
 fleet_tenant_006` — the next deploy discovers it automatically.
+
+## Starting over: `-Reset`
+
+The Module 1 deploy forges the Shop schema into every tenant, so re-running plain setup afterwards
+makes no changes — the guarded `CREATE DATABASE` statements are no-ops on databases that already
+exist. To return the fleet to its original empty state — for example, after experimenting with a
+fan-out deploy — reset it:
+
+```bash
+bash setup-databases.sh --reset
+```
+
+```powershell
+.\setup-databases.ps1 -Reset
+```
+
+Each engine's five tenant databases are dropped and recreated empty, reported as
+`PASS (reset, 5 tenant databases)`. **Only databases these scripts created are ever dropped.** On
+your own server, a database carrying one of these names that the labs didn't create is refused and
+left untouched — you'll be told to rename or move it. Nothing of yours is at risk.

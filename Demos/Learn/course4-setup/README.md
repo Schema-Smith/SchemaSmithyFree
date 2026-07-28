@@ -88,3 +88,21 @@ These are throwaway sandbox credentials — **never reuse them anywhere real.**
 
 The scripts are idempotent — running them a second time makes no changes and still reports `PASS`
 for every database. You can run them as many times as you like.
+
+## Starting over: `-Reset`
+
+Each recipe's database is scoped to that recipe, so labs stay isolated from one another. But if a
+lab run leaves one in an odd state — or you just want a recipe's database empty again — reset it:
+
+```bash
+bash setup-databases.sh --reset
+```
+
+```powershell
+.\setup-databases.ps1 -Reset
+```
+
+Each database is dropped and recreated empty, reported as `PASS (reset)`. **Only databases these
+scripts created are ever dropped.** On your own server, a database carrying one of these names that
+the labs didn't create is refused and left untouched — you'll be told to rename or move it. Nothing
+of yours is at risk.

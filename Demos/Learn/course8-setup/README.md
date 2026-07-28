@@ -78,13 +78,32 @@ Re-run the quench and it is a clean no-op: SchemaSmith compares the live databas
 model, finds no delta, and generates nothing. That is the convergence engine — it converges to the
 declared state and stops.
 
+## Starting over: `--reset`
+
+Want `diag_baseline` back to empty — say, after experimenting with the schema past Step 2, or just
+for a clean slate — reset it:
+
+```bash
+bash setup-databases.sh --reset
+```
+
+```powershell
+.\setup-databases.ps1 -Reset
+```
+
+The database is dropped and recreated empty, reported as `PASS (reset)`. **Only a database this
+script created is ever dropped.** On your own server, a database named `diag_baseline` that the
+labs didn't create is refused and left untouched — you'll be told to rename or move it. Nothing of
+yours is at risk.
+
+Re-run Step 2 afterwards to re-forge the `Shop` baseline.
+
 ## What each engine folder contains
 
 | Path | Purpose |
 | --- | --- |
 | `<engine>/Package/` | The `Shop` product: `Product.json`, `Templates/Main/` (the four tables), and generated editor `.json-schemas/`. |
 | `<engine>/quench.settings.json` | Connection to the sandbox engine, `Target.Databases: ["diag_baseline"]`, and lab-local `ArtifactPath` / `CheckpointDirectory`. |
-| `seed/<engine>/01_create_baseline_database.sql` | The guarded `CREATE DATABASE diag_baseline` Step 1 runs. |
 
 Next: **Module 1 — Reading the black box**, where a deploy fails on purpose and you follow the trail
 from `FAILED to quench` to the exact failing batch, and name the phase.

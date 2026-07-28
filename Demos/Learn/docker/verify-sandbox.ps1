@@ -1,6 +1,13 @@
 # Verify the SchemaSmith Learn sandbox: wait for each engine to report healthy,
 # then run a trivial connection/query against it. Prints PASS/FAIL per engine.
 
+. "$PSScriptRoot\..\lab-sql.ps1"
+if (Test-LabOwnServer) {
+    Write-Host "This script verifies the Docker sandbox, which you're not using - you're pointed at $($env:LEARN_SERVER):$($env:LEARN_PORT)."
+    Write-Host "Nothing to verify here. Run each course's setup script instead."
+    exit 0
+}
+
 $ErrorActionPreference = 'Continue'
 $failed = $false
 

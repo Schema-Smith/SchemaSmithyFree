@@ -41,18 +41,43 @@ cd Demos\Learn\course9-setup
 ```
 
 Prints `PASS` per engine once its service database exists. Re-running is safe —
-every `CREATE` is guarded.
+each database is only ever created once.
+
+On your own server ([Use your own server](../README.md#use-your-own-server-instead-no-docker)),
+only your single activated engine is set up — Course 9 needs SQL Server, PostgreSQL,
+and MySQL together, so at most one of the three services can run there at a time.
 
 ## What the script does
 
-| Engine | Database created | Guard |
-| --- | --- | --- |
-| SQL Server | `orders` | `IF DB_ID('orders') IS NULL` |
-| PostgreSQL | `catalog` | `SELECT … WHERE NOT EXISTS …`, run via psql `\gexec` |
-| MySQL | `sessions` | `CREATE DATABASE IF NOT EXISTS` |
+| Engine | Database created |
+| --- | --- |
+| SQL Server | `orders` |
+| PostgreSQL | `catalog` |
+| MySQL | `sessions` |
 
 No schema is deployed here. Module 1 deploys the first native package into each
 of these databases.
+
+## Starting over: `--reset`
+
+Any time you want a clean slate for one of the services — say a module's deploy
+failed partway and left it in a state a later module doesn't expect — reset it:
+
+```bash
+bash setup-databases.sh --reset
+```
+
+```powershell
+.\setup-databases.ps1 -Reset
+```
+
+Each database is dropped and recreated empty, reported as `PASS (reset)`. **Only
+databases this script created are ever dropped.** On your own server, a database
+carrying one of these names that the labs didn't create is refused and left
+untouched — you'll be told to rename or move it. Nothing of yours is at risk.
+
+Re-run the module you're returning to from its first step; everything it needs,
+it creates.
 
 Next: **Module 1 — Same change, three engines**, where you apply one identical
 schema evolution to all three services — as three independent native packages —

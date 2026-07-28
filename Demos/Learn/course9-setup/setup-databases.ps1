@@ -1,53 +1,67 @@
-# Create the Course 9 Northwind Commerce service databases on each sandbox engine:
-# orders on SQL Server, catalog on PostgreSQL, sessions on MySQL. No schema is
-# seeded — each course module deploys its own native package into these databases.
-# Re-running is safe; all CREATE DDL is guarded. PASS is reported only after the
-# database is confirmed to exist on an engine.
+# Create the Course 9 Northwind Commerce service databases on each sandbox engine, or on
+# your own server's single activated engine (LEARN_SERVER): orders on SQL Server, catalog
+# on PostgreSQL, sessions on MySQL. No schema is seeded -- each course module deploys its
+# own native package into these databases. Re-running is safe -- Confirm-LabDatabase only
+# creates what's missing. PASS is reported only after the database is confirmed to exist
+# (a create that silently fails reports FAIL, never a false PASS).
+#
+# -Reset drops and recreates them empty. Use it any time you want a clean slate -- e.g.
+# after a module's deploy fails partway and leaves a service in a state a later module
+# doesn't expect. Only databases the labs created are ever dropped -- see Remove-LabDatabase.
+[CmdletBinding()]
+param([switch] $Reset)
+
+. "$PSScriptRoot\..\lab-sql.ps1"
 
 $failed = $false
+$total = 0
+$readyDbs = @()
+$services = [ordered]@{
+    sqlserver = @{ Db = 'orders';   Label = 'Orders (SQL Server)' }
+    postgres  = @{ Db = 'catalog';  Label = 'Catalog (PostgreSQL)' }
+    mysql     = @{ Db = 'sessions'; Label = 'Sessions (MySQL)' }
+}
 
-function Invoke-Seed {
-    param([string]$Engine)
-    $file = Join-Path $PSScriptRoot "seed/$Engine/01_create_service_databases.sql"
-    if (-not (Test-Path $file)) { Write-Host "  MISSING $file"; $script:failed = $true; return }
-    # Copy the script into the container and run it there, rather than piping it on
-    # stdin from the host: Windows PowerShell 5.1 injects a UTF-8 BOM into piped
-    # native-command input, which sqlcmd rejects. docker cp + in-container execution
-    # is encoding-proof and behaves identically under PowerShell 5.1, pwsh 7, and bash.
-    switch ($Engine) {
-        'sqlserver' { docker cp $file learn-sqlserver:/tmp/seed.sql | Out-Null; docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -i /tmp/seed.sql | Out-Null }
-        'postgres'  { docker cp $file learn-postgres:/tmp/seed.sql | Out-Null; docker exec learn-postgres psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/seed.sql | Out-Null }
-        'mysql'     { docker cp $file learn-mysql:/tmp/seed.sql | Out-Null; docker exec learn-mysql sh -c 'mysql -uroot -pLearn!Passw0rd < /tmp/seed.sql' 2>$null | Out-Null }
+foreach ($engine in Get-LabEngines) {
+    if (-not $services.Contains($engine)) { continue }
+    $svc = $services[$engine]
+    Write-Host -NoNewline ("{0,-30} " -f $svc.Label)
+    $total++
+    try {
+        if ($Reset) {
+            $removed = Remove-LabDatabase -Engine $engine -Database $svc.Db
+            if ($removed -eq 'refused') {
+                throw "'$($svc.Db)' exists but wasn't created by the labs, so it will not be dropped. Rename or move it, then re-run."
+            }
+        }
+        Confirm-LabDatabase -Engine $engine -Database $svc.Db | Out-Null
+        Write-Host $(if ($Reset) { 'PASS (reset)' } else { 'PASS (service database ready)' })
+        $readyDbs += $svc.Db
+    } catch {
+        Write-Host 'FAIL'
+        Write-Host "    $($_.Exception.Message)"
+        $failed = $true
     }
 }
-
-function Get-ServiceDbCount {
-    param([string]$Engine)
-    switch ($Engine) {
-        'sqlserver' { (docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.databases WHERE name = 'orders'" 2>$null).Trim() }
-        'postgres'  { (docker exec learn-postgres psql -U postgres -tAc "SELECT COUNT(*) FROM pg_database WHERE datname = 'catalog'" 2>$null).Trim() }
-        'mysql'     { (docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'sessions'" 2>$null).Trim() }
-    }
-}
-
-function Initialize-Engine {
-    param([string]$Engine, [string]$Label)
-    Write-Host -NoNewline ("{0,-30} " -f $Label)
-    Invoke-Seed $Engine
-    $n = Get-ServiceDbCount $Engine
-    if ($n -eq '1') { Write-Host "PASS (service database ready)" }
-    else { Write-Host "FAIL (found '$n', expected 1)"; $script:failed = $true }
-}
-
-Initialize-Engine 'sqlserver' 'Orders (SQL Server)'
-Initialize-Engine 'postgres'  'Catalog (PostgreSQL)'
-Initialize-Engine 'mysql'     'Sessions (MySQL)'
 
 Write-Host ''
-if (-not $failed) {
-    Write-Host 'All three service databases are ready — orders, catalog, sessions.'
+if ($total -eq 0) {
+    Write-Host "Course 9 doesn't use $($env:LEARN_ENGINE) -- it needs SQL Server, PostgreSQL, and MySQL together. Point use-my-server at one of those instead, or use the sandbox for this course."
+    exit 1
+} elseif (-not $failed) {
+    if ($total -eq 1) {
+        Write-Host "The $($readyDbs[0]) service database is ready."
+    } else {
+        Write-Host "All $total service databases are ready -- $($readyDbs -join ', ')."
+    }
+    if ((Test-LabOwnServer) -and $total -lt $services.Count) {
+        Write-Host ''
+        Write-Host "Course 9 runs all three services together, so it needs SQL Server, PostgreSQL, and MySQL."
+        Write-Host "You have $total of the three. If you run the other engines too, re-source use-my-server for"
+        Write-Host 'each one and run this script again -- otherwise use the sandbox for this course.'
+    }
     exit 0
 } else {
-    Write-Host 'One or more engines could not be set up. Is the sandbox up? See Demos/Learn/README.md.'
+    Write-Host 'One or more engines could not be set up. Is the sandbox up (or your own server reachable)? See Demos/Learn/README.md.'
     exit 1
 }

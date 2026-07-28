@@ -90,3 +90,23 @@ These are throwaway sandbox credentials — **never reuse them anywhere real.**
 The seed scripts are idempotent — every table is dropped and recreated, so a second run restores the
 exact starting state and still reports `PASS` for every database. Run them as often as you like; if a
 lab leaves a database in an odd state, re-run the setup to reset it.
+
+## Starting over: `-Reset`
+
+Re-running the setup already restores each table to its starting state, but the database itself is
+never touched. `-Reset` goes a step further — it drops and recreates the whole database before
+reseeding, useful if a lab has added extra objects alongside the shop schema and you want a truly
+empty starting point:
+
+```bash
+bash setup-databases.sh --reset
+```
+
+```powershell
+.\setup-databases.ps1 -Reset
+```
+
+Each database is dropped and recreated, then reseeded, reported as `PASS (reset)`. **Only databases
+these scripts created are ever dropped.** On your own server, a database carrying one of these names
+that the labs didn't create is refused and left untouched — you'll be told to rename or move it.
+Nothing of yours is at risk.

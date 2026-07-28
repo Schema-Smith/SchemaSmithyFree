@@ -1,56 +1,67 @@
 #!/usr/bin/env bash
-# Create the Course 8 diagnostics baseline on each sandbox engine: ONE EMPTY database
-# diag_baseline on SQL Server, PostgreSQL, and MySQL. No schema is seeded —
-# the Module 1 deploy is what forges the Shop schema into the baseline. Re-running is
-# safe; all CREATE DDL is guarded. PASS is reported only after the database
-# is confirmed to exist on an engine.
+# Create the Course 8 diagnostics baseline database on each sandbox engine, or on your own
+# server's single activated engine (LEARN_SERVER): ONE EMPTY database diag_baseline. No
+# schema is seeded -- the Module 1 deploy is what forges the Shop schema into the baseline.
+# Re-running is safe -- creation is idempotent. PASS is reported only after the database is
+# confirmed to exist (a create that silently fails reports FAIL, never a false PASS).
+#
+# --reset drops and recreates it empty. Use it to return diag_baseline to a pristine state,
+# for example after experimenting past Step 2 of this setup's walkthrough. Only a database
+# the labs created is ever dropped -- see lab_remove_db.
 set -u
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../lab-sql.sh"
+
+db="diag_baseline"
+reset=0
+[ "${1:-}" = "--reset" ] && reset=1
+
+label() {
+  case "$1" in
+    sqlserver) printf 'SQL Server' ;;
+    postgres)  printf 'PostgreSQL' ;;
+    mysql)     printf 'MySQL' ;;
+    mariadb)   printf 'MariaDB' ;;
+  esac
+}
+
 fail=0
+total=0
 
-apply_seed() {
-  local engine="$1" file="$SCRIPT_DIR/seed/$1/01_create_baseline_database.sql"
-  if [ ! -f "$file" ]; then echo "  MISSING $file"; fail=1; return 1; fi
-  # Copy the script into the container and run it there rather than piping on stdin:
-  # keeps behaviour identical across bash, Windows PowerShell 5.1 (which injects a
-  # UTF-8 BOM sqlcmd rejects on piped input), and pwsh 7.
-  case "$engine" in
-    sqlserver) docker cp "$file" learn-sqlserver:/tmp/seed.sql >/dev/null; docker exec learn-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -i /tmp/seed.sql >/dev/null 2>&1 ;;
-    postgres)  docker cp "$file" learn-postgres:/tmp/seed.sql >/dev/null; docker exec learn-postgres psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/seed.sql >/dev/null 2>&1 ;;
-    mysql)     docker cp "$file" learn-mysql:/tmp/seed.sql >/dev/null; docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -e 'source /tmp/seed.sql' >/dev/null 2>&1 ;;
-    mariadb)   docker cp "$file" learn-mariadb:/tmp/seed.sql >/dev/null; docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -e 'source /tmp/seed.sql' >/dev/null 2>&1 ;;
-  esac
-}
-
-count_baseline() {
-  local engine="$1"
-  case "$engine" in
-    sqlserver) docker exec learn-sqlserver bash -c "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -h -1 -W -Q \"SET NOCOUNT ON; SELECT COUNT(*) FROM sys.databases WHERE name = 'diag_baseline'\"" 2>/dev/null | tr -d '[:space:]' ;;
-    postgres)  docker exec learn-postgres psql -U postgres -tAc "SELECT COUNT(*) FROM pg_database WHERE datname = 'diag_baseline'" 2>/dev/null | tr -d '[:space:]' ;;
-    mysql)     docker exec learn-mysql mysql -uroot -pLearn!Passw0rd -N -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'diag_baseline'" 2>/dev/null | tr -d '[:space:]' ;;
-    mariadb)   docker exec learn-mariadb mariadb -uroot -pLearn!Passw0rd -N -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'diag_baseline'" 2>/dev/null | tr -d '[:space:]' ;;
-  esac
-}
-
-seed_engine() {
-  local engine="$1" label="$2"
-  printf '%-12s ' "$label"
-  apply_seed "$engine"
-  local n; n="$(count_baseline "$engine")"
-  if [ "$n" = "1" ]; then echo "PASS (diagnostics baseline database ready)"; else echo "FAIL (found '${n}', expected 1)"; fail=1; fi
-}
-
-seed_engine sqlserver "SQL Server"
-seed_engine postgres  "PostgreSQL"
-seed_engine mysql     "MySQL"
-seed_engine mariadb   "MariaDB"
+engines="$(lab_engines)" || exit 1
+for engine in $engines; do
+  printf '%-12s ' "$(label "$engine")"
+  total=$((total + 1))
+  rc=0
+  err=''
+  if [ "$reset" -eq 1 ]; then
+    removed="$(lab_remove_db "$engine" "$db" 2>/dev/null)"
+    if [ "$removed" = "refused" ]; then
+      err="    '$db' exists but wasn't created by the labs, so it will not be dropped. Rename or move it, then re-run."
+      rc=1
+    fi
+  fi
+  if [ "$rc" -eq 0 ]; then
+    err="$(lab_confirm_db "$engine" "$db" 2>&1 1>/dev/null)"
+    rc=$?
+  fi
+  if [ "$rc" -eq 0 ]; then
+    if [ "$reset" -eq 1 ]; then echo "PASS (reset)"; else echo "PASS (diagnostics baseline database ready)"; fi
+  else
+    echo "FAIL"
+    echo "$err" | sed 's/^/    /'
+    fail=1
+  fi
+done
 
 echo
 if [ "$fail" -eq 0 ]; then
-  echo "diagnostics baseline database ready on all 4 engines — empty, ready for Module 1."
+  where="all ${total} engines"
+  [ "$total" -eq 1 ] && where="$(label "$engines")"
+  echo "diagnostics baseline database ready on ${where} — empty, ready for Module 1."
   exit 0
 else
-  echo "One or more engines could not be set up. Is the sandbox up? See Demos/Learn/README.md."
+  echo "One or more engines could not be set up. Is the sandbox up (or your own server reachable)? See Demos/Learn/README.md."
   exit 1
 fi
