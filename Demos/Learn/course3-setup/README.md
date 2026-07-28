@@ -73,3 +73,28 @@ real.**
 
 The scripts are idempotent — running them a second time makes no changes and still reports `PASS`
 for every database. You can run them as many times as you like.
+
+## Starting over: `--reset`
+
+Modules share these databases, and each one deploys its own package into them. That's the point —
+it's how the course shows a single product moving through environments. But **Module 5's capstone
+also installs infrastructure the other modules know nothing about**: a `recyclebin` schema, a
+registry table, and custom drop/restore procedures. Go back to an earlier module afterwards and its
+package meets objects it never declared.
+
+When that happens — or any time you want a clean slate — reset the databases:
+
+```bash
+bash setup-environments.sh --reset
+```
+
+```powershell
+.\setup-environments.ps1 -Reset
+```
+
+Each database is dropped and recreated empty, reported as `PASS (reset)`. **Only databases these
+scripts created are ever dropped.** On your own server, a database carrying one of these names that
+the labs didn't create is refused and left untouched — you'll be told to rename or move it. Nothing
+of yours is at risk.
+
+Re-run the module you're returning to from its first step; everything it needs, it creates.

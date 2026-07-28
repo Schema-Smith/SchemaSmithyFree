@@ -182,6 +182,48 @@ Rename or move your '$Database', then re-run this setup script.
     return 'reused'
 }
 
+# Drops a database so a course can start from a clean slate. Mirrors Confirm-LabDatabase's
+# ownership rule: on your own server only a database the labs stamped is ever dropped, so a
+# real database of yours that shares a lab name is refused, never destroyed. In the sandbox
+# the container is a throwaway we created, so an unstamped database is dropped too.
+# Returns 'dropped', 'absent', or 'refused'.
+function Remove-LabDatabase {
+    param([Parameter(Mandatory)][string]$Engine, [Parameter(Mandatory)][string]$Database)
+    $admin = Get-LabAdminDatabase $Engine
+
+    $existsSql = switch ($Engine) {
+        'sqlserver' { "SELECT COUNT(*) FROM sys.databases WHERE name = '$Database'" }
+        'postgres'  { "SELECT COUNT(*) FROM pg_database WHERE datname = '$Database'" }
+        default     { "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = '$Database'" }
+    }
+    if ((Invoke-LabSql -Engine $Engine -Database $admin -Sql $existsSql) -eq '0') { return 'absent' }
+
+    if (Test-LabOwnServer) {
+        $stampedSql = switch ($Engine) {
+            'sqlserver' { "SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name = '$LabStamp'" }
+            'postgres'  { "SELECT COUNT(*) FROM pg_database WHERE datname = current_database() AND COALESCE(shobj_description(oid, 'pg_database'), '') = '$LabStamp'" }
+            default     { "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$Database' AND table_name = '$LabStamp'" }
+        }
+        if ((Invoke-LabSql -Engine $Engine -Database $Database -Sql $stampedSql) -eq '0') { return 'refused' }
+    }
+
+    # PostgreSQL: evict sessions and drop as SEPARATE statements. psql -c wraps its whole
+    # string in one transaction, and DROP DATABASE cannot run inside a transaction block.
+    if ($Engine -eq 'postgres') {
+        Invoke-LabSql -Engine $Engine -Database $admin `
+            -Sql "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$Database' AND pid <> pg_backend_pid()" | Out-Null
+        Invoke-LabSql -Engine $Engine -Database $admin -Sql "DROP DATABASE IF EXISTS ""$Database""" | Out-Null
+        return 'dropped'
+    }
+
+    $dropSql = switch ($Engine) {
+        'sqlserver' { "ALTER DATABASE [$Database] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$Database];" }
+        default     { "DROP DATABASE IF EXISTS ``$Database``" }
+    }
+    Invoke-LabSql -Engine $Engine -Database $admin -Sql $dropSql | Out-Null
+    return 'dropped'
+}
+
 # Called as a command rather than dot-sourced: lab-sql.ps1 <engine> <database> <sql>
 if ($MyInvocation.InvocationName -ne '.' -and $args.Count -ge 3) {
     Invoke-LabSql -Engine $args[0] -Database $args[1] -Sql ($args[2..($args.Count - 1)] -join ' ')

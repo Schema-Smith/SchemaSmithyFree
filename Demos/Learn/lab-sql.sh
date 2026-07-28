@@ -184,6 +184,48 @@ lab_confirm_db() {
   printf 'reused'
 }
 
+# Drops a database so a course can start from a clean slate. Mirrors lab_confirm_db's
+# ownership rule: on your own server only a database the labs stamped is ever dropped, so a
+# real database of yours that shares a lab name is refused, never destroyed. In the sandbox
+# the container is a throwaway we created, so an unstamped database is dropped too.
+# Prints 'dropped', 'absent', or 'refused'.
+lab_remove_db() {
+  local engine="$1" db="$2" admin exists_sql stamped_sql drop_sql
+  admin="$(lab_admin_db "$engine")"
+
+  case "$engine" in
+    sqlserver) exists_sql="SELECT COUNT(*) FROM sys.databases WHERE name = '$db'" ;;
+    postgres)  exists_sql="SELECT COUNT(*) FROM pg_database WHERE datname = '$db'" ;;
+    *)         exists_sql="SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = '$db'" ;;
+  esac
+  if [ "$(lab_sql "$engine" "$admin" "$exists_sql")" = "0" ]; then printf 'absent'; return 0; fi
+
+  if lab_own_server; then
+    case "$engine" in
+      sqlserver) stamped_sql="SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name = '$LAB_STAMP'" ;;
+      postgres)  stamped_sql="SELECT COUNT(*) FROM pg_database WHERE datname = current_database() AND COALESCE(shobj_description(oid, 'pg_database'), '') = '$LAB_STAMP'" ;;
+      *)         stamped_sql="SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$db' AND table_name = '$LAB_STAMP'" ;;
+    esac
+    if [ "$(lab_sql "$engine" "$db" "$stamped_sql")" = "0" ]; then printf 'refused'; return 0; fi
+  fi
+
+  # PostgreSQL: evict sessions and drop as SEPARATE statements. psql -c wraps its whole
+  # string in one transaction, and DROP DATABASE cannot run inside a transaction block.
+  if [ "$engine" = "postgres" ]; then
+    lab_sql "$engine" "$admin" "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$db' AND pid <> pg_backend_pid()" >/dev/null || return 1
+    lab_sql "$engine" "$admin" "DROP DATABASE IF EXISTS \"$db\"" >/dev/null || return 1
+    printf 'dropped'
+    return 0
+  fi
+
+  case "$engine" in
+    sqlserver) drop_sql="ALTER DATABASE [$db] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$db];" ;;
+    *)         drop_sql="DROP DATABASE IF EXISTS \`$db\`" ;;
+  esac
+  lab_sql "$engine" "$admin" "$drop_sql" >/dev/null || return 1
+  printf 'dropped'
+}
+
 # Called as a command rather than sourced.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   if [ "$#" -lt 3 ]; then

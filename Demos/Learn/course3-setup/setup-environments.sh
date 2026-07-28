@@ -3,10 +3,18 @@
 # on your own server's single activated engine (LEARN_SERVER). Re-running is safe -- all
 # DDL is idempotent. PASS is reported only after the database is confirmed to exist (a
 # create that silently fails reports FAIL, never a false PASS).
+#
+# --reset drops and recreates them empty. Use it when returning to an earlier module after
+# Module 5: the capstone installs a recyclebin schema and custom drop/restore procedures
+# into these same databases, and an earlier module's package doesn't know about them.
+# Only databases the labs created are ever dropped -- see lab_remove_db.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../lab-sql.sh"
+
+reset=0
+[ "${1:-}" = "--reset" ] && reset=1
 
 fail=0
 total=0
@@ -27,10 +35,21 @@ for engine in $engines; do
     db="ordersservice_${env}"
     printf '  %-26s ' "$db"
     total=$((total + 1))
-    err="$(lab_confirm_db "$engine" "$db" 2>&1 1>/dev/null)"
-    rc=$?
+    rc=0
+    err=''
+    if [ "$reset" -eq 1 ]; then
+      removed="$(lab_remove_db "$engine" "$db" 2>/dev/null)"
+      if [ "$removed" = "refused" ]; then
+        err="    '$db' exists but wasn't created by the labs, so it will not be dropped. Rename or move it, then re-run."
+        rc=1
+      fi
+    fi
     if [ "$rc" -eq 0 ]; then
-      echo "PASS"
+      err="$(lab_confirm_db "$engine" "$db" 2>&1 1>/dev/null)"
+      rc=$?
+    fi
+    if [ "$rc" -eq 0 ]; then
+      if [ "$reset" -eq 1 ]; then echo "PASS (reset)"; else echo "PASS"; fi
     else
       echo "FAIL"
       echo "$err" | sed 's/^/    /'

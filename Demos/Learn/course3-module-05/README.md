@@ -303,9 +303,15 @@ mistakes you don't see coming; `OldName` is how you don't make this one.
 
 ## Teardown
 
-Reset the databases for a clean re-run by re-running `setup-environments` — it's idempotent but won't
-undo deployed state, so drop and recreate if you want a truly fresh start, or just re-deploy `v1` to
-each environment to converge back to known-good.
+Reset the databases for a clean re-run with `setup-environments --reset` (`-Reset` in PowerShell),
+which drops and recreates them empty — plain `setup-environments` is idempotent but won't undo
+deployed state. Re-deploying `v1` to each environment also converges back to known-good.
+
+> **Before you revisit an earlier Course 3 module, use `--reset`.** This capstone leaves its recycle-bin
+> infrastructure behind — the `recyclebin` schema, its registry table, and the custom drop/restore
+> procedures — in the shared `ordersservice_*` databases. That's exactly what you built and it's
+> supposed to persist here, but Modules 1–4 declare none of it, so their packages meet objects they
+> don't know about. One reset puts you back on their footing.
 
 After a cert pass, remove disposable build/run output before you're done — a cert pass isn't done until
 disposable output is gone:
