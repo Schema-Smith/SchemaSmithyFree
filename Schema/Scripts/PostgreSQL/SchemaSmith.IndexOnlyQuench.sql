@@ -52,7 +52,11 @@ BEGIN
            COALESCE(celem ->> 'FilterExpression', '') AS "FilterExpression",
            COALESCE((celem ->> 'Deferrable')::BOOLEAN, false) AS "Deferrable",
            COALESCE((celem ->> 'InitiallyDeferred')::BOOLEAN, false) AS "InitiallyDeferred",
-           COALESCE((celem ->> 'NullsNotDistinct')::BOOLEAN, false) AS "NullsNotDistinct",
+           -- Below PG15 NULLS NOT DISTINCT does not exist: the effective column drives compare + emit
+           -- (coerced false so an old target neither churns nor emits an unsupported clause), while the
+           -- raw declared value drives the unsupported-feature policy (fail | warn-with-downgrade) below.
+           CASE WHEN "SchemaSmith"."ServerVersionNum"() >= 15 THEN COALESCE((celem ->> 'NullsNotDistinct')::BOOLEAN, false) ELSE false END AS "NullsNotDistinct",
+           COALESCE((celem ->> 'NullsNotDistinct')::BOOLEAN, false) AS "NullsNotDistinctDeclared",
            COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
            COALESCE(celem ->> 'VariantName', '') AS "VariantName",
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((celem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
@@ -75,7 +79,26 @@ BEGIN
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, false);
 
-    
+    -- Unsupported-feature policy: NULLS NOT DISTINCT requires PostgreSQL 15. On an older target the
+    -- effective column above already omits the clause; here the policy decides how to surface that.
+    -- 'fail' aborts pre-emptively naming the offending index(es); 'warn' (default) records an
+    -- unsupportedDowngrade manifest row per declared-but-unsupported index and lets the deploy proceed.
+    IF "SchemaSmith"."ServerVersionNum"() < 15 THEN
+      IF "SchemaSmith"."UnsupportedFeaturePolicy"() = 'fail'
+         AND EXISTS (SELECT 1 FROM temp_indexes WHERE "NullsNotDistinctDeclared") THEN
+        RAISE EXCEPTION 'NULLS NOT DISTINCT requires PostgreSQL 15 (detected major %); index(es): %',
+          "SchemaSmith"."ServerVersionNum"(),
+          (SELECT STRING_AGG("TableSchema" || '.' || "TableName" || '.' || "Name", ', ')
+             FROM temp_indexes WHERE "NullsNotDistinctDeclared");
+      ELSE
+        INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+          SELECT pg_backend_pid(), 'NULLS NOT DISTINCT (PG15)',
+                 "TableSchema" || '.' || "TableName" || '.' || "Name", 'downgraded'
+            FROM temp_indexes
+            WHERE "NullsNotDistinctDeclared";
+      END IF;
+    END IF;
+
     DROP TABLE IF EXISTS temp_statistics;
     CREATE TEMPORARY TABLE temp_statistics AS
     WITH my_tables(arr) AS (VALUES(table_json::JSON))

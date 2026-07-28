@@ -101,10 +101,10 @@ public static class DeploymentSummaryAssembler
     /// Unsupported-feature downgrade manifest (Phase 0). Itemizes the objects a version-gated emit
     /// site downgraded because the DETECTED target version could not support a declared feature —
     /// audit rows carry the feature+version descriptor in <c>ObjectType</c> (e.g.
-    /// <c>NULLS NOT DISTINCT (PG15)</c>) and the object in <c>ObjectName</c>. Returns <c>null</c>
-    /// (omitted from the report) unless at least one downgrade was recorded, so runs that hit no
-    /// below-floor feature keep the v1 shape. Not gated on protected mode — a downgrade is
-    /// orthogonal to no-drop protection.
+    /// <c>NULLS NOT DISTINCT (PG15)</c>) and the object in <c>ObjectName</c>, under the
+    /// <c>downgraded</c> action. Returns <c>null</c> (omitted from the report) unless at least one
+    /// downgrade was recorded, so runs that hit no below-floor feature keep the v1 shape. Not gated
+    /// on protected mode — a downgrade is orthogonal to no-drop protection.
     /// </summary>
     private static UnsupportedDowngradeSummary BuildUnsupportedDowngrade(ChangeAuditCapture changeAudit)
     {
@@ -112,7 +112,7 @@ public static class DeploymentSummaryAssembler
             return null;
 
         var downgrades = changeAudit.Snapshot()
-            .Where(r => r.Action == "unsupportedDowngrade")
+            .Where(r => r.Action == "downgraded")
             .Select(r => new UnsupportedDowngradeEntry(r.ObjectType, r.ObjectName))
             .ToArray();
 
@@ -187,11 +187,11 @@ public static class DeploymentSummaryAssembler
 
         var scriptsRan = rows.Count(r => r.Action == "ran");
         // 'dropSuppressed' rows are protection-suppressed drops, not changes that would occur — they
-        // belong to the PreventDropSummary manifest, not the object-change detail. 'unsupportedDowngrade'
-        // rows likewise belong to the UnsupportedDowngradeSummary manifest, not the detail. WhatIf
-        // 'would*' rows ARE previewed changes and stay in the detail.
+        // belong to the PreventDropSummary manifest, not the object-change detail. 'downgraded' rows
+        // likewise belong to the UnsupportedDowngradeSummary manifest, not the detail. WhatIf 'would*'
+        // rows ARE previewed changes and stay in the detail.
         var details = rows
-            .Where(r => r.Action != "dropSuppressed" && r.Action != "unsupportedDowngrade")
+            .Where(r => r.Action != "dropSuppressed" && r.Action != "downgraded")
             .Select(r => new ObjectChangeDetail(r.ObjectType, r.ObjectName, r.Action))
             .ToArray();
 
