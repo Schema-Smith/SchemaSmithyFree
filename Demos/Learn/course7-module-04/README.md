@@ -83,7 +83,9 @@ it — `drift-tenant-003.sql` relaxes `fleet_tenant_003`'s `Product.Sku` to allo
 NULL `Sku` in it:
 
 ```bash
-../../lab-sql.sh sqlserver fleet_tenant_003 --file drift-tenant-003.sql
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver fleet_tenant_003 --file sqlserver/drift-tenant-003.sql
+cd sqlserver     # back into the engine folder
 ```
 
 Now run the fleet. Wire a checkpoint directory in — you'll need it in Step 4:
@@ -126,7 +128,9 @@ You've triaged: the failure was one drifted tenant. Fix it — `reset-tenant-003
 row so `Sku` can go back to NOT NULL:
 
 ```bash
-../../lab-sql.sh sqlserver fleet_tenant_003 --file reset-tenant-003.sql
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver fleet_tenant_003 --file sqlserver/reset-tenant-003.sql
+cd sqlserver     # back into the engine folder
 ```
 
 Now **resume** the run. The failed run left its checkpoints behind (a clean run deletes them); `--ResumeQuench`

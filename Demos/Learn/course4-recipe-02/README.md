@@ -39,7 +39,8 @@ The default and the check are both built from the metadata:
 
 ```bash
 # SQL Server
-../../lab-sql.sh sqlserver cookbook_r2 "SELECT definition FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.Document')"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver cookbook_r2 "SELECT definition FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.Document')"
 # → ([RetentionDays]<=(365))
 ```
 
@@ -58,6 +59,7 @@ INSERT INTO Document (DocumentId, Title, ArchiveAfterDays, RetentionDays) VALUES
 Edit the metadata — `ArchiveDays` from `90` to `30` — and re-quench:
 
 ```bash
+cd <engine>       # back into the engine folder
 schemaquench --ConfigFile:deploy.settings.json
 ```
 
@@ -65,7 +67,8 @@ The column default re-derives from the new number, identically on all four engin
 
 ```bash
 # PostgreSQL
-../../lab-sql.sh postgres cookbook_r2 "SELECT column_default FROM information_schema.columns WHERE table_name='document' AND column_name='archiveafterdays'"
+cd ..            # back to the lab folder
+../lab-sql.sh postgres cookbook_r2 "SELECT column_default FROM information_schema.columns WHERE table_name='document' AND column_name='archiveafterdays'"
 # → 30
 ```
 

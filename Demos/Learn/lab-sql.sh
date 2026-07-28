@@ -96,8 +96,15 @@ lab_sql() {
   lab_trim "$out"
 }
 
+# Git Bash hands scripts POSIX paths (/c/src/...), but the engine clients are native Windows
+# programs: sqlcmd given /c/... reports "opening file C: Access is denied". cygpath exists
+# only under MSYS/Cygwin, so on Linux and macOS this is a no-op and the path passes through.
+lab_winpath() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+
 lab_sql_file() {
-  local engine="$1" db="$2" path="$3" out rc client container
+  local engine="$1" db="$2" path="$3" out rc client container clientpath
   if [ ! -f "$path" ]; then
     echo "LAB-SQL: no such SQL file '$path'." >&2
     return 1
@@ -105,6 +112,7 @@ lab_sql_file() {
   if lab_own_server; then
     # Local clients read the file directly -- nothing has to be copied into a container.
     client="$(lab_client "$engine")" || return 1
+    path="$(lab_winpath "$path")"
     case "$engine" in
       sqlserver) out=$(sqlcmd -S "${LEARN_SERVER},${LEARN_PORT}" -U "$LEARN_USER" -P "$LEARN_PASSWORD" \
                          -C -b -d "$db" -i "$path" 2>&1); rc=$? ;;

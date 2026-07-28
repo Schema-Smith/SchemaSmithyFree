@@ -77,8 +77,10 @@ PostgreSQL says `Create new table public.Widget`; MySQL says ``Create table `Wid
 
 ```bash
 # SQL Server (from a SQL client): SELECT name FROM sys.tables WHERE name = 'Widget';
-../../../lab-sql.sh postgres learn "SELECT to_regclass('public.\"Widget\"')"
-../../../lab-sql.sh mysql learn "SELECT table_name FROM information_schema.tables WHERE table_schema='learn' AND table_name='Widget'"
+cd ../..                              # back to the lab folder
+../lab-sql.sh postgres learn "SELECT to_regclass('public.\"Widget\"')"
+../lab-sql.sh mysql learn "SELECT table_name FROM information_schema.tables WHERE table_schema='learn' AND table_name='Widget'"
+cd <engine>/starter                   # back to the engine folder
 ```
 
 ## Step 5: Run it again — the "aha"

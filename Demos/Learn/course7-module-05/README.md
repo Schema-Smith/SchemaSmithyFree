@@ -50,13 +50,17 @@ failure modes before the rollout:
 **Stage the index failure on tenant 002** (duplicate emails):
 
 ```bash
-../../lab-sql.sh sqlserver fleet_tenant_002 --file drift-tenant-002.sql
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver fleet_tenant_002 --file sqlserver/drift-tenant-002.sql
+cd sqlserver     # back into the engine folder
 ```
 
 **Stage the FK failure on tenant 004** (dropped FK + orphan row):
 
 ```bash
-../../lab-sql.sh sqlserver fleet_tenant_004 --file drift-tenant-004.sql
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver fleet_tenant_004 --file sqlserver/drift-tenant-004.sql
+cd sqlserver     # back into the engine folder
 ```
 
 Look at the comments at the top of each drift file — they describe exactly what broke and why the rollout
@@ -178,13 +182,17 @@ that succeeded skip past all their already-completed steps instantly.
 **Fix tenant 002** (deduplicate the emails):
 
 ```bash
-../../lab-sql.sh sqlserver fleet_tenant_002 --file reset-tenant-002.sql
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver fleet_tenant_002 --file sqlserver/reset-tenant-002.sql
+cd sqlserver     # back into the engine folder
 ```
 
 **Fix tenant 004** (remove the orphan):
 
 ```bash
-../../lab-sql.sh sqlserver fleet_tenant_004 --file reset-tenant-004.sql
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver fleet_tenant_004 --file sqlserver/reset-tenant-004.sql
+cd sqlserver     # back into the engine folder
 ```
 
 **Resume the run:**

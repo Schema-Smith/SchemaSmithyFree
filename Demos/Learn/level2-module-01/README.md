@@ -115,8 +115,10 @@ Both tables now live in the one `learn` database, side by side:
 
 ```bash
 # SQL Server (from a SQL client): SELECT name FROM sys.tables WHERE name IN ('Currency','SalesOrder');
-../../../lab-sql.sh postgres learn "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('Currency','SalesOrder') ORDER BY tablename"
-../../../lab-sql.sh mysql learn "SELECT table_name FROM information_schema.tables WHERE table_schema='learn' AND table_name IN ('Currency','SalesOrder') ORDER BY table_name"
+cd ../..                              # back to the lab folder
+../lab-sql.sh postgres learn "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('Currency','SalesOrder') ORDER BY tablename"
+../lab-sql.sh mysql learn "SELECT table_name FROM information_schema.tables WHERE table_schema='learn' AND table_name IN ('Currency','SalesOrder') ORDER BY table_name"
+cd <engine>/appserver                 # back to the engine folder
 ```
 
 Two tables, one shared lookup, declared in exactly one place. If `Currency` had been copied into both

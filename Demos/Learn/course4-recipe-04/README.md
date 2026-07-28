@@ -43,24 +43,26 @@ schemaquench --ConfigFile:deploy.settings.json
 Read the stored image back and confirm it's byte-for-byte the file you shipped (69 bytes):
 
 ```bash
+cd ..            # back to the lab folder
+
 # SQL Server
-../../lab-sql.sh sqlserver cookbook_r4 "SELECT DATALENGTH(Image), LOWER(CONVERT(VARCHAR(MAX), Image, 2)) FROM dbo.BrandAssets WHERE AssetName='Default'"
+../lab-sql.sh sqlserver cookbook_r4 "SELECT DATALENGTH(Image), LOWER(CONVERT(VARCHAR(MAX), Image, 2)) FROM dbo.BrandAssets WHERE AssetName='Default'"
 
 # PostgreSQL
-../../lab-sql.sh postgres cookbook_r4 "SELECT octet_length(image), encode(image,'hex') FROM public.brandassets WHERE assetname='Default'"
+../lab-sql.sh postgres cookbook_r4 "SELECT octet_length(image), encode(image,'hex') FROM public.brandassets WHERE assetname='Default'"
 
 # MySQL
-../../lab-sql.sh mysql cookbook_r4 "SELECT LENGTH(Image), LOWER(HEX(Image)) FROM cookbook_r4.BrandAssets WHERE AssetName='Default'"
+../lab-sql.sh mysql cookbook_r4 "SELECT LENGTH(Image), LOWER(HEX(Image)) FROM cookbook_r4.BrandAssets WHERE AssetName='Default'"
 
 # MariaDB
-../../lab-sql.sh mariadb cookbook_r4 "SELECT LENGTH(Image), LOWER(HEX(Image)) FROM cookbook_r4.BrandAssets WHERE AssetName='Default'"
+../lab-sql.sh mariadb cookbook_r4 "SELECT LENGTH(Image), LOWER(HEX(Image)) FROM cookbook_r4.BrandAssets WHERE AssetName='Default'"
 ```
 
 All four return length `69` and the same hex (`89504e47…ae426082` — the PNG signature and bytes of
 `resources/logo.png`). And the reference data is in:
 
 ```bash
-../../lab-sql.sh postgres cookbook_r4 "SELECT string_agg(categoryname,',' ORDER BY categoryname) FROM public.category"
+../lab-sql.sh postgres cookbook_r4 "SELECT string_agg(categoryname,',' ORDER BY categoryname) FROM public.category"
 # → Books,Electronics,Garden
 ```
 

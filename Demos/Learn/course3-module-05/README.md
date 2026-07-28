@@ -97,7 +97,9 @@ SmithySettings_ScriptTokens__TargetDb=ordersservice_prod \
   schemaquench --ConfigFile:./base.settings.json
 
 # seed prod with real orders
-../../../lab-sql.sh sqlserver ordersservice_prod --file seed-prod.sql
+cd ../..                              # back to the lab folder
+../lab-sql.sh sqlserver ordersservice_prod --file v1/sqlserver/seed-prod.sql
+cd v1/sqlserver                       # back to the engine folder
 ```
 
 ```bash
@@ -149,7 +151,9 @@ $env:SmithySettings_ScriptTokens__TargetDb = 'ordersservice_staging'
 schemaquench --ConfigFile:.\base.settings.json                                   # 2a. promote (staging)
 $env:SmithySettings_ScriptTokens__TargetDb = 'ordersservice_prod'
 schemaquench --ConfigFile:.\base.settings.json                                   # 2b. promote (prod)
-..\..\..\lab-sql.ps1 sqlserver ordersservice_prod --file seed-prod.sql
+cd ..\..                                                                          # back to the lab folder
+..\lab-sql.ps1 sqlserver ordersservice_prod --file v1\sqlserver\seed-prod.sql
+cd v1\sqlserver                                                                   # back to the engine folder
 
 cd ..\..\v2-bad\sqlserver
 $env:SmithySettings_ScriptTokens__TargetDb = 'ordersservice_dev'
@@ -184,7 +188,8 @@ For example, seeding prod on PostgreSQL:
 
 ```bash
 cd v1/postgres
-../../../lab-sql.sh postgres ordersservice_prod --file seed-prod.sql
+cd ../..                               # back to the lab folder
+../lab-sql.sh postgres ordersservice_prod --file v1/postgres/seed-prod.sql
 ```
 
 Everything else — the six beats, the env vars, the WhatIf-then-apply rollback, the `v2-fixed` in-place
@@ -204,20 +209,22 @@ just not where the application expects it anymore. Verify both halves of that:
 
 ```bash
 # SQL Server — SalesOrder is empty, OrderHeader shows up recycled in the registry
-../../lab-sql.sh sqlserver ordersservice_prod \
+cd ../..                              # back to the lab folder
+../lab-sql.sh sqlserver ordersservice_prod \
   "SELECT COUNT(*) FROM dbo.SalesOrder; SELECT OriginalName, RecycledName FROM recyclebin.Registry"
 
 # PostgreSQL
-../../lab-sql.sh postgres ordersservice_prod \
+../lab-sql.sh postgres ordersservice_prod \
   "SELECT COUNT(*) FROM public.\"SalesOrder\"; SELECT original_name, recycled_name FROM recyclebin.registry"
 
 # MySQL
-../../lab-sql.sh mysql ordersservice_prod \
+../lab-sql.sh mysql ordersservice_prod \
   "SELECT COUNT(*) FROM ordersservice_prod.SalesOrder; SELECT OriginalName, RecycledName FROM ordersservice_prod.recyclebin_Registry"
 
 # MariaDB
-../../lab-sql.sh mariadb ordersservice_prod \
+../lab-sql.sh mariadb ordersservice_prod \
   "SELECT COUNT(*) FROM ordersservice_prod.SalesOrder; SELECT OriginalName, RecycledName FROM ordersservice_prod.recyclebin_Registry"
+cd v2-bad/sqlserver                   # back to the engine folder
 ```
 
 `SalesOrder` reads `0`. The registry lists `OrderHeader` as the recycled table — its 4 rows are sitting
@@ -235,16 +242,18 @@ table, `CustomTableRestore` intercepts and restores the recycled copy: rows and 
 
 ```bash
 # SQL Server
-../../lab-sql.sh sqlserver ordersservice_prod "SELECT COUNT(*) FROM dbo.OrderHeader"
+cd ../..                              # back to the lab folder
+../lab-sql.sh sqlserver ordersservice_prod "SELECT COUNT(*) FROM dbo.OrderHeader"
 
 # PostgreSQL
-../../lab-sql.sh postgres ordersservice_prod 'SELECT COUNT(*) FROM public."OrderHeader"'
+../lab-sql.sh postgres ordersservice_prod 'SELECT COUNT(*) FROM public."OrderHeader"'
 
 # MySQL
-../../lab-sql.sh mysql ordersservice_prod "SELECT COUNT(*) FROM ordersservice_prod.OrderHeader"
+../lab-sql.sh mysql ordersservice_prod "SELECT COUNT(*) FROM ordersservice_prod.OrderHeader"
 
 # MariaDB
-../../lab-sql.sh mariadb ordersservice_prod "SELECT COUNT(*) FROM ordersservice_prod.OrderHeader"
+../lab-sql.sh mariadb ordersservice_prod "SELECT COUNT(*) FROM ordersservice_prod.OrderHeader"
+cd v1/sqlserver                       # back to the engine folder
 ```
 
 `OrderHeader` is back with all **4** rows, `SalesOrder` is gone, and prod matches the known-good `v1`
@@ -265,7 +274,8 @@ Confirm it on prod:
 
 ```bash
 # SQL Server — SalesOrder carries the data straight across the rename
-../../lab-sql.sh sqlserver ordersservice_prod "SELECT COUNT(*) FROM dbo.SalesOrder"
+cd ../..                              # back to the lab folder
+../lab-sql.sh sqlserver ordersservice_prod "SELECT COUNT(*) FROM dbo.SalesOrder"
 ```
 
 `SalesOrder` reads `4`. Unlike step 4, nothing data-bearing hit the recyclebin this time — `OrderHeader`

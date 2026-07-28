@@ -33,10 +33,12 @@ both tenants. Create + seed them, then deploy the baseline. SQL Server:
 ```bash
 cd sqlserver
 # create + seed both tenants (repeat the pattern for postgres/mysql/mariadb with their seed)
+cd ..            # back to the lab folder
 for db in shop_patch_canary shop_patch_scratch; do
-  ../../lab-sql.sh sqlserver master "IF DB_ID('$db') IS NULL CREATE DATABASE [$db]"
-  ../../lab-sql.sh sqlserver "$db" --file ../../course6-setup/seed/sqlserver/shop.sql
+  ../lab-sql.sh sqlserver master "IF DB_ID('$db') IS NULL CREATE DATABASE [$db]"
+  ../lab-sql.sh sqlserver "$db" --file ../course6-setup/seed/sqlserver/shop.sql
 done
+cd sqlserver     # back into the engine folder
 schemaquench --ConfigFile:quench.settings.baseline.json      # deploys baseline/ to both tenants (takes ownership)
 ```
 
@@ -44,10 +46,12 @@ MariaDB is the same pattern with its own client and seed:
 
 ```bash
 cd mariadb
+cd ..            # back to the lab folder
 for db in shop_patch_canary shop_patch_scratch; do
-  ../../lab-sql.sh mariadb information_schema "CREATE DATABASE IF NOT EXISTS \`$db\`"
-  ../../lab-sql.sh mariadb "$db" --file ../../course6-setup/seed/mariadb/shop.sql
+  ../lab-sql.sh mariadb information_schema "CREATE DATABASE IF NOT EXISTS \`$db\`"
+  ../lab-sql.sh mariadb "$db" --file ../course6-setup/seed/mariadb/shop.sql
 done
+cd mariadb       # back into the engine folder
 schemaquench --ConfigFile:quench.settings.baseline.json
 ```
 
@@ -138,7 +142,8 @@ The `PriceReviewBatch` column is added; `Customer`, `Product`, and `SalesOrder` 
 with all their data. Confirm:
 
 ```bash
-../../lab-sql.sh sqlserver shop_patch_canary "SELECT COUNT(*) FROM sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver shop_patch_canary "SELECT COUNT(*) FROM sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
 # -> 4  (all survive; the stamp held the line)
 ```
 
@@ -155,6 +160,7 @@ Suppression is a **default**, not a cage. When you genuinely intend to drop, `--
 those categories enabled. Rebuild the patch allowing table drops, and deploy it to a fresh scratch:
 
 ```bash
+cd sqlserver     # back into the engine folder
 schemaquench --ConfigFile:quench.settings.baseline.json     # restore the owned fleet first
 schemashears --Source:Package --Manifest:patch-manifest.txt --Output:patch-allowdrops --AllowDrops:Tables
 schemaquench --ConfigFile:quench.settings.allowdrops.json   # SchemaPackagePath: ./patch-allowdrops
@@ -169,11 +175,12 @@ when you mean it.
 Drop the two dedicated tenants on each engine:
 
 ```bash
-../../lab-sql.sh sqlserver master "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
-../../lab-sql.sh postgres postgres "DROP DATABASE IF EXISTS shop_patch_canary WITH (FORCE)"
-../../lab-sql.sh postgres postgres "DROP DATABASE IF EXISTS shop_patch_scratch WITH (FORCE)"
-../../lab-sql.sh mysql information_schema "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
-../../lab-sql.sh mariadb information_schema "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver master "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
+../lab-sql.sh postgres postgres "DROP DATABASE IF EXISTS shop_patch_canary WITH (FORCE)"
+../lab-sql.sh postgres postgres "DROP DATABASE IF EXISTS shop_patch_scratch WITH (FORCE)"
+../lab-sql.sh mysql information_schema "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
+../lab-sql.sh mariadb information_schema "DROP DATABASE IF EXISTS shop_patch_canary; DROP DATABASE IF EXISTS shop_patch_scratch"
 ```
 
 ## The principle

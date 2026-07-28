@@ -68,7 +68,8 @@ no-op. That no-op is the proof: the package is a faithful cast of the live datab
 
 ```bash
 # confirm both Liquibase tables are still there, untouched — drop them whenever you like
-../../lab-sql.sh sqlserver shop_from_liquibase "SELECT name FROM sys.tables WHERE name LIKE 'DATABASECHANGE%'"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver shop_from_liquibase "SELECT name FROM sys.tables WHERE name LIKE 'DATABASECHANGE%'"
 # → DATABASECHANGELOG, DATABASECHANGELOGLOCK  (left exactly where they were)
 ```
 

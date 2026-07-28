@@ -68,7 +68,8 @@ no-op. That no-op is the proof: the package is a faithful cast of the live datab
 
 ```bash
 # confirm __EFMigrationsHistory is still there, untouched — drop it whenever you like
-../../lab-sql.sh sqlserver shop_from_efcore "SELECT name FROM sys.tables WHERE name='__EFMigrationsHistory'"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver shop_from_efcore "SELECT name FROM sys.tables WHERE name='__EFMigrationsHistory'"
 # → __EFMigrationsHistory  (left exactly where it was)
 ```
 

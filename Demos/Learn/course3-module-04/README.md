@@ -118,16 +118,17 @@ command pointed at different databases.
 
 ```bash
 # SQL Server (repeat for ordersservice_staging / ordersservice_prod)
-../../../lab-sql.sh sqlserver ordersservice_dev "SELECT name FROM sys.tables ORDER BY name; SELECT name FROM sys.indexes WHERE name='IX_Customer_Email'; SELECT name FROM sys.foreign_keys WHERE name='FK_OrderHeader_Customer'"
+cd ../..                              # back to the lab folder
+../lab-sql.sh sqlserver ordersservice_dev "SELECT name FROM sys.tables ORDER BY name; SELECT name FROM sys.indexes WHERE name='IX_Customer_Email'; SELECT name FROM sys.foreign_keys WHERE name='FK_OrderHeader_Customer'"
 
 # PostgreSQL
-../../../lab-sql.sh postgres ordersservice_dev "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename; SELECT indexname FROM pg_indexes WHERE indexname='ix_customer_email'"
+../lab-sql.sh postgres ordersservice_dev "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename; SELECT indexname FROM pg_indexes WHERE indexname='ix_customer_email'"
 
 # MySQL
-../../../lab-sql.sh mysql ordersservice_dev "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='ordersservice_dev' ORDER BY TABLE_NAME; SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_dev' AND INDEX_NAME='IX_Customer_Email'"
+../lab-sql.sh mysql ordersservice_dev "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='ordersservice_dev' ORDER BY TABLE_NAME; SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_dev' AND INDEX_NAME='IX_Customer_Email'"
 
 # MariaDB
-../../../lab-sql.sh mariadb ordersservice_dev "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='ordersservice_dev' ORDER BY TABLE_NAME; SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_dev' AND INDEX_NAME='IX_Customer_Email'"
+../lab-sql.sh mariadb ordersservice_dev "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='ordersservice_dev' ORDER BY TABLE_NAME; SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_dev' AND INDEX_NAME='IX_Customer_Email'"
 ```
 
 ---
@@ -166,9 +167,10 @@ After this, the catalog shows **both** `Email` and `ContactEmail` on `Customer`,
 
 ```bash
 # SQL Server — seed a Customer with an Email but no ContactEmail
-../../../lab-sql.sh sqlserver ordersservice_dev "INSERT INTO dbo.Customer(Name, Email) VALUES('Ada Lovelace', 'ada@example.com')"
+cd ../..                              # back to the lab folder
+../lab-sql.sh sqlserver ordersservice_dev "INSERT INTO dbo.Customer(Name, Email) VALUES('Ada Lovelace', 'ada@example.com')"
 
-../../../lab-sql.sh sqlserver ordersservice_dev "SELECT Name, Email, ContactEmail FROM dbo.Customer"
+../lab-sql.sh sqlserver ordersservice_dev "SELECT Name, Email, ContactEmail FROM dbo.Customer"
 ```
 
 `ContactEmail` reads `NULL` — the new column is there but empty. That's the expand state.
@@ -180,22 +182,22 @@ any package. Run it once after expand:
 
 ```bash
 # SQL Server
-../../../lab-sql.sh sqlserver ordersservice_dev "UPDATE dbo.Customer SET ContactEmail = Email WHERE ContactEmail IS NULL"
+../lab-sql.sh sqlserver ordersservice_dev "UPDATE dbo.Customer SET ContactEmail = Email WHERE ContactEmail IS NULL"
 
 # PostgreSQL
-../../../lab-sql.sh postgres ordersservice_dev 'UPDATE public."Customer" SET "ContactEmail" = "Email" WHERE "ContactEmail" IS NULL'
+../lab-sql.sh postgres ordersservice_dev 'UPDATE public."Customer" SET "ContactEmail" = "Email" WHERE "ContactEmail" IS NULL'
 
 # MySQL
-../../../lab-sql.sh mysql ordersservice_dev "UPDATE Customer SET ContactEmail = Email WHERE ContactEmail IS NULL"
+../lab-sql.sh mysql ordersservice_dev "UPDATE Customer SET ContactEmail = Email WHERE ContactEmail IS NULL"
 
 # MariaDB
-../../../lab-sql.sh mariadb ordersservice_dev "UPDATE Customer SET ContactEmail = Email WHERE ContactEmail IS NULL"
+../lab-sql.sh mariadb ordersservice_dev "UPDATE Customer SET ContactEmail = Email WHERE ContactEmail IS NULL"
 ```
 
 Confirm the data copied — `ContactEmail` now equals `Email` for the seeded row:
 
 ```bash
-../../../lab-sql.sh sqlserver ordersservice_dev "SELECT Name, Email, ContactEmail FROM dbo.Customer"
+../lab-sql.sh sqlserver ordersservice_dev "SELECT Name, Email, ContactEmail FROM dbo.Customer"
 ```
 
 In production you'd run the backfill in batches for a large table and verify it before contracting.
@@ -234,16 +236,17 @@ After contract, the catalog shows `Email` **gone**, `ContactEmail` retaining the
 
 ```bash
 # SQL Server
-../../../lab-sql.sh sqlserver ordersservice_dev "SELECT name FROM sys.columns WHERE object_id=OBJECT_ID('dbo.Customer') ORDER BY name; SELECT name FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.Customer') AND name LIKE 'IX_%'; SELECT Name, ContactEmail FROM dbo.Customer"
+cd ../..                              # back to the lab folder
+../lab-sql.sh sqlserver ordersservice_dev "SELECT name FROM sys.columns WHERE object_id=OBJECT_ID('dbo.Customer') ORDER BY name; SELECT name FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.Customer') AND name LIKE 'IX_%'; SELECT Name, ContactEmail FROM dbo.Customer"
 
 # PostgreSQL
-../../../lab-sql.sh postgres ordersservice_dev "SELECT column_name FROM information_schema.columns WHERE table_name='Customer' ORDER BY column_name; SELECT indexname FROM pg_indexes WHERE tablename='Customer' AND indexname LIKE 'ix_%'"
+../lab-sql.sh postgres ordersservice_dev "SELECT column_name FROM information_schema.columns WHERE table_name='Customer' ORDER BY column_name; SELECT indexname FROM pg_indexes WHERE tablename='Customer' AND indexname LIKE 'ix_%'"
 
 # MySQL
-../../../lab-sql.sh mysql ordersservice_dev "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' ORDER BY COLUMN_NAME; SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND INDEX_NAME LIKE 'IX_%'"
+../lab-sql.sh mysql ordersservice_dev "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' ORDER BY COLUMN_NAME; SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND INDEX_NAME LIKE 'IX_%'"
 
 # MariaDB
-../../../lab-sql.sh mariadb ordersservice_dev "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' ORDER BY COLUMN_NAME; SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND INDEX_NAME LIKE 'IX_%'"
+../lab-sql.sh mariadb ordersservice_dev "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' ORDER BY COLUMN_NAME; SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND INDEX_NAME LIKE 'IX_%'"
 ```
 
 ### Why ContactEmail stays nullable

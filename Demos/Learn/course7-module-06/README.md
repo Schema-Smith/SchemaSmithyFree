@@ -37,7 +37,9 @@ All five tenants deploy cleanly, exit `0`.
 Plant duplicate emails in a single tenant so the rollout's new unique index fails there — and nowhere else:
 
 ```bash
-../../lab-sql.sh sqlserver fleet_tenant_003 --file drift-tenant-003.sql
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver fleet_tenant_003 --file sqlserver/drift-tenant-003.sql
+cd sqlserver     # back into the engine folder
 ```
 
 ## Step 3: Run the rollout and write the report
@@ -65,7 +67,9 @@ Read the report top to bottom — it's built to be read in that order:
 Reset the one tenant and re-run to watch the summary go all-green:
 
 ```bash
-../../lab-sql.sh sqlserver fleet_tenant_003 --file reset-tenant-003.sql
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver fleet_tenant_003 --file sqlserver/reset-tenant-003.sql
+cd sqlserver     # back into the engine folder
 schemaquench --ConfigFile:quench.settings.after.json --report ./out/deploy-summary --BottleneckThresholdMs=800
 ```
 

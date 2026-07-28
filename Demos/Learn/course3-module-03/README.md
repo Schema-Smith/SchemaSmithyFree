@@ -224,7 +224,9 @@ swap `sqlserver` for your engine.
 ```bash
 cd v1/sqlserver
 # 1-2. deploy v1, then v2 (as before), then seed a row into the new table:
-../../../lab-sql.sh sqlserver ordersservice_dev "INSERT INTO dbo.Promotion(Name, Discount) VALUES('Summer Sale', 10.00)"
+cd ../..                                                                          # back to the lab folder
+../lab-sql.sh sqlserver ordersservice_dev "INSERT INTO dbo.Promotion(Name, Discount) VALUES('Summer Sale', 10.00)"
+cd v1/sqlserver                                                                   # back to the engine folder
 
 # 3. roll back to v1 — Promotion is recycled (not destroyed), data and all
 SmithySettings_ScriptTokens__TargetDb=ordersservice_dev \
@@ -244,7 +246,9 @@ recyclebin.public_Promotion with a retention of 90 days.` Either way `Promotion`
 schema, but its rows are sitting in the recyclebin — confirm it:
 
 ```bash
-../../../lab-sql.sh sqlserver ordersservice_dev "SELECT Name, Discount FROM recyclebin.dbo_Promotion; SELECT OriginalName, RecycledName FROM recyclebin.Registry"
+cd ../..                              # back to the lab folder
+../lab-sql.sh sqlserver ordersservice_dev "SELECT Name, Discount FROM recyclebin.dbo_Promotion; SELECT OriginalName, RecycledName FROM recyclebin.Registry"
+cd v1/sqlserver                       # back to the engine folder
 ```
 
 The recycled name follows an `originalschema_table` convention so two recycled copies never collide:

@@ -65,7 +65,8 @@ no-op. That no-op is the proof: the package is a faithful cast of the live datab
 
 ```bash
 # confirm flyway_schema_history is still there, untouched — drop it whenever you like
-../../lab-sql.sh sqlserver shop_from_flyway "SELECT name FROM sys.tables WHERE name='flyway_schema_history'"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver shop_from_flyway "SELECT name FROM sys.tables WHERE name='flyway_schema_history'"
 # → flyway_schema_history  (left exactly where it was)
 ```
 

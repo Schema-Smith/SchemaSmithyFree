@@ -80,8 +80,10 @@ SchemaSmith creates `fleet_tenant_006` on the admin connection, kindles the forg
 whole `Shop` schema — four tables — into the fresh database. `001` is a no-op. Confirm:
 
 ```bash
-../../lab-sql.sh sqlserver fleet_tenant_006 "SELECT COUNT(*) FROM sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver fleet_tenant_006 "SELECT COUNT(*) FROM sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
 # → 4
+cd sqlserver     # back into the engine folder
 ```
 
 Onboarding a tenant went from "run this DDL, then run the deploy" down to one deploy. Add the tenant to
@@ -147,10 +149,11 @@ grant.
 Drop `fleet_tenant_006` on each engine to return to the five-tenant baseline:
 
 ```bash
-../../lab-sql.sh sqlserver master "ALTER DATABASE [fleet_tenant_006] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [fleet_tenant_006]"
-../../lab-sql.sh postgres postgres "DROP DATABASE IF EXISTS fleet_tenant_006"
-../../lab-sql.sh mysql information_schema "DROP DATABASE IF EXISTS fleet_tenant_006"
-../../lab-sql.sh mariadb information_schema "DROP DATABASE IF EXISTS fleet_tenant_006"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver master "ALTER DATABASE [fleet_tenant_006] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [fleet_tenant_006]"
+../lab-sql.sh postgres postgres "DROP DATABASE IF EXISTS fleet_tenant_006"
+../lab-sql.sh mysql information_schema "DROP DATABASE IF EXISTS fleet_tenant_006"
+../lab-sql.sh mariadb information_schema "DROP DATABASE IF EXISTS fleet_tenant_006"
 ```
 
 ## The principle

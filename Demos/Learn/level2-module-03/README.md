@@ -53,7 +53,9 @@ Verify:
 ```bash
 # SQL Server: SELECT COUNT(*) FROM dbo.Orders;  -- 3
 #             index IX_Orders_Region is absent
-../../lab-sql.sh postgres learn "SELECT count(*) FROM public.orders"
+cd ..                                  # back to the lab folder
+../lab-sql.sh postgres learn "SELECT count(*) FROM public.orders"
+cd <engine>                            # back to the engine folder
 ```
 
 ## Step 3: Deploy the SAME package to prod
@@ -79,7 +81,8 @@ Verify the index now exists:
 
 ```bash
 # SQL Server: index IX_Orders_Region is present on dbo.Orders
-../../lab-sql.sh postgres learn "SELECT indexname FROM pg_indexes WHERE tablename='orders' AND indexname='ix_orders_region'"
+cd ..                                  # back to the lab folder
+../lab-sql.sh postgres learn "SELECT indexname FROM pg_indexes WHERE tablename='orders' AND indexname='ix_orders_region'"
 ```
 
 (Both settings target the same `learn` database, so the dev sample rows persist into the prod

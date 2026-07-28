@@ -53,7 +53,8 @@ The production shape: the perf index **is** built, the diagnostic column is **no
 
 ```bash
 # SQL Server
-../../lab-sql.sh sqlserver cookbook_r1_prod "SELECT name FROM sys.columns WHERE object_id=OBJECT_ID('dbo.Customer')"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver cookbook_r1_prod "SELECT name FROM sys.columns WHERE object_id=OBJECT_ID('dbo.Customer')"
 # → CustomerId, Email  (no DebugPayload)
 # index IX_Customer_Email is present
 ```
@@ -61,6 +62,7 @@ The production shape: the perf index **is** built, the diagnostic column is **no
 ## Step 3: Deploy the SAME package to non-prod
 
 ```bash
+cd <engine>       # back into the engine folder
 schemaquench --ConfigFile:nonprod.settings.json
 ```
 
@@ -68,9 +70,10 @@ Now the calls flip — the perf index is **skipped**, the diagnostic column **is
 
 ```bash
 # PostgreSQL
-../../lab-sql.sh postgres cookbook_r1_nonprod "SELECT column_name FROM information_schema.columns WHERE table_name='customer' ORDER BY ordinal_position"
+cd ..            # back to the lab folder
+../lab-sql.sh postgres cookbook_r1_nonprod "SELECT column_name FROM information_schema.columns WHERE table_name='customer' ORDER BY ordinal_position"
 # → customerid, email, debugpayload
-../../lab-sql.sh postgres cookbook_r1_nonprod "SELECT indexname FROM pg_indexes WHERE tablename='customer'"
+../lab-sql.sh postgres cookbook_r1_nonprod "SELECT indexname FROM pg_indexes WHERE tablename='customer'"
 # → pk_customer  (no ix_customer_email)
 ```
 

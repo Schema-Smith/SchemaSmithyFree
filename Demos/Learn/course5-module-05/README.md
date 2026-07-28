@@ -72,7 +72,8 @@ no-op. Idempotency is now the engine's job, not a guard you hand-write into each
 
 ```bash
 # confirm schema_version is still there, untouched — drop it whenever you like
-../../lab-sql.sh sqlserver shop_from_scripts "SELECT name FROM sys.tables WHERE name='schema_version'"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver shop_from_scripts "SELECT name FROM sys.tables WHERE name='schema_version'"
 # → schema_version  (left exactly where it was)
 ```
 

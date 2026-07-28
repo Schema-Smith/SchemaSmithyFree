@@ -44,7 +44,8 @@ column:
 
 ```bash
 # SQL Server
-../../lab-sql.sh sqlserver cookbook_r9 "SELECT TableName, ColumnName, SensitivityLevel, DataSteward FROM dbo.DataDictionary ORDER BY TableName, ColumnName"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver cookbook_r9 "SELECT TableName, ColumnName, SensitivityLevel, DataSteward FROM dbo.DataDictionary ORDER BY TableName, ColumnName"
 # → Customer/Email PII privacy-office ; SalesOrder/TotalAmount Confidential finance ; …  (6 rows)
 ```
 

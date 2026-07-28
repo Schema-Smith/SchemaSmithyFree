@@ -104,10 +104,12 @@ deploy.
 ## Step 4: Confirm the column is there
 
 ```bash
-../../../lab-sql.sh sqlserver ordersservice_dev "SELECT name, TYPE_NAME(system_type_id), max_length FROM sys.columns WHERE object_id=OBJECT_ID('dbo.Customer') AND name='LoyaltyTier'"
-../../../lab-sql.sh postgres ordersservice_dev "SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_name='Customer' AND column_name='LoyaltyTier'"
-../../../lab-sql.sh mysql ordersservice_dev "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND COLUMN_NAME='LoyaltyTier'"
-../../../lab-sql.sh mariadb ordersservice_dev "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND COLUMN_NAME='LoyaltyTier'"
+cd ../..                              # back to the lab folder
+../lab-sql.sh sqlserver ordersservice_dev "SELECT name, TYPE_NAME(system_type_id), max_length FROM sys.columns WHERE object_id=OBJECT_ID('dbo.Customer') AND name='LoyaltyTier'"
+../lab-sql.sh postgres ordersservice_dev "SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_name='Customer' AND column_name='LoyaltyTier'"
+../lab-sql.sh mysql ordersservice_dev "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND COLUMN_NAME='LoyaltyTier'"
+../lab-sql.sh mariadb ordersservice_dev "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='ordersservice_dev' AND TABLE_NAME='Customer' AND COLUMN_NAME='LoyaltyTier'"
+cd solution/<engine>                  # back to the engine folder
 ```
 
 You'll see `LoyaltyTier` as a 20-character string column on each engine (`nvarchar` length 40 on SQL Server — `NVARCHAR(20)` is 40 bytes).

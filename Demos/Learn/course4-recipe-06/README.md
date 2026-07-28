@@ -26,17 +26,21 @@ schemaquench --ConfigFile:deploy.settings.json     # creates Keeper + Promotion,
 Then install the recyclebin hooks (kindling created the `SchemaSmith` schema they live in) — run the one for your engine:
 
 ```bash
+cd ..            # back to the lab folder
+
 # SQL Server
-../../lab-sql.sh sqlserver cookbook_r6 --file install-recyclebin.sql
+../lab-sql.sh sqlserver cookbook_r6 --file sqlserver/install-recyclebin.sql
 
 # PostgreSQL
-../../lab-sql.sh postgres cookbook_r6 --file install-recyclebin.sql
+../lab-sql.sh postgres cookbook_r6 --file postgres/install-recyclebin.sql
 
 # MySQL
-../../lab-sql.sh mysql cookbook_r6 --file install-recyclebin.sql
+../lab-sql.sh mysql cookbook_r6 --file mysql/install-recyclebin.sql
 
 # MariaDB
-../../lab-sql.sh mariadb cookbook_r6 --file install-recyclebin.sql
+../lab-sql.sh mariadb cookbook_r6 --file mariadb/install-recyclebin.sql
+
+cd <engine>       # back into the engine folder
 ```
 
 ## Step 2: Put data in the table
@@ -56,7 +60,8 @@ schemaquench --ConfigFile:remove-promotion.settings.json
 
 ```bash
 # the table is gone under its own name, but its rows are safe in the aside copy
-../../lab-sql.sh postgres cookbook_r6 "SELECT count(*) FROM public.__recyclebin__promotion"
+cd ..            # back to the lab folder
+../lab-sql.sh postgres cookbook_r6 "SELECT count(*) FROM public.__recyclebin__promotion"
 # → 2
 ```
 
@@ -66,8 +71,10 @@ Deploy the package that defines `Promotion` again. `CustomTableRestore` fires fi
 back, and the engine — seeing the table now exists — does **not** recreate it empty:
 
 ```bash
+cd <engine>       # back into the engine folder
 schemaquench --ConfigFile:deploy.settings.json
-../../lab-sql.sh postgres cookbook_r6 "SELECT promotionid, code FROM public.promotion ORDER BY promotionid"
+cd ..            # back to the lab folder
+../lab-sql.sh postgres cookbook_r6 "SELECT promotionid, code FROM public.promotion ORDER BY promotionid"
 # → 1 SAVE10
 #   2 SAVE20
 ```

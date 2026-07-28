@@ -53,7 +53,8 @@ after-script records it:
 
 ```bash
 # SQL Server
-../../lab-sql.sh sqlserver cookbook_r3 "SELECT ActiveFeatures FROM dbo.DeployLog"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver cookbook_r3 "SELECT ActiveFeatures FROM dbo.DeployLog"
 # → Billing,Reporting
 ```
 
@@ -63,9 +64,12 @@ Switch on `BetaSearch` on the server and quench again:
 
 ```bash
 # PostgreSQL
-../../lab-sql.sh postgres cookbook_r3 "UPDATE public.featureflag SET enabled=true WHERE flagname='BetaSearch'"
+cd ..            # back to the lab folder
+../lab-sql.sh postgres cookbook_r3 "UPDATE public.featureflag SET enabled=true WHERE flagname='BetaSearch'"
+cd postgres       # back into the engine folder
 schemaquench --ConfigFile:deploy.settings.json
-../../lab-sql.sh postgres cookbook_r3 "SELECT activefeatures FROM public.deploylog ORDER BY loggedat"
+cd ..            # back to the lab folder
+../lab-sql.sh postgres cookbook_r3 "SELECT activefeatures FROM public.deploylog ORDER BY loggedat"
 # → Billing,Reporting
 #   BetaSearch,Billing,Reporting
 ```

@@ -36,15 +36,16 @@ Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships two p
 ## Step 1: Install the hooks
 
 ```bash
-cd <engine>
 # SQL Server
-../../lab-sql.sh sqlserver cookbook_r8 --file install-audit-hooks.sql
+../lab-sql.sh sqlserver cookbook_r8 --file sqlserver/install-audit-hooks.sql
 # PostgreSQL
-../../lab-sql.sh postgres cookbook_r8 --file install-audit-hooks.sql
+../lab-sql.sh postgres cookbook_r8 --file postgres/install-audit-hooks.sql
 # MySQL
-../../lab-sql.sh mysql cookbook_r8 --file install-audit-hooks.sql
+../lab-sql.sh mysql cookbook_r8 --file mysql/install-audit-hooks.sql
 # MariaDB
-../../lab-sql.sh mariadb cookbook_r8 --file install-audit-hooks.sql
+../lab-sql.sh mariadb cookbook_r8 --file mariadb/install-audit-hooks.sql
+
+cd <engine>       # into the engine folder, for Step 2
 ```
 
 Installing the procedures opts this database into the recyclebin — no settings change needed. SchemaQuench
@@ -72,7 +73,8 @@ schemaquench --ConfigFile:remove-coupon.settings.json   # Coupon left the produc
 
 ```bash
 # SQL Server — archived table + audit row
-../../lab-sql.sh sqlserver cookbook_r8 "SELECT TableName, ArchivedName, RowsArchived, RetentionDays, Action FROM SchemaSmith.TableDropAudit"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver cookbook_r8 "SELECT TableName, ArchivedName, RowsArchived, RetentionDays, Action FROM SchemaSmith.TableDropAudit"
 # → Coupon  Coupon__dropped_20260704215904493  2  90  DROP
 ```
 
@@ -81,6 +83,7 @@ The row count (`2`) was captured before the table moved, and the retention windo
 ## Step 4: Bring Coupon back — the restore hook completes the trail
 
 ```bash
+cd <engine>       # back into the engine folder
 schemaquench --ConfigFile:deploy.settings.json      # Coupon returns to the product
 ```
 
@@ -89,7 +92,8 @@ engine would recreate the table. The rows survive, and the trail is complete:
 
 ```bash
 # SQL Server — Coupon back with its rows, DROP + RESTORE both audited
-../../lab-sql.sh sqlserver cookbook_r8 "SELECT CouponId, Code FROM dbo.Coupon; SELECT Action, ArchivedName FROM SchemaSmith.TableDropAudit ORDER BY AuditId"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver cookbook_r8 "SELECT CouponId, Code FROM dbo.Coupon; SELECT Action, ArchivedName FROM SchemaSmith.TableDropAudit ORDER BY AuditId"
 # → 1 SAVE10 / 2 SAVE20 ;  DROP + RESTORE
 ```
 

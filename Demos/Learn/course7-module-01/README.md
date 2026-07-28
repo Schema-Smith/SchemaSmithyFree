@@ -66,10 +66,12 @@ One work unit per tenant, dispatched together:
 Confirm the `Shop` schema landed in every tenant:
 
 ```bash
+cd ..            # back to the lab folder
 for n in 001 002 003 004 005; do
-  ../../lab-sql.sh sqlserver fleet_tenant_$n "SELECT COUNT(*) FROM sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
+  ../lab-sql.sh sqlserver fleet_tenant_$n "SELECT COUNT(*) FROM sys.tables WHERE name IN ('Customer','Product','SalesOrder','OrderItem')"
 done
 # → each tenant reports 4
+cd sqlserver     # back into the engine folder
 ```
 
 ## Step 3: Prove idempotence — run it again
@@ -86,7 +88,9 @@ five-way no-op. Re-running the whole fleet is always safe.
 A new customer signs up. Stand up their database:
 
 ```bash
-../../lab-sql.sh sqlserver master "CREATE DATABASE [fleet_tenant_006]"
+cd ..            # back to the lab folder
+../lab-sql.sh sqlserver master "CREATE DATABASE [fleet_tenant_006]"
+cd sqlserver     # back into the engine folder
 ```
 
 Deploy again — you edit nothing:
