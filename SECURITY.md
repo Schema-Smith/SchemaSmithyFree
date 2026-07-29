@@ -47,3 +47,8 @@ Running SchemaSmith against a schema package or database you do not trust is out
 - Restrict file system permissions on configuration files containing credentials
 - Use environment variables (`SmithySettings_` prefix) for sensitive settings in CI/CD pipelines
 - Review WhatIf output before applying changes to production databases
+
+## Security posture and common questions
+
+For how the tools behave in your environment, how releases are built and verified, and
+answers to common security-review questions, see [SECURITY-POSTURE.md](SECURITY-POSTURE.md).
