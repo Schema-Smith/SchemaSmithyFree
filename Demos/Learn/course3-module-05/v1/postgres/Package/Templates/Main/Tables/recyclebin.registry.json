@@ -1,6 +1,7 @@
 {
   "Name": "registry",
   "Schema": "recyclebin",
+  "PreventDrop": true,
   "Columns": [
     {
       "Name": "original_schema",

@@ -153,6 +153,62 @@ END $$");
         }
     }
 
+    // The recyclebin registry self-eat (roadmap #1 / C3 M5 capstone): a CustomTableDrop hook soft-drops a
+    // removed table by renaming it aside and recording it in a registry table. When a later package stops
+    // declaring the registry itself, the removed-drop pass must NOT route the registry through the hook —
+    // which would rename the registry away and then fail to INSERT into it (42P01). The registry is marked
+    // PreventDrop (sticky in ownership), so the pass skips it while still recycling other removed tables.
+    [Test]
+    public void ModifiedTableQuench_DoesNotRoutePreventDropTableThroughCustomTableDropHook()
+    {
+        var db = UniqueDb("hookprotect");
+        CreateDb(db);
+        try
+        {
+            using var conn = (NpgsqlConnection)DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(DbConnString(db));
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandTimeout = 300;
+            ForgeKindler.KindleTheForge(cmd, Platform.PostgreSQL);
+
+            // Hook mirrors the recyclebin: rename the removed table aside, then record it in the Ledger. If
+            // it were ever called on the Ledger itself it would rename the Ledger away and the INSERT would
+            // throw — so a regression here fails the whole quench loudly, not just an assertion.
+            Exec(cmd, @"
+CREATE OR REPLACE PROCEDURE ""SchemaSmith"".""CustomTableDrop""(p_Schema TEXT, p_Table TEXT) LANGUAGE plpgsql AS $$
+BEGIN
+  EXECUTE 'ALTER TABLE ""' || p_Schema || '"".""' || p_Table || '"" RENAME TO ""' || p_Table || '_recycled""';
+  INSERT INTO public.""Ledger""(""Recycled"") VALUES (p_Table);
+END $$");
+
+            // v1: own a PreventDrop Ledger (the registry) plus an ordinary Gadget.
+            Quench(cmd, "[{\"Schema\":\"public\",\"Name\":\"Ledger\",\"PreventDrop\":true,\"Columns\":[{\"Name\":\"Recycled\",\"DataType\":\"text\",\"Nullable\":false}],\"Indexes\":[{\"Name\":\"PK_Ledger\",\"PrimaryKey\":true,\"Unique\":true,\"IndexColumns\":\"Recycled\"}]},{\"Schema\":\"public\",\"Name\":\"Gadget\",\"Columns\":[{\"Name\":\"Id\",\"DataType\":\"integer\",\"Nullable\":false}],\"Indexes\":[{\"Name\":\"PK_Gadget\",\"PrimaryKey\":true,\"Unique\":true,\"IndexColumns\":\"Id\"}]}]", false);
+
+            // v2: package drops both Ledger and Gadget (declares only Keeper), autodrop on. Gadget must route
+            // through the hook; Ledger must be shielded by its sticky PreventDrop marker.
+            Quench(cmd, "[{\"Schema\":\"public\",\"Name\":\"Keeper\",\"Columns\":[{\"Name\":\"Id\",\"DataType\":\"integer\",\"Nullable\":false}],\"Indexes\":[{\"Name\":\"PK_Keeper\",\"PrimaryKey\":true,\"Unique\":true,\"IndexColumns\":\"Id\"}]}]", true);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(ScalarBool(cmd, "SELECT to_regclass('public.\"Ledger\"') IS NOT NULL"), Is.True,
+                    "PreventDrop Ledger (the registry) must survive — it must never be routed to the hook.");
+                Assert.That(ScalarBool(cmd, "SELECT to_regclass('public.\"Ledger_recycled\"') IS NULL"), Is.True,
+                    "The hook must never have renamed the Ledger aside.");
+                Assert.That(ScalarLong(cmd, "SELECT COUNT(*) FROM public.\"Ledger\" WHERE \"Recycled\"='Ledger'"), Is.EqualTo(0),
+                    "The hook must not have recorded the Ledger against itself.");
+                Assert.That(ScalarLong(cmd, "SELECT COUNT(*) FROM public.\"Ledger\" WHERE \"Recycled\"='Gadget'"), Is.EqualTo(1),
+                    "The hook must still run for the ordinary removed table and write to the surviving Ledger.");
+                Assert.That(ScalarBool(cmd, "SELECT to_regclass('public.\"Gadget\"') IS NULL"), Is.True,
+                    "Ordinary removed table should be recycled away by the hook.");
+            });
+            conn.Close();
+        }
+        finally
+        {
+            DropDb(db);
+        }
+    }
+
     private void Quench(IDbCommand cmd, string json, bool autoDrop)
     {
         cmd.CommandText = $"CALL \"SchemaSmith\".\"TableQuench\"(p_ProductName := '{Product}', p_TableDefinitions := '{json.Replace("'", "''")}', p_WhatIf := false, p_DropTablesRemovedFromProduct := {(autoDrop ? "true" : "false")}, p_DropUnknownIndexes := false)";
