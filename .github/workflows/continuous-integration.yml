@@ -9,6 +9,13 @@ on:
       - '**/*.md'
       - 'LICENSE'
       - '.gitignore'
+      # Demo/lab scripts are doc/demo content (Rule 6 carve-out): a lab .ps1/.sh/.sql is not product
+      # code and should not spin the three-engine container matrix. Package JSON and .json-schemas
+      # under Demos are deliberately NOT excluded — validate-demo-schemas.yml reads them and DoD #9
+      # (the --Validate SS-STALE-001 staleness check) keeps them current, so those still trigger CI.
+      - 'Demos/**/*.ps1'
+      - 'Demos/**/*.sh'
+      - 'Demos/**/*.sql'
   pull_request:
     branches: [main, dev/v2]
     paths-ignore:
@@ -17,6 +24,13 @@ on:
       - '**/*.md'
       - 'LICENSE'
       - '.gitignore'
+      # Demo/lab scripts are doc/demo content (Rule 6 carve-out): a lab .ps1/.sh/.sql is not product
+      # code and should not spin the three-engine container matrix. Package JSON and .json-schemas
+      # under Demos are deliberately NOT excluded — validate-demo-schemas.yml reads them and DoD #9
+      # (the --Validate SS-STALE-001 staleness check) keeps them current, so those still trigger CI.
+      - 'Demos/**/*.ps1'
+      - 'Demos/**/*.sh'
+      - 'Demos/**/*.sql'
 
 env:
   DOTNET_VERSION: '10.0.x'
