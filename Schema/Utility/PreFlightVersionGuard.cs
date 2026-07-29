@@ -31,7 +31,7 @@ namespace Schema.Utility
         {
             if (VersionHelper.IsBelowFloor(info.Platform, info.ServerComparable))
                 throw new Exception(
-                    $"{serverLabel}: detected {info.Platform} version {info.RawVersion} is below the minimum " +
+                    $"{serverLabel}: detected {info.Platform} version {VersionHelper.DisplayVersion(info)} is below the minimum " +
                     $"supported version {VersionHelper.HardFloorDisplay(info.Platform)}. SchemaSmith cannot run against it.");
 
             if (info.Platform.GetBasePlatform() == Platform.SqlServer &&
