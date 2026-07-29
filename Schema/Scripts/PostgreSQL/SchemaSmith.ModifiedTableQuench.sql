@@ -203,10 +203,7 @@ BEGIN
                   WHEN 'e' THEN 'EXTERNAL'
                   WHEN 'x' THEN 'EXTENDED'
                   ELSE 'DEFAULT' END AS "Storage",
-             CASE a.attcompression 
-                  WHEN 'p' THEN 'pglz' 
-                  WHEN 'l' THEN 'lz4' 
-                  ELSE 'DEFAULT' END AS "Compression",
+             "SchemaSmith"."ColumnCompression"(a.attrelid, a.attnum) AS "Compression",
              '' AS "OldName"
         FROM temp_tables t
         JOIN information_schema.columns c ON c.table_schema = t."Schema"
@@ -288,15 +285,12 @@ BEGIN
              se.stxname AS "StatisticsName",
              COALESCE((SELECT STRING_AGG(CASE k WHEN 'd' THEN 'NDISTINCT' WHEN 'f' THEN 'DEPENDENCIES' WHEN 'm' THEN 'MCV' WHEN 'e' THEN 'EXPRESSIONS' ELSE k::text END, ',')
                        FROM UNNEST(se.stxkind) AS k), '') AS "Kind",
-             COALESCE(ARRAY_TO_STRING(ARRAY_CAT(COALESCE((SELECT ARRAY_AGG(a.attname)
+             COALESCE(ARRAY_TO_STRING(ARRAY_CAT(COALESCE((SELECT ARRAY_AGG(a.attname::text)
                                                             FROM UNNEST(se.stxkeys) WITH ORDINALITY AS t(attnum, ord)
                                                             JOIN pg_attribute a ON a.attrelid = se.stxrelid AND a.attnum = t.attnum
                                                             WHERE a.attnum > 0),
                                                          ARRAY[]::text[]),
-                                                COALESCE((SELECT ARRAY_AGG(exp.expr)
-                                                            FROM pg_stats_ext_exprs exp
-                                                            WHERE exp.schemaname = t."Schema" AND exp.statistics_name = se.stxname),
-                                                         ARRAY[]::text[])), ','), '') AS "StatisticsColumns"
+                                                "SchemaSmith"."StatisticsExpressionColumns"(t."Schema", se.stxname)), ','), '') AS "StatisticsColumns"
       FROM temp_tables t
       JOIN  pg_statistic_ext se ON se.stxrelid = to_regclass('"' || t."Schema" || '"."' || t."Name" || '"');
 

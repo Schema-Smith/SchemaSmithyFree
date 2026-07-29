@@ -178,10 +178,12 @@ public class ForgeKindlerTests
 
         // SqlServer: 23 = 22 prior + 1 for Kindling_ChangeAudit_Table (object-change audit, #243 E5).
         Assert.That(sqlServer.Length, Is.EqualTo(23));
-        // PostgreSQL: 32 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
+        // PostgreSQL: 34 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
-        // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read).
-        Assert.That(postgres.Length, Is.EqualTo(32));
+        // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
+        // + SchemaSmith.ColumnCompression (PG14-adaptive attcompression read) + SchemaSmith.StatisticsExpressionColumns
+        // (PG14-adaptive pg_stats_ext_exprs read) — the last two are the floor 14->12 cascade.
+        Assert.That(postgres.Length, Is.EqualTo(34));
         // MySQL: 27 = 22 prior + five MariaDB-compat helpers (all #351): SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth (integer display width),
         // SchemaSmith_NormalizeColumnDefault (COLUMN_DEFAULT reporting: 'NULL' marker / quoting / parens),
