@@ -114,6 +114,8 @@ Four things are worth knowing:
   together, so the sandbox is the easier path for that one.)
 - **Per shell.** A new terminal needs the activation sourced again. `--off` / `-Off` returns you to
   the sandbox.
+<!-- TRAINING-RELEASE-PIN #370 — Target:IntegratedSecurity is merged to main but not in a
+     released CLI (2.3.0). When it ships, delete this bullet and relax use-my-server. -->
 - **A SQL login, not Windows Authentication — for now.** A credential declared in a settings file
   can't currently be cleared by an environment override on Windows, so the lab's own user would win.
   Create a SQL login for the labs. Windows Authentication follows in a later release.

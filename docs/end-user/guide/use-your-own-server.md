@@ -125,6 +125,8 @@ The training labs have their own helper, because they provision many small datab
 
 Every lab command in every course then works exactly as written — no settings file is edited. Each course's setup script creates that course's databases on your server, and stamps them, so a database it didn't create is never dropped or deployed into. Full walkthrough: [`Demos/Learn/README.md`](https://github.com/Schema-Smith/SchemaSmith/blob/main/Demos/Learn/README.md).
 
+<!-- TRAINING-RELEASE-PIN #370 — Target:IntegratedSecurity is merged to main but not in a
+     released CLI (2.3.0). When it ships, delete this note and relax use-my-server. -->
 > **A SQL login, not Windows Authentication — for now.** The labs override connection settings through environment variables, and on Windows an override can't clear a credential a settings file already declares. Create a SQL login for the labs; Windows Authentication follows in a later release. The demo helper above is unaffected — it takes Windows Authentication today.
 
 ## Bring your own database instead

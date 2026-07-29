@@ -42,6 +42,10 @@ if ($Server -like '*,*') {
 
 if (-not $Port) { $Port = @{ sqlserver = 1433; postgres = 5432; mysql = 3306; mariadb = 3306 }[$Engine] }
 
+# TRAINING-RELEASE-PIN #370 - drop this requirement once a released CLI carries
+# Target:IntegratedSecurity (merged to main, unreleased as of 2.3.0). Then accept a missing
+# -User/-Password on SQL Server and set SmithySettings_Target__IntegratedSecurity=true.
+#
 # Windows Authentication isn't expressible here yet: on Windows an environment variable
 # cannot be set to empty (assigning '' deletes it), so a lab settings file's "User" can
 # never be overridden away, and SchemaSmith selects integrated security only when both

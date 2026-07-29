@@ -42,6 +42,10 @@ else
   elif [ "${lab_server#*,}" != "$lab_server" ]; then
     echo "Pass the host on its own and the port separately: --server ${lab_server%%,*} --port ${lab_server#*,}" >&2
   elif [ -z "$lab_user" ] || [ -z "$lab_password" ]; then
+    # TRAINING-RELEASE-PIN #370 - drop this requirement once a released CLI carries
+    # Target:IntegratedSecurity (merged to main, unreleased as of 2.3.0). Then accept a missing
+    # --user/--password on SQL Server and export SmithySettings_Target__IntegratedSecurity=true.
+    #
     # Windows Authentication isn't expressible here yet: on Windows an environment variable
     # cannot be set to empty (assigning '' deletes it), so a lab settings file's "User" can
     # never be overridden away, and SchemaSmith selects integrated security only when both
