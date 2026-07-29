@@ -61,6 +61,7 @@ dotnet_diagnostic.S1066.severity = none  # mergeable if
 dotnet_diagnostic.S3220.severity = none  # params-overload partial match
 dotnet_diagnostic.S1643.severity = none  # StringBuilder over concatenation
 dotnet_diagnostic.S6617.severity = none  # Contains over Any
+dotnet_diagnostic.S8970.severity = none  # null-forgiving operator where nullable is disabled — the codebase runs nullable-disabled repo-wide, so ! is a harmless no-op; 137 sites, no correctness value (added with SonarAnalyzer 10.31 via Dependabot #372)
 dotnet_diagnostic.S6608.severity = none  # indexer over Enumerable.First/Last
 dotnet_diagnostic.S6612.severity = none  # lambda parameter over captured variable
 dotnet_diagnostic.S2955.severity = none  # generic default() comparison
