@@ -237,6 +237,38 @@ public class WorkUnitDispatcherTests
     }
 
     [Test]
+    public void Run_AbortMode_DrainsQueuedParallelAndSerialWork()
+    {
+        // On abort, both the shared parallel queue and every per-template serial queue are cleared,
+        // so no queued unit — parallel or serial — runs after the first failure. Guards the explicit
+        // drain independently of the worker-loop abort short-circuit; the existing abort tests queue
+        // only parallel work, so the serial-queue drain would otherwise be uncovered. maxThreads=1
+        // makes the dispatch order deterministic: the throwing parallel unit is dequeued first.
+        var units = new List<WorkUnit>
+        {
+            new("s", "db1", "Core", ""),    // throws first (parallel, dequeued first)
+            new("s", "db2", "Core", ""),    // queued parallel — must not run
+            new("s", "db3", "Core", ""),    // queued parallel — must not run
+            new("s", "db", "Serial", "t1"), // queued serial — must not run
+            new("s", "db", "Serial", "t2")  // queued serial — must not run
+        };
+        var allowParallel = new Dictionary<string, bool> { ["Serial"] = false };
+        var ranAfterFailure = new ConcurrentBag<string>();
+
+        var dispatcher = new WorkUnitDispatcher(units, maxThreads: 1, allowParallel,
+            unit =>
+            {
+                if (unit is { DatabaseName: "db1", TemplateName: "Core" })
+                    throw new InvalidOperationException("boom");
+                ranAfterFailure.Add($"{unit.TemplateName}/{unit.DatabaseName}");
+            });
+
+        Assert.Throws<AggregateException>(() => dispatcher.Run());
+        Assert.That(ranAfterFailure, Is.Empty,
+            "Abort must drain both the parallel queue and all serial queues — no queued unit may run after the first failure.");
+    }
+
+    [Test]
     public void Run_MissingTemplateKeyInAllowParallel_DefaultsToParallel()
     {
         // No "Core" entry in the AllowParallel map — should default to allow parallel.
