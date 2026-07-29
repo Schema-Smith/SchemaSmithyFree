@@ -172,10 +172,15 @@ lab_confirm_db() {
     *)         exists_sql="SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = '$db'" ;;
   esac
   if [ "$(lab_sql "$engine" "$admin" "$exists_sql")" = "0" ]; then
+    # Take the server's default character set and collation. Forcing one here (the demo
+    # helper pins utf8mb4_unicode_ci) leaves lab databases collated differently from
+    # everything else on the server -- MySQL 8 defaults to utf8mb4_0900_ai_ci and MariaDB
+    # 11.4 to utf8mb4_uca1400_ai_ci -- and any later comparison across the two fails with
+    # "Illegal mix of collations". The labs have always used the server default.
     case "$engine" in
       sqlserver) create_sql="CREATE DATABASE [$db]" ;;
       postgres)  create_sql="CREATE DATABASE \"$db\"" ;;
-      *)         create_sql="CREATE DATABASE \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" ;;
+      *)         create_sql="CREATE DATABASE \`$db\`" ;;
     esac
     lab_sql "$engine" "$admin" "$create_sql" >/dev/null || return 1
     lab_add_stamp "$engine" "$db" || return 1

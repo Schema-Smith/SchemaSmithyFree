@@ -137,12 +137,6 @@ back. The final state is identical: index present on staging and prod. Every que
 declared state and stops — that idempotence is exactly what makes promoting the *same* artifact across
 environments safe.
 
-> **Coming back after Module 5?** Reset the databases first —
-> `../../course3-setup/setup-environments.sh --reset` (or `.ps1 -Reset`). The Module 5 capstone
-> installs a `recyclebin` schema and custom drop/restore procedures into these same databases, and
-> this module's package doesn't declare them. Idempotence converges a package against *its own*
-> objects; it can't account for infrastructure a later module added.
-
 ## The principle
 
 The pipeline isn't magic — it's the four commands above, each one a `schemaquench` invocation whose

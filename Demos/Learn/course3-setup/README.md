@@ -77,12 +77,13 @@ for every database. You can run them as many times as you like.
 ## Starting over: `--reset`
 
 Modules share these databases, and each one deploys its own package into them. That's the point —
-it's how the course shows a single product moving through environments. But **Module 5's capstone
-also installs infrastructure the other modules know nothing about**: a `recyclebin` schema, a
-registry table, and custom drop/restore procedures. Go back to an earlier module afterwards and its
-package meets objects it never declared.
+it's how the course shows a single product moving through environments, and moving between modules
+needs no cleanup: every package converges the databases to its own declared state.
 
-When that happens — or any time you want a clean slate — reset the databases:
+You don't have to reset to go backwards, either. Module 5's capstone leaves a `recyclebin` schema
+and its registry behind, and an earlier module's package still converges — the registry is marked
+`PreventDrop`, so a package that doesn't declare it leaves it standing. Reset when you want a
+genuinely clean slate, or when an interrupted run left a database somewhere you'd rather not debug:
 
 ```bash
 bash setup-environments.sh --reset

@@ -166,10 +166,15 @@ function Confirm-LabDatabase {
         default     { "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = '$Database'" }
     }
     if ((Invoke-LabSql -Engine $Engine -Database $admin -Sql $existsSql) -eq '0') {
+        # Take the server's default character set and collation. Forcing one here (the demo
+        # helper pins utf8mb4_unicode_ci) leaves lab databases collated differently from
+        # everything else on the server -- MySQL 8 defaults to utf8mb4_0900_ai_ci and MariaDB
+        # 11.4 to utf8mb4_uca1400_ai_ci -- and any later comparison across the two fails with
+        # "Illegal mix of collations". The labs have always used the server default.
         $createSql = switch ($Engine) {
             'sqlserver' { "CREATE DATABASE [$Database]" }
             'postgres'  { "CREATE DATABASE ""$Database""" }
-            default     { "CREATE DATABASE ``$Database`` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" }
+            default     { "CREATE DATABASE ``$Database``" }
         }
         Invoke-LabSql -Engine $Engine -Database $admin -Sql $createSql | Out-Null
         Add-LabStamp -Engine $Engine -Database $Database

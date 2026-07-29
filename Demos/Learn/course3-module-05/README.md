@@ -306,11 +306,11 @@ Reset the databases for a clean re-run with `setup-environments --reset` (`-Rese
 which drops and recreates them empty — plain `setup-environments` is idempotent but won't undo
 deployed state. Re-deploying `v1` to each environment also converges back to known-good.
 
-> **Before you revisit an earlier Course 3 module, use `--reset`.** This capstone leaves its recycle-bin
-> infrastructure behind — the `recyclebin` schema, its registry table, and the custom drop/restore
-> procedures — in the shared `ordersservice_*` databases. That's exactly what you built and it's
-> supposed to persist here, but Modules 1–4 declare none of it, so their packages meet objects they
-> don't know about. One reset puts you back on their footing.
+> **The recyclebin stays behind, and that's fine.** This capstone leaves its infrastructure in the
+> shared `ordersservice_*` databases — the `recyclebin` schema, its registry, and the drop/restore
+> procedures. Go back to an earlier Course 3 module afterwards and its package converges anyway: the
+> registry is marked `PreventDrop`, so a package that doesn't declare it leaves it alone rather than
+> feeding it to the very hook it records for. Reset only if you want a genuinely clean slate.
 
 After a cert pass, remove disposable build/run output before you're done — a cert pass isn't done until
 disposable output is gone:
