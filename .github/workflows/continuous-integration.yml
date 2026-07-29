@@ -447,7 +447,11 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: coverage-artifacts
-          pattern: '*-test-results'
+          # Trailing wildcard is required: the PostgreSQL and MariaDB legs are a version matrix, so
+          # their artifacts are suffixed (postgresql-test-results-14, mariadb-test-results-10.6, ...).
+          # A bare '*-test-results' silently drops every matrix leg from the merge — which zeroes out
+          # PostgreSQL/MariaDB-only coverage (e.g. the PG<15 legacy-upsert path) and fails the gate.
+          pattern: '*-test-results*'
           merge-multiple: true
 
       - name: Merge coverage
