@@ -230,6 +230,133 @@ CREATE TABLE ""{Schema}"".""{tableName}"" (""Id"" INT NOT NULL, ""Code"" INT NUL
         conn.Close();
     }
 
+    // The FULL TableQuench flow (not just --IndexOnly) must honor NULLS NOT DISTINCT on a unique index —
+    // it previously only applied through IndexOnlyQuench, so a normal deploy silently dropped the clause.
+    [Test]
+    public void NormalFlow_NullsNotDistinct_AppliedOnPg15Plus()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"NfNnd_{uniqueId}";
+        var indexName = $"UX_{tableName}_Code";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        // Skip on a genuinely-old server (the clause cannot exist there); the sandbox is modern.
+        cmd.CommandText = "SELECT current_setting('server_version_num')::int / 10000";
+        if (Convert.ToInt32(cmd.ExecuteScalar()) < 15) Assert.Ignore("requires PostgreSQL 15+");
+
+        var json = $$"""
+[{
+    "Schema": "{{Schema}}",
+    "Name": "{{tableName}}",
+    "Columns": [
+        { "Name": "Id", "DataType": "INT", "Nullable": false },
+        { "Name": "Code", "DataType": "INT", "Nullable": true }
+    ],
+    "Indexes": [
+        { "Name": "{{indexName}}", "Unique": true, "IndexColumns": "Code", "NullsNotDistinct": true }
+    ]
+}]
+""";
+        RunTableQuenchProc(cmd, json, productName: $"NF_{uniqueId}");
+
+        cmd.CommandText = $@"SELECT idx.indnullsnotdistinct FROM pg_index idx
+                             JOIN pg_class i ON i.oid = idx.indexrelid WHERE i.relname = '{indexName}';";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(true),
+            "a normal (full) TableQuench deploy must apply NULLS NOT DISTINCT on PG15+, not only --IndexOnly");
+
+        // Idempotent: a second normal quench must not drop/recreate the index over NND.
+        var firstOid = IndexOid(cmd, indexName);
+        RunTableQuenchProc(cmd, json, productName: $"NF_{uniqueId}");
+        Assert.That(IndexOid(cmd, indexName), Is.EqualTo(firstOid), "no phantom churn on re-quench");
+
+        cmd.CommandText = $@"DROP TABLE ""{Schema}"".""{tableName}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    // Below 15 the normal flow degrades identically to the --IndexOnly path: clause omitted + a
+    // downgrade manifest row recorded.
+    [Test]
+    public void NormalFlow_NullsNotDistinct_BelowPg15_RecordsDowngrade()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"NfWarn_{uniqueId}";
+        var indexName = $"UX_{tableName}_Code";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+        cmd.CommandText = "SET schemasmith.version_override = '14';";
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+[{
+    "Schema": "{{Schema}}",
+    "Name": "{{tableName}}",
+    "Columns": [
+        { "Name": "Id", "DataType": "INT", "Nullable": false },
+        { "Name": "Code", "DataType": "INT", "Nullable": true }
+    ],
+    "Indexes": [
+        { "Name": "{{indexName}}", "Unique": true, "IndexColumns": "Code", "NullsNotDistinct": true }
+    ]
+}]
+""";
+        RunTableQuenchProc(cmd, json, productName: $"NFW_{uniqueId}");
+
+        Assert.That(IndexExists(cmd, tableName, indexName), Is.True, "index created (without the clause)");
+        cmd.CommandText = $@"SELECT COUNT(*) FROM ""SchemaSmith"".""ChangeAudit""
+                             WHERE ""ActionType"" = 'downgraded'
+                               AND ""ObjectName"" = '{Schema}.{tableName}.{indexName}'
+                               AND ""ObjectType"" = 'NULLS NOT DISTINCT (PG15)';";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1),
+            "the normal flow must record a downgrade manifest row below PG15");
+
+        cmd.CommandText = $@"RESET schemasmith.version_override; DROP TABLE ""{Schema}"".""{tableName}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    // The --IndexOnly path must also actually APPLY NULLS NOT DISTINCT on PG15+ (its emit was never
+    // exercised with the clause present — the policy tests all force override=14, which omits it).
+    [Test]
+    public void IndexOnly_NullsNotDistinct_AppliedOnPg15Plus()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"IoNnd_{uniqueId}";
+        var indexName = $"UX_{tableName}_Code";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        cmd.CommandText = "SELECT current_setting('server_version_num')::int / 10000";
+        if (Convert.ToInt32(cmd.ExecuteScalar()) < 15) Assert.Ignore("requires PostgreSQL 15+");
+
+        cmd.CommandText = $@"CREATE TABLE ""{Schema}"".""{tableName}"" (""Id"" INT NOT NULL, ""Code"" INT NULL);";
+        cmd.ExecuteNonQuery();
+
+        IndexOnlyQuenchNnd(cmd, tableName, indexName, productName: $"IO_{uniqueId}");
+
+        cmd.CommandText = $@"SELECT idx.indnullsnotdistinct FROM pg_index idx
+                             JOIN pg_class i ON i.oid = idx.indexrelid WHERE i.relname = '{indexName}';";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(true),
+            "the --IndexOnly path must apply NULLS NOT DISTINCT on PG15+");
+
+        cmd.CommandText = $@"DROP TABLE ""{Schema}"".""{tableName}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
     private void IndexOnlyQuenchNnd(IDbCommand cmd, string tableName, string indexName, string productName)
     {
         var json = $$"""
