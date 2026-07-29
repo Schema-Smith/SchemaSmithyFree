@@ -30,11 +30,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Check names must match the CI job names exactly. The PostgreSQL and MariaDB integration
+          # jobs are a matrix over latest + the supported floor, so each leg is a separate check
+          # (e.g. "Integration Tests (PostgreSQL 14)") and every leg must have passed. Coverage Gate
+          # and both MariaDB legs are required — a release must not cut with any of them red.
           REQUIRED_CHECKS=(
             "Build & Unit Tests"
             "Integration Tests (SQL Server)"
-            "Integration Tests (PostgreSQL)"
+            "Integration Tests (PostgreSQL latest)"
+            "Integration Tests (PostgreSQL 14)"
             "Integration Tests (MySQL)"
+            "Integration Tests (MariaDB 11.4)"
+            "Integration Tests (MariaDB 10.6)"
+            "Coverage Gate"
             "check-headers"
           )
           FAILED=0
