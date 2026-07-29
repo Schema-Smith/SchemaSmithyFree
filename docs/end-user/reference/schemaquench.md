@@ -367,7 +367,7 @@ In both cases the end state is identical. On PostgreSQL 15 and 16, SchemaSmith t
 **PostgreSQL 14 — below-15 features degrade rather than block.** A few constructs are PostgreSQL 15 features. On a 14 target:
 
 - **`NULLS NOT DISTINCT`** (unique indexes/constraints) is emitted *without* the clause, and each affected object is listed under **Unsupported Feature Downgrades** in the deployment summary so you know exactly what was relaxed. This is the default `warn` policy; set `Target:UnsupportedFeaturePolicy=fail` (for example `SmithySettings_Target__UnsupportedFeaturePolicy=fail`) to abort instead with a "requires PostgreSQL 15" message rather than deploy a silently-degraded schema.
-- **Data delivery** (`Insert/Update` / `Insert/Update/Delete`) uses `INSERT … ON CONFLICT` for the insert/update pass, since `MERGE` is a PostgreSQL 15 feature. The delete-on-absence pass is the same version-agnostic `DELETE` used on 15/16.
+- **Data delivery** (`Insert/Update` / `Insert/Update/Delete`) uses a manual INSERT + UPDATE upsert (matching the MERGE semantics, NULL-safe keys included) for the insert/update pass, since `MERGE` is a PostgreSQL 15 feature. The delete-on-absence pass is the same version-agnostic `DELETE` used on 15/16.
 
 Everything else deploys identically to 15+.
 

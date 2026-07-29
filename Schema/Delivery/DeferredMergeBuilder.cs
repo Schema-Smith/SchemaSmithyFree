@@ -132,25 +132,24 @@ internal static class DeferredMergeBuilder
 
         if (legacyUpsert)
         {
-            var conflictKeys = string.Join(", ", keyColumns.Split(',')
-                .Select(k => $"\"{k.Trim().TrimStart('*').Trim('"')}\""));
             var overriding = "";
             if (!string.IsNullOrEmpty(identAndSeq))
             {
                 var parts = identAndSeq.Split('=');
                 if (parts.Length >= 3) overriding = $" OVERRIDING {parts[2]} VALUE";
             }
-            // ONLY is not valid on INSERT (an insert targets the named table directly; inheriting
-            // children are unaffected regardless), so it is omitted here.
+            // Insert-only, MERGE-free: INSERT ... WHERE NOT EXISTS, keyed on the NULL-safe match predicate
+            // (handles '*' nullable keys, needs no unique constraint). ONLY is not valid on INSERT so it
+            // is omitted on the target; the NOT EXISTS check honors it.
             var selectExprs = string.Join(", ", (insertColumns ?? "").Split(',').Select(c => $"\"Source\".{c.Trim()}"));
-            sb.AppendLine($"INSERT INTO \"{schema}\".\"{table}\" AS \"Target\" (");
+            sb.AppendLine($"INSERT INTO \"{schema}\".\"{table}\" (");
             sb.AppendLine($" {insertColumns}");
             sb.AppendLine($"   ){overriding}");
             sb.AppendLine($"  SELECT {selectExprs}");
             sb.AppendLine("    FROM (WITH my_tables(arr) AS (VALUES(v_json::JSON))");
             sb.AppendLine($"          SELECT {jsonSelectColumns}");
             sb.AppendLine("            FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS \"Source\"");
-            sb.AppendLine($"ON CONFLICT ({conflictKeys}) DO NOTHING;");
+            sb.AppendLine($"   WHERE NOT EXISTS (SELECT 1 FROM {only}\"{schema}\".\"{table}\" AS \"Target\" WHERE {matchColumns});");
         }
         else
         {

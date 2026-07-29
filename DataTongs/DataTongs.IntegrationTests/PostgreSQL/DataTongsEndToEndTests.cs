@@ -26,7 +26,7 @@ public class DataTongsEndToEndTests
     private Dictionary<string, string> _connProps = null!;
     private IDbConnection _connection = null!;
     // The container's real PG major, threaded into BuildMergeScript so the execute-type tests generate
-    // the version-correct upsert (MERGE on 15+, INSERT ... ON CONFLICT below 15) for the container.
+    // the version-correct upsert (MERGE on 15+, a manual INSERT/UPDATE upsert below 15) for the container.
     private int _pgServerVersionNum;
     private global::DataTongs.DataTongs _dataTongs = null!;
     private string _testOutputDir = null!;

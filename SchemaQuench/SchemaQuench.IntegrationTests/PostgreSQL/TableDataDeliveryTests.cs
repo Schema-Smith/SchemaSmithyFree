@@ -34,7 +34,7 @@ public class TableDataDeliveryTests
     private string _testTableName = null!;
     private string _testDb = null!;
     // The container's real PG major, threaded into BuildMergeScript so these direct-helper tests
-    // exercise the version-correct path (MERGE on 15+, INSERT ... ON CONFLICT below 15) rather than
+    // exercise the version-correct path (MERGE on 15+, a manual INSERT/UPDATE upsert below 15) rather than
     // defaulting to 0 (= modern), which emits MERGE and fails on a genuine PG14 container.
     private int _pgServerVersionNum;
     private const string SchemaName = "public";
@@ -289,6 +289,39 @@ public class TableDataDeliveryTests
             .ToList();
 
         Assert.That(tablesWithData, Is.Empty);
+    }
+
+    // Proper PG<15 upsert (manual UPDATE + INSERT WHERE NOT EXISTS): matches a NULL-valued key and needs
+    // no unique constraint — both cases the ON CONFLICT fallback could not handle (duplicate rows / "no
+    // unique or exclusion constraint matching the ON CONFLICT specification"). The table has NO unique
+    // constraint and a NULL-valued '*' NULL-safe key.
+    [Test]
+    public void NullSafeKey_BelowPg15_ManualUpsert_MatchesNullKey_NoDuplicates()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_nullkey_{Guid.NewGuid():N}".Substring(0, 30);
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""{SchemaName}"".""{tableName}"" (""code"" INT NULL, ""name"" VARCHAR(50));";
+            command.ExecuteNonQuery();
+
+            var data = @"[{""code"":null,""name"":""Alpha""}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, SchemaName, tableName,
+                data, @"*""code""", mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: 14);
+
+            command.CommandText = script; command.ExecuteNonQuery();               // first delivery: insert
+            command.CommandText = script; command.ExecuteNonQuery();               // re-deliver: must MATCH the NULL-keyed row
+
+            command.CommandText = $@"SELECT COUNT(*) FROM ""{SchemaName}"".""{tableName}"";";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1),
+                "a NULL-safe key upsert must match the existing NULL-keyed row (no duplicate) on PG < 15");
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""{SchemaName}"".""{tableName}"";";
+            command.ExecuteNonQuery();
+        }
     }
 
     #region FK Dependency Ordering Tests
