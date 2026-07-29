@@ -43,6 +43,9 @@ HTTP client and open no sockets of their own.
 - **Test gate.** Unit tests and a full integration suite run against SQL Server,
   PostgreSQL, MySQL, and MariaDB in containers on every push and pull request, including a
   supported-floor version leg for PostgreSQL and MariaDB alongside the current release.
+- **Dependency monitoring.** Dependency and GitHub Actions updates are tracked
+  automatically, with security advisories surfaced against the repository's dependency
+  graph.
 
 ## Release integrity
 
@@ -60,6 +63,17 @@ HTTP client and open no sockets of their own.
 - **Runtime contents.** Binaries are published self-contained: each archive bundles the
   .NET 10 runtime alongside the tool executables. The bundled runtime is Microsoft's, not
   ours, and is updated by taking a newer runtime and cutting a new release.
+- **Software bill of materials.** Every release publishes a CycloneDX SBOM
+  (`SchemaSmith-<version>.cdx.json`) enumerating the third-party packages the tools
+  depend on, with resolved licenses. It covers declared dependencies, not the bundled
+  .NET runtime described above.
+- **Build provenance.** Release archives and packages carry a signed provenance
+  attestation binding each artifact to the workflow, repository, and commit that produced
+  it. Verify any release asset with the GitHub CLI:
+
+  ```
+  gh attestation verify SchemaSmith-<version>-linux-x64.tar.gz --repo Schema-Smith/SchemaSmith
+  ```
 
 ## Vulnerability disclosure
 
@@ -104,3 +118,8 @@ No. Static analysis (CodeQL, extended query suite) runs continuously, and identi
 issues are remediated in the public repository where the history is auditable. Given the
 operator-run model — no network service, no exposed endpoint, no attacker-reachable
 surface we host — a penetration test has limited applicability.
+
+**Can you provide an SBOM?**
+Yes. Every release includes a CycloneDX SBOM as a downloadable asset, listing declared
+third-party dependencies with resolved licenses. SchemaSmith Community itself is declared
+as `LicenseRef-SSCL-2.0`.
