@@ -204,6 +204,12 @@ SQL Server and PostgreSQL keep these in a dedicated `recyclebin` schema; MySQL a
 schemas, so they live under a `recyclebin_` name prefix in the same database. Installing them is just
 part of deploying the package — there's nothing extra to run.
 
+One detail worth calling out: the registry table is itself marked `PreventDrop`. It's the recyclebin's
+own ledger, so it has to outlive any single package. If a later deploy stopped declaring it, SchemaQuench
+would route the registry through the very `CustomTableDrop` hook that depends on it — renaming it aside
+and then failing to record the drop against a table that no longer exists. `PreventDrop` keeps the ledger
+anchored while the tables around it come and go.
+
 ### What the hooks change
 
 When a `CustomTableDrop` hook is present, SchemaQuench stops issuing a plain `DROP TABLE` for a removed

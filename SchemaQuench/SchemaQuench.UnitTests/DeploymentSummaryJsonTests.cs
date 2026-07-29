@@ -237,6 +237,25 @@ public class DeploymentSummaryJsonTests
     }
 
     [Test]
+    public void Serialize_UnsupportedDowngrade_EmitsCamelCaseFeatureAndObjectName()
+    {
+        var summary = BuildFullyPopulatedSummary() with
+        {
+            UnsupportedDowngrade = new UnsupportedDowngradeSummary(new[]
+            {
+                new UnsupportedDowngradeEntry("NULLS NOT DISTINCT (PG15)", "public.t.uq_t")
+            })
+        };
+
+        var json = JObject.Parse(DeploymentSummaryJson.Serialize(summary));
+
+        Assert.That(json.SelectToken("unsupportedDowngrade.downgrades[0].feature")?.Value<string>(),
+            Is.EqualTo("NULLS NOT DISTINCT (PG15)"));
+        Assert.That(json.SelectToken("unsupportedDowngrade.downgrades[0].objectName")?.Value<string>(),
+            Is.EqualTo("public.t.uq_t"));
+    }
+
+    [Test]
     public void Serialize_EmitsMigrationScriptFields()
     {
         var json = JObject.Parse(DeploymentSummaryJson.Serialize(BuildFullyPopulatedSummary()));

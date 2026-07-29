@@ -60,7 +60,11 @@ BEGIN
          COALESCE(celem ->> 'IncludeColumns', '') AS "IncludeColumns",
          COALESCE(celem ->> 'AccessMethod', 'btree') AS "AccessMethod",
          COALESCE(celem ->> 'FilterExpression', '') AS "FilterExpression",
-         COALESCE((celem ->> 'NullsNotDistinct')::BOOLEAN, false) AS "NullsNotDistinct",
+         -- Below PG15 NULLS NOT DISTINCT does not exist: the effective column drives compare + emit
+         -- (coerced false so an old target neither churns nor emits an unsupported clause); the raw
+         -- declared value drives the unsupported-feature policy in MissingMaterializedViewIndexesQuench.
+         CASE WHEN "SchemaSmith"."ServerVersionNum"() >= 15 THEN COALESCE((celem ->> 'NullsNotDistinct')::BOOLEAN, false) ELSE false END AS "NullsNotDistinct",
+         COALESCE((celem ->> 'NullsNotDistinct')::BOOLEAN, false) AS "NullsNotDistinctDeclared",
          COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
          CASE WHEN p_UpdateFillFactor THEN true ELSE false END AS "UpdateFillFactor",
          COALESCE(NULLIF((celem ->> 'FillFactor')::INT2, 0), 90) AS "FillFactor"

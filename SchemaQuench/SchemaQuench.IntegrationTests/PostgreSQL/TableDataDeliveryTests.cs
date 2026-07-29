@@ -33,6 +33,10 @@ public class TableDataDeliveryTests
     private IDbConnection _connection = null!;
     private string _testTableName = null!;
     private string _testDb = null!;
+    // The container's real PG major, threaded into BuildMergeScript so these direct-helper tests
+    // exercise the version-correct path (MERGE on 15+, a manual INSERT/UPDATE upsert below 15) rather than
+    // defaulting to 0 (= modern), which emits MERGE and fails on a genuine PG14 container.
+    private int _pgServerVersionNum;
     private const string SchemaName = "public";
 
     [SetUp]
@@ -51,6 +55,12 @@ public class TableDataDeliveryTests
         _connection = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(Schema.IntegrationTests.PostgreSQL.FixtureSetup.GetMainDbConnectionString());
         _connection.Open();
         _testTableName = $"_test_data_{Guid.NewGuid():N}".Substring(0, 30);
+
+        using (var verCmd = _connection.CreateCommand())
+        {
+            verCmd.CommandText = "SELECT current_setting('server_version_num')::int / 10000";
+            _pgServerVersionNum = Convert.ToInt32(verCmd.ExecuteScalar());
+        }
 
         using var command = _connection.CreateCommand();
         command.CommandText = $@"
@@ -88,7 +98,7 @@ public class TableDataDeliveryTests
 
         var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, SchemaName,_testTableName,
             tableData, @"""code""", mergeUpdate: true, mergeDelete: true, disableTriggers: false,
-            tokenizeScripts: false, mergeFilter: null);
+            tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
         command.CommandText = script;
         command.ExecuteNonQuery();
@@ -110,7 +120,7 @@ public class TableDataDeliveryTests
         var tableData = @"[{""code"":""A001"",""name"":""Updated"",""value"":15.00,""active"":1}]";
         var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, SchemaName,_testTableName,
             tableData, @"""code""", mergeUpdate: true, mergeDelete: true, disableTriggers: false,
-            tokenizeScripts: false, mergeFilter: null);
+            tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
         command.CommandText = script;
         command.ExecuteNonQuery();
@@ -135,7 +145,7 @@ public class TableDataDeliveryTests
         var tableData = @"[{""code"":""A001"",""name"":""Updated"",""value"":15.00,""active"":1},{""code"":""B002"",""name"":""New Item"",""value"":25.00,""active"":1}]";
         var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, SchemaName,_testTableName,
             tableData, @"""code""", mergeUpdate: true, mergeDelete: false, disableTriggers: false,
-            tokenizeScripts: false, mergeFilter: null);
+            tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
         command.CommandText = script;
         command.ExecuteNonQuery();
@@ -160,7 +170,7 @@ public class TableDataDeliveryTests
         var tableData = @"[{""code"":""A001"",""name"":""ShouldNotUpdate"",""value"":99.00,""active"":1},{""code"":""B002"",""name"":""New Item"",""value"":25.00,""active"":1}]";
         var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, SchemaName,_testTableName,
             tableData, @"""code""", mergeUpdate: false, mergeDelete: false, disableTriggers: false,
-            tokenizeScripts: false, mergeFilter: null);
+            tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
         command.CommandText = script;
         command.ExecuteNonQuery();
@@ -224,7 +234,7 @@ public class TableDataDeliveryTests
             var mergeDelete = mergeType.Contains("Delete", StringComparison.OrdinalIgnoreCase);
             var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, SchemaName,_testTableName,
                 tableData, @"""code""", mergeUpdate, mergeDelete, disableTriggers: false,
-                tokenizeScripts: false, mergeFilter: null);
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
             command.CommandText = script;
             command.ExecuteNonQuery();
@@ -281,6 +291,39 @@ public class TableDataDeliveryTests
         Assert.That(tablesWithData, Is.Empty);
     }
 
+    // Proper PG<15 upsert (manual UPDATE + INSERT WHERE NOT EXISTS): matches a NULL-valued key and needs
+    // no unique constraint — both cases the ON CONFLICT fallback could not handle (duplicate rows / "no
+    // unique or exclusion constraint matching the ON CONFLICT specification"). The table has NO unique
+    // constraint and a NULL-valued '*' NULL-safe key.
+    [Test]
+    public void NullSafeKey_BelowPg15_ManualUpsert_MatchesNullKey_NoDuplicates()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_nullkey_{Guid.NewGuid():N}".Substring(0, 30);
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""{SchemaName}"".""{tableName}"" (""code"" INT NULL, ""name"" VARCHAR(50));";
+            command.ExecuteNonQuery();
+
+            var data = @"[{""code"":null,""name"":""Alpha""}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, SchemaName, tableName,
+                data, @"*""code""", mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: 14);
+
+            command.CommandText = script; command.ExecuteNonQuery();               // first delivery: insert
+            command.CommandText = script; command.ExecuteNonQuery();               // re-deliver: must MATCH the NULL-keyed row
+
+            command.CommandText = $@"SELECT COUNT(*) FROM ""{SchemaName}"".""{tableName}"";";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(1),
+                "a NULL-safe key upsert must match the existing NULL-keyed row (no duplicate) on PG < 15");
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""{SchemaName}"".""{tableName}"";";
+            command.ExecuteNonQuery();
+        }
+    }
+
     #region FK Dependency Ordering Tests
 
     [Test]
@@ -313,13 +356,13 @@ public class TableDataDeliveryTests
 
             var parentScript = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, SchemaName,parentTable,
                 parentData, @"""id""", mergeUpdate: true, mergeDelete: true, disableTriggers: false,
-                tokenizeScripts: false, mergeFilter: null);
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
             command.CommandText = parentScript;
             command.ExecuteNonQuery();
 
             var childScript = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, SchemaName,childTable,
                 childData, @"""id""", mergeUpdate: true, mergeDelete: true, disableTriggers: false,
-                tokenizeScripts: false, mergeFilter: null);
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
             command.CommandText = childScript;
             command.ExecuteNonQuery();
 
@@ -367,7 +410,7 @@ public class TableDataDeliveryTests
 
             var childScript = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command, SchemaName,childTable,
                 childData, @"""id""", mergeUpdate: true, mergeDelete: false, disableTriggers: false,
-                tokenizeScripts: false, mergeFilter: null);
+                tokenizeScripts: false, mergeFilter: null, pgServerVersionNum: _pgServerVersionNum);
 
             // Assert.Catch matches NpgsqlException or derived PostgresException
             Assert.Catch<NpgsqlException>(() =>

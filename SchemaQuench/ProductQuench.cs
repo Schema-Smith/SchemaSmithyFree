@@ -302,7 +302,7 @@ public class ProductQuench
     {
         return detected
             .Where(d => !VersionHelper.IsAtLeast(d.Info.ServerComparable, requiredComparable))
-            .Select(d => $"  {d.Server}: detected version {d.Info.RawVersion} is below the product's declared MinimumVersion {declaredMinimum}")
+            .Select(d => $"  {d.Server}: detected version {VersionHelper.DisplayVersion(d.Info)} is below the product's declared MinimumVersion {declaredMinimum}")
             .ToList();
     }
 
@@ -426,6 +426,13 @@ public class ProductQuench
         return props;
     }
 
+    // Integrated Security is opt-in via Target:IntegratedSecurity=true. It supersedes any configured
+    // Target:User/Password rather than requiring them to be cleared — an override cannot clear a
+    // credential a settings file carries (setting an env var to empty deletes it on Windows), so a
+    // checked-in "User": "sa" would otherwise block Windows Authentication. SQL Server only.
+    private bool IsIntegratedSecurity() =>
+        string.Equals(_config["Target:IntegratedSecurity"], "true", StringComparison.OrdinalIgnoreCase);
+
     internal virtual IDbCommand GetCommand(string server)
     {
         var initDb = GetInitDatabase(_product.Platform);
@@ -444,7 +451,7 @@ public class ProductQuench
         else
         {
             var connectionProperties = ReadTargetConnectionProperties();
-            connectionString = ConnectionString.Build(_product.Platform, server, initDb, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
+            connectionString = ConnectionString.Build(_product.Platform, server, initDb, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties, integratedSecurity: IsIntegratedSecurity());
         }
         var factory = DbConnectionFactory.ForPlatform(_product.Platform);
         var connection = factory.GetDbConnection(connectionString);
@@ -522,7 +529,7 @@ public class ProductQuench
             return ConnectionString.RetargetDatabase(connectionStringOverride, identificationDb, _product.Platform);
 
         var connectionProperties = ReadTargetConnectionProperties();
-        return ConnectionString.Build(_product.Platform, server, identificationDb, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
+        return ConnectionString.Build(_product.Platform, server, identificationDb, _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties, integratedSecurity: IsIntegratedSecurity());
     }
 
     /// <summary>
@@ -578,7 +585,7 @@ public class ProductQuench
         }
         var connectionProperties = ReadTargetConnectionProperties();
         return ConnectionString.Build(_product.Platform, server, initDb,
-            _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
+            _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties, integratedSecurity: IsIntegratedSecurity());
     }
 
     public bool RunPreFlight(bool previewTargets)
@@ -1728,7 +1735,7 @@ public class ProductQuench
         {
             var connectionProperties = ReadTargetConnectionProperties();
             connectionString = ConnectionString.Build(_product.Platform, server, databaseName,
-                _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties);
+                _config["Target:User"], _config["Target:Password"], _config["Target:Port"], connectionProperties, integratedSecurity: IsIntegratedSecurity());
         }
         var factory = DbConnectionFactory.ForPlatform(_product.Platform);
         var connection = factory.GetDbConnection(connectionString);

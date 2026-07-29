@@ -64,11 +64,31 @@ BEGIN
           AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped);
   END IF;
 
+  -- Unsupported-feature policy: NULLS NOT DISTINCT requires PostgreSQL 15. Below it the clause is
+  -- omitted from the emit below (effective column coerced false in the parse); 'fail' aborts naming
+  -- the offending index(es), 'warn' (default) records an unsupportedDowngrade manifest row per
+  -- declared-but-unsupported index. Same routing as the --IndexOnly path (IndexOnlyQuench).
+  IF "SchemaSmith"."ServerVersionNum"() < 15 THEN
+    IF "SchemaSmith"."UnsupportedFeaturePolicy"() = 'fail'
+       AND EXISTS (SELECT 1 FROM temp_indexes WHERE "NullsNotDistinctDeclared") THEN
+      RAISE EXCEPTION 'NULLS NOT DISTINCT requires PostgreSQL 15 (detected major %); index(es): %',
+        "SchemaSmith"."ServerVersionNum"(),
+        (SELECT STRING_AGG("TableSchema" || '.' || "TableName" || '.' || "Name", ', ')
+           FROM temp_indexes WHERE "NullsNotDistinctDeclared");
+    ELSE
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(), 'NULLS NOT DISTINCT (PG15)',
+               "TableSchema" || '.' || "TableName" || '.' || "Name", 'downgraded'
+          FROM temp_indexes
+          WHERE "NullsNotDistinctDeclared";
+    END IF;
+  END IF;
+
   RAISE NOTICE 'Add Missing Indexes'; -- Includes Primary Keys and Unique Constraints
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing ' || CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey" THEN 'Constraint ' ELSE 'Index ' END || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."Name" || CASE WHEN COALESCE(ti."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(ti."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey"
                          THEN 'ALTER TABLE "' || ti."TableSchema" || '"."' || ti."TableName" || '" ADD CONSTRAINT "' || ti."Name" || '" ' ||
-                              CASE WHEN ti."PrimaryKey" THEN 'PRIMARY KEY ' ELSE 'UNIQUE ' END ||
+                              CASE WHEN ti."PrimaryKey" THEN 'PRIMARY KEY ' ELSE 'UNIQUE ' || CASE WHEN ti."NullsNotDistinct" THEN 'NULLS NOT DISTINCT ' ELSE '' END END ||
                               '(' || "SchemaSmith"."QuoteIndexColumnList"(ti."IndexColumns") || ')' ||
                               CASE WHEN COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
                                    THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
@@ -79,6 +99,8 @@ BEGIN
                               'USING ' || COALESCE(ti."AccessMethod", 'btree') || ' ' ||
                               '(' || "SchemaSmith"."QuoteIndexColumnList"(ti."IndexColumns") || ')' ||
                               CASE WHEN NULLIF(ti."IncludeColumns", '') IS NOT NULL THEN ' INCLUDE (' || "SchemaSmith"."QuoteColumnList"(ti."IncludeColumns") || ')' ELSE '' END ||
+                              -- NULLS NOT DISTINCT belongs after INCLUDE and before WITH per the CREATE INDEX grammar.
+                              CASE WHEN ti."Unique" AND ti."NullsNotDistinct" THEN ' NULLS NOT DISTINCT' ELSE '' END ||
                               CASE WHEN COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
                                    THEN ' WITH (fillfactor = ' || ti."FillFactor" || ') '
                                    ELSE ' ' END ||

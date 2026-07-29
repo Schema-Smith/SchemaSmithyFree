@@ -9,6 +9,13 @@ on:
       - '**/*.md'
       - 'LICENSE'
       - '.gitignore'
+      # Demo/lab scripts are doc/demo content (Rule 6 carve-out): a lab .ps1/.sh/.sql is not product
+      # code and should not spin the three-engine container matrix. Package JSON and .json-schemas
+      # under Demos are deliberately NOT excluded — validate-demo-schemas.yml reads them and DoD #9
+      # (the --Validate SS-STALE-001 staleness check) keeps them current, so those still trigger CI.
+      - 'Demos/**/*.ps1'
+      - 'Demos/**/*.sh'
+      - 'Demos/**/*.sql'
   pull_request:
     branches: [main, dev/v2]
     paths-ignore:
@@ -17,6 +24,13 @@ on:
       - '**/*.md'
       - 'LICENSE'
       - '.gitignore'
+      # Demo/lab scripts are doc/demo content (Rule 6 carve-out): a lab .ps1/.sh/.sql is not product
+      # code and should not spin the three-engine container matrix. Package JSON and .json-schemas
+      # under Demos are deliberately NOT excluded — validate-demo-schemas.yml reads them and DoD #9
+      # (the --Validate SS-STALE-001 staleness check) keeps them current, so those still trigger CI.
+      - 'Demos/**/*.ps1'
+      - 'Demos/**/*.sh'
+      - 'Demos/**/*.sql'
 
 env:
   DOTNET_VERSION: '10.0.x'
@@ -177,15 +191,21 @@ jobs:
           use-actions-summary: 'true'
 
   integration-tests-postgresql:
-    name: Integration Tests (PostgreSQL)
+    name: Integration Tests (PostgreSQL ${{ matrix.pg }})
     runs-on: ubuntu-latest
     needs: build-and-unit-tests
+    # latest + the supported floor (14): the floor container is the only way to exercise the version-
+    # adaptive catalog-read branches below 15 (a physical-column-existence question no override can fake).
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [latest, '14']
     permissions:
       contents: read
       checks: write
     services:
       postgres:
-        image: postgres:latest
+        image: postgres:${{ matrix.pg }}
         env:
           POSTGRES_USER: ${{ env.TEST_USER }}
           POSTGRES_PASSWORD: ${{ env.TEST_PASSWORD }}
@@ -204,7 +224,7 @@ jobs:
           apply_and_wait() {
             PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -c "ALTER SYSTEM SET max_connections = 2000;"
             # shellcheck disable=SC2046  # docker restart accepts multiple IDs; word splitting is intentional
-            docker restart $(docker ps -q --filter "ancestor=postgres:latest")
+            docker restart $(docker ps -q --filter "ancestor=postgres:${{ matrix.pg }}")
             sleep 5
             for _ in $(seq 1 30); do
               PGPASSWORD="$TEST_PASSWORD" psql -h 127.0.0.1 -U "$TEST_USER" -d TestMain -c "SELECT 1" > /dev/null 2>&1 && break
@@ -249,7 +269,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
-          name: postgresql-test-results
+          name: postgresql-test-results-${{ matrix.pg }}
           path: TestResults
           if-no-files-found: ignore
           retention-days: 7
@@ -258,7 +278,7 @@ jobs:
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
         if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
         with:
-          name: PostgreSQL Integration Tests
+          name: PostgreSQL ${{ matrix.pg }} Integration Tests
           path: TestResults/*.trx
           reporter: dotnet-trx
           only-summary: 'true'
@@ -333,18 +353,23 @@ jobs:
           use-actions-summary: 'true'
 
   integration-tests-mariadb:
-    name: Integration Tests (MariaDB)
+    name: Integration Tests (MariaDB ${{ matrix.mariadb }})
     runs-on: ubuntu-latest
     needs: build-and-unit-tests
+    # Current LTS (11.4, whose new utf8mb4_uca1400_ai_ci default collation exercises the data-delivery
+    # collation fix #15) + the supported floor (10.6).
+    strategy:
+      fail-fast: false
+      matrix:
+        mariadb: ['11.4', '10.6']
     permissions:
       contents: read
       checks: write
     services:
       mariadb:
         # MariaDB is a MySQL variant (GetBasePlatform() routes it to the MySQL engine + Scripts/MariaDb
-        # overrides). Pinned to the current LTS (11.4), whose new utf8mb4_uca1400_ai_ci default collation
-        # exercises the data-delivery collation fix (#15); the 10.6 floor is covered by local sandbox runs.
-        image: mariadb:11.4
+        # overrides).
+        image: mariadb:${{ matrix.mariadb }}
         env:
           MARIADB_ROOT_PASSWORD: ${{ env.TEST_PASSWORD }}
           MARIADB_USER: ${{ env.TEST_USER }}
@@ -388,7 +413,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
-          name: mariadb-test-results
+          name: mariadb-test-results-${{ matrix.mariadb }}
           path: TestResults
           if-no-files-found: ignore
           retention-days: 7
@@ -397,7 +422,7 @@ jobs:
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
         if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
         with:
-          name: MariaDB Integration Tests
+          name: MariaDB ${{ matrix.mariadb }} Integration Tests
           path: TestResults/*.trx
           reporter: dotnet-trx
           only-summary: 'true'
@@ -422,7 +447,11 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: coverage-artifacts
-          pattern: '*-test-results'
+          # Trailing wildcard is required: the PostgreSQL and MariaDB legs are a version matrix, so
+          # their artifacts are suffixed (postgresql-test-results-14, mariadb-test-results-10.6, ...).
+          # A bare '*-test-results' silently drops every matrix leg from the merge — which zeroes out
+          # PostgreSQL/MariaDB-only coverage (e.g. the PG<15 legacy-upsert path) and fails the gate.
+          pattern: '*-test-results*'
           merge-multiple: true
 
       - name: Merge coverage

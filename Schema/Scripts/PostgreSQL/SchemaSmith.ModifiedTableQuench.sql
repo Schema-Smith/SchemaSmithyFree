@@ -34,6 +34,23 @@ BEGIN
                       WHERE t2."Schema" = tp."Schema"
                         AND NULLIF(t2."OldName", '') = tp."TableName");
 
+    -- OldName constraint-rename parity: index/constraint ownership rows (IndexName NOT NULL) still
+    -- carry the PRE-rename table name after MissingTableAndColumnQuench renamed the table. Unlike SQL
+    -- Server (object_id-keyed extended properties that survive a rename), these rows are table-name
+    -- scoped, so the removed-from-product index/constraint drop pass below -- keyed on the NEW table
+    -- name -- never matches a carried-over old-named PK/unique/index and never drops it. When the
+    -- package also renames the constraint (new PK name on the renamed table) the add pass then issues
+    -- a second ADD PRIMARY KEY -> 42P16. Migrate the index/constraint ownership rows old->new so the
+    -- drop pass recognises the old-named object as removed and drops it before the add pass. Must be
+    -- UPDATE not DELETE: SchemaSmith only drops indexes it owns, so the row must survive pointing at
+    -- the renamed table. FKs are unaffected (their drop pass is structural/by-absence, not ownership).
+    UPDATE temp_product_ownership tp
+       SET "TableName" = t2."Name"
+      FROM temp_tables t2
+     WHERE tp."IndexName" IS NOT NULL
+       AND t2."Schema" = tp."Schema"
+       AND NULLIF(t2."OldName", '') = tp."TableName";
+
     -- No-drop protection tier (#270): when protected mode is active the caller forces
     -- p_DropTablesRemovedFromProduct to FALSE so the table-drop pass below is skipped. Record the
     -- tables that WOULD have been dropped by absence (owned, absent from the package, not sticky
@@ -632,7 +649,8 @@ BEGIN
                             OR COALESCE(i."UniqueConstraint", FALSE) != ei."UniqueConstraint"
                             OR COALESCE(i."PrimaryKey", FALSE) != ei."PrimaryKey"
                             OR COALESCE(i."FilterExpression", '') != COALESCE(ei."FilterExpression", '')
-                            OR COALESCE(i."AccessMethod", 'btree') != COALESCE(ei."AccessMethod", 'btree')))
+                            OR COALESCE(i."AccessMethod", 'btree') != COALESCE(ei."AccessMethod", 'btree')
+                            OR COALESCE(i."NullsNotDistinct", false) != COALESCE(ei."NullsNotDistinct", false)))
            OR (p_DropIndexesRemovedFromProduct -- Index Removed from Product Definition (gated)
                AND COALESCE((SELECT tt."DropIndexesRemovedFromProduct" FROM temp_tables tt WHERE tt."Schema" = ei."TableSchema" AND tt."Name" = ei."TableName"), TRUE)
                AND EXISTS (SELECT 1

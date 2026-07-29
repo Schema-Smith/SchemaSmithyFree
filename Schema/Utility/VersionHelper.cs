@@ -15,7 +15,8 @@ namespace Schema.Utility
     {
         // SQL Server release-year -> major-version map (declared-version year alias). Bottoms out at
         // 2017 (major 14): the intrinsic floor. 2016 and older are not declarable — they are below the
-        // version SchemaSmith's engine scripts require (STRING_AGG / DB compatibility level 140).
+        // server-binary version SchemaSmith's engine scripts require (STRING_AGG, 2017). The separate
+        // DB compatibility-level floor is 130 (OPENJSON) — see PreFlightVersionGuard.
         private static readonly Dictionary<int, int> SqlServerYearToMajor = new()
         {
             { 2017, 14 }, { 2019, 15 }, { 2022, 16 }
@@ -28,7 +29,7 @@ namespace Schema.Utility
         private static int HardFloorComparable(Platform platform) => platform switch
         {
             Platform.SqlServer => 14,     // SQL Server 2017
-            Platform.PostgreSQL => 15,    // PostgreSQL 15
+            Platform.PostgreSQL => 14,    // PostgreSQL 14 (NULLS NOT DISTINCT, a PG15 feature, is degraded below 15)
             Platform.MySQL => 800,        // MySQL 8.0
             Platform.MariaDb => 1006,     // MariaDB 10.6
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "No version floor defined for platform")
@@ -41,7 +42,7 @@ namespace Schema.Utility
         public static string HardFloorDisplay(Platform platform) => platform switch
         {
             Platform.SqlServer => "2017 (major 14)",
-            Platform.PostgreSQL => "15",
+            Platform.PostgreSQL => "14",
             Platform.MySQL => "8.0",
             Platform.MariaDb => "10.6",
             _ => HardFloorComparable(platform).ToString()

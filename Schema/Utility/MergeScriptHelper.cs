@@ -840,14 +840,29 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
             ? $"{{{{{contentToken}}}}}"
             : tableData?.Replace("'", "''");
 
-        var mergeSQL = (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\n")
+        var modernDelete = pgServerVersionNum == 0 || pgServerVersionNum >= 17;
+        // PostgreSQL MERGE is a v15 feature; below 15 the upsert is emitted as INSERT ... ON CONFLICT
+        // DO UPDATE instead. The delete-on-absence below is a standalone MERGE-free DELETE that already
+        // covers every pre-17 server, so it serves the pre-15 path unchanged.
+        var legacyUpsert = pgServerVersionNum != 0 && pgServerVersionNum < 15;
+
+        string mergeSQL;
+        if (legacyUpsert)
+        {
+            mergeSQL = BuildPostgreSqlLegacyUpsert(cmd, tableSchema, tableName, destSchema, updateDescendents,
+                mergeUpdate, disableTriggers, jsonValue, jsonColumns, keyColumns, identAndSeq,
+                unsupportedComments, disableRuleStatements, enableRuleStatements, jsonKeys);
+        }
+        else
+        {
+        mergeSQL = (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\n")
             + (string.IsNullOrEmpty(disableRuleStatements) ? "" : disableRuleStatements + "\n") + $@"
 DO $$
 DECLARE
   v_json JSON = '{jsonValue}';
   nextval BIGINT;
 BEGIN
-{(disableTriggers ? $"ALTER TABLE \"{destSchema}\".\"{tableName}\" {(updateDescendents ? "" : "ONLY ")}DISABLE TRIGGER ALL;" : "")}
+{(disableTriggers ? $"ALTER TABLE {(updateDescendents ? "" : "ONLY ")}\"{destSchema}\".\"{tableName}\" DISABLE TRIGGER ALL;" : "")}
 MERGE INTO {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}"" AS ""Target""
 USING (
     WITH my_tables(arr) AS (VALUES(v_json::JSON))
@@ -885,8 +900,6 @@ WHEN MATCHED AND ({updateCompare}) THEN
 """;
         }
 
-        var modernDelete = pgServerVersionNum == 0 || pgServerVersionNum >= 17;
-
         var insertColumns = GetInsertColumnsPostgreSql(cmd, tableSchema, tableName, jsonKeys);
         mergeSQL += $@"
 
@@ -909,11 +922,12 @@ WHEN MATCHED AND ({updateCompare}) THEN
         }
 
         mergeSQL += $@";
-{(disableTriggers ? $"ALTER TABLE \"{destSchema}\".\"{tableName}\" {(updateDescendents ? "" : "ONLY ")}ENABLE TRIGGER ALL;" : "")}
+{(disableTriggers ? $"ALTER TABLE {(updateDescendents ? "" : "ONLY ")}\"{destSchema}\".\"{tableName}\" ENABLE TRIGGER ALL;" : "")}
 {(!string.IsNullOrEmpty(identAndSeq) ? $"SELECT SETVAL('{identAndSeq.Split("=")[1]}', (SELECT MAX(\"{identAndSeq.Split("=")[0]}\") FROM \"{destSchema}\".\"{tableName}\")) INTO nextval;" : "")}
 
 END $$ LANGUAGE plpgsql;
 " + (string.IsNullOrEmpty(enableRuleStatements) ? "" : "\n" + enableRuleStatements);
+        }
 
         if (mergeDelete && !modernDelete)
         {
@@ -949,6 +963,85 @@ DELETE FROM {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}""
         }
 
         return mergeSQL;
+    }
+
+    /// <summary>
+    /// PostgreSQL &lt; 15 upsert: MERGE does not exist, so the insert/update half is emitted as a manual
+    /// UPDATE (matched rows, changed-only) followed by an INSERT ... WHERE NOT EXISTS (unmatched rows) —
+    /// the faithful MERGE equivalent. Unlike INSERT ... ON CONFLICT this uses the same NULL-safe key
+    /// predicate the MERGE ON clause uses (so '*'-prefixed nullable keys work correctly) and requires no
+    /// unique/exclusion constraint on the match columns. The delete-on-absence half is the caller's
+    /// standalone DELETE. Mirrors the MERGE path's trigger-disable, identity OVERRIDING, sequence
+    /// re-seed, changed-only compare (IS DISTINCT FROM, with xml/json text/jsonb casts), and rule
+    /// disable/enable wrapping.
+    /// </summary>
+    private static string BuildPostgreSqlLegacyUpsert(IDbCommand cmd, string tableSchema, string tableName,
+        string destSchema, bool updateDescendents, bool mergeUpdate, bool disableTriggers, string jsonValue,
+        string jsonColumns, string keyColumns, string identAndSeq,
+        string unsupportedComments, string disableRuleStatements, string enableRuleStatements, HashSet<string> jsonKeys)
+    {
+        var only = updateDescendents ? "" : "ONLY ";
+        // NULL-safe key predicate (same as the MERGE ON clause) — handles '*'-prefixed nullable keys and
+        // needs no unique/exclusion constraint. "Target" is the table, "Source" the reprojected JSON.
+        var matchColumns = BuildPostgreSqlMatchColumns(keyColumns);
+        var source = $@"(WITH my_tables(arr) AS (VALUES(v_json::JSON))
+          SELECT {jsonColumns}
+            FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS ""Source""";
+
+        var updateSql = "";
+        if (mergeUpdate)
+        {
+            var updateColumns = GetUpdateColumnsPostgreSql(cmd, tableSchema, tableName, jsonKeys);
+            var xmlColumns = GetXmlColumnsPostgreSql(cmd, tableSchema, tableName);
+            var jsonCols = GetJsonColumnsPostgreSql(cmd, tableSchema, tableName);
+            string CompareExpr(string c)
+            {
+                var colName = c.Trim().Trim('"');
+                if (xmlColumns.Contains(colName))
+                    return $"\"Target\".{c}::text IS DISTINCT FROM \"Source\".{c}::text";
+                if (jsonCols.TryGetValue(colName, out var jsonType))
+                {
+                    var cast = jsonType == "jsonb" ? "::jsonb" : "::text";
+                    return $"\"Target\".{c}{cast} IS DISTINCT FROM \"Source\".{c}{cast}";
+                }
+                return $"\"Target\".{c} IS DISTINCT FROM \"Source\".{c}";
+            }
+            var setClause = string.Join(",\n", updateColumns!.Split(',').Select(c => $"    {c} = \"Source\".{c}"));
+            var whereChanged = string.Join(" OR ", updateColumns.Split(',').Select(CompareExpr));
+            updateSql = $@"
+UPDATE {only}""{destSchema}"".""{tableName}"" AS ""Target""
+   SET
+{setClause}
+  FROM {source}
+ WHERE {matchColumns}
+   AND ({whereChanged});";
+        }
+
+        // Computed after the update columns to keep the same catalog-probe order as the MERGE path.
+        var insertColumns = GetInsertColumnsPostgreSql(cmd, tableSchema, tableName, jsonKeys);
+        var selectExprs = string.Join(", ", insertColumns!.Split(',').Select(c => $"\"Source\".{c.Trim()}"));
+        var overriding = string.IsNullOrEmpty(identAndSeq)
+            ? ""
+            : $"OVERRIDING {identAndSeq.Split("=")[2]} VALUE\n  ";
+
+        return (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\n")
+            + (string.IsNullOrEmpty(disableRuleStatements) ? "" : disableRuleStatements + "\n") + $@"
+DO $$
+DECLARE
+  v_json JSON = '{jsonValue}';
+  nextval BIGINT;
+BEGIN
+{(disableTriggers ? $"ALTER TABLE {only}\"{destSchema}\".\"{tableName}\" DISABLE TRIGGER ALL;" : "")}{updateSql}
+INSERT INTO ""{destSchema}"".""{tableName}"" (
+{insertColumns}
+)
+  {overriding}SELECT {selectExprs}
+    FROM {source}
+   WHERE NOT EXISTS (SELECT 1 FROM {only}""{destSchema}"".""{tableName}"" AS ""Target"" WHERE {matchColumns});
+{(disableTriggers ? $"ALTER TABLE {only}\"{destSchema}\".\"{tableName}\" ENABLE TRIGGER ALL;" : "")}
+{(!string.IsNullOrEmpty(identAndSeq) ? $"SELECT SETVAL('{identAndSeq.Split("=")[1]}', (SELECT MAX(\"{identAndSeq.Split("=")[0]}\") FROM \"{destSchema}\".\"{tableName}\")) INTO nextval;" : "")}
+END $$ LANGUAGE plpgsql;
+" + (string.IsNullOrEmpty(enableRuleStatements) ? "" : "\n" + enableRuleStatements);
     }
 
     private static (string DisableStatements, string EnableStatements) GetRuleDisableEnableStatements(

@@ -39,6 +39,31 @@ public class ConnectionStringTests
     }
 
     [Test]
+    public void Build_SqlServer_IntegratedSecurityFlag_ForcesIntegrated_EvenWithCredentials()
+    {
+        // A checked-in settings file may carry "User": "sa"; an operator opting into Windows
+        // Authentication via Target:IntegratedSecurity=true must reach integrated auth even though a
+        // credential is present — an override cannot clear the file's credential on Windows (setting
+        // an env var to empty deletes it), so the credential must be superseded, not cleared.
+        var result = ConnectionString.Build(Platform.SqlServer, "myserver", "mydb", "sa", "pw",
+            integratedSecurity: true);
+
+        Assert.That(result, Does.Contain("Integrated Security=True"));
+        Assert.That(result, Does.Not.Contain("User ID="));
+        Assert.That(result, Does.Not.Contain("Password="));
+    }
+
+    [Test]
+    public void Build_SqlServer_IntegratedSecurityFalse_WithCredentials_UsesCredentials()
+    {
+        var result = ConnectionString.Build(Platform.SqlServer, "myserver", "mydb", "sa", "pw",
+            integratedSecurity: false);
+
+        Assert.That(result, Does.Contain("User ID=sa"));
+        Assert.That(result, Does.Not.Contain("Integrated Security"));
+    }
+
+    [Test]
     public void Build_SqlServer_EmitsExplicitEncryptTrue_ByDefault()
     {
         var result = ConnectionString.Build(Platform.SqlServer, "myserver", "mydb", "u", "p");

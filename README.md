@@ -194,9 +194,17 @@ Four sample databases ship across all four platforms:
 
 See [Demos/README.md](Demos/README.md) for the per-platform layout, credentials, and SQL Server tutorials.
 
+## Security
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md). For how the tools handle
+credentials and network access, how releases are built and signed, and answers to common
+security-review questions, see [SECURITY-POSTURE.md](SECURITY-POSTURE.md).
+
 ## License
 
 SchemaSmith Community Edition is licensed under [SSCL v2.0](LICENSE). Use it freely to manage databases for your own products and services — SQL Server, PostgreSQL, MySQL, or MariaDB — with no restrictions on organization size, revenue, database size, or environment count. Not permitted: redistributing SchemaSmith as a standalone product, bundling it as a component of another product marketed to third parties, or offering it as a hosted or managed service. See the [LICENSE](LICENSE) for the full terms.
+
+For SBOM and license-scanning tools, SSCL v2.0 is declared as the SPDX custom identifier `LicenseRef-SSCL-2.0` (SSCL is not on the SPDX License List).
 
 ## Contributors
 

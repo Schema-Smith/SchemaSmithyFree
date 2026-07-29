@@ -212,6 +212,33 @@ public class DeploymentSummaryTextTests
         Assert.That(result, Does.Not.Contain("WhatIf"));
     }
 
+    [Test]
+    public void Render_WithUnsupportedDowngrade_ShowsDowngradeSection()
+    {
+        var summary = BuildFullyPopulatedSummary() with
+        {
+            UnsupportedDowngrade = new UnsupportedDowngradeSummary(new[]
+            {
+                new UnsupportedDowngradeEntry("NULLS NOT DISTINCT (PG15)", "public.t.uq_t")
+            })
+        };
+
+        var result = DeploymentSummaryText.Render(summary);
+
+        Assert.That(result, Does.Contain("Unsupported Feature Downgrades"));
+        Assert.That(result, Does.Contain("NULLS NOT DISTINCT (PG15): public.t.uq_t"));
+    }
+
+    [Test]
+    public void Render_WithoutUnsupportedDowngrade_OmitsDowngradeSection()
+    {
+        var summary = BuildFullyPopulatedSummary() with { UnsupportedDowngrade = null };
+
+        var result = DeploymentSummaryText.Render(summary);
+
+        Assert.That(result, Does.Not.Contain("Unsupported Feature Downgrades"));
+    }
+
     // ─── Bottlenecks: present only when non-empty ───────────────────────────────
 
     [Test]

@@ -30,11 +30,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Check names must match the CI job names exactly. The PostgreSQL and MariaDB integration
+          # jobs are a matrix over latest + the supported floor, so each leg is a separate check
+          # (e.g. "Integration Tests (PostgreSQL 14)") and every leg must have passed. Coverage Gate
+          # and both MariaDB legs are required — a release must not cut with any of them red.
           REQUIRED_CHECKS=(
             "Build & Unit Tests"
             "Integration Tests (SQL Server)"
-            "Integration Tests (PostgreSQL)"
+            "Integration Tests (PostgreSQL latest)"
+            "Integration Tests (PostgreSQL 14)"
             "Integration Tests (MySQL)"
+            "Integration Tests (MariaDB 11.4)"
+            "Integration Tests (MariaDB 10.6)"
+            "Coverage Gate"
             "check-headers"
           )
           FAILED=0
@@ -340,9 +348,49 @@ jobs:
           path: "output/*.${{ matrix.fmt }}"
           retention-days: 5
 
+  sbom:
+    runs-on: ubuntu-latest
+    needs: [read-version]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install CycloneDX
+        run: dotnet tool install --global CycloneDX --version 6.2.0
+
+      - name: Generate SBOM
+        run: |
+          VERSION="${{ needs.read-version.outputs.version }}"
+          mkdir -p sbom
+          dotnet CycloneDX SchemaSmith.sln \
+            -o sbom \
+            -fn "SchemaSmith-${VERSION}.cdx.json" \
+            -F Json \
+            -t \
+            -ed \
+            -sn SchemaSmith \
+            -sv "$VERSION"
+          echo "SBOM components: $(python3 -c "import json;print(len(json.load(open('sbom/SchemaSmith-${VERSION}.cdx.json'))['components']))")"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom
+          path: sbom/*.cdx.json
+          retention-days: 1
+
   create-release:
     runs-on: ubuntu-latest
-    needs: [package-zip-windows, package-tar-unix, package-linux, read-version]
+    needs: [package-zip-windows, package-tar-unix, package-linux, read-version, sbom]
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -370,6 +418,12 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Download SBOM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: sbom
+          path: release-assets
+
       - name: List release assets
         run: find release-assets -type f
 
@@ -379,6 +433,15 @@ jobs:
           sha256sum -- * > SHA256SUMS
           echo "SHA256SUMS contents:"
           cat SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: |
+            release-assets/*.zip
+            release-assets/*.tar.gz
+            release-assets/*.deb
+            release-assets/*.rpm
 
       - name: Extract release notes from CHANGELOG
         run: |

@@ -29,7 +29,9 @@ namespace SchemaQuench.UnitTests
 
             Assert.That(failures, Has.Count.EqualTo(1));
             Assert.That(failures.Single(), Does.Contain("primary"));
-            Assert.That(failures.Single(), Does.Contain("150010"));
+            // Detected version is displayed normalized to its major, not the raw server_version_num (150010).
+            Assert.That(failures.Single(), Does.Contain("version 15"));
+            Assert.That(failures.Single(), Does.Not.Contain("150010"));
             Assert.That(failures.Single(), Does.Contain("16"));
         }
 
@@ -122,7 +124,7 @@ namespace SchemaQuench.UnitTests
                 try
                 {
                     ConfigureProduct("PostgreSQL", minimumVersion: "15");
-                    var quench = new StubDetectProductQuench("150010"); // major 15 == floor 15
+                    var quench = new StubDetectProductQuench("150010"); // major 15 meets declared min 15
 
                     Assert.DoesNotThrow(() => quench.ValidateMinimumVersion());
                 }

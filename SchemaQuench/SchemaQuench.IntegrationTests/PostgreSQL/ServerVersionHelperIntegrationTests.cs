@@ -20,7 +20,7 @@ namespace SchemaQuench.IntegrationTests.PostgreSQL
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = "SELECT \"SchemaSmith\".\"ServerVersionNum\"()";
-            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThanOrEqualTo(15)); // PostgreSQL 15 floor
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThanOrEqualTo(14)); // PostgreSQL 14 floor
         }
 
         [Test]

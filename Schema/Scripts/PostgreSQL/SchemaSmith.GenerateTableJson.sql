@@ -89,7 +89,7 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                                     WHEN i.reloptions IS NULL THEN 90 -- Default for B-tree indexes
                                     ELSE (REGEXP_MATCH(ARRAY_TO_STRING(i.reloptions, ','), 'fillfactor=(\d+)') ) [1] ::int
                                     END AS "FillFactor",
-                               idx.indnullsnotdistinct AS "NullsNotDistinct",
+                               "SchemaSmith"."IndexNullsNotDistinct"(idx.indexrelid) AS "NullsNotDistinct",
                                COALESCE(con.condeferrable, FALSE) AS "Deferrable",
                                COALESCE(con.condeferred, FALSE) AS "InitiallyDeferred"
                           FROM pg_index idx

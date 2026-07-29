@@ -2,6 +2,7 @@
   "Schema": "[recyclebin]",
   "Name": "[Registry]",
   "CompressionType": "NONE",
+  "PreventDrop": true,
   "Columns": [
     {
       "Name": "[Id]",

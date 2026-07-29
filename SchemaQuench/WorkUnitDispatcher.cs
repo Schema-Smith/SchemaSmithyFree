@@ -184,7 +184,15 @@ public sealed class WorkUnitDispatcher
                 {
                     _failures.Add(ex);
                     if (!_continueOnFailure)
+                    {
                         _abort = true;
+                        // Explicitly abandon queued work on abort. "Queued units don't run after a
+                        // failure" is then a property of the empty queues, not an emergent consequence
+                        // of the WorkerLoop short-circuit alone — a future restructure of the loop that
+                        // drops the _abort check cannot silently regress it.
+                        _parallelQueue.Clear();
+                        foreach (var q in _serialQueues.Values) q.Clear();
+                    }
                     Monitor.PulseAll(_lock);
                 }
             }

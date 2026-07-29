@@ -26,6 +26,18 @@ public class MergeScriptHelperIntegrationTests
     {
         _connection = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(FixtureSetup.GetMainDbConnectionString());
         _connection.Open();
+
+        // This fixture simulates modern (>=15) PostgreSQL MERGE targets and executes the generated
+        // scripts to verify they run. MERGE is a v15 feature, so on a real <15 server those scripts
+        // cannot execute — they fail inside plpgsql ("only" is not a known variable). Skip the fixture
+        // on an older server EXCEPT the real-version-adaptive test, which is exactly the intended
+        // below-15 (legacy-upsert) coverage; generation-shape is fully covered on the modern CI leg.
+        // Without this, the PostgreSQL 14 matrix leg runs modern-only execution tests against a server
+        // that cannot run them (production is unaffected — it generates for the detected version).
+        using var probe = _connection.CreateCommand();
+        if (TargetVersionDetector.Detect(probe, Platform.PostgreSQL).ServerComparable < 15
+            && TestContext.CurrentContext.Test.MethodName != nameof(BuildMergeScript_NativeVersion_DeletesRowsAbsentFromSource))
+            Assert.Ignore("MergeScriptHelper modern-MERGE execution tests require PostgreSQL 15+; the below-15 path is covered by BuildMergeScript_NativeVersion and the SchemaQuench legacy-upsert integration tests.");
     }
 
     [TearDown]

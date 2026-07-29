@@ -5,12 +5,23 @@
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."BuildExistingIndexesSnapshot"()
     LANGUAGE plpgsql
 AS $$
+DECLARE
+  -- Version-adaptive catalog read: pg_index.indnullsnotdistinct is PostgreSQL 15+. Referencing it
+  -- on an older server errors at PLAN time (42703) even inside a never-taken branch, so the whole
+  -- snapshot SELECT is built dynamically and the column is swapped for a literal FALSE below 15. This
+  -- keys on the REAL server version (server_version_num), NOT the override-aware ServerVersionNum():
+  -- whether the physical column EXISTS is a property of the actual binary, so a test that forces a
+  -- higher version on a genuinely older server must still read the fallback. The declared-side
+  -- NullsNotDistinct is neutralised to false below 15 (override-aware) in the emit procs; the emitted
+  -- index therefore physically lacks the clause, so FALSE-vs-FALSE produces no phantom churn.
+  v_nnd_expr TEXT := CASE WHEN (current_setting('server_version_num')::int / 10000) >= 15 THEN 'idx.indnullsnotdistinct' ELSE 'FALSE' END;
 BEGIN
   -- Session-scoped snapshot of existing indexes, consumed by ModifiedTableQuench,
   -- IndexOnlyQuench, and MissingIndexesAndConstraintsQuench. Extracted to one proc so the
   -- three sites can never drift and so a checkpoint-resumed run (which skips the step that
   -- normally builds it) can rebuild it on demand (#332). Depends only on temp_tables.
   DROP TABLE IF EXISTS temp_existing_indexes;
+  EXECUTE format($snapshot$
   CREATE TEMPORARY TABLE temp_existing_indexes AS
     SELECT t."Schema" AS "TableSchema",
            t."Name" AS "TableName",
@@ -37,11 +48,12 @@ BEGIN
                 WHEN i.reloptions IS NULL THEN 90 -- Default for B-tree indexes
                 ELSE (regexp_match(array_to_string(i.reloptions, ','), 'fillfactor=(\d+)') ) [1] ::int
                 END AS "FillFactor",
-           idx.indnullsnotdistinct AS "NullsNotDistinct",
+           %s AS "NullsNotDistinct",
            COALESCE(con.condeferrable, FALSE) AS "Deferrable",
            COALESCE(con.condeferred, FALSE) AS "InitiallyDeferred"
       FROM temp_tables t
       JOIN pg_index idx ON idx.indrelid = to_regclass('"' || t."Schema" || '"' ||  '.' || '"' ||  t."Name" || '"')
       JOIN pg_class i ON i.oid = idx.indexrelid
-      LEFT JOIN pg_catalog.pg_constraint con ON con.contype IN ('p','u') AND con.conrelid = idx.indrelid AND con.conname = i.relname;
+      LEFT JOIN pg_catalog.pg_constraint con ON con.contype IN ('p','u') AND con.conrelid = idx.indrelid AND con.conname = i.relname
+  $snapshot$, v_nnd_expr);
 END $$;
