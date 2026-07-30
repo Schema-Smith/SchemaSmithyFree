@@ -113,6 +113,8 @@ CREATE TABLE public.""TestChecks"" (
         using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_testConnectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT current_setting('server_version_num')::int / 10000";
+        if (Convert.ToInt32(cmd.ExecuteScalar()) < 14) Assert.Ignore("Expression statistics (CREATE STATISTICS on an expression) require PostgreSQL 14+.");
         cmd.CommandText = @"
 CREATE TABLE public.""TestStatistics"" (
     ""MyInt"" INT4 NOT NULL,
