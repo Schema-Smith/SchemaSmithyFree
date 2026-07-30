@@ -919,6 +919,36 @@ BEGIN
       CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
     END IF;
 
+    -- Un-generate a column (target is no longer GENERATED) on PostgreSQL < 13, which lacks
+    -- ALTER COLUMN ... DROP EXPRESSION. Drop and re-add the column as a plain column (decision: Paul,
+    -- 2026-07-30 — achieve the un-generation on old PG; the previously-computed values are NOT preserved,
+    -- unlike PG13+ in-place DROP EXPRESSION). Runs before the "Alter Modified Columns" pass, which excludes
+    -- these columns (the re-add carries the full target definition — type/collation/nullability/default).
+    IF "SchemaSmith"."ServerVersionNum"() < 13 THEN
+      SELECT STRING_AGG('RAISE NOTICE ''  Un-generating column ' || c."TableSchema" || '.' || c."TableName" || '.' || c."Name" || ' (drop+re-add as plain; PG < 13 has no DROP EXPRESSION)'';' || CHR(10) ||
+                        'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" DROP COLUMN IF EXISTS "' || c."Name" || '" CASCADE;' || CHR(10) ||
+                        'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ADD "' || c."Name" || '" ' || c."DataType" ||
+                        CASE WHEN COALESCE(c."Collation", '') != '' THEN ' COLLATE "' || c."Collation" || '"' ELSE '' END ||
+                        CASE WHEN c."Nullable" THEN '' ELSE ' NOT NULL' END ||
+                        CASE WHEN COALESCE(c."Default", '') != '' THEN ' DEFAULT ' || c."Default" ELSE '' END || ';' ||
+                        CASE WHEN COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != 'DEFAULT'
+                             THEN CHR(10) || 'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ALTER COLUMN "' || c."Name" || '" SET STORAGE ' || c."Storage" || ';'
+                             ELSE '' END, CHR(10))
+        INTO sql_script
+        FROM temp_columns c
+        JOIN temp_existing_columns ec ON ec."TableSchema" = c."TableSchema"
+                                     AND ec."TableName" = c."TableName"
+                                     AND ec."ColumnName" = c."Name"
+        WHERE (COALESCE(c."Generated", 'NEVER') = 'NEVER' OR COALESCE(c."GenerationExpression", '') = '')  -- target no longer generated
+          AND COALESCE(ec."GenerationExpression", '') != ''                                                -- but it currently is a generated column
+          AND EXISTS (SELECT 1
+                        FROM information_schema.columns ic
+                        WHERE ic.table_schema = c."TableSchema"
+                          AND ic.table_name = c."TableName"
+                          AND ic.column_name = c."Name");
+      CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+    END IF;
+
     RAISE NOTICE 'Alter Modified Columns';
     SELECT STRING_AGG("code", CHR(10))
       INTO sql_script
@@ -952,7 +982,9 @@ BEGIN
                            ELSE '' END ||
                       CASE WHEN COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
                            THEN CASE WHEN (COALESCE(c."Generated", 'NEVER') = 'NEVER' OR COALESCE(c."GenerationExpression", '') = '')
-                                     THEN ' ALTER COLUMN "' || c."Name" || '" DROP EXPRESSION,'
+                                     THEN CASE WHEN "SchemaSmith"."ServerVersionNum"() >= 13
+                                               THEN ' ALTER COLUMN "' || c."Name" || '" DROP EXPRESSION,'
+                                               ELSE '' END  -- PG < 13: handled by the un-generate drop-and-re-add pass above
                                      WHEN "SchemaSmith"."ServerVersionNum"() >= 17
                                      THEN ' ALTER COLUMN "' || c."Name" || '" SET EXPRESSION AS (' || COALESCE(c."GenerationExpression", '') || '),'
                                      ELSE '' END  -- PG < 17: expression change is handled by the drop-and-re-add pass below
@@ -1005,6 +1037,12 @@ BEGIN
                  AND COALESCE(c."GenerationExpression", '') != ''
                  AND COALESCE(c."Generated", 'NEVER') = COALESCE(ec."Generated", 'NEVER')
                  AND COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", ''))
+        AND NOT (-- PG < 13 un-generate (target no longer GENERATED, currently generated): handled SOLELY by the
+                 -- "Un-generating column" drop-and-re-add pass above (which re-adds the full plain-column
+                 -- definition). MUST match that pass's predicate — keep in lockstep.
+                 "SchemaSmith"."ServerVersionNum"() < 13
+                 AND (COALESCE(c."Generated", 'NEVER') = 'NEVER' OR COALESCE(c."GenerationExpression", '') = '')
+                 AND COALESCE(ec."GenerationExpression", '') != '')
        GROUP BY c."TableSchema", c."TableName") x;
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
