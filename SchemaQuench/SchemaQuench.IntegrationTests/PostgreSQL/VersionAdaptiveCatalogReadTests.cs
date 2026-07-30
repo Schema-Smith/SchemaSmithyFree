@@ -36,6 +36,40 @@ public class VersionAdaptiveCatalogReadTests : BaseTableQuenchTests
         conn.Close();
     }
 
+    // PG12: BootstrapTableQuench declared each column's identity TWICE — Step 1's CREATE TABLE builds the
+    // full column list inline, then Step 2 emitted ADD COLUMN IF NOT EXISTS for EVERY column. On PostgreSQL
+    // 12, ADD COLUMN IF NOT EXISTS ... GENERATED AS IDENTITY leaks an orphan owned sequence even while it
+    // skips the already-present column, so the identity column ends up owning two sequences and every later
+    // INSERT fails with "more than one owned sequence found". ChangeAudit.Id is such a column, so the
+    // quench's own audit INSERT broke on PG12. After the fix (Step 2 guarded by information_schema so it
+    // only ADDs genuinely-missing columns), the column owns exactly one sequence and inserts succeed on
+    // every version.
+    [Test]
+    public void ChangeAudit_IdentityColumn_OwnsExactlyOneSequence_AndInsertSucceeds()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        cmd.CommandText = @"
+SELECT count(*) FROM pg_depend d
+  JOIN pg_class s ON s.oid = d.objid AND s.relkind = 'S'
+ WHERE d.refobjid = '""SchemaSmith"".""ChangeAudit""'::regclass
+   AND d.refobjsubid = (SELECT attnum FROM pg_attribute
+                          WHERE attrelid = '""SchemaSmith"".""ChangeAudit""'::regclass AND attname = 'Id');";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1),
+            "ChangeAudit.Id must own exactly one sequence (PG12 leaked a second via Step-2 ADD COLUMN IF NOT EXISTS + IDENTITY)");
+
+        cmd.CommandText = @"INSERT INTO ""SchemaSmith"".""ChangeAudit"" (""SessionId"", ""ObjectType"", ""ObjectName"", ""ActionType"")
+                            VALUES (pg_backend_pid(), 'table', 'VacrTest.OwnedSeq', 'created');";
+        Assert.DoesNotThrow(() => cmd.ExecuteNonQuery(),
+            "INSERT into ChangeAudit must not hit 'more than one owned sequence found' (PG12 duplicate owned sequence)");
+
+        conn.Close();
+    }
+
     // The compare-side serialization (GenerateTableJSON) and the modify-side snapshot (ModifiedTableQuench's
     // temp_existing_columns) both read pg_attribute.attcompression, a PG14 column. Below 14 the read is a
     // plan-time 42703; the ColumnCompression helper reads it via EXECUTE only on a server that has it. A
