@@ -58,6 +58,18 @@ jobs:
     steps:
       - run: echo "docs-only change — no integration run required."
 
+  integration-tests-postgresql-13:
+    name: Integration Tests (PostgreSQL 13)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-postgresql-12:
+    name: Integration Tests (PostgreSQL 12)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
   integration-tests-mysql:
     name: Integration Tests (MySQL)
     runs-on: ubuntu-latest
