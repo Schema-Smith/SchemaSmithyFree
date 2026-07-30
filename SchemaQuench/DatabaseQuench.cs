@@ -1640,13 +1640,24 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         // Set the unsupported-feature policy on every convergence connection (built directly to the
         // target database, so no ChangeDatabase resets the session): version-gated emit sites read it
         // via SchemaSmith.UnsupportedFeaturePolicy() to choose degrade-with-warning (default) vs abort.
-        // PostgreSQL now; SQL Server (SESSION_CONTEXT) and MySQL/MariaDB (user var) land with their
-        // floor-lowering phases. The SQL helper defaults to 'warn', so only an explicit 'fail' matters.
+        // PostgreSQL and SQL Server now; MySQL/MariaDB (user var) land with their floor-lowering phase.
+        // The SQL helper defaults to 'warn', so only an explicit 'fail' matters.
         if (_product.Platform.GetBasePlatform() == Platform.PostgreSQL)
         {
             var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
             using var policyCmd = connection.CreateCommand();
             policyCmd.CommandText = $"SET schemasmith.unsupported_policy = '{policy}'";
+            policyCmd.ExecuteNonQuery();
+        }
+        else if (_product.Platform.GetBasePlatform() == Platform.SqlServer)
+        {
+            var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
+            using var policyCmd = connection.CreateCommand();
+            policyCmd.CommandText = "EXEC sp_set_session_context @key = N'schemasmith.unsupported_policy', @value = @policy";
+            var policyParam = policyCmd.CreateParameter();
+            policyParam.ParameterName = "@policy";
+            policyParam.Value = policy;
+            policyCmd.Parameters.Add(policyParam);
             policyCmd.ExecuteNonQuery();
         }
 
