@@ -337,7 +337,7 @@ These are the minimum versions SchemaSmith supports for deployment:
 | Platform | Minimum supported |
 |----------|------------------|
 | SQL Server | 2017 (major version 14) |
-| PostgreSQL | 14 |
+| PostgreSQL | 12 |
 | MySQL | 8.0 |
 | MariaDB | 10.6 |
 
@@ -355,21 +355,20 @@ If a target's version cannot be determined, that is a hard error -- SchemaQuench
 
 When the supported range across your targets diverges, SchemaSmith adapts the DDL it generates automatically. There is nothing to configure -- you deploy the same package to older and newer engine versions and SchemaSmith picks the right form for each target.
 
-> **PostgreSQL:** The following cases apply only to PostgreSQL, where the supported range spans versions that differ in available DDL.
+> **PostgreSQL:** The following cases apply only to PostgreSQL, whose supported range (12 through current) spans versions that differ in available DDL.
 
-| Operation | PostgreSQL 17+ | PostgreSQL 15 / 16 |
-|-----------|---------------|--------------------|
-| **Generated-column change** | `ALTER COLUMN … SET EXPRESSION` applied in place | Drop and re-add the generated column, preserving data type, collation, nullability, storage, and compression |
-| **Delete-on-absence** (`Insert/Update/Delete` DataDelivery) | Single `MERGE … WHEN NOT MATCHED BY SOURCE THEN DELETE` | `MERGE` for insert/update, then a follow-on `DELETE … WHERE NOT EXISTS` keyed identically, honoring the same merge filter |
+A feature a target version lacks is either taken by an equivalent longer path (same end state), or -- where there is no equivalent -- degraded through the **unsupported-feature policy** (`Target:UnsupportedFeaturePolicy`, default `warn`): the object is emitted without the unsupported aspect and each affected object is listed under **Unsupported Feature Downgrades** in the deployment summary, so you know exactly what was relaxed. Set `Target:UnsupportedFeaturePolicy=fail` (for example `SmithySettings_Target__UnsupportedFeaturePolicy=fail`) to abort instead with a "requires PostgreSQL N" message rather than deploy a silently-degraded schema.
 
-In both cases the end state is identical. On PostgreSQL 15 and 16, SchemaSmith takes the longer path that those engine versions support. You can deploy the same package to PostgreSQL 15, 16, or 17 and the result is the same database.
+| Authored feature | Requires | Below that version, SchemaSmith… |
+|---|---|---|
+| **`NULLS NOT DISTINCT`** (unique index / constraint) | PostgreSQL 15 | emits the object *without* the clause + records a downgrade |
+| **`MERGE` data delivery** (`Insert/Update`) | PostgreSQL 15 | uses a manual, NULL-safe INSERT + UPDATE upsert with identical semantics |
+| **In-place generated-column expression change** (`SET EXPRESSION`) | PostgreSQL 17 | drops and re-adds the generated column (data type, collation, nullability, storage, compression preserved) |
+| **Per-column compression** (`SET COMPRESSION`) | PostgreSQL 14 | omits the compression + records a downgrade |
+| **Expression statistics** (`CREATE STATISTICS` on an expression) | PostgreSQL 14 | skips the statistic + records a downgrade |
+| **Removing a column's generation** (`DROP EXPRESSION`) | PostgreSQL 13 | drops and re-adds the column as a plain column (the previously-computed values are not preserved, unlike the in-place conversion available on 13+) |
 
-**PostgreSQL 14 — below-15 features degrade rather than block.** A few constructs are PostgreSQL 15 features. On a 14 target:
-
-- **`NULLS NOT DISTINCT`** (unique indexes/constraints) is emitted *without* the clause, and each affected object is listed under **Unsupported Feature Downgrades** in the deployment summary so you know exactly what was relaxed. This is the default `warn` policy; set `Target:UnsupportedFeaturePolicy=fail` (for example `SmithySettings_Target__UnsupportedFeaturePolicy=fail`) to abort instead with a "requires PostgreSQL 15" message rather than deploy a silently-degraded schema.
-- **Data delivery** (`Insert/Update` / `Insert/Update/Delete`) uses a manual INSERT + UPDATE upsert (matching the MERGE semantics, NULL-safe keys included) for the insert/update pass, since `MERGE` is a PostgreSQL 15 feature. The delete-on-absence pass is the same version-agnostic `DELETE` used on 15/16.
-
-Everything else deploys identically to 15+.
+The version-sensitive system-catalog reads SchemaSmith uses to compare and extract state (per-column compression, expression statistics, `NULLS NOT DISTINCT`, INCLUDE columns) are branched automatically so they parse on the older server too — extraction and idempotency work the same on 12 as on current PostgreSQL. Delete-on-absence data delivery uses a single `MERGE … WHEN NOT MATCHED BY SOURCE THEN DELETE` on 17+ and a `MERGE` + follow-on `DELETE … WHERE NOT EXISTS` (keyed identically, same merge filter) on 15/16; below 15 it is the same version-agnostic `DELETE`. In every case the end state is identical — deploy the same package to PostgreSQL 12 through current and you get the same database, minus only the features the target genuinely cannot support (which the deployment summary names).
 
 ### MariaDB (MySQL family) — where the native DDL diverges
 
