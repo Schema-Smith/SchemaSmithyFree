@@ -146,6 +146,15 @@ public static class ForgeKindler
     }
 
     /// <summary>
+    /// Get the XML-ingest twin of the ParseTableJson script (selected below the OPENJSON compat cliff).
+    /// </summary>
+    public static string GetParseTableXmlScript(Platform platform)
+    {
+        return ResourceLoader.Load("ParseTableXmlIntoTempTables.sql", platform)
+            ?? throw new Exception($"ParseTableXmlIntoTempTables.sql not found for platform '{platform}'.");
+    }
+
+    /// <summary>
     /// Load the sibling .json resource for a kindling _Table.sql script. Convention: the JSON
     /// file shares the script's base name. For "Kindling_CompletedMigrationScripts_Table.sql"
     /// the resolver strips the "_Table.sql" suffix and loads "Kindling_CompletedMigrationScripts.json".
