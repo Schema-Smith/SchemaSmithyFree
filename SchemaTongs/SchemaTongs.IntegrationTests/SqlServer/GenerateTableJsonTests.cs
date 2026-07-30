@@ -541,6 +541,44 @@ EXEC sys.sp_addextendedproperty 'PreventDrop', 'true', 'SCHEMA', [dbo], 'TABLE',
         conn.Close();
     }
 
+    [Test]
+    public void ShouldRoundTripSystemVersionedTemporalTable()
+    {
+        // #369: SchemaTongs extraction previously emitted no IsTemporal for a system-versioned (temporal)
+        // table, so an extract -> re-deploy round-trip silently dropped system-versioning. Extraction must
+        // (a) emit IsTemporal:true and (b) EXCLUDE the period columns (ValidFrom/ValidTo, GENERATED ALWAYS
+        // AS ROW START/END) — SchemaSmith regenerates those from IsTemporal by convention on apply (see
+        // TableQuench_TemporalTables, whose IsTemporal:true JSON declares no period columns yet produces
+        // them), so emitting them as user columns would double-declare them on re-deploy.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.MyTemporalExtract (
+    Id INT NOT NULL,
+    Somedata VARCHAR(500) NOT NULL,
+    ValidFrom DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    ValidTo DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    CONSTRAINT [PK_MyTemporalExtract] PRIMARY KEY NONCLUSTERED (Id),
+    PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo)
+) WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.MyTemporalExtract_Hist))
+";
+        cmd.ExecuteNonQuery();
+
+        var json = GenerateTableJson(cmd, "dbo", "MyTemporalExtract");
+        var result = GenerateTable(cmd, "dbo", "MyTemporalExtract");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsTemporal, Is.True, "a system-versioned table must extract with IsTemporal:true so the round-trip preserves system-versioning");
+            Assert.That(result.Columns, Has.Count.EqualTo(2), "only the user columns (Id, Somedata) remain — the period columns are SchemaSmith-generated from IsTemporal, not user columns");
+            Assert.That(json, Does.Not.Contain("ValidFrom"), "the ROW START period column must not be extracted as a user column");
+            Assert.That(json, Does.Not.Contain("ValidTo"), "the ROW END period column must not be extracted as a user column");
+        });
+
+        conn.Close();
+    }
+
     private string GenerateTableJson(IDbCommand cmd, string schema, string table)
     {
         cmd.CommandText = $"EXEC [SchemaSmith].GenerateTableJson @p_Schema = '{schema}', @p_Table = '{table}'";

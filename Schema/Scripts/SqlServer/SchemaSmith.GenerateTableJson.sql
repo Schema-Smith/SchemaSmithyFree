@@ -19,6 +19,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
        st.is_tracked_by_cdc AS [EnableCDC],
+       -- System-versioning round-trip (#369): emit IsTemporal so an extracted temporal table re-deploys
+       -- as temporal (previously omitted -> silently lost on round-trip). Only when true, to keep non-
+       -- temporal tables minimal. sys.tables.temporal_type is 2016+ (safe at the current 2017 floor;
+       -- gate this + generated_always_type below when the SQL Server floor drops below 2016).
+       CASE WHEN st.temporal_type = 2 THEN CAST(1 AS BIT) END AS [IsTemporal],
        -- Emit the sticky drop-protection marker first-class (only when set true, so unprotected tables stay minimal).
        -- Read from the PreventDrop extended property (excluded from generic Extensions via @InternalEPNames). #270
        CASE WHEN (SELECT CONVERT(NVARCHAR(50), [value])
@@ -74,7 +79,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[object_id] = st.[object_id]
                                                                AND mc.[name] = c.COLUMN_NAME
                   WHERE c.TABLE_SCHEMA = t.TABLE_SCHEMA
-                    AND c.TABLE_NAME = t.TABLE_NAME) x 
+                    AND c.TABLE_NAME = t.TABLE_NAME
+                    -- Exclude the temporal period columns (GENERATED ALWAYS AS ROW START/END). SchemaSmith
+                    -- regenerates ValidFrom/ValidTo from IsTemporal by convention on apply, so emitting them
+                    -- as user columns would double-declare them on re-deploy (#369).
+                    AND sc.generated_always_type = 0) x
           ORDER BY [Name]
           FOR JSON AUTO) AS [Columns],
        (SELECT '[' + [Name] + ']' AS [Name], 
