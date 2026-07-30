@@ -14,10 +14,10 @@
     <iconUrl>https://schemasmith.com/images/SchemaSmith-logo.png</iconUrl>
     <bugTrackerUrl>https://github.com/Schema-Smith/SchemaSmith/issues</bugTrackerUrl>
     <copyright>© SchemaSmith Contributors. Licensed under the SSCL v2.0</copyright>
-    <tags>database schema migration sql-server postgresql mysql cli devops admin</tags>
-    <summary>Schema package management CLI tools for SQL Server, PostgreSQL, and MySQL.</summary>
+    <tags>database schema migration sql-server postgresql mysql mariadb cli devops admin</tags>
+    <summary>Schema package management CLI tools for SQL Server, PostgreSQL, MySQL, and MariaDB.</summary>
     <description><![CDATA[
-SchemaSmith is a state-based database schema management toolset for SQL Server, PostgreSQL, and MySQL. Define your desired database state as metadata — tables, views, procedures, indexes, foreign keys — and SchemaSmith transforms any target database to match.
+SchemaSmith is a state-based database schema management toolset for SQL Server, PostgreSQL, MySQL, and MariaDB. Define your desired database state as metadata — tables, views, procedures, indexes, foreign keys — and SchemaSmith transforms any target database to match.
 
 This package installs four self-contained command-line tools:
 

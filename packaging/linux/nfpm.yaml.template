@@ -5,7 +5,7 @@ version: ${VERSION}
 maintainer: SchemaSmith Contributors <support@schemasmith.com>
 description: |
   SchemaSmith CLI tools (schemaquench, schematongs, datatongs, schemashears).
-  Schema package management for SQL Server, PostgreSQL, and MySQL:
+  Schema package management for SQL Server, PostgreSQL, MySQL, and MariaDB:
   extract schemas, deploy changes, and manage data delivery scripts.
 vendor: SchemaSmith Contributors
 homepage: https://schemasmith.com
