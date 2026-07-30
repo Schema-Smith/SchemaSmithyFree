@@ -63,7 +63,7 @@ namespace Schema.UnitTests.Utility
         [Test]
         public void CheckOrThrow_PostgresBelowFloor_Throws()
         {
-            var info = new TargetVersionInfo(Platform.PostgreSQL, "130006", 13);
+            var info = new TargetVersionInfo(Platform.PostgreSQL, "110006", 11);   // PostgreSQL 11 — below the 12 floor
 
             var ex = Assert.Throws<Exception>(() => PreFlightVersionGuard.CheckOrThrow(info, "pg"));
             Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
