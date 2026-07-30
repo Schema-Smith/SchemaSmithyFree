@@ -380,7 +380,9 @@ $$ LANGUAGE plpgsql;
 
     private static void DropOneDatabase(IDbCommand cmd, string dbName)
     {
-        cmd.CommandText = @$"DROP DATABASE IF EXISTS ""{dbName}"" WITH (FORCE);";
+        cmd.CommandText = @$"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{dbName}' AND pid <> pg_backend_pid();";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = @$"DROP DATABASE IF EXISTS ""{dbName}"";";
         cmd.ExecuteNonQuery();
     }
 }
