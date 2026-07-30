@@ -70,6 +70,53 @@ SELECT count(*) FROM pg_depend d
         conn.Close();
     }
 
+    // Per-column compression (ALTER COLUMN ... SET COMPRESSION) is PostgreSQL 14. Authoring a non-default
+    // compression against a below-14 target must NOT emit SET COMPRESSION (a 42601 syntax error there); the
+    // emit is gated off and routed through the unsupported-feature policy (warn: skip + downgrade manifest).
+    // On PG14+ it applies normally.
+    [Test]
+    public void ModifiedColumn_AuthoredCompression_BelowPg14_DoesNotEmitSetCompression_AndManifests()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"Cmp_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var createJson = $$"""
+[{ "Schema": "{{Schema}}", "Name": "{{tableName}}",
+   "Columns": [ { "Name": "Id", "DataType": "INT", "Nullable": false },
+                { "Name": "Notes", "DataType": "TEXT", "Nullable": true } ] }]
+""";
+        RunTableQuenchProc(cmd, createJson, productName: $"CMP_{uniqueId}");
+
+        // Re-quench with a non-default compression authored on the TEXT column.
+        var compJson = $$"""
+[{ "Schema": "{{Schema}}", "Name": "{{tableName}}",
+   "Columns": [ { "Name": "Id", "DataType": "INT", "Nullable": false },
+                { "Name": "Notes", "DataType": "TEXT", "Nullable": true, "Compression": "pglz" } ] }]
+""";
+        Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, compJson, productName: $"CMP_{uniqueId}"),
+            "authoring per-column compression on a below-14 target must not emit SET COMPRESSION (42601)");
+
+        cmd.CommandText = "SELECT current_setting('server_version_num')::int / 10000";
+        if (Convert.ToInt32(cmd.ExecuteScalar()) < 14)
+        {
+            cmd.CommandText = $@"SELECT COUNT(*) FROM ""SchemaSmith"".""ChangeAudit""
+                                 WHERE ""ActionType"" = 'downgraded' AND ""ObjectType"" = 'per-column compression (PG14)'
+                                   AND ""ObjectName"" = '{Schema}.{tableName}.Notes';";
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThanOrEqualTo(1),
+                "a downgrade manifest row must name the column whose compression was skipped");
+        }
+
+        cmd.CommandText = $@"DROP TABLE ""{Schema}"".""{tableName}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
     // The compare-side serialization (GenerateTableJSON) and the modify-side snapshot (ModifiedTableQuench's
     // temp_existing_columns) both read pg_attribute.attcompression, a PG14 column. Below 14 the read is a
     // plan-time 42703; the ColumnCompression helper reads it via EXECUTE only on a server that has it. A

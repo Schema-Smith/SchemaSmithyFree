@@ -899,7 +899,7 @@ BEGIN
                         CASE WHEN COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != 'DEFAULT'
                              THEN CHR(10) || 'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ALTER COLUMN "' || c."Name" || '" SET STORAGE ' || c."Storage" || ';'
                              ELSE '' END ||
-                        CASE WHEN COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != 'DEFAULT'
+                        CASE WHEN COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != 'DEFAULT' AND "SchemaSmith"."ServerVersionNum"() >= 14
                              THEN CHR(10) || 'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ALTER COLUMN "' || c."Name" || '" SET COMPRESSION ' || c."Compression" || ';'
                              ELSE '' END, CHR(10))
         INTO sql_script
@@ -947,6 +947,24 @@ BEGIN
                           AND ic.table_name = c."TableName"
                           AND ic.column_name = c."Name");
       CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+    END IF;
+
+    -- Unsupported-feature policy: per-column compression (SET COMPRESSION) requires PostgreSQL 14. The emit
+    -- below is gated off under 14; 'fail' aborts, 'warn' (default) records a downgrade manifest per column
+    -- that declared a non-default compression. Same routing spine as NULLS NOT DISTINCT / expression stats.
+    IF "SchemaSmith"."ServerVersionNum"() < 14 THEN
+      IF "SchemaSmith"."UnsupportedFeaturePolicy"() = 'fail'
+         AND EXISTS (SELECT 1 FROM temp_columns WHERE COALESCE("Compression", '') NOT IN ('', 'DEFAULT')) THEN
+        RAISE EXCEPTION 'Per-column compression requires PostgreSQL 14 (detected major %); column(s): %',
+          "SchemaSmith"."ServerVersionNum"(),
+          (SELECT STRING_AGG("TableSchema" || '.' || "TableName" || '.' || "Name", ', ')
+             FROM temp_columns WHERE COALESCE("Compression", '') NOT IN ('', 'DEFAULT'));
+      ELSE
+        INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+          SELECT pg_backend_pid(), 'per-column compression (PG14)',
+                 "TableSchema" || '.' || "TableName" || '.' || "Name", 'downgraded'
+            FROM temp_columns WHERE COALESCE("Compression", '') NOT IN ('', 'DEFAULT');
+      END IF;
     END IF;
 
     RAISE NOTICE 'Alter Modified Columns';
@@ -1006,7 +1024,7 @@ BEGIN
                       CASE WHEN COALESCE(c."Storage", '') != COALESCE(ec."Storage", '') AND COALESCE(c."Storage", '') != ''
                            THEN ' ALTER COLUMN "' || c."Name" || '" SET STORAGE ' || COALESCE(c."Storage", '') || ','
                            ELSE '' END ||
-                      CASE WHEN COALESCE(c."Compression", '') != COALESCE(ec."Compression", '') AND COALESCE(c."Compression", '') != ''
+                      CASE WHEN COALESCE(c."Compression", '') != COALESCE(ec."Compression", '') AND COALESCE(c."Compression", '') != '' AND "SchemaSmith"."ServerVersionNum"() >= 14
                            THEN ' ALTER COLUMN "' || c."Name" || '" SET COMPRESSION ' || COALESCE(c."Compression", '') || ','
                            ELSE '' END)), ''), ',' || CHR(10)) || ';' AS "code"
       FROM temp_columns c
