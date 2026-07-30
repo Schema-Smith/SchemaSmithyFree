@@ -154,6 +154,30 @@ BEGIN
     WHERE COALESCE("NewCluster", '') != COALESCE("OldCluster", '');
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+  -- Unsupported-feature policy: expression statistics (CREATE STATISTICS on an expression, detected by a
+  -- parenthesised StatisticsColumns) require PostgreSQL 14 — below it PG rejects them (0A000 "only simple
+  -- column references are allowed in CREATE STATISTICS"). 'fail' aborts naming the offending statistic(s);
+  -- 'warn' (default) records a downgrade manifest row and the emit below skips them. Same routing spine as
+  -- the NULLS NOT DISTINCT policy above.
+  IF "SchemaSmith"."ServerVersionNum"() < 14 THEN
+    IF "SchemaSmith"."UnsupportedFeaturePolicy"() = 'fail'
+       AND EXISTS (SELECT 1 FROM temp_statistics WHERE "StatisticsColumns" LIKE '%(%') THEN
+      RAISE EXCEPTION 'Expression statistics require PostgreSQL 14 (detected major %); statistic(s): %',
+        "SchemaSmith"."ServerVersionNum"(),
+        (SELECT STRING_AGG("TableSchema" || '.' || "TableName" || '.' || "Name", ', ')
+           FROM temp_statistics WHERE "StatisticsColumns" LIKE '%(%');
+    ELSE
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(), 'expression statistics (PG14)',
+               ts."TableSchema" || '.' || ts."TableName" || '.' || ts."Name", 'downgraded'
+          FROM temp_statistics ts
+          WHERE ts."StatisticsColumns" LIKE '%(%'
+            AND NOT EXISTS (SELECT 1 FROM pg_statistic_ext ste JOIN pg_class rel ON rel.oid = ste.stxrelid
+                              JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace AND nsp.nspname = ts."TableSchema" AND rel.relname = ts."TableName"
+                              WHERE ste.stxname = ts."Name");
+    END IF;
+  END IF;
+
   RAISE NOTICE 'Add Missing Statistics';
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing statistics ' || ts."TableSchema" || '.' || ts."TableName" || '.' || ts."Name" || CASE WHEN COALESCE(ts."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(ts."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     'CREATE STATISTICS "' || ts."TableSchema" || '"."' || ts."Name" || '"' ||
@@ -169,7 +193,9 @@ BEGIN
                         JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
                                              AND nsp.nspname = ts."TableSchema"
                                              AND rel.relname = ts."TableName"
-                        WHERE ste.stxname = ts."Name");
+                        WHERE ste.stxname = ts."Name")
+      -- Skip expression statistics below PostgreSQL 14 (routed through the unsupported-feature policy above).
+      AND NOT ("SchemaSmith"."ServerVersionNum"() < 14 AND ts."StatisticsColumns" LIKE '%(%');
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
   -- #363: WhatIf twin of the embedded 'statistic'/'created' audit above; same predicate.
@@ -183,7 +209,8 @@ BEGIN
                             JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
                                                  AND nsp.nspname = ts."TableSchema"
                                                  AND rel.relname = ts."TableName"
-                            WHERE ste.stxname = ts."Name");
+                            WHERE ste.stxname = ts."Name")
+          AND NOT ("SchemaSmith"."ServerVersionNum"() < 14 AND ts."StatisticsColumns" LIKE '%(%');
   END IF;
 
   RAISE NOTICE 'Add Missing Exclude Constraints';

@@ -92,6 +92,7 @@ public class TableQuench_DropColumnsTests : BaseTableQuenchTests
     [Test]
     public void TableQuench_ShouldHandleRemovingColumnWithStatistics()
     {
+        if (PgServerMajor() < 14) Assert.Ignore("Expression statistics (CREATE STATISTICS on an expression) require PostgreSQL 14+.");
         using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
         conn.Open();
         conn.ChangeDatabase(_mainDb);
@@ -199,7 +200,7 @@ CREATE TABLE ""DropColumnsTests"".""DropColumnWithDefault"" (""Column1"" INT NOT
 CREATE TABLE ""DropColumnsTests"".""DropColumnWithTableCheckConstraint"" (""Column1"" INT NOT NULL, ""Column2"" INT, CONSTRAINT ""CK_DropColumnWithTableCheckConstraint_Dependency"" CHECK (""Column2"" < ""Column1""));
 --TableQuench_ShouldHandleRemovingColumnWithStatistics
 CREATE TABLE ""DropColumnsTests"".""DropColumnWithStatistics"" (""Column1"" INT NOT NULL, ""Column2"" INT);
-CREATE STATISTICS ""DropColumnsTests"".""ST_Dependency"" ON (""Column2"" / 1) FROM ""DropColumnsTests"".""DropColumnWithStatistics"";
+DO $$ BEGIN IF (current_setting('server_version_num')::int / 10000) >= 14 THEN EXECUTE 'CREATE STATISTICS ""DropColumnsTests"".""ST_Dependency"" ON (""Column2"" / 1) FROM ""DropColumnsTests"".""DropColumnWithStatistics""'; END IF; END $$;
 --TableQuench_ShouldHandleRemovingColumnWithIndexFilterExpression
 CREATE TABLE ""DropColumnsTests"".""DropColumnWithIndexFilter"" (""Column1"" INT NOT NULL, ""Column2"" INT);
 CREATE INDEX ""IDX_Dependency3"" ON ""DropColumnsTests"".""DropColumnWithIndexFilter"" (""Column1"") WHERE ""Column2"" < 100;

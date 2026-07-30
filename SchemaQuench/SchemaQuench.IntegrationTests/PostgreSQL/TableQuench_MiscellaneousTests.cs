@@ -79,6 +79,7 @@ public class TableQuench_MiscellaneousTests : BaseTableQuenchTests
     [Test]
     public void ShouldModifyStatisticsWhenColumnListChanges()
     {
+        if (PgServerMajor() < 14) Assert.Ignore("Expression statistics (CREATE STATISTICS on an expression) require PostgreSQL 14+.");
         using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
         conn.Open();
         conn.ChangeDatabase(_mainDb);
@@ -219,7 +220,7 @@ ALTER TABLE ""MiscellaneousTests"".""DropFK"" ADD CONSTRAINT ""FK_DropFK_SelfRef
 ALTER TABLE ""MiscellaneousTests"".""DropFK"" ADD CONSTRAINT ""FK_DropFK_SelfRef2"" FOREIGN KEY (""Column2"") REFERENCES ""MiscellaneousTests"".""DropFK"" (""Column1"");
 --ShouldModifyStatisticsWhenColumnListChanges
 CREATE TABLE ""MiscellaneousTests"".""ModifyStatisticsColumnList"" (""Column1"" INT NOT NULL, ""Column2"" INT NOT NULL);
-CREATE STATISTICS ""MiscellaneousTests"".""ST_ColumnList"" ON (""Column1"" / 1) FROM ""MiscellaneousTests"".""ModifyStatisticsColumnList"";
+DO $$ BEGIN IF (current_setting('server_version_num')::int / 10000) >= 14 THEN EXECUTE 'CREATE STATISTICS ""MiscellaneousTests"".""ST_ColumnList"" ON (""Column1"" / 1) FROM ""MiscellaneousTests"".""ModifyStatisticsColumnList""'; END IF; END $$;
 --ShouldDropIndexNoLongerPartOfProduct
 CREATE TABLE ""MiscellaneousTests"".""IndexNoLongerInProduct"" (""Column1"" INT NOT NULL);
 CREATE INDEX ""IDX_DropMe"" ON ""MiscellaneousTests"".""IndexNoLongerInProduct"" (""Column1"");
