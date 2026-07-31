@@ -57,21 +57,17 @@ BEGIN
                     CASE WHEN i.is_unique = 1 THEN 'true' ELSE 'false' END AS [Unique],
                     CASE WHEN i.type = 1 THEN 'true' ELSE 'false' END AS [Clustered],
                     CASE WHEN i.type IN (5, 6) THEN 'true' ELSE 'false' END AS [ColumnStore],
-                    STRING_AGG(
-                        CASE WHEN ic.is_included_column = 0
-                            THEN [SchemaSmith].[fn_SafeBracketWrap](c.name) +
-                                CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END
-                            ELSE NULL
-                        END,
-                        ', '
-                    ) WITHIN GROUP (ORDER BY ic.key_ordinal) AS [IndexColumns],
-                    (
-                        SELECT STRING_AGG([SchemaSmith].[fn_SafeBracketWrap](c2.name), ', ')
-                        WITHIN GROUP (ORDER BY ic2.index_column_id)
-                          FROM sys.index_columns ic2
-                         INNER JOIN sys.columns c2 ON ic2.object_id = c2.object_id AND ic2.column_id = c2.column_id
-                         WHERE ic2.object_id = i.object_id AND ic2.index_id = i.index_id AND ic2.is_included_column = 1
-                    ) AS [IncludeColumns],
+                    STUFF((SELECT ', ' + [SchemaSmith].[fn_SafeBracketWrap](c.name) +
+                                        CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END
+                             FROM sys.index_columns ic
+                            INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+                            WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.is_included_column = 0
+                            ORDER BY ic.key_ordinal FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS [IndexColumns],
+                    STUFF((SELECT ', ' + [SchemaSmith].[fn_SafeBracketWrap](c2.name)
+                             FROM sys.index_columns ic2
+                            INNER JOIN sys.columns c2 ON ic2.object_id = c2.object_id AND ic2.column_id = c2.column_id
+                            WHERE ic2.object_id = i.object_id AND ic2.index_id = i.index_id AND ic2.is_included_column = 1
+                            ORDER BY ic2.index_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS [IncludeColumns],
                     CASE
                         WHEN p.data_compression_desc IS NOT NULL AND p.data_compression_desc != 'NONE'
                         THEN p.data_compression_desc
@@ -79,11 +75,8 @@ BEGIN
                     END AS [CompressionType],
                     CASE WHEN i.fill_factor > 0 THEN i.fill_factor ELSE NULL END AS [FillFactor]
                   FROM sys.indexes i
-                 INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
-                 INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
                   LEFT JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id AND p.partition_number = 1
                  WHERE i.object_id = v.object_id AND i.type > 0
-                 GROUP BY i.name, i.is_unique, i.type, i.fill_factor, p.data_compression_desc, i.object_id, i.index_id
                  ORDER BY CASE WHEN i.type = 1 THEN 0 ELSE 1 END, i.name
                    FOR XML PATH('Indexes'), TYPE
             )

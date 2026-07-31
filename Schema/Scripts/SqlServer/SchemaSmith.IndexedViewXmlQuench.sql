@@ -297,23 +297,23 @@ BEGIN
                     i.name,
                     i.is_unique,
                     CAST(CASE WHEN i.type = 1 THEN 1 ELSE 0 END AS BIT),
-                    STRING_AGG(
-                        CASE WHEN ic.is_included_column = 0
+                    STUFF((SELECT ',' + CASE WHEN ic.is_included_column = 0
                             THEN QUOTENAME(c.name) + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END
-                            ELSE NULL END, ','
-                    ) WITHIN GROUP (ORDER BY ic.key_ordinal),
-                    (SELECT STRING_AGG(QUOTENAME(c2.name), ',') WITHIN GROUP (ORDER BY ic2.index_column_id)
+                            ELSE NULL END
+                       FROM sys.index_columns ic
+                      INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+                      WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id
+                      ORDER BY ic.key_ordinal FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
+                    STUFF((SELECT ',' + QUOTENAME(c2.name)
                        FROM sys.index_columns ic2
                       INNER JOIN sys.columns c2 ON ic2.object_id = c2.object_id AND ic2.column_id = c2.column_id
-                      WHERE ic2.object_id = i.object_id AND ic2.index_id = i.index_id AND ic2.is_included_column = 1),
+                      WHERE ic2.object_id = i.object_id AND ic2.index_id = i.index_id AND ic2.is_included_column = 1
+                      ORDER BY ic2.index_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
                     ISNULL(p.data_compression_desc, 'NONE'),
                     i.fill_factor
                 FROM sys.indexes i
-                INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
-                INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
                 LEFT JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id AND p.partition_number = 1
-                WHERE i.object_id = @existingObjectId AND i.type > 0
-                GROUP BY i.name, i.index_id, i.is_unique, i.type, i.fill_factor, p.data_compression_desc, i.object_id;
+                WHERE i.object_id = @existingObjectId AND i.type > 0;
 
                 -- Parse desired indexes from JSON
                 DECLARE @DesiredIdx TABLE (
@@ -423,8 +423,8 @@ BEGIN
             -- Already-existing indexes are skipped via the NOT EXISTS filter (unchanged during an
             -- index-only update). FillFactor is emitted whenever > 0, matching the per-index form.
             DECLARE @createIdxSql NVARCHAR(MAX);
-            SELECT @createIdxSql = STRING_AGG(CAST(
-                    'CREATE '
+            SELECT @createIdxSql = STUFF((SELECT '; ' + CHAR(13) + CHAR(10)
+                    + 'CREATE '
                     + CASE WHEN v.IsUnique = 1 THEN 'UNIQUE ' ELSE '' END
                     + CASE WHEN v.IsClustered = 1 THEN 'CLUSTERED ' ELSE '' END
                     + 'INDEX ' + QUOTENAME(v.IdxName)
@@ -432,8 +432,6 @@ BEGIN
                     + ' (' + v.IdxColumns + ')'
                     + CASE WHEN v.IdxInclude IS NOT NULL THEN ' INCLUDE (' + v.IdxInclude + ')' ELSE '' END
                     + CASE WHEN w.WithInner <> '' THEN ' WITH (' + w.WithInner + ')' ELSE '' END
-                  AS NVARCHAR(MAX)), '; ' + CHAR(13) + CHAR(10))
-                  WITHIN GROUP (ORDER BY CASE WHEN v.IsClustered = 1 THEN 0 ELSE 1 END)
             FROM @indexXml.nodes('Indexes') AS Y(idx)
             CROSS APPLY (VALUES (
                 [SchemaSmith].[fn_StripBracketWrapping](idx.value('(Name/text())[1]', 'NVARCHAR(500)')),
@@ -457,7 +455,8 @@ BEGIN
                 SELECT 1 FROM sys.indexes si
                 WHERE si.object_id = OBJECT_ID(QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName))
                 AND si.name = v.IdxName
-            );
+            )
+            ORDER BY CASE WHEN v.IsClustered = 1 THEN 0 ELSE 1 END FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 4, '');
 
             IF @createIdxSql IS NOT NULL
             BEGIN

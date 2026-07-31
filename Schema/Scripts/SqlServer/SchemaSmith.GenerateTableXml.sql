@@ -102,12 +102,14 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                CASE WHEN [type] IN (1, 5) THEN 'true' ELSE 'false' END AS [Clustered],
                CASE WHEN [type] IN (5, 6) THEN 'true' ELSE 'false' END AS [ColumnStore],
                CASE WHEN fill_factor = 100 THEN 0 ELSE fill_factor END AS [FillFactor],
-               (SELECT STRING_AGG(CAST('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY key_ordinal)
+               STUFF((SELECT ',' + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END
                   FROM sys.index_columns ic WITH (NOLOCK)
-                  WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0) AS [IndexColumns],
-               (SELECT STRING_AGG(CAST('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY index_column_id)
+                  WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0
+                  ORDER BY key_ordinal FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [IndexColumns],
+               STUFF((SELECT ',' + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']'
                   FROM sys.index_columns ic WITH (NOLOCK)
-                  WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1) AS [IncludeColumns],
+                  WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1
+                  ORDER BY index_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [IncludeColumns],
 			   CASE WHEN has_filter = 1 THEN SchemaSmith.fn_StripParenWrapping(filter_definition) ELSE NULL END AS [FilterExpression]
           FROM sys.indexes si WITH (NOLOCK)
           WHERE si.[object_id] = st.[object_id]
@@ -130,14 +132,16 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
           FOR XML PATH('XmlIndexes'), TYPE),
 	   (SELECT 'true' AS [@json:Array],
                '[' + [Name] + ']' AS [Name],
-               (SELECT STRING_AGG(CAST('[' + COL_NAME(fc.[parent_object_id], fc.parent_column_id) + ']' AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY fc.constraint_column_id)
+               STUFF((SELECT ',' + '[' + COL_NAME(fc.[parent_object_id], fc.parent_column_id) + ']'
                             FROM sys.foreign_key_columns fc WITH (NOLOCK)
-                            WHERE fk.[object_id] = fc.[constraint_object_id]) AS [Columns],
+                            WHERE fk.[object_id] = fc.[constraint_object_id]
+                            ORDER BY fc.constraint_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns],
                '[' + OBJECT_SCHEMA_NAME(referenced_object_id) + ']' AS RelatedTableSchema,
                '[' + OBJECT_NAME(referenced_object_id) + ']' AS RelatedTable,
-               (SELECT STRING_AGG(CAST('[' + COL_NAME(fc.[referenced_object_id], fc.referenced_column_id) + ']' AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY fc.constraint_column_id)
+               STUFF((SELECT ',' + '[' + COL_NAME(fc.[referenced_object_id], fc.referenced_column_id) + ']'
                             FROM sys.foreign_key_columns fc WITH (NOLOCK)
-                            WHERE fk.[object_id] = fc.[constraint_object_id]) AS [RelatedColumns],
+                            WHERE fk.[object_id] = fc.[constraint_object_id]
+                            ORDER BY fc.constraint_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [RelatedColumns],
                REPLACE(fk.delete_referential_action_desc, '_', ' ') COLLATE DATABASE_DEFAULT AS [DeleteAction],
                REPLACE(fk.update_referential_action_desc, '_', ' ') COLLATE DATABASE_DEFAULT AS [UpdateAction]
           FROM sys.foreign_keys fk WITH (NOLOCK)
@@ -146,9 +150,10 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
           FOR XML PATH('ForeignKeys'), TYPE),
        (SELECT 'true' AS [@json:Array],
                '[' + [Name] + ']' AS [Name],
-               (SELECT STRING_AGG(CAST('[' + COL_NAME(sc.[object_id], sc.column_id) + ']' AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY sc.stats_column_id)
+               STUFF((SELECT ',' + '[' + COL_NAME(sc.[object_id], sc.column_id) + ']'
                   FROM sys.stats_columns sc WITH (NOLOCK)
-                  WHERE s.[object_id] = sc.[object_id] AND s.stats_id = sc.stats_id) AS [Columns],
+                  WHERE s.[object_id] = sc.[object_id] AND s.stats_id = sc.stats_id
+                  ORDER BY sc.stats_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns],
                SchemaSmith.fn_StripParenWrapping([filter_definition]) AS FilterExpression
           FROM sys.stats s WITH (NOLOCK)
           WHERE [object_id] = st.[object_id]
@@ -171,12 +176,13 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                KeyIndex = '[' + (SELECT i.[Name] FROM sys.indexes i WITH (NOLOCK) WHERE i.[object_id] = fi.[object_id] AND i.[index_id] = fi.[unique_index_id]) + ']',
                ChangeTracking = change_tracking_state_desc,
                [StopList] = '[' + (SELECT fs.[name] FROM sys.fulltext_stoplists fs WITH (NOLOCK) WHERE fs.stoplist_id = fi.stoplist_id) + ']',
-               (SELECT STRING_AGG(CAST('[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
+               STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
                                        CASE WHEN fc.type_column_id IS NOT NULL
                                             THEN ' TYPE COLUMN [' + COL_NAME(fc.[object_id], fc.type_column_id) + ']'
-                                            ELSE '' END AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
+                                            ELSE '' END
                   FROM sys.fulltext_index_columns fc WITH (NOLOCK)
-                  WHERE fi.[object_id] = fc.[object_id]) AS [Columns]
+                  WHERE fi.[object_id] = fc.[object_id]
+                  ORDER BY COL_NAME(fc.[object_id], fc.column_id) FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns]
           FROM sys.fulltext_indexes fi WITH (NOLOCK)
           WHERE fi.[object_id] = st.[object_id]
           FOR XML PATH('FullTextIndex'), TYPE)
