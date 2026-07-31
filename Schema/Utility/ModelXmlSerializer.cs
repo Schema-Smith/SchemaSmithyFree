@@ -42,5 +42,20 @@ namespace Schema.Utility
             var doc = JsonConvert.DeserializeXNode(modelJsonObject, rootElement);
             return doc!.ToString(SaveOptions.DisableFormatting);
         }
+
+        /// <summary>
+        /// Inverse of <see cref="ToIngestXmlObject"/>: converts the compare-side ingest XML (emitted by the
+        /// SQL Server <c>GenerateTableXml</c>/<c>GenerateIndexedViewXml</c> procs below the <c>FOR JSON</c>
+        /// binary floor) back to a JSON object string that <c>PlatformDeserializer.DeserializeTable</c> can
+        /// materialize into the domain model. The proc emits <c>json:Array="true"</c> (the Json.NET metadata
+        /// namespace) on repeated containers so a single-element array does not collapse to an object; every
+        /// scalar arrives as a JSON string (XML is typeless) and Newtonsoft coerces it into the typed model.
+        /// </summary>
+        /// <param name="tableXml">The XML for one object, rooted at a single element (e.g. <c>&lt;Table&gt;</c>).</param>
+        public static string FromIngestXml(string tableXml)
+        {
+            var root = XElement.Parse(tableXml);
+            return JsonConvert.SerializeXNode(root, Newtonsoft.Json.Formatting.None, omitRootObject: true);
+        }
     }
 }

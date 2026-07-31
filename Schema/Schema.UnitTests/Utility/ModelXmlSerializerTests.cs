@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using NUnit.Framework;
+using Schema.Domain;
 using Schema.Utility;
 
 namespace Schema.UnitTests.Utility
@@ -8,6 +9,37 @@ namespace Schema.UnitTests.Utility
     [TestFixture]
     public class ModelXmlSerializerTests
     {
+        // De-risk spike for the compare-side (GenerateTableXml) design: prove the two SerializeXNode sharp
+        // edges are handled — (1) a SINGLE-element container still becomes a 1-element JSON array (via the
+        // json:Array hint the proc emits), and (2) string-typed scalars ('true'/'80') coerce into the typed
+        // domain model. Uses the hardest case: one column + one index (both singletons).
+        [Test]
+        public void FromIngestXml_SingleElementArraysAndStringScalars_MaterializeTypedModel()
+        {
+            const string xml =
+                "<Table xmlns:json=\"http://james.newtonking.com/projects/json\">" +
+                "<Schema>[dbo]</Schema><Name>[Widget]</Name>" +
+                "<Columns json:Array=\"true\"><Name>[Id]</Name><DataType>INT</DataType><Nullable>false</Nullable></Columns>" +
+                "<Indexes json:Array=\"true\"><Name>[PK_Widget]</Name><Unique>true</Unique><Clustered>true</Clustered><IndexColumns>[Id]</IndexColumns></Indexes>" +
+                "</Table>";
+
+            var json = ModelXmlSerializer.FromIngestXml(xml);
+            var table = PlatformDeserializer.DeserializeTable(json, Platform.SqlServer);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(table.Name, Is.EqualTo("[Widget]"));
+                // Single <Columns> element survived as a 1-element array, not collapsed to an object.
+                Assert.That(table.Columns, Has.Count.EqualTo(1));
+                Assert.That(table.Columns[0].Name, Is.EqualTo("[Id]"));
+                Assert.That(table.Columns[0].DataType, Is.EqualTo("INT"));
+                Assert.That(table.Columns[0].Nullable, Is.False, "string 'false' should coerce to bool");
+                Assert.That(table.Indexes, Has.Count.EqualTo(1));
+                Assert.That(table.Indexes[0].Unique, Is.True, "string 'true' should coerce to bool");
+                Assert.That(table.Indexes[0].IndexColumns, Is.EqualTo("[Id]"));
+            });
+        }
+
         [Test]
         public void ToIngestXml_WrapsArrayInRoot_WithRepeatedItemElement()
         {
