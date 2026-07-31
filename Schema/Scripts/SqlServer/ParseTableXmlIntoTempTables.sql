@@ -14,12 +14,17 @@
   SET NOCOUNT ON
   RAISERROR('Parse Tables from Xml', 10, 100) WITH NOWAIT
 
+  -- Accept @TableDefinitions whether it is XML-typed (standalone callers declare @TableDefinitions XML) or
+  -- NVARCHAR(MAX) (when inlined via {{ParseJson}} into TableQuench, whose param is NVARCHAR(MAX) — .nodes()
+  -- cannot bind to an nvarchar). CONVERT(XML, <xml>) is a no-op; CONVERT(XML, <nvarchar>) parses the text.
+  DECLARE @v_TableXml XML = CONVERT(XML, @TableDefinitions)
+
   -- I5: missing/blank [Schema] is a programmer error after slice-1's SchemaDefaultResolver (see JSON twin).
-  IF EXISTS (SELECT 1 FROM @TableDefinitions.nodes('/Tables/Table') AS X(t)
+  IF EXISTS (SELECT 1 FROM @v_TableXml.nodes('/Tables/Table') AS X(t)
                  WHERE NULLIF(RTRIM(ISNULL(t.value('(Schema/text())[1]', 'NVARCHAR(500)'), '')), '') IS NULL)
   BEGIN
     DECLARE @v_BadTable NVARCHAR(500) =
-      (SELECT TOP 1 ISNULL(t.value('(Name/text())[1]', 'NVARCHAR(500)'), '<unnamed>') FROM @TableDefinitions.nodes('/Tables/Table') AS X(t)
+      (SELECT TOP 1 ISNULL(t.value('(Name/text())[1]', 'NVARCHAR(500)'), '<unnamed>') FROM @v_TableXml.nodes('/Tables/Table') AS X(t)
          WHERE NULLIF(RTRIM(ISNULL(t.value('(Schema/text())[1]', 'NVARCHAR(500)'), '')), '') IS NULL);
     DECLARE @v_Msg NVARCHAR(2000) = 'Table XML is missing Schema for table ''' + @v_BadTable + '''. ' +
       'Schema must be populated before reaching ParseTableXmlIntoTempTables — this is a programmer error. ' +
@@ -44,7 +49,7 @@
          [DropIndexesRemovedFromProduct] = CONVERT(BIT, CASE LOWER(t.value('(DropIndexesRemovedFromProduct/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
          [PreventDrop] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(PreventDrop/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0)
     INTO #TableDefinitions
-    FROM @TableDefinitions.nodes('/Tables/Table') AS X(t);
+    FROM @v_TableXml.nodes('/Tables/Table') AS X(t);
 
   -- Identify Tables to skip based on ShouldApply expression (scoped by [_RowId]) — identical to JSON twin.
   SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #TableDefinitions WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))

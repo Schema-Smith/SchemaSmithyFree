@@ -176,8 +176,9 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        // SqlServer: 23 = 22 prior + 1 for Kindling_ChangeAudit_Table (object-change audit, #243 E5).
-        Assert.That(sqlServer.Length, Is.EqualTo(23));
+        // SqlServer: 24 = 22 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
+        // + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive codegen policy helper, SS-2008 floor spine).
+        Assert.That(sqlServer.Length, Is.EqualTo(24));
         // PostgreSQL: 34 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
@@ -190,6 +191,61 @@ public class ForgeKindlerTests
         // SchemaSmith_DropCheckClause (DROP CHECK vs DROP CONSTRAINT for check-constraint drops), and
         // SchemaSmith_IndexInvisibleClause (INVISIBLE vs IGNORED for hidden-index DDL).
         Assert.That(mysql.Length, Is.EqualTo(27));
+    }
+
+    [Test]
+    public void GetKindlingScripts_SqlServerXmlEncoding_SwapsProcsAndDropsFormatJson()
+    {
+        var json = ForgeKindler.GetKindlingScripts(Platform.SqlServer, IngestEncoding.Json)
+            .Select(s => s.FileName).ToArray();
+        var xml = ForgeKindler.GetKindlingScripts(Platform.SqlServer, IngestEncoding.Xml)
+            .Select(s => s.FileName).ToArray();
+
+        Assert.Multiple(() =>
+        {
+            // The five OPENJSON/FOR JSON procs are swapped for their XML twins...
+            foreach (var (jsonFile, xmlFile) in new[]
+                     {
+                         ("SchemaSmith.BootstrapTableQuench.sql", "SchemaSmith.BootstrapTableXmlQuench.sql"),
+                         ("SchemaSmith.IndexOnlyQuench.sql", "SchemaSmith.IndexOnlyXmlQuench.sql"),
+                         ("SchemaSmith.IndexedViewQuench.sql", "SchemaSmith.IndexedViewXmlQuench.sql"),
+                         ("SchemaSmith.GenerateTableJson.sql", "SchemaSmith.GenerateTableXml.sql"),
+                         ("SchemaSmith.GenerateIndexedViewJson.sql", "SchemaSmith.GenerateIndexedViewXml.sql"),
+                     })
+            {
+                Assert.That(xml, Does.Contain(xmlFile).And.Not.Contain(jsonFile), $"{jsonFile} -> {xmlFile}");
+            }
+
+            // ...fn_FormatJson (JSON-only, itself OPENJSON-based) is dropped...
+            Assert.That(json, Does.Contain("SchemaSmith.fn_FormatJson.sql"));
+            Assert.That(xml, Does.Not.Contain("SchemaSmith.fn_FormatJson.sql"));
+
+            // ...so the XML list is one shorter, and every name is unique.
+            Assert.That(xml, Has.Length.EqualTo(json.Length - 1));
+            Assert.That(xml, Is.Unique);
+
+            // The two stamps differ, so switching a database's encoding always re-kindles.
+            Assert.That(ForgeKindler.ComputeKindleStamp(Platform.SqlServer, IngestEncoding.Xml),
+                Is.Not.EqualTo(ForgeKindler.ComputeKindleStamp(Platform.SqlServer, IngestEncoding.Json)));
+        });
+    }
+
+    [Test]
+    public void ResolveKindleScript_SqlServerXml_InlinesXmlParseAndXmlTableDef()
+    {
+        // TableQuench carries {{ParseJson}}: under Xml it inlines the .nodes()-based parse (no OPENJSON), so
+        // the proc CREATEs below the compat-130 cliff.
+        var tableQuench = ForgeKindler.ResolveKindleScript("SchemaSmith.TableQuench.sql", Platform.SqlServer,
+            replaceParseJson: true, replaceTableDef: false, IngestEncoding.Xml);
+        // No executable OPENJSON(...) — the XML parse binds via .nodes()/.value(), so TableQuench CREATEs
+        // below compat 130 (prose mentions of "OPENJSON" in comments are fine — match the call form).
+        Assert.That(tableQuench, Does.Contain("Parse Tables from Xml").And.Not.Contain("OPENJSON("));
+
+        // A _Table kindling script carries {{TableDef}}: under Xml it becomes a <Table> element the XML
+        // bootstrap can shred, not raw JSON.
+        var changeAudit = ForgeKindler.ResolveKindleScript("Kindling_ChangeAudit_Table.sql", Platform.SqlServer,
+            replaceParseJson: false, replaceTableDef: true, IngestEncoding.Xml);
+        Assert.That(changeAudit, Does.Contain("<Table>").And.Not.Contain("{{TableDef}}"));
     }
 
     [Test]
