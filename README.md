@@ -29,11 +29,26 @@ For the complete feature reference, see [docs/FEATURE_LIST.md](docs/FEATURE_LIST
 
 ## Platform Support
 
+### Operating systems
+
 | OS | x64 | ARM64 |
 |----|-----|-------|
 | Windows | win-x64 | win-arm64 |
 | Linux | linux-x64 | linux-arm64 |
 | macOS | osx-x64 | osx-arm64 |
+
+### Supported database versions
+
+These are the minimum engine versions SchemaSmith supports. The floor is enforced automatically — a below-floor target aborts the run with a clear message before anything is deployed.
+
+| Engine | Minimum supported |
+|--------|-------------------|
+| SQL Server | 2017 (major version 14) |
+| PostgreSQL | 12 |
+| MySQL | 8.0 |
+| MariaDB | 10.6 |
+
+For SQL Server the target database's `compatibility_level` is also checked. Full detail — the compatibility-level floor and how SchemaSmith adapts its generated DDL to each target's version — is in the [Engine Version Compatibility](docs/end-user/reference/schemaquench.md#engine-version-compatibility) reference.
 
 ## Installation
 
