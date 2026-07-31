@@ -30,5 +30,17 @@ namespace Schema.Utility
             var doc = JsonConvert.DeserializeXNode(wrapped, rootElement);
             return doc!.ToString(SaveOptions.DisableFormatting);
         }
+
+        /// <summary>
+        /// Converts a single JSON object (e.g. a kindling table definition) to XML rooted at
+        /// <paramref name="rootElement"/>. Nested JSON arrays become repeated elements named by their property.
+        /// </summary>
+        /// <param name="modelJsonObject">A JSON object string, e.g. <c>{...}</c>.</param>
+        /// <param name="rootElement">The XML root element name (e.g. <c>Table</c>).</param>
+        public static string ToIngestXmlObject(string modelJsonObject, string rootElement)
+        {
+            var doc = JsonConvert.DeserializeXNode(modelJsonObject, rootElement);
+            return doc!.ToString(SaveOptions.DisableFormatting);
+        }
     }
 }

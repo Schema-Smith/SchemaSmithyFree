@@ -84,5 +84,17 @@ namespace Schema.UnitTests.Utility
 
             Assert.That(xml, Does.Contain("<Name>Ünïcödé</Name>"));
         }
+
+        [Test]
+        public void ToIngestXmlObject_WrapsSingleObjectInRoot()
+        {
+            const string json = "{\"Schema\":\"dbo\",\"Name\":\"T\",\"Columns\":[{\"Name\":\"Id\"},{\"Name\":\"X\"}]}";
+
+            var xml = ModelXmlSerializer.ToIngestXmlObject(json, "Table");
+
+            Assert.That(xml, Is.EqualTo(
+                "<Table><Schema>dbo</Schema><Name>T</Name>" +
+                "<Columns><Name>Id</Name></Columns><Columns><Name>X</Name></Columns></Table>"));
+        }
     }
 }
