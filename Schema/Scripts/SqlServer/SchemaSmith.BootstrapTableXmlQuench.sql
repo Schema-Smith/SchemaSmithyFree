@@ -73,13 +73,15 @@ BEGIN TRY
     -- Step 1: CREATE TABLE if it does not exist (with inline PK constraint if defined).
     IF OBJECT_ID(@v_QualifiedName, 'U') IS NULL
     BEGIN
+        -- Ordered aggregation via FOR XML PATH (STRING_AGG ... WITHIN GROUP is a syntax error at compat 100).
         DECLARE @v_ColumnList NVARCHAR(MAX) =
-            (SELECT STRING_AGG(CAST(
+            STUFF((SELECT ', ' +
                 ColumnName + ' ' + DataType +
                 CASE WHEN Nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END +
                 CASE WHEN RTRIM(ISNULL([Default], '')) <> '' THEN ' DEFAULT ' + [Default] ELSE '' END
-              AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY OrdinalPos)
-             FROM @v_Columns);
+              FROM @v_Columns
+              ORDER BY OrdinalPos
+              FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
 
         DECLARE @v_PkClause NVARCHAR(MAX) =
             (SELECT TOP 1 ', CONSTRAINT ' + IndexName + ' PRIMARY KEY ' +
@@ -96,17 +98,18 @@ BEGIN TRY
     BEGIN
         -- Step 2: ADD COLUMN for any columns missing on an existing table (one multi-column ALTER).
         DECLARE @v_AddColumns NVARCHAR(MAX) =
-            (SELECT STRING_AGG(CAST(
+            STUFF((SELECT ', ' +
                 ColumnName + ' ' + DataType +
                 CASE WHEN Nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END +
                 CASE WHEN RTRIM(ISNULL([Default], '')) <> '' THEN ' DEFAULT ' + [Default] ELSE '' END
-              AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY OrdinalPos)
                FROM @v_Columns c
               WHERE NOT EXISTS (
                   SELECT 1 FROM sys.columns sc
                    WHERE sc.object_id = OBJECT_ID(@v_QualifiedName)
                      AND sc.name = c.ColumnNameBare
-              ));
+              )
+              ORDER BY OrdinalPos
+              FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
 
         IF @v_AddColumns IS NOT NULL
         BEGIN
@@ -117,20 +120,21 @@ BEGIN TRY
 
     -- Step 3: CREATE INDEX for any non-PK indexes missing on the table.
     SET @v_SQL =
-        (SELECT STRING_AGG(CAST(
+        STUFF((SELECT ';' + CHAR(13) + CHAR(10) +
             'CREATE ' +
             CASE WHEN [Unique] = 1 THEN 'UNIQUE ' ELSE '' END +
             CASE WHEN [Clustered] = 1 THEN 'CLUSTERED ' ELSE 'NONCLUSTERED ' END +
             'INDEX ' + IndexName +
             ' ON ' + @v_QualifiedName + ' (' + IndexColumns + ')'
-          AS NVARCHAR(MAX)), ';' + CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY OrdinalPos)
            FROM @v_Indexes i
           WHERE PrimaryKey = 0
             AND NOT EXISTS (
                 SELECT 1 FROM sys.indexes si
                  WHERE si.object_id = OBJECT_ID(@v_QualifiedName)
                    AND si.name = i.IndexNameBare
-            ));
+            )
+          ORDER BY OrdinalPos
+          FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 3, '');
 
     IF @v_SQL IS NOT NULL
         EXEC(@v_SQL);

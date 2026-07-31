@@ -176,9 +176,10 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        // SqlServer: 24 = 22 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
-        // + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive codegen policy helper, SS-2008 floor spine).
-        Assert.That(sqlServer.Length, Is.EqualTo(24));
+        // SqlServer: 25 = 22 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
+        // + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive codegen policy helper, SS-2008 floor spine)
+        // + SchemaSmith.fn_SplitList (all-versions STRING_SPLIT replacement for the compat-100 XML path).
+        Assert.That(sqlServer.Length, Is.EqualTo(25));
         // PostgreSQL: 34 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)

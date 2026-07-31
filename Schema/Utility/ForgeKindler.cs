@@ -226,6 +226,7 @@ public static class ForgeKindler
                 new("SchemaSmith.fn_StripLeadingSelect.sql"),
                 new("SchemaSmith.fn_StripBracketWrapping.sql"),
                 new("SchemaSmith.fn_SafeBracketWrap.sql"),
+                new("SchemaSmith.fn_SplitList.sql"),
                 new("SchemaSmith.fn_ServerMajorVersion.sql"),
                 new("SchemaSmith.UnsupportedFeaturePolicy.sql"),
                 new("SchemaSmith.PrintWithNoWait.sql"),
