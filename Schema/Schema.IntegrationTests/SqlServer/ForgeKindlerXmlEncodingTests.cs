@@ -57,11 +57,6 @@ public class ForgeKindlerXmlEncodingTests
         conn.Close();
     }
 
-    // Un-ignore once the shared apply procs (MissingTableAndColumnQuench / ModifiedTableQuench /
-    // MissingIndexesAndConstraintsQuench / ForeignKeyQuench) are converted to compat-100-safe aggregation —
-    // they are kindled on the Xml path and still contain STRING_AGG ... WITHIN GROUP / STRING_SPLIT, so the
-    // full legacy kindle does not yet CREATE at compat 100. The XML twins + fn_SplitList are already done.
-    [Ignore("Blocked on shared-apply-proc compat-100 conversion (Slice D1) — see SS-2008 ledger.")]
     [Test]
     public void KindleTheForge_XmlEncoding_SucceedsAtCompatibilityLevel100()
     {
