@@ -231,6 +231,59 @@ public class TemplateTargetsHappyPathTests
     }
 
     [Test]
+    public void DeployWithLegacyCompatEncoding_KindlesXmlHelpersAndAppliesSchema()
+    {
+        // B3: Target:CompatEncoding=legacy forces the XML model-ingest encoding on a modern-compat DB (the CI
+        // backbone tier — exercises the XML kindle + XML-ingest apply path without needing the supported floor
+        // lowered). Deploy the Shared template into a TRANSIENT DB (so the legacy re-kindle never touches the
+        // JSON-kindled shared MainDb) and assert the XML twin helpers were kindled (GenerateTableXml, an
+        // Xml-only twin) and the schema applied end-to-end (dbo.Lookup) through the XML ingest path.
+        var transientDb = MakeTransientDbName("ttdb_legacy");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ClearCheckpointsForProduct();
+            DropTransientDb(transientDb);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+
+            config["Target:Templates:0"] = "Shared";
+            config["Target:TemplateTargets:Shared:Databases:0"] = transientDb;
+            config["Target:TemplateTargets:Shared:CreateIfMissing"] = "true";
+            config["Target:CompatEncoding"] = "legacy";
+
+            try
+            {
+                RunSchemaQuenchWithKindling();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // The legacy encoding kindled the XML twin helpers, not the JSON generate proc — proving the
+                // detected encoding was threaded to KindleTheForge.
+                Assert.That(ObjectExistsInDb(transientDb, "SchemaSmith.GenerateTableXml", "P"), Is.True,
+                    "Target:CompatEncoding=legacy must kindle the XML compare twin (encoding threaded to KindleTheForge).");
+                Assert.That(ObjectExistsInDb(transientDb, "SchemaSmith.GenerateTableJSON", "P"), Is.False,
+                    "The JSON generate proc must NOT be kindled on the legacy encoding.");
+
+                // The schema applied end-to-end through the XML ingest apply path.
+                Assert.That(TableExistsInDb(transientDb, "dbo", "Lookup"), Is.True,
+                    "The Shared template must deploy dbo.Lookup via the XML ingest apply path.");
+            }
+            finally
+            {
+                config["Target:CompatEncoding"] = null;
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTransientDb(transientDb);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
     public void DatabaseOverrideWithoutCreateIfMissing_SkipsMissingDbWithInfoLog()
     {
         // CreateIfMissing: false (default) → missing DBs are SKIPPED with an info log; no
@@ -545,6 +598,19 @@ IF SCHEMA_ID('{tenant}') IS NOT NULL EXEC('DROP SCHEMA [{tenant}]');";
         var result = cmd.ExecuteScalar();
         conn.Close();
         return Convert.ToInt32(result) > 0;
+    }
+
+    private bool ObjectExistsInDb(string databaseName, string objectName, string type)
+    {
+        if (!DatabaseExists(databaseName)) return false;
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(databaseName);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT CASE WHEN OBJECT_ID('{objectName}', '{type}') IS NULL THEN 0 ELSE 1 END";
+        var result = cmd.ExecuteScalar();
+        conn.Close();
+        return Convert.ToInt32(result) == 1;
     }
 
     private void DropTransientDb(string databaseName)

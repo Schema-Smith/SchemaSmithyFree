@@ -122,6 +122,11 @@ public class DatabaseQuench
     private readonly string _databaseName;
     private readonly string _schemaName;
     private readonly bool _suppressKindling;
+    // SQL Server model-ingest encoding for this database, resolved from the detected compatibility level +
+    // Target:CompatEncoding during Execute (below the OPENJSON compat cliff, or CompatEncoding=legacy -> Xml).
+    // Defaults to Json; stays Json for PostgreSQL/MySQL and when kindling is suppressed (helpers are then
+    // presumed already kindled with the JSON encoding against a compat-130+ database).
+    private IngestEncoding _ingestEncoding = IngestEncoding.Json;
     private readonly string _whatIfOnly;
     private readonly bool _runScriptsTwice;
     private readonly string _dropRemovedTables;
@@ -280,6 +285,14 @@ public class DatabaseQuench
     // once at iteration-prepare time without losing the filter on regular templates that bypass
     // PrepareIterationContent through the constructor → QuenchIndexedViews test entry points).
     internal string IterationIndexedViewSchema => _iteration.IndexedViewSchema ?? _template.IndexedViewSchema ?? "";
+
+    // XML transports for the legacy (Xml) ingest encoding: convert the iteration's JSON model array to the
+    // ingest XML the below-cliff parse/quench procs shred. An empty/absent schema maps to an empty array so
+    // ToIngestXml produces a well-formed empty root (mirrors the JSON path tolerating an empty @TableDefinitions).
+    private string IterationTableXml =>
+        ModelXmlSerializer.ToIngestXml(string.IsNullOrWhiteSpace(IterationTableSchema) ? "[]" : IterationTableSchema, "Tables", "Table");
+    private string IterationIndexedViewXml =>
+        ModelXmlSerializer.ToIngestXml(string.IsNullOrWhiteSpace(IterationIndexedViewSchema) ? "[]" : IterationIndexedViewSchema, "IndexedViews", "IndexedView");
 
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         string schemaName, bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
@@ -467,6 +480,12 @@ public class DatabaseQuench
                     SafeProgressLog($"  [{_databaseName}] detected SQL Server version {VersionHelper.DisplayVersion(info)}" +
                                     (info.CompatibilityLevel is { } lvl ? $" (compatibility level {lvl})" : ""));
                     PreFlightVersionGuard.CheckOrThrow(info, _server, _databaseName);
+
+                    // Select the model-ingest encoding: below the OPENJSON compat cliff (compat < 130 or a
+                    // pre-2016 binary), or when Target:CompatEncoding=legacy, the model is ingested/compared as
+                    // XML. Both the kindle (below) and the runtime ingest emitters read _ingestEncoding.
+                    var compatEncodingOverride = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:CompatEncoding"];
+                    _ingestEncoding = CompatEncoding.Select(compatEncodingOverride, info.CompatibilityLevel, info.ServerComparable);
                 }
 
                 // Step: Kindle the forge
@@ -480,7 +499,7 @@ public class DatabaseQuench
                 if (!_suppressKindling)
                 {
                     SafeProgressLog("  Kindling the forge");
-                    ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform, _forceReKindle);
+                    ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform, _forceReKindle, _ingestEncoding);
                 }
 
                 // Step: Validate baseline. Resolved against per-iteration tokens (BaselineValidationScript
@@ -1313,7 +1332,13 @@ public class DatabaseQuench
             case Platform.SqlServer:
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
-                tableCommand.CommandText = $@"
+                tableCommand.CommandText = _ingestEncoding == IngestEncoding.Xml
+                    ? $@"
+DECLARE @TableDefinitions XML = '{EscapeSqlLiteral(IterationTableXml)}',
+        @UpdateFillFactor BIT = {updateFillFactor}
+{ForgeKindler.GetParseTableXmlScript(Platform.SqlServer)}
+EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {_whatIfOnly}"
+                    : $@"
 DECLARE @TableDefinitions VARCHAR(MAX)= '{EscapeSqlLiteral(IterationTableSchema)}',
         @UpdateFillFactor BIT = {updateFillFactor}
 {ForgeKindler.GetParseTableJsonScript(Platform.SqlServer)}
@@ -1399,8 +1424,9 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             case Platform.SqlServer:
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
+                var indexOnlyTableDefs = _ingestEncoding == IngestEncoding.Xml ? IterationTableXml : IterationTableSchema;
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
-                    ? $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}"
+                    ? $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(indexOnlyTableDefs)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}"
                     : $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
                 break;
             }
@@ -1531,7 +1557,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         // server-side (mirroring PostgreSQL materialized views), so no C# pre-filtering.
         // Route through the iteration-aware schema string so {{SchemaName}} substitution
         // (schema templates) is already applied; for regular templates it's the full set verbatim.
-        var viewSchema = IterationIndexedViewSchema;
+        var viewSchema = _ingestEncoding == IngestEncoding.Xml ? IterationIndexedViewXml : IterationIndexedViewSchema;
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         // B5 fix: thread @TemplateName + @SchemaName so the existing-views lookup in the proc
         // is scoped to the iteration's schema. Regular templates pass @SchemaName = '' and the
