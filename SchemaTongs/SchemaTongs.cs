@@ -104,6 +104,12 @@ public class SchemaTongs
     internal CheckConstraintStyle CheckConstraintStyle => _checkConstraintStyle;
     private CheckConstraintStyle _checkConstraintStyle;
 
+    // The wire encoding used to KINDLE and to READ the SQL Server schema model back out of the source.
+    // Below the OPENJSON/FOR JSON cliff (pre-2016 binary), or when Source:CompatEncoding=legacy, the
+    // model is generated as XML (GenerateTableXml / GenerateIndexedViewXml) and converted back to the
+    // JSON model via ModelXmlSerializer.FromIngestXml. Resolved per source in PreFlightSourceVersion.
+    private IngestEncoding _ingestEncoding = IngestEncoding.Json;
+
     public SchemaTongs(Platform platform)
     {
         _platform = platform;
@@ -253,6 +259,15 @@ public class SchemaTongs
             _platform.GetBasePlatform() == Platform.SqlServer ? targetDb : null);
         _progressLog.Info($"Source {info.Platform} version {VersionHelper.DisplayVersion(info)}" +
                           (info.CompatibilityLevel is { } lvl ? $" (compatibility level {lvl})" : ""));
+
+        // Resolve the model-extraction encoding from the detected source (a pre-2016 binary lacks FOR JSON)
+        // and the Source:CompatEncoding override. Detection already happens here, so this is its single
+        // home; CastSqlServerObjects kindles with — and the extraction sites read — the resolved encoding.
+        // SQL-Server-only: PostgreSQL/MySQL/MariaDB extraction is single-path (they keep IngestEncoding.Json).
+        if (_platform.GetBasePlatform() == Platform.SqlServer)
+            _ingestEncoding = CompatEncoding.Select(config["Source:CompatEncoding"],
+                info.CompatibilityLevel, info.ServerComparable);
+
         PreFlightVersionGuard.CheckOrThrow(info, server, targetDb);
     }
 
@@ -965,8 +980,11 @@ public class SchemaTongs
         {
             using var command = connection.CreateCommand();
 
+            // Kindle with the extraction encoding resolved in PreFlightSourceVersion (the XML twins carry
+            // twin proc names — GenerateTableXml / GenerateIndexedViewXml — so kindling with the encoding
+            // installs the right generators; the extraction sites below read _ingestEncoding to call them).
             _progressLog.Info("Kindling The Forge");
-            ForgeKindler.KindleTheForge(command, _platform);
+            ForgeKindler.KindleTheForge(command, _platform, encoding: _ingestEncoding);
 
             if (_includeTables) ExtractTableDefinitions(command, targetDb);
             if (_includeSchemas) ScriptSqlServerSchemas(command);
@@ -1884,8 +1902,12 @@ SELECT s.name AS SchemaName, v.name AS ViewName
 
         if (indexedViews.Count == 0) return;
 
-        // Install the extraction function
-        command.CommandText = ResourceLoader.Load("SchemaSmith.GenerateIndexedViewJson.sql", _platform);
+        // Install the extraction function — the XML twin (GenerateIndexedViewXml) for the legacy encoding,
+        // else the JSON generator. The XML variant carries a twin name, so both live in SchemaSmith.
+        command.CommandText = ResourceLoader.Load(
+            _ingestEncoding == IngestEncoding.Xml
+                ? "SchemaSmith.GenerateIndexedViewXml.sql"
+                : "SchemaSmith.GenerateIndexedViewJson.sql", _platform);
         command.ExecuteNonQuery();
 
         var castPath = Path.Combine(_templatePath, "Indexed Views");
@@ -1895,9 +1917,8 @@ SELECT s.name AS SchemaName, v.name AS ViewName
         {
             if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{name}".ToLower()) && !_objectsToCast.Contains(name.ToLower())) continue;
 
-            _progressLog.Info($"  Cast Json for {schema}.{name}");
-            command.CommandText = $"SELECT [SchemaSmith].[GenerateIndexedViewJson]('{EscapeSql(schema)}', '{EscapeSql(name)}')";
-            var viewJson = command.ExecuteScalar()?.ToString() ?? "";
+            _progressLog.Info($"  Cast {_ingestEncoding} for {schema}.{name}");
+            var viewJson = ExtractIndexedViewModel(command, schema, name);
             if (string.IsNullOrWhiteSpace(viewJson) || viewJson.Trim().Equals("{}"))
             {
                 _progressLog.Error($"    No json returned for {schema}.{name}");
@@ -1920,6 +1941,21 @@ SELECT s.name AS SchemaName, v.name AS ViewName
             JsonHelper.Write(viewFile, viewObj);
             _stats.IndexedViews++;
         }
+    }
+
+    // Legacy encoding calls the GenerateIndexedViewXml twin (FOR XML PATH) and converts the XML back to the
+    // JSON model; the modern encoding uses the GenerateIndexedViewJson function directly.
+    private string ExtractIndexedViewModel(IDbCommand command, string schema, string name)
+    {
+        if (_ingestEncoding == IngestEncoding.Xml)
+        {
+            command.CommandText = $"SELECT [SchemaSmith].[GenerateIndexedViewXml]('{EscapeSql(schema)}', '{EscapeSql(name)}')";
+            var xml = command.ExecuteScalar()?.ToString() ?? "";
+            return string.IsNullOrWhiteSpace(xml) ? "" : ModelXmlSerializer.FromIngestXml(xml);
+        }
+
+        command.CommandText = $"SELECT [SchemaSmith].[GenerateIndexedViewJson]('{EscapeSql(schema)}', '{EscapeSql(name)}')";
+        return command.ExecuteScalar()?.ToString() ?? "";
     }
 
     #endregion
@@ -2709,13 +2745,10 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 if (!ShouldExtractFromSchema(tableSchema)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(tableName.ToLower()) && !_objectsToCast.Contains($"{tableSchema}.{tableName}".ToLower())) continue;
 
-                _progressLog.Info($"  Cast Json for {tableSchema}.{tableName}");
-                commandJson.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{EscapeSql(tableSchema)}', @p_Table = '{EscapeSql(tableName)}'";
-
-                using var jsonReader = commandJson.ExecuteReader();
-                var json = "";
-                while (jsonReader.Read())
-                    json += $"{jsonReader[0]}\r\n";
+                _progressLog.Info($"  Cast {_ingestEncoding} for {tableSchema}.{tableName}");
+                var json = _ingestEncoding == IngestEncoding.Xml
+                    ? ExtractTableModelXml(commandJson, tableSchema, tableName)
+                    : ExtractTableModelJson(commandJson, tableSchema, tableName);
                 if (string.IsNullOrWhiteSpace(json) || json.Trim().Equals("{}"))
                 {
                     _progressLog.Error($"    No json returned for {tableSchema}.{tableName}");
@@ -2772,6 +2805,31 @@ SELECT cc.name AS [Name],
         {
             connectionJson.Close();
         }
+    }
+
+    // Modern encoding: GenerateTableJSON emits the JSON model directly, split across rows once it exceeds
+    // the row size — concatenate every row.
+    private static string ExtractTableModelJson(IDbCommand command, string tableSchema, string tableName)
+    {
+        command.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{EscapeSql(tableSchema)}', @p_Table = '{EscapeSql(tableName)}'";
+        using var reader = command.ExecuteReader();
+        var json = "";
+        while (reader.Read())
+            json += $"{reader[0]}\r\n";
+        return json;
+    }
+
+    // Legacy encoding (pre-2016 binary, or Source:CompatEncoding=legacy): GenerateTableXml emits the model
+    // as FOR XML PATH, converted back to the JSON model via ModelXmlSerializer.FromIngestXml. FOR XML also
+    // splits across rows past ~2033 chars, so concatenate every row into the single <Table> document first.
+    private static string ExtractTableModelXml(IDbCommand command, string tableSchema, string tableName)
+    {
+        command.CommandText = $"EXEC SchemaSmith.GenerateTableXml @p_Schema = '{EscapeSql(tableSchema)}', @p_Table = '{EscapeSql(tableName)}'";
+        using var reader = command.ExecuteReader();
+        var xml = "";
+        while (reader.Read())
+            xml += reader[0]?.ToString();
+        return string.IsNullOrWhiteSpace(xml) ? "" : ModelXmlSerializer.FromIngestXml(xml);
     }
 
     #endregion
