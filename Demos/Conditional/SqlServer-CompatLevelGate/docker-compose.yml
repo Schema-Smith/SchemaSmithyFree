@@ -1,0 +1,101 @@
+name: schemasmith-conditional-compatlevel-demo
+
+# Conditional deployment demo: ONE SQL Server 2022 instance, TWO databases at
+# different compatibility levels.
+#
+#   AppDb_Modern  -> compat 160 -> gets the GENERATE_SERIES view
+#   AppDb_Legacy  -> compat 130 -> gets the recursive-CTE view
+#
+# Same binary, so SERVERPROPERTY('ProductMajorVersion') is 16 for BOTH. The obvious
+# server-version gate cannot tell them apart and would push 160-only syntax at the
+# compat-130 database, which fails at parse time. The gate that works reads
+# sys.databases.compatibility_level.
+#
+# This is the SQL Server-specific trap: on the other engines "what version is this
+# server" answers "what syntax can I use". On SQL Server it does not.
+
+services:
+  demoserver:
+    image: ${MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest} # Overridable via MSSQL_IMAGE; must be 2022+
+    environment:
+      ACCEPT_EULA: Y
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    ports:
+      - "1435:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+      start_period: 30s
+
+  bootstrap:
+    image: ${MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest}
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        # Retry: even after the healthcheck passes, sa auth can briefly wobble
+        # while a first-boot system-database upgrade finishes settling.
+        for attempt in $$(seq 1 180); do
+          /opt/mssql-tools18/bin/sqlcmd -S demoserver -U sa -P "${MSSQL_SA_PASSWORD}" -C -i /bootstrap/init-databases.sql && exit 0
+          echo "bootstrap: SQL Server not ready yet, retrying ($$attempt/180)..."
+          sleep 10
+        done
+        echo "bootstrap: gave up waiting for SQL Server" >&2; exit 1
+    volumes:
+      - ./bootstrap:/bootstrap
+    depends_on:
+      demoserver:
+        condition: service_healthy
+
+  quench:
+    build:
+      context: ../../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=demoserver
+      - SmithySettings_Target__User=sa
+      - SmithySettings_Target__Password=${MSSQL_SA_PASSWORD}
+      - SmithySettings_Target__ConnectionProperties__TrustServerCertificate=True
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Package:/metadata
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
+  verify:
+    image: ${MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest}
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        SQLCMD="/opt/mssql-tools18/bin/sqlcmd -S demoserver -U sa -P ${MSSQL_SA_PASSWORD} -C -W"
+        echo
+        echo '=================================================================='
+        echo '  Verification: one package, one server, two compatibility levels'
+        echo '=================================================================='
+        echo
+        echo '--- The server version is IDENTICAL for both databases ---'
+        $$SQLCMD -Q "SET NOCOUNT ON; SELECT d.name AS DatabaseName, CAST(SERVERPROPERTY('ProductMajorVersion') AS INT) AS ServerMajor, d.compatibility_level AS CompatLevel FROM sys.databases d WHERE d.name IN ('AppDb_Modern','AppDb_Legacy') ORDER BY d.name;"
+        echo
+        # Match on the CODE, not the word: both variants MENTION GENERATE_SERIES in their
+        # comment headers, and SQL Server stores those comments as part of the definition.
+        VARIANT="SELECT CASE WHEN OBJECT_DEFINITION(OBJECT_ID('dbo.vReadingCalendar')) LIKE '%FROM GENERATE_SERIES(%' THEN 'GENERATE_SERIES (needs compat 160)' WHEN OBJECT_DEFINITION(OBJECT_ID('dbo.vReadingCalendar')) LIKE '%DaySeries%' THEN 'recursive CTE (any compat)' ELSE 'unknown' END AS VariantDeployed"
+        echo '--- AppDb_Legacy (compat 130): recursive-CTE variant deployed ---'
+        $$SQLCMD -d AppDb_Legacy -Q "SET NOCOUNT ON; $$VARIANT; SELECT COUNT(*) AS CalendarRows FROM dbo.vReadingCalendar;"
+        echo
+        echo '--- AppDb_Modern (compat 160): GENERATE_SERIES variant deployed ---'
+        $$SQLCMD -d AppDb_Modern -Q "SET NOCOUNT ON; $$VARIANT; SELECT COUNT(*) AS CalendarRows FROM dbo.vReadingCalendar;"
+        echo
+        echo '--- Negative control: what the modern view would have hit in AppDb_Legacy ---'
+        $$SQLCMD -d AppDb_Legacy -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM GENERATE_SERIES(0,29);" || true
+        echo
+        echo 'Same package. Same server. Same view name. Same 30 rows.'
+        echo 'Two implementations, chosen by database compatibility level —'
+        echo 'which is the ONLY gate that can tell these two databases apart.'
+        echo
+    depends_on:
+      quench:
+        condition: service_completed_successfully

@@ -1,0 +1,25 @@
+{
+  "Name": "Assets",
+  "Columns": [
+    {
+      "Name": "AssetId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "Name",
+      "DataType": "VARCHAR(200)"
+    },
+    {
+      "Name": "AcquiredOn",
+      "DataType": "DATE",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "IndexColumns": "AssetId"
+    }
+  ]
+}

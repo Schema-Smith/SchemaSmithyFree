@@ -1,0 +1,34 @@
+{
+  "Schema": "dbo",
+  "Name": "Reading",
+  "Columns": [
+    {
+      "Name": "ReadingId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "SensorId",
+      "DataType": "INT"
+    },
+    {
+      "Name": "TakenAt",
+      "DataType": "DATETIME2"
+    },
+    {
+      "Name": "Value",
+      "DataType": "DECIMAL(18,4)"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_Reading",
+      "PrimaryKey": true,
+      "Clustered": true,
+      "IndexColumns": "ReadingId"
+    },
+    {
+      "Name": "IX_Reading_TakenAt",
+      "IndexColumns": "TakenAt"
+    }
+  ]
+}

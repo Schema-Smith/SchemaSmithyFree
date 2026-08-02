@@ -1,0 +1,111 @@
+name: schemasmith-conditional-mariadb-demo
+
+# Conditional deployment demo: the same schema package deploys against MariaDB 10.6
+# (SchemaSmith's MariaDB floor) and MariaDB 11.4 (current LTS). An
+# AssetIdentifiers.ExternalUuid column declared as the native UUID type is gated on
+# the server version -- UUID landed in MariaDB 10.7, so 10.6 skips the column and the
+# table lands without it, while 11.4 applies the full schema.
+#
+# Note the predicate shape: unlike the MySQL demo, a MAJOR-version comparison is not
+# enough here. UUID arrived mid-major (10.7), so the gate has to compare major AND
+# minor. That is the common case -- most engine features do not land on a major
+# boundary -- and getting it wrong silently skips (or wrongly applies) the feature.
+
+services:
+  mariadb10:
+    # Overridable via MARIADB_OLD_IMAGE in .env. Must stay BELOW 10.7 or the demo loses
+    # its contrast — both sides would apply the UUID column.
+    image: ${MARIADB_OLD_IMAGE:-mariadb:10.6}
+    command: --log-bin-trust-function-creators=1
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_DATABASE: conditional_demo
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -h 127.0.0.1 -uroot -p${MARIADB_ROOT_PASSWORD} -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 15s
+    ports:
+      - "3310:3306"
+
+  mariadb11:
+    image: ${MARIADB_NEW_IMAGE:-mariadb:11.4} # Overridable via MARIADB_NEW_IMAGE; must stay AT/ABOVE 10.7
+    command: --log-bin-trust-function-creators=1
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_DATABASE: conditional_demo
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -h 127.0.0.1 -uroot -p${MARIADB_ROOT_PASSWORD} -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 15s
+    ports:
+      - "3311:3306"
+
+  quench-mariadb10:
+    build:
+      context: ../../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=mariadb10
+      - SmithySettings_Target__User=${MARIADB_USER}
+      - SmithySettings_Target__Password=${MARIADB_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Package:/metadata
+    depends_on:
+      mariadb10:
+        condition: service_healthy
+
+  quench-mariadb11:
+    build:
+      context: ../../../SchemaQuench
+      dockerfile: Dockerfile.release
+    environment:
+      - SmithySettings_Target__Server=mariadb11
+      - SmithySettings_Target__User=${MARIADB_USER}
+      - SmithySettings_Target__Password=${MARIADB_PASSWORD}
+      - SmithySettings_SchemaPackagePath=/metadata
+    volumes:
+      - ./Package:/metadata
+    depends_on:
+      mariadb11:
+        condition: service_healthy
+
+  verify:
+    # Runs the 11.4 client against BOTH servers. --skip-ssl is required for the 10.6 leg:
+    # the MariaDB 11.x client demands TLS by default and a stock 10.6 container offers
+    # none, which fails with "SSL is required, but the server does not support it".
+    image: ${MARIADB_NEW_IMAGE:-mariadb:11.4}
+    environment:
+      MYSQL_PWD: ${MARIADB_PASSWORD}
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        echo
+        echo '=================================================================='
+        echo '  Verification: same schema package, two MariaDB versions'
+        echo '=================================================================='
+        echo
+        echo '--- MariaDB 10.6 (below 10.7): ExternalUuid column SKIPPED ---'
+        mariadb --skip-ssl -h mariadb10 -u${MARIADB_USER} -D conditional_demo -e "SELECT VERSION() AS server; DESCRIBE AssetIdentifiers;"
+        echo
+        echo '--- MariaDB 11.4 (10.7 or later): ExternalUuid APPLIED as native UUID ---'
+        mariadb --skip-ssl -h mariadb11 -u${MARIADB_USER} -D conditional_demo -e "SELECT VERSION() AS server; DESCRIBE AssetIdentifiers;"
+        echo
+        echo 'Single schema package. Two engine versions. Different schemas.'
+        echo 'ShouldApplyExpression in the column JSON did the version gating —'
+        echo 'comparing MAJOR *and* MINOR, because UUID landed mid-major at 10.7.'
+        echo
+    depends_on:
+      quench-mariadb10:
+        condition: service_completed_successfully
+      quench-mariadb11:
+        condition: service_completed_successfully

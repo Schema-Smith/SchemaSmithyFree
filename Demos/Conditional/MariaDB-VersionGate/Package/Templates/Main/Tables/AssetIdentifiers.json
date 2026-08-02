@@ -1,0 +1,43 @@
+{
+  "Name": "AssetIdentifiers",
+  "Columns": [
+    {
+      "Name": "IdentifierId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "AssetId",
+      "DataType": "BIGINT"
+    },
+    {
+      "Name": "Scheme",
+      "DataType": "VARCHAR(64)"
+    },
+    {
+      "Name": "ExternalUuid",
+      "DataType": "UUID",
+      "Nullable": true,
+      "VariantName": "UUID native type (MariaDB 10.7+)",
+      "ShouldApplyExpression": "CAST(SUBSTRING_INDEX(VERSION(), '.', 1) AS UNSIGNED) * 100 + CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(VERSION(), '.', 2), '.', -1) AS UNSIGNED) >= 1007"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "IndexColumns": "IdentifierId"
+    },
+    {
+      "Name": "ix_assetidentifiers_asset",
+      "IndexColumns": "AssetId"
+    }
+  ],
+  "ForeignKeys": [
+    {
+      "Name": "fk_assetidentifiers_assets",
+      "Columns": "AssetId",
+      "RelatedTable": "Assets",
+      "RelatedColumns": "AssetId"
+    }
+  ]
+}

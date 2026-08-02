@@ -18,13 +18,17 @@ TenantCRM is a hand-authored multi-tenant CRM showcasing the **schema-per-tenant
 
 ## Conditional Deployment Demos
 
-Demonstrations of `ShouldApplyExpression` (conditional deployment) on real engine pairs, supporting the *Production Server That Can't Be Upgraded* article (LinkedIn, 2026-06-11). See [`Conditional/`](Conditional/) for the three demos:
+Demonstrations of `ShouldApplyExpression` (conditional deployment) on real engines. See [`Conditional/`](Conditional/) for the five demos:
 
 - [`Conditional/PostgreSQL-VersionGate`](Conditional/PostgreSQL-VersionGate) — PG15 ↔ PG18, gating a virtual generated column on PG18+
-- [`Conditional/SqlServer-RollingRollout`](Conditional/SqlServer-RollingRollout) — SQL Server 2022 × 3 tenant databases, rolling out a nonclustered columnstore index one tenant per maintenance window via a `RolloutControl` table
 - [`Conditional/MySQL-VersionGate`](Conditional/MySQL-VersionGate) — MySQL 8.0 ↔ MySQL 9, gating a `VECTOR(384)` column on MySQL 9+
+- [`Conditional/MariaDB-VersionGate`](Conditional/MariaDB-VersionGate) — MariaDB 10.6 ↔ 11.4, gating a native `UUID` column on 10.7+. Shows the **mid-major** case: a major-only comparison is wrong, so the gate tests major *and* minor
+- [`Conditional/SqlServer-CompatLevelGate`](Conditional/SqlServer-CompatLevelGate) — one SQL Server 2022 instance, two databases at compatibility level 130 and 160, swapping a whole view implementation by folder-level gating. Shows why `SERVERPROPERTY('ProductMajorVersion')` is the **wrong** gate for syntax on SQL Server
+- [`Conditional/SqlServer-RollingRollout`](Conditional/SqlServer-RollingRollout) — SQL Server 2022 × 3 tenant databases, rolling out a nonclustered columnstore index one tenant per maintenance window via a `RolloutControl` table
 
-These demos use a different docker layout than the products above (engine pairs rather than a single instance) and live in `Conditional/` rather than per-platform subdirectories.
+Three of the five (PostgreSQL, MySQL, Rolling-Rollout) support the *Production Server That Can't Be Upgraded* article (LinkedIn, 2026-06-11); the other two close engine and gating-shape gaps.
+
+These demos use a different docker layout than the products above (engine pairs, or one instance with several databases) and live in `Conditional/` rather than per-platform subdirectories.
 
 ## Quick Start
 
@@ -83,6 +87,8 @@ Every demo lets you point its container at a different engine version, so you ca
 | [Learn sandbox](Learn/docker) | `MSSQL_IMAGE`, `POSTGRES_IMAGE`, `MYSQL_IMAGE`, `MARIADB_IMAGE` | as above (`postgres:16` for PG) |
 | [`Conditional/PostgreSQL-VersionGate`](Conditional/PostgreSQL-VersionGate) | `PG_OLD_IMAGE`, `PG_NEW_IMAGE` | `postgres:15`, `postgres:18` |
 | [`Conditional/MySQL-VersionGate`](Conditional/MySQL-VersionGate) | `MYSQL_OLD_IMAGE`, `MYSQL_NEW_IMAGE` | `mysql:8.0`, `mysql:9` |
+| [`Conditional/MariaDB-VersionGate`](Conditional/MariaDB-VersionGate) | `MARIADB_OLD_IMAGE`, `MARIADB_NEW_IMAGE` | `mariadb:10.6`, `mariadb:11.4` |
+| [`Conditional/SqlServer-CompatLevelGate`](Conditional/SqlServer-CompatLevelGate) | `MSSQL_IMAGE` (must stay 2022+) | `mcr.microsoft.com/mssql/server:2022-latest` |
 | [`Conditional/SqlServer-RollingRollout`](Conditional/SqlServer-RollingRollout) | `MSSQL_IMAGE` | `mcr.microsoft.com/mssql/server:2022-latest` |
 
 Three things to know before you override:

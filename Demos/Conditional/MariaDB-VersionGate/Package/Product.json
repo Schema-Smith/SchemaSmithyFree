@@ -1,0 +1,12 @@
+{
+  "Name": "ConditionalMariaDbDemo",
+  "ValidationScript": "SELECT TRUE",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {
+    "DemoDb": "conditional_demo"
+  },
+  "ScriptFolders": [],
+  "Platform": "MariaDb"
+}
