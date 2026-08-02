@@ -336,12 +336,12 @@ These are the minimum versions SchemaSmith supports for deployment:
 
 | Platform | Minimum supported |
 |----------|------------------|
-| SQL Server | 2017 (major version 14) |
+| SQL Server | 2008 (major version 10) |
 | PostgreSQL | 12 |
 | MySQL | 8.0 |
 | MariaDB | 10.6 |
 
-**These floors are enforced automatically — you don't declare anything.** Before any deployment (SchemaQuench) or extraction (SchemaTongs) work begins, the target server's version is detected and logged; a below-floor server aborts the run with a clear "unsupported version" message instead of failing later with a raw engine error. For SQL Server, the target database's `compatibility_level` is checked too — it must be `130` or higher (SQL Server 2016), even on a 2017+ server, because the JSON ingest uses `OPENJSON` (compatibility-level-gated at 130); a database left at a lower compatibility level is reported distinctly from a too-old server. `MinimumVersion` (below) is a separate, opt-in gate for raising the floor *further* per product.
+**These floors are enforced automatically — you don't declare anything.** Before any deployment (SchemaQuench) or extraction (SchemaTongs) work begins, the target server's version is detected and logged; a below-floor server aborts the run with a clear "unsupported version" message instead of failing later with a raw engine error. For SQL Server, the target database's `compatibility_level` is checked too — it must be `100` or higher (SQL Server 2008); a database below that is reported distinctly from a too-old server. Between compatibility levels 100 and 120 SchemaSmith ingests its schema model as XML rather than JSON (`OPENJSON`'s JSON path is a parse error below 130) — automatically, see [Version-adaptive code generation](#version-adaptive-code-generation) below. `MinimumVersion` (below) is a separate, opt-in gate for raising the floor *further* per product.
 
 ### MinimumVersion pre-flight gate
 
@@ -369,6 +369,14 @@ A feature a target version lacks is either taken by an equivalent longer path (s
 | **Removing a column's generation** (`DROP EXPRESSION`) | PostgreSQL 13 | drops and re-adds the column as a plain column (the previously-computed values are not preserved, unlike the in-place conversion available on 13+) |
 
 The version-sensitive system-catalog reads SchemaSmith uses to compare and extract state (per-column compression, expression statistics, `NULLS NOT DISTINCT`, INCLUDE columns) are branched automatically so they parse on the older server too — extraction and idempotency work the same on 12 as on current PostgreSQL. Delete-on-absence data delivery uses a single `MERGE … WHEN NOT MATCHED BY SOURCE THEN DELETE` on 17+ and a `MERGE` + follow-on `DELETE … WHERE NOT EXISTS` (keyed identically, same merge filter) on 15/16; below 15 it is the same version-agnostic `DELETE`. In every case the end state is identical — deploy the same package to PostgreSQL 12 through current and you get the same database, minus only the features the target genuinely cannot support (which the deployment summary names).
+
+> **SQL Server:** Below compatibility level 130 (SQL Server 2016), SchemaSmith switches its entire model-ingest and compare encoding from JSON to XML — automatically.
+
+On SQL Server the version-adaptive behavior is a change of *encoding*, not individual feature fallbacks. SchemaSmith hands its parsed schema model to the server as JSON (`OPENJSON` / `FOR JSON`) at compatibility level 130 and above, and as XML (`.nodes()` / `.value()` / `FOR XML PATH`) below 130 — because `OPENJSON`'s JSON path is a parse error under compatibility level 130. The switch is chosen from the detected compatibility level and server version, and applies to deployment (SchemaQuench) and extraction (SchemaTongs) alike, reaching down to compatibility level 100 (SQL Server 2008). Compatibility-level-gated constructs SchemaSmith itself uses — `STRING_AGG … WITHIN GROUP` and `STRING_SPLIT` — fall back to `FOR XML PATH` ordered aggregation and a split function on the XML path, so the end state is identical to a modern deployment.
+
+You normally never touch this, but you can force the encoding with `Target:CompatEncoding` (deployment) or `Source:CompatEncoding` (extraction): `auto` (the default — pick by detected version), `legacy` (XML), or `modern` (JSON) — for example `SmithySettings_Target__CompatEncoding=legacy`.
+
+> **Legacy fallback (SQL Server only):** On the XML (legacy) encoding, the open-ended custom-property `Extensions` bag is dropped when SchemaTongs reverse-engineers a table below the JSON cliff. The typed schema model — columns, indexes, keys, constraints, statistics — round-trips intact; only the free-form `Extensions` metadata is not carried on the legacy encoding.
 
 ### MariaDB (MySQL family) — where the native DDL diverges
 
