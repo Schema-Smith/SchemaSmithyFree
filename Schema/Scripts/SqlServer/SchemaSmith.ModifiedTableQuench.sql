@@ -123,12 +123,18 @@ BEGIN TRY
       -- table can be dropped; the now-orphaned history table is dropped after the main drop below.
       RAISERROR('Turn off system versioning for temporal tables removed from the product', 10, 100) WITH NOWAIT
       DROP TABLE IF EXISTS #RemovedTemporalHistory
-      SELECT hs.[name] COLLATE DATABASE_DEFAULT AS HistSchema, h.[name] COLLATE DATABASE_DEFAULT AS HistName
-        INTO #RemovedTemporalHistory
-        FROM #TablesRemovedFromProduct t WITH (NOLOCK)
-        JOIN sys.tables mt WITH (NOLOCK) ON mt.[object_id] = OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']') AND mt.temporal_type = 2
-        JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = mt.history_table_id
-        JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]
+      CREATE TABLE #RemovedTemporalHistory (HistSchema NVARCHAR(128) COLLATE DATABASE_DEFAULT NULL, HistName NVARCHAR(128) COLLATE DATABASE_DEFAULT NULL)
+      -- sys.tables.temporal_type / history_table_id are 2016+, so a STATIC reference would fail to CREATE this
+      -- shared proc on a genuine pre-2016 binary. Populate via a fn_ServerMajorVersion()>=13 guarded dynamic
+      -- INSERT (identifiers live only in the string); empty below 2016, where no temporal table can exist.
+      IF SchemaSmith.fn_ServerMajorVersion() >= 13
+        EXEC sp_executesql N'
+          INSERT INTO #RemovedTemporalHistory (HistSchema, HistName)
+          SELECT hs.[name] COLLATE DATABASE_DEFAULT, h.[name] COLLATE DATABASE_DEFAULT
+            FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+            JOIN sys.tables mt WITH (NOLOCK) ON mt.[object_id] = OBJECT_ID(t.[Schema] + ''.['' + t.[TableName] + '']'') AND mt.temporal_type = 2
+            JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = mt.history_table_id
+            JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]'
       SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Turn OFF system versioning for ' + t.[Schema] + '.' + t.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                       'ALTER TABLE ' + t.[Schema] + '.[' + t.[TableName] + '] SET (SYSTEM_VERSIONING = OFF);' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
         FROM #TablesRemovedFromProduct t WITH (NOLOCK)
@@ -223,6 +229,34 @@ BEGIN TRY
                           AND i.TableName = xp.TableName
                           AND SchemaSmith.fn_StripBracketWrapping(i.IndexName) = xp.IndexName)
 
+  -- 2016-era per-column catalog metadata (dynamic data masking + Always Encrypted) is version-gated so this
+  -- shared apply proc CREATEs on a genuine pre-2016 binary: a STATIC sys.masked_columns / encryption_* column
+  -- reference is a CREATE-time binding error below 2016. Stage it via a fn_ServerMajorVersion()>=13 guarded
+  -- dynamic INSERT (the 2016 identifiers live only in the string); #ColumnChanges below LEFT JOINs #ColMeta
+  -- instead of the 2016 columns. Empty below 2016 (no masked/encrypted columns exist there) so the ISNULL
+  -- defaults preserve behavior.
+  RAISERROR('Stage version-gated column metadata (masking, Always Encrypted)', 10, 100) WITH NOWAIT
+  DROP TABLE IF EXISTS #ColMeta
+  -- Column names carry an Existing* prefix so they do NOT collide with the model's unqualified [EncryptionType]
+  -- / [EncryptionAlgorithm] references in #ColumnChanges (which would make those ambiguous).
+  CREATE TABLE #ColMeta
+  (
+    [object_id] INT NOT NULL,
+    column_id INT NOT NULL,
+    ExistingMaskFn NVARCHAR(4000) NULL,
+    ExistingEncType NVARCHAR(64) NULL,
+    ExistingEncAlgo NVARCHAR(128) NULL,
+    ExistingEncKeyDb NVARCHAR(128) NULL,
+    PRIMARY KEY ([object_id], column_id)
+  )
+  IF SchemaSmith.fn_ServerMajorVersion() >= 13
+    EXEC sp_executesql N'
+      INSERT INTO #ColMeta ([object_id], column_id, ExistingMaskFn, ExistingEncType, ExistingEncAlgo, ExistingEncKeyDb)
+      SELECT sc.[object_id], sc.column_id, mc.masking_function, sc.encryption_type_desc, sc.encryption_algorithm_name, sc.column_encryption_key_database_name
+        FROM sys.columns sc WITH (NOLOCK)
+        JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = sc.[object_id] AND st.is_ms_shipped = 0
+        LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[object_id] = sc.[object_id] AND mc.column_id = sc.column_id'
+
   RAISERROR('Detect Column Changes', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #ColumnChanges
   SELECT c.[Schema], c.[TableName], c.[ColumnName],
@@ -244,9 +278,9 @@ BEGIN TRY
                    CASE WHEN [DataType] NOT LIKE '%ROWGUIDCOL%' AND sc.is_rowguidcol = 1 THEN ' DROP ROWGUIDCOL' ELSE '' END +
                    CASE WHEN [DataType] LIKE '%NOT FOR REPLICATION%' AND ident.is_not_for_replication = 0 THEN ' ADD NOT FOR REPLICATION' ELSE '' END +
                    CASE WHEN [DataType] NOT LIKE '%NOT FOR REPLICATION%' AND ident.is_not_for_replication = 1 THEN ' DROP NOT FOR REPLICATION' ELSE '' END +
-                   CASE WHEN mc.masking_function IS NOT NULL AND ([DataMaskFunction] = '' OR mc.masking_function COLLATE DATABASE_DEFAULT <> [DataMaskFunction]) THEN ' DROP MASKED' ELSE '' END +
-                   CASE WHEN [DataMaskFunction] <> '' AND mc.masking_function IS NULL THEN ' ADD MASKED WITH (FUNCTION = ''' + [DataMaskFunction] + ''')' ELSE '' END +
-                   CASE WHEN [DataMaskFunction] <> '' AND mc.masking_function COLLATE DATABASE_DEFAULT <> [DataMaskFunction]
+                   CASE WHEN cm.ExistingMaskFn IS NOT NULL AND ([DataMaskFunction] = '' OR cm.ExistingMaskFn COLLATE DATABASE_DEFAULT <> [DataMaskFunction]) THEN ' DROP MASKED' ELSE '' END +
+                   CASE WHEN [DataMaskFunction] <> '' AND cm.ExistingMaskFn IS NULL THEN ' ADD MASKED WITH (FUNCTION = ''' + [DataMaskFunction] + ''')' ELSE '' END +
+                   CASE WHEN [DataMaskFunction] <> '' AND cm.ExistingMaskFn COLLATE DATABASE_DEFAULT <> [DataMaskFunction]
                         THEN '; ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ALTER COLUMN ' + c.[ColumnName] + ' ADD MASKED WITH (FUNCTION = ''' + [DataMaskFunction] + ''')'
                         ELSE '' END
               ELSE ''
@@ -256,7 +290,7 @@ BEGIN TRY
                    THEN 1 ELSE 0 END AS BIT) AS MustDropAndRecreate,
          CAST(CASE WHEN (ident.column_id IS NOT NULL AND [DataType] NOT LIKE '%IDENTITY%'
                         AND RTRIM(ISNULL([ComputedExpression], '')) = '') -- identity removal (data-preserving swap)
-                    OR (ISNULL(sc.encryption_type_desc, 'NONE') COLLATE DATABASE_DEFAULT <> [EncryptionType]) -- encryption change (data-preserving swap)
+                    OR (ISNULL(cm.ExistingEncType, 'NONE') COLLATE DATABASE_DEFAULT <> [EncryptionType]) -- encryption change (data-preserving swap)
                    THEN 1 ELSE 0 END AS BIT) AS MustSwapColumn,
          CAST(0 AS BIT) AS DropOnly
     INTO #ColumnChanges
@@ -275,8 +309,7 @@ BEGIN TRY
                                                       AND ident.[object_id] = OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME)
     LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = SchemaSmith.fn_StripBracketWrapping(c.ColumnName)
                                                    AND cc.[object_id] = OBJECT_ID(C.[Schema] + '.' + C.[TableName])
-    LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[name] = SchemaSmith.fn_StripBracketWrapping(c.ColumnName)
-                                                 AND mc.[object_id] = OBJECT_ID(C.[Schema] + '.' + C.[TableName])
+    LEFT JOIN #ColMeta cm ON cm.[object_id] = sc.[object_id] AND cm.column_id = sc.column_id
     WHERE t.NewTable = 0
       AND (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
                                            THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
@@ -297,10 +330,10 @@ BEGIN TRY
         OR ISNULL(SchemaSmith.fn_StripParenWrapping(cc.[definition]), '') <> ISNULL(c.ComputedExpression, '')
         OR ISNULL(cc.is_persisted, 0) <> ISNULL(c.[Persisted], 0))
         OR sc.is_sparse <> [Sparse]
-        OR ISNULL(mc.masking_function, '') COLLATE DATABASE_DEFAULT <> [DataMaskFunction]
+        OR ISNULL(cm.ExistingMaskFn, '') COLLATE DATABASE_DEFAULT <> [DataMaskFunction]
         OR ([Collation] <> 'IGNORE' AND ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') <> [Collation])
-        OR ISNULL(sc.encryption_type_desc, 'NONE') COLLATE DATABASE_DEFAULT <> [EncryptionType]
-        OR (ISNULL(sc.encryption_type_desc, 'NONE') COLLATE DATABASE_DEFAULT <> 'NONE' AND (ISNULL(sc.encryption_algorithm_name, '') COLLATE DATABASE_DEFAULT <> [EncryptionAlgorithm] OR ISNULL(sc.column_encryption_key_database_name, '') COLLATE DATABASE_DEFAULT <> [EncryptionKey]))
+        OR ISNULL(cm.ExistingEncType, 'NONE') COLLATE DATABASE_DEFAULT <> [EncryptionType]
+        OR (ISNULL(cm.ExistingEncType, 'NONE') COLLATE DATABASE_DEFAULT <> 'NONE' AND (ISNULL(cm.ExistingEncAlgo, '') COLLATE DATABASE_DEFAULT <> [EncryptionAlgorithm] OR ISNULL(cm.ExistingEncKeyDb, '') COLLATE DATABASE_DEFAULT <> [EncryptionKey]))
   
   RAISERROR('Detect Computed Columns Impacted by Other Column Changes', 10, 100) WITH NOWAIT
   INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, MustSwapColumn, [DropOnly])
