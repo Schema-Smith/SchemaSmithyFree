@@ -12,14 +12,46 @@
 -- emits well-formed, entity-encoded XML directly).
 --
 -- Extensions bag is DROPPED on the legacy encoding (program design non-goal); the equivalence test asserts
--- model equality minus Extensions. The temporal catalog columns (temporal_type/generated_always_type) are
--- 2016+ and are gated in Slice E when the floor drops below 2016 (mirrors GenerateTableJSON).
+-- model equality minus Extensions.
+--
+-- 2016-era catalog reads are version-gated (Slice E) so this procedure CREATEs on a genuine pre-2016 binary,
+-- where a STATIC reference to any of them is an "invalid column"/"invalid object" error at CREATE time (not
+-- runtime) and reproducible only on a real old binary, never on the modern CI container. The 2016+ reads —
+-- sys.tables.temporal_type, sys.columns.generated_always_type, sys.masked_columns.masking_function, and the
+-- Always Encrypted metadata (sys.columns.encryption_type_desc/column_encryption_key_id/
+-- encryption_algorithm_name + sys.column_encryption_keys) — are staged through a fn_ServerMajorVersion()>=13
+-- guarded DYNAMIC statement (the identifiers live only in a string, never in the compiled body). The static
+-- SELECT reads @v_IsTemporal and LEFT JOINs #ColMeta, both simply empty/0 on an older binary (which has no
+-- temporal/masking/Always-Encrypted objects anyway), so the emitted model degrades cleanly there.
 CREATE OR ALTER PROCEDURE SchemaSmith.GenerateTableXml
   @p_Schema SYSNAME = 'dbo',
   @p_Table SYSNAME
 AS
 SET NOCOUNT ON
 DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))
+DECLARE @v_ObjectId INT = OBJECT_ID(@p_Schema + '.' + @p_Table)
+DECLARE @v_IsTemporal BIT = 0
+
+CREATE TABLE #ColMeta
+(
+  [column_id] INT PRIMARY KEY,
+  GeneratedAlwaysType TINYINT NOT NULL DEFAULT 0,
+  MaskingFunction NVARCHAR(4000) NULL,
+  EncryptionType NVARCHAR(64) NULL,
+  EncryptionKey NVARCHAR(388) NULL,
+  EncryptionAlgorithm NVARCHAR(128) NULL
+)
+IF SchemaSmith.fn_ServerMajorVersion() >= 13
+  EXEC sp_executesql N'
+    INSERT INTO #ColMeta ([column_id], GeneratedAlwaysType, MaskingFunction, EncryptionType, EncryptionKey, EncryptionAlgorithm)
+    SELECT sc.column_id, sc.generated_always_type, mc.masking_function, sc.encryption_type_desc,
+           (SELECT ''['' + cek.[name] + '']'' FROM sys.column_encryption_keys cek WITH (NOLOCK) WHERE cek.column_encryption_key_id = sc.column_encryption_key_id),
+           sc.encryption_algorithm_name
+      FROM sys.columns sc WITH (NOLOCK)
+      LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[object_id] = sc.[object_id] AND mc.column_id = sc.column_id
+      WHERE sc.[object_id] = @p_ObjId;
+    SELECT @p_Out = CASE WHEN temporal_type = 2 THEN 1 ELSE 0 END FROM sys.tables WITH (NOLOCK) WHERE [object_id] = @p_ObjId;',
+    N'@p_ObjId INT, @p_Out BIT OUTPUT', @p_ObjId = @v_ObjectId, @p_Out = @v_IsTemporal OUTPUT
 ;WITH XMLNAMESPACES ('http://james.newtonking.com/projects/json' AS json)
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
@@ -29,8 +61,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
        CASE WHEN st.is_tracked_by_cdc = 1 THEN 'true' ELSE 'false' END AS [EnableCDC],
        -- System-versioning round-trip (#369): emit IsTemporal only when true. sys.tables.temporal_type is
-       -- 2016+ (safe at the current 2017 floor; gate this + generated_always_type below when < 2016).
-       CASE WHEN st.temporal_type = 2 THEN 'true' END AS [IsTemporal],
+       -- 2016+, so it is read into @v_IsTemporal via the version-gated dynamic pre-stage above (0 below 2016).
+       CASE WHEN @v_IsTemporal = 1 THEN 'true' END AS [IsTemporal],
        -- Sticky drop-protection marker (only when set true). Read from the PreventDrop extended property. #270
        CASE WHEN (SELECT CONVERT(NVARCHAR(50), [value])
                     FROM fn_listextendedproperty(N'PreventDrop', N'Schema', @p_Schema, N'Table', @p_Table, default, default)) = 'true'
@@ -65,12 +97,10 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        CASE WHEN ISNULL(cc.is_persisted, 0) = 1 THEN 'true' ELSE 'false' END AS [Persisted],
                        CASE WHEN sc.is_sparse = 1 THEN 'true' ELSE 'false' END AS [Sparse],
                        ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') AS [Collation],
-                       ISNULL(mc.masking_function, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,
-                       ISNULL(sc.encryption_type_desc, 'NONE') COLLATE DATABASE_DEFAULT AS EncryptionType,
-                       ISNULL((SELECT '[' + cek.[name] + ']'
-                                 FROM sys.column_encryption_keys cek WITH (NOLOCK)
-                                WHERE cek.column_encryption_key_id = sc.column_encryption_key_id), '') COLLATE DATABASE_DEFAULT AS EncryptionKey,
-                       ISNULL(sc.encryption_algorithm_name, '') COLLATE DATABASE_DEFAULT AS EncryptionAlgorithm,
+                       ISNULL(cm.MaskingFunction, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,
+                       ISNULL(cm.EncryptionType, 'NONE') COLLATE DATABASE_DEFAULT AS EncryptionType,
+                       ISNULL(cm.EncryptionKey, '') COLLATE DATABASE_DEFAULT AS EncryptionKey,
+                       ISNULL(cm.EncryptionAlgorithm, '') COLLATE DATABASE_DEFAULT AS EncryptionAlgorithm,
                        '' AS [OldName]
                   FROM INFORMATION_SCHEMA.COLUMNS c WITH (NOLOCK)
                   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = st.[object_id] AND sc.[name] = c.COLUMN_NAME
@@ -81,13 +111,13 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                                                                  AND cc.[name] = c.COLUMN_NAME
                   LEFT JOIN sys.identity_columns ic WITH (NOLOCK) ON ic.[object_id] = st.[object_id]
                                                                  AND ic.[Name] = c.COLUMN_NAME
-                  LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[object_id] = st.[object_id]
-                                                               AND mc.[name] = c.COLUMN_NAME
+                  LEFT JOIN #ColMeta cm ON cm.[column_id] = sc.column_id
                   WHERE c.TABLE_SCHEMA = t.TABLE_SCHEMA
                     AND c.TABLE_NAME = t.TABLE_NAME
                     -- Exclude the temporal period columns (GENERATED ALWAYS AS ROW START/END); regenerated
-                    -- from IsTemporal on apply (#369).
-                    AND sc.generated_always_type = 0
+                    -- from IsTemporal on apply (#369). generated_always_type is 2016+ -> staged into #ColMeta
+                    -- (0 below 2016, where no period columns exist).
+                    AND ISNULL(cm.GeneratedAlwaysType, 0) = 0
                   ORDER BY c.COLUMN_NAME
                   FOR XML PATH('Columns'), TYPE),
        (SELECT 'true' AS [@json:Array],
