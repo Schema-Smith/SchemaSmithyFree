@@ -16,7 +16,7 @@ They answer different questions, and none is the "advanced" version of another:
 
 - **Gating on server version** (PostgreSQL / MySQL / MariaDB) — the common case. Compare the MySQL and MariaDB pair specifically: MySQL's feature landed exactly on a major boundary so a major-only test suffices, while MariaDB's landed at 10.7 and a major-only test is wrong in both directions. Most features land mid-major.
 - **Gating on compatibility level** (SQL Server Compat-Level) — the SQL Server-specific trap. A current binary can host an old-compat database, so `SERVERPROPERTY('ProductMajorVersion')` does **not** answer "what syntax can I use". Gate syntax on compat level, features on server version.
-- **Gating on state** (SQL Server Rolling-Rollout) — nothing to do with capability. The engine *can* do it; the DBA has not approved it for this tenant in this maintenance window yet. Reach for this when the DDL is expensive, not as a more sophisticated version gate.
+- **Gating on state** (SQL Server Rolling-Rollout) — nothing to do with capability. The engine *can* do it; nobody has said yes for this target yet. Reach for this only when the condition is something the target **cannot detect** — see below.
 
 Each demo is self-contained: schema package, `docker-compose.yml` with the engine pair (or single instance + multi-DB for the SQL Server one), launcher scripts (`run-demo.sh` / `run-demo.cmd`), and a one-page README with the expected output.
 
@@ -38,9 +38,20 @@ Three **version-gate** shapes (PostgreSQL, MySQL, MariaDB), one **compatibility-
 
 - **Version-gate:** the same JSON column declaration carries an engine-version expression. The older engine evaluates it as false and skips the column; the newer one evaluates it as true and applies it. The deploy artifact is identical; only the target engine's version differs.
 - **Compatibility-level gate:** the same package deploys to two databases on **one** server, and a whole view implementation is swapped by folder-level gating. This exists because SQL Server decouples syntax availability from the server binary — a current server can host an old-compat database where newer syntax will not parse. It is the one case where a server-version test gives the wrong answer.
-- **State-gate:** the same JSON index declaration carries an `EXISTS`-against-control-table expression. The row in `dbo.RolloutControl` is the DBA's per-database approval lever — flip it to `Ready` when a tenant is approved for the heavy DDL in this maintenance window, leave it `Pending` otherwise. Same package every run; only approved tenants take the index.
+- **State-gate:** the same JSON index declaration carries an `EXISTS`-against-control-table expression. The row in `dbo.RolloutControl` is the approval lever — flip it to `Ready` when a tenant is cleared, leave it `Pending` otherwise. Same package every run; only approved tenants take the index. This shape exists for conditions the server has no way to detect: a maintenance-window approval for expensive DDL, a customer's opt-in to a feature, an environment signed off as ready.
 
-**These are peers, not a progression.** Pick by the question you are actually asking: *can this target do it* (version / compat) or *has someone approved it here yet* (state). The state gate is not the mature form of a version gate — it buys deliberate human control at the cost of automatic convergence, which is only worth it when the DDL is expensive.
+**These are peers, not a progression.** The state gate is not the mature form of a version gate. Pick by one question:
+
+> **Can the target answer this itself?**
+
+If yes — server version, compatibility level, an installed extension, an object that already exists — gate on that answer. It resolves automatically, needs nobody's attention, and converges on its own as targets qualify.
+
+If no, use a control table. Two families genuinely qualify:
+
+- **Cost / scheduling.** The DDL is long-running or lock-heavy, so it has to be scheduled per tenant per maintenance window. (That is this demo bundle's Rolling-Rollout.)
+- **Facts that live outside the database.** Customer opt-in to a feature, environmental readiness sign-off, contractual entitlement. No query answers "has this customer bought the module?"
+
+**The anti-pattern: a control table for something easily detectable.** If the server can tell you, ask the server. A hand-maintained row standing in for a detectable fact is toil you invented, and it drifts — eventually the row says `Ready` for something that isn't, or `Pending` for something that shipped months ago. Control tables are for what the engine *cannot* know, not for what someone would prefer to control.
 
 Each shape puts the conditional logic **in the schema package**, in the language the target engine already speaks, instead of in a CI wrapper.
 
