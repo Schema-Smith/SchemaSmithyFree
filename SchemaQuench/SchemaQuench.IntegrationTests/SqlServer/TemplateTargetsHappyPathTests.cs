@@ -342,6 +342,68 @@ public class TemplateTargetsHappyPathTests
     }
 
     [Test]
+    public void RealCompat100Database_AutoSelectsXmlAndDeploys_MatchingModern()
+    {
+        // F2 floor proof: a REAL compat-100 database (NOT the Target:CompatEncoding override) now clears
+        // pre-flight (the floor is compat 100, F1) and the ingest encoding auto-selects XML from the detected
+        // compat, deploying a schema identical to a modern (compat-default, JSON) deploy of the same product.
+        // Exercises the whole floor chain end to end: detect compat 100 → pass pre-flight → auto-select XML →
+        // kindle XML helpers → apply. This is the compat-100 integration coverage inside the existing SQL
+        // Server context (no new CI leg / status-check name). Before F1 the compat-100 target aborted pre-flight.
+        var compat100Db = MakeTransientDbName("ttdb_c100");
+        var modernDb = MakeTransientDbName("ttdb_c100M");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ClearCheckpointsForProduct();
+            DropTransientDb(compat100Db);
+            DropTransientDb(modernDb);
+            CreateDatabaseAtCompatLevel(compat100Db, 100);   // real compat 100 — no CompatEncoding override
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+            config["Target:Templates:0"] = "Shared";
+            config["Target:TemplateTargets:Shared:CreateIfMissing"] = "true";
+
+            try
+            {
+                // Real compat-100 deploy — NO CompatEncoding override; the encoding auto-selects from detected compat.
+                config["Target:TemplateTargets:Shared:Databases:0"] = compat100Db;
+                config["Target:CompatEncoding"] = null;
+                RunSchemaQuenchWithKindling();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Modern (compat-default → JSON) deploy of the same product.
+                ClearCheckpointsForProduct();
+                config["Target:TemplateTargets:Shared:Databases:0"] = modernDb;
+                RunSchemaQuenchWithKindling();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                Assert.That(GetCompatLevel(compat100Db), Is.EqualTo(100),
+                    "Target database must remain at compatibility level 100 (guards against a silent reset).");
+                var c100Sig = CaptureUserSchemaSignature(compat100Db);
+                var modernSig = CaptureUserSchemaSignature(modernDb);
+                Assert.That(c100Sig, Is.Not.Empty, "Signature capture must find the deployed user tables.");
+                Assert.That(c100Sig, Is.EqualTo(modernSig),
+                    "A real compat-100 deploy (auto-selected XML ingest) must converge a schema identical to the modern (JSON) deploy.");
+            }
+            finally
+            {
+                config["Target:CompatEncoding"] = null;
+                config["Target:TemplateTargets:Shared:CreateIfMissing"] = null;
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTransientDb(compat100Db);
+                DropTransientDb(modernDb);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
     public void DatabaseOverrideWithoutCreateIfMissing_SkipsMissingDbWithInfoLog()
     {
         // CreateIfMissing: false (default) → missing DBs are SKIPPED with an info log; no
@@ -668,26 +730,30 @@ IF SCHEMA_ID('{tenant}') IS NOT NULL EXEC('DROP SCHEMA [{tenant}]');";
         conn.ChangeDatabase(databaseName);
         using var cmd = conn.CreateCommand();
         // COLLATE DATABASE_DEFAULT on every string operand: INFORMATION_SCHEMA/sys expose catalog-collation
-        // sysname columns that otherwise conflict with DB-collation literals under STRING_AGG.
+        // sysname columns that otherwise conflict with DB-collation literals in the per-row concatenation.
+        // The rows are aggregated in C# (sort + join) rather than STRING_AGG so the capture also works
+        // against a compat-100 database (STRING_AGG ... WITHIN GROUP is compat-130-gated).
         cmd.CommandText = @"
-SELECT STRING_AGG(sig, CHAR(10)) WITHIN GROUP (ORDER BY sig) FROM (
-  SELECT 'COL|' + TABLE_SCHEMA COLLATE DATABASE_DEFAULT + '.' + TABLE_NAME COLLATE DATABASE_DEFAULT + '|' +
-         COLUMN_NAME COLLATE DATABASE_DEFAULT + '|' + DATA_TYPE COLLATE DATABASE_DEFAULT + '|' +
-         ISNULL(CONVERT(VARCHAR(20), CHARACTER_MAXIMUM_LENGTH), '') + '|' + IS_NULLABLE COLLATE DATABASE_DEFAULT AS sig
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA <> 'SchemaSmith' AND TABLE_NAME NOT LIKE 'SchemaSmith[_]%'
-  UNION ALL
-  SELECT 'IDX|' + s.name COLLATE DATABASE_DEFAULT + '.' + t.name COLLATE DATABASE_DEFAULT + '|' +
-         i.name COLLATE DATABASE_DEFAULT + '|' + CONVERT(CHAR(1), i.is_unique) + '|' +
-         CONVERT(CHAR(1), i.is_primary_key) + '|' + i.type_desc COLLATE DATABASE_DEFAULT AS sig
-    FROM sys.indexes i
-    JOIN sys.tables t ON i.object_id = t.object_id
-    JOIN sys.schemas s ON t.schema_id = s.schema_id
-    WHERE i.index_id > 0 AND s.name <> 'SchemaSmith'
-) x";
-        var result = cmd.ExecuteScalar();
+SELECT 'COL|' + TABLE_SCHEMA COLLATE DATABASE_DEFAULT + '.' + TABLE_NAME COLLATE DATABASE_DEFAULT + '|' +
+       COLUMN_NAME COLLATE DATABASE_DEFAULT + '|' + DATA_TYPE COLLATE DATABASE_DEFAULT + '|' +
+       ISNULL(CONVERT(VARCHAR(20), CHARACTER_MAXIMUM_LENGTH), '') + '|' + IS_NULLABLE COLLATE DATABASE_DEFAULT AS sig
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA <> 'SchemaSmith' AND TABLE_NAME NOT LIKE 'SchemaSmith[_]%'
+UNION ALL
+SELECT 'IDX|' + s.name COLLATE DATABASE_DEFAULT + '.' + t.name COLLATE DATABASE_DEFAULT + '|' +
+       i.name COLLATE DATABASE_DEFAULT + '|' + CONVERT(CHAR(1), i.is_unique) + '|' +
+       CONVERT(CHAR(1), i.is_primary_key) + '|' + i.type_desc COLLATE DATABASE_DEFAULT AS sig
+  FROM sys.indexes i
+  JOIN sys.tables t ON i.object_id = t.object_id
+  JOIN sys.schemas s ON t.schema_id = s.schema_id
+  WHERE i.index_id > 0 AND s.name <> 'SchemaSmith'";
+        var sigs = new List<string>();
+        using (var reader = cmd.ExecuteReader())
+            while (reader.Read())
+                sigs.Add(reader.GetString(0));
         conn.Close();
-        return result as string ?? "";
+        sigs.Sort(StringComparer.Ordinal);
+        return string.Join("\n", sigs);
     }
 
     private bool ObjectExistsInDb(string databaseName, string objectName, string type)
@@ -701,6 +767,28 @@ SELECT STRING_AGG(sig, CHAR(10)) WITHIN GROUP (ORDER BY sig) FROM (
         var result = cmd.ExecuteScalar();
         conn.Close();
         return Convert.ToInt32(result) == 1;
+    }
+
+    private void CreateDatabaseAtCompatLevel(string databaseName, int compatLevel)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 0;
+        cmd.CommandText = $"CREATE DATABASE [{databaseName}]; ALTER DATABASE [{databaseName}] SET COMPATIBILITY_LEVEL = {compatLevel};";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    private int GetCompatLevel(string databaseName)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT compatibility_level FROM sys.databases WHERE name = '{databaseName.Replace("'", "''")}'";
+        var result = cmd.ExecuteScalar();
+        conn.Close();
+        return Convert.ToInt32(result);
     }
 
     private void DropTransientDb(string databaseName)
