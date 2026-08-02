@@ -20,7 +20,7 @@ namespace SchemaQuench.IntegrationTests.SqlServer
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = "SELECT SchemaSmith.fn_ServerMajorVersion()";
-            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThanOrEqualTo(14)); // SQL Server 2017 floor
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThanOrEqualTo(10)); // SQL Server 2008 (major 10) floor
         }
 
         [Test]

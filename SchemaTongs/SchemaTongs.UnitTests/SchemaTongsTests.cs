@@ -2327,17 +2327,17 @@ public class SchemaTongsTests
             SetUpMocks();
             RegisterConfig(Platform.SqlServer, new Dictionary<string, string>
             {
-                ["Source:Server"] = "SQL2K12",
+                ["Source:Server"] = "SQL2K5",
                 ["Source:Database"] = "LegacyDb"
             });
             RegisterConnectionFactory(Platform.SqlServer);
-            _command.ExecuteScalar().Returns("11");   // SQL Server 2012, below the 2017 floor
+            _command.ExecuteScalar().Returns("9");   // SQL Server 2005, below the 2008 floor
 
             var tongs = new SchemaTongs(Platform.SqlServer);
 
             var ex = Assert.Throws<Exception>(() => tongs.PreFlightSourceVersion());
             Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
-            Assert.That(ex.Message, Does.Contain("SQL2K12"));
+            Assert.That(ex.Message, Does.Contain("SQL2K5"));
 
             FactoryContainer.Clear();
             LogFactory.Clear();

@@ -14,12 +14,12 @@ namespace Schema.Utility
     public static class VersionHelper
     {
         // SQL Server release-year -> major-version map (declared-version year alias). Bottoms out at
-        // 2017 (major 14): the intrinsic floor. 2016 and older are not declarable — they are below the
-        // server-binary version SchemaSmith's engine scripts require (STRING_AGG, 2017). The separate
-        // DB compatibility-level floor is 130 (OPENJSON) — see PreFlightVersionGuard.
+        // 2008 (major 10): the intrinsic floor. Below compat 130 SchemaSmith ingests/compares the model
+        // as XML (the JSON cliff), so 2008-2016 are supported; the separate DB compatibility-level floor
+        // is 100 — see PreFlightVersionGuard.
         private static readonly Dictionary<int, int> SqlServerYearToMajor = new()
         {
-            { 2017, 14 }, { 2019, 15 }, { 2022, 16 }
+            { 2008, 10 }, { 2012, 11 }, { 2014, 12 }, { 2016, 13 }, { 2017, 14 }, { 2019, 15 }, { 2022, 16 }
         };
 
         // Intrinsic per-engine hard floor: the lowest version the current script set supports, matching
@@ -28,7 +28,7 @@ namespace Schema.Utility
         // the actual platform (MariaDB's floor differs from MySQL's despite sharing the base engine).
         private static int HardFloorComparable(Platform platform) => platform switch
         {
-            Platform.SqlServer => 14,     // SQL Server 2017
+            Platform.SqlServer => 10,     // SQL Server 2008 (below compat 130 the model is ingested/compared as XML)
             Platform.PostgreSQL => 12,    // PostgreSQL 12 (features above 12 — per-column compression + expression statistics (14), NULLS NOT DISTINCT (15) — are degraded per the unsupported-feature policy)
             Platform.MySQL => 800,        // MySQL 8.0
             Platform.MariaDb => 1006,     // MariaDB 10.6
@@ -41,7 +41,7 @@ namespace Schema.Utility
         /// <summary>Human-friendly form of the hard floor, matching the reference docs' floors table.</summary>
         public static string HardFloorDisplay(Platform platform) => platform switch
         {
-            Platform.SqlServer => "2017 (major 14)",
+            Platform.SqlServer => "2008 (major 10)",
             Platform.PostgreSQL => "12",
             Platform.MySQL => "8.0",
             Platform.MariaDb => "10.6",

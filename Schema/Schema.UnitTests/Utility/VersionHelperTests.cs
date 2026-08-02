@@ -12,6 +12,10 @@ namespace Schema.UnitTests.Utility
         [TestCase("2017", Platform.SqlServer, 14)]
         [TestCase("2019", Platform.SqlServer, 15)]
         [TestCase("2022", Platform.SqlServer, 16)]
+        [TestCase("2008", Platform.SqlServer, 10)]   // floor lowered to 2008 — years 2008-2016 declarable again
+        [TestCase("2012", Platform.SqlServer, 11)]
+        [TestCase("2014", Platform.SqlServer, 12)]
+        [TestCase("2016", Platform.SqlServer, 13)]
         [TestCase("15", Platform.SqlServer, 15)]   // already-a-major declaration
         [TestCase("16", Platform.PostgreSQL, 16)]
         [TestCase("15.3", Platform.PostgreSQL, 15)]
@@ -59,17 +63,17 @@ namespace Schema.UnitTests.Utility
             Assert.That(VersionHelper.IsAtLeast(detected, required), Is.EqualTo(expected));
         }
 
-        // 2016 (and older) is no longer a declarable SQL Server version — the real floor is 2017.
-        [TestCase("2016", Platform.SqlServer)]
-        [TestCase("2014", Platform.SqlServer)]
+        // Years below 2008 (not in the year map) are not declarable — the floor is 2008.
+        [TestCase("2005", Platform.SqlServer)]
+        [TestCase("2000", Platform.SqlServer)]
         public void ParseDeclaredVersion_BelowFloorYear_ReturnsNull(string version, Platform platform)
         {
             Assert.That(VersionHelper.ParseDeclaredVersion(version, platform), Is.Null);
         }
 
-        [TestCase(Platform.SqlServer, 11, true)]    // SQL Server 2012
-        [TestCase(Platform.SqlServer, 13, true)]    // SQL Server 2016
-        [TestCase(Platform.SqlServer, 14, false)]   // 2017 floor
+        [TestCase(Platform.SqlServer, 9, true)]     // SQL Server 2005 — below the 2008 floor
+        [TestCase(Platform.SqlServer, 10, false)]   // 2008 floor
+        [TestCase(Platform.SqlServer, 13, false)]   // SQL Server 2016 — now supported
         [TestCase(Platform.SqlServer, 16, false)]
         [TestCase(Platform.PostgreSQL, 11, true)]   // PostgreSQL 11 (below floor)
         [TestCase(Platform.PostgreSQL, 12, false)]  // 12 floor
@@ -82,7 +86,7 @@ namespace Schema.UnitTests.Utility
             Assert.That(VersionHelper.IsBelowFloor(platform, comparable), Is.EqualTo(expected));
         }
 
-        [TestCase(Platform.SqlServer, "2017 (major 14)")]
+        [TestCase(Platform.SqlServer, "2008 (major 10)")]
         [TestCase(Platform.PostgreSQL, "12")]
         [TestCase(Platform.MySQL, "8.0")]
         [TestCase(Platform.MariaDb, "10.6")]

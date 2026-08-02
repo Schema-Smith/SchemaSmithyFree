@@ -13,33 +13,33 @@ namespace Schema.UnitTests.Utility
         [Test]
         public void CheckOrThrow_BelowServerFloor_Throws_WithClearMessage()
         {
-            var info = new TargetVersionInfo(Platform.SqlServer, "11", 11);   // SQL Server 2012
+            var info = new TargetVersionInfo(Platform.SqlServer, "9", 9);   // SQL Server 2005 — below the 2008 floor
 
             var ex = Assert.Throws<Exception>(() =>
-                PreFlightVersionGuard.CheckOrThrow(info, "SQL2K12\\SC2K12", "Chinook"));
+                PreFlightVersionGuard.CheckOrThrow(info, "SQL2K5\\SC2K5", "Chinook"));
 
             Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
-            Assert.That(ex.Message, Does.Contain("SQL2K12"));
+            Assert.That(ex.Message, Does.Contain("SQL2K5"));
         }
 
         [Test]
-        public void CheckOrThrow_CompatBelow130_Throws_DistinctMessage()
+        public void CheckOrThrow_CompatBelow100_Throws_DistinctMessage()
         {
-            var info = new TargetVersionInfo(Platform.SqlServer, "14", 14, 120);   // SQL Server 2014 compat
+            var info = new TargetVersionInfo(Platform.SqlServer, "10", 10, 90);   // 2008 binary, compat-90 DB
 
             var ex = Assert.Throws<Exception>(() =>
                 PreFlightVersionGuard.CheckOrThrow(info, "srv", "OldDb"));
 
-            Assert.That(ex!.Message, Does.Contain("compatibility level 120"));
+            Assert.That(ex!.Message, Does.Contain("compatibility level 90"));
             Assert.That(ex.Message, Does.Contain("OldDb"));
         }
 
         [Test]
-        public void CheckOrThrow_CompatAtFloor130_DoesNotThrow()
+        public void CheckOrThrow_CompatAtFloor100_DoesNotThrow()
         {
-            // compat 130 (SQL Server 2016) is the real floor: OPENJSON parses at 130 and STRING_AGG
-            // executes at 130 on a 2017+ server (empirically verified — floor-lowering spike 2026-07-27).
-            var info = new TargetVersionInfo(Platform.SqlServer, "14", 14, 130);
+            // compat 100 (SQL Server 2008) is the floor: below compat 130 the model is ingested/compared
+            // as XML (OPENJSON's JSON-path parse-errors below 130), so a compat-100 DB is supported.
+            var info = new TargetVersionInfo(Platform.SqlServer, "10", 10, 100);
 
             Assert.DoesNotThrow(() => PreFlightVersionGuard.CheckOrThrow(info, "srv", "Db"));
         }

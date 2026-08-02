@@ -20,7 +20,7 @@ namespace SchemaQuench.IntegrationTests.SqlServer
 
             var info = TargetVersionDetector.Detect(cmd, Platform.SqlServer);
 
-            Assert.That(info.ServerComparable, Is.GreaterThanOrEqualTo(14)); // SQL Server 2017 (major 14) floor
+            Assert.That(info.ServerComparable, Is.GreaterThanOrEqualTo(10)); // SQL Server 2008 (major 10) floor
         }
     }
 }

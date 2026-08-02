@@ -46,8 +46,9 @@ namespace Schema.Utility
             return new TargetVersionInfo(platform, raw, comparable.Value, compatibilityLevel);
         }
 
-        // The target database's compatibility_level gates STRING_AGG (needs 140) independently of the
-        // server major version — a 2017+ server can still host a database left at compat 130. The
+        // The target database's compatibility_level selects the model-ingest encoding independently of
+        // the server major version — a modern server can still host a database left at compat 100, which
+        // takes the XML ingest/compare path (OPENJSON's JSON-path parse-errors below compat 130). The
         // database name comes from trusted configuration/package data; it is escaped as a string
         // literal (the codebase idiom) rather than parameterized so detection stays self-contained.
         private static int? DetectSqlServerCompatibilityLevel(IDbCommand command, string databaseName)
