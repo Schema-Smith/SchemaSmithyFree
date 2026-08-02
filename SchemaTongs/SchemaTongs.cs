@@ -107,7 +107,8 @@ public class SchemaTongs
     // The wire encoding used to KINDLE and to READ the SQL Server schema model back out of the source.
     // Below the OPENJSON/FOR JSON cliff (pre-2016 binary), or when Source:CompatEncoding=legacy, the
     // model is generated as XML (GenerateTableXml / GenerateIndexedViewXml) and converted back to the
-    // JSON model via ModelXmlSerializer.FromIngestXml. Resolved per source in PreFlightSourceVersion.
+    // JSON model via ModelXmlSerializer.FromIngestXml. Resolved per source in CastSqlServerObjects from
+    // best-effort version detection (defaults to Json when the version is unknown).
     private IngestEncoding _ingestEncoding = IngestEncoding.Json;
 
     public SchemaTongs(Platform platform)
@@ -259,15 +260,6 @@ public class SchemaTongs
             _platform.GetBasePlatform() == Platform.SqlServer ? targetDb : null);
         _progressLog.Info($"Source {info.Platform} version {VersionHelper.DisplayVersion(info)}" +
                           (info.CompatibilityLevel is { } lvl ? $" (compatibility level {lvl})" : ""));
-
-        // Resolve the model-extraction encoding from the detected source (a pre-2016 binary lacks FOR JSON)
-        // and the Source:CompatEncoding override. Detection already happens here, so this is its single
-        // home; CastSqlServerObjects kindles with — and the extraction sites read — the resolved encoding.
-        // SQL-Server-only: PostgreSQL/MySQL/MariaDB extraction is single-path (they keep IngestEncoding.Json).
-        if (_platform.GetBasePlatform() == Platform.SqlServer)
-            _ingestEncoding = CompatEncoding.Select(config["Source:CompatEncoding"],
-                info.CompatibilityLevel, info.ServerComparable);
-
         PreFlightVersionGuard.CheckOrThrow(info, server, targetDb);
     }
 
@@ -980,9 +972,23 @@ public class SchemaTongs
         {
             using var command = connection.CreateCommand();
 
-            // Kindle with the extraction encoding resolved in PreFlightSourceVersion (the XML twins carry
-            // twin proc names — GenerateTableXml / GenerateIndexedViewXml — so kindling with the encoding
-            // installs the right generators; the extraction sites below read _ingestEncoding to call them).
+            // Resolve the model-extraction encoding from the detected source version, best-effort: below the
+            // OPENJSON cliff (a pre-2016 binary / compat < 130), or when Source:CompatEncoding=legacy, extract
+            // as XML; a genuinely undetectable version defaults to JSON (the modern path). Kept self-contained
+            // here (not carried from PreFlightSourceVersion) so extraction picks the right encoding regardless
+            // of call order; the strict "never work blind" version guard stays PreFlightSourceVersion's job.
+            // The XML twins carry twin proc names (GenerateTableXml / GenerateIndexedViewXml), so kindling with
+            // the encoding installs the right generators; the extraction sites below read _ingestEncoding.
+            using (var versionCmd = connection.CreateCommand())
+            {
+                var info = TargetVersionDetector.TryDetect(versionCmd, _platform, targetDb);
+                _ingestEncoding = info == null
+                    ? IngestEncoding.Json
+                    : CompatEncoding.Select(
+                        FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Source:CompatEncoding"],
+                        info.CompatibilityLevel, info.ServerComparable);
+            }
+
             _progressLog.Info("Kindling The Forge");
             ForgeKindler.KindleTheForge(command, _platform, encoding: _ingestEncoding);
 

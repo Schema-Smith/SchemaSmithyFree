@@ -129,12 +129,10 @@ public class SourceCompatEncodingExtractionTests
         LogFactory.Register("ErrorLog", Substitute.For<ILog>());
         LogFactory.Register("ProgressLog", Substitute.For<ILog>());
 
-        // Mirror the CLI sequence (Program.cs): pre-flight resolves the source version + extraction
-        // encoding, then CastTemplate extracts. On the modern container the real compat (150) clears the
-        // floor guard; Source:CompatEncoding=legacy is what forces the XML path.
-        var tongs = new SchemaTongs(Platform.SqlServer);
-        tongs.PreFlightSourceVersion();
-        tongs.CastTemplate();
+        // CastTemplate resolves its own extraction encoding (best-effort version detection), so it is called
+        // WITHOUT PreFlightSourceVersion here — proving extraction is self-sufficient regardless of call
+        // order. On the modern container Source:CompatEncoding=legacy forces the XML path.
+        new SchemaTongs(Platform.SqlServer).CastTemplate();
         return productPath;
     }
 

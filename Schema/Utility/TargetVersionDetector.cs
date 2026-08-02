@@ -46,6 +46,33 @@ namespace Schema.Utility
             return new TargetVersionInfo(platform, raw, comparable.Value, compatibilityLevel);
         }
 
+        /// <summary>
+        /// Best-effort detection for callers that can safely proceed with a default when the version is
+        /// unknown — e.g. selecting the model-ingest encoding, where JSON is the safe modern default.
+        /// Unlike <see cref="Detect"/> this returns <c>null</c> instead of throwing on an undetectable or
+        /// engine-ambiguous version; it applies no "never work blind" guard — that stays a caller concern
+        /// (the pre-flight <see cref="PreFlightVersionGuard"/>).
+        /// </summary>
+        public static TargetVersionInfo TryDetect(IDbCommand command, Platform platform, string databaseName = null)
+        {
+            command.CommandText = GetVersionQuery(platform);
+            var raw = command.ExecuteScalar()?.ToString();
+
+            var comparable = VersionHelper.ParseDetectedVersion(raw, platform);
+            if (comparable == null) return null;
+
+            // MySQL and MariaDB share the VERSION() query; a mismatch is ambiguous, not throwing here.
+            var isMariaDb = raw != null && raw.IndexOf("MariaDB", StringComparison.OrdinalIgnoreCase) >= 0;
+            if ((platform == Platform.MariaDb && !isMariaDb) || (platform == Platform.MySQL && isMariaDb))
+                return null;
+
+            int? compatibilityLevel = null;
+            if (platform.GetBasePlatform() == Platform.SqlServer && !string.IsNullOrWhiteSpace(databaseName))
+                compatibilityLevel = DetectSqlServerCompatibilityLevel(command, databaseName);
+
+            return new TargetVersionInfo(platform, raw, comparable.Value, compatibilityLevel);
+        }
+
         // The target database's compatibility_level selects the model-ingest encoding independently of
         // the server major version — a modern server can still host a database left at compat 100, which
         // takes the XML ingest/compare path (OPENJSON's JSON-path parse-errors below compat 130). The
