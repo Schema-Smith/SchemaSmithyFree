@@ -39,7 +39,7 @@
       "Default": "uuid()",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "Collation": "utf8mb4_0900_ai_ci",
+      "Collation": "utf8mb4_unicode_ci",
       "CharacterSet": "utf8mb4"
     },
     {
@@ -47,7 +47,7 @@
       "DataType": "varchar(10)",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "Collation": "utf8mb4_0900_ai_ci",
+      "Collation": "utf8mb4_unicode_ci",
       "CharacterSet": "utf8mb4"
     }
   ],

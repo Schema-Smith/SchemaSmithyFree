@@ -25,7 +25,7 @@
       "DataType": "char(1)",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "Collation": "utf8mb4_0900_ai_ci",
+      "Collation": "utf8mb4_unicode_ci",
       "CharacterSet": "utf8mb4"
     },
     {
@@ -39,7 +39,7 @@
       "DataType": "varchar(50)",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "Collation": "utf8mb4_0900_ai_ci",
+      "Collation": "utf8mb4_unicode_ci",
       "CharacterSet": "utf8mb4"
     },
     {
@@ -47,7 +47,7 @@
       "DataType": "varchar(256)",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "Collation": "utf8mb4_0900_ai_ci",
+      "Collation": "utf8mb4_unicode_ci",
       "CharacterSet": "utf8mb4"
     },
     {
@@ -55,7 +55,7 @@
       "DataType": "char(1)",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "Collation": "utf8mb4_0900_ai_ci",
+      "Collation": "utf8mb4_unicode_ci",
       "CharacterSet": "utf8mb4"
     },
     {
@@ -70,7 +70,7 @@
       "DataType": "varchar(15)",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "Collation": "utf8mb4_0900_ai_ci",
+      "Collation": "utf8mb4_unicode_ci",
       "CharacterSet": "utf8mb4"
     },
     {
@@ -79,7 +79,7 @@
       "Nullable": true,
       "ShouldApplyExpression": "",
       "OldName": "",
-      "Collation": "utf8mb4_0900_ai_ci",
+      "Collation": "utf8mb4_unicode_ci",
       "CharacterSet": "utf8mb4"
     },
     {
@@ -88,7 +88,7 @@
       "Default": "uuid()",
       "ShouldApplyExpression": "",
       "OldName": "",
-      "Collation": "utf8mb4_0900_ai_ci",
+      "Collation": "utf8mb4_unicode_ci",
       "CharacterSet": "utf8mb4"
     },
     {

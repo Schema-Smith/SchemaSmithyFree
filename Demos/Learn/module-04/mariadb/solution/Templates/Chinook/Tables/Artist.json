@@ -28,7 +28,7 @@
   "Engine": "InnoDB",
   "RowFormat": "Dynamic",
   "CharacterSet": "utf8mb4",
-  "Collation": "utf8mb4_0900_ai_ci",
+  "Collation": "utf8mb4_unicode_ci",
   "AutoIncrementValue": 6,
   "FullTextIndexes": []
 }

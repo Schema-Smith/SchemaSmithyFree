@@ -16,7 +16,8 @@
 - 16 tables, 7 views, 3 functions, 3 procedures, 3 triggers
 - 15 data tables — `film_text` excluded (populated by `ins_film`/`upd_film`/`del_film` triggers on `film`)
 - MergeType: `Insert/Update` on all data tables
-- Character set: `utf8mb3` (matches jOOQ source); database-level `utf8mb4_0900_ai_ci`
+- Character set: `utf8mb3` (matches jOOQ source); database-level `utf8mb4_unicode_ci`
+  - **Deliberately diverges from the MySQL twin, which uses `utf8mb4_0900_ai_ci`.** That collation is MySQL-only — MariaDB did not gain it until 11.x, so it fails on any MariaDB at or near SchemaSmith's 10.6 floor with `Unknown collation`. `utf8mb4_unicode_ci` is UCA-based like the original and is present on every supported MariaDB (verified on 10.6). Do not "resync" this value to match the MySQL package.
 - Full round-trip validated: quench to clean database, exact row counts, idempotency verified
 
 ## Differences from Previous Product
