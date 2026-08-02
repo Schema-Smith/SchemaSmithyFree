@@ -62,7 +62,7 @@ services:
         condition: service_completed_successfully
 
   demoserver:
-    image: mysql:8.0
+    image: ${MYSQL_IMAGE:-mysql:8.0} # Overridable via MYSQL_IMAGE in .env
     command: --log-bin-trust-function-creators=1 --max-connections=2000
     ports:
       - "${MYSQL_PORT:-3306}:3306"

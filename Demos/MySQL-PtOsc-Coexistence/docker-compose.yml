@@ -10,7 +10,7 @@ name: schemasmith-mysql-ptosc-demo
 
 services:
   mysql9:
-    image: mysql:9.7.0
+    image: ${MYSQL_IMAGE:-mysql:9.7.0} # Overridable via MYSQL_IMAGE; the default pin is deliberate (see .env)
     # log-bin-trust-function-creators=1 lets a non-SUPER user (the demo user) create the
     # stored functions SchemaSmith's KindleTheForge installs. Without it, MySQL rejects
     # CREATE FUNCTION because binary logging is on by default and non-SUPER users could
@@ -58,7 +58,7 @@ services:
         condition: service_healthy
 
   verify:
-    image: mysql:9.7.0
+    image: ${MYSQL_IMAGE:-mysql:9.7.0} # Overridable via MYSQL_IMAGE; the default pin is deliberate (see .env)
     environment:
       MYSQL_PWD: ${MYSQL_PASSWORD}
     entrypoint:

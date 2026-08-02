@@ -10,7 +10,7 @@ name: schemasmith-conditional-sqlserver-demo
 
 services:
   demoserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: ${MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest} # Overridable via MSSQL_IMAGE in .env
     environment:
       ACCEPT_EULA: Y
       MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
@@ -39,7 +39,7 @@ services:
       - "1444:1433"
 
   bootstrap:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: ${MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest} # Overridable via MSSQL_IMAGE in .env
     entrypoint:
       - /bin/bash
       - -c
@@ -75,7 +75,7 @@ services:
         condition: service_completed_successfully
 
   verify:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: ${MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest} # Overridable via MSSQL_IMAGE in .env
     entrypoint:
       - /bin/bash
       - -c

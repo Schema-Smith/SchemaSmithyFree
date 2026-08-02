@@ -77,7 +77,8 @@ services:
         condition: service_completed_successfully
 
   demoserver:
-    image: postgis/postgis:latest # PostGIS-enabled PostgreSQL for spatial data support
+    # Overridable via POSTGRES_IMAGE in .env. Must stay PostGIS-enabled — the demo deploys spatial columns.
+    image: ${POSTGRES_IMAGE:-postgis/postgis:latest} # PostGIS-enabled PostgreSQL for spatial data support
     platform: linux/amd64 # postgis/postgis has no arm64 manifest; force amd64 emulation on macOS arm64
     ports:
       - "${PostGreSQL_PORT:-5432}:5432"

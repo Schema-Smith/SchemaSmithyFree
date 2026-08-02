@@ -70,9 +70,28 @@ Each platform folder contains:
 - A `run-demo.sh` / `run-demo.cmd` launcher
 - A `.env` file with default credentials
 
-### SQL Server version (optional)
+### Engine version (optional)
 
-The SQL Server demo builds on `mcr.microsoft.com/mssql/server:2022-latest` by default. A fresh SQL Server container runs a one-time system-database upgrade on first boot — a few seconds on a fast disk, but many minutes on a slow or resource-constrained Docker backend, and the amount of work varies a lot by version. Point the demo at a different image with `MSSQL_IMAGE` in [`SqlServer/.env`](SqlServer/.env) (the [Learn sandbox](Learn/docker) honors the same variable):
+Every demo lets you point its container at a different engine version, so you can exercise the demo against the version you actually run in production. Each variable lives in that demo's `.env` and falls back to the default shown:
+
+| Demo | Variable | Default |
+| --- | --- | --- |
+| [`SqlServer/`](SqlServer) | `MSSQL_IMAGE` | `mcr.microsoft.com/mssql/server:2022-latest` |
+| [`PostgreSQL/`](PostgreSQL) | `POSTGRES_IMAGE` | `postgis/postgis:latest` |
+| [`MySQL/`](MySQL) | `MYSQL_IMAGE` | `mysql:8.0` |
+| [`MariaDB/`](MariaDB) | `MARIADB_IMAGE` | `mariadb:11.4` |
+| [Learn sandbox](Learn/docker) | `MSSQL_IMAGE`, `POSTGRES_IMAGE`, `MYSQL_IMAGE`, `MARIADB_IMAGE` | as above (`postgres:16` for PG) |
+| [`Conditional/PostgreSQL-VersionGate`](Conditional/PostgreSQL-VersionGate) | `PG_OLD_IMAGE`, `PG_NEW_IMAGE` | `postgres:15`, `postgres:18` |
+| [`Conditional/MySQL-VersionGate`](Conditional/MySQL-VersionGate) | `MYSQL_OLD_IMAGE`, `MYSQL_NEW_IMAGE` | `mysql:8.0`, `mysql:9` |
+| [`Conditional/SqlServer-RollingRollout`](Conditional/SqlServer-RollingRollout) | `MSSQL_IMAGE` | `mcr.microsoft.com/mssql/server:2022-latest` |
+
+Three things to know before you override:
+
+- **The version-gate demos need both sides.** They exist to show the *contrast* between two engine versions, so they take an old and a new image. Keep the old one below the gate and the new one at or above it, or both sides behave identically and the demo stops demonstrating anything. The compose service names (`pg15`, `pg18`, `mysql8`, `mysql9`) reflect the defaults, not your override.
+- **The PostgreSQL demo must stay PostGIS-enabled.** It deploys spatial columns, so use a `postgis/postgis:<pgMajor>-<postgisVersion>` tag rather than a plain `postgres:<n>` one.
+- **SchemaSmith enforces its own floor first.** Point a demo below the supported floor and SchemaQuench refuses at pre-flight with a clear message rather than failing partway through a deploy. That is the guard working, not the demo breaking.
+
+**SQL Server first-boot cost.** A fresh SQL Server container runs a one-time system-database upgrade on first boot — a few seconds on a fast disk, but many minutes on a slow or resource-constrained Docker backend, and the amount of work varies a lot by version:
 
 | `MSSQL_IMAGE` | First boot | Pick it when |
 | --- | --- | --- |

@@ -8,7 +8,9 @@ name: schemasmith-conditional-pg-demo
 
 services:
   pg15:
-    image: postgres:15
+    # Overridable via PG_OLD_IMAGE in .env. Must stay BELOW the gate (PG18) or the demo
+    # loses its contrast — both sides would apply the generated column.
+    image: ${PG_OLD_IMAGE:-postgres:15}
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -22,7 +24,7 @@ services:
       - "5415:5432"
 
   pg18:
-    image: postgres:18
+    image: ${PG_NEW_IMAGE:-postgres:18} # Overridable via PG_NEW_IMAGE; must stay AT/ABOVE PG18
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -66,7 +68,7 @@ services:
         condition: service_healthy
 
   verify:
-    image: postgres:18
+    image: ${PG_NEW_IMAGE:-postgres:18} # Overridable via PG_NEW_IMAGE; must stay AT/ABOVE PG18
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
     entrypoint:

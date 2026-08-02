@@ -62,7 +62,7 @@ services:
         condition: service_completed_successfully
 
   demoserver:
-    image: mariadb:11.4
+    image: ${MARIADB_IMAGE:-mariadb:11.4} # Overridable via MARIADB_IMAGE in .env
     # MariaDB's default max_allowed_packet is smaller than MySQL 8's 64M; raise it to parity so
     # large single-table data deliveries (delivered as one JSON payload) aren't rejected. See the
     # MariaDB delivery note in the end-user docs.

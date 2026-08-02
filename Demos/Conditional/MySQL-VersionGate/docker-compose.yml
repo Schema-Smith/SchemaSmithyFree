@@ -9,7 +9,9 @@ name: schemasmith-conditional-mysql-demo
 
 services:
   mysql8:
-    image: mysql:8.0
+    # Overridable via MYSQL_OLD_IMAGE in .env. Must stay BELOW the gate (MySQL 9) or the
+    # demo loses its contrast — both sides would apply the VECTOR column.
+    image: ${MYSQL_OLD_IMAGE:-mysql:8.0}
     # log-bin-trust-function-creators=1 lets a non-SUPER user (the demo user) create the
     # stored functions SchemaSmith's KindleTheForge installs. Without it, MySQL rejects
     # CREATE FUNCTION because binary logging is on by default and non-SUPER users could
@@ -29,7 +31,7 @@ services:
       - "3308:3306"
 
   mysql9:
-    image: mysql:9
+    image: ${MYSQL_NEW_IMAGE:-mysql:9} # Overridable via MYSQL_NEW_IMAGE; must stay AT/ABOVE MySQL 9
     command: --log-bin-trust-function-creators=1
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -75,7 +77,7 @@ services:
         condition: service_healthy
 
   verify:
-    image: mysql:9
+    image: ${MYSQL_NEW_IMAGE:-mysql:9} # Overridable via MYSQL_NEW_IMAGE; must stay AT/ABOVE MySQL 9
     environment:
       MYSQL_PWD: ${MYSQL_PASSWORD}
     entrypoint:
