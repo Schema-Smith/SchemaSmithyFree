@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -48,12 +49,12 @@ public static class ForgeKindler
     /// helpers. Otherwise drops superseded PG overloads (PG only), re-kindles, and re-stamps.
     /// </summary>
     public static void KindleTheForge(IDbCommand command, Platform platform, bool forceReKindle = false,
-        IngestEncoding encoding = IngestEncoding.Json)
+        IngestEncoding encoding = IngestEncoding.Json, int serverMajorVersion = 0, string policy = "warn")
     {
         AcquireKindleLock(command, platform); // throws ArgumentException for unsupported platforms (before the try)
         try
         {
-            var expected = ComputeKindleStamp(platform, encoding);
+            var expected = ComputeKindleStamp(platform, encoding, serverMajorVersion, policy);
             var current = ReadStamp(command, platform);
             if (!forceReKindle && string.Equals(current, expected, StringComparison.Ordinal))
             {
@@ -64,7 +65,7 @@ public static class ForgeKindler
             if (platform == Platform.PostgreSQL)
                 DropSupersededPostgreSqlOverloads(command);
 
-            KindleScripts(command, platform, encoding);
+            KindleScripts(command, platform, encoding, serverMajorVersion, policy);
             if (platform.GetBasePlatform() == Platform.MySQL)
                 CleanupMySqlStatusMessages(command);
 
@@ -76,10 +77,12 @@ public static class ForgeKindler
         }
     }
 
-    private static void KindleScripts(IDbCommand command, Platform platform, IngestEncoding encoding)
+    private static void KindleScripts(IDbCommand command, Platform platform, IngestEncoding encoding,
+        int serverMajorVersion, string policy)
     {
         foreach (var s in GetKindlingScripts(platform, encoding))
-            KindleOneFile(command, s.FileName, platform, s.ReplaceParseJson, s.ReplaceTableDef, encoding);
+            KindleOneFile(command, s.FileName, platform, s.ReplaceParseJson, s.ReplaceTableDef, encoding,
+                serverMajorVersion, policy);
     }
 
     // MySQL only: clear orphaned status rows from crashed sessions. Operational, not schema
@@ -98,14 +101,18 @@ public static class ForgeKindler
     }
 
     /// <summary>
-    /// Load a kindling script and apply the two static-resource token substitutions. This is the
-    /// single resolution path — KindleOneFile executes the result, ComputeKindleStamp hashes it.
-    /// IMPORTANT: only {{ParseJson}} and {{TableDef}} (both static resources) are resolved here.
-    /// No runtime/iteration-scoped token (e.g. {{SchemaName}}) is ever substituted in the kindle
-    /// path, which is why the stamp is content-only and identical across databases/schemas.
+    /// Load a kindling script and apply the kindle-time token substitutions. This is the single
+    /// resolution path — KindleOneFile executes the result, ComputeKindleStamp hashes it. Resolved
+    /// here: {{ParseJson}} and {{TableDef}} (static resources), plus {{ServerMajorVersion}} and
+    /// {{UnsupportedPolicy}} (the C#-detected server version + resolved run policy baked into the two
+    /// SQL Server helper functions — see the note below). No iteration/schema-scoped token (e.g.
+    /// {{SchemaName}}) is ever substituted in the kindle path, so the stamp is content + server-version
+    /// + policy scoped: identical across databases of the same server and policy, differing only when
+    /// a kindled script body, the detected server version, or the policy changes.
     /// </summary>
     internal static string ResolveKindleScript(string fileName, Platform platform,
-        bool replaceParseJson, bool replaceTableDef, IngestEncoding encoding = IngestEncoding.Json)
+        bool replaceParseJson, bool replaceTableDef, IngestEncoding encoding = IngestEncoding.Json,
+        int serverMajorVersion = 0, string policy = "warn")
     {
         var script = ResourceLoader.Load(fileName, platform)
             ?? throw new Exception($"Script '{fileName}' not found for platform '{platform}'.");
@@ -122,6 +129,12 @@ public static class ForgeKindler
                 ? ModelXmlSerializer.ToIngestXmlObject(tableDefJson, "Table")
                 : tableDefJson);
         }
+        // SQL Server 2008-floor helpers bake the C#-detected server major version and the resolved
+        // unsupported-feature policy at kindle time rather than reading SESSION_CONTEXT (2016+, which
+        // would fail to CREATE the functions on a genuine pre-2016 binary). The tokens appear only in
+        // the two SQL Server helper functions, so these replaces are a no-op on every other script.
+        script = script.Replace("{{ServerMajorVersion}}", serverMajorVersion.ToString(CultureInfo.InvariantCulture))
+                       .Replace("{{UnsupportedPolicy}}", policy);
         return script;
     }
 
@@ -132,11 +145,12 @@ public static class ForgeKindler
     /// </summary>
     public static void KindleOneFile(IDbCommand command, string fileName, Platform platform,
         bool replaceParseJsonToken = false, bool replaceTableDefToken = false,
-        IngestEncoding encoding = IngestEncoding.Json)
+        IngestEncoding encoding = IngestEncoding.Json, int serverMajorVersion = 0, string policy = "warn")
     {
         try
         {
-            var script = ResolveKindleScript(fileName, platform, replaceParseJsonToken, replaceTableDefToken, encoding);
+            var script = ResolveKindleScript(fileName, platform, replaceParseJsonToken, replaceTableDefToken,
+                encoding, serverMajorVersion, policy);
 
             if (platform.GetBasePlatform() == Platform.MySQL)
             {
@@ -423,18 +437,21 @@ public static class ForgeKindler
 
     /// <summary>
     /// SHA-256 (lowercase hex) of the resolved kindling scripts concatenated in kindle order.
-    /// Takes ONLY platform — by construction it cannot depend on iteration/schema/database scope,
-    /// so the stamp is content-only and identical on every target for a given kindle-content version.
-    /// Any change to a kindled script OR a token source (e.g. ParseTableJsonIntoTempTables.sql)
-    /// changes the resolved text and therefore the stamp -> the next kindle re-runs automatically.
+    /// Scoped to (platform, encoding, server major version, policy) — it cannot depend on
+    /// iteration/schema/database scope, so the stamp is identical across databases of the same server
+    /// and policy. Any change to a kindled script, a token source (e.g. ParseTableJsonIntoTempTables.sql),
+    /// the detected server version, or the run policy changes the resolved text and therefore the stamp
+    /// -> the next kindle re-runs automatically (alternating version/policy across runs re-kindles; cheap).
     /// </summary>
-    public static string ComputeKindleStamp(Platform platform, IngestEncoding encoding = IngestEncoding.Json)
+    public static string ComputeKindleStamp(Platform platform, IngestEncoding encoding = IngestEncoding.Json,
+        int serverMajorVersion = 0, string policy = "warn")
     {
         var sb = new StringBuilder();
         // The XML encoding swaps in different script bodies (and drops fn_FormatJson), so the concatenated
         // resolved text — and therefore the stamp — already differs from Json; no extra discriminator needed.
         foreach (var s in GetKindlingScripts(platform, encoding))
-            sb.Append(ResolveKindleScript(s.FileName, platform, s.ReplaceParseJson, s.ReplaceTableDef, encoding));
+            sb.Append(ResolveKindleScript(s.FileName, platform, s.ReplaceParseJson, s.ReplaceTableDef, encoding,
+                serverMajorVersion, policy));
 
         using var sha = SHA256.Create();
         var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()));

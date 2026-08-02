@@ -250,6 +250,46 @@ public class ForgeKindlerTests
     }
 
     [Test]
+    public void ResolveKindleScript_SqlServerHelpers_BakeVersionAndPolicy_DroppingSessionContext()
+    {
+        // SS-2008 floor: fn_ServerMajorVersion / UnsupportedFeaturePolicy bake the C#-detected version + the
+        // resolved policy at kindle time, so they CREATE on a genuine pre-2016 binary where SESSION_CONTEXT
+        // (the former transport) does not exist.
+        var fn = ForgeKindler.ResolveKindleScript("SchemaSmith.fn_ServerMajorVersion.sql", Platform.SqlServer,
+            replaceParseJson: false, replaceTableDef: false, IngestEncoding.Json, serverMajorVersion: 15);
+        Assert.Multiple(() =>
+        {
+            Assert.That(fn, Does.Contain("NULLIF(15, 0)"), "the detected version must be baked as a literal");
+            Assert.That(fn, Does.Not.Contain("{{ServerMajorVersion}}"), "the version token must be substituted");
+            Assert.That(fn, Does.Not.Contain("SESSION_CONTEXT("), "the 2016+ transport read must be gone");
+        });
+
+        var policyFn = ForgeKindler.ResolveKindleScript("SchemaSmith.UnsupportedFeaturePolicy.sql", Platform.SqlServer,
+            replaceParseJson: false, replaceTableDef: false, IngestEncoding.Json, policy: "fail");
+        Assert.Multiple(() =>
+        {
+            Assert.That(policyFn, Does.Contain("'fail'"), "the resolved policy must be baked");
+            Assert.That(policyFn, Does.Not.Contain("{{UnsupportedPolicy}}"), "the policy token must be substituted");
+            Assert.That(policyFn, Does.Not.Contain("SESSION_CONTEXT("), "the 2016+ transport read must be gone");
+        });
+    }
+
+    [Test]
+    public void ComputeKindleStamp_SqlServer_VariesByBakedVersionAndPolicy()
+    {
+        // Baking the version + policy into the helper bodies makes the stamp server-version + policy scoped:
+        // a different detected version or policy re-kindles (correct — the resolved helper text differs).
+        var v15Warn = ForgeKindler.ComputeKindleStamp(Platform.SqlServer, IngestEncoding.Json, serverMajorVersion: 15, policy: "warn");
+        var v10Warn = ForgeKindler.ComputeKindleStamp(Platform.SqlServer, IngestEncoding.Json, serverMajorVersion: 10, policy: "warn");
+        var v15Fail = ForgeKindler.ComputeKindleStamp(Platform.SqlServer, IngestEncoding.Json, serverMajorVersion: 15, policy: "fail");
+        Assert.Multiple(() =>
+        {
+            Assert.That(v15Warn, Is.Not.EqualTo(v10Warn), "a different detected version must change the stamp");
+            Assert.That(v15Warn, Is.Not.EqualTo(v15Fail), "a different policy must change the stamp");
+        });
+    }
+
+    [Test]
     public void GetKindlingScriptNames_MariaDb_MatchesMySql()
     {
         // MariaDb is a MySQL variant: it inherits the MySQL kindling list via base-platform

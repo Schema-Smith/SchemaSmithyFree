@@ -127,6 +127,10 @@ public class DatabaseQuench
     // Defaults to Json; stays Json for PostgreSQL/MySQL and when kindling is suppressed (helpers are then
     // presumed already kindled with the JSON encoding against a compat-130+ database).
     private IngestEncoding _ingestEncoding = IngestEncoding.Json;
+    // SQL Server: the detected server major version (10=2008 … 16=2022; 0 until detected / non-SQL-Server).
+    // Baked into SchemaSmith.fn_ServerMajorVersion at kindle time so the version-gated helpers work on a
+    // genuine pre-2016 binary where SESSION_CONTEXT (the former transport) does not exist.
+    private int _sqlServerMajorVersion;
     private readonly string _whatIfOnly;
     private readonly bool _runScriptsTwice;
     private readonly string _dropRemovedTables;
@@ -482,6 +486,11 @@ public class DatabaseQuench
                                     (info.CompatibilityLevel is { } lvl ? $" (compatibility level {lvl})" : ""));
                     PreFlightVersionGuard.CheckOrThrow(info, _server, _databaseName);
 
+                    // Baked into SchemaSmith.fn_ServerMajorVersion at kindle time (below), so the version-gated
+                    // helpers resolve the real target version on a genuine pre-2016 binary where SESSION_CONTEXT
+                    // (the former transport) is unavailable.
+                    _sqlServerMajorVersion = info.ServerComparable;
+
                     // Select the model-ingest encoding: below the OPENJSON compat cliff (compat < 130 or a
                     // pre-2016 binary), or when Target:CompatEncoding=legacy, the model is ingested/compared as
                     // XML. Both the kindle (below) and the runtime ingest emitters read _ingestEncoding.
@@ -500,7 +509,13 @@ public class DatabaseQuench
                 if (!_suppressKindling)
                 {
                     SafeProgressLog("  Kindling the forge");
-                    ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform, _forceReKindle, _ingestEncoding);
+                    // SQL Server bakes the detected server version + resolved unsupported-feature policy into the
+                    // helper functions at kindle time (dropping the 2016+ SESSION_CONTEXT transport). Both are
+                    // no-ops for PostgreSQL/MySQL (their scripts carry neither token; PG uses a runtime GUC).
+                    var kindlePolicy = string.Equals(FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:UnsupportedFeaturePolicy"],
+                        "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
+                    ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform, _forceReKindle, _ingestEncoding,
+                        _sqlServerMajorVersion, kindlePolicy);
                 }
 
                 // Step: Validate baseline. Resolved against per-iteration tokens (BaselineValidationScript
@@ -1664,27 +1679,18 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
         connection.Open();
 
-        // Set the unsupported-feature policy on every convergence connection (built directly to the
-        // target database, so no ChangeDatabase resets the session): version-gated emit sites read it
-        // via SchemaSmith.UnsupportedFeaturePolicy() to choose degrade-with-warning (default) vs abort.
-        // PostgreSQL and SQL Server now; MySQL/MariaDB (user var) land with their floor-lowering phase.
+        // PostgreSQL: set the unsupported-feature policy on every convergence connection (built directly to
+        // the target database, so no ChangeDatabase resets the session) via a GUC that works on every PG
+        // version; version-gated emit sites read it via SchemaSmith.UnsupportedFeaturePolicy() to choose
+        // degrade-with-warning (default) vs abort. SQL Server bakes the same policy into the helper function
+        // at kindle time instead (dropping the 2016+ sp_set_session_context transport, unavailable on a
+        // genuine old binary) — see the KindleTheForge call in Execute. MySQL/MariaDB land with their floor.
         // The SQL helper defaults to 'warn', so only an explicit 'fail' matters.
         if (_product.Platform.GetBasePlatform() == Platform.PostgreSQL)
         {
             var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
             using var policyCmd = connection.CreateCommand();
             policyCmd.CommandText = $"SET schemasmith.unsupported_policy = '{policy}'";
-            policyCmd.ExecuteNonQuery();
-        }
-        else if (_product.Platform.GetBasePlatform() == Platform.SqlServer)
-        {
-            var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
-            using var policyCmd = connection.CreateCommand();
-            policyCmd.CommandText = "EXEC sp_set_session_context @key = N'schemasmith.unsupported_policy', @value = @policy";
-            var policyParam = policyCmd.CreateParameter();
-            policyParam.ParameterName = "@policy";
-            policyParam.Value = policy;
-            policyCmd.Parameters.Add(policyParam);
             policyCmd.ExecuteNonQuery();
         }
 

@@ -979,6 +979,7 @@ public class SchemaTongs
             // of call order; the strict "never work blind" version guard stays PreFlightSourceVersion's job.
             // The XML twins carry twin proc names (GenerateTableXml / GenerateIndexedViewXml), so kindling with
             // the encoding installs the right generators; the extraction sites below read _ingestEncoding.
+            var sourceMajor = 0;
             using (var versionCmd = connection.CreateCommand())
             {
                 var info = TargetVersionDetector.TryDetect(versionCmd, _platform, targetDb);
@@ -987,10 +988,14 @@ public class SchemaTongs
                     : CompatEncoding.Select(
                         FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Source:CompatEncoding"],
                         info.CompatibilityLevel, info.ServerComparable);
+                sourceMajor = info?.ServerComparable ?? 0;
             }
 
             _progressLog.Info("Kindling The Forge");
-            ForgeKindler.KindleTheForge(command, _platform, encoding: _ingestEncoding);
+            // Bake the detected SOURCE major version into SchemaSmith.fn_ServerMajorVersion so the version-gated
+            // compare/extraction helpers resolve the source version on a genuine pre-2016 binary (where the
+            // former SESSION_CONTEXT transport is unavailable); 0 falls back to the server property on modern.
+            ForgeKindler.KindleTheForge(command, _platform, encoding: _ingestEncoding, serverMajorVersion: sourceMajor);
 
             if (_includeTables) ExtractTableDefinitions(command, targetDb);
             if (_includeSchemas) ScriptSqlServerSchemas(command);

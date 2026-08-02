@@ -4,10 +4,10 @@ CREATE OR ALTER FUNCTION SchemaSmith.UnsupportedFeaturePolicy()
 AS
 BEGIN
   -- Policy for a model feature the DETECTED target version/compat cannot support: 'warn' (default)
-  -- emits the degraded form plus a 'downgraded' ChangeAudit manifest row; 'fail' aborts. Set per
-  -- connection by DatabaseQuench.GetConnection from Target:UnsupportedFeaturePolicy via
-  -- sp_set_session_context, mirroring the PostgreSQL schemasmith.unsupported_policy GUC. Any value
-  -- other than an explicit 'fail' resolves to the safe 'warn' default.
-  RETURN CASE WHEN LOWER(ISNULL(CONVERT(VARCHAR(4), SESSION_CONTEXT(N'schemasmith.unsupported_policy')), 'warn')) = 'fail'
-              THEN 'fail' ELSE 'warn' END
+  -- emits the degraded form plus a 'downgraded' ChangeAudit manifest row; 'fail' aborts. The C# kindler
+  -- bakes the resolved policy into {{UnsupportedPolicy}} at kindle time from Target:UnsupportedFeaturePolicy.
+  -- SESSION_CONTEXT (the former transport) is 2016+ and would fail to CREATE this function on the 2008 /
+  -- compat-100 floor, so it is no longer read; the PostgreSQL schemasmith.unsupported_policy GUC works on
+  -- every PG version and keeps its runtime read. Any value other than an explicit 'fail' resolves to 'warn'.
+  RETURN CASE WHEN LOWER('{{UnsupportedPolicy}}') = 'fail' THEN 'fail' ELSE 'warn' END
 END
