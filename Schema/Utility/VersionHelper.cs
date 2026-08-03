@@ -91,7 +91,7 @@ namespace Schema.Utility
                 // MariaDb VERSION() -> e.g. "10.6.27-MariaDB" -> 1006 (the -MariaDB suffix sits
                 // on the patch part, which ParseMajorMinor ignores).
                 Platform.MySQL or Platform.MariaDb => ParseMajorMinor(rawVersion),
-                // SQL Server SERVERPROPERTY('ProductMajorVersion') -> already the major.
+                // SQL Server SERVERPROPERTY('ProductVersion') -> e.g. "10.50.4000.0" -> major 10 (first part).
                 _ => int.TryParse(SplitFirst(rawVersion), out var v) ? v : (int?)null
             };
         }

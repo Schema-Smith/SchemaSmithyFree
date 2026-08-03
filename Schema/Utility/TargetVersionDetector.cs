@@ -14,7 +14,10 @@ namespace Schema.Utility
     {
         public static string GetVersionQuery(Platform platform) => platform switch
         {
-            Platform.SqlServer => "SELECT CONVERT(int, SERVERPROPERTY('ProductMajorVersion'))",
+            // ProductVersion (e.g. '10.50.4000.0'), NOT ProductMajorVersion: the latter is a 2016+ property
+            // that returns NULL on the pre-2016 binaries the SQL Server 2008 floor targets, so detection would
+            // fail on exactly those servers. ParseDetectedVersion takes the major from the first dotted part.
+            Platform.SqlServer => "SELECT CONVERT(varchar(50), SERVERPROPERTY('ProductVersion'))",
             Platform.PostgreSQL => "SELECT current_setting('server_version_num')",
             Platform.MySQL => "SELECT VERSION()",
             Platform.MariaDb => "SELECT VERSION()",

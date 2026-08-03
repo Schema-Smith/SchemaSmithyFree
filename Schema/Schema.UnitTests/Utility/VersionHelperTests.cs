@@ -48,6 +48,8 @@ namespace Schema.UnitTests.Utility
         [TestCase("8.0.36", Platform.MySQL, 800)]
         [TestCase("8.4.1", Platform.MySQL, 804)]
         [TestCase("16", Platform.SqlServer, 16)]
+        [TestCase("10.50.4000.0", Platform.SqlServer, 10)] // SERVERPROPERTY('ProductVersion') on 2008 R2 -> major 10
+        [TestCase("16.0.1000.6", Platform.SqlServer, 16)]  // ProductVersion on 2022 -> major 16
         [TestCase("10.6.27-MariaDB", Platform.MariaDb, 1006)]
         [TestCase("11.4.2-MariaDB-1:11.4.2+maria~ubu2404", Platform.MariaDb, 1104)]
         public void ParseDetectedVersion_NormalizesToComparable(string raw, Platform platform, int expected)
