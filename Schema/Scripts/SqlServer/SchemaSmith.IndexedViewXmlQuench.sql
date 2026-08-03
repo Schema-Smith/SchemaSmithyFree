@@ -88,7 +88,7 @@ BEGIN
             (SELECT TOP 1 ViewSchema + '.' + ViewName FROM @Views GROUP BY ViewSchema, ViewName HAVING COUNT(*) > 1 ORDER BY ViewSchema, ViewName);
         DECLARE @v_IvDupMsg NVARCHAR(2000) = 'Multiple indexed view variants matched on this target for view ' + @v_IvDupView +
             '. SQL Server allows one view per name — ShouldApplyExpressions must be mutually exclusive.';
-        THROW 51000, @v_IvDupMsg, 1;
+        RAISERROR(@v_IvDupMsg, 16, 1); RETURN;
     END;
 
     -- Validate ownership: fail if any requested views are owned by a different product
@@ -107,7 +107,7 @@ BEGIN
     IF @conflictMsg IS NOT NULL
     BEGIN
         EXEC [SchemaSmith].[PrintWithNoWait] @conflictMsg;
-        THROW 50001, 'One or more indexed views in this quench are already owned by another product', 1;
+        RAISERROR('One or more indexed views in this quench are already owned by another product', 16, 1); RETURN;
     END;
 
     -- Identify existing indexed views owned by this product

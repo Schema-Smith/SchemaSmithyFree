@@ -37,7 +37,7 @@ BEGIN TRY
       'Schema must be populated before reaching IndexOnlyQuench — this is a programmer error. ' +
       'In production the SchemaDefaultResolver fills Schema with the platform default or the {{SchemaName}} token; ' +
       'a blank value here means a caller bypassed Template.Load or substituted the token away.';
-    THROW 51000, @v_Msg, 1;
+    RAISERROR(@v_Msg, 16, 1);
   END
 
   DROP TABLE IF EXISTS #TableDefinitions
@@ -180,7 +180,7 @@ BEGIN TRY
       (SELECT TOP 1 [Schema] + '.' + [TableName] FROM #FullTextIndexes WITH (NOLOCK) GROUP BY [Schema], [TableName] HAVING COUNT(*) > 1 ORDER BY [Schema], [TableName]);
     DECLARE @v_FTDupMsg NVARCHAR(2000) = 'Multiple full-text index variants matched on this target for table ' + @v_FTDupTable +
       '. SQL Server allows one full-text index per table — ShouldApplyExpressions must be mutually exclusive.';
-    THROW 51000, @v_FTDupMsg, 1;
+    RAISERROR(@v_FTDupMsg, 16, 1);
   END
 
   -- Handle index compression changes
@@ -733,5 +733,6 @@ BEGIN TRY
   SET NOCOUNT OFF
 END TRY
 BEGIN CATCH
-  THROW
+  DECLARE @v_RethrowMsg NVARCHAR(4000) = ERROR_MESSAGE();
+  RAISERROR(@v_RethrowMsg, 16, 1);
 END CATCH

@@ -486,7 +486,9 @@ public static class ForgeKindler
                     "DECLARE @r INT; " +
                     $"EXEC @r = sp_getapplock @Resource = '{KindleLockResource}', " +
                     "@LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = 60000; " +
-                    "IF @r < 0 THROW 51000, 'Could not acquire the SchemaSmith kindle lock.', 1;";
+                    // RAISERROR (not THROW) so the guard CREATEs/runs on the SQL Server 2008 floor — THROW is
+                    // 2012+. Severity 16 surfaces as a SqlException to the caller, matching THROW's abort intent.
+                    "IF @r < 0 RAISERROR('Could not acquire the SchemaSmith kindle lock.', 16, 1);";
                 command.ExecuteNonQuery();
                 break;
             case Platform.PostgreSQL:

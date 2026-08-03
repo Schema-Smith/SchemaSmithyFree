@@ -29,7 +29,7 @@ BEGIN TRY
     SET @v_NameBare = REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@v_Name, ''))), '[', ''), ']', '');
 
     IF @v_SchemaBare = '' OR @v_NameBare = ''
-        THROW 51000, 'BootstrapTableQuench: XML must contain non-blank Schema and Name.', 1;
+        RAISERROR('BootstrapTableQuench: XML must contain non-blank Schema and Name.', 16, 1);
 
     DECLARE @v_QualifiedName NVARCHAR(1000) = '[' + @v_SchemaBare + '].[' + @v_NameBare + ']';
     DECLARE @v_FullKey NVARCHAR(1000) = @v_SchemaBare + '.' + @v_NameBare;
@@ -142,5 +142,6 @@ BEGIN TRY
         EXEC(@v_SQL);
 END TRY
 BEGIN CATCH
-    THROW;
+    DECLARE @v_RethrowMsg NVARCHAR(4000) = ERROR_MESSAGE();
+    RAISERROR(@v_RethrowMsg, 16, 1);
 END CATCH
