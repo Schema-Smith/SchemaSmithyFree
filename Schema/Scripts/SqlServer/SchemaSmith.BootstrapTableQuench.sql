@@ -10,7 +10,9 @@
 -- Out of scope: column type changes, drops, FKs, check constraints, ownership tracking.
 -- Idempotent: a second call on the same definition is a no-op.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.BootstrapTableQuench
+IF OBJECT_ID('SchemaSmith.BootstrapTableQuench', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.BootstrapTableQuench
+GO
+CREATE PROCEDURE SchemaSmith.BootstrapTableQuench
     @TableDefinitions NVARCHAR(MAX)
 AS
 BEGIN TRY

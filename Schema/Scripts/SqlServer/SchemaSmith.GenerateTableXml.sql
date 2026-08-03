@@ -23,7 +23,9 @@
 -- guarded DYNAMIC statement (the identifiers live only in a string, never in the compiled body). The static
 -- SELECT reads @v_IsTemporal and LEFT JOINs #ColMeta, both simply empty/0 on an older binary (which has no
 -- temporal/masking/Always-Encrypted objects anyway), so the emitted model degrades cleanly there.
-CREATE OR ALTER PROCEDURE SchemaSmith.GenerateTableXml
+IF OBJECT_ID('SchemaSmith.GenerateTableXml', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.GenerateTableXml
+GO
+CREATE PROCEDURE SchemaSmith.GenerateTableXml
   @p_Schema SYSNAME = 'dbo',
   @p_Table SYSNAME
 AS

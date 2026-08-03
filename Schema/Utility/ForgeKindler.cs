@@ -168,6 +168,17 @@ public static class ForgeKindler
                     command.ExecuteNonQuery();
                 }
             }
+            else if (platform.GetBasePlatform() == Platform.SqlServer)
+            {
+                // Split on GO so a kindled object can use the pre-2016 idempotent create form
+                // (IF OBJECT_ID(...) DROP; GO; CREATE …) instead of the 2016 SP1 CREATE OR ALTER. A script
+                // with no GO yields a single batch, so this is a no-op for any script that hasn't adopted it.
+                foreach (var batch in SqlServerBatchSplitter.Split(script))
+                {
+                    command.CommandText = batch;
+                    command.ExecuteNonQuery();
+                }
+            }
             else
             {
                 command.CommandText = script;

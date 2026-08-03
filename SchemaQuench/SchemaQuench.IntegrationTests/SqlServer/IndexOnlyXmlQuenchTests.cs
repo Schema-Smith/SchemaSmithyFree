@@ -37,7 +37,7 @@ namespace SchemaQuench.IntegrationTests.SqlServer
             {
                 Exec(conn, $"CREATE TABLE dbo.{jt} (Id INT NOT NULL, Label NVARCHAR(100) NULL);");
                 Exec(conn, $"CREATE TABLE dbo.{xt} (Id INT NOT NULL, Label NVARCHAR(100) NULL);");
-                Exec(conn, xmlScript);
+                foreach (var b in SqlServerBatchSplitter.Split(xmlScript)) Exec(conn, b);
 
                 Exec(conn, "EXEC SchemaSmith.IndexOnlyQuench @ProductName = 'EqTest', @TableDefinitions = @p",
                     ("@p", PayloadJson(jt)));

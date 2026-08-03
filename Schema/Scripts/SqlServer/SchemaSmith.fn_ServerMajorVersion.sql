@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER FUNCTION SchemaSmith.fn_ServerMajorVersion()
+IF OBJECT_ID('SchemaSmith.fn_ServerMajorVersion') IS NOT NULL DROP FUNCTION SchemaSmith.fn_ServerMajorVersion
+GO
+CREATE FUNCTION SchemaSmith.fn_ServerMajorVersion()
   RETURNS INT
 AS
 BEGIN

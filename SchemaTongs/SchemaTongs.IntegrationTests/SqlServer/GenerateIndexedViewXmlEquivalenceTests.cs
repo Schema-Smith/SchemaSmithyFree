@@ -43,11 +43,8 @@ public class GenerateIndexedViewXmlEquivalenceTests
         conn.ChangeDatabase(_integrationDb);
         ForgeKindler.KindleTheForge(cmd, Platform.SqlServer);
 
-        cmd.CommandText = ResourceLoader.Load("SchemaSmith.GenerateIndexedViewJson.sql", Platform.SqlServer);
-        cmd.ExecuteNonQuery();
-        cmd.CommandText = ResourceLoader.Load("SchemaSmith.GenerateIndexedViewXml.sql", Platform.SqlServer)
-                          ?? throw new Exception("GenerateIndexedViewXml.sql not found");
-        cmd.ExecuteNonQuery();
+        ForgeKindler.KindleOneFile(cmd, "SchemaSmith.GenerateIndexedViewJson.sql", Platform.SqlServer);
+        ForgeKindler.KindleOneFile(cmd, "SchemaSmith.GenerateIndexedViewXml.sql", Platform.SqlServer);
 
         conn.Close();
     }

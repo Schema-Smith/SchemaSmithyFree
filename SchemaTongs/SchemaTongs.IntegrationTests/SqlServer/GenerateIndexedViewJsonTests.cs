@@ -62,9 +62,8 @@ CREATE NONCLUSTERED INDEX [IX_vTestSummary_Name] ON Test.vTestSummary (Name);
 ";
         cmd.ExecuteNonQuery();
 
-        // Install the extraction function
-        cmd.CommandText = ResourceLoader.Load("SchemaSmith.GenerateIndexedViewJson.sql", Platform.SqlServer);
-        cmd.ExecuteNonQuery();
+        // Install the extraction function (via KindleOneFile so the GO-batched idempotent create is split).
+        ForgeKindler.KindleOneFile(cmd, "SchemaSmith.GenerateIndexedViewJson.sql", Platform.SqlServer);
 
         // Call it
         cmd.CommandText = "SELECT [SchemaSmith].[GenerateIndexedViewJson]('Test', 'vTestSummary')";
@@ -129,9 +128,8 @@ CREATE UNIQUE CLUSTERED INDEX [IX_vProductSummary_Id] ON NoNC.vProductSummary (I
 ";
         cmd.ExecuteNonQuery();
 
-        // Install the extraction function
-        cmd.CommandText = ResourceLoader.Load("SchemaSmith.GenerateIndexedViewJson.sql", Platform.SqlServer);
-        cmd.ExecuteNonQuery();
+        // Install the extraction function (via KindleOneFile so the GO-batched idempotent create is split).
+        ForgeKindler.KindleOneFile(cmd, "SchemaSmith.GenerateIndexedViewJson.sql", Platform.SqlServer);
 
         cmd.CommandText = "SELECT [SchemaSmith].[GenerateIndexedViewJson]('NoNC', 'vProductSummary')";
         var json = cmd.ExecuteScalar()?.ToString();
@@ -193,9 +191,8 @@ CREATE UNIQUE CLUSTERED INDEX [IX_vOrderTotals_Id] ON Multi.vOrderTotals (Id);
 ";
         cmd.ExecuteNonQuery();
 
-        // Install the extraction function
-        cmd.CommandText = ResourceLoader.Load("SchemaSmith.GenerateIndexedViewJson.sql", Platform.SqlServer);
-        cmd.ExecuteNonQuery();
+        // Install the extraction function (via KindleOneFile so the GO-batched idempotent create is split).
+        ForgeKindler.KindleOneFile(cmd, "SchemaSmith.GenerateIndexedViewJson.sql", Platform.SqlServer);
 
         // Extract first view
         cmd.CommandText = "SELECT [SchemaSmith].[GenerateIndexedViewJson]('Multi', 'vOrdersByCustomer')";

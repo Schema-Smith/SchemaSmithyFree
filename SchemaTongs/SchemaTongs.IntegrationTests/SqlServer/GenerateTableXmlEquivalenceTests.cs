@@ -49,10 +49,9 @@ CREATE FULLTEXT STOPLIST [SL_Test];";
         cmd.ExecuteNonQuery();
 
         // GenerateTableXml is not kindled yet (that is the later ForgeKindler encoding-aware wiring task);
-        // create it from its resource so this equivalence test can exercise it directly.
-        cmd.CommandText = ResourceLoader.Load("SchemaSmith.GenerateTableXml.sql", Platform.SqlServer)
-                          ?? throw new Exception("GenerateTableXml.sql not found");
-        cmd.ExecuteNonQuery();
+        // create it from its resource so this equivalence test can exercise it directly. Via KindleOneFile so
+        // the GO-batched idempotent create form (pre-2016 CREATE OR ALTER replacement) is split correctly.
+        ForgeKindler.KindleOneFile(cmd, "SchemaSmith.GenerateTableXml.sql", Platform.SqlServer);
 
         conn.Close();
     }

@@ -8,7 +8,9 @@
 -- one-index view does not collapse to an object when C# (ModelXmlSerializer.FromIngestXml) converts it back
 -- to JSON for DeserializeObject<SqlServerIndexedView>. bit values are emitted as 'true'/'false' text so
 -- Newtonsoft coerces them into the typed model. The definition-extraction logic is identical to the JSON twin.
-CREATE OR ALTER FUNCTION [SchemaSmith].[GenerateIndexedViewXml](@p_Schema SYSNAME, @p_ViewName SYSNAME)
+IF OBJECT_ID('[SchemaSmith].[GenerateIndexedViewXml]') IS NOT NULL DROP FUNCTION [SchemaSmith].[GenerateIndexedViewXml]
+GO
+CREATE FUNCTION [SchemaSmith].[GenerateIndexedViewXml](@p_Schema SYSNAME, @p_ViewName SYSNAME)
 RETURNS NVARCHAR(MAX)
 AS
 BEGIN

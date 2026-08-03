@@ -10,7 +10,9 @@
 -- schema-template iterations treat sibling iterations' indexed views as
 -- "removed from product" and race to drop each other's objects. Tracked in the
 -- Community roadmap under "Slice 3 audit B5".
-CREATE OR ALTER PROCEDURE [SchemaSmith].[IndexedViewQuench]
+IF OBJECT_ID('[SchemaSmith].[IndexedViewQuench]', 'P') IS NOT NULL DROP PROCEDURE [SchemaSmith].[IndexedViewQuench]
+GO
+CREATE PROCEDURE [SchemaSmith].[IndexedViewQuench]
     @ProductName NVARCHAR(200),
     @IndexedViewSchema NVARCHAR(MAX),
     @WhatIf BIT = 0,

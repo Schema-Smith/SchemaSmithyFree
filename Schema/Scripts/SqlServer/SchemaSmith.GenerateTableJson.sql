@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.GenerateTableJSON 
+IF OBJECT_ID('SchemaSmith.GenerateTableJSON', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.GenerateTableJSON
+GO
+CREATE PROCEDURE SchemaSmith.GenerateTableJSON 
   @p_Schema SYSNAME = 'dbo',
   @p_Table SYSNAME
 AS

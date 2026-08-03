@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.MissingTableAndColumnQuench
+IF OBJECT_ID('SchemaSmith.MissingTableAndColumnQuench', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.MissingTableAndColumnQuench
+GO
+CREATE PROCEDURE SchemaSmith.MissingTableAndColumnQuench
     @WhatIf BIT = 0
 AS
 BEGIN TRY

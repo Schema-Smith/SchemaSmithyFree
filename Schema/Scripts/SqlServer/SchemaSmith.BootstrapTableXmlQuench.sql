@@ -7,7 +7,9 @@
 -- name and behaviour; the payload is a single <Table> element (see ModelXmlSerializer.ToIngestXmlObject)
 -- shredded with .nodes()/.value() instead of OPENJSON. Booleans arrive as 'true'/'false' text and are CASEd.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.BootstrapTableQuench
+IF OBJECT_ID('SchemaSmith.BootstrapTableQuench', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.BootstrapTableQuench
+GO
+CREATE PROCEDURE SchemaSmith.BootstrapTableQuench
     @TableDefinitions XML
 AS
 BEGIN TRY

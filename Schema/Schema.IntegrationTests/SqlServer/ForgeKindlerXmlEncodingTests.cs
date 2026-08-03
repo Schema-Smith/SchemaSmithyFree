@@ -46,8 +46,8 @@ public class ForgeKindlerXmlEncodingTests
         cmd.CommandText = "IF SCHEMA_ID('SchemaSmith') IS NULL EXEC('CREATE SCHEMA SchemaSmith')";
         cmd.ExecuteNonQuery();
         // fn_SplitList must CREATE at compat 100 (STRING_SPLIT itself would not exist here).
-        cmd.CommandText = ResourceLoader.Load("SchemaSmith.fn_SplitList.sql", Platform.SqlServer);
-        Assert.DoesNotThrow(() => cmd.ExecuteNonQuery(), "fn_SplitList must CREATE at compatibility level 100");
+        Assert.DoesNotThrow(() => ForgeKindler.KindleOneFile(cmd, "SchemaSmith.fn_SplitList.sql", Platform.SqlServer),
+            "fn_SplitList must CREATE at compatibility level 100");
 
         // Splits in input order (Ordinal), including an embedded-space token and an empty trailing token.
         cmd.CommandText = @"SELECT STUFF((SELECT '|' + [value] FROM SchemaSmith.fn_SplitList('[Id],[Name] DESC,[Amount],', ',')

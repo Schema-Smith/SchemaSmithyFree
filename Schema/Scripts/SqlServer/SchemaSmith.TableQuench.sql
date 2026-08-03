@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.TableQuench
+IF OBJECT_ID('SchemaSmith.TableQuench', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.TableQuench
+GO
+CREATE PROCEDURE SchemaSmith.TableQuench
     @ProductName NVARCHAR(50),
     @TableDefinitions NVARCHAR(MAX),
     @WhatIf BIT = 0,

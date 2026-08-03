@@ -46,7 +46,7 @@ namespace SchemaQuench.IntegrationTests.SqlServer
                 Exec(conn, "EXEC SchemaSmith.BootstrapTableQuench @TableDefinitions = @p", ("@p", DefJson(jsonTable)));
 
                 // XML side: a renamed copy of the XML proc so the shared _mainDb's real proc is untouched.
-                Exec(conn, xmlScript);
+                foreach (var b in SqlServerBatchSplitter.Split(xmlScript)) Exec(conn, b);
                 Exec(conn, "EXEC SchemaSmith.BootstrapTableQuenchXmlTest @TableDefinitions = @p",
                     ("@p", ModelXmlSerializer.ToIngestXmlObject(DefJson(xmlTable), "Table")));
 

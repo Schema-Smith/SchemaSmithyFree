@@ -70,9 +70,7 @@ public class GenerateTableXmlVersionGatingTests
         using var cmd = conn.CreateCommand();
 
         ForgeKindler.KindleTheForge(cmd, Platform.SqlServer, forceReKindle: true, IngestEncoding.Json, serverMajorVersion: major);
-        cmd.CommandText = ResourceLoader.Load("SchemaSmith.GenerateTableXml.sql", Platform.SqlServer)
-                          ?? throw new Exception("GenerateTableXml.sql not found");
-        cmd.ExecuteNonQuery();
+        ForgeKindler.KindleOneFile(cmd, "SchemaSmith.GenerateTableXml.sql", Platform.SqlServer);
 
         cmd.CommandText = "EXEC [SchemaSmith].GenerateTableXml @p_Schema = 'dbo', @p_Table = 'Masked'";
         using var reader = cmd.ExecuteReader();

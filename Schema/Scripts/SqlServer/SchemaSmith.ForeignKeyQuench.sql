@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.ForeignKeyQuench
+IF OBJECT_ID('SchemaSmith.ForeignKeyQuench', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.ForeignKeyQuench
+GO
+CREATE PROCEDURE SchemaSmith.ForeignKeyQuench
     @ProductName NVARCHAR(50),
     @WhatIf BIT = 0
 AS

@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE [SchemaSmith].[FixupIndexedViewOwnership]
+IF OBJECT_ID('[SchemaSmith].[FixupIndexedViewOwnership]', 'P') IS NOT NULL DROP PROCEDURE [SchemaSmith].[FixupIndexedViewOwnership]
+GO
+CREATE PROCEDURE [SchemaSmith].[FixupIndexedViewOwnership]
     @ProductName NVARCHAR(200),
     @SchemaName NVARCHAR(200),
     @ViewName NVARCHAR(200)

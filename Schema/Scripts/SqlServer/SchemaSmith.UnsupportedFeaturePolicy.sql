@@ -1,5 +1,7 @@
 -- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
-CREATE OR ALTER FUNCTION SchemaSmith.UnsupportedFeaturePolicy()
+IF OBJECT_ID('SchemaSmith.UnsupportedFeaturePolicy') IS NOT NULL DROP FUNCTION SchemaSmith.UnsupportedFeaturePolicy
+GO
+CREATE FUNCTION SchemaSmith.UnsupportedFeaturePolicy()
   RETURNS VARCHAR(4)
 AS
 BEGIN

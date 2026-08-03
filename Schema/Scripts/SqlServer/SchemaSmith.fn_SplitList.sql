@@ -8,7 +8,9 @@
 -- can rebuild a list in its original order via FOR XML PATH; [value] matches STRING_SPLIT's column name so
 -- existing WHERE filters port unchanged. An inline table-valued function (no scalar-UDF row cost); the
 -- 10,000-row tally caps list length well above any column/index list.
-CREATE OR ALTER FUNCTION SchemaSmith.fn_SplitList(@List NVARCHAR(MAX), @Delimiter NCHAR(1))
+IF OBJECT_ID('SchemaSmith.fn_SplitList') IS NOT NULL DROP FUNCTION SchemaSmith.fn_SplitList
+GO
+CREATE FUNCTION SchemaSmith.fn_SplitList(@List NVARCHAR(MAX), @Delimiter NCHAR(1))
 RETURNS TABLE
 AS RETURN
   WITH E1(n) AS (SELECT 1 FROM (VALUES (1),(1),(1),(1),(1),(1),(1),(1),(1),(1)) v(n)),

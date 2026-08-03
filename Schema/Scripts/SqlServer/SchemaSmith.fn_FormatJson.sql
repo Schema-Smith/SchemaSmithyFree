@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER FUNCTION SchemaSmith.fn_FormatJson(@Json NVARCHAR(MAX), @Level INT) 
+IF OBJECT_ID('SchemaSmith.fn_FormatJson') IS NOT NULL DROP FUNCTION SchemaSmith.fn_FormatJson
+GO
+CREATE FUNCTION SchemaSmith.fn_FormatJson(@Json NVARCHAR(MAX), @Level INT) 
   RETURNS @r_Result TABLE ([LineNo] INT IDENTITY(1,1), [Line] NVARCHAR(MAX))
 AS 
 BEGIN

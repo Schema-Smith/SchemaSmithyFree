@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.MissingIndexesAndConstraintsQuench
+IF OBJECT_ID('SchemaSmith.MissingIndexesAndConstraintsQuench', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.MissingIndexesAndConstraintsQuench
+GO
+CREATE PROCEDURE SchemaSmith.MissingIndexesAndConstraintsQuench
     @ProductName NVARCHAR(50),
     @WhatIf BIT = 0
 AS

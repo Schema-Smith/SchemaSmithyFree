@@ -45,7 +45,7 @@ namespace SchemaQuench.IntegrationTests.SqlServer
             {
                 Exec(conn, "CREATE TABLE dbo.IvXmlSource (Id INT NOT NULL, Label VARCHAR(100) NOT NULL, Amount DECIMAL(10,2) NOT NULL); " +
                            "CREATE UNIQUE CLUSTERED INDEX UDX_IvXmlSource ON dbo.IvXmlSource (Id);");
-                Exec(conn, xmlScript);
+                foreach (var b in SqlServerBatchSplitter.Split(xmlScript)) Exec(conn, b);
 
                 // Distinct product names: IndexedViewQuench drops product-owned views absent from the
                 // payload, so a shared product would make the second run reap the first run's view.

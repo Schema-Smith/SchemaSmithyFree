@@ -1914,12 +1914,18 @@ SELECT s.name AS SchemaName, v.name AS ViewName
         if (indexedViews.Count == 0) return;
 
         // Install the extraction function — the XML twin (GenerateIndexedViewXml) for the legacy encoding,
-        // else the JSON generator. The XML variant carries a twin name, so both live in SchemaSmith.
-        command.CommandText = ResourceLoader.Load(
+        // else the JSON generator. The XML variant carries a twin name, so both live in SchemaSmith. Split on
+        // GO: the pre-2016 idempotent create form (IF OBJECT_ID(...) DROP; GO; CREATE …) is two batches.
+        var generateFn = ResourceLoader.Load(
             _ingestEncoding == IngestEncoding.Xml
                 ? "SchemaSmith.GenerateIndexedViewXml.sql"
-                : "SchemaSmith.GenerateIndexedViewJson.sql", _platform);
-        command.ExecuteNonQuery();
+                : "SchemaSmith.GenerateIndexedViewJson.sql", _platform)
+            ?? throw new Exception("GenerateIndexedView generator script not found");
+        foreach (var batch in SqlServerBatchSplitter.Split(generateFn))
+        {
+            command.CommandText = batch;
+            command.ExecuteNonQuery();
+        }
 
         var castPath = Path.Combine(_templatePath, "Indexed Views");
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);

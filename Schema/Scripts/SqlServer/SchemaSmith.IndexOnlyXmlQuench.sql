@@ -8,7 +8,9 @@
 -- #Statistics/#FullTextIndexes) is shredded with .nodes()/.value() instead of OPENJSON so the proc CREATEs
 -- below compat 130. The compare/emit half (sys.* reads + STRING_AGG DDL) is identical to the JSON twin.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.IndexOnlyQuench
+IF OBJECT_ID('SchemaSmith.IndexOnlyQuench', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.IndexOnlyQuench
+GO
+CREATE PROCEDURE SchemaSmith.IndexOnlyQuench
   @ProductName NVARCHAR(50),
   @TableDefinitions XML,
   @WhatIf BIT = 0,
