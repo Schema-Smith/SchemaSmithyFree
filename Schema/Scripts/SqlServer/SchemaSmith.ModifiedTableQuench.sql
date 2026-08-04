@@ -649,11 +649,11 @@ BEGIN TRY
   RAISERROR('Collect Existing XML Index Definitions', 10, 100) WITH NOWAIT
   IF OBJECT_ID('tempdb..#ExistingXmlIndexes') IS NOT NULL DROP TABLE #ExistingXmlIndexes
   SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(i.[Name] COLLATE DATABASE_DEFAULT AS NVARCHAR(500)),
-         IndexScript = 'CREATE ' + CASE WHEN i.xml_index_type = 0 THEN 'PRIMARY ' ELSE '' END + 
+         IndexScript = 'CREATE ' + CASE WHEN i.using_xml_index_id IS NULL THEN 'PRIMARY ' ELSE '' END +
                        'XML INDEX [' + i.[name] COLLATE DATABASE_DEFAULT + '] ON [' + OBJECT_SCHEMA_NAME(i.[object_id]) + '].[' + OBJECT_NAME(i.[object_id]) + '] ' + 
                        '([' + COL_NAME(i.[Object_id], ic.column_id) + '])' + 
-                       CASE WHEN i.xml_index_type = 1 
-                            THEN ' USING XML INDEX [' + (SELECT [Name] FROM sys.xml_indexes i2 WHERE i2.[object_id] = i.[object_id] AND i2.index_id = i.using_xml_index_id) COLLATE DATABASE_DEFAULT + '] ' + 
+                       CASE WHEN i.using_xml_index_id IS NOT NULL
+                            THEN ' USING XML INDEX [' + (SELECT [Name] FROM sys.xml_indexes i2 WHERE i2.[object_id] = i.[object_id] AND i2.index_id = i.using_xml_index_id) COLLATE DATABASE_DEFAULT + '] ' +
                                  'FOR ' + i.secondary_type_desc COLLATE DATABASE_DEFAULT 
                             ELSE '' END
     INTO #ExistingXmlIndexes
@@ -1162,7 +1162,7 @@ BEGIN TRY
     JOIN sys.stats si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
                                    AND auto_created = 0
                                    AND user_created = 1
-                                   AND is_temporary = 0
+                                   -- is_temporary (2012 col) omitted: temporary stats exist only on readable secondaries; SchemaSmith targets a writable primary where it is always 0
                                    AND si.[Name] NOT LIKE 'stat[_]%'
                                    AND si.[Name] NOT LIKE 'hind[_]%'
     WHERE t.NewTable = 0

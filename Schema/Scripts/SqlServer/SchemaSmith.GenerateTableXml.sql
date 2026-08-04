@@ -154,8 +154,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        (SELECT 'true' AS [@json:Array],
                '[' + i.[name] COLLATE DATABASE_DEFAULT + ']' AS [Name],
                '[' + COL_NAME(i.[Object_id], ic.column_id) + ']' AS [Column],
-               CASE WHEN i.xml_index_type = 0 THEN 'true' ELSE 'false' END AS [IsPrimary],
-               (SELECT '[' + [Name] COLLATE DATABASE_DEFAULT + ']' FROM sys.xml_indexes i2 WHERE i2.[object_id] = i.[object_id] AND i2.index_id = i.using_xml_index_id AND i.xml_index_type = 1) AS [PrimaryIndex],
+               CASE WHEN i.using_xml_index_id IS NULL THEN 'true' ELSE 'false' END AS [IsPrimary],
+               (SELECT '[' + [Name] COLLATE DATABASE_DEFAULT + ']' FROM sys.xml_indexes i2 WHERE i2.[object_id] = i.[object_id] AND i2.index_id = i.using_xml_index_id AND i.using_xml_index_id IS NOT NULL) AS [PrimaryIndex],
                i.secondary_type_desc COLLATE DATABASE_DEFAULT AS [SecondaryIndexType]
           FROM sys.xml_indexes i WITH (NOLOCK)
           JOIN sys.index_columns ic WITH (NOLOCK) ON i.[object_id] = ic.[object_id] AND i.index_id = ic.index_id
@@ -191,7 +191,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
           WHERE [object_id] = st.[object_id]
             AND auto_created = 0
             AND user_created = 1
-            AND is_temporary = 0
+            -- is_temporary (2012 col) omitted: temporary stats exist only on readable secondaries; SchemaSmith targets a writable primary where it is always 0
             AND [Name] NOT LIKE 'stat[_]%'
             AND [Name] NOT LIKE 'hind[_]%'
           ORDER BY [Name]
