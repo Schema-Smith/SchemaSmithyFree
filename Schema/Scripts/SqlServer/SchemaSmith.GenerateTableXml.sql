@@ -54,6 +54,15 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 13
       WHERE sc.[object_id] = @p_ObjId;
     SELECT @p_Out = CASE WHEN temporal_type = 2 THEN 1 ELSE 0 END FROM sys.tables WITH (NOLOCK) WHERE [object_id] = @p_ObjId;',
     N'@p_ObjId INT, @p_Out BIT OUTPUT', @p_ObjId = @v_ObjectId, @p_Out = @v_IsTemporal OUTPUT
+
+-- sys.stats.is_temporary is a 2012 column, so a STATIC reference is a CREATE-time "invalid column" error on a
+-- pre-2012 binary. Stage the temporary-stat keys via a fn_ServerMajorVersion()>=11 guarded dynamic INSERT (empty
+-- below 2012, where temporary statistics cannot exist) and exclude them from the extracted stats list below,
+-- matching the JSON twin's `is_temporary = 0` filter (temporary stats appear on Always On readable secondaries).
+CREATE TABLE #TempStats ([object_id] INT NOT NULL, stats_id INT NOT NULL)
+IF SchemaSmith.fn_ServerMajorVersion() >= 11
+  EXEC sp_executesql N'INSERT INTO #TempStats ([object_id], stats_id) SELECT [object_id], stats_id FROM sys.stats WITH (NOLOCK) WHERE is_temporary = 1 AND [object_id] = @p_ObjId',
+    N'@p_ObjId INT', @p_ObjId = @v_ObjectId
 ;WITH XMLNAMESPACES ('http://james.newtonking.com/projects/json' AS json)
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
@@ -191,7 +200,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
           WHERE [object_id] = st.[object_id]
             AND auto_created = 0
             AND user_created = 1
-            -- is_temporary (2012 col) omitted: temporary stats exist only on readable secondaries; SchemaSmith targets a writable primary where it is always 0
+            AND NOT EXISTS (SELECT 1 FROM #TempStats ts WITH (NOLOCK) WHERE ts.[object_id] = s.[object_id] AND ts.stats_id = s.stats_id)  -- exclude 2012+ temporary stats (staged above; empty pre-2012)
             AND [Name] NOT LIKE 'stat[_]%'
             AND [Name] NOT LIKE 'hind[_]%'
           ORDER BY [Name]
