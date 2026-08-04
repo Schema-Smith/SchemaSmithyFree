@@ -33,7 +33,7 @@
     RAISERROR(@v_Msg, 16, 1);
   END
 
-  DROP TABLE IF EXISTS #TableDefinitions
+  IF OBJECT_ID('tempdb..#TableDefinitions') IS NOT NULL DROP TABLE #TableDefinitions
   -- [_RowId] gives each parsed row a unique identifier for the per-row ShouldApply DELETE (see JSON twin).
   -- [TableXml] carries the whole <Table> element so the nested blocks below re-navigate with .nodes().
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
@@ -58,7 +58,7 @@
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   EXEC(@v_SQL)
 
-  DROP TABLE IF EXISTS #Tables
+  IF OBJECT_ID('tempdb..#Tables') IS NOT NULL DROP TABLE #Tables
   SELECT [Schema], [Name], [CompressionType], [IsTemporal], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
@@ -67,7 +67,7 @@
     FROM #TableDefinitions WITH (NOLOCK);
 
   RAISERROR('Parse Columns from Xml', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #Columns
+  IF OBJECT_ID('tempdb..#Columns') IS NOT NULL DROP TABLE #Columns
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [ColumnName] = SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]),
          -- Canonicalize DATETIME2/TIME/DATETIMEOFFSET to explicit (7) — see JSON twin for the rationale.
@@ -134,7 +134,7 @@
     WHERE NOT EXISTS (SELECT * FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = #TableDefinitions.[Schema] AND C.[TableName] = #TableDefinitions.[Name])
 
   RAISERROR('Parse Indexes from Xml', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #Indexes
+  IF OBJECT_ID('tempdb..#Indexes') IS NOT NULL DROP TABLE #Indexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(NULLIF(RTRIM(i.[CompressionType]), ''), 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
@@ -180,7 +180,7 @@
   EXEC(@v_SQL)
 
   RAISERROR('Parse XML Indexes from Xml', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #XmlIndexes
+  IF OBJECT_ID('tempdb..#XmlIndexes') IS NOT NULL DROP TABLE #XmlIndexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), i.[IsPrimary],
          [Column] = SchemaSmith.fn_SafeBracketWrap(i.[Column]), [PrimaryIndex] = SchemaSmith.fn_SafeBracketWrap(i.[PrimaryIndex]),
@@ -206,7 +206,7 @@
   EXEC(@v_SQL)
 
   RAISERROR('Parse Foreign Keys from Xml', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #ForeignKeys
+  IF OBJECT_ID('tempdb..#ForeignKeys') IS NOT NULL DROP TABLE #ForeignKeys
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [KeyName] = SchemaSmith.fn_SafeBracketWrap(f.[KeyName]),
          [RelatedTableSchema] = SchemaSmith.fn_SafeBracketWrap(f.[RelatedTableSchema]), [RelatedTable] = SchemaSmith.fn_SafeBracketWrap(f.[RelatedTable]),
@@ -252,7 +252,7 @@
   EXEC(@v_SQL)
 
   RAISERROR('Parse Table Level Check Constraints from Xml', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #CheckConstraints
+  IF OBJECT_ID('tempdb..#CheckConstraints') IS NOT NULL DROP TABLE #CheckConstraints
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], c.[ConstraintName], c.[Expression], c.[ShouldApplyExpression], c.[VariantName]
     INTO #CheckConstraints
@@ -273,7 +273,7 @@
   EXEC(@v_SQL)
 
   RAISERROR('Parse Statistics from Xml', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #Statistics
+  IF OBJECT_ID('tempdb..#Statistics') IS NOT NULL DROP TABLE #Statistics
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [StatisticName] = SchemaSmith.fn_SafeBracketWrap(s.[StatisticName]), [SampleSize] = ISNULL(s.[SampleSize], 0), s.[FilterExpression],
          [Columns] = STUFF((SELECT ',' + SchemaSmith.fn_SafeBracketWrap([value]) FROM SchemaSmith.fn_SplitList(s.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '' ORDER BY [Ordinal] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
@@ -298,7 +298,7 @@
   EXEC(@v_SQL)
 
   RAISERROR('Parse Full Text Indexes from Xml', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #FullTextIndexes
+  IF OBJECT_ID('tempdb..#FullTextIndexes') IS NOT NULL DROP TABLE #FullTextIndexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]),
          f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),

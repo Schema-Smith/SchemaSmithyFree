@@ -45,7 +45,7 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Collect table level extended properties', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #TableProperties
+  IF OBJECT_ID('tempdb..#TableProperties') IS NOT NULL DROP TABLE #TableProperties
   SELECT [Schema], objname COLLATE DATABASE_DEFAULT AS TableName, x.[Name] COLLATE DATABASE_DEFAULT AS PropertyName, CONVERT(NVARCHAR(50), x.[value]) COLLATE DATABASE_DEFAULT AS [value]
     INTO #TableProperties
     FROM #SchemaList WITH (NOLOCK)
@@ -103,7 +103,7 @@ BEGIN TRY
   IF @DropTablesRemovedFromProduct = 1
   BEGIN
     RAISERROR('Identify tables removed from the product', 10, 100) WITH NOWAIT
-    DROP TABLE IF EXISTS #TablesRemovedFromProduct
+    IF OBJECT_ID('tempdb..#TablesRemovedFromProduct') IS NOT NULL DROP TABLE #TablesRemovedFromProduct
     SELECT tp.[Schema], tp.TableName
       INTO #TablesRemovedFromProduct
       FROM #TableProperties tp
@@ -127,7 +127,7 @@ BEGIN TRY
       -- (history_table_id is only valid while versioning is on), then turn versioning off so the
       -- table can be dropped; the now-orphaned history table is dropped after the main drop below.
       RAISERROR('Turn off system versioning for temporal tables removed from the product', 10, 100) WITH NOWAIT
-      DROP TABLE IF EXISTS #RemovedTemporalHistory
+      IF OBJECT_ID('tempdb..#RemovedTemporalHistory') IS NOT NULL DROP TABLE #RemovedTemporalHistory
       CREATE TABLE #RemovedTemporalHistory (HistSchema NVARCHAR(128) COLLATE DATABASE_DEFAULT NULL, HistName NVARCHAR(128) COLLATE DATABASE_DEFAULT NULL)
       -- sys.tables.temporal_type / history_table_id are 2016+, so a STATIC reference would fail to CREATE this
       -- shared proc on a genuine pre-2016 binary. Populate via a fn_ServerMajorVersion()>=13 guarded dynamic
@@ -149,7 +149,7 @@ BEGIN TRY
 
       RAISERROR('Drop inbound foreign keys referencing tables removed from the product', 10, 100) WITH NOWAIT
       SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping inbound foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                      'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];' + CHAR(13) + CHAR(10) +
+                                      'IF OBJECT_ID(''[' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + fk.[name] + ']'') IS NOT NULL ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT [' + fk.[name] + '];' + CHAR(13) + CHAR(10) +
                                       'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''[' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '].[' + fk.[name] + ']'', ''dropped'');' AS NVARCHAR(MAX))
                                FROM #TablesRemovedFromProduct t WITH (NOLOCK)
                                JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']')
@@ -168,7 +168,7 @@ BEGIN TRY
       SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping table ' + t.[Schema] + '.' + t.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                       CASE WHEN OBJECT_ID('SchemaSmith.CustomTableDrop') IS NOT NULL
                                            THEN 'EXEC SchemaSmith.CustomTableDrop ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ''' + t.[TableName] + ''';'
-                                           ELSE 'DROP TABLE IF EXISTS ' + t.[Schema] + '.[' + t.[TableName] + '];'
+                                           ELSE 'IF OBJECT_ID(''' + t.[Schema] + '.[' + t.[TableName] + ']'') IS NOT NULL DROP TABLE ' + t.[Schema] + '.[' + t.[TableName] + '];'
                                            END + CHAR(13) + CHAR(10) +
                                       'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + t.[Schema] + '.[' + t.[TableName] + ']'', ''dropped'');' AS NVARCHAR(MAX))
                                FROM #TablesRemovedFromProduct t WITH (NOLOCK)
@@ -188,7 +188,7 @@ BEGIN TRY
       BEGIN
         RAISERROR('Drop history tables of temporal tables removed from the product', 10, 100) WITH NOWAIT
         SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping history table ' + h.HistSchema + '.' + h.HistName + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                        'DROP TABLE IF EXISTS [' + h.HistSchema + '].[' + h.HistName + '];' AS NVARCHAR(MAX))
+                                        'IF OBJECT_ID(''[' + h.HistSchema + '].[' + h.HistName + ']'') IS NOT NULL DROP TABLE [' + h.HistSchema + '].[' + h.HistName + '];' AS NVARCHAR(MAX))
                                  FROM #RemovedTemporalHistory h WITH (NOLOCK)
                                  FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
         IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
@@ -215,7 +215,7 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Collect index level extended properties', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #IndexProperties
+  IF OBJECT_ID('tempdb..#IndexProperties') IS NOT NULL DROP TABLE #IndexProperties
   SELECT t.[Schema], t.[Name] AS TableName, objname COLLATE DATABASE_DEFAULT AS IndexName, x.[Name] COLLATE DATABASE_DEFAULT AS PropertyName, CONVERT(NVARCHAR(50), x.[value]) COLLATE DATABASE_DEFAULT AS [value]
     INTO #IndexProperties
     FROM #Tables t WITH (NOLOCK)
@@ -223,7 +223,7 @@ BEGIN TRY
     WHERE x.[Name] COLLATE DATABASE_DEFAULT = 'ProductName'
 
   RAISERROR('Identify indexes removed from the product', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #IndexesRemovedFromProduct
+  IF OBJECT_ID('tempdb..#IndexesRemovedFromProduct') IS NOT NULL DROP TABLE #IndexesRemovedFromProduct
   SELECT xp.[Schema], xp.TableName, xp.IndexName, IsConstraint = CAST(CASE WHEN OBJECT_ID(xp.[Schema] + '.' + xp.IndexName) IS NOT NULL THEN 1 ELSE 0 END AS BIT)
     INTO #IndexesRemovedFromProduct
     FROM #IndexProperties xp
@@ -246,7 +246,7 @@ BEGIN TRY
   -- instead of the 2016 columns. Empty below 2016 (no masked/encrypted columns exist there) so the ISNULL
   -- defaults preserve behavior.
   RAISERROR('Stage version-gated column metadata (masking, Always Encrypted)', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #ColMeta
+  IF OBJECT_ID('tempdb..#ColMeta') IS NOT NULL DROP TABLE #ColMeta
   -- Column names carry an Existing* prefix so they do NOT collide with the model's unqualified [EncryptionType]
   -- / [EncryptionAlgorithm] references in #ColumnChanges (which would make those ambiguous).
   CREATE TABLE #ColMeta
@@ -268,7 +268,7 @@ BEGIN TRY
         LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[object_id] = sc.[object_id] AND mc.column_id = sc.column_id'
 
   RAISERROR('Detect Column Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #ColumnChanges
+  IF OBJECT_ID('tempdb..#ColumnChanges') IS NOT NULL DROP TABLE #ColumnChanges
   SELECT c.[Schema], c.[TableName], c.[ColumnName],
          -- For computed columns, only the expression is needed
          CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) <> ''
@@ -380,7 +380,7 @@ BEGIN TRY
   -- a column drop that never happens. Genuinely-modified columns (DropOnly = 0) are never listed here,
   -- so their transient drop-and-recreate cleanup is untouched.
   RAISERROR('Identify suppressed column drops whose dependents must be retained (#358)', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #SuppressedColumnDrops
+  IF OBJECT_ID('tempdb..#SuppressedColumnDrops') IS NOT NULL DROP TABLE #SuppressedColumnDrops
   SELECT cc.[Schema], cc.[TableName], cc.[ColumnName]
     INTO #SuppressedColumnDrops
     FROM #ColumnChanges cc WITH (NOLOCK)
@@ -408,7 +408,7 @@ BEGIN TRY
   END
 
   RAISERROR('Collect Foreign Keys To Drop', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #FKsToDrop
+  IF OBJECT_ID('tempdb..#FKsToDrop') IS NOT NULL DROP TABLE #FKsToDrop
   SELECT t.[Schema], [TableName] = t.[Name], [FKName] = fk.[Name]
     INTO #FKsToDrop
     FROM #Tables t WITH (NOLOCK)
@@ -419,7 +419,7 @@ BEGIN TRY
 
   RAISERROR('Drop Foreign Keys No Longer Defined In The Product', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + df.[FKName] + '];' + CHAR(13) + CHAR(10) +
+                                  'IF OBJECT_ID(''' + df.[Schema] + '.[' + df.[FKName] + ']'') IS NOT NULL ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT [' + df.[FKName] + '];' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', ''dropped'');' AS NVARCHAR(MAX))
                            FROM #FKsToDrop df WITH (NOLOCK)
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
@@ -432,7 +432,7 @@ BEGIN TRY
         FROM #FKsToDrop df WITH (NOLOCK)
 
   RAISERROR('Identify Fulltext Indexes To Drop Based On Column Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #FTIndexesToDropForChanges
+  IF OBJECT_ID('tempdb..#FTIndexesToDropForChanges') IS NOT NULL DROP TABLE #FTIndexesToDropForChanges
   SELECT DISTINCT cc.[Schema], cc.[TableName]
     INTO #FTIndexesToDropForChanges
     FROM sys.fulltext_index_columns ic WITH (NOLOCK)
@@ -450,7 +450,7 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Collect Existing FullText Indexes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #ExistingFullTextIndexes
+  IF OBJECT_ID('tempdb..#ExistingFullTextIndexes') IS NOT NULL DROP TABLE #ExistingFullTextIndexes
   SELECT t.[Schema], [TableName] = t.[Name],
          STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
                             CASE WHEN fc.type_column_id IS NOT NULL
@@ -469,7 +469,7 @@ BEGIN TRY
     WHERE t.NewTable = 0
   
   RAISERROR('Identify Indexes To Drop Based On Column Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #IndexesToDropForColumnChanges
+  IF OBJECT_ID('tempdb..#IndexesToDropForColumnChanges') IS NOT NULL DROP TABLE #IndexesToDropForColumnChanges
   SELECT DISTINCT cc.[Schema], cc.[TableName], IndexName = i.[name],
          IsConstraint = CAST(CASE WHEN i.is_primary_key = 1 OR i.is_unique_constraint = 1 THEN 1 ELSE 0 END AS BIT),
          IsUnique = i.is_unique,
@@ -522,7 +522,7 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Collect Existing Index Definitions', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #ExistingIndexes
+  IF OBJECT_ID('tempdb..#ExistingIndexes') IS NOT NULL DROP TABLE #ExistingIndexes
   SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(si.[Name] AS NVARCHAR(500)),
          IsConstraint = CAST(CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 1 ELSE 0 END AS BIT),
          IsUnique = si.is_unique, IsClustered = CAST(CASE WHEN si.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT), [FillFactor] = ISNULL(NULLIF(si.fill_factor, 0), 100),
@@ -566,7 +566,7 @@ BEGIN TRY
       AND NOT EXISTS (SELECT * FROM sys.xml_indexes xi WHERE xi.[object_id] = si.[object_id] AND xi.index_id = si.index_id)
     
   RAISERROR('Detect Index Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #IndexChanges
+  IF OBJECT_ID('tempdb..#IndexChanges') IS NOT NULL DROP TABLE #IndexChanges
   SELECT i.[Schema], i.[TableName], i.[IndexName], ei.[IsConstraint], IsUnique = i.[Unique], IsClustered = i.[Clustered]
     INTO #IndexChanges
     FROM #ExistingIndexes ei WITH (NOLOCK)
@@ -592,7 +592,7 @@ BEGIN TRY
                                  ELSE '' END
   
   RAISERROR('Detect Index Renames', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #IndexRenames
+  IF OBJECT_ID('tempdb..#IndexRenames') IS NOT NULL DROP TABLE #IndexRenames
   SELECT i.[Schema], i.[TableName], [NewName] = i.[IndexName], ei.[IsConstraint], IsUnique = i.[Unique], [OldName] = ei.[xIndexName]
     INTO #IndexRenames
     FROM #ExistingIndexes ei WITH (NOLOCK)
@@ -635,11 +635,11 @@ BEGIN TRY
                                   CASE WHEN IsConstraint = 1
                                        THEN CASE WHEN OBJECT_ID(ir.[Schema] + '.' + ir.[NewName]) IS NULL
                                                  THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''OBJECT'';'
-                                                 ELSE 'ALTER TABLE ' + ir.[Schema] + '.' + ir.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + ir.[OldName] + '];'
+                                                 ELSE 'IF OBJECT_ID(''' + ir.[Schema] + '.[' + ir.[OldName] + ']'') IS NOT NULL ALTER TABLE ' + ir.[Schema] + '.' + ir.[TableName] + ' DROP CONSTRAINT [' + ir.[OldName] + '];'
                                                  END
                                        ELSE CASE WHEN INDEXPROPERTY(OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]), SchemaSmith.fn_StripBracketWrapping(ir.[NewName]), 'IndexID') IS NULL
                                                  THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
-                                                 ELSE 'DROP INDEX IF EXISTS [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
+                                                 ELSE 'IF INDEXPROPERTY(OBJECT_ID(''' + ir.[Schema] + '.' + ir.[TableName] + '''), ''' + ir.[OldName] + ''', ''IndexID'') IS NOT NULL DROP INDEX [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
                                                  END
                                        END AS NVARCHAR(MAX))
                            FROM #IndexRenames ir WITH (NOLOCK)
@@ -647,7 +647,7 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Collect Existing XML Index Definitions', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #ExistingXmlIndexes
+  IF OBJECT_ID('tempdb..#ExistingXmlIndexes') IS NOT NULL DROP TABLE #ExistingXmlIndexes
   SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(i.[Name] COLLATE DATABASE_DEFAULT AS NVARCHAR(500)),
          IndexScript = 'CREATE ' + CASE WHEN i.xml_index_type = 0 THEN 'PRIMARY ' ELSE '' END + 
                        'XML INDEX [' + i.[name] COLLATE DATABASE_DEFAULT + '] ON [' + OBJECT_SCHEMA_NAME(i.[object_id]) + '].[' + OBJECT_NAME(i.[object_id]) + '] ' + 
@@ -663,7 +663,7 @@ BEGIN TRY
     WHERE t.NewTable = 0
 
   RAISERROR('Detect Xml Index Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #XmlIndexChanges
+  IF OBJECT_ID('tempdb..#XmlIndexChanges') IS NOT NULL DROP TABLE #XmlIndexChanges
   SELECT i.[Schema], i.[TableName], i.[IndexName]
     INTO #XmlIndexChanges
     FROM #ExistingXmlIndexes ei WITH (NOLOCK)
@@ -681,7 +681,7 @@ BEGIN TRY
                                  ELSE '' END
   
   RAISERROR('Detect Xml Index Renames', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #XmlIndexRenames
+  IF OBJECT_ID('tempdb..#XmlIndexRenames') IS NOT NULL DROP TABLE #XmlIndexRenames
   SELECT i.[Schema], i.[TableName], [NewName] = i.[IndexName], [OldName] = ei.[xIndexName]
     INTO #XmlIndexRenames
     FROM #ExistingXmlIndexes ei WITH (NOLOCK)
@@ -704,7 +704,7 @@ BEGIN TRY
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN INDEXPROPERTY(OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]), SchemaSmith.fn_StripBracketWrapping(ir.[NewName]), 'IndexID') IS NULL
                                        THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
-                                       ELSE 'DROP INDEX IF EXISTS [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
+                                       ELSE 'IF INDEXPROPERTY(OBJECT_ID(''' + ir.[Schema] + '.' + ir.[TableName] + '''), ''' + ir.[OldName] + ''', ''IndexID'') IS NOT NULL DROP INDEX [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
                                        END AS NVARCHAR(MAX))
                            FROM #XmlIndexRenames ir WITH (NOLOCK)
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
@@ -752,7 +752,7 @@ BEGIN TRY
   END
 
   RAISERROR('Identify unknown and modified indexes to drop', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #IndexesToDrop
+  IF OBJECT_ID('tempdb..#IndexesToDrop') IS NOT NULL DROP TABLE #IndexesToDrop
   SELECT [Schema] = CAST([Schema] AS NVARCHAR(500)), [TableName] = CAST([TableName] AS NVARCHAR(500)), 
          [IndexName] = CAST(SchemaSmith.fn_StripBracketWrapping([IndexName]) AS NVARCHAR(500)), [IsConstraint], [IsUnique] = i.[is_unique], 
          [IsClustered] = CAST(CASE WHEN i.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT)
@@ -792,7 +792,7 @@ BEGIN TRY
   
   RAISERROR('Drop Referencing Foreign Keys When Dropping Unique Indexes', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];' AS NVARCHAR(MAX))
+                                  'IF OBJECT_ID(''[' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + fk.[name] + ']'') IS NOT NULL ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT [' + fk.[name] + '];' AS NVARCHAR(MAX))
                            FROM #IndexesToDrop di WITH (NOLOCK)
                            JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(di.[Schema] + '.' + di.[TableName])
                            WHERE IsConstraint = 1 OR IsUnique = 1
@@ -813,8 +813,8 @@ BEGIN TRY
   RAISERROR('Drop Unknown and Modified Indexes', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + 'RAISERROR(''  Dropping ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + di.[Schema] + '.' + di.[TableName] + '.' + di.[IndexName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN IsConstraint = 1
-                                       THEN 'ALTER TABLE ' + di.[Schema] + '.' + di.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + di.[IndexName] + '];'
-                                       ELSE 'DROP INDEX IF EXISTS [' + di.[IndexName] + '] ON ' + di.[Schema] + '.' + di.[TableName] + ';'
+                                       THEN 'IF OBJECT_ID(''' + di.[Schema] + '.[' + di.[IndexName] + ']'') IS NOT NULL ALTER TABLE ' + di.[Schema] + '.' + di.[TableName] + ' DROP CONSTRAINT [' + di.[IndexName] + '];'
+                                       ELSE 'IF INDEXPROPERTY(OBJECT_ID(''' + di.[Schema] + '.' + di.[TableName] + '''), ''' + di.[IndexName] + ''', ''IndexID'') IS NOT NULL DROP INDEX [' + di.[IndexName] + '] ON ' + di.[Schema] + '.' + di.[TableName] + ';'
                                        END + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ''', ''' + di.[Schema] + '.' + di.[TableName] + '.' + di.[IndexName] + ''', ''dropped'');'
                                   FROM #IndexesToDrop di WITH (NOLOCK)
@@ -842,7 +842,7 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Identify Statistics To Drop Based On Column Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #StatisticsToDropForChanges
+  IF OBJECT_ID('tempdb..#StatisticsToDropForChanges') IS NOT NULL DROP TABLE #StatisticsToDropForChanges
   SELECT DISTINCT cc.[Schema], cc.[TableName], [StatName] = i.[name]
     INTO #StatisticsToDropForChanges
     FROM sys.stats i WITH (NOLOCK) 
@@ -863,7 +863,7 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Identify Foreign Keys To Drop Based On Column Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #FKsToDropForChanges
+  IF OBJECT_ID('tempdb..#FKsToDropForChanges') IS NOT NULL DROP TABLE #FKsToDropForChanges
   SELECT DISTINCT cc.[Schema], cc.[TableName], FKName = fk.[name]
     INTO #FKsToDropForChanges
     FROM sys.foreign_key_columns fc WITH (NOLOCK)
@@ -877,13 +877,13 @@ BEGIN TRY
 
   RAISERROR('Drop Foreign Keys Referencing Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + df.[FKName] + '];' AS NVARCHAR(MAX))
+                                  'IF OBJECT_ID(''' + df.[Schema] + '.[' + df.[FKName] + ']'') IS NOT NULL ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT [' + df.[FKName] + '];' AS NVARCHAR(MAX))
                            FROM #FKsToDropForChanges df WITH (NOLOCK)
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Identify Defaults To Drop Based On Column Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #DefaultsToDropForChanges
+  IF OBJECT_ID('tempdb..#DefaultsToDropForChanges') IS NOT NULL DROP TABLE #DefaultsToDropForChanges
   SELECT cc.[Schema], cc.[TableName], DefaultName = dc.[name]
     INTO #DefaultsToDropForChanges
     FROM sys.default_constraints dc WITH (NOLOCK)
@@ -894,13 +894,13 @@ BEGIN TRY
 
   RAISERROR('Drop Defaults Referencing Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping default ' + dd.[Schema] + '.' + dd.[TableName] + '.' + dd.[DefaultName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + dd.[Schema] + '.' + dd.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + dd.[DefaultName] + '];' AS NVARCHAR(MAX))
+                                  'IF OBJECT_ID(''' + dd.[Schema] + '.[' + dd.[DefaultName] + ']'') IS NOT NULL ALTER TABLE ' + dd.[Schema] + '.' + dd.[TableName] + ' DROP CONSTRAINT [' + dd.[DefaultName] + '];' AS NVARCHAR(MAX))
                            FROM #DefaultsToDropForChanges dd WITH (NOLOCK)
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Identify Check Constraints To Drop Based On Column Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #ChecksToDropForChanges
+  IF OBJECT_ID('tempdb..#ChecksToDropForChanges') IS NOT NULL DROP TABLE #ChecksToDropForChanges
   SELECT cc.[Schema], cc.[TableName], CheckName = ck.[name]
     INTO #ChecksToDropForChanges
     FROM sys.check_constraints ck WITH (NOLOCK)
@@ -912,7 +912,7 @@ BEGIN TRY
 
   RAISERROR('Drop Check Constraints Referencing Modified Columns', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping check constraint ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.CheckName + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + fc.CheckName + '];' AS NVARCHAR(MAX))
+                                  'IF OBJECT_ID(''' + fc.[Schema] + '.[' + fc.CheckName + ']'') IS NOT NULL ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT [' + fc.CheckName + '];' AS NVARCHAR(MAX))
                            FROM #ChecksToDropForChanges fc WITH (NOLOCK)
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
@@ -1033,7 +1033,7 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Detect Default Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #DefaultChanges
+  IF OBJECT_ID('tempdb..#DefaultChanges') IS NOT NULL DROP TABLE #DefaultChanges
   SELECT C.[Schema], C.[TableName], C.[ColumnName],
          [DefaultName] = (SELECT [Name]
                           FROM sys.default_constraints dc WITH (NOLOCK)
@@ -1103,13 +1103,13 @@ BEGIN TRY
 
   RAISERROR('Drop Modified Defaults', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping default ' + dc.[Schema] + '.' + dc.[TableName] + '.' + dc.[DefaultName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + dc.[Schema] + '.' + dc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + dc.[DefaultName] + '];' AS NVARCHAR(MAX))
+                                  'IF OBJECT_ID(''' + dc.[Schema] + '.[' + dc.[DefaultName] + ']'') IS NOT NULL ALTER TABLE ' + dc.[Schema] + '.' + dc.[TableName] + ' DROP CONSTRAINT [' + dc.[DefaultName] + '];' AS NVARCHAR(MAX))
                            FROM #DefaultChanges dc WITH (NOLOCK)
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Collect Existing Foreign Keys', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #ExistingFKs
+  IF OBJECT_ID('tempdb..#ExistingFKs') IS NOT NULL DROP TABLE #ExistingFKs
   SELECT t.[Schema], [TableName] = t.[Name],
          FKName = fk.[Name],
          FKScript = '(' + STUFF((SELECT ',' + '[' + COL_NAME(fc.[parent_object_id], fc.parent_column_id) + ']'
@@ -1129,7 +1129,7 @@ BEGIN TRY
     WHERE t.NewTable = 0
 
   RAISERROR('Detect Foreign Key Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #FKChanges
+  IF OBJECT_ID('tempdb..#FKChanges') IS NOT NULL DROP TABLE #FKChanges
   SELECT ek.[Schema], ek.[TableName], ek.[FKName]
     INTO #FKChanges
     FROM #ExistingFKs ek WITH (NOLOCK)
@@ -1142,13 +1142,13 @@ BEGIN TRY
   
   RAISERROR('Drop Modified Foreign Keys', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping Foreign Key ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + fc.[FKName] + '];' AS NVARCHAR(MAX))
+                                  'IF OBJECT_ID(''' + fc.[Schema] + '.[' + fc.[FKName] + ']'') IS NOT NULL ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT [' + fc.[FKName] + '];' AS NVARCHAR(MAX))
                            FROM #FKChanges fc WITH (NOLOCK)
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Collect Existing Statistics Definitions', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #ExistingStats
+  IF OBJECT_ID('tempdb..#ExistingStats') IS NOT NULL DROP TABLE #ExistingStats
   SELECT t.[Schema], [TableName] = t.[Name], [StatsName] = si.[Name],
          StatisticScript = 'CREATE STATISTICS ' +
                            '[' + si.[Name] + '] ON ' + t.[Schema] + '.' + t.[Name] + ' (' +
@@ -1168,7 +1168,7 @@ BEGIN TRY
     WHERE t.NewTable = 0
   
   RAISERROR('Detect Statistics Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #StatsChanges
+  IF OBJECT_ID('tempdb..#StatsChanges') IS NOT NULL DROP TABLE #StatsChanges
   SELECT s.[Schema], s.[TableName], s.[StatisticName]
     INTO #StatsChanges
     FROM #Statistics s WITH (NOLOCK)
@@ -1237,7 +1237,7 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Collect Existing Check Constraints', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #ExistingCheckConstraints
+  IF OBJECT_ID('tempdb..#ExistingCheckConstraints') IS NOT NULL DROP TABLE #ExistingCheckConstraints
   SELECT t.[Schema], [TableName] = t.[Name], [CheckName] = ck.[name], 
          [CheckColumn] = CASE WHEN ck.parent_column_id <> 0 THEN COL_NAME(ck.parent_object_id, ck.parent_column_id) ELSE NULL END,
          [CheckDefinition] = SchemaSmith.fn_StripParenWrapping(ck.[definition])
@@ -1246,7 +1246,7 @@ BEGIN TRY
     JOIN sys.check_constraints ck WITH (NOLOCK) ON ck.[parent_object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
   
   RAISERROR('Detect Column Level Check Constraint Changes', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #CheckChanges
+  IF OBJECT_ID('tempdb..#CheckChanges') IS NOT NULL DROP TABLE #CheckChanges
   SELECT ec.[Schema], ec.[TableName], ec.[CheckName]
     INTO #CheckChanges
     FROM #ExistingCheckConstraints ec WITH (NOLOCK)
@@ -1273,7 +1273,7 @@ BEGIN TRY
   
   RAISERROR('Drop Modified Check Constraints', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + cc.[CheckName] + '];' AS NVARCHAR(MAX))
+                                  'IF OBJECT_ID(''' + cc.[Schema] + '.[' + cc.[CheckName] + ']'') IS NOT NULL ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' DROP CONSTRAINT [' + cc.[CheckName] + '];' AS NVARCHAR(MAX))
                            FROM #CheckChanges cc WITH (NOLOCK)
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
@@ -1316,7 +1316,7 @@ BEGIN TRY
   -- DropCheckConstraintsRemovedFromProduct:false to protect its own).
   RAISERROR('Drop Check Constraints No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping check constraint ' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + ec.[Schema] + '.' + ec.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + ec.[CheckName] + '];' + CHAR(13) + CHAR(10) +
+                                  'IF OBJECT_ID(''' + ec.[Schema] + '.[' + ec.[CheckName] + ']'') IS NOT NULL ALTER TABLE ' + ec.[Schema] + '.' + ec.[TableName] + ' DROP CONSTRAINT [' + ec.[CheckName] + '];' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''dropped'');' AS NVARCHAR(MAX))
                            FROM #ExistingCheckConstraints ec WITH (NOLOCK)
                            JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
@@ -1378,7 +1378,7 @@ BEGIN TRY
           AND [DropOnly] = 0
 
   RAISERROR('Identify Existing Clustered Index Conflicts', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #MissingClusteredIndexTables
+  IF OBJECT_ID('tempdb..#MissingClusteredIndexTables') IS NOT NULL DROP TABLE #MissingClusteredIndexTables
   SELECT DISTINCT i.[Schema], i.[TableName]
     INTO #MissingClusteredIndexTables
     FROM #Indexes i WITH (NOLOCK)
@@ -1391,8 +1391,8 @@ BEGIN TRY
   RAISERROR('Drop Conflicting Clustered Index', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping ' + CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + mct.[Schema] + '.' + mct.[TableName] + '.' + si.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1
-                                       THEN 'ALTER TABLE ' + mct.[Schema] + '.' + mct.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + si.[Name] + '];'
-                                       ELSE 'DROP INDEX IF EXISTS [' + si.[Name] + '] ON ' + mct.[Schema] + '.' + mct.[TableName] + ';'
+                                       THEN 'IF OBJECT_ID(''' + mct.[Schema] + '.[' + si.[Name] + ']'') IS NOT NULL ALTER TABLE ' + mct.[Schema] + '.' + mct.[TableName] + ' DROP CONSTRAINT [' + si.[Name] + '];'
+                                       ELSE 'IF INDEXPROPERTY(OBJECT_ID(''' + mct.[Schema] + '.' + mct.[TableName] + '''), ''' + si.[Name] + ''', ''IndexID'') IS NOT NULL DROP INDEX [' + si.[Name] + '] ON ' + mct.[Schema] + '.' + mct.[TableName] + ';'
                                        END AS NVARCHAR(MAX))
                            FROM #MissingClusteredIndexTables mct WITH (NOLOCK)
                            JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(mct.[Schema] + '.' + mct.[TableName])

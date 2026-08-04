@@ -67,7 +67,7 @@ BEGIN
     -- gate DELETEs are built and run against a temp table populated from @Views, then
     -- survivors are reconciled back. Building the aggregate gate SQL directly against
     -- #ViewGate avoids a fragile string REPLACE that a ShouldApplyExpression could corrupt.
-    DROP TABLE IF EXISTS #ViewGate;
+    IF OBJECT_ID('tempdb..#ViewGate') IS NOT NULL DROP TABLE #ViewGate;
     SELECT * INTO #ViewGate FROM @Views;
     DECLARE @gateSql NVARCHAR(MAX);
     SELECT @gateSql = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('DELETE FROM #ViewGate WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect(ShouldApplyExpression) + ');' AS NVARCHAR(MAX))
@@ -79,7 +79,7 @@ BEGIN
         EXEC(@gateSql);
         DELETE FROM @Views WHERE [_RowId] NOT IN (SELECT [_RowId] FROM #ViewGate);
     END;
-    DROP TABLE IF EXISTS #ViewGate;
+    IF OBJECT_ID('tempdb..#ViewGate') IS NOT NULL DROP TABLE #ViewGate;
 
     -- A view name with 2+ surviving variants cannot be honored: SQL Server allows ONE view
     -- per (schema, name). ShouldApplyExpressions for same-named variants must be mutually

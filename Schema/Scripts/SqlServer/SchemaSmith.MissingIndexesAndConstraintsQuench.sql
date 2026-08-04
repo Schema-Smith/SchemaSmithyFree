@@ -13,7 +13,7 @@ BEGIN TRY
   SET NOCOUNT ON
 
   RAISERROR('Collect index level extended properties', 10, 100) WITH NOWAIT
-  DROP TABLE IF EXISTS #IndexProperties
+  IF OBJECT_ID('tempdb..#IndexProperties') IS NOT NULL DROP TABLE #IndexProperties
   SELECT t.[Schema], t.[Name] AS TableName, objname COLLATE DATABASE_DEFAULT AS IndexName, x.[Name] COLLATE DATABASE_DEFAULT AS PropertyName, CONVERT(NVARCHAR(50), x.[value]) COLLATE DATABASE_DEFAULT AS [value]
   INTO #IndexProperties
   FROM #Tables t WITH (NOLOCK)
