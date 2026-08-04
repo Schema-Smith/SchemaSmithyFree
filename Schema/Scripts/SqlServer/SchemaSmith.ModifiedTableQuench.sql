@@ -35,12 +35,13 @@ BEGIN TRY
     FROM #Tables t WITH (NOLOCK)
 
   RAISERROR('Turn off Temporal Tracking for tables no longer defined temporal', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Turn OFF Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Turn OFF Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' SET (SYSTEM_VERSIONING = OFF);' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP PERIOD FOR SYSTEM_TIME;' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #Tables T WITH (NOLOCK)
-    WHERE t.IsTemporal = 0
-      AND OBJECTPROPERTY(OBJECT_ID([Schema] + '.' + [Name]), 'TableTemporalType') = 2
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP PERIOD FOR SYSTEM_TIME;' AS NVARCHAR(MAX))
+                           FROM #Tables T WITH (NOLOCK)
+                           WHERE t.IsTemporal = 0
+                             AND OBJECTPROPERTY(OBJECT_ID([Schema] + '.' + [Name]), 'TableTemporalType') = 2
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Collect table level extended properties', 10, 100) WITH NOWAIT
@@ -52,12 +53,13 @@ BEGIN TRY
     WHERE x.[Name] COLLATE DATABASE_DEFAULT IN ('ProductName', 'PreventDrop')
 
   RAISERROR('Validate Table Ownership', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.[TableName] + ' owned by different product. [' + tp.[Value] + ']'', 10, 100) WITH NOWAIT;' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #Tables t WITH (NOLOCK)
-    JOIN #TableProperties tp WITH (NOLOCK) ON t.[Schema] = tp.[Schema]
-                                          AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName
-    WHERE tp.PropertyName = 'ProductName'
-      AND tp.[value] <> @ProductName
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.[TableName] + ' owned by different product. [' + tp.[Value] + ']'', 10, 100) WITH NOWAIT;' AS NVARCHAR(MAX))
+                           FROM #Tables t WITH (NOLOCK)
+                           JOIN #TableProperties tp WITH (NOLOCK) ON t.[Schema] = tp.[Schema]
+                                                                 AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName
+                           WHERE tp.PropertyName = 'ProductName'
+                             AND tp.[value] <> @ProductName
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   IF EXISTS (SELECT *
@@ -78,9 +80,9 @@ BEGIN TRY
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture tables suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
-    SELECT @v_SQL = STRING_AGG(CAST(
+    SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST(
       'RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.TableName + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + tp.[Schema] + '.[' + tp.TableName + ']'', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + tp.[Schema] + '.[' + tp.TableName + ']'', ''dropSuppressed'');' AS NVARCHAR(MAX))
       FROM #TableProperties tp
       WHERE tp.PropertyName = 'ProductName'
         AND tp.[value] = @ProductName
@@ -94,6 +96,7 @@ BEGIN TRY
                           FROM #Tables t WITH (NOLOCK)
                           WHERE t.[Schema] = tp.[Schema]
                             AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
+      FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
     IF @v_SQL IS NOT NULL EXEC(@v_SQL)
   END
 
@@ -137,18 +140,20 @@ BEGIN TRY
             JOIN sys.tables mt WITH (NOLOCK) ON mt.[object_id] = OBJECT_ID(t.[Schema] + ''.['' + t.[TableName] + '']'') AND mt.temporal_type = 2
             JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = mt.history_table_id
             JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]'
-      SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Turn OFF system versioning for ' + t.[Schema] + '.' + t.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                      'ALTER TABLE ' + t.[Schema] + '.[' + t.[TableName] + '] SET (SYSTEM_VERSIONING = OFF);' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-        FROM #TablesRemovedFromProduct t WITH (NOLOCK)
-        WHERE OBJECTPROPERTY(OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']'), 'TableTemporalType') = 2
+      SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Turn OFF system versioning for ' + t.[Schema] + '.' + t.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                      'ALTER TABLE ' + t.[Schema] + '.[' + t.[TableName] + '] SET (SYSTEM_VERSIONING = OFF);' AS NVARCHAR(MAX))
+                               FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+                               WHERE OBJECTPROPERTY(OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']'), 'TableTemporalType') = 2
+                               FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
       RAISERROR('Drop inbound foreign keys referencing tables removed from the product', 10, 100) WITH NOWAIT
-      SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping inbound foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping inbound foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                       'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];' + CHAR(13) + CHAR(10) +
-                                      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''[' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '].[' + fk.[name] + ']'', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-        FROM #TablesRemovedFromProduct t WITH (NOLOCK)
-        JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']')
+                                      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''[' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '].[' + fk.[name] + ']'', ''dropped'');' AS NVARCHAR(MAX))
+                               FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+                               JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']')
+                               FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
       -- #363: WhatIf twin of the embedded 'foreignKey'/'dropped' audit above (which rides the DROP
@@ -160,13 +165,14 @@ BEGIN TRY
             JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(t.[Schema] + '.[' + t.[TableName] + ']')
 
       RAISERROR('Drop tables removed from the product', 10, 100) WITH NOWAIT
-      SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping table ' + t.[Schema] + '.' + t.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping table ' + t.[Schema] + '.' + t.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                       CASE WHEN OBJECT_ID('SchemaSmith.CustomTableDrop') IS NOT NULL
                                            THEN 'EXEC SchemaSmith.CustomTableDrop ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ''' + t.[TableName] + ''';'
                                            ELSE 'DROP TABLE IF EXISTS ' + t.[Schema] + '.[' + t.[TableName] + '];'
                                            END + CHAR(13) + CHAR(10) +
-                                      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + t.[Schema] + '.[' + t.[TableName] + ']'', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-        FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+                                      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + t.[Schema] + '.[' + t.[TableName] + ']'', ''dropped'');' AS NVARCHAR(MAX))
+                               FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+                               FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
       -- #363: WhatIf twin of the embedded 'table'/'dropped' audit above.
@@ -181,29 +187,31 @@ BEGIN TRY
       IF OBJECT_ID('SchemaSmith.CustomTableDrop') IS NULL
       BEGIN
         RAISERROR('Drop history tables of temporal tables removed from the product', 10, 100) WITH NOWAIT
-        SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping history table ' + h.HistSchema + '.' + h.HistName + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                        'DROP TABLE IF EXISTS [' + h.HistSchema + '].[' + h.HistName + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-          FROM #RemovedTemporalHistory h WITH (NOLOCK)
+        SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping history table ' + h.HistSchema + '.' + h.HistName + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                        'DROP TABLE IF EXISTS [' + h.HistSchema + '].[' + h.HistName + '];' AS NVARCHAR(MAX))
+                                 FROM #RemovedTemporalHistory h WITH (NOLOCK)
+                                 FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
         IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
       END
     END
   END
 
   RAISERROR('Report tables removed from the product but retained by PreventDrop', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Retaining table ' + tp.[Schema] + '.' + tp.TableName + ' - removed from product but protected by PreventDrop'', 10, 100) WITH NOWAIT;' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #TableProperties tp WITH (NOLOCK)
-    WHERE tp.PropertyName = 'ProductName'
-      AND tp.[value] = @ProductName
-      AND EXISTS (SELECT 1
-                    FROM #TableProperties px WITH (NOLOCK)
-                    WHERE px.[Schema] = tp.[Schema]
-                      AND px.TableName = tp.TableName
-                      AND px.PropertyName = 'PreventDrop'
-                      AND px.[value] = 'true')
-      AND NOT EXISTS (SELECT *
-                        FROM #Tables t WITH (NOLOCK)
-                        WHERE t.[Schema] = tp.[Schema]
-                          AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Retaining table ' + tp.[Schema] + '.' + tp.TableName + ' - removed from product but protected by PreventDrop'', 10, 100) WITH NOWAIT;' AS NVARCHAR(MAX))
+                           FROM #TableProperties tp WITH (NOLOCK)
+                           WHERE tp.PropertyName = 'ProductName'
+                             AND tp.[value] = @ProductName
+                             AND EXISTS (SELECT 1
+                                           FROM #TableProperties px WITH (NOLOCK)
+                                           WHERE px.[Schema] = tp.[Schema]
+                                             AND px.TableName = tp.TableName
+                                             AND px.PropertyName = 'PreventDrop'
+                                             AND px.[value] = 'true')
+                             AND NOT EXISTS (SELECT *
+                                               FROM #Tables t WITH (NOLOCK)
+                                               WHERE t.[Schema] = tp.[Schema]
+                                                 AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Collect index level extended properties', 10, 100) WITH NOWAIT
@@ -388,13 +396,14 @@ BEGIN TRY
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture foreign keys suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
-    SELECT @v_SQL = STRING_AGG(CAST(
+    SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST(
       'RAISERROR(''  Foreign key ' + t.[Schema] + '.' + t.[Name] + '.' + fk.[name] + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + t.[Schema] + '.' + t.[Name] + '.' + fk.[name] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + t.[Schema] + '.' + t.[Name] + '.' + fk.[name] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX))
       FROM #Tables t WITH (NOLOCK)
       JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.parent_object_id = OBJECT_ID(t.[Schema] + '.' + t.[Name])
       WHERE NOT EXISTS (SELECT * FROM #ForeignKeys fk2 WITH (NOLOCK) WHERE t.[Schema] = fk2.[Schema] AND t.[Name] = fk2.[TableName] AND fk.[name] = SchemaSmith.fn_StripBracketWrapping(fk2.[KeyName]))
         AND ISNULL(t.[DropForeignKeysRemovedFromProduct], 1) = 1
+      FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
     IF @v_SQL IS NOT NULL EXEC(@v_SQL)
   END
 
@@ -409,10 +418,11 @@ BEGIN TRY
       AND ISNULL(t.[DropForeignKeysRemovedFromProduct], 1) = 1
 
   RAISERROR('Drop Foreign Keys No Longer Defined In The Product', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + df.[FKName] + '];' + CHAR(13) + CHAR(10) +
-                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-        FROM #FKsToDrop df WITH (NOLOCK)
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''foreignKey'', ''' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', ''dropped'');' AS NVARCHAR(MAX))
+                           FROM #FKsToDrop df WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   -- #363: WhatIf twin of the embedded 'foreignKey'/'dropped' audit above.
@@ -432,10 +442,11 @@ BEGIN TRY
                                                           WHERE s.[Schema] = cc.[Schema] AND s.[TableName] = cc.[TableName] AND s.[ColumnName] = cc.[ColumnName])  -- #358
 
   RAISERROR('Drop FullText Indexes Referencing Modified Columns', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping fulltext index on ' + di.[Schema] + '.' + di.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'DROP FULLTEXT INDEX ON ' + di.[Schema] + '.' + di.[TableName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #FTIndexesToDropForChanges di WITH (NOLOCK)
-    JOIN sys.fulltext_indexes fi WITH (NOLOCK) ON fi.[object_id] = OBJECT_ID(di.[Schema] + '.' + di.[TableName])
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping fulltext index on ' + di.[Schema] + '.' + di.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP FULLTEXT INDEX ON ' + di.[Schema] + '.' + di.[TableName] + ';' AS NVARCHAR(MAX))
+                           FROM #FTIndexesToDropForChanges di WITH (NOLOCK)
+                           JOIN sys.fulltext_indexes fi WITH (NOLOCK) ON fi.[object_id] = OBJECT_ID(di.[Schema] + '.' + di.[TableName])
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Collect Existing FullText Indexes', 10, 100) WITH NOWAIT
@@ -476,15 +487,16 @@ BEGIN TRY
   
   -- Handle table compression changes
   RAISERROR('Fixup Table Compression', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering table compression for ' + t.[Schema] + '.' + t.[Name] + ' TO ' + t.[CompressionType] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Altering table compression for ' + t.[Schema] + '.' + t.[Name] + ' TO ' + t.[CompressionType] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + t.[Schema] + '.' + t.[Name] + ' REBUILD PARTITION=ALL WITH (DATA_COMPRESSION=' + t.[CompressionType] + ');' + CHAR(13) + CHAR(10) +
-                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + t.[Schema] + '.' + t.[Name] + ''', ''modified'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #Tables t WITH (NOLOCK)
-    LEFT JOIN sys.partitions AS p WITH (NOLOCK) ON p.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
-                                               AND p.index_id < 2
-    WHERE t.NewTable = 0
-      AND t.[CompressionType] IN ('NONE', 'ROW', 'PAGE')
-      AND COALESCE(p.data_compression_desc COLLATE DATABASE_DEFAULT, 'NONE') <> t.[CompressionType]
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + t.[Schema] + '.' + t.[Name] + ''', ''modified'');' AS NVARCHAR(MAX))
+                           FROM #Tables t WITH (NOLOCK)
+                           LEFT JOIN sys.partitions AS p WITH (NOLOCK) ON p.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+                                                                      AND p.index_id < 2
+                           WHERE t.NewTable = 0
+                             AND t.[CompressionType] IN ('NONE', 'ROW', 'PAGE')
+                             AND COALESCE(p.data_compression_desc COLLATE DATABASE_DEFAULT, 'NONE') <> t.[CompressionType]
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   -- #363: WhatIf twin of the embedded 'table'/'modified' (compression) audit above.
@@ -498,14 +510,15 @@ BEGIN TRY
 
   -- Handle index compression changes
   RAISERROR('Fixup Index Compression', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering index compression for ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ' TO ' + i.[CompressionType] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD PARTITION=ALL WITH (DATA_COMPRESSION=' + i.[CompressionType] + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #Indexes i WITH (NOLOCK) 
-    JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName])
-                                     AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
-    LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = si.[object_id]
-                                            AND p.index_id = si.index_id
-    WHERE COALESCE(p.data_compression_desc COLLATE DATABASE_DEFAULT, 'NONE') <> i.[CompressionType]
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Altering index compression for ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ' TO ' + i.[CompressionType] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD PARTITION=ALL WITH (DATA_COMPRESSION=' + i.[CompressionType] + ');' AS NVARCHAR(MAX))
+                           FROM #Indexes i WITH (NOLOCK)
+                           JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName])
+                                                            AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+                           LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = si.[object_id]
+                                                                   AND p.index_id = si.index_id
+                           WHERE COALESCE(p.data_compression_desc COLLATE DATABASE_DEFAULT, 'NONE') <> i.[CompressionType]
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Collect Existing Index Definitions', 10, 100) WITH NOWAIT
@@ -618,7 +631,7 @@ BEGIN TRY
   DELETE FROM #IndexRenames WHERE EXISTS (SELECT * FROM #IndexRenameDedupe dd WITH (NOLOCK) WHERE [OriginalName] = [OldName] AND [ValidNewName] <> [NewName])
   
   RAISERROR('Handle Renamed Indexes And Unique Constraints', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN IsConstraint = 1
                                        THEN CASE WHEN OBJECT_ID(ir.[Schema] + '.' + ir.[NewName]) IS NULL
                                                  THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''OBJECT'';'
@@ -628,8 +641,9 @@ BEGIN TRY
                                                  THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
                                                  ELSE 'DROP INDEX IF EXISTS [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
                                                  END
-                                       END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #IndexRenames ir WITH (NOLOCK)
+                                       END AS NVARCHAR(MAX))
+                           FROM #IndexRenames ir WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Collect Existing XML Index Definitions', 10, 100) WITH NOWAIT
@@ -687,12 +701,13 @@ BEGIN TRY
                                                                        ELSE '' END
 
   RAISERROR('Handle Renamed Xml Indexes', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Renaming ' + [OldName] + ' to ' + [NewName] + ' ON ' + ir.[Schema] + '.' + ir.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN INDEXPROPERTY(OBJECT_ID(ir.[Schema] + '.' + ir.[TableName]), SchemaSmith.fn_StripBracketWrapping(ir.[NewName]), 'IndexID') IS NULL
                                        THEN 'EXEC sp_rename N''' + SchemaSmith.fn_StripBracketWrapping(ir.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(ir.[TableName]) + '.' + ir.[OldName] + ''', N''' + SchemaSmith.fn_StripBracketWrapping(ir.[NewName]) + ''', N''INDEX'';'
                                        ELSE 'DROP INDEX IF EXISTS [' + ir.[OldName] + '] ON ' + ir.[Schema] + '.' + ir.[TableName] + ';'
-                                       END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #XmlIndexRenames ir WITH (NOLOCK)
+                                       END AS NVARCHAR(MAX))
+                           FROM #XmlIndexRenames ir WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   -- No-drop protection tier (#270): when protected mode is active the caller forces both
@@ -708,9 +723,9 @@ BEGIN TRY
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture indexes suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
-    SELECT @v_SQL = STRING_AGG(CAST(
+    SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST(
       'RAISERROR(''  ' + [ObjName] + ' removed from product but PreventDrop is active -- skipping ' + [ObjType] + ' drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + [ObjType] + ''', ''' + [ObjName] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + [ObjType] + ''', ''' + [ObjName] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX))
       FROM (
         -- Arm (a): indexes removed from the product (ownership-stamped) -- @DropIndexesRemovedFromProduct
         -- env gate stripped; per-table cascade-tightening opt-out (ISNULL(...) = 1) kept.
@@ -732,6 +747,7 @@ BEGIN TRY
           FROM #ExistingXmlIndexes ei WITH (NOLOCK)
           WHERE NOT EXISTS (SELECT * FROM #XmlIndexes i WITH (NOLOCK) WHERE i.[Schema] = ei.[xSchema] AND i.[TableName] = ei.[xTableName] AND SchemaSmith.fn_StripBracketWrapping(i.[IndexName]) = ei.[xIndexName])
       ) x
+      FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
     IF @v_SQL IS NOT NULL EXEC(@v_SQL)
   END
 
@@ -775,21 +791,23 @@ BEGIN TRY
         AND NOT EXISTS (SELECT * FROM #IndexesToDrop id WITH (NOLOCK) WHERE [xSchema] = [Schema] AND [xTableName] = [TableName] AND [xIndexName] = [IndexName])
   
   RAISERROR('Drop Referencing Foreign Keys When Dropping Unique Indexes', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #IndexesToDrop di WITH (NOLOCK)
-    JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(di.[Schema] + '.' + di.[TableName])
-    WHERE IsConstraint = 1 OR IsUnique = 1
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping foreign Key ' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '.' + OBJECT_NAME(fk.parent_object_id) + '.' + fk.[name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE [' + OBJECT_SCHEMA_NAME(fk.parent_object_id) + '].[' + OBJECT_NAME(fk.parent_object_id) + '] DROP CONSTRAINT IF EXISTS [' + fk.[name] + '];' AS NVARCHAR(MAX))
+                           FROM #IndexesToDrop di WITH (NOLOCK)
+                           JOIN sys.foreign_keys fk WITH (NOLOCK) ON fk.referenced_object_id = OBJECT_ID(di.[Schema] + '.' + di.[TableName])
+                           WHERE IsConstraint = 1 OR IsUnique = 1
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Drop FullText Indexes Referencing Unique Indexes That Will Be Dropped', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping fulltext index on ' + ef.[Schema] + '.' + ef.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'DROP FULLTEXT INDEX ON ' + ef.[Schema] + '.' + ef.[TableName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #IndexesToDrop id WITH (NOLOCK)
-    JOIN #ExistingFullTextIndexes ef WITH (NOLOCK) ON id.[Schema] = ef.[Schema]
-                                                  AND id.[TableName] = ef.[TableName]
-                                                  AND id.[IndexName] = SchemaSmith.fn_StripBracketWrapping(ef.[KeyIndex])
-    JOIN sys.fulltext_indexes fi WITH (NOLOCK) ON fi.[object_id] = OBJECT_ID(ef.[Schema] + '.' + ef.[TableName])
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping fulltext index on ' + ef.[Schema] + '.' + ef.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP FULLTEXT INDEX ON ' + ef.[Schema] + '.' + ef.[TableName] + ';' AS NVARCHAR(MAX))
+                           FROM #IndexesToDrop id WITH (NOLOCK)
+                           JOIN #ExistingFullTextIndexes ef WITH (NOLOCK) ON id.[Schema] = ef.[Schema]
+                                                                         AND id.[TableName] = ef.[TableName]
+                                                                         AND id.[IndexName] = SchemaSmith.fn_StripBracketWrapping(ef.[KeyIndex])
+                           JOIN sys.fulltext_indexes fi WITH (NOLOCK) ON fi.[object_id] = OBJECT_ID(ef.[Schema] + '.' + ef.[TableName])
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Drop Unknown and Modified Indexes', 10, 100) WITH NOWAIT
@@ -811,15 +829,16 @@ BEGIN TRY
         FROM #IndexesToDrop di WITH (NOLOCK)
 
   RAISERROR('Fixup Modified Fillfactors', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Fixup ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' fillfactor in ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 100) WITH NOWAIT; ' + 
-                                  'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD WITH (FILLFACTOR = ' + CONVERT(NVARCHAR(5), i.[FillFactor]) + ', SORT_IN_TEMPDB = ON);' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #ExistingIndexes ei WITH (NOLOCK)
-    JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
-                                 AND ei.[xTableName] = i.[TableName]
-                                 AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
-    WHERE i.[UpdateFillFactor] = 1
-      AND ei.[FillFactor] <> i.[FillFactor]
-      AND INDEXPROPERTY(OBJECT_ID(i.[Schema] + '.' + i.[TableName]), ei.[xIndexName], 'IndexID') IS NOT NULL
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Fixup ' + CASE WHEN IsConstraint = 1 THEN 'constraint' ELSE 'index' END + ' fillfactor in ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 100) WITH NOWAIT; ' +
+                                  'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD WITH (FILLFACTOR = ' + CONVERT(NVARCHAR(5), i.[FillFactor]) + ', SORT_IN_TEMPDB = ON);' AS NVARCHAR(MAX))
+                           FROM #ExistingIndexes ei WITH (NOLOCK)
+                           JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                                        AND ei.[xTableName] = i.[TableName]
+                                                        AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+                           WHERE i.[UpdateFillFactor] = 1
+                             AND ei.[FillFactor] <> i.[FillFactor]
+                             AND INDEXPROPERTY(OBJECT_ID(i.[Schema] + '.' + i.[TableName]), ei.[xIndexName], 'IndexID') IS NOT NULL
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Identify Statistics To Drop Based On Column Changes', 10, 100) WITH NOWAIT
@@ -837,9 +856,10 @@ BEGIN TRY
        OR i.filter_definition LIKE '%' + SchemaSmith.fn_StripBracketWrapping(cc.ColumnName) + '%'
   
   RAISERROR('Drop Statistics Referencing Modified Columns', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping statistic ' + id.[Schema] + '.' + id.[TableName] + '.[' + [StatName] + ']'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'DROP STATISTICS ' + id.[Schema] + '.' + id.[TableName] + '.[' + [StatName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #StatisticsToDropForChanges id WITH (NOLOCK)
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping statistic ' + id.[Schema] + '.' + id.[TableName] + '.[' + [StatName] + ']'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP STATISTICS ' + id.[Schema] + '.' + id.[TableName] + '.[' + [StatName] + '];' AS NVARCHAR(MAX))
+                           FROM #StatisticsToDropForChanges id WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Identify Foreign Keys To Drop Based On Column Changes', 10, 100) WITH NOWAIT
@@ -856,9 +876,10 @@ BEGIN TRY
                         WHERE s.[Schema] = cc.[Schema] AND s.[TableName] = cc.[TableName] AND s.[ColumnName] = cc.[ColumnName])
 
   RAISERROR('Drop Foreign Keys Referencing Modified Columns', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + df.[FKName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #FKsToDropForChanges df WITH (NOLOCK)
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping foreign Key ' + df.[Schema] + '.' + df.[TableName] + '.' + df.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + df.[Schema] + '.' + df.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + df.[FKName] + '];' AS NVARCHAR(MAX))
+                           FROM #FKsToDropForChanges df WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Identify Defaults To Drop Based On Column Changes', 10, 100) WITH NOWAIT
@@ -872,9 +893,10 @@ BEGIN TRY
                                                           WHERE s.[Schema] = cc.[Schema] AND s.[TableName] = cc.[TableName] AND s.[ColumnName] = cc.[ColumnName])  -- #358
 
   RAISERROR('Drop Defaults Referencing Modified Columns', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping default ' + dd.[Schema] + '.' + dd.[TableName] + '.' + dd.[DefaultName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + dd.[Schema] + '.' + dd.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + dd.[DefaultName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #DefaultsToDropForChanges dd WITH (NOLOCK)
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping default ' + dd.[Schema] + '.' + dd.[TableName] + '.' + dd.[DefaultName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + dd.[Schema] + '.' + dd.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + dd.[DefaultName] + '];' AS NVARCHAR(MAX))
+                           FROM #DefaultsToDropForChanges dd WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Identify Check Constraints To Drop Based On Column Changes', 10, 100) WITH NOWAIT
@@ -889,9 +911,10 @@ BEGIN TRY
                                                           WHERE s.[Schema] = cc.[Schema] AND s.[TableName] = cc.[TableName] AND s.[ColumnName] = cc.[ColumnName])  -- #358
 
   RAISERROR('Drop Check Constraints Referencing Modified Columns', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping check constraint ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.CheckName + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + fc.CheckName + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #ChecksToDropForChanges fc WITH (NOLOCK)
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping check constraint ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.CheckName + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + fc.CheckName + '];' AS NVARCHAR(MAX))
+                           FROM #ChecksToDropForChanges fc WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Temporarily Disable CDC For Tables With Column Changes', 10, 100) WITH NOWAIT
@@ -964,14 +987,15 @@ BEGIN TRY
   DEALLOCATE swap_cursor
 
   RAISERROR('Drop Modified Computed Columns', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM (SELECT T.[Schema], T.[Name], 
-                 ScriptColumns = STUFF((SELECT ', ' + 'COLUMN ' + [ColumnName] FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0 ORDER BY cc.[ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, ''),
-                 MessageColumns = STUFF((SELECT ', ' + [ColumnName] FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0 ORDER BY cc.[ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
-            FROM #Tables T WITH (NOLOCK)
-            WHERE NewTable = 0
-              AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0)) T
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';' AS NVARCHAR(MAX))
+                           FROM (SELECT T.[Schema], T.[Name],
+                                        ScriptColumns = STUFF((SELECT ', ' + 'COLUMN ' + [ColumnName] FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0 ORDER BY cc.[ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, ''),
+                                        MessageColumns = STUFF((SELECT ', ' + [ColumnName] FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0 ORDER BY cc.[ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+                                   FROM #Tables T WITH (NOLOCK)
+                                   WHERE NewTable = 0
+                                     AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0)) T
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   -- No-drop protection tier (#270): when protected mode is active the caller forces
@@ -982,28 +1006,30 @@ BEGIN TRY
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture columns suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
-    SELECT @v_SQL = STRING_AGG(CAST(
+    SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST(
       'RAISERROR(''  Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''column'', ''' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''column'', ''' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX))
       FROM #ColumnChanges cc WITH (NOLOCK)
       JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = cc.[Schema] AND t.[Name] = cc.[TableName]
       WHERE cc.DropOnly = 1
         AND t.NewTable = 0
         AND ISNULL(t.[DropColumnsRemovedFromProduct], 1) = 1
+      FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
     IF @v_SQL IS NOT NULL EXEC(@v_SQL)
   END
 
   RAISERROR('Drop Columns No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM (SELECT T.[Schema], T.[Name],
-                 ScriptColumns = STUFF((SELECT ', ' + 'COLUMN ' + [ColumnName] FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1 ORDER BY [ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, ''),
-                 MessageColumns = STUFF((SELECT ', ' + [ColumnName] FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1 ORDER BY [ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
-            FROM #Tables T WITH (NOLOCK)
-            WHERE NewTable = 0
-              AND @DropColumnsRemovedFromProduct = 1
-              AND ISNULL(T.[DropColumnsRemovedFromProduct], 1) = 1
-              AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1)) T
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping columns from ' + T.[Schema] + '.' + T.[Name] + ' (' + MessageColumns + ')'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' DROP ' + ScriptColumns + ';' AS NVARCHAR(MAX))
+                           FROM (SELECT T.[Schema], T.[Name],
+                                        ScriptColumns = STUFF((SELECT ', ' + 'COLUMN ' + [ColumnName] FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1 ORDER BY [ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, ''),
+                                        MessageColumns = STUFF((SELECT ', ' + [ColumnName] FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1 ORDER BY [ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+                                   FROM #Tables T WITH (NOLOCK)
+                                   WHERE NewTable = 0
+                                     AND @DropColumnsRemovedFromProduct = 1
+                                     AND ISNULL(T.[DropColumnsRemovedFromProduct], 1) = 1
+                                     AND EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = T.[Schema] AND cc.[TableName] = T.[Name] AND cc.DropOnly = 1)) T
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Detect Default Changes', 10, 100) WITH NOWAIT
@@ -1035,47 +1061,51 @@ BEGIN TRY
     WHERE EXISTS (SELECT * FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = c.[Schema] AND cc.[TableName] = c.[TableName] and cc.ColumnName = c.ColumnName AND cc.MustDropAndRecreate = 1 AND cc.MustSwapColumn = 0)
   
   RAISERROR('Add missing ProductName extended property to tables', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +
                                                               '@level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', ' +
-                                                              '@level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #Tables t WITH (NOLOCK)
-    WHERE NOT EXISTS (SELECT * FROM #TableProperties tp WITH (NOLOCK) WHERE t.[Schema] = tp.[Schema] AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName AND tp.PropertyName = 'ProductName')
-      AND OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL  -- and the table physically exists
+                                                              '@level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''';' AS NVARCHAR(MAX))
+                           FROM #Tables t WITH (NOLOCK)
+                           WHERE NOT EXISTS (SELECT * FROM #TableProperties tp WITH (NOLOCK) WHERE t.[Schema] = tp.[Schema] AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName AND tp.PropertyName = 'ProductName')
+                             AND OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL  -- and the table physically exists
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   -- Stamp/refresh the sticky PreventDrop protection marker so it tracks the package value each run
   -- (an existing table newly marked PreventDrop:true gets its property; one toggled back to false is
   -- updated). Covers the same present-table set as the ProductName stamp above (physical tables in #Tables).
   RAISERROR('Stamp/refresh PreventDrop protection marker', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST(
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST(
     'IF EXISTS (SELECT 1 FROM fn_listextendedproperty(N''PreventDrop'', N''Schema'', ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', N''Table'', ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', default, default)) ' +
     'EXEC sp_updateextendedproperty @name = N''PreventDrop'', @value = ''' + CASE WHEN t.[PreventDrop] = 1 THEN 'true' ELSE 'false' END + ''', @level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', @level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + '''; ' +
-    'ELSE EXEC sp_addextendedproperty @name = N''PreventDrop'', @value = ''' + CASE WHEN t.[PreventDrop] = 1 THEN 'true' ELSE 'false' END + ''', @level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', @level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+    'ELSE EXEC sp_addextendedproperty @name = N''PreventDrop'', @value = ''' + CASE WHEN t.[PreventDrop] = 1 THEN 'true' ELSE 'false' END + ''', @level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', @level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''';' AS NVARCHAR(MAX))
     FROM #Tables t WITH (NOLOCK)
     WHERE OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL  -- table physically exists
+    FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Add Missing Physical Columns', 10, 100) WITH NOWAIT
   -- Need to do this a second time for the edge case of replacing a computed column with a physical column
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Adding ' + CAST(ColumnCount AS NVARCHAR(100)) + ' new columns to ' + T.[Schema] + '.' + T.[Name] +
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Adding ' + CAST(ColumnCount AS NVARCHAR(100)) + ' new columns to ' + T.[Schema] + '.' + T.[Name] +
                                   CASE WHEN RTRIM(ISNULL(VariantList, '')) <> '' THEN ' (variant: ' + VariantList + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD ' + ColumnScripts + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-  FROM (SELECT T.[Schema], T.[Name],
-               ColumnScripts = STUFF((SELECT ', ' + CAST([ColumnScript] AS NVARCHAR(MAX)) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = '' ORDER BY c.[ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, ''),
-               ColumnCount = (SELECT COUNT(*) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = ''),
-               VariantList = (SELECT STRING_AGG(CAST(REPLACE(RTRIM(c.[VariantName]), '''', '''''') AS NVARCHAR(MAX)), ', ')
-                                FROM #Columns C WITH (NOLOCK)
-                                WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = ''
-                                  AND RTRIM(ISNULL(c.[VariantName], '')) <> '')
-        FROM #Tables T WITH (NOLOCK)
-        WHERE NewTable = 0
-          AND EXISTS (SELECT * FROM #Columns c WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = '')) T
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD ' + ColumnScripts + ';' AS NVARCHAR(MAX))
+                           FROM (SELECT T.[Schema], T.[Name],
+                                        ColumnScripts = STUFF((SELECT ', ' + CAST([ColumnScript] AS NVARCHAR(MAX)) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = '' ORDER BY c.[ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, ''),
+                                        ColumnCount = (SELECT COUNT(*) FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = ''),
+                                        VariantList = STUFF((SELECT ', ' + CAST(REPLACE(RTRIM(c.[VariantName]), '''', '''''') AS NVARCHAR(MAX))
+                                                               FROM #Columns C WITH (NOLOCK)
+                                                               WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = ''
+                                                                 AND RTRIM(ISNULL(c.[VariantName], '')) <> '' FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+                                   FROM #Tables T WITH (NOLOCK)
+                                   WHERE NewTable = 0
+                                     AND EXISTS (SELECT * FROM #Columns c WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL([ComputedExpression], '')) = '')) T
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Drop Modified Defaults', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping default ' + dc.[Schema] + '.' + dc.[TableName] + '.' + dc.[DefaultName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + dc.[Schema] + '.' + dc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + dc.[DefaultName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #DefaultChanges dc WITH (NOLOCK)
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping default ' + dc.[Schema] + '.' + dc.[TableName] + '.' + dc.[DefaultName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + dc.[Schema] + '.' + dc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + dc.[DefaultName] + '];' AS NVARCHAR(MAX))
+                           FROM #DefaultChanges dc WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Collect Existing Foreign Keys', 10, 100) WITH NOWAIT
@@ -1111,9 +1141,10 @@ BEGIN TRY
                          ' ON UPDATE ' + [UpdateAction]
   
   RAISERROR('Drop Modified Foreign Keys', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping Foreign Key ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + fc.[FKName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #FKChanges fc WITH (NOLOCK)
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping Foreign Key ' + fc.[Schema] + '.' + fc.[TableName] + '.' + fc.[FKName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + fc.[Schema] + '.' + fc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + fc.[FKName] + '];' AS NVARCHAR(MAX))
+                           FROM #FKChanges fc WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Collect Existing Statistics Definitions', 10, 100) WITH NOWAIT
@@ -1148,9 +1179,10 @@ BEGIN TRY
                                 CASE WHEN RTRIM(ISNULL(s.[FilterExpression], '')) <> '' THEN ' WHERE ' + s.[FilterExpression] ELSE '' END
   
   RAISERROR('Drop Modified Statistics', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping statistics ' + sc.[Schema] + '.' + sc.[TableName] + '.' + sc.[StatisticName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'DROP STATISTICS ' + sc.[Schema] + '.' + sc.[TableName] + '.' + sc.[StatisticName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #StatsChanges sc WITH (NOLOCK)
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping statistics ' + sc.[Schema] + '.' + sc.[TableName] + '.' + sc.[StatisticName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP STATISTICS ' + sc.[Schema] + '.' + sc.[TableName] + '.' + sc.[StatisticName] + ';' AS NVARCHAR(MAX))
+                           FROM #StatsChanges sc WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   -- No-drop protection tier (#270): when protected mode is active the caller forces
@@ -1162,9 +1194,9 @@ BEGIN TRY
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture statistics suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
-    SELECT @v_SQL = STRING_AGG(CAST(
+    SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST(
       'RAISERROR(''  Statistic ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + '] removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''statistic'', ''' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + ']'', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''statistic'', ''' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + ']'', ''dropSuppressed'');' AS NVARCHAR(MAX))
       FROM #ExistingStats es WITH (NOLOCK)
       JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = es.[Schema] AND t.[Name] = es.[TableName]
       WHERE t.NewTable = 0
@@ -1177,6 +1209,7 @@ BEGIN TRY
                           WHERE es.[Schema] = sd.[Schema]
                             AND es.[TableName] = sd.[TableName]
                             AND es.[StatsName] = sd.[StatName])
+      FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
     IF @v_SQL IS NOT NULL EXEC(@v_SQL)
   END
 
@@ -1185,21 +1218,22 @@ BEGIN TRY
   -- still in the product by name) and the column-change pass (#StatisticsToDropForChanges) to avoid
   -- a double DROP STATISTICS. Auto-created stats are already excluded from #ExistingStats.
   RAISERROR('Drop Statistics No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping statistics ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + ']'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'DROP STATISTICS ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #ExistingStats es WITH (NOLOCK)
-    JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = es.[Schema] AND t.[Name] = es.[TableName]
-    WHERE t.NewTable = 0
-      AND @DropStatisticsRemovedFromProduct = 1
-      AND ISNULL(t.[DropStatisticsRemovedFromProduct], 1) = 1
-      AND NOT EXISTS (SELECT * FROM #Statistics s WITH (NOLOCK)
-                        WHERE es.[Schema] = s.[Schema]
-                          AND es.[TableName] = s.[TableName]
-                          AND es.[StatsName] = SchemaSmith.fn_StripBracketWrapping(s.[StatisticName]))
-      AND NOT EXISTS (SELECT * FROM #StatisticsToDropForChanges sd WITH (NOLOCK)
-                        WHERE es.[Schema] = sd.[Schema]
-                          AND es.[TableName] = sd.[TableName]
-                          AND es.[StatsName] = sd.[StatName])
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping statistics ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + ']'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP STATISTICS ' + es.[Schema] + '.' + es.[TableName] + '.[' + es.[StatsName] + '];' AS NVARCHAR(MAX))
+                           FROM #ExistingStats es WITH (NOLOCK)
+                           JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = es.[Schema] AND t.[Name] = es.[TableName]
+                           WHERE t.NewTable = 0
+                             AND @DropStatisticsRemovedFromProduct = 1
+                             AND ISNULL(t.[DropStatisticsRemovedFromProduct], 1) = 1
+                             AND NOT EXISTS (SELECT * FROM #Statistics s WITH (NOLOCK)
+                                               WHERE es.[Schema] = s.[Schema]
+                                                 AND es.[TableName] = s.[TableName]
+                                                 AND es.[StatsName] = SchemaSmith.fn_StripBracketWrapping(s.[StatisticName]))
+                             AND NOT EXISTS (SELECT * FROM #StatisticsToDropForChanges sd WITH (NOLOCK)
+                                               WHERE es.[Schema] = sd.[Schema]
+                                                 AND es.[TableName] = sd.[TableName]
+                                                 AND es.[StatsName] = sd.[StatName])
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   RAISERROR('Collect Existing Check Constraints', 10, 100) WITH NOWAIT
@@ -1238,9 +1272,10 @@ BEGIN TRY
       WHERE ec.[CheckDefinition] <> cc.[Expression]
   
   RAISERROR('Drop Modified Check Constraints', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + cc.[CheckName] + '];' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #CheckChanges cc WITH (NOLOCK)
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + cc.[CheckName] + '];' AS NVARCHAR(MAX))
+                           FROM #CheckChanges cc WITH (NOLOCK)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   -- No-drop protection tier (#270): when protected mode is active the caller forces
@@ -1252,9 +1287,9 @@ BEGIN TRY
   IF @CaptureWouldDrop = 1
   BEGIN
     RAISERROR('Capture check constraints suppressed by PreventDrop (would drop by absence)', 10, 100) WITH NOWAIT
-    SELECT @v_SQL = STRING_AGG(CAST(
+    SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST(
       'RAISERROR(''  Check constraint ' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ' removed from product but PreventDrop is active -- skipping drop (protected)'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
+      'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''dropSuppressed'');' AS NVARCHAR(MAX))
       FROM #ExistingCheckConstraints ec WITH (NOLOCK)
       JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
       WHERE (ec.[CheckColumn] IS NULL
@@ -1269,6 +1304,7 @@ BEGIN TRY
                           WHERE ec.[Schema] = cc.[Schema]
                             AND ec.[TableName] = cc.[TableName]
                             AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
+      FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
     IF @v_SQL IS NOT NULL EXEC(@v_SQL)
   END
 
@@ -1279,24 +1315,25 @@ BEGIN TRY
   -- Gated by the cascade flag + the per-table tightening (a table may set
   -- DropCheckConstraintsRemovedFromProduct:false to protect its own).
   RAISERROR('Drop Check Constraints No Longer Part of The Product Definition', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping check constraint ' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping check constraint ' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + ec.[Schema] + '.' + ec.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + ec.[CheckName] + '];' + CHAR(13) + CHAR(10) +
-                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''dropped'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #ExistingCheckConstraints ec WITH (NOLOCK)
-    JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
-    WHERE (ec.[CheckColumn] IS NULL
-           OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK)
-                        WHERE c.[Schema] = ec.[Schema]
-                          AND c.[TableName] = ec.[TableName]
-                          AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = ec.[CheckColumn]
-                          AND ISNULL(c.[CheckExpression], '') = ''))
-      AND t.NewTable = 0
-      AND @DropCheckConstraintsRemovedFromProduct = 1
-      AND ISNULL(t.[DropCheckConstraintsRemovedFromProduct], 1) = 1
-      AND NOT EXISTS (SELECT * FROM #CheckConstraints cc WITH (NOLOCK)
-                        WHERE ec.[Schema] = cc.[Schema]
-                          AND ec.[TableName] = cc.[TableName]
-                          AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''constraint'', ''' + ec.[Schema] + '.' + ec.[TableName] + '.' + ec.[CheckName] + ''', ''dropped'');' AS NVARCHAR(MAX))
+                           FROM #ExistingCheckConstraints ec WITH (NOLOCK)
+                           JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = ec.[Schema] AND t.[Name] = ec.[TableName]
+                           WHERE (ec.[CheckColumn] IS NULL
+                                  OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK)
+                                               WHERE c.[Schema] = ec.[Schema]
+                                                 AND c.[TableName] = ec.[TableName]
+                                                 AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = ec.[CheckColumn]
+                                                 AND ISNULL(c.[CheckExpression], '') = ''))
+                             AND t.NewTable = 0
+                             AND @DropCheckConstraintsRemovedFromProduct = 1
+                             AND ISNULL(t.[DropCheckConstraintsRemovedFromProduct], 1) = 1
+                             AND NOT EXISTS (SELECT * FROM #CheckConstraints cc WITH (NOLOCK)
+                                               WHERE ec.[Schema] = cc.[Schema]
+                                                 AND ec.[TableName] = cc.[TableName]
+                                                 AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   -- #363: WhatIf twin of the embedded 'constraint'/'dropped' (check) audit above; same predicate.
@@ -1320,14 +1357,15 @@ BEGIN TRY
                               AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName]))
 
   RAISERROR('Alter Modified Columns', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Altering Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Altering Column ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + cc.[Schema] + '.' + cc.[TableName] + ' ALTER COLUMN ' + cc.[ColumnName] + ' ' +
                                   CASE WHEN RTRIM([SpecialColumnScript]) <> '' THEN [SpecialColumnScript] ELSE [ColumnScript] END + ';' + CHAR(13) + CHAR(10) +
-                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''column'', ''' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', ''modified'');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-        FROM #ColumnChanges cc WITH (NOLOCK)
-        WHERE [MustDropAndRecreate] = 0
-          AND [MustSwapColumn] = 0
-          AND [DropOnly] = 0
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''column'', ''' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ''', ''modified'');' AS NVARCHAR(MAX))
+                           FROM #ColumnChanges cc WITH (NOLOCK)
+                           WHERE [MustDropAndRecreate] = 0
+                             AND [MustSwapColumn] = 0
+                             AND [DropOnly] = 0
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
   -- #363: WhatIf twin of the embedded 'column'/'modified' audit above; same predicate.
@@ -1351,29 +1389,31 @@ BEGIN TRY
                           AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
   
   RAISERROR('Drop Conflicting Clustered Index', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping ' + CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + mct.[Schema] + '.' + mct.[TableName] + '.' + si.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping ' + CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + mct.[Schema] + '.' + mct.[TableName] + '.' + si.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1
                                        THEN 'ALTER TABLE ' + mct.[Schema] + '.' + mct.[TableName] + ' DROP CONSTRAINT IF EXISTS [' + si.[Name] + '];'
                                        ELSE 'DROP INDEX IF EXISTS [' + si.[Name] + '] ON ' + mct.[Schema] + '.' + mct.[TableName] + ';'
-                                       END AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #MissingClusteredIndexTables mct WITH (NOLOCK)
-    JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(mct.[Schema] + '.' + mct.[TableName])
-                                     AND si.[type] IN (1, 5)
+                                       END AS NVARCHAR(MAX))
+                           FROM #MissingClusteredIndexTables mct WITH (NOLOCK)
+                           JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(mct.[Schema] + '.' + mct.[TableName])
+                                                            AND si.[type] IN (1, 5)
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Drop Modified or Removed FullText Indexes', 10, 100) WITH NOWAIT
-  SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Dropping fulltext index on ' + ei.[Schema] + '.' + ei.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'DROP FULLTEXT INDEX ON ' + ei.[Schema] + '.' + ei.[TableName] + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #ExistingFullTextIndexes ei WITH (NOLOCK)
-    LEFT JOIN #FullTextIndexes fi WITH (NOLOCK) ON fi.[Schema] = ei.[Schema]
-                                               AND fi.[TableName] = ei.[TableName]
-    JOIN sys.fulltext_indexes ft WITH (NOLOCK) ON ft.[object_id] = OBJECT_ID(ei.[Schema] + '.' + ei.[TableName])
-    WHERE RTRIM(ISNULL(fi.[Columns], '')) <> RTRIM(ISNULL(ei.[Columns], ''))
-       OR SchemaSmith.fn_StripBracketWrapping(fi.[FullTextCatalog]) <> SchemaSmith.fn_StripBracketWrapping(ei.[FullTextCatalog])
-       OR SchemaSmith.fn_StripBracketWrapping(fi.[KeyIndex]) <> SchemaSmith.fn_StripBracketWrapping(ei.[KeyIndex])
-       OR fi.[ChangeTracking] <> ei.[ChangeTracking]
-       OR RTRIM(ISNULL(fi.[StopList], '')) <> RTRIM(ISNULL(ei.[StopList], ''))
-       OR fi.[TableName] IS NULL
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping fulltext index on ' + ei.[Schema] + '.' + ei.[TableName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'DROP FULLTEXT INDEX ON ' + ei.[Schema] + '.' + ei.[TableName] + ';' AS NVARCHAR(MAX))
+                           FROM #ExistingFullTextIndexes ei WITH (NOLOCK)
+                           LEFT JOIN #FullTextIndexes fi WITH (NOLOCK) ON fi.[Schema] = ei.[Schema]
+                                                                      AND fi.[TableName] = ei.[TableName]
+                           JOIN sys.fulltext_indexes ft WITH (NOLOCK) ON ft.[object_id] = OBJECT_ID(ei.[Schema] + '.' + ei.[TableName])
+                           WHERE RTRIM(ISNULL(fi.[Columns], '')) <> RTRIM(ISNULL(ei.[Columns], ''))
+                              OR SchemaSmith.fn_StripBracketWrapping(fi.[FullTextCatalog]) <> SchemaSmith.fn_StripBracketWrapping(ei.[FullTextCatalog])
+                              OR SchemaSmith.fn_StripBracketWrapping(fi.[KeyIndex]) <> SchemaSmith.fn_StripBracketWrapping(ei.[KeyIndex])
+                              OR fi.[ChangeTracking] <> ei.[ChangeTracking]
+                              OR RTRIM(ISNULL(fi.[StopList], '')) <> RTRIM(ISNULL(ei.[StopList], ''))
+                              OR fi.[TableName] IS NULL
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Enable/Disable CDC', 10, 100) WITH NOWAIT

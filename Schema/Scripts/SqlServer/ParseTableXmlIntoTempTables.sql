@@ -52,9 +52,10 @@
     FROM @v_TableXml.nodes('/Tables/Table') AS X(t);
 
   -- Identify Tables to skip based on ShouldApply expression (scoped by [_RowId]) — identical to JSON twin.
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #TableDefinitions WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #TableDefinitions WITH (NOLOCK)
-    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('DELETE FROM #TableDefinitions WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX))
+                           FROM #TableDefinitions WITH (NOLOCK)
+                           WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   EXEC(@v_SQL)
 
   DROP TABLE IF EXISTS #Tables
@@ -120,9 +121,10 @@
       ) c;
 
   -- Identify Columns to skip based on ShouldApply expression (scoped by [_RowId]) — identical to JSON twin.
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Columns WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #Columns WITH (NOLOCK)
-    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('DELETE FROM #Columns WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX))
+                           FROM #Columns WITH (NOLOCK)
+                           WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   EXEC(@v_SQL)
 
   -- Don't try to apply tables without columns
@@ -171,9 +173,10 @@
       ) i;
 
   -- Identify Indexes to skip based on ShouldApply expression (scoped by [_RowId]) — identical to JSON twin.
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Indexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #Indexes WITH (NOLOCK)
-    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('DELETE FROM #Indexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX))
+                           FROM #Indexes WITH (NOLOCK)
+                           WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   EXEC(@v_SQL)
 
   RAISERROR('Parse XML Indexes from Xml', 10, 100) WITH NOWAIT
@@ -196,9 +199,10 @@
       ) i;
 
   -- Identify XmlIndexes to skip based on ShouldApply expression (scoped by [_RowId]) — identical to JSON twin.
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #XmlIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #XmlIndexes WITH (NOLOCK)
-    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('DELETE FROM #XmlIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX))
+                           FROM #XmlIndexes WITH (NOLOCK)
+                           WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   EXEC(@v_SQL)
 
   RAISERROR('Parse Foreign Keys from Xml', 10, 100) WITH NOWAIT
@@ -241,9 +245,10 @@
   END
 
   -- Identify ForeignKeys to skip based on ShouldApply expression (scoped by [_RowId]) — identical to JSON twin.
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #ForeignKeys WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #ForeignKeys WITH (NOLOCK)
-    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('DELETE FROM #ForeignKeys WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX))
+                           FROM #ForeignKeys WITH (NOLOCK)
+                           WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   EXEC(@v_SQL)
 
   RAISERROR('Parse Table Level Check Constraints from Xml', 10, 100) WITH NOWAIT
@@ -261,9 +266,10 @@
       ) c;
 
   -- Identify CheckConstraints to skip based on ShouldApply expression (scoped by [_RowId]) — identical to JSON twin.
-  SELECT @v_SQL = STRING_AGG('DELETE FROM #CheckConstraints WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');', CHAR(13) + CHAR(10))
-    FROM #CheckConstraints WITH (NOLOCK)
-    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + 'DELETE FROM #CheckConstraints WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');'
+                           FROM #CheckConstraints WITH (NOLOCK)
+                           WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   EXEC(@v_SQL)
 
   RAISERROR('Parse Statistics from Xml', 10, 100) WITH NOWAIT
@@ -285,9 +291,10 @@
       ) s;
 
   -- Identify Statistics to skip based on ShouldApply expression (scoped by [_RowId]) — identical to JSON twin.
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #Statistics WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #Statistics WITH (NOLOCK)
-    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('DELETE FROM #Statistics WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX))
+                           FROM #Statistics WITH (NOLOCK)
+                           WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   EXEC(@v_SQL)
 
   RAISERROR('Parse Full Text Indexes from Xml', 10, 100) WITH NOWAIT
@@ -311,9 +318,10 @@
       ) f;
 
   -- Identify FullTextIndexes to skip based on ShouldApply expression (scoped by [_RowId]) — identical to JSON twin.
-  SELECT @v_SQL = STRING_AGG(CAST('DELETE FROM #FullTextIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #FullTextIndexes WITH (NOLOCK)
-    WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('DELETE FROM #FullTextIndexes WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect([ShouldApplyExpression]) + ');' AS NVARCHAR(MAX))
+                           FROM #FullTextIndexes WITH (NOLOCK)
+                           WHERE RTRIM(ISNULL([ShouldApplyExpression], '')) <> ''
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   EXEC(@v_SQL)
 
   -- A table with 2+ surviving full-text variants cannot be honored — identical to JSON twin.

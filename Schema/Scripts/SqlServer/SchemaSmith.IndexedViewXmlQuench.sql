@@ -6,7 +6,8 @@
 -- OPENJSON compat cliff (compatibility level < 130) or under Target:CompatEncoding=legacy. Same procedure
 -- name and behaviour; only the ingest half (the OPENJSON blocks that parse @IndexedViewSchema and each
 -- view's index list) is shredded with .nodes()/.value() instead of OPENJSON/JSON_VALUE so the proc CREATEs
--- below compat 130. The compare/emit half (sys.* reads + STRING_AGG DDL) is identical to the JSON twin.
+-- below compat 130. The compare/emit half (sys.* reads + DDL aggregation) mirrors the JSON twin, but its
+-- statement aggregation uses STUFF/FOR XML PATH instead of STRING_AGG so the proc also runs on a pre-2017 binary.
 
 -- TRANSITIONAL (slice 3 audit B5 of schema-templates) @TemplateName and @SchemaName
 -- default to empty for backward compatibility. New callers pass the active template
@@ -69,9 +70,10 @@ BEGIN
     DROP TABLE IF EXISTS #ViewGate;
     SELECT * INTO #ViewGate FROM @Views;
     DECLARE @gateSql NVARCHAR(MAX);
-    SELECT @gateSql = STRING_AGG(CAST('DELETE FROM #ViewGate WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect(ShouldApplyExpression) + ');' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10))
-    FROM #ViewGate
-    WHERE RTRIM(ISNULL(ShouldApplyExpression, '')) <> '';
+    SELECT @gateSql = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('DELETE FROM #ViewGate WHERE [_RowId] = ' + CAST([_RowId] AS NVARCHAR(20)) + ' AND NOT (' + SchemaSmith.fn_StripLeadingSelect(ShouldApplyExpression) + ');' AS NVARCHAR(MAX))
+                             FROM #ViewGate
+                             WHERE RTRIM(ISNULL(ShouldApplyExpression, '')) <> ''
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
     IF @gateSql IS NOT NULL
     BEGIN
         EXEC(@gateSql);
@@ -94,15 +96,16 @@ BEGIN
     -- Validate ownership: fail if any requested views are owned by a different product
     -- (mirrors PostgreSQL ValidateMaterializedViewOwnership pattern)
     DECLARE @conflictMsg NVARCHAR(MAX);
-    SELECT @conflictMsg = STRING_AGG(
-        N'Indexed view ' + s.name + N'.' + v.name + N' owned by different product. ['
-        + CAST(ep.value AS NVARCHAR(200)) + N'] <> [' + @ProductName + N']', CHAR(10))
+    SELECT @conflictMsg = STUFF((SELECT CHAR(10)
+        + N'Indexed view ' + s.name + N'.' + v.name + N' owned by different product. ['
+        + CAST(ep.value AS NVARCHAR(200)) + N'] <> [' + @ProductName + N']'
     FROM @Views rv
     INNER JOIN sys.schemas s ON s.name = rv.ViewSchema
     INNER JOIN sys.views v ON v.name = rv.ViewName AND v.schema_id = s.schema_id
     INNER JOIN sys.extended_properties ep ON ep.major_id = v.object_id AND ep.minor_id = 0
         AND ep.name = 'SchemaSmith_Product'
-    WHERE CAST(ep.value AS NVARCHAR(200)) <> @ProductName;
+    WHERE CAST(ep.value AS NVARCHAR(200)) <> @ProductName
+    FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '');
 
     IF @conflictMsg IS NOT NULL
     BEGIN
@@ -173,8 +176,9 @@ BEGIN
         EXEC [SchemaSmith].[PrintWithNoWait] @msg;
         -- Drop nonclustered indexes first
         DECLARE @ncDropSql NVARCHAR(MAX);
-        SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName), '; ')
-        FROM sys.indexes i WHERE i.object_id = @objectId AND i.type > 1;
+        SELECT @ncDropSql = STUFF((SELECT '; ' + 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
+        FROM sys.indexes i WHERE i.object_id = @objectId AND i.type > 1
+        FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
         IF @ncDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @ncDropSql;
 
         -- Drop clustered index
@@ -241,8 +245,9 @@ BEGIN
                 SET @msg = N'Definition changed for indexed view ' + @ivSchema + N'.' + @ivName + N' — dropping for recreation';
                 EXEC [SchemaSmith].[PrintWithNoWait] @msg;
 
-                SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName), '; ')
-                FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type > 1;
+                SELECT @ncDropSql = STUFF((SELECT '; ' + 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
+                FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type > 1
+                FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
                 IF @ncDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @ncDropSql;
 
                 SELECT @clDropSql = 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
@@ -369,8 +374,9 @@ BEGIN
                     EXEC [SchemaSmith].[PrintWithNoWait] @msg;
 
                     SET @ncDropSql = NULL;
-                    SELECT @ncDropSql = STRING_AGG('DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName), '; ')
-                    FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type > 1;
+                    SELECT @ncDropSql = STUFF((SELECT '; ' + 'DROP INDEX ' + QUOTENAME(i.name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
+                    FROM sys.indexes i WHERE i.object_id = @existingObjectId AND i.type > 1
+                    FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
                     IF @ncDropSql IS NOT NULL AND @WhatIf = 0 EXEC sp_executesql @ncDropSql;
 
                     SET @clDropSql = NULL;
@@ -385,8 +391,7 @@ BEGIN
 
                     -- Drop changed nonclustered indexes (properties differ from spec)
                     SET @dropSql = NULL;
-                    SELECT @dropSql = STRING_AGG(
-                        'DROP INDEX ' + QUOTENAME(e.Name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName), '; ')
+                    SELECT @dropSql = STUFF((SELECT '; ' + 'DROP INDEX ' + QUOTENAME(e.Name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
                     FROM @ExistingIdx e
                     INNER JOIN @DesiredIdx d ON d.Name = e.Name
                     WHERE e.IsClustered = 0
@@ -394,7 +399,8 @@ BEGIN
                          OR d.IndexColumns != e.IndexColumns
                          OR ISNULL(d.IncludeColumns, '') != ISNULL(e.IncludeColumns, '')
                          OR d.CompressionType != e.CompressionType
-                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor]));
+                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor]))
+                    FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
                     IF @dropSql IS NOT NULL
                     BEGIN
                         SET @msg = N'Dropping changed nonclustered indexes on ' + @ivSchema + N'.' + @ivName;
@@ -404,11 +410,11 @@ BEGIN
 
                     -- Drop removed nonclustered indexes (in DB but not in spec)
                     SET @dropSql = NULL;
-                    SELECT @dropSql = STRING_AGG(
-                        'DROP INDEX ' + QUOTENAME(e.Name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName), '; ')
+                    SELECT @dropSql = STUFF((SELECT '; ' + 'DROP INDEX ' + QUOTENAME(e.Name) + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
                     FROM @ExistingIdx e
                     WHERE e.IsClustered = 0
-                    AND NOT EXISTS (SELECT 1 FROM @DesiredIdx d WHERE d.Name = e.Name);
+                    AND NOT EXISTS (SELECT 1 FROM @DesiredIdx d WHERE d.Name = e.Name)
+                    FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
                     IF @dropSql IS NOT NULL
                     BEGIN
                         SET @msg = N'Dropping removed nonclustered indexes on ' + @ivSchema + N'.' + @ivName;
