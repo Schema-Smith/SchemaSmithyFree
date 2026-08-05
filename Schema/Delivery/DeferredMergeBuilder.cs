@@ -232,14 +232,19 @@ internal static class DeferredMergeBuilder
         var table = tableName.Trim().Trim('`');
         var deferredSet = new HashSet<string>(deferredColumns, StringComparer.OrdinalIgnoreCase);
 
+        // Version-adaptive JSON row source, mirroring MergeScriptHelper: JSON_TABLE on MySQL 8.0+ /
+        // MariaDB 10.6+; a recursive-CTE shred on MariaDB 10.2-10.5; MySQL < 8.0 is gated (no JSON_TABLE and
+        // no recursive CTE). DeferredMergeBuilder is integration-only (no mocked unit tests), so detecting
+        // from the live command is safe here.
+        cmd.Parameters.Clear();
+        cmd.CommandText = "SELECT SchemaSmith_ServerVersionNum()";
+        var versionNum = Convert.ToInt32(cmd.ExecuteScalar());
+
         var columns = helper.GetColumnMetadata(cmd, schemaOrDb, tableName);
         if (columns.Count == 0)
             throw new InvalidOperationException($"No columns found for table `{db}`.`{table}`.");
 
         var columnList = string.Join(", ", columns.Select(c => $"`{c.Name}`"));
-
-        var jsonTableColumns = string.Join(",\n    ", columns.Where(c => !c.IsComputed).Select(c =>
-            $"`{c.Name}` {c.JsonParseType} PATH '$.{c.Name}'"));
 
         var selectExpressions = string.Join(", ", columns.Select(c =>
         {
@@ -249,23 +254,55 @@ internal static class DeferredMergeBuilder
             return $"`jt`.`{c.Name}`";
         }));
 
+        var jsonSource = BuildDeferredJsonRowSourceMySql(columns.Where(c => !c.IsComputed).ToList(), versionNum);
+
         var sb = new StringBuilder();
         sb.AppendLine($"SET @json_data = '{tableData?.Replace("'", "''")}';");
         sb.AppendLine();
         sb.AppendLine($"INSERT INTO `{db}`.`{table}` ({columnList})");
         sb.AppendLine($"SELECT {selectExpressions}");
-        sb.AppendLine("FROM JSON_TABLE(");
-        sb.AppendLine("  @json_data,");
-        sb.AppendLine("  '$[*]' COLUMNS (");
-        sb.AppendLine($"    {jsonTableColumns}");
-        sb.AppendLine("  )");
-        sb.AppendLine(") AS jt");
+        sb.AppendLine($"FROM {jsonSource}");
 
         var updateCols = columns.Where(c => !c.IsIdentity && !c.IsComputed).Select(c =>
             deferredSet.Contains(c.Name) ? $"`{c.Name}` = NULL" : $"`{c.Name}` = VALUES(`{c.Name}`)");
         sb.AppendLine($"ON DUPLICATE KEY UPDATE {string.Join(", ", updateCols)};");
 
         return sb.ToString();
+    }
+
+    // Version-adaptive "<source> AS jt" fragment for the deferred MySQL insert. See MergeScriptHelper's
+    // BuildJsonRowSourceMySql for the full rationale; versionNum >= 1000 identifies MariaDB.
+    private static string BuildDeferredJsonRowSourceMySql(List<MergeColumnInfo> columns, int versionNum)
+    {
+        var isMariaDb = versionNum >= 1000;
+        var hasJsonTable = versionNum == 0 || (isMariaDb ? versionNum >= 1006 : versionNum >= 800);
+        if (hasJsonTable)
+        {
+            var jsonTableColumns = string.Join(",\n    ", columns.Select(c =>
+                $"`{c.Name}` {c.JsonParseType} PATH '$.{c.Name}'"));
+            return "JSON_TABLE(\n  @json_data,\n  '$[*]' COLUMNS (\n    " + jsonTableColumns + "\n  )\n) AS jt";
+        }
+
+        if (!isMariaDb)
+            throw new NotSupportedException(
+                $"Automatic data delivery requires JSON_TABLE (MySQL 8.0+); it is unavailable on MySQL {versionNum / 100}.{versionNum % 100}. " +
+                "Deliver data on this target with manual data scripts.");
+
+        // MariaDB 10.2-10.5: recursive-CTE shred embedded in the derived table (JSON-null -> SQL NULL via
+        // SchemaSmith_JsonScalarStr; JSON columns keep their structure via JSON_EXTRACT).
+        var extractions = string.Join(",\n      ", columns.Select(c =>
+        {
+            var pathSuffix = c.Name.Contains(' ') || c.Name.Contains('.') || c.Name.Contains('-') ? $"\"{c.Name}\"" : c.Name;
+            var extract = $"JSON_EXTRACT(@json_data, CONCAT('$[', _ss_seq.i, '].{pathSuffix}'))";
+            return c.JsonParseType.Equals("JSON", StringComparison.OrdinalIgnoreCase)
+                ? $"{extract} AS `{c.Name}`"
+                : $"SchemaSmith_JsonScalarStr({extract}) AS `{c.Name}`";
+        }));
+        return "(\n" +
+               "    WITH RECURSIVE _ss_seq AS (SELECT 0 i UNION ALL SELECT i + 1 FROM _ss_seq WHERE i + 1 < JSON_LENGTH(@json_data))\n" +
+               "    SELECT\n      " + extractions + "\n" +
+               "    FROM _ss_seq WHERE _ss_seq.i < JSON_LENGTH(@json_data)\n" +
+               "  ) AS jt";
     }
 
     #endregion

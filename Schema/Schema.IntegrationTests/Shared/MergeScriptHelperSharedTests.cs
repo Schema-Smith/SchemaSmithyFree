@@ -31,6 +31,17 @@ public abstract class MergeScriptHelperSharedTests
 
     private IDbConnection _connection = null!;
     private string _testDb = null!;
+    private int _serverVersionNum;
+
+    // JSON_TABLE exists on MySQL 8.0+ / MariaDB 10.6+; below that (MariaDB 10.2-10.5) the merge shreds
+    // @json_data with a recursive CTE instead. 0 = unknown (defaults to JSON_TABLE).
+    private bool UsesJsonTable => _serverVersionNum == 0 || (_serverVersionNum >= 1000 ? _serverVersionNum >= 1006 : _serverVersionNum >= 800);
+
+    // JSON columns are distinguishable from longtext only on MySQL and MariaDB >= 10.4.3 (implicit json_valid
+    // CHECK). On MariaDB 10.2-10.4.2 a JSON column is stored as plain longtext with no marker, so it is
+    // delivered as text (data round-trips correctly) but the JSON-aware order-insensitive upsert comparison
+    // is unavailable. Granularity can't see the .3 patch; treat >= 10.4 as detectable (accepted edge).
+    private bool JsonColumnsDetectable => _serverVersionNum == 0 || _serverVersionNum < 1000 || _serverVersionNum >= 1004;
 
     [SetUp]
     public void SetUp()
@@ -38,6 +49,21 @@ public abstract class MergeScriptHelperSharedTests
         _testDb = MainDb;
         _connection = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(MainConnectionString);
         _connection.Open();
+        using var versionCmd = _connection.CreateCommand();
+        versionCmd.CommandText = "SELECT SchemaSmith_ServerVersionNum()";
+        _serverVersionNum = Convert.ToInt32(versionCmd.ExecuteScalar());
+    }
+
+    // Routes every test's merge build through the detected server version (major*100+minor). Below MySQL 8.0
+    // automatic data delivery is gated (no JSON_TABLE, no recursive CTE), so those tests self-skip on a genuine
+    // 5.7 target; MariaDB (>= 1000) always proceeds -- 10.2-10.5 exercise the recursive-CTE fallback.
+    protected string BuildMergeScript(IDbCommand command, string db, string table, string tableData,
+        string keyColumns, bool mergeUpdate, bool mergeDelete, bool disableTriggers, bool tokenizeScripts, string mergeFilter)
+    {
+        if (_serverVersionNum is > 0 and < 800)
+            Assert.Ignore($"Automatic data delivery is gated below MySQL 8.0 (detected {_serverVersionNum}); manual data scripts are the supported path.");
+        return MergeScriptHelper.BuildMergeScript(Platform, command, db, table, tableData, keyColumns,
+            mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, mySqlServerVersionNum: _serverVersionNum);
     }
 
     [TearDown]
@@ -63,7 +89,7 @@ CREATE TABLE `{_testDb}`.`{tableName.Replace("`", "``")}` (
             command.ExecuteNonQuery();
 
             var tableData = @"[{""id"":1,""name"":""Alpha""}]";
-            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName,
+            var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", true, true, false, false, null!);
 
             Assert.That(script, Is.Not.Null);
@@ -89,6 +115,8 @@ CREATE TABLE `{_testDb}`.`{tableName.Replace("`", "``")}` (
     [Test]
     public void BuildDeferredMergeScript_TextColumn_UsesTextInJsonTableAndCanBeExecuted()
     {
+        if (_serverVersionNum is > 0 and < 800)
+            Assert.Ignore($"Automatic data delivery is gated below MySQL 8.0 (detected {_serverVersionNum}); manual data scripts are the supported path.");
         using var command = _connection.CreateCommand();
         var tableName = $"zz_deferred_text_{Guid.NewGuid():N}";
 
@@ -113,7 +141,8 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
                 tableData, "`id`", false, new List<string> { "ParentId" });
 
             // TEXT must be read as TEXT in JSON_TABLE, not an oversized CHAR that MariaDB rejects.
-            Assert.That(script, Does.Contain("`Notes` TEXT PATH '$.Notes'"));
+            // (MariaDB 10.2-10.5 uses the recursive-CTE shred instead of JSON_TABLE.)
+            if (UsesJsonTable) Assert.That(script, Does.Contain("`Notes` TEXT PATH '$.Notes'"));
 
             foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
             {
@@ -177,7 +206,7 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
         var tableData = @"[{""actor_id"":1,""first_name"":""TEST"",""last_name"":""ACTOR"",""last_update"":""2024-01-01 00:00:00""}]";
 
         // Act
-        var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, "actor",
+        var script = BuildMergeScript(command, _testDb, "actor",
             tableData, "`actor_id`", true, true, false, false, null!);
 
         // Assert — must not use REPLACE INTO (breaks ON DELETE RESTRICT FKs)
@@ -186,9 +215,18 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
         Assert.That(script, Does.Contain("ON DUPLICATE KEY UPDATE"));
         Assert.That(script, Does.Contain($"DELETE Target FROM `{_testDb}`.`actor` Target"));
         Assert.That(script, Does.Contain("NOT EXISTS"));
-        Assert.That(script, Does.Contain("JSON_TABLE("));
-        Assert.That(script, Does.Contain("`first_name` VARCHAR(45) PATH '$.first_name'"));
-        Assert.That(script, Does.Contain("`last_name` VARCHAR(45) PATH '$.last_name'"));
+        if (UsesJsonTable)
+        {
+            Assert.That(script, Does.Contain("JSON_TABLE("));
+            Assert.That(script, Does.Contain("`first_name` VARCHAR(45) PATH '$.first_name'"));
+            Assert.That(script, Does.Contain("`last_name` VARCHAR(45) PATH '$.last_name'"));
+        }
+        else
+        {
+            // MariaDB 10.2-10.5: the JSON array is shredded with a recursive CTE instead of JSON_TABLE.
+            Assert.That(script, Does.Contain("WITH RECURSIVE _ss_seq"));
+            Assert.That(script, Does.Contain("`first_name`"));
+        }
         // AUTO_INCREMENT columns are included so explicit ID values from data files are preserved.
         Assert.That(script, Does.Contain("`actor_id`"));
     }
@@ -201,12 +239,12 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
         var tableData = @"[{""country_id"":1,""country"":""Testland"",""last_update"":""2024-01-01 00:00:00""}]";
 
         // Act
-        var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, "country",
+        var script = BuildMergeScript(command, _testDb, "country",
             tableData, "`country_id`", false, false, false, false, null!);
 
         // Assert
         Assert.That(script, Does.Contain($"INSERT IGNORE INTO `{_testDb}`.`country`"));
-        Assert.That(script, Does.Contain("`country` VARCHAR(50) PATH '$.country'"));
+        if (UsesJsonTable) Assert.That(script, Does.Contain("`country` VARCHAR(50) PATH '$.country'"));
         // AUTO_INCREMENT columns are included to preserve original IDs
         Assert.That(script, Does.Contain("`country_id`"));
     }
@@ -219,7 +257,7 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
         var tableData = @"[{""country"":""Updated Country"",""last_update"":""2024-01-01 00:00:00""}]";
 
         // Act
-        var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, "country",
+        var script = BuildMergeScript(command, _testDb, "country",
             tableData, "", true, false, false, false, null!);
 
         // Assert
@@ -254,7 +292,7 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
             var tableData = @"[{""name"":""test1"",""value"":20.00},{""name"":""test2"",""value"":30.00}]";
 
             // Generate and execute merge script
-            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName,
+            var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", false, false, false, false, null!);
 
             // Execute the generated script (batch execution)
@@ -298,11 +336,11 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
 
             var tableData = @"[{""id"":1,""name"":""Test"",""location"":""POINT(0 0)""}]";
 
-            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName,
+            var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", true, false, false, false, null!);
 
             // JSON_TABLE should read geometry as TEXT (WKT string)
-            Assert.That(script, Does.Contain("`location` TEXT PATH '$.location'"));
+            if (UsesJsonTable) Assert.That(script, Does.Contain("`location` TEXT PATH '$.location'"));
 
             // SELECT should convert WKT back to geometry
             Assert.That(script, Does.Contain("ST_GeomFromText(`location`)"));
@@ -335,7 +373,7 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
 
             var tableData = @"[{""id"":1,""name"":""Place A"",""location"":""POINT(10.5 20.3)""},{""id"":2,""name"":""Place B"",""location"":""POINT(-73.9857 40.7484)""}]";
 
-            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName,
+            var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", true, true, false, false, null!);
 
             foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
@@ -381,11 +419,11 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
 
             var tableData = @"[{""id"":1,""name"":""Test"",""picture"":""SGVsbG8gV29ybGQ=""}]";
 
-            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName,
+            var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", true, false, false, false, null!);
 
             // JSON_TABLE should read blob as TEXT (Base64 string)
-            Assert.That(script, Does.Contain("`picture` TEXT PATH '$.picture'"));
+            if (UsesJsonTable) Assert.That(script, Does.Contain("`picture` TEXT PATH '$.picture'"));
 
             // SELECT should convert Base64 back to binary
             Assert.That(script, Does.Contain("FROM_BASE64(`picture`)"));
@@ -419,7 +457,7 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
             // "Hello World" = SGVsbG8gV29ybGQ=, "Test Data" = VGVzdCBEYXRh
             var tableData = @"[{""id"":1,""name"":""Item A"",""data"":""SGVsbG8gV29ybGQ=""},{""id"":2,""name"":""Item B"",""data"":""VGVzdCBEYXRh""}]";
 
-            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName,
+            var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", true, true, false, false, null!);
 
             foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
@@ -453,10 +491,10 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
         var tableData = @"[{""amount"":100.50,""payment_date"":""2024-01-01 10:00:00""}]";
 
         // payment table has amount DECIMAL(5,2)
-        var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, "payment",
+        var script = BuildMergeScript(command, _testDb, "payment",
             tableData, "`payment_id`", false, false, false, false, null!);
 
-        Assert.That(script, Does.Contain("DECIMAL(5,2)"));
+        if (UsesJsonTable) Assert.That(script, Does.Contain("DECIMAL(5,2)"));
     }
 
     [Test]
@@ -465,10 +503,10 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
         using var command = _connection.CreateCommand();
         var tableData = @"[{""first_name"":""TEST"",""last_name"":""ACTOR"",""last_update"":""2024-01-01 12:30:45""}]";
 
-        var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, "actor",
+        var script = BuildMergeScript(command, _testDb, "actor",
             tableData, "", false, false, false, false, null!);
 
-        Assert.That(script, Does.Contain("TIMESTAMP")); // last_update is TIMESTAMP
+        if (UsesJsonTable) Assert.That(script, Does.Contain("TIMESTAMP")); // last_update is TIMESTAMP (JSON_TABLE column type)
     }
 
     [Test]
@@ -489,12 +527,15 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
 
             var tableData = @"[{""id"":1,""name"":""Test"",""metadata"":{""z_key"":""last"",""a_key"":""first"",""nested"":{""x"":10}}}]";
 
-            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName,
+            var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", true, false, false, false, null!);
 
             // JSON column upsert should use conditional comparison via the MySQL/MariaDb-portable
-            // JSON_EXTRACT(x,'$') form (MariaDB rejects CAST(x AS JSON)).
-            Assert.That(script, Does.Contain("JSON_EXTRACT(VALUES(`metadata`), '$')"));
+            // JSON_EXTRACT(x,'$') form (MariaDB rejects CAST(x AS JSON)). MariaDB 10.2-10.4.2 cannot
+            // distinguish a JSON column from longtext (no implicit json_valid), so it is delivered as text
+            // there -- the data still round-trips (asserted below); only this order-insensitive compare differs.
+            if (JsonColumnsDetectable)
+                Assert.That(script, Does.Contain("JSON_EXTRACT(VALUES(`metadata`), '$')"));
 
             // Execute the generated script
             foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
@@ -539,7 +580,7 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
 
             var tableData = @"[{""id"":1,""release_year"":2024},{""id"":2,""release_year"":1901},{""id"":3,""release_year"":0}]";
 
-            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName,
+            var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", true, true, false, false, null!);
 
             // Execute the generated script
@@ -603,7 +644,7 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
             // 'OTHER') so it must survive even though it's also absent from source.
             var tableData = @"[{""id"":1,""region"":""KEEP""}]";
 
-            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, tableName,
+            var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", true, true, false, false, "Target.region = 'KEEP'");
 
             foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
