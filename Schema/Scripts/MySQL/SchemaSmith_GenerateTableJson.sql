@@ -175,7 +175,7 @@ BEGIN
         SET @v_ccSql = 'SELECT CONCAT(''['', IFNULL(GROUP_CONCAT(
     JSON_OBJECT(
         ''Name'', cc.CONSTRAINT_NAME,
-        ''Expression'', REPLACE(REGEXP_REPLACE(cc.CHECK_CLAUSE, ''_utf8mb4|_utf8|_latin1|_binary'', ''''), ''\\\\'''''', '''''''')
+        ''Expression'', REPLACE(REGEXP_REPLACE(cc.CHECK_CLAUSE, ''_utf8mb4|_utf8mb3|_utf8|_latin1|_binary'', ''''), ''\\\\'''''', '''''''')
     )
     SEPARATOR '',''
 ), ''''), '']'') INTO @v_ccResult

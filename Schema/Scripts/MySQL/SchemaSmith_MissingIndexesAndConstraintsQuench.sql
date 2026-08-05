@@ -612,11 +612,15 @@ WHERE col.CheckExpression IS NOT NULL
     IF SchemaSmith_SupportsCheckConstraints() = 0 THEN
         IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail'
            AND EXISTS (SELECT 1 FROM _SchemaSmith_CheckConstraints) THEN
-            SET @ss_msg = (SELECT CONCAT('CHECK constraints require MySQL 8.0.16 (detected server version ',
-                                         SchemaSmith_ServerVersionNum(), '); check constraint(s): ',
-                                         GROUP_CONCAT(CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.',
-                                                             SchemaSmith_StripBacktickWrapping(c.ConstraintName)) SEPARATOR ', '))
-                           FROM _SchemaSmith_CheckConstraints c);
+            -- Log the full offending list to the run log first (SIGNAL MESSAGE_TEXT is capped at 128 chars,
+            -- so the abort message stays concise + non-truncating and names the detail in the log instead).
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  CHECK constraint unsupported (requires MySQL 8.0.16): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName))
+            FROM _SchemaSmith_CheckConstraints c;
+            -- Keep < 128 chars: MySQL errors ("Data too long for condition item") on an over-long MESSAGE_TEXT.
+            SET @ss_msg = CONCAT('CHECK constraints require MySQL 8.0.16 (detected ',
+                                 SchemaSmith_ServerVersionNum(), '); see the deploy log for the unsupported check(s).');
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
         ELSE
             -- Surface the downgrade in the run log too (not only the ChangeAudit manifest), matching this
@@ -707,13 +711,16 @@ WHERE col.CheckExpression IS NOT NULL
     IF SchemaSmith_SupportsCheckConstraints() = 0 THEN
         IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail'
            AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns WHERE CheckExpression IS NOT NULL AND TRIM(CheckExpression) != '') THEN
-            SET @ss_msg = (SELECT CONCAT('CHECK constraints require MySQL 8.0.16 (detected server version ',
-                                         SchemaSmith_ServerVersionNum(), '); column check constraint(s): ',
-                                         GROUP_CONCAT(CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.CK_',
-                                                             SchemaSmith_StripBacktickWrapping(c.TableName), '_',
-                                                             SchemaSmith_StripBacktickWrapping(c.ColumnName)) SEPARATOR ', '))
-                           FROM _SchemaSmith_Columns c
-                           WHERE c.CheckExpression IS NOT NULL AND TRIM(c.CheckExpression) != '');
+            -- Log the full offending list first; keep the SIGNAL message concise (128-char cap). See STEP 4.
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column CHECK constraint unsupported (requires MySQL 8.0.16): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.CK_',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            WHERE c.CheckExpression IS NOT NULL AND TRIM(c.CheckExpression) != '';
+            -- Keep < 128 chars (see STEP 4).
+            SET @ss_msg = CONCAT('CHECK constraints require MySQL 8.0.16 (detected ',
+                                 SchemaSmith_ServerVersionNum(), '); see the deploy log for the unsupported column check(s).');
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
         ELSE
             -- Surface the downgrade in the run log (see STEP 4).
