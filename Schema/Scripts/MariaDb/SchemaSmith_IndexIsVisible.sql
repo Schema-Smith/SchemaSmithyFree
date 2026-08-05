@@ -18,6 +18,14 @@ BEGIN
     -- 'YES' = ignored/invisible). This override is the whole reason the divergence is isolated to
     -- one small function instead of forking the three large caller scripts. See the MySQL base
     -- definition for the full rationale.
+    --
+    -- Invisible indexes (the IGNORED column) are a MariaDB 10.6 feature; the column is absent on the
+    -- 10.2 floor, where a static read fails at runtime binding. Below 10.6 no index can be invisible,
+    -- so return visible. The early RETURN leaves the IGNORED statement unreached -> unbound on 10.2
+    -- (column resolution is deferred to execution). Mirrors the MySQL base guard (IS_VISIBLE, 8.0).
+    IF SchemaSmith_ServerVersionNum() < 1006 THEN
+        RETURN 1;
+    END IF;
 
     RETURN (
         SELECT CASE WHEN MAX(s.IGNORED) = 'NO' THEN 1 ELSE 0 END

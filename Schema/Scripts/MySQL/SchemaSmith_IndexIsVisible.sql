@@ -22,6 +22,14 @@ BEGIN
     -- column-name divergence is isolated here: this MySQL definition reads IS_VISIBLE; the
     -- Scripts/MariaDb override reads IGNORED. IS_VISIBLE is uniform across an index's STATISTICS rows,
     -- so MAX collapses the per-column rows to one value.
+    --
+    -- Invisible indexes (the IS_VISIBLE column) are a MySQL 8.0 feature; the column is absent on the
+    -- 5.7 floor, where a static read fails at runtime binding. Below 8.0 no index can be invisible, so
+    -- return visible. The early RETURN leaves the IS_VISIBLE statement unreached -> unbound on 5.7
+    -- (column resolution is deferred to execution). Mirrored in the MariaDb override (IGNORED, 10.6).
+    IF SchemaSmith_ServerVersionNum() < 800 THEN
+        RETURN 1;
+    END IF;
 
     RETURN (
         SELECT CASE WHEN MAX(s.IS_VISIBLE) = 'YES' THEN 1 ELSE 0 END
