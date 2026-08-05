@@ -186,6 +186,11 @@ public class CheckConstraintGatingTests
     [Test]
     public void ModernServer_CreatesAndEnforcesCheck()
     {
+        // Enforcement is only assertable where the engine actually supports CHECK constraints (MySQL 8.0.16+
+        // or MariaDB). On a genuine below-floor target (MySQL 5.7) checks degrade, so this positive test skips.
+        if (Scalar("SELECT SchemaSmith_SupportsCheckConstraints()") == 0)
+            Assert.Ignore("Target does not enforce CHECK constraints (MySQL < 8.0.16); covered by the BelowFloor_* tests.");
+
         // No version override: on a real 8.0 server SupportsCheckConstraints() = 1, so the check is created.
         SetPolicy("warn");
 
