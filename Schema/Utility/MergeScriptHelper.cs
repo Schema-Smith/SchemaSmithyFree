@@ -499,7 +499,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
         bool mergeUpdate, bool mergeDelete, bool disableTriggers,
         bool tokenizeScripts, string mergeFilter,
         bool disableRules = false, bool updateDescendents = false,
-        string destSchemaOverride = null, int pgServerVersionNum = 0)
+        string destSchemaOverride = null, int pgServerVersionNum = 0, int mySqlServerVersionNum = 0)
     {
         // Extract JSON keys to filter columns — only include columns present in the data.
         // For tokenized scripts, data is replaced at runtime so we include all columns.
@@ -512,7 +512,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
             Platform.PostgreSQL => BuildMergeScriptPostgreSql(cmd, schemaOrDb, tableName, updateDescendents, tableData, keyColumns,
                 mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride, pgServerVersionNum),
             Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, tableData, keyColumns,
-                mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, jsonKeys),
+                mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, jsonKeys, mySqlServerVersionNum),
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
         };
     }
@@ -1285,7 +1285,8 @@ SELECT c.column_name, c.udt_name
     }
 
     private static string BuildMergeScriptMySql(IDbCommand cmd, string databaseName, string tableName,
-        string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys)
+        string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete, bool tokenizeScripts, string mergeFilter,
+        HashSet<string> jsonKeys, int mySqlServerVersionNum = 0)
     {
         databaseName = databaseName.Trim().Trim('`');
         tableName = tableName.Trim().Trim('`');
@@ -1295,7 +1296,13 @@ SELECT c.column_name, c.udt_name
         // (unlike SQL Server's IDENTITY_INSERT or PostgreSQL's OVERRIDING VALUE).
         var insertColumns = GetInsertColumnsMySql(cmd, databaseName, tableName, jsonKeys);
         var selectExpressions = GetJsonSelectColumnsMySql(cmd, databaseName, tableName, jsonKeys);
-        var jsonTableColumns = GetJsonColumnDefinitionsMySql(cmd, databaseName, tableName, jsonKeys);
+
+        // The JSON-array row source is version-adaptive: JSON_TABLE where the target has it (MySQL 8.0+ /
+        // MariaDB 10.6+), else a recursive-CTE shred for MariaDB 10.2-10.5. MySQL below 8.0 has neither and is
+        // gated out of automatic data delivery upstream (DataDeliveryProcessor) -- BuildJsonRowSourceMySql
+        // throws NotSupportedException there so the gate has a single source of truth.
+        var columns = GetColumnInfoMySql(cmd, databaseName, tableName, excludeAutoIncrement: false, jsonKeys);
+        var jsonSource = BuildJsonRowSourceMySql(columns, mySqlServerVersionNum);
 
         if (string.IsNullOrEmpty(insertColumns))
             throw new InvalidOperationException($"No columns found for table `{databaseName}`.`{tableName}` (or all columns are auto-increment/generated).");
@@ -1310,18 +1317,18 @@ SELECT c.column_name, c.udt_name
         {
             var updateColumns = GetUpdateColumnsMySql(cmd, databaseName, tableName, jsonKeys);
             var upsert = mergeUpdate
-                ? BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, updateColumns, tableData, keyColumns, tokenizeScripts)
-                : BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, tableData, tokenizeScripts);
+                ? BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, updateColumns, tableData, keyColumns, tokenizeScripts)
+                : BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, tableData, tokenizeScripts);
             var stringKeys = GetStringKeyColumnsMySql(cmd, databaseName, tableName, keyColumns);
-            var delete = BuildDeleteStatementMySql(databaseName, tableName, jsonTableColumns, keyColumns, mergeFilter, stringKeys);
+            var delete = BuildDeleteStatementMySql(databaseName, tableName, jsonSource, keyColumns, mergeFilter, stringKeys);
             return upsert + "\n" + delete;
         }
         if (mergeUpdate)
         {
             var updateColumns = GetUpdateColumnsMySql(cmd, databaseName, tableName, jsonKeys);
-            return BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, updateColumns, tableData, keyColumns, tokenizeScripts);
+            return BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, updateColumns, tableData, keyColumns, tokenizeScripts);
         }
-        return BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonTableColumns, tableData, tokenizeScripts);
+        return BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, tableData, tokenizeScripts);
     }
 
     private static List<MySqlColumnInfo> GetColumnInfoMySql(IDbCommand cmd, string databaseName, string tableName, bool excludeAutoIncrement, HashSet<string> jsonKeys = null)
@@ -1448,18 +1455,13 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
             : $"Target.`{k}` = jt.`{k}`";
 
     private static string BuildDeleteStatementMySql(string databaseName, string tableName,
-        string jsonTableColumns, string keyColumns, string mergeFilter, HashSet<string> stringKeys)
+        string jsonSource, string keyColumns, string mergeFilter, HashSet<string> stringKeys)
     {
         var keyColNames = ParseKeyColumnsMySql(keyColumns);
         var sb = new StringBuilder();
         sb.AppendLine($"DELETE Target FROM `{databaseName}`.`{tableName}` Target");
         sb.AppendLine("WHERE NOT EXISTS (");
-        sb.AppendLine("  SELECT 1 FROM JSON_TABLE(");
-        sb.AppendLine("    @json_data,");
-        sb.AppendLine("    '$[*]' COLUMNS (");
-        sb.AppendLine($"      {jsonTableColumns}");
-        sb.AppendLine("    )");
-        sb.AppendLine("  ) AS jt");
+        sb.AppendLine($"  SELECT 1 FROM {jsonSource}");
         sb.AppendLine($"  WHERE {string.Join(" AND ", keyColNames.Select(k => BuildKeyMatchMySql(k, stringKeys)))}");
         sb.Append(")");
         if (!string.IsNullOrWhiteSpace(mergeFilter))
@@ -1469,18 +1471,13 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
     }
 
     private static string BuildUpsertStatementMySql(string databaseName, string tableName,
-        string insertColumns, string selectExpressions, string jsonTableColumns, string updateColumns,
+        string insertColumns, string selectExpressions, string jsonSource, string updateColumns,
         string tableData, string keyColumns, bool tokenizeScripts)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"INSERT INTO `{databaseName}`.`{tableName}` ({insertColumns})");
         sb.AppendLine($"SELECT {selectExpressions}");
-        sb.AppendLine("FROM JSON_TABLE(");
-        sb.AppendLine("  @json_data,");
-        sb.AppendLine("  '$[*]' COLUMNS (");
-        sb.AppendLine($"    {jsonTableColumns}");
-        sb.AppendLine("  )");
-        sb.AppendLine(") AS jt");
+        sb.AppendLine($"FROM {jsonSource}");
 
         var keyColNames = ParseKeyColumnsMySql(keyColumns);
         var nonKeyColumns = updateColumns.Split(',')
@@ -1520,18 +1517,13 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
     }
 
     private static string BuildInsertStatementMySql(string databaseName, string tableName,
-        string insertColumns, string selectExpressions, string jsonTableColumns,
+        string insertColumns, string selectExpressions, string jsonSource,
         string tableData, bool tokenizeScripts)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"INSERT IGNORE INTO `{databaseName}`.`{tableName}` ({insertColumns})");
         sb.AppendLine($"SELECT {selectExpressions}");
-        sb.AppendLine("FROM JSON_TABLE(");
-        sb.AppendLine("  @json_data,");
-        sb.AppendLine("  '$[*]' COLUMNS (");
-        sb.AppendLine($"    {jsonTableColumns}");
-        sb.AppendLine("  )");
-        sb.AppendLine(") AS jt;");
+        sb.AppendLine($"FROM {jsonSource};");
 
         return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts);
     }
@@ -1554,6 +1546,52 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
         sb.AppendLine();
         sb.Append(sqlStatement);
         return sb.ToString();
+    }
+
+    // Builds the JSON-array row source "<expr> AS jt" for the merge statements, version-adaptively.
+    // JSON_TABLE exists on MySQL 8.0+ / MariaDB 10.6+; MariaDB 10.2-10.5 has no JSON_TABLE but has recursive
+    // CTEs, so it shreds @json_data with an embedded recursive CTE (WITH cannot prefix INSERT/DELETE on
+    // MariaDB 10.2, hence embedding inside the derived table). MySQL below 8.0 has neither and is unsupported
+    // for automatic data delivery (gated upstream in DataDeliveryProcessor) -- this throws so that gate has a
+    // single source of truth. versionNum is major*100+minor; 0 means "unknown/modern" (unit tests, callers
+    // that don't detect) and takes the JSON_TABLE path. versionNum >= 1000 identifies MariaDB (10+/11+);
+    // MySQL never reaches major 10, so the single number distinguishes the engine family.
+    private static string BuildJsonRowSourceMySql(List<MySqlColumnInfo> columns, int versionNum)
+    {
+        var isMariaDb = versionNum >= 1000;
+        var hasJsonTable = versionNum == 0 || (isMariaDb ? versionNum >= 1006 : versionNum >= 800);
+        if (hasJsonTable)
+            return "JSON_TABLE(\n    @json_data,\n    '$[*]' COLUMNS (\n      " +
+                   BuildJsonTableColumnsMySql(columns) + "\n    )\n  ) AS jt";
+
+        if (!isMariaDb)
+            throw new NotSupportedException(
+                $"Automatic data delivery requires JSON_TABLE (MySQL 8.0+); it is unavailable on MySQL {versionNum / 100}.{versionNum % 100}. " +
+                "Deliver data on this target with manual data scripts.");
+
+        // MariaDB 10.2-10.5: recursive-CTE shred (cap-free), embedded in the derived table. The outer WHERE
+        // bounds the sequence to the array length so an empty payload yields zero rows (JSON_TABLE parity).
+        var extractions = string.Join(",\n      ", columns.Select(BuildCteExtractionMySql));
+        return "(\n" +
+               "    WITH RECURSIVE _ss_seq AS (SELECT 0 i UNION ALL SELECT i + 1 FROM _ss_seq WHERE i + 1 < JSON_LENGTH(@json_data))\n" +
+               "    SELECT\n      " + extractions + "\n" +
+               "    FROM _ss_seq WHERE _ss_seq.i < JSON_LENGTH(@json_data)\n" +
+               "  ) AS jt";
+    }
+
+    // One recursive-CTE extraction expression, matching the JSON_TABLE column it replaces. JSON columns keep
+    // their structure (JSON_EXTRACT); every other column is read as a null-safe scalar via
+    // SchemaSmith_JsonScalarStr so an explicit JSON null becomes SQL NULL (a bare JSON_UNQUOTE would yield the
+    // string 'null') -- the target column type coerces the extracted text on INSERT, matching JSON_TABLE.
+    private static string BuildCteExtractionMySql(MySqlColumnInfo col)
+    {
+        var pathSuffix = col.Name.Contains(' ') || col.Name.Contains('.') || col.Name.Contains('-')
+            ? $"\"{col.Name}\""
+            : col.Name;
+        var extract = $"JSON_EXTRACT(@json_data, CONCAT('$[', _ss_seq.i, '].{pathSuffix}'))";
+        return col.IsJson
+            ? $"{extract} AS `{col.Name}`"
+            : $"SchemaSmith_JsonScalarStr({extract}) AS `{col.Name}`";
     }
 
     private static string BuildJsonTableColumnsMySql(List<MySqlColumnInfo> columns)
