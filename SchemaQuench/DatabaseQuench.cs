@@ -161,6 +161,8 @@ public class DatabaseQuench
         $"Template:{_template?.Name}", LogPrefix,
         FailureContext.ResolveCapacity(FactoryContainer.Resolve<IConfigurationRoot>()));
     private int _postgreSqlServerVersionNum; // 0 until detected; only meaningful when Platform == PostgreSQL
+    private int _mySqlServerVersionNum; // 0 until detected (major*100+minor); only meaningful for MySQL/MariaDb
+    private string _unsupportedFeaturePolicy; // Target:UnsupportedFeaturePolicy; governs the MySQL data-delivery gate
 
     // Per-iteration content built by PrepareIterationContent at the start of Execute(). For schema-
     // template iterations the script collections are cloned (isolating {{SchemaName}}-substituted
@@ -473,6 +475,16 @@ public class DatabaseQuench
                     _postgreSqlServerVersionNum = TargetVersionDetector.Detect(versionCmd, Platform.PostgreSQL).ServerComparable;
                 }
 
+                // MySQL/MariaDb: detect the server version (major*100+minor) so data delivery can pick a
+                // version-adaptive JSON-array shred — JSON_TABLE on MySQL 8.0+/MariaDB 10.6+, a recursive CTE
+                // on MariaDB 10.2-10.5, and (gated) manual scripts below MySQL 8.0.
+                if (_product.Platform.GetBasePlatform() == Platform.MySQL)
+                {
+                    using var versionCmd = connection.CreateCommand();
+                    _mySqlServerVersionNum = TargetVersionDetector.Detect(versionCmd, _product.Platform).ServerComparable;
+                    _unsupportedFeaturePolicy = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:UnsupportedFeaturePolicy"];
+                }
+
                 // SQL Server: detect the target *database* compatibility level before kindling (a modern
                 // server can host a database left at compat 100) to enforce the compat-100 floor and select
                 // the model-ingest encoding — at/above compat 130 the JSON/OPENJSON path, below 130 the XML
@@ -677,6 +689,8 @@ public class DatabaseQuench
                                 ProgressLogError = SafeProgressLogError,
                                 WhatIf = IsWhatIf,
                                 PostgreSqlServerVersionNum = _postgreSqlServerVersionNum,
+                                MySqlServerVersionNum = _mySqlServerVersionNum,
+                                UnsupportedFeaturePolicy = _unsupportedFeaturePolicy,
                                 WriteResolvedSqlArtifact = (label, sql) =>
                                 {
                                     try
@@ -786,6 +800,8 @@ public class DatabaseQuench
                             DatabaseName = _databaseName,
                             SchemaName = _schemaName,
                             PostgreSqlServerVersionNum = _postgreSqlServerVersionNum,
+                            MySqlServerVersionNum = _mySqlServerVersionNum,
+                            UnsupportedFeaturePolicy = _unsupportedFeaturePolicy,
                             TemplateRootPath = Path.GetDirectoryName(_template.FilePath) ?? "",
                             ScriptHelper = FactoryContainer.Resolve<IMergeScriptHelper>(),
                             ReadFileContent = path => ProductFileWrapper.GetFromFactory().ReadAllText(path),
