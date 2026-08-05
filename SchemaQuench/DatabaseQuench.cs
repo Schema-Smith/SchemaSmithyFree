@@ -1684,13 +1684,21 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         // version; version-gated emit sites read it via SchemaSmith.UnsupportedFeaturePolicy() to choose
         // degrade-with-warning (default) vs abort. SQL Server bakes the same policy into the helper function
         // at kindle time instead (dropping the 2016+ sp_set_session_context transport, unavailable on a
-        // genuine old binary) — see the KindleTheForge call in Execute. MySQL/MariaDB land with their floor.
+        // genuine old binary) — see the KindleTheForge call in Execute. MySQL/MariaDB use a session
+        // variable that works on every version (mirroring @schemasmith_version_override).
         // The SQL helper defaults to 'warn', so only an explicit 'fail' matters.
         if (_product.Platform.GetBasePlatform() == Platform.PostgreSQL)
         {
             var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
             using var policyCmd = connection.CreateCommand();
             policyCmd.CommandText = $"SET schemasmith.unsupported_policy = '{policy}'";
+            policyCmd.ExecuteNonQuery();
+        }
+        else if (_product.Platform.GetBasePlatform() == Platform.MySQL)
+        {
+            var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
+            using var policyCmd = connection.CreateCommand();
+            policyCmd.CommandText = $"SET @schemasmith_unsupported_policy = '{policy}'";
             policyCmd.ExecuteNonQuery();
         }
 
