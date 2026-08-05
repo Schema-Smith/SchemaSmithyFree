@@ -79,10 +79,12 @@ namespace Schema.UnitTests.Utility
         [TestCase(Platform.SqlServer, 16, false)]
         [TestCase(Platform.PostgreSQL, 11, true)]   // PostgreSQL 11 (below floor)
         [TestCase(Platform.PostgreSQL, 12, false)]  // 12 floor
-        [TestCase(Platform.MySQL, 507, true)]       // MySQL 5.7
-        [TestCase(Platform.MySQL, 800, false)]      // 8.0 floor
-        [TestCase(Platform.MariaDb, 1005, true)]    // MariaDB 10.5
-        [TestCase(Platform.MariaDb, 1006, false)]   // 10.6 floor
+        [TestCase(Platform.MySQL, 506, true)]       // MySQL 5.6 — below the 5.7 floor (no JSON)
+        [TestCase(Platform.MySQL, 507, false)]      // 5.7 floor
+        [TestCase(Platform.MySQL, 800, false)]      // 8.0 — above floor
+        [TestCase(Platform.MariaDb, 1001, true)]    // MariaDB 10.1 — below the 10.2 floor (no JSON)
+        [TestCase(Platform.MariaDb, 1002, false)]   // 10.2 floor
+        [TestCase(Platform.MariaDb, 1006, false)]   // 10.6 — above floor
         public void IsBelowFloor_ComparesAgainstEngineFloor(Platform platform, int comparable, bool expected)
         {
             Assert.That(VersionHelper.IsBelowFloor(platform, comparable), Is.EqualTo(expected));
@@ -90,8 +92,8 @@ namespace Schema.UnitTests.Utility
 
         [TestCase(Platform.SqlServer, "2008 (major 10)")]
         [TestCase(Platform.PostgreSQL, "12")]
-        [TestCase(Platform.MySQL, "8.0")]
-        [TestCase(Platform.MariaDb, "10.6")]
+        [TestCase(Platform.MySQL, "5.7")]
+        [TestCase(Platform.MariaDb, "10.2")]
         public void HardFloorDisplay_MatchesSupportedFloorsTable(Platform platform, string expected)
         {
             Assert.That(VersionHelper.HardFloorDisplay(platform), Is.EqualTo(expected));

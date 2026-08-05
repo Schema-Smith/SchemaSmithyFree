@@ -30,8 +30,8 @@ namespace Schema.Utility
         {
             Platform.SqlServer => 10,     // SQL Server 2008 (below compat 130 the model is ingested/compared as XML)
             Platform.PostgreSQL => 12,    // PostgreSQL 12 (features above 12 — per-column compression + expression statistics (14), NULLS NOT DISTINCT (15) — are degraded per the unsupported-feature policy)
-            Platform.MySQL => 800,        // MySQL 8.0
-            Platform.MariaDb => 1006,     // MariaDB 10.6
+            Platform.MySQL => 507,        // MySQL 5.7 (JSON_TABLE-free JSON_EXTRACT parse; CHECK degrades below 8.0.16; data delivery requires 8.0)
+            Platform.MariaDb => 1002,     // MariaDB 10.2 (recursive-CTE data-delivery shred below 10.6; full support)
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "No version floor defined for platform")
         };
 
@@ -43,8 +43,8 @@ namespace Schema.Utility
         {
             Platform.SqlServer => "2008 (major 10)",
             Platform.PostgreSQL => "12",
-            Platform.MySQL => "8.0",
-            Platform.MariaDb => "10.6",
+            Platform.MySQL => "5.7",
+            Platform.MariaDb => "10.2",
             _ => HardFloorComparable(platform).ToString()
         };
 

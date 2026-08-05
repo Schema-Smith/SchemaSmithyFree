@@ -72,9 +72,35 @@ namespace Schema.UnitTests.Utility
         [Test]
         public void CheckOrThrow_MariaDbAtFloor_DoesNotThrow()
         {
-            var info = new TargetVersionInfo(Platform.MariaDb, "10.6.27-MariaDB", 1006);
+            var info = new TargetVersionInfo(Platform.MariaDb, "10.2.44-MariaDB", 1002);   // 10.2 floor
 
             Assert.DoesNotThrow(() => PreFlightVersionGuard.CheckOrThrow(info, "maria"));
+        }
+
+        [Test]
+        public void CheckOrThrow_MariaDbBelowFloor_Throws()
+        {
+            var info = new TargetVersionInfo(Platform.MariaDb, "10.1.48-MariaDB", 1001);   // 10.1 — below the 10.2 floor (no JSON)
+
+            var ex = Assert.Throws<Exception>(() => PreFlightVersionGuard.CheckOrThrow(info, "maria"));
+            Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
+        }
+
+        [Test]
+        public void CheckOrThrow_MySqlAtFloor_DoesNotThrow()
+        {
+            var info = new TargetVersionInfo(Platform.MySQL, "5.7.44", 507);   // 5.7 floor
+
+            Assert.DoesNotThrow(() => PreFlightVersionGuard.CheckOrThrow(info, "mysql"));
+        }
+
+        [Test]
+        public void CheckOrThrow_MySqlBelowFloor_Throws()
+        {
+            var info = new TargetVersionInfo(Platform.MySQL, "5.6.51", 506);   // 5.6 — below the 5.7 floor (no JSON)
+
+            var ex = Assert.Throws<Exception>(() => PreFlightVersionGuard.CheckOrThrow(info, "mysql"));
+            Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
         }
     }
 }
