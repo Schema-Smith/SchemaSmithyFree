@@ -502,9 +502,13 @@ BEGIN
                     SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].CheckConstraints[', v_ChkInnerIdx, '].Name')))) AS ConstraintName,
                     -- Strip MySQL charset introducers (_utf8mb4, _utf8, etc.) and backslash-escaped quotes
                     -- from CHECK_CLAUSE expressions. MySQL's INFORMATION_SCHEMA stores these internally
-                    -- but they're not needed in DDL and cause PREPARE failures.
+                    -- but they're not needed in DDL and cause PREPARE failures. Nested REPLACE (not
+                    -- REGEXP_REPLACE, which is MySQL 8.0+) keeps this version-agnostic down to the 5.7
+                    -- floor; _utf8mb4 must be stripped before _utf8 (its prefix), so it is the innermost.
                     REPLACE(
-                        REGEXP_REPLACE(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].CheckConstraints[', v_ChkInnerIdx, '].Expression'))), '_utf8mb4|_utf8|_latin1|_binary', ''),
+                        REPLACE(REPLACE(REPLACE(REPLACE(
+                            SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].CheckConstraints[', v_ChkInnerIdx, '].Expression'))),
+                            '_utf8mb4', ''), '_utf8', ''), '_latin1', ''), '_binary', ''),
                         '\\''', '''') AS Expression,
                     1 AS ShouldApply,
                     NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].CheckConstraints[', v_ChkInnerIdx, '].ShouldApplyExpression')))), '') AS ShouldApplyExpression,
