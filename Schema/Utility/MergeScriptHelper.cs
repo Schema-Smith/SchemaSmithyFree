@@ -1448,10 +1448,14 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
     // MariaDB 11.4 defaults new tables to utf8mb4_uca1400_ai_ci while a JSON_TABLE-extracted string
     // column is utf8mb4_general_ci, so `Target.k = jt.k` raises "Illegal mix of collations" (1267).
     // Forcing utf8mb4_unicode_ci on both sides (the same canonical the quench comparison path uses)
-    // resolves the mix without changing which rows match. Numeric/date keys carry no collation.
+    // resolves the mix without changing which rows match. The Target column is transcoded with
+    // CONVERT(... USING utf8mb4) FIRST so the collation is valid for its charset -- a non-utf8mb4 key
+    // (latin1 / legacy utf8mb3, common on the older MySQL 5.7 / MariaDB 10.2 databases the floor targets)
+    // would otherwise raise "COLLATION 'utf8mb4_unicode_ci' is not valid for CHARACTER SET 'latin1'" (1253);
+    // same fix as CHANGELOG #359 for the forge procs. Numeric/date keys carry no collation.
     private static string BuildKeyMatchMySql(string k, HashSet<string> stringKeys) =>
         stringKeys.Contains(k)
-            ? $"Target.`{k}` COLLATE utf8mb4_unicode_ci = jt.`{k}` COLLATE utf8mb4_unicode_ci"
+            ? $"CONVERT(Target.`{k}` USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(jt.`{k}` USING utf8mb4) COLLATE utf8mb4_unicode_ci"
             : $"Target.`{k}` = jt.`{k}`";
 
     private static string BuildDeleteStatementMySql(string databaseName, string tableName,

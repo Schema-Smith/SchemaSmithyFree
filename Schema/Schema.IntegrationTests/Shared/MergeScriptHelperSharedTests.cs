@@ -113,6 +113,50 @@ CREATE TABLE `{_testDb}`.`{tableName.Replace("`", "``")}` (
     }
 
     [Test]
+    public void BuildMergeScript_Latin1StringKey_FullSyncDelete_ExecutesWithoutCollationError()
+    {
+        // Regression (#373): the DELETE key-match forced COLLATE utf8mb4_unicode_ci onto the key column
+        // regardless of its charset, so a latin1 key column (latin1 is a common stock default on older
+        // MySQL/MariaDB) raised "COLLATION 'utf8mb4_unicode_ci' is not valid for CHARACTER SET 'latin1'"
+        // (error 1253), aborting data delivery. Same defect class as CHANGELOG #359.
+        using var command = _connection.CreateCommand();
+        var tableName = $"zz_latin1key_{Guid.NewGuid():N}";
+        try
+        {
+            command.CommandText = $@"
+CREATE TABLE `{_testDb}`.`{tableName}` (
+    code VARCHAR(20) CHARACTER SET latin1 NOT NULL PRIMARY KEY,
+    name VARCHAR(50)
+)";
+            command.ExecuteNonQuery();
+            // Seed a stale row the full-sync delete must remove (absent from the delivered data).
+            command.CommandText = $"INSERT INTO `{_testDb}`.`{tableName}` (code, name) VALUES ('STALE', 'old')";
+            command.ExecuteNonQuery();
+
+            var tableData = @"[{""code"":""KEEP"",""name"":""Alpha""}]";
+            var script = BuildMergeScript(command, _testDb, tableName,
+                tableData, "`code`", true, true, false, false, null!);
+
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrWhiteSpace(batch)) continue;
+                command.CommandText = batch;
+                command.ExecuteNonQuery();
+            }
+
+            command.CommandText = $"SELECT name FROM `{_testDb}`.`{tableName}` WHERE code = 'KEEP'";
+            Assert.That(command.ExecuteScalar()?.ToString(), Is.EqualTo("Alpha"), "The delivered latin1-keyed row must upsert.");
+            command.CommandText = $"SELECT COUNT(*) FROM `{_testDb}`.`{tableName}` WHERE code = 'STALE'";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0), "The full-sync delete must remove the stale latin1-keyed row.");
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
     public void BuildDeferredMergeScript_TextColumn_UsesTextInJsonTableAndCanBeExecuted()
     {
         if (_serverVersionNum is > 0 and < 800)
