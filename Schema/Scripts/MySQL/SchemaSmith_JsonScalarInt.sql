@@ -17,11 +17,15 @@ BEGIN
   -- (a) an explicit JSON null does not reach a numeric CAST (which errors "Invalid JSON value for CAST to
   -- INTEGER"), and (b) a JSON boolean does not stringify to 'true'/'false' when it flows through COALESCE
   -- or into a typed column. Pure computation on 5.7+ / 10.2+ built-ins (no JSON_TABLE / JSON_VALUE).
+  -- Boolean is compared via JSON_UNQUOTE text ('true'/'false'), NOT `p_val = CAST('true' AS JSON)`:
+  -- MariaDB has no native JSON type (JSON is a LONGTEXT alias) and rejects CAST(... AS JSON), so the
+  -- text comparison is the cross-engine form that CREATEs and evaluates identically on MySQL 5.7/8.0
+  -- and MariaDB 10.2/11.4.
   IF p_val IS NULL OR JSON_TYPE(p_val) = 'NULL' THEN
     RETURN NULL;
   END IF;
   IF JSON_TYPE(p_val) = 'BOOLEAN' THEN
-    RETURN IF(p_val = CAST('true' AS JSON), 1, 0);
+    RETURN IF(JSON_UNQUOTE(p_val) = 'true', 1, 0);
   END IF;
   RETURN CAST(JSON_UNQUOTE(p_val) AS SIGNED);
 END //

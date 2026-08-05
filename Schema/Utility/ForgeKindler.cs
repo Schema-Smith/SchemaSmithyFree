@@ -309,6 +309,11 @@ public static class ForgeKindler
             ],
             Platform.MySQL =>
             [
+                // Scalar JSON helpers must kindle BEFORE BootstrapTableQuench: the Kindling_*_Table
+                // scripts execute Bootstrap at kindle time, and Bootstrap (like ParseTableJson) calls
+                // these helpers to shred its table definition.
+                new("SchemaSmith_JsonScalarInt.sql"),
+                new("SchemaSmith_JsonScalarStr.sql"),
                 new("SchemaSmith_BootstrapTableQuench.sql"),
                 new("Kindling_KindleStamp_Table.sql", ReplaceTableDef: true),
                 new("Kindling_CompletedMigrationScripts_Table.sql", ReplaceTableDef: true),
@@ -320,8 +325,6 @@ public static class ForgeKindler
                 new("SchemaSmith_SafeBacktickWrap.sql"),
                 new("SchemaSmith_StripLeadingSelect.sql"),
                 new("SchemaSmith_ServerVersionNum.sql"),
-                new("SchemaSmith_JsonScalarInt.sql"),
-                new("SchemaSmith_JsonScalarStr.sql"),
                 new("SchemaSmith_NormalizeIndexColumns.sql"),
                 new("SchemaSmith_NormalizeCheckExpression.sql"),
                 new("SchemaSmith_UpperDataType.sql"),
