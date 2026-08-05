@@ -12,6 +12,33 @@ CREATE PROCEDURE SchemaSmith_ParseTableJson(
 )
 SQL SECURITY DEFINER
 BEGIN
+    -- Loop counters for the JSON_EXTRACT-based shred of p_TableDefinitions (MySQL 5.7 / MariaDB 10.2
+    -- compatible replacement for JSON_TABLE, which does not exist on those versions). One outer/inner
+    -- counter pair per JSON_TABLE call this procedure used to make; grouped here because MySQL requires
+    -- all DECLAREs at the top of the BEGIN block, before any executable statement.
+    DECLARE v_TblCnt INT;
+    DECLARE v_TblIdx INT;
+    DECLARE v_ColOuterCnt INT;
+    DECLARE v_ColOuterIdx INT;
+    DECLARE v_ColInnerCnt INT;
+    DECLARE v_ColInnerIdx INT;
+    DECLARE v_IxOuterCnt INT;
+    DECLARE v_IxOuterIdx INT;
+    DECLARE v_IxInnerCnt INT;
+    DECLARE v_IxInnerIdx INT;
+    DECLARE v_FkOuterCnt INT;
+    DECLARE v_FkOuterIdx INT;
+    DECLARE v_FkInnerCnt INT;
+    DECLARE v_FkInnerIdx INT;
+    DECLARE v_ChkOuterCnt INT;
+    DECLARE v_ChkOuterIdx INT;
+    DECLARE v_ChkInnerCnt INT;
+    DECLARE v_ChkInnerIdx INT;
+    DECLARE v_FtOuterCnt INT;
+    DECLARE v_FtOuterIdx INT;
+    DECLARE v_FtInnerCnt INT;
+    DECLARE v_FtInnerIdx INT;
+
     -- Parse JSON table definitions into temporary tables for MySQL
     -- These temp tables persist in the session and are used by
     -- SchemaSmith_MissingTableAndColumnQuench, SchemaSmith_ModifiedTableQuench, and SchemaSmith_MissingIndexesAndConstraintsQuench
@@ -57,39 +84,30 @@ BEGIN
     -- The NOT EXISTS check against INFORMATION_SCHEMA is done separately via UPDATE
     -- to avoid a MySQL optimizer issue where correlated subqueries with function calls
     -- inside JSON_TABLE context don't re-evaluate correctly for all rows.
-    INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropIndexesRemovedFromProduct, PreventDrop)
-    SELECT
-        SchemaSmith_SafeBacktickWrap(jt.Name) AS TableName,
-        COALESCE(NULLIF(TRIM(jt.Engine), ''), 'InnoDB') AS Engine,
-        NULLIF(TRIM(jt.Collation), '') AS Collation,
-        SchemaSmith_SafeBacktickWrap(jt.OldName) AS OldName,
-        NULLIF(TRIM(jt.RowFormat), '') AS RowFormat,
-        jt.AutoIncrementValue AS AutoIncrementValue,
-        0 AS NewTable,
-        1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
-        NULLIF(TRIM(jt.VariantName), '') AS VariantName,
-        jt.DropColumnsRemovedFromProduct,
-        jt.DropForeignKeysRemovedFromProduct,
-        jt.DropCheckConstraintsRemovedFromProduct,
-        jt.DropIndexesRemovedFromProduct,
-        COALESCE(jt.PreventDrop, 0) AS PreventDrop
-    FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
-        Name VARCHAR(128) PATH '$.Name',
-        Engine VARCHAR(50) PATH '$.Engine',
-        Collation VARCHAR(100) PATH '$.Collation',
-        OldName VARCHAR(128) PATH '$.OldName',
-        RowFormat VARCHAR(20) PATH '$.RowFormat',
-        AutoIncrementValue BIGINT UNSIGNED PATH '$.AutoIncrementValue',
-        ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
-        VariantName VARCHAR(128) PATH '$.VariantName',
-        DropColumnsRemovedFromProduct TINYINT PATH '$.DropColumnsRemovedFromProduct',
-        DropForeignKeysRemovedFromProduct TINYINT PATH '$.DropForeignKeysRemovedFromProduct',
-        DropCheckConstraintsRemovedFromProduct TINYINT PATH '$.DropCheckConstraintsRemovedFromProduct',
-        DropIndexesRemovedFromProduct TINYINT PATH '$.DropIndexesRemovedFromProduct',
-        PreventDrop TINYINT PATH '$.PreventDrop'
-    )) AS jt
-    WHERE jt.Name IS NOT NULL;
+    SET v_TblCnt = JSON_LENGTH(p_TableDefinitions);
+    SET v_TblIdx = 0;
+    WHILE v_TblIdx < v_TblCnt DO
+        IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name'))) IS NOT NULL THEN
+            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropIndexesRemovedFromProduct, PreventDrop)
+            SELECT
+                SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name')))) AS TableName,
+                COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Engine')))), ''), 'InnoDB') AS Engine,
+                NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Collation')))), '') AS Collation,
+                SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].OldName')))) AS OldName,
+                NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].RowFormat')))), '') AS RowFormat,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].AutoIncrementValue'))) AS AutoIncrementValue,
+                0 AS NewTable,
+                1 AS ShouldApply,
+                NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].ShouldApplyExpression')))), '') AS ShouldApplyExpression,
+                NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].VariantName')))), '') AS VariantName,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropColumnsRemovedFromProduct'))) AS DropColumnsRemovedFromProduct,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropForeignKeysRemovedFromProduct'))) AS DropForeignKeysRemovedFromProduct,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropCheckConstraintsRemovedFromProduct'))) AS DropCheckConstraintsRemovedFromProduct,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropIndexesRemovedFromProduct'))) AS DropIndexesRemovedFromProduct,
+                COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].PreventDrop'))), 0) AS PreventDrop;
+        END IF;
+        SET v_TblIdx = v_TblIdx + 1;
+    END WHILE;
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Identify new tables');
 
@@ -149,50 +167,42 @@ BEGIN
         KEY ix_columns_table_name (TableName, ColumnName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    INSERT INTO _SchemaSmith_Columns (
-        TableName, ColumnName, OrdinalPosition, DataType, IsNullable, DefaultValue,
-        IsAutoIncrement, GeneratedExpression, GeneratedType,
-        CharacterSet, Collation, CheckExpression, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
-    )
-    SELECT
-        SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
-        SchemaSmith_SafeBacktickWrap(jt.ColumnName) AS ColumnName,
-        jt.ColumnOrdinal AS OrdinalPosition,
-        jt.DataType,
-        COALESCE(jt.Nullable, 1) AS IsNullable,
-        jt.DefaultVal AS DefaultValue,
-        COALESCE(jt.IsAutoIncrement, 0) AS IsAutoIncrement,
-        jt.GeneratedExpression,
-        jt.GeneratedType,
-        jt.CharacterSet,
-        jt.ColumnCollation AS Collation,
-        jt.CheckExpression,
-        SchemaSmith_SafeBacktickWrap(jt.OldName) AS OldName,
-        0 AS NewColumn,
-        1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
-        NULLIF(TRIM(jt.VariantName), '') AS VariantName
-    FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
-        TableName VARCHAR(128) PATH '$.Name',
-        NESTED PATH '$.Columns[*]' COLUMNS (
-            ColumnOrdinal FOR ORDINALITY,
-            ColumnName VARCHAR(128) PATH '$.Name',
-            DataType VARCHAR(100) PATH '$.DataType',
-            Nullable TINYINT PATH '$.Nullable',
-            DefaultVal TEXT PATH '$.Default',
-            IsAutoIncrement TINYINT PATH '$.AutoIncrement',
-            GeneratedExpression TEXT PATH '$.GenerationExpression',
-            GeneratedType VARCHAR(10) PATH '$.Generated',
-            CharacterSet VARCHAR(50) PATH '$.CharacterSet',
-            ColumnCollation VARCHAR(100) PATH '$.Collation',
-            CheckExpression TEXT PATH '$.CheckExpression',
-            OldName VARCHAR(128) PATH '$.OldName',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
-            VariantName VARCHAR(128) PATH '$.VariantName'
-        )
-    )) AS jt
-    WHERE jt.ColumnName IS NOT NULL
-    AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(jt.TableName));
+    SET v_ColOuterCnt = JSON_LENGTH(p_TableDefinitions);
+    SET v_ColOuterIdx = 0;
+    WHILE v_ColOuterIdx < v_ColOuterCnt DO
+        SET v_ColInnerCnt = COALESCE(JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns'))), 0);
+        SET v_ColInnerIdx = 0;
+        WHILE v_ColInnerIdx < v_ColInnerCnt DO
+            IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Name'))) IS NOT NULL
+               AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Name'))))) THEN
+                INSERT INTO _SchemaSmith_Columns (
+                    TableName, ColumnName, OrdinalPosition, DataType, IsNullable, DefaultValue,
+                    IsAutoIncrement, GeneratedExpression, GeneratedType,
+                    CharacterSet, Collation, CheckExpression, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
+                )
+                SELECT
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Name')))) AS TableName,
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Name')))) AS ColumnName,
+                    v_ColInnerIdx + 1 AS OrdinalPosition,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].DataType'))) AS DataType,
+                    COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Nullable'))), 1) AS IsNullable,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Default'))) AS DefaultValue,
+                    COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].AutoIncrement'))), 0) AS IsAutoIncrement,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].GenerationExpression'))) AS GeneratedExpression,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Generated'))) AS GeneratedType,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].CharacterSet'))) AS CharacterSet,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Collation'))) AS Collation,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].CheckExpression'))) AS CheckExpression,
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].OldName')))) AS OldName,
+                    0 AS NewColumn,
+                    1 AS ShouldApply,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].ShouldApplyExpression')))), '') AS ShouldApplyExpression,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].VariantName')))), '') AS VariantName;
+            END IF;
+            SET v_ColInnerIdx = v_ColInnerIdx + 1;
+        END WHILE;
+        SET v_ColOuterIdx = v_ColOuterIdx + 1;
+    END WHILE;
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Identify new columns');
 
@@ -377,35 +387,33 @@ BEGIN
         KEY ix_indexes_table_name (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    INSERT INTO _SchemaSmith_Indexes (
-        TableName, IndexName, IsPrimaryKey, IsUnique, IndexType, IndexColumns, IsVisible, ShouldApply, ShouldApplyExpression, VariantName
-    )
-    SELECT
-        SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
-        SchemaSmith_SafeBacktickWrap(jt.IndexName) AS IndexName,
-        COALESCE(jt.PrimaryKey, 0) AS IsPrimaryKey,
-        COALESCE(jt.IsUnique, jt.PrimaryKey, 0) AS IsUnique,
-        COALESCE(NULLIF(TRIM(jt.IndexType), ''), 'BTREE') AS IndexType,
-        jt.IndexColumns,
-        COALESCE(jt.Visible, 1) AS IsVisible,
-        1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
-        NULLIF(TRIM(jt.VariantName), '') AS VariantName
-    FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
-        TableName VARCHAR(128) PATH '$.Name',
-        NESTED PATH '$.Indexes[*]' COLUMNS (
-            IndexName VARCHAR(128) PATH '$.Name',
-            PrimaryKey TINYINT PATH '$.PrimaryKey',
-            IsUnique TINYINT PATH '$.Unique',
-            IndexType VARCHAR(20) PATH '$.IndexType',
-            IndexColumns TEXT PATH '$.IndexColumns',
-            Visible TINYINT PATH '$.Visible',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
-            VariantName VARCHAR(128) PATH '$.VariantName'
-        )
-    )) AS jt
-    WHERE jt.IndexName IS NOT NULL
-    AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(jt.TableName));
+    SET v_IxOuterCnt = JSON_LENGTH(p_TableDefinitions);
+    SET v_IxOuterIdx = 0;
+    WHILE v_IxOuterIdx < v_IxOuterCnt DO
+        SET v_IxInnerCnt = COALESCE(JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes'))), 0);
+        SET v_IxInnerIdx = 0;
+        WHILE v_IxInnerIdx < v_IxInnerCnt DO
+            IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].Name'))) IS NOT NULL
+               AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Name'))))) THEN
+                INSERT INTO _SchemaSmith_Indexes (
+                    TableName, IndexName, IsPrimaryKey, IsUnique, IndexType, IndexColumns, IsVisible, ShouldApply, ShouldApplyExpression, VariantName
+                )
+                SELECT
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Name')))) AS TableName,
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].Name')))) AS IndexName,
+                    COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].PrimaryKey'))), 0) AS IsPrimaryKey,
+                    COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].Unique'))), SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].PrimaryKey'))), 0) AS IsUnique,
+                    COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].IndexType')))), ''), 'BTREE') AS IndexType,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].IndexColumns'))) AS IndexColumns,
+                    COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].Visible'))), 1) AS IsVisible,
+                    1 AS ShouldApply,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].ShouldApplyExpression')))), '') AS ShouldApplyExpression,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].VariantName')))), '') AS VariantName;
+            END IF;
+            SET v_IxInnerIdx = v_IxInnerIdx + 1;
+        END WHILE;
+        SET v_IxOuterIdx = v_IxOuterIdx + 1;
+    END WHILE;
 
     -- MySQL: AUTO_INCREMENT column must be indexed. When it's not the first column
     -- in a composite PK, we need a separate KEY clause in the CREATE TABLE statement.
@@ -436,37 +444,34 @@ BEGIN
         KEY ix_fks_table_name (TableName, KeyName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    INSERT INTO _SchemaSmith_ForeignKeys (
-        TableName, KeyName, Columns, RelatedTableSchema, RelatedTable, RelatedColumns, DeleteAction, UpdateAction, ShouldApply, ShouldApplyExpression, VariantName
-    )
-    SELECT
-        SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
-        SchemaSmith_SafeBacktickWrap(jt.KeyName) AS KeyName,
-        jt.Columns,
-        NULLIF(TRIM(jt.RelatedTableSchema), '') AS RelatedTableSchema,
-        SchemaSmith_SafeBacktickWrap(jt.RelatedTable) AS RelatedTable,
-        jt.RelatedColumns,
-        COALESCE(NULLIF(TRIM(jt.DeleteAction), ''), 'NO ACTION') AS DeleteAction,
-        COALESCE(NULLIF(TRIM(jt.UpdateAction), ''), 'NO ACTION') AS UpdateAction,
-        1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
-        NULLIF(TRIM(jt.VariantName), '') AS VariantName
-    FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
-        TableName VARCHAR(128) PATH '$.Name',
-        NESTED PATH '$.ForeignKeys[*]' COLUMNS (
-            KeyName VARCHAR(128) PATH '$.Name',
-            Columns TEXT PATH '$.Columns',
-            RelatedTableSchema VARCHAR(128) PATH '$.RelatedTableSchema',
-            RelatedTable VARCHAR(128) PATH '$.RelatedTable',
-            RelatedColumns TEXT PATH '$.RelatedColumns',
-            DeleteAction VARCHAR(20) PATH '$.DeleteAction',
-            UpdateAction VARCHAR(20) PATH '$.UpdateAction',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
-            VariantName VARCHAR(128) PATH '$.VariantName'
-        )
-    )) AS jt
-    WHERE jt.KeyName IS NOT NULL
-    AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(jt.TableName));
+    SET v_FkOuterCnt = JSON_LENGTH(p_TableDefinitions);
+    SET v_FkOuterIdx = 0;
+    WHILE v_FkOuterIdx < v_FkOuterCnt DO
+        SET v_FkInnerCnt = COALESCE(JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys'))), 0);
+        SET v_FkInnerIdx = 0;
+        WHILE v_FkInnerIdx < v_FkInnerCnt DO
+            IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys[', v_FkInnerIdx, '].Name'))) IS NOT NULL
+               AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].Name'))))) THEN
+                INSERT INTO _SchemaSmith_ForeignKeys (
+                    TableName, KeyName, Columns, RelatedTableSchema, RelatedTable, RelatedColumns, DeleteAction, UpdateAction, ShouldApply, ShouldApplyExpression, VariantName
+                )
+                SELECT
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].Name')))) AS TableName,
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys[', v_FkInnerIdx, '].Name')))) AS KeyName,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys[', v_FkInnerIdx, '].Columns'))) AS Columns,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys[', v_FkInnerIdx, '].RelatedTableSchema')))), '') AS RelatedTableSchema,
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys[', v_FkInnerIdx, '].RelatedTable')))) AS RelatedTable,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys[', v_FkInnerIdx, '].RelatedColumns'))) AS RelatedColumns,
+                    COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys[', v_FkInnerIdx, '].DeleteAction')))), ''), 'NO ACTION') AS DeleteAction,
+                    COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys[', v_FkInnerIdx, '].UpdateAction')))), ''), 'NO ACTION') AS UpdateAction,
+                    1 AS ShouldApply,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys[', v_FkInnerIdx, '].ShouldApplyExpression')))), '') AS ShouldApplyExpression,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FkOuterIdx, '].ForeignKeys[', v_FkInnerIdx, '].VariantName')))), '') AS VariantName;
+            END IF;
+            SET v_FkInnerIdx = v_FkInnerIdx + 1;
+        END WHILE;
+        SET v_FkOuterIdx = v_FkOuterIdx + 1;
+    END WHILE;
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Parse check constraints');
 
@@ -483,30 +488,32 @@ BEGIN
         KEY ix_checks_table_name (TableName, ConstraintName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    INSERT INTO _SchemaSmith_CheckConstraints (TableName, ConstraintName, Expression, ShouldApply, ShouldApplyExpression, VariantName)
-    SELECT
-        SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
-        SchemaSmith_SafeBacktickWrap(jt.ConstraintName) AS ConstraintName,
-        -- Strip MySQL charset introducers (_utf8mb4, _utf8, etc.) and backslash-escaped quotes
-        -- from CHECK_CLAUSE expressions. MySQL's INFORMATION_SCHEMA stores these internally
-        -- but they're not needed in DDL and cause PREPARE failures.
-        REPLACE(
-            REGEXP_REPLACE(jt.Expression, '_utf8mb4|_utf8|_latin1|_binary', ''),
-            '\\''', '''') AS Expression,
-        1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
-        NULLIF(TRIM(jt.VariantName), '') AS VariantName
-    FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
-        TableName VARCHAR(128) PATH '$.Name',
-        NESTED PATH '$.CheckConstraints[*]' COLUMNS (
-            ConstraintName VARCHAR(128) PATH '$.Name',
-            Expression TEXT PATH '$.Expression',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
-            VariantName VARCHAR(128) PATH '$.VariantName'
-        )
-    )) AS jt
-    WHERE jt.ConstraintName IS NOT NULL
-    AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(jt.TableName));
+    SET v_ChkOuterCnt = JSON_LENGTH(p_TableDefinitions);
+    SET v_ChkOuterIdx = 0;
+    WHILE v_ChkOuterIdx < v_ChkOuterCnt DO
+        SET v_ChkInnerCnt = COALESCE(JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].CheckConstraints'))), 0);
+        SET v_ChkInnerIdx = 0;
+        WHILE v_ChkInnerIdx < v_ChkInnerCnt DO
+            IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].CheckConstraints[', v_ChkInnerIdx, '].Name'))) IS NOT NULL
+               AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].Name'))))) THEN
+                INSERT INTO _SchemaSmith_CheckConstraints (TableName, ConstraintName, Expression, ShouldApply, ShouldApplyExpression, VariantName)
+                SELECT
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].Name')))) AS TableName,
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].CheckConstraints[', v_ChkInnerIdx, '].Name')))) AS ConstraintName,
+                    -- Strip MySQL charset introducers (_utf8mb4, _utf8, etc.) and backslash-escaped quotes
+                    -- from CHECK_CLAUSE expressions. MySQL's INFORMATION_SCHEMA stores these internally
+                    -- but they're not needed in DDL and cause PREPARE failures.
+                    REPLACE(
+                        REGEXP_REPLACE(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].CheckConstraints[', v_ChkInnerIdx, '].Expression'))), '_utf8mb4|_utf8|_latin1|_binary', ''),
+                        '\\''', '''') AS Expression,
+                    1 AS ShouldApply,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].CheckConstraints[', v_ChkInnerIdx, '].ShouldApplyExpression')))), '') AS ShouldApplyExpression,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ChkOuterIdx, '].CheckConstraints[', v_ChkInnerIdx, '].VariantName')))), '') AS VariantName;
+            END IF;
+            SET v_ChkInnerIdx = v_ChkInnerIdx + 1;
+        END WHILE;
+        SET v_ChkOuterIdx = v_ChkOuterIdx + 1;
+    END WHILE;
 
     -- Note: Tables with just a Name and no columns/indexes are valid for IndexOnlyQuench
     -- scenarios where we want to track that the table is "in the definition" for the purpose
@@ -535,29 +542,29 @@ BEGIN
         KEY ix_ft_table_name (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    INSERT INTO _SchemaSmith_FullTextIndexes (TableName, IndexName, Columns, Parser, Comment, ShouldApply, ShouldApplyExpression, VariantName)
-    SELECT
-        SchemaSmith_SafeBacktickWrap(jt.TableName) AS TableName,
-        SchemaSmith_SafeBacktickWrap(jt.Name) AS IndexName,
-        jt.Columns,
-        NULLIF(TRIM(jt.Parser), '') AS Parser,
-        NULLIF(TRIM(jt.Comment), '') AS Comment,
-        1 AS ShouldApply,
-        NULLIF(TRIM(jt.ShouldApplyExpr), '') AS ShouldApplyExpression,
-        NULLIF(TRIM(jt.VariantName), '') AS VariantName
-    FROM JSON_TABLE(p_TableDefinitions, '$[*]' COLUMNS (
-        TableName VARCHAR(128) PATH '$.Name',
-        NESTED PATH '$.FullTextIndexes[*]' COLUMNS (
-            Name VARCHAR(128) PATH '$.Name',
-            Columns TEXT PATH '$.Columns',
-            Parser VARCHAR(128) PATH '$.Parser',
-            Comment VARCHAR(255) PATH '$.Comment',
-            ShouldApplyExpr VARCHAR(255) PATH '$.ShouldApplyExpression',
-            VariantName VARCHAR(128) PATH '$.VariantName'
-        )
-    )) AS jt
-    WHERE jt.Name IS NOT NULL
-    AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(jt.TableName));
+    SET v_FtOuterCnt = JSON_LENGTH(p_TableDefinitions);
+    SET v_FtOuterIdx = 0;
+    WHILE v_FtOuterIdx < v_FtOuterCnt DO
+        SET v_FtInnerCnt = COALESCE(JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FtOuterIdx, '].FullTextIndexes'))), 0);
+        SET v_FtInnerIdx = 0;
+        WHILE v_FtInnerIdx < v_FtInnerCnt DO
+            IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FtOuterIdx, '].FullTextIndexes[', v_FtInnerIdx, '].Name'))) IS NOT NULL
+               AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FtOuterIdx, '].Name'))))) THEN
+                INSERT INTO _SchemaSmith_FullTextIndexes (TableName, IndexName, Columns, Parser, Comment, ShouldApply, ShouldApplyExpression, VariantName)
+                SELECT
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FtOuterIdx, '].Name')))) AS TableName,
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FtOuterIdx, '].FullTextIndexes[', v_FtInnerIdx, '].Name')))) AS IndexName,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FtOuterIdx, '].FullTextIndexes[', v_FtInnerIdx, '].Columns'))) AS Columns,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FtOuterIdx, '].FullTextIndexes[', v_FtInnerIdx, '].Parser')))), '') AS Parser,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FtOuterIdx, '].FullTextIndexes[', v_FtInnerIdx, '].Comment')))), '') AS Comment,
+                    1 AS ShouldApply,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FtOuterIdx, '].FullTextIndexes[', v_FtInnerIdx, '].ShouldApplyExpression')))), '') AS ShouldApplyExpression,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_FtOuterIdx, '].FullTextIndexes[', v_FtInnerIdx, '].VariantName')))), '') AS VariantName;
+            END IF;
+            SET v_FtInnerIdx = v_FtInnerIdx + 1;
+        END WHILE;
+        SET v_FtOuterIdx = v_FtOuterIdx + 1;
+    END WHILE;
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Evaluate ShouldApplyExpression');
 
