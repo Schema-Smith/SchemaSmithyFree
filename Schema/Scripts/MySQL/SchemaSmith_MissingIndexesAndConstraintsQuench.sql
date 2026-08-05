@@ -603,7 +603,28 @@ WHERE col.CheckExpression IS NOT NULL
     -- =========================================================================
     -- STEP 4: Create missing check constraints (MySQL 8.0.16+)
     -- =========================================================================
-    IF p_WhatIf = 1 THEN
+    -- CHECK constraints require MySQL 8.0.16 (INFORMATION_SCHEMA.CHECK_CONSTRAINTS + enforcement); on MySQL
+    -- 5.7 a declared CHECK is parsed-and-ignored, so it can neither be created nor detected as present -- which
+    -- would make this create pass re-emit on every deploy. Degrade via the UnsupportedFeaturePolicy spine
+    -- (mirrors the PostgreSQL NULLS-NOT-DISTINCT routing): 'fail' aborts naming the offending constraint(s);
+    -- 'warn' (default) skips the emit and records one 'downgraded' manifest row per declared check so the run
+    -- stays idempotent. MariaDB reports support at/above the 10.2 floor, so it never enters this branch.
+    IF SchemaSmith_SupportsCheckConstraints() = 0 THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail'
+           AND EXISTS (SELECT 1 FROM _SchemaSmith_CheckConstraints) THEN
+            SET @ss_msg = (SELECT CONCAT('CHECK constraints require MySQL 8.0.16 (detected server version ',
+                                         SchemaSmith_ServerVersionNum(), '); check constraint(s): ',
+                                         GROUP_CONCAT(CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.',
+                                                             SchemaSmith_StripBacktickWrapping(c.ConstraintName)) SEPARATOR ', '))
+                           FROM _SchemaSmith_CheckConstraints c);
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'CHECK constraint (MySQL 8.0.16)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName)), 'downgraded'
+            FROM _SchemaSmith_CheckConstraints c;
+        END IF;
+    ELSEIF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing check constraints');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
         SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
@@ -675,8 +696,28 @@ WHERE col.CheckExpression IS NOT NULL
     -- =========================================================================
     -- A column's CheckExpression becomes a deterministically named CK_<table>_<column> check.
     -- The deterministic name lets the create/modify passes key on it (INFORMATION_SCHEMA has no
-    -- column linkage for checks). Mirrors the table-level STEP 4 idiom exactly.
-    IF p_WhatIf = 1 THEN
+    -- column linkage for checks). Mirrors the table-level STEP 4 idiom exactly -- including the
+    -- SchemaSmith_SupportsCheckConstraints() degrade for MySQL below 8.0.16 (see STEP 4).
+    IF SchemaSmith_SupportsCheckConstraints() = 0 THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail'
+           AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns WHERE CheckExpression IS NOT NULL AND TRIM(CheckExpression) != '') THEN
+            SET @ss_msg = (SELECT CONCAT('CHECK constraints require MySQL 8.0.16 (detected server version ',
+                                         SchemaSmith_ServerVersionNum(), '); column check constraint(s): ',
+                                         GROUP_CONCAT(CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.CK_',
+                                                             SchemaSmith_StripBacktickWrapping(c.TableName), '_',
+                                                             SchemaSmith_StripBacktickWrapping(c.ColumnName)) SEPARATOR ', '))
+                           FROM _SchemaSmith_Columns c
+                           WHERE c.CheckExpression IS NOT NULL AND TRIM(c.CheckExpression) != '');
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'CHECK constraint (MySQL 8.0.16)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.CK_',
+                          SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            WHERE c.CheckExpression IS NOT NULL AND TRIM(c.CheckExpression) != '';
+        END IF;
+    ELSEIF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing column check constraints');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
         SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
