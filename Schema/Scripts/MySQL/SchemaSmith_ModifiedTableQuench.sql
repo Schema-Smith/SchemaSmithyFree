@@ -693,21 +693,32 @@ BEGIN
             PRIMARY KEY (TableName, ConstraintName)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-        INSERT IGNORE INTO _SchemaSmith_CKsToDrop (TableName, ConstraintName)
-        SELECT DISTINCT
-            CONVERT(tc.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-            CONVERT(cc.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
-        FROM _SchemaSmith_ColumnsToDrop ctd
-        INNER JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
-            ON CONVERT(cc.CONSTRAINT_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-            -- Check if constraint references this column (explicit COLLATE to avoid collation mismatch)
-            AND CONVERT(cc.CHECK_CLAUSE USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                LIKE CONCAT('%`', ctd.ColumnName COLLATE utf8mb4_unicode_ci, '`%')
-        INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-            ON CONVERT(tc.CONSTRAINT_SCHEMA USING utf8mb4) = CONVERT(cc.CONSTRAINT_SCHEMA USING utf8mb4)
-            AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(cc.CONSTRAINT_NAME USING utf8mb4)
-            AND CONVERT(tc.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
-            AND tc.CONSTRAINT_TYPE = 'CHECK';
+        -- Check if constraint references this column (explicit COLLATE to avoid collation mismatch).
+        -- INFORMATION_SCHEMA.CHECK_CONSTRAINTS does not exist on MySQL 5.7 and MySQL binds
+        -- INFORMATION_SCHEMA references at CREATE time, so the read lives only inside this
+        -- dynamically-built string, gated by SchemaSmith_SupportsCheckConstraints() (see
+        -- GenerateTableJson for the full rationale). Below the floor there are no check
+        -- constraints to drop, so _SchemaSmith_CKsToDrop simply stays unpopulated by this step.
+        IF SchemaSmith_SupportsCheckConstraints() = 1 THEN
+            SET @v_ckDbName = p_DatabaseName;
+            SET @v_ckSql = 'INSERT IGNORE INTO _SchemaSmith_CKsToDrop (TableName, ConstraintName)
+SELECT DISTINCT
+    CONVERT(tc.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+    CONVERT(cc.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+FROM _SchemaSmith_ColumnsToDrop ctd
+INNER JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+    ON CONVERT(cc.CONSTRAINT_SCHEMA USING utf8mb4) = CONVERT(@v_ckDbName USING utf8mb4)
+    AND CONVERT(cc.CHECK_CLAUSE USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        LIKE CONCAT(''%`'', ctd.ColumnName COLLATE utf8mb4_unicode_ci, ''`%'')
+INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+    ON CONVERT(tc.CONSTRAINT_SCHEMA USING utf8mb4) = CONVERT(cc.CONSTRAINT_SCHEMA USING utf8mb4)
+    AND CONVERT(tc.CONSTRAINT_NAME USING utf8mb4) = CONVERT(cc.CONSTRAINT_NAME USING utf8mb4)
+    AND CONVERT(tc.TABLE_NAME USING utf8mb4) = CONVERT(ctd.TableName USING utf8mb4)
+    AND tc.CONSTRAINT_TYPE = ''CHECK''';
+            PREPARE stmt FROM @v_ckSql;
+            EXECUTE stmt;
+            DEALLOCATE PREPARE stmt;
+        END IF;
 
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
         SELECT CONNECTION_ID(), CONCAT('  Drop check constraint for column: ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName,

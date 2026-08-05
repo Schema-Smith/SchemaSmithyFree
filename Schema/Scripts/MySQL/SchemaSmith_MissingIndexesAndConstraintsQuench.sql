@@ -398,43 +398,60 @@ BEGIN
         PRIMARY KEY (TableName, ConstraintName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    -- Table-level checks: live CHECK_CLAUSE differs from the desired _SchemaSmith_CheckConstraints.Expression
-    INSERT IGNORE INTO _SchemaSmith_ModifiedChecks (TableName, ConstraintName)
-    SELECT
-        SchemaSmith_StripBacktickWrapping(c.TableName) AS TableName,
-        SchemaSmith_StripBacktickWrapping(c.ConstraintName) AS ConstraintName
-    FROM _SchemaSmith_CheckConstraints c
-    JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-        ON BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-        AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-        AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
-        AND tc.CONSTRAINT_TYPE = 'CHECK'
-    JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
-        ON BINARY cc.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
-        AND BINARY cc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
-    WHERE BINARY SchemaSmith_NormalizeCheckExpression(CONVERT(cc.CHECK_CLAUSE USING utf8mb4))
-        != BINARY SchemaSmith_NormalizeCheckExpression(c.Expression);
+    -- Table-level checks: live CHECK_CLAUSE differs from the desired _SchemaSmith_CheckConstraints.Expression.
+    -- INFORMATION_SCHEMA.CHECK_CONSTRAINTS does not exist on MySQL 5.7 and MySQL binds INFORMATION_SCHEMA
+    -- references at CREATE time, so both CHECK_CONSTRAINTS reads below live only inside dynamically-built
+    -- strings, gated by SchemaSmith_SupportsCheckConstraints() (see GenerateTableJson for the full rationale).
+    -- Below the floor there are no check constraints to detect as modified, so _SchemaSmith_ModifiedChecks
+    -- simply stays unpopulated by this step.
+    SET @v_mcDbName = p_DatabaseName;
+    IF SchemaSmith_SupportsCheckConstraints() = 1 THEN
+        SET @v_mcSql1 = 'INSERT IGNORE INTO _SchemaSmith_ModifiedChecks (TableName, ConstraintName)
+SELECT
+    SchemaSmith_StripBacktickWrapping(c.TableName) AS TableName,
+    SchemaSmith_StripBacktickWrapping(c.ConstraintName) AS ConstraintName
+FROM _SchemaSmith_CheckConstraints c
+JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+    ON BINARY tc.TABLE_SCHEMA = BINARY @v_mcDbName
+    AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+    AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
+    AND tc.CONSTRAINT_TYPE = ''CHECK''
+JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+    ON BINARY cc.CONSTRAINT_SCHEMA = BINARY @v_mcDbName
+    AND BINARY cc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
+WHERE BINARY SchemaSmith_NormalizeCheckExpression(CONVERT(cc.CHECK_CLAUSE USING utf8mb4))
+    != BINARY SchemaSmith_NormalizeCheckExpression(c.Expression)';
+        PREPARE stmt FROM @v_mcSql1;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
 
     -- Column-level checks: keyed on the deterministic name CK_<table>_<column>; live CHECK_CLAUSE
     -- differs from the desired column CheckExpression. (INFORMATION_SCHEMA.CHECK_CONSTRAINTS has
-    -- no column linkage, which is exactly why column checks carry a deterministic name.)
-    INSERT IGNORE INTO _SchemaSmith_ModifiedChecks (TableName, ConstraintName)
-    SELECT
-        SchemaSmith_StripBacktickWrapping(col.TableName) AS TableName,
-        CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName)) AS ConstraintName
-    FROM _SchemaSmith_Columns col
-    JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-        ON BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-        AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(col.TableName)
-        AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName))
-        AND tc.CONSTRAINT_TYPE = 'CHECK'
-    JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
-        ON BINARY cc.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
-        AND BINARY cc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName))
-    WHERE col.CheckExpression IS NOT NULL
-      AND TRIM(col.CheckExpression) != ''
-      AND BINARY SchemaSmith_NormalizeCheckExpression(CONVERT(cc.CHECK_CLAUSE USING utf8mb4))
-        != BINARY SchemaSmith_NormalizeCheckExpression(col.CheckExpression);
+    -- no column linkage, which is exactly why column checks carry a deterministic name.) Same
+    -- CREATE-time binding constraint as above, so this read is also dynamic SQL under the same guard.
+    IF SchemaSmith_SupportsCheckConstraints() = 1 THEN
+        SET @v_mcSql2 = 'INSERT IGNORE INTO _SchemaSmith_ModifiedChecks (TableName, ConstraintName)
+SELECT
+    SchemaSmith_StripBacktickWrapping(col.TableName) AS TableName,
+    CONCAT(''CK_'', SchemaSmith_StripBacktickWrapping(col.TableName), ''_'', SchemaSmith_StripBacktickWrapping(col.ColumnName)) AS ConstraintName
+FROM _SchemaSmith_Columns col
+JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+    ON BINARY tc.TABLE_SCHEMA = BINARY @v_mcDbName
+    AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(col.TableName)
+    AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT(''CK_'', SchemaSmith_StripBacktickWrapping(col.TableName), ''_'', SchemaSmith_StripBacktickWrapping(col.ColumnName))
+    AND tc.CONSTRAINT_TYPE = ''CHECK''
+JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+    ON BINARY cc.CONSTRAINT_SCHEMA = BINARY @v_mcDbName
+    AND BINARY cc.CONSTRAINT_NAME = BINARY CONCAT(''CK_'', SchemaSmith_StripBacktickWrapping(col.TableName), ''_'', SchemaSmith_StripBacktickWrapping(col.ColumnName))
+WHERE col.CheckExpression IS NOT NULL
+  AND TRIM(col.CheckExpression) != ''''
+  AND BINARY SchemaSmith_NormalizeCheckExpression(CONVERT(cc.CHECK_CLAUSE USING utf8mb4))
+    != BINARY SchemaSmith_NormalizeCheckExpression(col.CheckExpression)';
+        PREPARE stmt FROM @v_mcSql2;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
 
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop modified check constraints');
