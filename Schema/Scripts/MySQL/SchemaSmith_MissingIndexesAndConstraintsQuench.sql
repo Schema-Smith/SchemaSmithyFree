@@ -619,6 +619,12 @@ WHERE col.CheckExpression IS NOT NULL
                            FROM _SchemaSmith_CheckConstraints c);
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
         ELSE
+            -- Surface the downgrade in the run log too (not only the ChangeAudit manifest), matching this
+            -- proc's per-object status-message convention, so a 5.7 deploy visibly reports skipped checks.
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Skipping check constraint (requires MySQL 8.0.16 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName))
+            FROM _SchemaSmith_CheckConstraints c;
             INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
             SELECT CONNECTION_ID(), 'CHECK constraint (MySQL 8.0.16)',
                    CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName)), 'downgraded'
@@ -710,6 +716,13 @@ WHERE col.CheckExpression IS NOT NULL
                            WHERE c.CheckExpression IS NOT NULL AND TRIM(c.CheckExpression) != '');
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
         ELSE
+            -- Surface the downgrade in the run log (see STEP 4).
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Skipping column check constraint (requires MySQL 8.0.16 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.CK_',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            WHERE c.CheckExpression IS NOT NULL AND TRIM(c.CheckExpression) != '';
             INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
             SELECT CONNECTION_ID(), 'CHECK constraint (MySQL 8.0.16)',
                    CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.CK_',
