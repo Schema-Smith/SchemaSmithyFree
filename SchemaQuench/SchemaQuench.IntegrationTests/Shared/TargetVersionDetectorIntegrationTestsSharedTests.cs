@@ -17,6 +17,7 @@ public abstract class TargetVersionDetectorIntegrationTestsSharedTests : BaseTab
 
         var info = TargetVersionDetector.Detect(cmd, Platform);
 
-        Assert.That(info.ServerComparable, Is.GreaterThanOrEqualTo(800)); // MySQL 8.0 floor
+        // Floor is per-platform: MySQL 5.7 (507), MariaDB 10.2 (1002).
+        Assert.That(info.ServerComparable, Is.GreaterThanOrEqualTo(VersionHelper.HardFloor(Platform)));
     }
 }

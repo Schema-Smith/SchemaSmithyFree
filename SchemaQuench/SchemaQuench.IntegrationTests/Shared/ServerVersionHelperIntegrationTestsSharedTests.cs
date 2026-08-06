@@ -3,6 +3,7 @@
 using System;
 using Schema.DataAccess;
 using Schema.Domain;
+using Schema.Utility;
 
 namespace SchemaQuench.IntegrationTests.Shared;
 
@@ -16,7 +17,8 @@ public abstract class ServerVersionHelperIntegrationTestsSharedTests : BaseTable
         using var cmd = conn.CreateCommand();
 
         cmd.CommandText = "SELECT SchemaSmith_ServerVersionNum()";
-        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThanOrEqualTo(800)); // MySQL 8.0 floor
+        // Floor is per-platform: MySQL 5.7 (507), MariaDB 10.2 (1002).
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThanOrEqualTo(VersionHelper.HardFloor(Platform)));
     }
 
     [Test]
