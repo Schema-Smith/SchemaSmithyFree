@@ -86,10 +86,11 @@ BEGIN
           AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.OldName))
           AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName));
 
+        -- Descriptive (version-agnostic) preview: the executed DDL is RENAME COLUMN or, below MySQL 8.0 /
+        -- MariaDB 10.5.2, CHANGE COLUMN preserving the current definition (see the real-path block below).
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
-                      ' RENAME COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
-                      '` TO `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`')
+        SELECT CONNECTION_ID(), CONCAT('  Rename column `', SchemaSmith_StripBacktickWrapping(c.OldName),
+                      '` to `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '` on `', c.TableName, '`')
         FROM _SchemaSmith_Columns c
         WHERE c.OldName IS NOT NULL
           AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName) AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.OldName))
@@ -228,32 +229,50 @@ BEGIN
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ColRenameStmts;
         CREATE TEMPORARY TABLE _SchemaSmith_ColRenameStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        -- `ALTER TABLE ... RENAME COLUMN old TO new` needs MySQL 8.0 / MariaDB 10.5.2+. Below that
+        -- (MySQL 5.7 / MariaDB 10.2-10.5) reproduce the rename with `CHANGE COLUMN old new <def>`,
+        -- reconstructing the OLD column's current definition from INFORMATION_SCHEMA (type / charset /
+        -- collate / nullability / generated / auto_increment / comment). DEFAULT is intentionally OMITTED:
+        -- the subsequent ModifiedTableQuench pass reconciles the column to its desired default in the same
+        -- deploy, which sidesteps the cross-engine COLUMN_DEFAULT-quoting divergence (MySQL 5.7 returns
+        -- string defaults unquoted, MariaDB/8.0 quoted) and keeps the rename data-preserving.
         INSERT INTO _SchemaSmith_ColRenameStmts (Stmt)
         SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName, ' ',
                       GROUP_CONCAT(
-                          CONCAT('RENAME COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
-                                 '` TO `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`')
+                          IF(SchemaSmith_SupportsRenameColumn() = 1,
+                             CONCAT('RENAME COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
+                                    '` TO `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`'),
+                             CONCAT('CHANGE COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
+                                    '` `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '` ',
+                                    CONVERT(isc.COLUMN_TYPE USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                                    IF(isc.CHARACTER_SET_NAME IS NOT NULL,
+                                       CONCAT(' CHARACTER SET ', CONVERT(isc.CHARACTER_SET_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                                              ' COLLATE ', CONVERT(isc.COLLATION_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci), ''),
+                                    IF(CONVERT(isc.EXTRA USING utf8mb4) LIKE '%GENERATED%',
+                                       CONCAT(' GENERATED ALWAYS AS (', CONVERT(isc.GENERATION_EXPRESSION USING utf8mb4) COLLATE utf8mb4_unicode_ci, ') ',
+                                              IF(CONVERT(isc.EXTRA USING utf8mb4) LIKE '%STORED%', 'STORED', 'VIRTUAL')), ''),
+                                    IF(CONVERT(isc.IS_NULLABLE USING utf8mb4) = 'NO', ' NOT NULL', ' NULL'),
+                                    IF(CONVERT(isc.EXTRA USING utf8mb4) LIKE '%auto_increment%', ' AUTO_INCREMENT', ''),
+                                    IF(COALESCE(CONVERT(isc.COLUMN_COMMENT USING utf8mb4), '') <> '',
+                                       CONCAT(' COMMENT ', QUOTE(CONVERT(isc.COLUMN_COMMENT USING utf8mb4) COLLATE utf8mb4_unicode_ci)), '')))
                           ORDER BY c.ColumnName SEPARATOR ', '))
         FROM _SchemaSmith_Columns c
+        JOIN INFORMATION_SCHEMA.COLUMNS isc
+            ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+           AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+           AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.OldName)
         WHERE c.OldName IS NOT NULL
-          AND EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
-              WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
-                AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-                AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.OldName)
-          )
           AND NOT EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc
-              WHERE BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
-                AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-                AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+              SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS isc2
+              WHERE BINARY isc2.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY isc2.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                AND BINARY isc2.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
           )
         GROUP BY c.TableName;
 
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-        SELECT CONNECTION_ID(), CONCAT('  Rename column: ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
-                      ' RENAME COLUMN `', SchemaSmith_StripBacktickWrapping(c.OldName),
-                      '` TO `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '`')
+        SELECT CONNECTION_ID(), CONCAT('  Rename column `', SchemaSmith_StripBacktickWrapping(c.OldName),
+                      '` to `', SchemaSmith_StripBacktickWrapping(c.ColumnName), '` on `', c.TableName, '`')
         FROM _SchemaSmith_Columns c
         WHERE c.OldName IS NOT NULL
           AND EXISTS (
