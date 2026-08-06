@@ -338,16 +338,18 @@ These are the minimum versions SchemaSmith supports for deployment:
 |----------|------------------|
 | SQL Server | 2008 (major version 10) |
 | PostgreSQL | 12 |
-| MySQL | 8.0 |
-| MariaDB | 10.6 |
+| MySQL | 5.7 |
+| MariaDB | 10.2 |
 
 **These floors are enforced automatically — you don't declare anything.** Before any deployment (SchemaQuench) or extraction (SchemaTongs) work begins, the target server's version is detected and logged; a below-floor server aborts the run with a clear "unsupported version" message instead of failing later with a raw engine error. For SQL Server, the target database's `compatibility_level` is checked too — it must be `100` or higher (SQL Server 2008); a database below that is reported distinctly from a too-old server. Between compatibility levels 100 and 120 SchemaSmith ingests its schema model as XML rather than JSON (`OPENJSON`'s JSON path is a parse error below 130) — automatically, see [Version-adaptive code generation](#version-adaptive-code-generation) below. `MinimumVersion` (below) is a separate, opt-in gate for raising the floor *further* per product.
+
+**MySQL 5.7 / MariaDB 10.2 — what adapts at the floor.** The schema model parses on both (a version-agnostic `JSON_EXTRACT` shred replaces `JSON_TABLE`, which is MySQL 8.0 / MariaDB 10.6), and column/index renames that need newer DDL fall back to an equivalent path automatically (a below-`RENAME COLUMN`/`RENAME INDEX` target gets `CHANGE COLUMN` / drop-and-recreate — same end state). A few features have no equivalent below their introduction and degrade through the unsupported-feature policy (`Target:UnsupportedFeaturePolicy`, default `warn` → apply without the feature + a downgrade-manifest line; `fail` → abort): **CHECK constraints** require MySQL **8.0.16** (MariaDB enforces them at the 10.2 floor); **descending index key parts** are stored ascending below MySQL 8.0 / MariaDB 10.8; and **automatic table-data delivery** requires MySQL **8.0** (on MariaDB 10.2 it works via a recursive-CTE shred — full support; below the MySQL floor, use manual data scripts). The hard wall is the floor itself — MySQL 5.6 and MariaDB 10.1 have no JSON support at all and are rejected outright.
 
 ### MinimumVersion pre-flight gate
 
 You can raise the floor for a specific product by declaring `MinimumVersion` in `Product.json`. Before any deployment work begins, SchemaQuench detects the version of every resolved target. If any target is below the declared floor, the entire run aborts with a manifest naming each below-floor server and its detected version. Nothing is deployed -- no partial work, no side effects on any target.
 
-See [Schema Packages -- Product.json](schema-packages.md#productjson) for the accepted value formats (`16` or `2022` for SQL Server; `15` for PostgreSQL; `8.0` for MySQL; `10.6` for MariaDB) and configuration details.
+See [Schema Packages -- Product.json](schema-packages.md#productjson) for the accepted value formats (`16` or `2022` for SQL Server; `15` for PostgreSQL; `8.0` for MySQL; `10.6` for MariaDB) and configuration details. The declared value may be any supported version — for example `5.7` (MySQL) or `10.2` (MariaDB) to pin exactly at the floor.
 
 If a target's version cannot be determined, that is a hard error -- SchemaQuench never deploys blind against an unknown version. An unparseable `MinimumVersion` value fails at startup before any connections open.
 
@@ -377,6 +379,20 @@ On SQL Server the version-adaptive behavior is a change of *encoding*, not indiv
 You normally never touch this, but you can force the encoding with `Target:CompatEncoding` (deployment) or `Source:CompatEncoding` (extraction): `auto` (the default — pick by detected version), `legacy` (XML), or `modern` (JSON) — for example `SmithySettings_Target__CompatEncoding=legacy`.
 
 > **Legacy fallback (SQL Server only):** On the XML (legacy) encoding, the open-ended custom-property `Extensions` bag is dropped when SchemaTongs reverse-engineers a table below the JSON cliff. The typed schema model — columns, indexes, keys, constraints, statistics — round-trips intact; only the free-form `Extensions` metadata is not carried on the legacy encoding.
+
+> **MySQL / MariaDB:** The supported range (MySQL 5.7 through current, MariaDB 10.2 through current) spans versions that differ in available DDL and JSON support, so the same package adapts per target.
+
+The schema model itself parses on every supported version — a version-agnostic `JSON_EXTRACT` shred stands in for `JSON_TABLE` (MySQL 8.0 / MariaDB 10.6), so nothing about kindling or ingest depends on the target version. Beyond that, a feature a target lacks is either taken by an equivalent path (same end state) or degraded through the **unsupported-feature policy** (`Target:UnsupportedFeaturePolicy`, default `warn` → emit without the feature + an **Unsupported Feature Downgrades** line; `fail` → abort with a "requires MySQL N" message):
+
+| Authored feature | Requires | Below that version, SchemaSmith… |
+|---|---|---|
+| **Column rename** (`RENAME COLUMN`) | MySQL 8.0 / MariaDB 10.5.2 | reproduces the rename with `CHANGE COLUMN`, reconstructing the current column definition (same end state) |
+| **Index rename** (`RENAME INDEX`) | MariaDB 10.5.2 (MySQL 5.7 has it) | drops and recreates the index under the new name from its live definition (same end state) |
+| **CHECK constraints** | MySQL 8.0.16 (MariaDB: at the 10.2 floor) | emits the table *without* the check + records a downgrade (MySQL 5.7 parses-and-ignores CHECK, so it can neither be created nor detected) |
+| **Descending index key parts** (`… DESC`) | MySQL 8.0 / MariaDB 10.8 | stores the key part ascending (the engine silently does so anyway) + records a downgrade |
+| **Automatic table-data delivery** | MySQL 8.0 | on MariaDB 10.2 uses a recursive-CTE shred (full support); below the MySQL floor, skips delivery with a clear log — use manual data scripts |
+
+The version-sensitive catalog reads (CHECK constraints, index visibility) are branched so they parse on the older server too, and integer display widths / FK default actions are normalized on compare so an unchanged table doesn't phantom-modify across versions. The end state is identical — deploy the same package to MySQL 5.7 through current, or MariaDB 10.2 through current, and you get the same database, minus only the features the target genuinely cannot support (which the deployment summary names).
 
 ### MariaDB (MySQL family) — where the native DDL diverges
 

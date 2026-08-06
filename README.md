@@ -43,12 +43,12 @@ These are the minimum engine versions SchemaSmith supports. The floor is enforce
 
 | Engine | Minimum supported |
 |--------|-------------------|
-| SQL Server | 2017 (major version 14) |
+| SQL Server | 2008 (major version 10) |
 | PostgreSQL | 12 |
-| MySQL | 8.0 |
-| MariaDB | 10.6 |
+| MySQL | 5.7 |
+| MariaDB | 10.2 |
 
-For SQL Server the target database's `compatibility_level` is also checked. Full detail — the compatibility-level floor and how SchemaSmith adapts its generated DDL to each target's version — is in the [Engine Version Compatibility](docs/end-user/reference/schemaquench.md#engine-version-compatibility) reference.
+The floor is enforced from the detected server version — below it, the run aborts before any change. SchemaSmith reaches these floors by generating version-correct SQL for each target rather than demanding a uniform version: newer-version features are taken by an equivalent path (or degraded through a policy with a downgrade manifest) instead of refused. For SQL Server the target database's `compatibility_level` is also checked (100+). Full detail — the compatibility-level floor, the per-version feature adaptations, and how to raise the floor per product — is in the [Engine Version Compatibility](docs/end-user/reference/schemaquench.md#engine-version-compatibility) reference.
 
 ## Installation
 
