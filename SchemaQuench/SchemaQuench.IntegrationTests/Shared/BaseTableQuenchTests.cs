@@ -169,6 +169,41 @@ SELECT UPPER(COLUMN_TYPE)
             : major >= 8;
     }
 
+    /// <summary>Detected MySQL-family comparable (major*100+minor, e.g. 507, 800, 1002, 1104) of the configured
+    /// target — for gating feature-gap tests below a floor. Returns int.MaxValue if unparseable (treat as modern).</summary>
+    protected int MySqlServerVersion()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT VERSION()";
+        var version = cmd.ExecuteScalar()?.ToString() ?? "";
+        var parts = version.Split('.');
+        if (parts.Length < 2 || !int.TryParse(parts[0], out var major) || !int.TryParse(parts[1], out var minor))
+            return int.MaxValue;
+        return major * 100 + minor;
+    }
+
+    /// <summary>Whether the target enforces CHECK constraints + exposes INFORMATION_SCHEMA.CHECK_CONSTRAINTS.
+    /// MySQL: 8.0.16 (major >= 8 here). MariaDB (>= 10.2 floor), SQL Server, PostgreSQL: always.</summary>
+    protected bool TargetSupportsCheckConstraints()
+        => Platform != Platform.MySQL || MySqlServerVersion() >= 800;
+
+    /// <summary>Whether SchemaSmith delivers table data on this target. Requires MySQL 8.0 (5.7 lacks JSON_TABLE
+    /// AND a recursive-CTE fallback, so delivery is gated); MariaDB 10.2 works via recursive CTE; SS/PG always.</summary>
+    protected bool TargetSupportsDataDelivery()
+        => Platform != Platform.MySQL || MySqlServerVersion() >= 800;
+
+    /// <summary>Whether the target supports invisible/ignored indexes. MySQL 8.0 (IS_VISIBLE); MariaDB 10.6
+    /// (IGNORED). SQL Server / PostgreSQL: not applicable — these gates only fire on the MySQL family.</summary>
+    protected bool TargetSupportsInvisibleIndexes()
+        => Platform switch
+        {
+            Platform.MySQL => MySqlServerVersion() >= 800,
+            Platform.MariaDb => MySqlServerVersion() >= 1006,
+            _ => true
+        };
+
     /// <summary>
     /// Strips the deprecated integer/YEAR display width so a column's reported type is engine-neutral:
     /// MariaDB reports `BIGINT(20)` / `INT(10) UNSIGNED` / `YEAR(4)` where MySQL 8.0.19+ reports

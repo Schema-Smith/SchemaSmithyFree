@@ -564,6 +564,8 @@ public abstract class TableQuenchTestsSharedTests
     [Test]
     public void CheckConstraintQuench_CanCreateCheckConstraint()
     {
+        if (!TestVersionGates.SupportsCheckConstraints(Platform, MainConnectionString))
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; skipped below the floor.");
         using var command = _connection.CreateCommand();
 
         var tableName = $"{_testTablePrefix}_chk";

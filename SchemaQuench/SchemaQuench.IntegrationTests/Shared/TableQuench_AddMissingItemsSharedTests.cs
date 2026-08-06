@@ -175,6 +175,8 @@ public abstract class TableQuench_AddMissingItemsSharedTests : BaseTableQuenchTe
     [Test]
     public void TableQuench_ShouldAddMissingTableLevelCheckConstraint()
     {
+        if (!TargetSupportsCheckConstraints())
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; skipped below the floor.");
         using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
@@ -289,6 +291,8 @@ public abstract class TableQuench_AddMissingItemsSharedTests : BaseTableQuenchTe
     [Test]
     public void TableQuench_ShouldKeepOneVariantWhenTwoSameNameCheckConstraintsHaveMutuallyExclusiveShouldApply()
     {
+        if (!TargetSupportsCheckConstraints())
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; skipped below the floor.");
         using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();

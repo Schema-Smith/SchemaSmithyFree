@@ -41,6 +41,8 @@ public abstract class ProtectedMode_ColumnDependentsTestsSharedTests
     [Test]
     public void ProtectedMode_RemovedColumn_KeepsAllDependents_Exit0()
     {
+        if (!TestVersionGates.SupportsCheckConstraints(Platform, _connectionString))
+            Assert.Ignore("Verifies a CHECK-constraint dependent survives; CHECK requires MySQL 8.0.16 — skipped below the floor.");
         var tempDir = Path.Join(Path.GetTempPath(), $"ProtMode_ColDeps_{Guid.NewGuid():N}");
 
         lock (FactoryContainer.SharedLockObject)

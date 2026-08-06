@@ -122,6 +122,18 @@ public class ProductUpdateTests
     [Test]
     public void ShouldWhatIfValidProductWithoutQuenchingAnything()
     {
+        // The WhatIf output includes "Would DELIVER" only where data delivery is supported (MySQL 8.0+);
+        // MySQL 5.7 gates delivery, so that line is absent — skip this assertion below the floor.
+        using (var vconn = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(_connectionString))
+        {
+            vconn.Open();
+            using var vcmd = vconn.CreateCommand();
+            vcmd.CommandText = "SELECT VERSION()";
+            var parts = (vcmd.ExecuteScalar()?.ToString() ?? "").Split('.');
+            if (parts.Length >= 2 && int.TryParse(parts[0], out var mj) && int.TryParse(parts[1], out var mn) && mj * 100 + mn < 800)
+                Assert.Ignore("Data delivery requires MySQL 8.0; 'Would DELIVER' is absent below the floor.");
+        }
+
         lock (FactoryContainer.SharedLockObject)
         {
             SetupSharedMocks();

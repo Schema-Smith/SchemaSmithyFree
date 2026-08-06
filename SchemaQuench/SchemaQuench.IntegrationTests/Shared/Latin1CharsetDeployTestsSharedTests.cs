@@ -71,8 +71,11 @@ public abstract class Latin1CharsetDeployTestsSharedTests
                         "A table must deploy to a latin1 database (#359).");
                     Assert.That(IndexExists(cmd, latin1Db, "KeeperTable", "IX_KeeperTable_Notes"), Is.True,
                         "The table's index must deploy to a latin1 database (#359).");
-                    Assert.That(CheckConstraintExists(cmd, latin1Db, "CK_KeeperTable_IdPos"), Is.True,
-                        "The table's check constraint must deploy to a latin1 database (#359).");
+                    // CHECK constraints require MySQL 8.0.16 — below the floor SchemaSmith degrades them, so verify
+                    // the check only where the target stores it (the latin1 table+index coverage still runs on 5.7).
+                    if (TestVersionGates.SupportsCheckConstraints(Platform, serverConnectionString))
+                        Assert.That(CheckConstraintExists(cmd, latin1Db, "CK_KeeperTable_IdPos"), Is.True,
+                            "The table's check constraint must deploy to a latin1 database (#359).");
                 });
             }
             finally

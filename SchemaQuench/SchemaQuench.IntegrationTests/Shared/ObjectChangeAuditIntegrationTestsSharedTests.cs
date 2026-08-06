@@ -20,6 +20,8 @@ public abstract class ObjectChangeAuditIntegrationTestsSharedTests : BaseTableQu
     [Test]
     public void TableQuench_EmitsObjectChangeAudit_ForCreateModifyDrop()
     {
+        if (!TargetSupportsCheckConstraints())
+            Assert.Ignore("Exercises CHECK-constraint audit rows; CHECK requires MySQL 8.0.16 — skipped below the floor.");
         using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
