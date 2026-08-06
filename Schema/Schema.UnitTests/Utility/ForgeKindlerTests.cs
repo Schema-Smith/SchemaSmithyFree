@@ -186,16 +186,18 @@ public class ForgeKindlerTests
         // + SchemaSmith.ColumnCompression (PG14-adaptive attcompression read) + SchemaSmith.StatisticsExpressionColumns
         // (PG14-adaptive pg_stats_ext_exprs read) — the last two are the floor 14->12 cascade.
         Assert.That(postgres.Length, Is.EqualTo(34));
-        // MySQL: 34 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
+        // MySQL: 35 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
-        // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + seven MySQL-5.7/MariaDB-10.2 floor
+        // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor
         // helpers: SchemaSmith_JsonScalarInt + SchemaSmith_JsonScalarStr (null-safe JSON payload reads for the
         // version-agnostic JSON_EXTRACT parse), SchemaSmith_UnsupportedFeaturePolicy (MySQL policy spine),
         // SchemaSmith_SupportsCheckConstraints (CHECK-availability predicate, MySQL 8.0.16 / MariaDB),
         // SchemaSmith_SupportsRenameColumn + SchemaSmith_SupportsRenameIndex (RENAME COLUMN needs MySQL 8.0 /
-        // MariaDB 10.5.2; RENAME INDEX needs MariaDB 10.5.2 — below, emit CHANGE COLUMN / drop-recreate), and
-        // SchemaSmith_BuildIndexRenameClause (the version-adaptive index-rename clause builder).
-        Assert.That(mysql.Length, Is.EqualTo(34));
+        // MariaDB 10.5.2; RENAME INDEX needs MariaDB 10.5.2 — below, emit CHANGE COLUMN / drop-recreate),
+        // SchemaSmith_BuildIndexRenameClause (the version-adaptive index-rename clause builder), and
+        // SchemaSmith_SupportsDescendingIndex (DESC key parts need MySQL 8.0 / MariaDB 10.8 — below, degrade to
+        // ascending idempotently).
+        Assert.That(mysql.Length, Is.EqualTo(35));
     }
 
     [Test]

@@ -153,17 +153,20 @@ SELECT UPPER(COLUMN_TYPE)
 
     /// <summary>
     /// Whether the connected target honors DESC index key parts (reflected as COLLATION='D' in
-    /// INFORMATION_SCHEMA.STATISTICS). MySQL 8.0+ (our floor) always does; MariaDB ignored the DESC
-    /// keyword and stored ascending until 10.8, so a MariaDB 10.6/10.7 target reports COLLATION='A'.
+    /// INFORMATION_SCHEMA.STATISTICS). MySQL stores them since 8.0 (5.7 parses-and-ignores → COLLATION='A');
+    /// MariaDB ignored the DESC keyword until 10.8, so a MariaDB 10.2-10.7 target reports COLLATION='A'.
     /// </summary>
     protected bool TargetSupportsDescendingIndexes(IDbCommand cmd)
     {
-        if (Platform != Platform.MariaDb) return true;
         cmd.CommandText = "SELECT VERSION()";
-        var parts = (cmd.ExecuteScalar()?.ToString() ?? "").Split('.');
+        var version = cmd.ExecuteScalar()?.ToString() ?? "";
+        var parts = version.Split('.');
         if (parts.Length < 2 || !int.TryParse(parts[0], out var major) || !int.TryParse(parts[1], out var minor))
             return true;
-        return major > 10 || (major == 10 && minor >= 8);
+        // MariaDB: 10.8+. MySQL: 8.0+ (VERSION() carries the "-MariaDB" suffix on the patch part only).
+        return version.Contains("MariaDB")
+            ? major > 10 || (major == 10 && minor >= 8)
+            : major >= 8;
     }
 
     /// <summary>

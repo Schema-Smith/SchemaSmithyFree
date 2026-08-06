@@ -45,6 +45,25 @@ BEGIN
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     -- =========================================================================
+    -- STEP 0.5: Degrade descending index key parts below MySQL 8.0 / MariaDB 10.8
+    -- =========================================================================
+    -- Mirrors MissingIndexesAndConstraintsQuench STEP 0.5: these engines silently store a DESC key part
+    -- ascending, so SchemaSmith_NormalizeIndexColumns drops the DESC suffix below the floor (keeping the
+    -- compare/create steps idempotent) and one 'downgraded' manifest row + run-log line is recorded here.
+    IF SchemaSmith_SupportsDescendingIndex() = 0 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Descending index key part stored ascending (requires MySQL 8.0 / MariaDB 10.8 - downgraded): ',
+               SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
+        FROM _SchemaSmith_Indexes i
+        WHERE UPPER(CONVERT(i.IndexColumns USING utf8mb4)) LIKE '% DESC%';
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'INDEX (descending key part, MySQL 8.0 / MariaDB 10.8)',
+               CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName)), 'downgraded'
+        FROM _SchemaSmith_Indexes i
+        WHERE UPPER(CONVERT(i.IndexColumns USING utf8mb4)) LIKE '% DESC%';
+    END IF;
+
+    -- =========================================================================
     -- STEP 1: Detect index renames (same columns, different name)
     -- =========================================================================
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexRenames;

@@ -100,6 +100,27 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- STEP 0.5: Degrade descending index key parts below MySQL 8.0 / MariaDB 10.8
+    -- =========================================================================
+    -- These engines parse-and-ignore a DESC key part (silently storing it ascending). There is no
+    -- equivalent, so a declared DESC index is stored + compared as ascending (SchemaSmith_NormalizeIndexColumns
+    -- drops the DESC suffix below the floor, so the create/compare steps below see an ascending index and stay
+    -- idempotent). Record one 'downgraded' manifest row + a run-log line per affected index so the downgrade is
+    -- visible, mirroring the CHECK-constraint degrade. At/above the floor this is a no-op.
+    IF SchemaSmith_SupportsDescendingIndex() = 0 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Descending index key part stored ascending (requires MySQL 8.0 / MariaDB 10.8 - downgraded): ',
+               SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
+        FROM _SchemaSmith_Indexes i
+        WHERE UPPER(CONVERT(i.IndexColumns USING utf8mb4)) LIKE '% DESC%';
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'INDEX (descending key part, MySQL 8.0 / MariaDB 10.8)',
+               CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName)), 'downgraded'
+        FROM _SchemaSmith_Indexes i
+        WHERE UPPER(CONVERT(i.IndexColumns USING utf8mb4)) LIKE '% DESC%';
+    END IF;
+
+    -- =========================================================================
     -- STEP 1: Detect index renames (same columns, different name)
     -- =========================================================================
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexRenames;

@@ -9,7 +9,7 @@ DROP FUNCTION IF EXISTS SchemaSmith_NormalizeIndexColumns//
 CREATE FUNCTION SchemaSmith_NormalizeIndexColumns(
     p_IndexColumns TEXT
 ) RETURNS TEXT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci
-DETERMINISTIC
+NOT DETERMINISTIC
 SQL SECURITY DEFINER
 BEGIN
     -- Normalizes an index column list for comparison.
@@ -18,6 +18,12 @@ BEGIN
     -- - DESC suffix normalized
     -- - Whitespace trimmed
     -- - Comma-separated
+    --
+    -- When the target does NOT store descending index key parts (MySQL 5.7 / MariaDB 10.2-10.7), the DESC
+    -- suffix is dropped: the engine silently stores such indexes ascending, so the live catalog always
+    -- reports ascending. Dropping DESC here makes the desired list match that ascending catalog, keeping the
+    -- deploy idempotent (without this, a declared DESC index would be seen as modified and rebuilt every run).
+    -- The 'downgraded' visibility is recorded by the index-apply procs. NOT DETERMINISTIC: reads the version.
 
     DECLARE v_Result TEXT DEFAULT '';
     DECLARE v_Column TEXT;
@@ -27,6 +33,7 @@ BEGIN
     DECLARE v_Trimmed TEXT;
     DECLARE v_IsDesc INT DEFAULT 0;
     DECLARE v_ColName TEXT;
+    DECLARE v_SupportsDesc TINYINT DEFAULT SchemaSmith_SupportsDescendingIndex();
 
     IF p_IndexColumns IS NULL OR TRIM(p_IndexColumns) = '' THEN
         RETURN '';
@@ -62,7 +69,7 @@ BEGIN
             SET v_Result = CONCAT(v_Result, ',');
         END IF;
         SET v_Result = CONCAT(v_Result, '`', v_ColName, '`');
-        IF v_IsDesc = 1 THEN
+        IF v_IsDesc = 1 AND v_SupportsDesc = 1 THEN
             SET v_Result = CONCAT(v_Result, ' DESC');
         END IF;
 
