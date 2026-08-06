@@ -1401,6 +1401,15 @@ ORDER BY c.ORDINAL_POSITION;
     // on MySQL — its native JSON columns carry no such constraint and are detected by DATA_TYPE = 'json'.
     private static HashSet<string> GetJsonCheckConstraintColumnsMySql(IDbCommand cmd, string databaseName, string tableName)
     {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // INFORMATION_SCHEMA.CHECK_CONSTRAINTS does not exist on MySQL 5.7, and only MariaDB auto-creates the
+        // json_valid(<col>) checks detected here (MySQL's native `json` type is detected by DATA_TYPE), so this
+        // read is MariaDB-only — return empty on MySQL rather than erroring on the missing catalog view. This is
+        // reached directly by DataTongs (which builds merge scripts without the DatabaseQuench delivery gate).
+        cmd.CommandText = "SELECT VERSION()";
+        if ((cmd.ExecuteScalar()?.ToString() ?? string.Empty).IndexOf("MariaDB", StringComparison.OrdinalIgnoreCase) < 0)
+            return result;
+
         BindIdentifierParameters(cmd, ("@db", databaseName), ("@table", tableName));
         cmd.CommandText = @"
 SELECT cc.CHECK_CLAUSE
@@ -1412,7 +1421,6 @@ JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
 WHERE tc.CONSTRAINT_SCHEMA = @db
   AND tc.TABLE_NAME = @table;
 ";
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
