@@ -158,8 +158,8 @@ BEGIN
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle index renames');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName,
-                      '` RENAME INDEX `', OldIndexName, '` TO `', NewIndexName, '`')
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                      SchemaSmith_BuildIndexRenameClause(p_DatabaseName, TableName, OldIndexName, NewIndexName))
         FROM _SchemaSmith_IndexRenames;
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle index renames');
@@ -170,8 +170,8 @@ BEGIN
         INSERT INTO _SchemaSmith_RenameStmts (LogMsg, Stmt)
         SELECT
             CONCAT('  Rename index: ', TableName, '.', OldIndexName, ' -> ', NewIndexName),
-            CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName,
-                   '` RENAME INDEX `', OldIndexName, '` TO `', NewIndexName, '`')
+            CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                   SchemaSmith_BuildIndexRenameClause(p_DatabaseName, TableName, OldIndexName, NewIndexName))
         FROM _SchemaSmith_IndexRenames;
 
         SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_RenameStmts);

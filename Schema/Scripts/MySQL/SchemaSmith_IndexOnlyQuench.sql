@@ -103,8 +103,8 @@ BEGIN
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle index renames');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName,
-                      '` RENAME INDEX `', OldIndexName, '` TO `', NewIndexName, '`')
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                      SchemaSmith_BuildIndexRenameClause(p_DatabaseName, TableName, OldIndexName, NewIndexName))
         FROM _SchemaSmith_IndexRenames;
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle index renames');
@@ -118,7 +118,7 @@ BEGIN
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         INSERT INTO _SchemaSmith_IndexRenameStmts (Stmt)
         SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
-                      GROUP_CONCAT(CONCAT('RENAME INDEX `', OldIndexName, '` TO `', NewIndexName, '`') ORDER BY OldIndexName SEPARATOR ', '))
+                      GROUP_CONCAT(SchemaSmith_BuildIndexRenameClause(p_DatabaseName, TableName, OldIndexName, NewIndexName) ORDER BY OldIndexName SEPARATOR ', '))
         FROM _SchemaSmith_IndexRenames
         GROUP BY TableName;
 
