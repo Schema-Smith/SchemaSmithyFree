@@ -17,11 +17,22 @@ RETURNS VARCHAR(4000) CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci
 DETERMINISTIC
 NO SQL
 BEGIN
+    DECLARE v_rest VARCHAR(4000);
     IF p_text IS NULL THEN
         RETURN p_text;
     END IF;
+    -- The REGEXP *operator* exists on every supported version, but REGEXP_REPLACE is MySQL 8.0+ (MariaDB
+    -- has it, MySQL 5.7 does not), so the strip is done with SUBSTRING + a whitespace scan to keep this
+    -- function runnable on the MySQL 5.7 / MariaDB 10.2 floor. Output is byte-identical on every version to
+    -- the former REGEXP_REPLACE(TRIM(p_text), '^[Ss][Ee][Ll][Ee][Cc][Tt][[:space:]]+', '').
     IF TRIM(p_text) REGEXP '^[Ss][Ee][Ll][Ee][Cc][Tt][[:space:]]' THEN
-        RETURN REGEXP_REPLACE(TRIM(p_text), '^[Ss][Ee][Ll][Ee][Cc][Tt][[:space:]]+', '');
+        SET v_rest = SUBSTRING(TRIM(p_text), 7);   -- drop the 6-char SELECT keyword
+        -- consume the following run of whitespace (space, tab, LF, VT, FF, CR = the POSIX [:space:] class)
+        WHILE LENGTH(v_rest) > 0
+              AND LOCATE(LEFT(v_rest, 1), CONCAT(' ', CHAR(9), CHAR(10), CHAR(11), CHAR(12), CHAR(13))) > 0 DO
+            SET v_rest = SUBSTRING(v_rest, 2);
+        END WHILE;
+        RETURN v_rest;
     END IF;
     RETURN p_text;
 END //
