@@ -394,8 +394,12 @@ jobs:
           MARIADB_DATABASE: TestMain
         ports:
           - 3317:3306
+        # 10.2's bundled healthcheck.sh --innodb_initialized runs a privileged query as root with no
+        # password and gets 'Access denied' (newer images auth via unix_socket; 10.2 requires the
+        # password), so the container never turns healthy. Use the same mysqladmin ping the MySQL leg
+        # uses for 10.2; keep healthcheck.sh for 10.6/11.4 where it works.
         options: >-
-          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-cmd "${{ matrix.mariadb == '10.2' && 'mysqladmin ping -h 127.0.0.1 -u root -p''aCa2d805-41E5@40c4!98e7#92F93zzxo176''' || 'healthcheck.sh --connect --innodb_initialized' }}"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
