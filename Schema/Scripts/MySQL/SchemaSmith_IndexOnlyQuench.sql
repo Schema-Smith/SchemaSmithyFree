@@ -209,8 +209,11 @@ BEGIN
           -- Or index type differs (BTREE vs HASH)
           OR (BINARY UPPER(COALESCE(i.IndexType, 'BTREE')) != BINARY UPPER(s.INDEX_TYPE)
               AND NOT (BINARY UPPER(COALESCE(i.IndexType, 'BTREE')) = BINARY 'BTREE' AND BINARY UPPER(s.INDEX_TYPE) = BINARY 'BTREE'))
-          -- Or visibility differs (FULLTEXT indexes don't support INVISIBLE, skip them)
+          -- Or visibility differs (FULLTEXT indexes don't support INVISIBLE, skip them). Below the
+          -- invisible-index floor (MySQL 8.0 / MariaDB 10.6) the keyword can't be emitted, so a declared
+          -- invisible index is stored visible; ignore the visibility difference there or it churns every run.
           OR (BINARY UPPER(s.INDEX_TYPE) != BINARY 'FULLTEXT'
+              AND SchemaSmith_SupportsInvisibleIndex() = 1
               AND i.IsVisible != SchemaSmith_IndexIsVisible(s.TABLE_SCHEMA, s.TABLE_NAME, s.INDEX_NAME))
       );
 
@@ -616,7 +619,7 @@ BEGIN
                       CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                            WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
                            ELSE '' END,
-                      CASE WHEN i.IsVisible = 0 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
+                      CASE WHEN i.IsVisible = 0 AND SchemaSmith_SupportsInvisibleIndex() = 1 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
         FROM _SchemaSmith_Indexes i
         WHERE i.IsPrimaryKey = 0
           AND NOT EXISTS (
@@ -666,7 +669,7 @@ BEGIN
                               CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                                    WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
                                    ELSE '' END,
-                              CASE WHEN i.IsVisible = 0 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
+                              CASE WHEN i.IsVisible = 0 AND SchemaSmith_SupportsInvisibleIndex() = 1 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
                           ORDER BY i.IndexName SEPARATOR ', '))
         FROM _SchemaSmith_Indexes i
         WHERE i.IsPrimaryKey = 0

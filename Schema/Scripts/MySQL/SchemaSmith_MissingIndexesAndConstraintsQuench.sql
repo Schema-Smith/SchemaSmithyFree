@@ -121,6 +121,35 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- STEP 0.6: Degrade invisible indexes below MySQL 8.0 / MariaDB 10.6
+    -- =========================================================================
+    -- The INVISIBLE (MySQL) / IGNORED (MariaDB) keyword is a hard syntax error below these versions (unlike a
+    -- DESC key part, which parses-and-ignores). A declared invisible index degrades: the visibility clause is
+    -- suppressed (see the create pass) and the modified-index compare ignores the visibility difference so the
+    -- deploy stays idempotent. 'fail' aborts naming the offending index(es); 'warn' (default) records one
+    -- 'downgraded' manifest row + a run-log line per declared invisible index. At/above the floor this is a no-op.
+    IF SchemaSmith_SupportsInvisibleIndex() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Indexes WHERE IsVisible = 0) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Invisible index requires MySQL 8.0 / MariaDB 10.6 (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
+            FROM _SchemaSmith_Indexes i WHERE i.IsVisible = 0;
+            SET @ss_msg = 'Invisible index requires MySQL 8.0 / MariaDB 10.6 (UnsupportedFeaturePolicy=fail). See the run log for the full list.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Invisible index stored visible (requires MySQL 8.0 / MariaDB 10.6 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
+            FROM _SchemaSmith_Indexes i WHERE i.IsVisible = 0;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'INDEX (invisible, MySQL 8.0 / MariaDB 10.6)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName)), 'downgraded'
+            FROM _SchemaSmith_Indexes i WHERE i.IsVisible = 0;
+        END IF;
+    END IF;
+
+    -- =========================================================================
     -- STEP 1: Detect index renames (same columns, different name)
     -- =========================================================================
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexRenames;
@@ -263,8 +292,11 @@ BEGIN
           )
           -- Or uniqueness differs
           OR i.IsUnique != (s.NON_UNIQUE = 0)
-          -- Or visibility differs (FULLTEXT indexes don't support INVISIBLE, skip them)
+          -- Or visibility differs (FULLTEXT indexes don't support INVISIBLE, skip them). Below the
+          -- invisible-index floor (MySQL 8.0 / MariaDB 10.6) the keyword can't be emitted, so a declared
+          -- invisible index is stored visible; ignore the visibility difference there or it churns every run.
           OR (BINARY UPPER(s.INDEX_TYPE) != BINARY 'FULLTEXT'
+              AND SchemaSmith_SupportsInvisibleIndex() = 1
               AND i.IsVisible != SchemaSmith_IndexIsVisible(s.TABLE_SCHEMA, s.TABLE_NAME, s.INDEX_NAME))
       );
 
@@ -369,7 +401,7 @@ BEGIN
                 CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                      WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
                      ELSE '' END,
-                CASE WHEN i.IsVisible = 0 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END
+                CASE WHEN i.IsVisible = 0 AND SchemaSmith_SupportsInvisibleIndex() = 1 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END
             ),
             CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
         FROM _SchemaSmith_Indexes i

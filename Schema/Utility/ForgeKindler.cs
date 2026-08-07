@@ -331,6 +331,7 @@ public static class ForgeKindler
                 new("SchemaSmith_SupportsRenameIndex.sql"),
                 new("SchemaSmith_BuildIndexRenameClause.sql"),
                 new("SchemaSmith_SupportsDescendingIndex.sql"),
+                new("SchemaSmith_SupportsInvisibleIndex.sql"),
                 new("SchemaSmith_NormalizeIndexColumns.sql"),
                 new("SchemaSmith_NormalizeCheckExpression.sql"),
                 new("SchemaSmith_UpperDataType.sql"),
