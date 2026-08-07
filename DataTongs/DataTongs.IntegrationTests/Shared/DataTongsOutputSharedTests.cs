@@ -28,12 +28,24 @@ public abstract class DataTongsOutputSharedTests
     private string _testOutputDir = null!;
     private string _testDb = null!;
 
+    // The GeneratedScript_* tests build a merge script with the modern JSON_TABLE row source and EXECUTE it, so
+    // they need a target with native JSON_TABLE (MySQL 8.0 / MariaDB 10.6). The recursive-CTE path (MariaDB
+    // 10.2-10.5) and the below-MySQL-8.0 skip are exercised by the SchemaQuench delivery tests.
+    private int _serverVersionNum;
+    private bool TargetHasNativeJsonTable => Platform == Platform.MySQL ? _serverVersionNum >= 800 : _serverVersionNum >= 1006;
+
     [SetUp]
     public void SetUp()
     {
         _testDb = MainDb;
         _connection = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(MainConnectionString);
         _connection.Open();
+        using (var vcmd = _connection.CreateCommand())
+        {
+            vcmd.CommandText = "SELECT VERSION()";
+            var vp = (vcmd.ExecuteScalar()?.ToString() ?? "").Split('.');
+            _serverVersionNum = vp.Length >= 2 && int.TryParse(vp[0], out var mj) && int.TryParse(vp[1], out var mn) ? mj * 100 + mn : int.MaxValue;
+        }
         _dataTongs = new global::DataTongs.DataTongs(Platform);
         _testOutputDir = Path.Combine(Path.GetTempPath(), $"DataTongsTest_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testOutputDir);
@@ -232,6 +244,8 @@ public abstract class DataTongsOutputSharedTests
     [Test]
     public void GeneratedScript_CanBeExecuted()
     {
+        if (!TargetHasNativeJsonTable)
+            Assert.Ignore("Data delivery requires native JSON_TABLE (MySQL 8.0 / MariaDB 10.6); the CTE / gated paths are covered by the SchemaQuench delivery tests.");
         using var command = _connection.CreateCommand();
         var tableName = $"_test_output_{Guid.NewGuid():N}".Substring(0, 30);
 
@@ -285,6 +299,8 @@ public abstract class DataTongsOutputSharedTests
     [Test]
     public void GeneratedScript_Replace_DeletesAndInserts()
     {
+        if (!TargetHasNativeJsonTable)
+            Assert.Ignore("Data delivery requires native JSON_TABLE (MySQL 8.0 / MariaDB 10.6); the CTE / gated paths are covered by the SchemaQuench delivery tests.");
         using var command = _connection.CreateCommand();
         var tableName = $"_test_replace_{Guid.NewGuid():N}".Substring(0, 30);
 
@@ -331,6 +347,8 @@ public abstract class DataTongsOutputSharedTests
     [Test]
     public void GeneratedScript_Insert_SkipsExisting()
     {
+        if (!TargetHasNativeJsonTable)
+            Assert.Ignore("Data delivery requires native JSON_TABLE (MySQL 8.0 / MariaDB 10.6); the CTE / gated paths are covered by the SchemaQuench delivery tests.");
         using var command = _connection.CreateCommand();
         var tableName = $"_test_insert_{Guid.NewGuid():N}".Substring(0, 30);
 
