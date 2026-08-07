@@ -70,8 +70,14 @@ jobs:
     steps:
       - run: echo "docs-only change — no integration run required."
 
-  integration-tests-mysql:
-    name: Integration Tests (MySQL)
+  integration-tests-mysql-80:
+    name: Integration Tests (MySQL 8.0)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-mysql-57:
+    name: Integration Tests (MySQL 5.7)
     runs-on: ubuntu-latest
     steps:
       - run: echo "docs-only change — no integration run required."
@@ -84,6 +90,12 @@ jobs:
 
   integration-tests-mariadb-106:
     name: Integration Tests (MariaDB 10.6)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-mariadb-102:
+    name: Integration Tests (MariaDB 10.2)
     runs-on: ubuntu-latest
     steps:
       - run: echo "docs-only change — no integration run required."
